@@ -2615,7 +2615,7 @@ def check_objects_not_exist(bucket, obj_arr):
         check_object_not_exists(bucket, objname)
         
 @attr('sync_policy')
-def test_bucket_delete_with_sync_policy():
+def test_bucket_delete_with_bucket_sync_policy_directional():
 
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -2651,6 +2651,7 @@ def test_bucket_delete_with_sync_policy():
     buckets.append(bucketA)
     create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
     create_sync_group_flow_directional(c1, "sync-bucket", "sync-flow-bucket", zoneA.name, zoneB.name, bucketA.name)
+    #create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flow-bucket", zones, bucketA.name)
     create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zoneA.name, zoneB.name, bucketA.name)
     set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
 
@@ -2679,20 +2680,256 @@ def test_bucket_delete_with_sync_policy():
     bucket = get_bucket(zcA, bucketA.name)
     check_objects_not_exist(bucket, objnameB)
 
-    log.debug('deleting object')
+    log.debug('deleting object on zone A')
     k = get_key(zcA, bucket, objnameA)
     k.delete()
-    
+
     zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
-    
+
     # delete bucket on zoneA. it should fail to delete
     log.debug('deleting bucket')
     assert_raises(boto.exception.S3ResponseError, zcA.delete_bucket, bucketA.name)
 
     assert check_all_buckets_exist(zcA, buckets)
     assert check_all_buckets_exist(zcB, buckets)
+
+    log.debug('deleting object on zone B')
+    k = get_key(zcB, bucket, objnameB)
+    k.delete()
+    time.sleep(config.checkpoint_delay)
+
+    # retry deleting bucket after removing the object from zone B. should succeed
+    log.debug('retry deleting bucket')
+    zcA.delete_bucket(bucketA.name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    assert check_all_buckets_dont_exist(zcA, buckets)
+    assert check_all_buckets_dont_exist(zcB, buckets)
+
     return
 
+@attr('sync_policy')
+def test_bucket_delete_with_bucket_sync_policy_symmetric():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+
+    c1 = zoneA.cluster
+
+    # configure sync policy
+    zones = zoneA.name + ',' + zoneB.name
+    c1.admin(['sync', 'policy', 'get'])
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+    set_sync_policy_group_status(c1, "sync-group", "allowed")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    """
+        configure symmetrical policy at bucketA level with src and dest
+        zones specified to zoneA and zoneB resp.
+    """
+
+    # configure sync policy for only bucketA and enable it
+    bucketA = create_zone_bucket(zcA)
+    buckets = []
+    buckets.append(bucketA)
+    create_sync_policy_group(c1, "sync-bucket", "allowed", bucketA.name)
+    create_sync_group_flow_symmetrical(c1, "sync-bucket", "sync-flow-bucket", zones, bucketA.name)
+    create_sync_group_pipe(c1, "sync-bucket", "sync-pipe", zones, zones, bucketA.name)
+    set_sync_policy_group_status(c1, "sync-bucket", "enabled", bucketA.name)
+
+    get_sync_policy(c1, bucketA.name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create bucketA and objects in zoneA and zoneB
+    objnameA = 'a'
+    objnameB = 'b'
+
+    # upload object in each zone and wait for sync.
+    k = new_key(zcA, bucketA, objnameA)
+    k.set_contents_from_string('foo')
+    k = new_key(zcB, bucketA, objnameB)
+    k.set_contents_from_string('foo')
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    log.debug('deleting object A')
+    k = get_key(zcA, bucketA, objnameA)
+    k.delete()
+
+    log.debug('deleting object B')
+    k = get_key(zcA, bucketA, objnameB)
+    k.delete()
+
+    zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # delete bucket on zoneA.
+    log.debug('deleting bucket')
+    zcA.delete_bucket(bucketA.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    assert check_all_buckets_dont_exist(zcA, buckets)
+    assert check_all_buckets_dont_exist(zcB, buckets)
+    return
+
+@attr('sync_policy')
+def test_bucket_delete_with_zonegroup_sync_policy_symmetric():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+
+    c1 = zoneA.cluster
+
+    # configure symmetric sync policy
+    zones = zoneA.name + ',' + zoneB.name
+    c1.admin(['sync', 'policy', 'get'])
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_symmetrical(c1, "sync-group", "sync-flow", zones)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zones, zones)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # configure sync policy for only bucketA and enable it
+    bucketA = create_zone_bucket(zcA)
+    buckets = []
+    buckets.append(bucketA)
+
+    time.sleep(config.checkpoint_delay)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create bucketA and objects in zoneA and zoneB
+    objnameA = 'a'
+    objnameB = 'b'
+
+    # upload object in each zone and wait for sync.
+    k = new_key(zcA, bucketA, objnameA)
+    k.set_contents_from_string('foo')
+    k = new_key(zcB, bucketA, objnameB)
+    k.set_contents_from_string('foo')
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    log.debug('deleting object A')
+    k = get_key(zcA, bucketA, objnameA)
+    k.delete()
+
+    log.debug('deleting object B')
+    k = get_key(zcA, bucketA, objnameB)
+    k.delete()
+
+    zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # delete bucket on zoneA.
+    log.debug('deleting bucket')
+    zcA.delete_bucket(bucketA.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    assert check_all_buckets_dont_exist(zcA, buckets)
+    assert check_all_buckets_dont_exist(zcB, buckets)
+    return
+
+@attr('sync_policy')
+def test_bucket_delete_with_zonegroup_sync_policy_directional():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    (zoneA, zoneB) = zonegroup.zones[0:2]
+    (zcA, zcB) = zonegroup_conns.zones[0:2]
+
+    c1 = zoneA.cluster
+
+    # configure sync policy
+    zones = zoneA.name + ',' + zoneB.name
+    c1.admin(['sync', 'policy', 'get'])
+    create_sync_policy_group(c1, "sync-group")
+    create_sync_group_flow_directional(c1, "sync-group", "sync-flow1", zoneA.name, zoneB.name)
+    create_sync_group_pipe(c1, "sync-group", "sync-pipe", zoneA.name, zoneB.name)
+    set_sync_policy_group_status(c1, "sync-group", "enabled")
+
+    zonegroup.period.update(zoneA, commit=True)
+    get_sync_policy(c1)
+
+    # configure sync policy for only bucketA and enable it
+    bucketA = create_zone_bucket(zcA)
+    buckets = []
+    buckets.append(bucketA)
+
+    time.sleep(config.checkpoint_delay)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create bucketA and objects in zoneA and zoneB
+    objnameA = 'a'
+    objnameB = 'b'
+
+    # upload object in each zone and wait for sync.
+    k = new_key(zcA, bucketA, objnameA)
+    k.set_contents_from_string('foo')
+    k = new_key(zcB, bucketA, objnameB)
+    k.set_contents_from_string('foo')
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(zoneB, zoneA)
+
+    # verify that objnameA is synced to bucketA in zoneB
+    bucket = get_bucket(zcB, bucketA.name)
+    check_objects_exist(bucket, objnameA)
+
+    # verify that objnameB is not synced to bucketA in zoneA
+    bucket = get_bucket(zcA, bucketA.name)
+    check_objects_not_exist(bucket, objnameB)
+
+    log.debug('deleting object on zone A')
+    k = get_key(zcA, bucket, objnameA)
+    k.delete()
+
+    zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
+
+    # delete bucket on zoneA. it should fail to delete
+    log.debug('deleting bucket')
+    assert_raises(boto.exception.S3ResponseError, zcA.delete_bucket, bucketA.name)
+
+    assert check_all_buckets_exist(zcA, buckets)
+    assert check_all_buckets_exist(zcB, buckets)
+
+    # retry deleting bucket after removing the object from zone B. should succeed
+    log.debug('deleting object on zone B')
+    k = get_key(zcB, bucket, objnameB)
+    k.delete()
+    time.sleep(config.checkpoint_delay)
+
+    log.debug('retry deleting bucket')
+    zcA.delete_bucket(bucketA.name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    assert check_all_buckets_dont_exist(zcA, buckets)
+    assert check_all_buckets_dont_exist(zcB, buckets)
+
+    return
 
 @attr('fails_with_rgw')
 @attr('sync_policy')
