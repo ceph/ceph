@@ -38,10 +38,7 @@ struct LttngBackend
     CommonOBCPipeline::WaitRepop::BlockingEvent::Backend,
     CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
     CommonOBCPipeline::SendReply::BlockingEvent::Backend,
-    PGRepopPipeline::Process::BlockingEvent::Backend,
-    PGRepopPipeline::WaitCommit::BlockingEvent::Backend,
-    PGRepopPipeline::WaitCommit::BlockingEvent::ExitBarrierEvent::Backend,
-    PGRepopPipeline::SendReply::BlockingEvent::Backend
+    PGRepopPipeline::Process::BlockingEvent::Backend
 {
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
@@ -129,20 +126,6 @@ struct LttngBackend
               const PGRepopPipeline::Process& blocker) override {
   }
 
-  void handle(PGRepopPipeline::WaitCommit::BlockingEvent& ev,
-              const Operation& op,
-              const PGRepopPipeline::WaitCommit& blocker) override {
-  }
-
-  void handle(PGRepopPipeline::WaitCommit::BlockingEvent::ExitBarrierEvent& ev,
-              const Operation& op) override {
-  }
-
-  void handle(PGRepopPipeline::SendReply::BlockingEvent& ev,
-              const Operation& op,
-              const PGRepopPipeline::SendReply& blocker) override {
-  }
-
   void handle(ClientRequest::CompletionEvent&,
               const Operation&) override {}
 
@@ -167,10 +150,7 @@ struct HistoricBackend
     CommonOBCPipeline::WaitRepop::BlockingEvent::Backend,
     CommonOBCPipeline::WaitRepop::BlockingEvent::ExitBarrierEvent::Backend,
     CommonOBCPipeline::SendReply::BlockingEvent::Backend,
-    PGRepopPipeline::Process::BlockingEvent::Backend,
-    PGRepopPipeline::WaitCommit::BlockingEvent::Backend,
-    PGRepopPipeline::WaitCommit::BlockingEvent::ExitBarrierEvent::Backend,
-    PGRepopPipeline::SendReply::BlockingEvent::Backend
+    PGRepopPipeline::Process::BlockingEvent::Backend
 {
   void handle(ClientRequest::StartEvent&,
               const Operation&) override {}
@@ -265,21 +245,6 @@ struct HistoricBackend
               const Operation& op,
               const PGRepopPipeline::Process& blocker) override {
   }
-
-  void handle(PGRepopPipeline::WaitCommit::BlockingEvent& ev,
-              const Operation& op,
-              const PGRepopPipeline::WaitCommit& blocker) override {
-  }
-
-  void handle(PGRepopPipeline::WaitCommit::BlockingEvent::ExitBarrierEvent& ev,
-              const Operation& op) override {
-  }
-
-  void handle(PGRepopPipeline::SendReply::BlockingEvent& ev,
-              const Operation& op,
-              const PGRepopPipeline::SendReply& blocker) override {
-  }
-
 
   void handle(ClientRequest::CompletionEvent&, const Operation& op) override {
     if (crimson::common::local_conf()->osd_op_history_size) {

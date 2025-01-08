@@ -84,8 +84,6 @@ public:
     ConnectionPipeline::GetPGMapping::BlockingEvent,
     PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     PGRepopPipeline::Process::BlockingEvent,
-    PGRepopPipeline::WaitCommit::BlockingEvent,
-    PGRepopPipeline::SendReply::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
