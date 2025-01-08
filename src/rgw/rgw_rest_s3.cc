@@ -2485,35 +2485,23 @@ public:
   string location_constraint;
 };
 
-class RGWCreateBucketConfig : public XMLObj
-{
-public:
-  RGWCreateBucketConfig() {}
-  ~RGWCreateBucketConfig() override {}
+// CreateBucketConfiguration
+struct RGWCreateBucketConfig : XMLObj {
+  XMLObj* location_constraint = nullptr;
+
+  bool xml_end(const char*) override {
+    location_constraint = find_first("LocationConstraint");
+    return true;
+  }
 };
 
-class RGWCreateBucketParser : public RGWXMLParser
-{
+class RGWCreateBucketParser : public RGWXMLParser {
   XMLObj *alloc_obj(const char *el) override {
+    using namespace std::string_view_literals;
+    if (el == "CreateBucketConfiguration"sv) {
+      return new RGWCreateBucketConfig;
+    }
     return new XMLObj;
-  }
-
-public:
-  RGWCreateBucketParser() {}
-  ~RGWCreateBucketParser() override {}
-
-  bool get_location_constraint(string& zone_group) {
-    XMLObj *config = find_first("CreateBucketConfiguration");
-    if (!config)
-      return false;
-
-    XMLObj *constraint = config->find_first("LocationConstraint");
-    if (!constraint)
-      return false;
-
-    zone_group = constraint->get_data();
-
-    return true;
   }
 };
 
@@ -2561,13 +2549,19 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
 
-    if (!parser.get_location_constraint(location_constraint)) {
-      ldpp_dout(this, 0) << "provided input did not specify location constraint correctly" << dendl;
+    auto config = static_cast<RGWCreateBucketConfig*>(
+        parser.find_first("CreateBucketConfiguration"));
+    if (!config) {
+      s->err.message = "Missing required element CreateBucketConfiguration";
       return -EINVAL;
     }
 
-    ldpp_dout(this, 10) << "create bucket location constraint: "
-		      << location_constraint << dendl;
+    if (config->location_constraint) {
+      location_constraint = config->location_constraint->get_data();
+
+      ldpp_dout(this, 10) << "create bucket location constraint: "
+          << location_constraint << dendl;
+    }
   }
 
   size_t pos = location_constraint.find(':');
