@@ -307,6 +307,7 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
   }
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
+    obc->obs.oi.size,
     in_native,
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
 }

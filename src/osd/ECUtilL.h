@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef ECUTIL_H
-#define ECUTIL_H
+#pragma once
 
 #include <ostream>
 #include "erasure-code/ErasureCodeInterface.h"
@@ -22,7 +21,8 @@
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
-namespace ECUtil {
+namespace ECLegacy {
+namespace ECUtilL {
 
 class stripe_info_t {
   const uint64_t stripe_width;
@@ -275,6 +275,6 @@ typedef std::shared_ptr<HashInfo> HashInfoRef;
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
 
-WRITE_CLASS_ENCODER(ECUtil::HashInfo)
+WRITE_CLASS_ENCODER(ECUtilL::HashInfo)
 }
-#endif
+}
