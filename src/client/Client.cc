@@ -3996,9 +3996,8 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 
     if ((need & CEPH_CAP_FILE_WR) &&
         ((in->auth_cap && in->auth_cap->session->readonly) ||
-        // userland clients are only allowed to read if fscrypt enabled but no fscrypt ctx exists
         // (is locked)
-         (in->is_fscrypt_enabled() && !in->fscrypt_ctx)))
+        (in->is_fscrypt_enabled() && is_inode_locked(in))))
       return -EROFS;
 
     if (in->flags & I_CAP_DROPPED) {
