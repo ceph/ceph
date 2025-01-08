@@ -12,6 +12,40 @@ We recommend that all users update to this release.
 Notable Changes
 ---------------
 
+* CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
+  `--earmark` with a unique identifier needed for NFS or SMB services. The earmark
+  string for a subvolume is empty by default. To remove an already present earmark,
+  an empty string can be assigned to it. Additionally, commands
+  `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
+  `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
+
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
+
+* RADOS: A performance bottleneck in the balancer mgr module has been fixed.
+  Related Tracker: https://tracker.ceph.com/issues/68657
+
+* RADOS: Based on tests performed at scale on a HDD based Ceph cluster, it was found
+  that scheduling with mClock was not optimal with multiple OSD shards. For
+  example, in the test cluster with multiple OSD node failures, the client
+  throughput was found to be inconsistent across test runs coupled with multiple
+  reported slow requests. However, the same test with a single OSD shard and
+  with multiple worker threads yielded significantly better results in terms of
+  consistency of client and recovery throughput across multiple test runs.
+  Therefore, as an interim measure until the issue with multiple OSD shards
+  (or multiple mClock queues per OSD) is investigated and fixed, the following
+  change to the default HDD OSD shard configuration is made:
+   - osd_op_num_shards_hdd = 1 (was 5)
+   - osd_op_num_threads_per_shard_hdd = 5 (was 1)
+  For more details see https://tracker.ceph.com/issues/66289.
+
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues,
+  resulting in the Manager crashing.
+
 Changelog
 ---------
 
@@ -334,6 +368,10 @@ Changelog
 * squid: test/rgw/notifications: fix test regression (`pr#61119 <https://github.com/ceph/ceph/pull/61119>`_, Yuval Lifshitz)
 * squid: Test: osd-recovery-space.sh extends the wait time for "recovery toofull" (`pr#59041 <https://github.com/ceph/ceph/pull/59041>`_, Nitzan Mordechai)
 * upgrade/cephfs/mds_upgrade_sequence: ignore osds down (`pr#59865 <https://github.com/ceph/ceph/pull/59865>`_, Kamoltat Sirivadhna)
+* squid: rgw: Don't crash on exceptions from pool listing (`pr#61306 <https://github.com/ceph/ceph/pull/61306>`_, Adam Emerson)
+* squid: container/Containerfile: replace CEPH_VERSION label for backward compact (`pr#61583 <https://github.com/ceph/ceph/pull/61583>`_, Dan Mick)
+* squid: container/build.sh: fix up org vs. repo naming (`pr#61584 <https://github.com/ceph/ceph/pull/61584>`_, Dan Mick)
+* squid: container/build.sh: don't require repo creds on NO_PUSH (`pr#61585 <https://github.com/ceph/ceph/pull/61585>`_, Dan Mick)
 
 v19.2.0 Squid
 =============
