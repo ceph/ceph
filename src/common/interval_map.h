@@ -277,7 +277,7 @@ public:
   const_iterator get_lower_range(
       K off,
       K len) const {
-    return const_iterator(get_range_fst(off, len));
+    return const_iterator(get_range_fst(off));
   }
   K get_start_off() const
   {
@@ -292,7 +292,7 @@ public:
     return i->first + i->second.first;
   }
   bool contains(K off, K len) const {
-    auto it = get_range_fst(off, len);
+    auto it = get_range_fst(off);
     if (it == m.end()) return false;
 
     K _off = it->first;
