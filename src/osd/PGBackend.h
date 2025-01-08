@@ -424,9 +424,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
-   virtual int get_ec_data_chunk_count() const { return 0; };
+   virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
-
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, int shard) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
 
  private:
@@ -507,9 +507,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::Transaction *t);
 
    /// Truncate object to rollback append
-   virtual void rollback_append(
+   void rollback_append(
      const hobject_t &hoid,
-     uint64_t old_size,
+     uint64_t old_shard_size,
      ObjectStore::Transaction *t);
 
    /// Unstash object to rollback stash
@@ -585,8 +585,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
+     uint64_t object_size,
      const std::list<std::pair<ec_align_t,
-		std::pair<ceph::buffer::list*, Context*> > > &to_read,
+		std::pair<ceph::buffer::list*, Context*>>> &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
