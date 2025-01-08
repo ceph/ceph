@@ -25,7 +25,7 @@ class BlueStore(BaseObjectStore):
         self.block_device_path: str = ''
         self.wal_device_path: str = ''
         self.db_device_path: str = ''
-        self.block_lv: Volume
+        self.block_lv: Optional[Volume] = None
 
     def add_objectstore_opts(self) -> None:
         """
