@@ -34,6 +34,10 @@ export class RgwUserAccountsService {
     return this.http.put(`${this.url}/set`, payload);
   }
 
+  remove(accountId: string) {
+    return this.http.delete(`${this.url}/${accountId}`);
+  }
+
   setQuota(
     account_id: string,
     payload: { quota_type: string; max_size: string; max_objects: string; enabled: boolean }
