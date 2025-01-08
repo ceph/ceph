@@ -675,6 +675,16 @@ struct rgw_sync_policy_info {
     return groups.empty();
   }
 
+  bool is_directional() const {
+    for (auto& item : groups) {
+      auto& group = item.second;
+      if (!group.data_flow.directional.empty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void get_potential_related_buckets(const rgw_bucket& bucket,
                                      std::set<rgw_bucket> *sources,
                                      std::set<rgw_bucket> *dests) const;
