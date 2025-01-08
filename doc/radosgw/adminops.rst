@@ -1510,9 +1510,23 @@ Request Parameters
 :Example: ``foo_bucket``
 :Required: Yes
 
+``tenant``
+
+:Description: The tenant under which the bucket is to be removed.
+:Type: String
+:Example: ``tenant1``
+:Required: No
+
 ``purge-objects``
 
 :Description: Remove a buckets objects before deletion.
+:Type: Boolean
+:Example: True [False]
+:Required: No
+
+``bypass-gc``
+
+:Description: Bypass garbage collection.
 :Type: Boolean
 :Example: True [False]
 :Required: No
