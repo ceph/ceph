@@ -21,12 +21,13 @@
 
 #include "PGBackend.h"
 #include "ECBackendL.h"
+#include "ECBackend.h"
 
 class ECSwitch : public PGBackend {
 
   bool is_optimized = false;
   ECBackendL legacy;
-  ECBackendL optimized;
+  ECBackend optimized;
 public:
   ECSwitch(
   PGBackend::Listener *pg,
