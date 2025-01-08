@@ -221,6 +221,18 @@ class CertKeyStore():
         if entity in self.service_name_cert and not service_name:
             raise OrchestratorError(f'Need service name to access cert for entity {entity}')
 
+    def get_services_certificates(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
+        ls: Dict[str, Any] = {}
+        for k, v in self.known_certs.items():
+            if k == 'cephadm_root_ca_cert':
+                continue
+            if k in self.service_name_cert or k in self.host_cert:
+                tmp: Dict[str, Any] = {key: True for key in v if v[key]}
+                ls[k] = tmp if tmp else False
+            else:
+                ls[k] = bool(v)
+        return ls
+
     def cert_ls(self, show_details: bool = True) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
 
         def get_cert_info(cert: Cert) -> Dict:
@@ -338,13 +350,14 @@ class CertMgr:
                  mgr: "CephadmOrchestrator",
                  certificate_duration_days: int,
                  renewal_threshold_days: int,
-                 ip: str) -> None:
+                 mgr_ip: str) -> None:
         self.mgr = mgr
+        self.mgr_ip = mgr_ip
         self.certificate_duration_days = certificate_duration_days
         self.renewal_threshold_days = renewal_threshold_days
         self.cert_key_store = CertKeyStore(mgr)
         self.cert_key_store.load()
-        self._initialize_root_ca(ip)
+        self._initialize_root_ca(mgr_ip)
 
     # Delegate the method calls to `cert_key_store` if `name` matches one of its methods
     def __getattr__(self, name: str) -> Any:
@@ -385,35 +398,41 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def is_valid_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> bool:
+    def is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
+        """
+        Checks if a certificate is valid and close to expiration.
+
+        Returns:
+            - is_valid: True if the certificate is valid.
+            - is_close_to_expiration: True if the certificate is close to expiration.
+            - days_to_expiration: Number of days until expiration.
+            - exception_info: Details of any exception encountered during validation.
+        """
+        try:
+            days_to_expiration = verify_tls(cert.cert, key.key)
+            is_close_to_expiration = days_to_expiration < self.renewal_threshold_days
+            return True, is_close_to_expiration, days_to_expiration, ""
+        except ServerConfigException as e:
+            return False, False, 0, str(e)
+
+    def _validate_and_manage_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> Tuple[bool, bool]:
         """Helper method to validate a cert/key pair and handle errors."""
         key = key_obj.key
         cert = cert_obj.cert
-        is_valid = True
-        is_close_to_expiration = False
-        exception_info = ''
-        try:
-            (org, cn) = get_cert_issuer_info(cert)
-            days_to_expiration = verify_tls(cert, key)
-            is_close_to_expiration = (days_to_expiration < self.renewal_threshold_days)
-            if is_close_to_expiration:
-                logger.info(f'Certificate for "{cert_ref}" must be renewed as only {days_to_expiration} are left for expiration.')
-        except ServerConfigException as e:
-            is_valid = False
-            exception_info = f'{e}'
+        is_valid, is_close_to_expiration, days_to_expiration, exception_info = self.is_valid_certificate(cert_obj, key_obj)
 
-        if is_close_to_expiration or not is_valid:
+        if is_close_to_expiration:
+            self._renew_certificate(cert_ref, cert_obj)
+        elif not is_valid:
             if cert_obj.user_made:
-                # TODO(redo): contact ACME to get a new certificate
-                # logger.info(f'Triggering ACME certificate renewal for {cert_ref}')
-                # self.enqueue_acme_certificate_renewal(cert_ref)
                 entity_info = f" ({entity})" if entity else ""
-                err_msg = f"""
-                Detected invalid certificate for {cert_ref}{entity_info}. Please, use the appropriate commands to set a valid
-                key and certificate or reset their value to an empty string if you want cephadm to generate self-signed certificates.
-                Once done, reconfigure the affected daemons as needed.
-                """
-                logger.error(f'Detected invalid certificate for {cert_ref}{entity_info}: {exception_info}')
+                """Log an error and set a health warning for invalid user-made certificates."""
+                logger.error(f'Detected invalid user-made certificate for {cert_ref}{entity_info}: {exception_info}')
+                err_msg = (
+                    f'Detected invalid certificate for {cert_ref}{entity_info}. '
+                    'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
+                    'Reconfigure affected daemons as needed.'
+                )
                 self.mgr.set_health_warning(
                     'CEPHADM_CERT_ERROR',
                     f'Invalid certificate for {cert_ref}{entity_info}: {exception_info}',
@@ -421,23 +440,28 @@ class CertMgr:
                     [err_msg]
                 )
             else:
-                # Trigger automated certificate renewal using local self-signed certificates
-                logger.info(f'Triggering local certificate renewal for {cert_ref}')
-                if is_close_to_expiration:
-                    logger.info(f'Certificate {cert_ref} is valid, trying to renew self-signed certificates')
-                    new_cert, new_key = self.ssl_certs.renew_cert(cert, self.certificate_duration_days)
-                    self.cert_key_store.save_cert(cert_ref, new_cert)
-                    self.cert_key_store.save_key(cert_ref, new_key)
-                else:
-                    service_name, host = self.get_service_or_host(cert_ref, entity)
-                    logger.info(f'Certificate {cert_ref} is not valid, removing to force a new certificate generation service_name: {service_name}, host: {host}')
-                    self.cert_key_store.rm_cert(cert_ref, service_name, host)
-
+                # self-signed invalid certificate.. let's try to renew it
+                service_name, host = self.get_service_or_host(cert_ref, entity)
+                logger.info(f'Removing invalid certificate for {cert_ref} to trigger regeneration (service: {service_name}, host: {host}).')
+                self.cert_key_store.rm_cert(cert_ref, service_name, host)
         else:
             logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
             self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
 
-        return is_valid
+        return is_valid, is_close_to_expiration
+
+    def _renew_certificate(self, cert_ref: str, cert_obj: Cert) -> None:
+        """Renew a self-signed certificate."""
+        if cert_obj.user_made:
+            logger.info(f'Renewing user-generated certificate for {cert_ref} using ACME')
+        else:
+            try:
+                logger.info(f'Renewing self-signed certificate for {cert_ref}')
+                new_cert, new_key = self.ssl_certs.renew_cert(cert_obj.cert, self.certificate_duration_days)
+                self.cert_key_store.save_cert(cert_ref, new_cert)
+                self.cert_key_store.save_key(cert_ref, new_key)
+            except SSLConfigException as e:
+                logger.error(f'Error while trying o renew self-signed certificate for {cert_ref}: {e}')
 
     def get_service_or_host(self, cert_ref: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
         """Determine the service name or host based on the cert_ref."""
@@ -446,6 +470,8 @@ class CertMgr:
         return service_name, host
 
     def check_certificates(self) -> List[str]:
+        # services_to_reconfig = self.get_acme_ready_certificates()
+        services_to_reconfig = []
 
         def get_cert_and_key(cert_ref: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
             """Retrieve certificate and key, translating names as necessary."""
@@ -455,25 +481,32 @@ class CertMgr:
             key = self.cert_key_store.get_key(key_ref, service_name=service_name, host=host)
             return cert, key, entity
 
-        # services_to_reconfig = self.get_acme_ready_certificates()
-        services_to_reconfig = []
-        for cert_ref, cert_entries in self.cert_key_store.cert_ls().items():
+        def process_certificate(cert_ref: str, cert: Optional[Cert], key: Optional[PrivKey], entity: str = '') -> None:
+            nonlocal services_to_reconfig
+            if cert and key:
+                # TODO(redo): get srv name from the entity info
+                is_valid, is_close_to_expiration = self._validate_and_manage_certificate(cert_ref, cert, key, entity)
+                if (not is_valid or is_close_to_expiration) and not cert.user_made:
+                    services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
+            elif cert:
+                # Edge case where cert is present but key is None
+                # this could only happen if somebody has put manually a bad key!
+                logger.warning(f"Key is missing for certificate '{cert_ref}'. Attempting renewal.")
+                self._renew_certificate(cert_ref, cert)
+
+        for cert_ref, cert_entries in self.cert_key_store.get_services_certificates().items():
             if not cert_entries:
-                # No certificates to check for this reference
                 continue
 
             if isinstance(cert_entries, dict):
                 # Process only valid instances
                 for entity in [entry for entry, exists in cert_entries.items() if exists]:
                     cert, key, entity = get_cert_and_key(cert_ref, entity)
-                    if (cert and key) and not self.is_valid_certificate(cert_ref, cert, key, entity):
-                        # TODO(redo): get srv name from the entity info
-                        services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
+                    process_certificate(cert_ref, cert, key, entity)
             else:
                 # Global cert case
                 cert, key, _ = get_cert_and_key(cert_ref)
-                if (cert and key) and not self.is_valid_certificate(cert_ref, cert, key):
-                    services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
+                process_certificate(cert_ref, cert, key)
 
         logger.info(f'redo: services to reconfigure {services_to_reconfig}')
 
