@@ -146,35 +146,38 @@ class SMBClusterTest(ControllerTestCase):
 class SMBShareTest(ControllerTestCase):
     _endpoint = '/api/smb/share'
 
-    _shares = [{
-        "resource_type": "ceph.smb.share",
-        "cluster_id": "clusterUserTest",
-        "share_id": "share1",
-                    "intent": "present",
-                    "name": "share1name",
-                    "readonly": "false",
-                    "browseable": "true",
-                    "cephfs": {
-                        "volume": "fs1",
-                        "path": "/",
-                        "provider": "samba-vfs"
-                    }
-    },
-        {
-        "resource_type": "ceph.smb.share",
-        "cluster_id": "clusterADTest",
-        "share_id": "share2",
-                    "intent": "present",
-                    "name": "share2name",
-                    "readonly": "false",
-                    "browseable": "true",
-                    "cephfs": {
-                        "volume": "fs2",
-                        "path": "/",
-                        "provider": "samba-vfs"
-                    }
+    _shares = {
+        "resources": [
+            {
+                "resource_type": "ceph.smb.share",
+                "cluster_id": "clusterUserTest",
+                "share_id": "share1",
+                "intent": "present",
+                "name": "share1name",
+                "readonly": "false",
+                "browseable": "true",
+                "cephfs": {
+                    "volume": "fs1",
+                    "path": "/",
+                    "provider": "samba-vfs",
+                },
+            },
+            {
+                "resource_type": "ceph.smb.share",
+                "cluster_id": "clusterADTest",
+                "share_id": "share2",
+                "intent": "present",
+                "name": "share2name",
+                "readonly": "false",
+                "browseable": "true",
+                "cephfs": {
+                    "volume": "fs2",
+                    "path": "/",
+                    "provider": "samba-vfs",
+                },
+            },
+        ]
     }
-    ]
 
     @classmethod
     def setup_server(cls):
@@ -185,14 +188,14 @@ class SMBShareTest(ControllerTestCase):
 
         self._get(self._endpoint)
         self.assertStatus(200)
-        self.assertJsonBody(self._shares)
+        self.assertJsonBody(self._shares['resources'])
 
-    def test_list_from_cluster(self):
-        mgr.remote = Mock(return_value=self._shares[0])
+    def test_list_one_share(self):
+        mgr.remote = Mock(return_value=self._shares['resources'][0])
 
         self._get(self._endpoint)
         self.assertStatus(200)
-        self.assertJsonBody(self._shares[0])
+        self.assertJsonBody([self._shares['resources'][0]])
 
     def test_delete(self):
         _res = {
