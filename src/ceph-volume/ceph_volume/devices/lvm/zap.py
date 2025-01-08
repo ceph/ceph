@@ -52,30 +52,25 @@ def wipefs(path):
     * ``CEPH_VOLUME_WIPEFS_INTERVAL``: Defaults to 5
 
     """
-    tries = str_to_int(
-        os.environ.get('CEPH_VOLUME_WIPEFS_TRIES', 8)
-    )
-    interval = str_to_int(
-        os.environ.get('CEPH_VOLUME_WIPEFS_INTERVAL', 5)
-    )
+    tries = str_to_int(os.environ.get('CEPH_VOLUME_WIPEFS_TRIES', 8)) + 1
+    interval = str_to_int(os.environ.get('CEPH_VOLUME_WIPEFS_INTERVAL', 5))
 
-    for trying in range(tries):
-        stdout, stderr, exit_code = process.call([
+    for attempt in range(1, tries):
+        _, _, exit_code = process.call([
             'wipefs',
             '--all',
             path
         ])
-        if exit_code != 0:
-            # this could narrow the retry by poking in the stderr of the output
-            # to verify that 'probing initialization failed' appears, but
-            # better to be broad in this retry to prevent missing on
-            # a different message that needs to be retried as well
-            terminal.warning(
-                'failed to wipefs device, will try again to workaround probable race condition'
-            )
-            time.sleep(interval)
-        else:
+        if not exit_code:
             return
+        # this could narrow the retry by poking in the stderr of the output
+        # to verify that 'probing initialization failed' appears, but
+        # better to be broad in this retry to prevent missing on
+        # a different message that needs to be retried as well
+        terminal.warning(
+            f'failed to wipefs device, will try again ({attempt}/{tries}) to workaround probable race condition'
+        )
+        time.sleep(interval)
     raise RuntimeError("could not complete wipefs on device: %s" % path)
 
 
