@@ -3021,7 +3021,7 @@ public:
 
           if (!dest_bucket_perms.verify_bucket_permission(dest_key.value_or(key), rgw::IAM::s3PutObject)) {
             ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bucket.get_key() << ")" << dendl;
-            return -EPERM;
+            return set_cr_error(-EPERM);
           }
         }
 
