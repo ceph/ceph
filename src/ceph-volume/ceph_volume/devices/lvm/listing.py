@@ -140,7 +140,7 @@ class List(object):
         """
         return self.create_report(api.get_lvs())
 
-    def single_report(self, arg):
+    def single_report(self, osd):
         """
         Generate a report for a single device. This can be either a logical
         volume in the form of vg/lv, a device with an absolute path like
@@ -148,12 +148,12 @@ class List(object):
 
         Return value '{}' denotes failure.
         """
-        if isinstance(arg, int) or arg.isdigit():
-            lv = api.get_lvs_from_osd_id(arg)
-        elif arg[0] == '/':
-            lv = api.get_lvs_from_path(arg)
+        if osd.isdigit():
+            lv = api.get_lvs_from_osd_id(osd)
+        elif osd[0] == '/':
+            lv = api.get_lvs_from_path(osd)
         else:
-            vg_name, lv_name = arg.split('/')
+            vg_name, lv_name = osd.split('/')
             lv = [api.get_single_lv(filters={'lv_name': lv_name,
                                              'vg_name': vg_name})]
 
@@ -163,7 +163,7 @@ class List(object):
             # check if device is a non-lvm journals or wal/db
             for dev_type in ['journal', 'wal', 'db']:
                 lvs = api.get_lvs(tags={
-                    'ceph.{}_device'.format(dev_type): arg})
+                    'ceph.{}_device'.format(dev_type): osd})
                 if lvs:
                     # just taking the first lv here should work
                     lv = lvs[0]
