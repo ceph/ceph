@@ -71,9 +71,6 @@ public:
     r_conn = make_local_shared_foreign(std::move(conn));
   }
 
-  interruptible_future<> with_pg_interruptible(
-    Ref<PG> pg);
-
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
