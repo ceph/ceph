@@ -75,7 +75,7 @@ class RawBlueStore(BlueStore):
         except Exception:
             logger.exception('raw prepare was unable to complete')
             logger.info('will rollback OSD ID creation')
-            rollback_osd(self.args, self.osd_id)
+            rollback_osd(self.osd_id)
             raise
         dmcrypt_log = 'dmcrypt' if hasattr(args, 'dmcrypt') else 'clear'
         terminal.success("ceph-volume raw {} prepare "

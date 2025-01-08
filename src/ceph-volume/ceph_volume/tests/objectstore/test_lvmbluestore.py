@@ -188,7 +188,7 @@ class TestLvmBlueStore:
         m_rollback_osd.return_value = MagicMock()
         with pytest.raises(Exception):
             self.lvm_bs.safe_prepare()
-        assert m_rollback_osd.mock_calls == [call(self.lvm_bs.args, '111')]
+        assert m_rollback_osd.mock_calls == [call('111')]
 
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.get_ptuuid', Mock(return_value='c6798f59-01'))
     @patch('ceph_volume.api.lvm.Volume.set_tags', MagicMock())
