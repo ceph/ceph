@@ -5646,11 +5646,18 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
   // if there is bucket sync policy configured, by doing unordered
   // listing with max_key=1. if objects are found, don't delete the bucket.
   if (svc.zone->is_syncing_bucket_meta(bucket)) {
-    auto bs_policy = bucket_info.sync_policy;
-    if (bs_policy) {
-      ldpp_dout(dpp, 10) << "bucket policy exists. listing remote zones" << dendl;
-      const rgw_zone_id source_zone = svc.zone->get_zone_params().get_id();
+    // check if asymmetric replication policy exists either at zonegroup or bucket level
+    auto zg_sync_policy = svc.zone->get_zonegroup().sync_policy;
+    bool is_zg_policy_directional = zg_sync_policy.is_directional();
 
+    bool is_bucket_policy_directional = false;
+    auto bucket_sync_policy = bucket_info.sync_policy;
+    if (bucket_sync_policy) {
+      is_bucket_policy_directional = bucket_sync_policy->is_directional();
+    }
+    if (is_zg_policy_directional || is_bucket_policy_directional) {
+      ldpp_dout(dpp, 10) << "sync policy exists. listing remote zones" << dendl;
+      const rgw_zone_id source_zone = svc.zone->get_zone_params().get_id();
       r = list_remote_buckets(dpp, driver, source_zone, bucket, y);
       if (r == -ENOTEMPTY) {
         ldpp_dout(dpp, 0) << "ERROR: cannot delete bucket. objects exist in the bucket on another zone " << dendl;
