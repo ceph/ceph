@@ -7888,11 +7888,12 @@ class C_MDS_PeerLinkCommit : public ServerContext {
   MDRequestRef mdr;
   CInode *targeti;
   inodeno_t referent_ino;
+  bool link_inc;
 public:
-  C_MDS_PeerLinkCommit(Server *s, const MDRequestRef& r, CInode *t, inodeno_t ri) :
-    ServerContext(s), mdr(r), targeti(t), referent_ino(ri) { }
+  C_MDS_PeerLinkCommit(Server *s, const MDRequestRef& r, CInode *t, inodeno_t ri, bool inc) :
+    ServerContext(s), mdr(r), targeti(t), referent_ino(ri), link_inc(inc) { }
   void finish(int r) override {
-    server->_commit_peer_link(mdr, r, targeti, referent_ino);
+    server->_commit_peer_link(mdr, r, targeti, referent_ino, link_inc);
   }
 };
 
@@ -8010,7 +8011,7 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   mdcache->add_uncommitted_peer(mdr->reqid, mdr->ls, mdr->peer_to_mds);
 
   // set up commit waiter
-  mdr->more()->peer_commit = new C_MDS_PeerLinkCommit(this, mdr, targeti, referent_ino);
+  mdr->more()->peer_commit = new C_MDS_PeerLinkCommit(this, mdr, targeti, referent_ino, inc);
 
   mdr->more()->peer_update_journaled = true;
   submit_mdlog_entry(le, new C_MDS_PeerLinkPrep(this, mdr, targeti, adjust_realm),
@@ -8061,7 +8062,7 @@ struct C_MDS_CommittedPeer : public ServerLogContext {
   }
 };
 
-void Server::_commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti, inodeno_t referent_ino)
+void Server::_commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti, inodeno_t referent_ino, bool link_inc)
 {  
   dout(10) << "_commit_peer_link " << *mdr
 	   << " r=" << r
@@ -8070,12 +8071,14 @@ void Server::_commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti, 
   ceph_assert(g_conf()->mds_kill_link_at != 7);
 
   if (r == 0) {
-    ceph_assert(referent_ino);
-    // All good, set referent inode ready to be used before apply
-    auto pi = targeti->project_inode(mdr);
-    pi.inode->version = targeti->pre_dirty();
-    pi.inode->add_referent_ino(referent_ino);
-    dout(20) << "_commit_peer_link " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
+    // All good, set referent inode before apply
+    if (link_inc) {
+      ceph_assert(referent_ino);
+      auto pi = targeti->project_inode(mdr);
+      pi.inode->version = targeti->pre_dirty();
+      pi.inode->add_referent_ino(referent_ino);
+      dout(20) << "_commit_peer_link " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
+    }
 
     // It's expected to update the fnode when inode data is modified, so asserts are in place
     // to validate the fnode's version >= inode's version. In this case, there is nothing update,
