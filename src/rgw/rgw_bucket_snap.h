@@ -67,5 +67,9 @@ public:
 
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<RGWBucketSnapMgr*>& o);
+
+  rgw_bucket_snap_id get_cur_snap() const {
+    return cur_snap;
+  }
 };
 WRITE_CLASS_ENCODER(RGWBucketSnapMgr)

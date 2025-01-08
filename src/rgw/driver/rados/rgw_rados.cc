@@ -3347,9 +3347,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(rctx.dpp, poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
-                        storage_class, meta.owner,
-			 meta.category, meta.remove_objs, rctx.y,
-			 meta.user_data, meta.appendable, log_op);
+                        storage_class,
+                        meta.owner, meta.category,
+                        target->get_bucket_info().local.snap_mgr.get_cur_snap(),
+                        meta.remove_objs, rctx.y,
+                        meta.user_data, meta.appendable, log_op);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -3962,6 +3964,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    storage_class,
 			    owner,
 			    RGWObjCategory::Main, // RGWObjCategory category,
+                            bucket_info.local.snap_mgr.get_cur_snap(),
 			    nullptr, // remove_objs list
 			    y,
 			    nullptr, // user data string
@@ -6232,7 +6235,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(dpp, poolid, epoch, state->mtime, params.remove_objs, y, log_op);
+    auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap();
+    r = index_op.complete_del(dpp, poolid, epoch, state->mtime, cur_snap, params.remove_objs,
+                              y, log_op);
 
     int ret = target->complete_atomic_modification(dpp, y);
     if (ret < 0) {
@@ -6317,7 +6322,8 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-  return index_op.complete_del(dpp, -1 /* pool */, 0, mtime, nullptr, y);
+  auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap();
+  return index_op.complete_del(dpp, -1 /* pool */, 0, mtime, cur_snap, nullptr, y);
 }
 
 static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
@@ -7005,9 +7011,10 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
         } catch (buffer::error& err) {
         }
       }
+      auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap();
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
-                            category, nullptr, y, nullptr, false, log_op);
+                            category, cur_snap, nullptr, y, nullptr, false, log_op);
     } else {
       int ret = index_op.cancel(dpp, nullptr, y, log_op);
       if (ret < 0) {
@@ -7411,6 +7418,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
                                             const string& content_type, const string& storage_class,
                                             const ACLOwner& owner,
                                             RGWObjCategory category,
+                                            rgw_bucket_snap_id snap_id,
                                             list<rgw_obj_index_key> *remove_objs,
 					    optional_yield y,
 					    const string *user_data,
@@ -7443,6 +7451,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   ent.meta.owner_display_name = owner.display_name;
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
+  ent.meta.snap_id = snap_id;
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
@@ -7458,6 +7467,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
                                                 int64_t poolid, uint64_t epoch,
                                                 real_time& removed_mtime,
+                                                rgw_bucket_snap_id snap_id,
                                                 list<rgw_obj_index_key> *remove_objs,
                                                 optional_yield y,
                                                 bool log_op)
@@ -7476,7 +7486,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
 
   bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace, add_log);
+  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, snap_id, remove_objs, bilog_flags, zones_trace, add_log);
 
   if (add_log) {
     add_datalog_entry(dpp, store->svc.datalog_rados,
@@ -9866,6 +9876,7 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
                                    int64_t pool, uint64_t epoch,
                                    rgw_obj& obj,
                                    real_time& removed_mtime,
+                                   rgw_bucket_snap_id snap_id,
                                    list<rgw_obj_index_key> *remove_objs,
                                    uint16_t bilog_flags,
                                    rgw_zone_set *zones_trace,
@@ -9873,6 +9884,7 @@ int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
 {
   rgw_bucket_dir_entry ent;
   ent.meta.mtime = removed_mtime;
+  ent.meta.snap_id = snap_id;
   obj.key.get_index_key(&ent.key);
   return cls_obj_complete_op(bs, obj, CLS_RGW_OP_DEL, tag, pool, epoch,
 			     ent, RGWObjCategory::None, remove_objs,
