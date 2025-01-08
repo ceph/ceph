@@ -7690,6 +7690,8 @@ int Client::_do_lookup(const InodeRef& dir, const string& name, int mask,
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
       }
       inode->symlink_plain = slname;
+    } else {
+      inode->symlink_plain = inode->symlink;
     }
   }
 
@@ -8292,7 +8294,7 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
     memcpy(buf, dname.c_str(), dname.size());
     r = dname.size();
   } else {
-    memcpy(buf, in->symlink_plain.c_str(), r);
+    memcpy(buf, in->symlink.c_str(), r);
   }
 
   return r;
