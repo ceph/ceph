@@ -4520,7 +4520,7 @@ public:
           }
           tn->set_resource_name(SSTR(bucket_str_noinstance(bs.bucket) << "/" << key));
         }
-        if (retcode == -ERR_PRECONDITION_FAILED || retcode == -EPERM) {
+        if (retcode == -ERR_PRECONDITION_FAILED || retcode == -EPERM || retcode == -EACCES) {
 	  pretty_print(sc->env, "Skipping object s3://{}/{} in sync from zone {}\n",
 		       bs.bucket.name, key, zone_name);
           set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
