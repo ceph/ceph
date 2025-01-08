@@ -251,7 +251,7 @@ public:
       cls_rgw_bi_put_entries(op, std::move(entries), check_existing);
     } else {
       for (auto& entry : entries) {
-        store->getRados()->bi_put(op, bs, entry, null_yield);
+        cls_rgw_bi_put(op, entry);
       }
       cls_rgw_bucket_update_stats(op, false, stats);
     }

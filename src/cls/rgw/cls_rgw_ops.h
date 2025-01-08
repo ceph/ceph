@@ -495,8 +495,6 @@ struct rgw_cls_bucket_update_stats_op
   std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
   std::map<RGWObjCategory, rgw_bucket_category_stats> dec_stats;
 
-  rgw_cls_bucket_update_stats_op() {}
-
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(2, 1, bl);
     encode(absolute, bl);
@@ -734,8 +732,6 @@ WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 struct rgw_cls_bi_put_op {
   rgw_cls_bi_entry entry;
 
-  rgw_cls_bi_put_op() {}
-
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(entry, bl);
@@ -790,12 +786,10 @@ struct rgw_cls_bi_put_entries_op {
 WRITE_CLASS_ENCODER(rgw_cls_bi_put_entries_op)
 
 struct rgw_cls_bi_list_op {
-  uint32_t max;
+  uint32_t max = 0;
   std::string name_filter; // limit result to one object and its instances
   std::string marker;
-  bool reshardlog;
-
-  rgw_cls_bi_list_op() : max(0), reshardlog(false) {}
+  bool reshardlog = false;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);

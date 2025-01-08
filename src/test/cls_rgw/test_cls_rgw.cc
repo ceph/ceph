@@ -616,6 +616,20 @@ TEST_F(cls_rgw, index_list_delimited)
   ASSERT_EQ("u-4", id_entry_map.crbegin()->first);
 }
 
+static int bi_list(librados::IoCtx& ioctx, const std::string& oid,
+                   const std::string& name_filter, const std::string& marker,
+                   uint32_t max, std::list<rgw_cls_bi_entry>& entries,
+                   bool& is_truncated, bool reshardlog = false)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_bi_list(op, name_filter, marker, max, reshardlog, bl);
+  int r = ioctx.operate(oid, &op, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  return cls_rgw_bi_list_decode(bl, entries, is_truncated);
+}
 
 TEST_F(cls_rgw, bi_list)
 {
@@ -633,8 +647,8 @@ TEST_F(cls_rgw, bi_list)
   bool is_truncated;
   std::string marker;
 
-  int ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
-			    &entries, &is_truncated);
+  int ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+                    entries, is_truncated);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(entries.size(), 0u) <<
     "The listing of an empty bucket as 0 entries.";
@@ -659,8 +673,8 @@ TEST_F(cls_rgw, bi_list)
 		   RGW_BILOG_FLAG_VERSIONED_OP);
   }
 
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs + 10,
-			&entries, &is_truncated);
+  ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs + 10,
+                entries, is_truncated);
   ASSERT_EQ(ret, 0);
   if (is_truncated) {
     ASSERT_LT(entries.size(), num_objs);
@@ -673,8 +687,8 @@ TEST_F(cls_rgw, bi_list)
   is_truncated = true;
   marker.clear();
   while(is_truncated) {
-    ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
-			  &entries, &is_truncated);
+    ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+                  entries, is_truncated);
     ASSERT_EQ(ret, 0);
     if (is_truncated) {
       ASSERT_LT(entries.size(), num_objs - num_entries);
@@ -686,8 +700,8 @@ TEST_F(cls_rgw, bi_list)
   }
 
   // try with marker as final entry
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
-			&entries, &is_truncated);
+  ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+                entries, is_truncated);
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(entries.size(), 0u);
   ASSERT_EQ(is_truncated, false);
@@ -698,8 +712,8 @@ TEST_F(cls_rgw, bi_list)
     is_truncated = true;
     marker.clear();
     while(is_truncated) {
-      ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
-			    &entries, &is_truncated);
+      ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+                    entries, is_truncated);
       ASSERT_EQ(ret, 0);
       if (is_truncated) {
 	ASSERT_LT(entries.size(), num_objs - num_entries);
@@ -711,8 +725,8 @@ TEST_F(cls_rgw, bi_list)
     }
 
     // try with marker as final entry
-    ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
-			  &entries, &is_truncated);
+    ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, max,
+                  entries, is_truncated);
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(entries.size(), 0u);
     ASSERT_EQ(is_truncated, false);
@@ -728,8 +742,8 @@ TEST_F(cls_rgw, bi_list)
     entries.clear();
     marker.clear();
 
-    ret = cls_rgw_bi_list(ioctx, bucket_oid, filter_result.first, marker, max,
-			  &entries, &is_truncated);
+    ret = bi_list(ioctx, bucket_oid, filter_result.first, marker, max,
+                  entries, is_truncated);
 
     ASSERT_EQ(ret, 0) << "bi list test with name filters should succeed";
     ASSERT_EQ(entries.size(), filter_result.second) <<
@@ -743,8 +757,8 @@ TEST_F(cls_rgw, bi_list)
   entries.clear();
   marker.clear();
 
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs - 1,
-			&entries, &is_truncated);
+  ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs - 1,
+                entries, is_truncated);
   ASSERT_EQ(ret, 0) << "combined segment count should succeed";
   ASSERT_EQ(entries.size(), num_objs - 1) <<
     "combined segment count should return the correct number of results";
@@ -753,8 +767,8 @@ TEST_F(cls_rgw, bi_list)
 
 
   marker = entries.back().idx; // advance marker
-  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs - 1,
-			&entries, &is_truncated);
+  ret = bi_list(ioctx, bucket_oid, empty_name_filter, marker, num_objs - 1,
+                entries, is_truncated);
   ASSERT_EQ(ret, 0) << "combined segment count should succeed";
   ASSERT_EQ(entries.size(), 1) <<
     "combined segment count should return the correct number of results";
@@ -1195,8 +1209,7 @@ TEST_F(cls_rgw, bi_log_trim)
   {
     list<rgw_cls_bi_entry> entries;
     bool truncated{false};
-    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, bucket_oid, "", "", 128,
-                                 &entries, &truncated));
+    ASSERT_EQ(0, bi_list(ioctx, bucket_oid, "", "", 128, entries, truncated));
     // prepare/complete/instance/olh entry for each
     EXPECT_EQ(40u, entries.size());
     EXPECT_FALSE(truncated);
@@ -1258,8 +1271,7 @@ TEST_F(cls_rgw, bi_log_trim)
   {
     list<rgw_cls_bi_entry> entries;
     bool truncated{false};
-    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, bucket_oid, "", "", 128,
-                                 &entries, &truncated));
+    ASSERT_EQ(0, bi_list(ioctx, bucket_oid, "", "", 128, entries, truncated));
     EXPECT_EQ(40u, entries.size());
     EXPECT_FALSE(truncated);
   }
@@ -1364,9 +1376,9 @@ void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
 }
 
 static int reshardlog_list(librados::IoCtx& ioctx, const std::string& oid,
-                           std::list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+                           std::list<rgw_cls_bi_entry>& entries, bool& is_truncated)
 {
-  int ret = cls_rgw_bi_list(ioctx, oid, "", "", 100, entries, is_truncated, true);
+  int ret = bi_list(ioctx, oid, "", "", 100, entries, is_truncated, true);
   if (ret < 0) {
     return ret;
   }
@@ -1391,7 +1403,7 @@ TEST_F(cls_rgw, reshardlog_list)
   // do not record logs
   bool is_truncated = false;
   std::list<rgw_cls_bi_entry> entries;
-  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, entries, is_truncated));
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(0u, entries.size());
 
@@ -1402,14 +1414,14 @@ TEST_F(cls_rgw, reshardlog_list)
   cls_rgw_obj_key obj2 = str_int("obj2", 0);
   entries.clear();
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj2, loc);
-  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, entries, is_truncated));
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(1u, entries.size());
 
   // overwrite the log writen in prepare
   entries.clear();
   index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, obj2, meta);
-  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, entries, is_truncated));
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(1u, entries.size());
 
@@ -1417,7 +1429,7 @@ TEST_F(cls_rgw, reshardlog_list)
   entries.clear();
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj1, loc);
   index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 1, obj1, meta);
-  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, entries, is_truncated));
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(2u, entries.size());
 
@@ -1425,7 +1437,7 @@ TEST_F(cls_rgw, reshardlog_list)
   entries.clear();
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj2, loc);
   index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 1, obj2, meta);
-  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, entries, is_truncated));
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(2u, entries.size());
 }
@@ -1518,8 +1530,8 @@ TEST_F(cls_rgw, bi_put_entries)
   {
     list<rgw_cls_bi_entry> src_entries;
     bool truncated{false};
-    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, src_bucket, "", "", 128,
-                                 &src_entries, &truncated));
+    ASSERT_EQ(0, bi_list(ioctx, src_bucket, "", "", 128,
+                         src_entries, truncated));
     ASSERT_EQ(2u, src_entries.size());
 
     ObjectWriteOperation op;
@@ -1556,8 +1568,8 @@ TEST_F(cls_rgw, bi_put_entries)
     list<rgw_cls_bi_entry> src_entries;
     bool truncated{false};
     const bool reshardlog = true;
-    ASSERT_EQ(0, cls_rgw_bi_list(ioctx, src_bucket, "", "", 128,
-                                 &src_entries, &truncated, reshardlog));
+    ASSERT_EQ(0, bi_list(ioctx, src_bucket, "", "", 128,
+                         src_entries, truncated, reshardlog));
     ASSERT_EQ(4u, src_entries.size());
 
     const auto& entry = src_entries.front();
