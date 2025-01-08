@@ -159,6 +159,7 @@ smallmds=0
 short=0
 crimson=0
 ec=0
+cephexporter=0
 cephadm=0
 parallel=true
 restart=1
@@ -233,6 +234,7 @@ options:
 	-G disable Kerberos/GSSApi authentication
 	--hitset <pool> <hit_set_type>: enable hitset tracking
 	-e : create an erasure pool
+	--cephexporter: start the ceph-exporter daemon
 	-o config add extra config parameters to all sections
 	--rgw_port specify ceph rgw http listen port
 	--rgw_frontend specify the rgw frontend configuration
@@ -371,6 +373,9 @@ case $1 in
         ;;
     -e)
         ec=1
+        ;;
+    --cephexporter)
+        cephexporter=1
         ;;
     --new | -n)
         new=1
@@ -1140,6 +1145,17 @@ EOF
     fi
 }
 
+start_cephexporter() {
+    debug echo "Starting Ceph exporter daemon..."
+
+    # Define socket directory for the exporter
+    # Start the exporter daemon 
+    prunb ceph-exporter \
+        -c "$conf_fn" \
+        --sock-dir "$CEPH_ASOK_DIR" \
+        --addrs "$IP"
+}
+
 start_osd() {
     if [ $inc_osd_num -gt 0 ]; then
         old_maxosd=$($CEPH_BIN/ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
@@ -1736,6 +1752,10 @@ if [ $CEPH_NUM_MDS -gt 0 ]; then
     start_mds
     # key with access to all FS
     ceph_adm fs authorize \* "client.fs" / rwp >> "$keyring_fn"
+fi
+
+if [ "$cephexporter" -eq 1 ]; then
+    start_cephexporter
 fi
 
 # Don't set max_mds until all the daemons are started, otherwise
