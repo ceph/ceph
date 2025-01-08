@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mgr:
+        client mount timeout: 30
+        mon warn on pool no app: false

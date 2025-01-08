@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mon:
+        mon op complaint time: 120
+    # cephadm can take up to 5 minutes to bring up remaining mons
+    # This needs to be set before cluster-conf configs are applied.
+    conf:
+      mon:
+        mon down mkfs grace: 300
