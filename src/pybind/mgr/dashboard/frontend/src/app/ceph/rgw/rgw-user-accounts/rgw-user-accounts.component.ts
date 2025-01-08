@@ -14,6 +14,11 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Router } from '@angular/router';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { Observable, Subscriber, forkJoin as observableForkJoin } from 'rxjs';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 
 const BASE_URL = 'rgw/accounts';
 
@@ -36,7 +41,9 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private router: Router,
-    private rgwUserAccountsService: RgwUserAccountsService
+    private rgwUserAccountsService: RgwUserAccountsService,
+    private cdsModalService: ModalCdsService,
+    private taskWrapper: TaskWrapperService
   ) {
     super();
   }
@@ -110,7 +117,13 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
       click: () => this.router.navigate([`${BASE_URL}/${getEditURL()}`]),
       name: this.actionLabels.EDIT
     };
-    this.tableActions = [addAction, editAction];
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteAction(),
+      name: this.actionLabels.DELETE
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
   }
 
   getAccountsList(context?: CdTableFetchDataContext) {
@@ -128,5 +141,43 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  deleteAction() {
+    const account_name = this.selection.first().name;
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`Account`,
+      itemNames: [account_name],
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask(BASE_URL, {
+                account_names: [account_name]
+              }),
+              call: observableForkJoin(
+                this.selection.selected.map((account: Account) => {
+                  return this.rgwUserAccountsService.remove(account.id);
+                })
+              )
+            })
+            .subscribe({
+              error: (error: any) => {
+                // Forward the error to the observer.
+                observer.error(error);
+                // Reload the data table content because some deletions might
+                // have been executed successfully in the meanwhile.
+                this.table.refreshBtn();
+              },
+              complete: () => {
+                // Notify the observer that we are done.
+                observer.complete();
+                // Reload the data table content.
+                this.table.refreshBtn();
+              }
+            });
+        });
+      }
+    });
   }
 }
