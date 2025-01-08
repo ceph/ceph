@@ -440,6 +440,11 @@ class interval_set {
     if (p->first+p->second < start+len) return false;
     return true;
   }
+  bool contains(interval_set const &other) const {
+    interval_set tmp;
+    tmp.intersection_of(*this, other);
+    return tmp == other;
+  }
   bool intersects(T start, T len) const {
     interval_set a;
     a.insert(start, len);
