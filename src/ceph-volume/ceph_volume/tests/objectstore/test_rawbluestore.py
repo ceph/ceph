@@ -60,7 +60,7 @@ class TestRawBlueStore:
         self.raw_bs.osd_id = self.raw_bs.args.osd_id
         with pytest.raises(Exception):
             self.raw_bs.safe_prepare()
-        assert m_rollback_osd.mock_calls == [call(self.raw_bs.args, '1')]
+        assert m_rollback_osd.mock_calls == [call('1')]
 
     @patch('ceph_volume.objectstore.rawbluestore.RawBlueStore.prepare', MagicMock())
     def test_safe_prepare(self,

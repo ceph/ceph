@@ -3,8 +3,9 @@ from ceph_volume import process, conf
 from ceph_volume import terminal
 from ceph_volume.devices.lvm.zap import Zap
 import argparse
+from typing import Any, Dict, Optional
 
-def rollback_osd(args, osd_id=None):
+def rollback_osd(osd_id: Optional[str] = None) -> None:
     """
     When the process of creating or preparing fails, the OSD needs to be
     destroyed so that the ID can be reused.  This prevents from leaving the ID
@@ -35,7 +36,7 @@ def rollback_osd(args, osd_id=None):
     Zap(['--destroy', '--osd-id', osd_id]).main()
 
 
-common_args = {
+common_args: Dict[str, Any] = {
     '--objectstore': {
         'dest': 'objectstore',
         'help': 'The OSD objectstore.',
@@ -95,7 +96,7 @@ common_args = {
     },
 }
 
-bluestore_args = {
+bluestore_args: Dict[str, Any] = {
     '--bluestore': {
         'action': 'store_true',
         'help': 'Use the bluestore objectstore. (DEPRECATED: use --objectstore instead)',
@@ -139,16 +140,16 @@ bluestore_args = {
 }
 
 
-def get_default_args():
+def get_default_args() -> Dict[str, Any]:
     defaults = {}
-    def format_name(name):
+    def format_name(name: str) -> str:
         return name.strip('-').replace('-', '_').replace('.', '_')
     for argset in (common_args, bluestore_args):
         defaults.update({format_name(name): val.get('default', None) for name, val in argset.items()})
     return defaults
 
 
-def common_parser(prog, description):
+def common_parser(prog: str, description: str) -> argparse.ArgumentParser:
     """
     Both prepare and create share the same parser, those are defined here to
     avoid duplication
