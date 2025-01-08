@@ -19,9 +19,9 @@
 
 using namespace std;
 
-extent_map imap_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
+extent_map_l imap_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
 {
-  extent_map out;
+  extent_map_l out;
   for (auto &&tup: in) {
     bufferlist bl;
     bl.append_zero(tup.second);
@@ -30,9 +30,9 @@ extent_map imap_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
   return out;
 }
 
-extent_map imap_from_iset(const extent_set &set)
+extent_map_l imap_from_iset(const extent_set_l &set)
 {
-  extent_map out;
+  extent_map_l out;
   for (auto &&iter: set) {
     bufferlist bl;
     bl.append_zero(iter.second);
@@ -41,9 +41,9 @@ extent_map imap_from_iset(const extent_set &set)
   return out;
 }
 
-extent_set iset_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
+extent_set_l iset_from_vector(vector<pair<uint64_t, uint64_t> > &&in)
 {
-  extent_set out;
+  extent_set_l out;
   for (auto &&tup: in) {
     out.insert(tup.first, tup.second);
   }
@@ -178,7 +178,7 @@ TEST(extentcache, write_write_overlap2)
   c.open_write_pin(pin);
 
   // start write 1
-  auto to_read = extent_set();
+  auto to_read = extent_set_l();
   auto to_write = iset_from_vector(
     {{659456, 4096}});
   auto must_read = c.reserve_extents_for_rmw(
@@ -192,7 +192,7 @@ TEST(extentcache, write_write_overlap2)
   // start write 2
   ECExtentCacheL::write_pin pin2;
   c.open_write_pin(pin2);
-  auto to_read2 = extent_set();
+  auto to_read2 = extent_set_l();
   auto to_write2 = iset_from_vector(
     {{663552, 4096}});
   auto must_read2 = c.reserve_extents_for_rmw(
@@ -211,7 +211,7 @@ TEST(extentcache, write_write_overlap2)
     oid, pin3, to_write3, to_read3);
   ASSERT_EQ(
     must_read3,
-    extent_set());
+    extent_set_l());
 
   c.print(std::cerr);
 

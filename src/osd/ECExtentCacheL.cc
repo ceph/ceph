@@ -129,18 +129,18 @@ std::pair<
   return std::make_pair(fst, lst);
 }
 
-extent_set ECExtentCacheL::reserve_extents_for_rmw(
+extent_set_l ECExtentCacheL::reserve_extents_for_rmw(
   const hobject_t &oid,
   write_pin &pin,
-  const extent_set &to_write,
-  const extent_set &to_read)
+  const extent_set_l &to_write,
+  const extent_set_l &to_read)
 {
   if (to_write.empty() && to_read.empty()) {
-    return extent_set();
+    return extent_set_l();
   }
-  extent_set must_read;
+  extent_set_l must_read;
   auto &eset = get_or_create(oid);
-  extent_set missing;
+  extent_set_l missing;
   for (auto &&res: to_write) {
     eset.traverse_update(
       pin,
@@ -160,15 +160,15 @@ extent_set ECExtentCacheL::reserve_extents_for_rmw(
   return must_read;
 }
 
-extent_map ECExtentCacheL::get_remaining_extents_for_rmw(
+extent_map_l ECExtentCacheL::get_remaining_extents_for_rmw(
   const hobject_t &oid,
   write_pin &pin,
-  const extent_set &to_get)
+  const extent_set_l &to_get)
 {
   if (to_get.empty()) {
-    return extent_map();
+    return extent_map_l();
   }
-  extent_map ret;
+  extent_map_l ret;
   auto &eset = get_or_create(oid);
   for (auto &&res: to_get) {
     bufferlist bl;
@@ -196,7 +196,7 @@ extent_map ECExtentCacheL::get_remaining_extents_for_rmw(
 void ECExtentCacheL::present_rmw_update(
   const hobject_t &oid,
   write_pin &pin,
-  const extent_map &extents)
+  const extent_map_l &extents)
 {
   if (extents.empty()) {
     return;

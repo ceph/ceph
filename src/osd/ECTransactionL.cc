@@ -44,7 +44,7 @@ static void encode_and_write(
   bufferlist bl,
   uint32_t flags,
   ECUtilL::HashInfoRef hinfo,
-  extent_map &written,
+  extent_map_l &written,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   DoutPrefixProvider *dpp)
 {
@@ -100,9 +100,9 @@ void ECTransactionL::generate_transactions(
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
   const ECUtilL::stripe_info_t &sinfo,
-  const map<hobject_t,extent_map> &partial_extents,
+  const map<hobject_t,extent_map_l> &partial_extents,
   vector<pg_log_entry_t> &entries,
-  map<hobject_t,extent_map> *written_map,
+  map<hobject_t,extent_map_l> *written_map,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   set<hobject_t> *temp_added,
   set<hobject_t> *temp_removed,
@@ -389,7 +389,7 @@ void ECTransactionL::generate_transactions(
 	}
       }
 
-      extent_map to_write;
+      extent_map_l to_write;
       auto pextiter = partial_extents.find(oid);
       if (pextiter != partial_extents.end()) {
 	to_write = pextiter->second;

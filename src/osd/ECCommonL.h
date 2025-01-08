@@ -58,7 +58,7 @@ struct ECCommonL {
 
   struct ec_extent_t {
     int err;
-    extent_map emap;
+    extent_map_l emap;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
@@ -145,7 +145,7 @@ struct ECCommonL {
     void complete_object(
       const hobject_t &hoid,
       int err,
-      extent_map &&buffers) {
+      extent_map_l &&buffers) {
       ceph_assert(objects_to_read);
       --objects_to_read;
       ceph_assert(!results.count(hoid));
@@ -392,9 +392,9 @@ struct ECCommonL {
       bool using_cache = true;
 
       /// In progress read state;
-      std::map<hobject_t,extent_set> pending_read; // subset already being read
-      std::map<hobject_t,extent_set> remote_read;  // subset we must read
-      std::map<hobject_t,extent_map> remote_read_result;
+      std::map<hobject_t,extent_set_l> pending_read; // subset already being read
+      std::map<hobject_t,extent_set_l> remote_read;  // subset we must read
+      std::map<hobject_t,extent_map_l> remote_read_result;
       bool read_in_progress() const {
         return !remote_read.empty() && remote_read_result.empty();
       }
@@ -425,7 +425,7 @@ struct ECCommonL {
         ceph::ErasureCodeInterfaceRef &ecimpl,
         pg_t pgid,
         const ECUtilL::stripe_info_t &sinfo,
-        std::map<hobject_t,extent_map> *written,
+        std::map<hobject_t,extent_map_l> *written,
         std::map<shard_id_t, ceph::os::Transaction> *transactions,
         DoutPrefixProvider *dpp,
         const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
@@ -499,7 +499,7 @@ struct ECCommonL {
 
     template <typename Func>
     void objects_read_async_no_cache(
-      const std::map<hobject_t,extent_set> &to_read,
+      const std::map<hobject_t,extent_set_l> &to_read,
       Func &&on_complete
     ) {
       std::map<hobject_t, std::list<ec_align_t>> _to_read;

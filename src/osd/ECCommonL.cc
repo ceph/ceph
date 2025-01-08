@@ -517,7 +517,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
     auto* cct = read_pipeline.cct;
     dout(20) << __func__ << " completing hoid=" << hoid
              << " res=" << res << " to_read="  << to_read << dendl;
-    extent_map result;
+    extent_map_l result;
     if (res.r != 0)
       goto out;
     ceph_assert(res.returned.size() == to_read.size());
@@ -745,21 +745,21 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
   if (op->using_cache) {
     cache.open_write_pin(op->pin);
 
-    extent_set empty;
+    extent_set_l empty;
     for (auto &&hpair: op->plan.will_write) {
       auto to_read_plan_iter = op->plan.to_read.find(hpair.first);
-      const extent_set &to_read_plan =
+      const extent_set_l &to_read_plan =
 	to_read_plan_iter == op->plan.to_read.end() ?
 	empty :
 	to_read_plan_iter->second;
 
-      extent_set remote_read = cache.reserve_extents_for_rmw(
+      extent_set_l remote_read = cache.reserve_extents_for_rmw(
 	hpair.first,
 	op->pin,
 	hpair.second,
 	to_read_plan);
 
-      extent_set pending_read = to_read_plan;
+      extent_set_l pending_read = to_read_plan;
       pending_read.subtract(remote_read);
 
       if (!remote_read.empty()) {
@@ -830,7 +830,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
 
   op->trace.event("start ec write");
 
-  map<hobject_t,extent_map> written;
+  map<hobject_t,extent_map_l> written;
   op->generate_transactions(
     ec_impl,
     get_parent()->get_info().pgid.pgid,
@@ -854,7 +854,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
     }
   }
 
-  map<hobject_t,extent_set> written_set;
+  map<hobject_t,extent_set_l> written_set;
   for (auto &&i: written) {
     written_set[i.first] = i.second.get_interval_set();
   }
@@ -953,7 +953,7 @@ struct ECDummyOp : ECCommonL::RMWPipeline::Op {
       ceph::ErasureCodeInterfaceRef &ecimpl,
       pg_t pgid,
       const ECUtilL::stripe_info_t &sinfo,
-      std::map<hobject_t,extent_map> *written,
+      std::map<hobject_t,extent_map_l> *written,
       std::map<shard_id_t, ObjectStore::Transaction> *transactions,
       DoutPrefixProvider *dpp,
       const ceph_release_t require_osd_release) final

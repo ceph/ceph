@@ -23,8 +23,8 @@
 namespace ECTransactionL {
   struct WritePlan {
     bool invalidates_cache = false; // Yes, both are possible
-    std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write; // superset of to_read
+    std::map<hobject_t,extent_set_l> to_read;
+    std::map<hobject_t,extent_set_l> will_write; // superset of to_read
 
     std::map<hobject_t,ECUtilL::HashInfoRef> hash_infos;
   };
@@ -80,7 +80,7 @@ namespace ECTransactionL {
 	    op.truncate->first);
 	}
 
-	extent_set raw_write_set;
+	extent_set_l raw_write_set;
 	for (auto &&extent: op.buffer_updates) {
 	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
 	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
@@ -181,9 +181,9 @@ namespace ECTransactionL {
     ceph::ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtilL::stripe_info_t &sinfo,
-    const std::map<hobject_t,extent_map> &partial_extents,
+    const std::map<hobject_t,extent_map_l> &partial_extents,
     std::vector<pg_log_entry_t> &entries,
-    std::map<hobject_t,extent_map> *written,
+    std::map<hobject_t,extent_map_l> *written,
     std::map<shard_id_t, ceph::os::Transaction> *transactions,
     std::set<hobject_t> *temp_added,
     std::set<hobject_t> *temp_removed,

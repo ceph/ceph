@@ -1409,7 +1409,7 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
       ceph::ErasureCodeInterfaceRef &ecimpl,
       pg_t pgid,
       const ECUtilL::stripe_info_t &sinfo,
-      std::map<hobject_t,extent_map> *written,
+      std::map<hobject_t,extent_map_l> *written,
       std::map<shard_id_t, ObjectStore::Transaction> *transactions,
       DoutPrefixProvider *dpp,
       const ceph_release_t require_osd_release) final
@@ -1551,7 +1551,7 @@ void ECBackendL::objects_read_async(
   map<hobject_t,std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
-  extent_set es;
+  extent_set_l es;
   for (const auto& [read, ctx] : to_read) {
     pair<uint64_t, uint64_t> tmp;
     if (!cct->_conf->osd_ec_partial_reads || fast_read) {
