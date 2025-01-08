@@ -352,6 +352,7 @@ class PVolume:
     def __init__(self, **kw: Any) -> None:
         self.pv_name: str = ''
         self.pv_uuid: str = ''
+        self.lv_uuid: str = ''
         for k, v in kw.items():
             setattr(self, k, v)
         self.pv_api = kw
