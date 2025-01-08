@@ -969,7 +969,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       Fh *fh = (Fh*)fi->fh;
       Inode *in = fh->inode.get();
 
-      if (in->fscrypt_ctx) {
+      if (in->is_fscrypt_enabled()) {
         in->fscrypt_ctx->convert_to(&out_arg.policy.v2);
         out_arg.policy_size = sizeof(out_arg.policy);
 
