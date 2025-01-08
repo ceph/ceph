@@ -5,6 +5,8 @@ import { AppRoutingModule } from '~/app/app-routing.module';
 import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { SmbDomainSettingModalComponent } from './smb-domain-setting-modal/smb-domain-setting-modal.component';
+import { SmbClusterTabsComponent } from './smb-cluster-tabs/smb-cluster-tabs.component';
+import { SmbShareListComponent } from './smb-share-list/smb-share-list.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -18,7 +20,8 @@ import {
   ModalModule,
   NumberModule,
   PlaceholderModule,
-  SelectModule
+  SelectModule,
+  TabsModule
 } from 'carbon-components-angular';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -40,6 +43,7 @@ import { NgModule } from '@angular/core';
     DataTableModule,
     GridModule,
     SelectModule,
+    TabsModule,
     InputModule,
     CheckboxModule,
     SelectModule,
@@ -53,7 +57,13 @@ import { NgModule } from '@angular/core';
     IconModule
   ],
   exports: [SmbClusterListComponent, SmbClusterFormComponent],
-  declarations: [SmbClusterListComponent, SmbClusterFormComponent, SmbDomainSettingModalComponent],
+  declarations: [
+    SmbClusterListComponent,
+    SmbClusterFormComponent,
+    SmbDomainSettingModalComponent,
+    SmbClusterTabsComponent,
+    SmbShareListComponent
+  ],
   providers: [provideCharts(withDefaultRegisterables())]
 })
 export class SmbModule {

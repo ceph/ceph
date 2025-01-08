@@ -1,0 +1,11 @@
+<ng-container *ngIf="smbShares$ | async as smbShares">
+  <cd-table
+    [data]="smbShares"
+    columnMode="flex"
+    [columns]="columns"
+    selectionType="single"
+    [hasDetails]="false"
+    (fetchData)="loadSMBShares()"
+  >
+  </cd-table>
+  </ng-container>
