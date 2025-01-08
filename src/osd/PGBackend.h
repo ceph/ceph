@@ -18,7 +18,8 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "ECCommonL.h"
+#include "ECListener.h"
+#include "ECTypes.h"
 #include "osd_types.h"
 #include "pg_features.h"
 #include "common/intrusive_timer.h"
