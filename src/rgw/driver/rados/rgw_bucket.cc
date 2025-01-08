@@ -1280,7 +1280,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 
 int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
 				    optional_yield y, const DoutPrefixProvider *dpp, 
-                                    bool bypass_gc, bool keep_index_consistent)
+                                    bool bypass_gc, bool keep_index_consistent, bool forwarded_request)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
@@ -1289,6 +1289,14 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
                                 &bucket, y);
   if (ret < 0)
     return ret;
+
+  // check if the bucket is owned by my zonegroup, if not, refuse to remove it
+  if (!forwarded_request && bucket->get_info().zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+    ldpp_dout(dpp, 0) << "ERROR: The bucket's zonegroup does not match. "
+                      << "Removal is not allowed. Please execute this operation "
+                      << "on the bucket's zonegroup: " << bucket->get_info().zonegroup << dendl;
+    return -ERR_PERMANENT_REDIRECT;
+  }
 
   if (bypass_gc)
     ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
