@@ -560,8 +560,13 @@ class interval_set {
     erase(val, 1);
   }
 
-  void erase(T start, T len, 
-    std::function<bool(T, T)> claim = {}) {
+  /* This variant of erase allows the client to determine whether touching
+   * intervals should also be erased. This variant will assert that the
+   * intersection of the interval (start~len) is entirely contained by a single
+   * interval in *this.
+   */
+  void erase(T start, T len,
+    std::function<bool(T, T)> claim) {
     auto p = find_inc_m(start);
 
     _size -= len;
@@ -591,9 +596,79 @@ class interval_set {
     }
   }
 
+  /** This variant of erase allows for general erases (making it useful for
+   * functions like subtract). It can cope with any overlaps and will erase
+   * multiple. entries.
+   */
+  void erase(T start, T len) {
+    T begin = start;
+    T end = start + len;
+
+    auto p = find_inc_m(begin);
+
+    while ( p != m.end() && begin < end && end > p->first) {
+      T pend = p->first + p->second;
+
+      // Skip any gap.
+      if (begin < p->first) begin = p->first;
+      _size -= pend - begin;
+
+      // Truncate (delete later if empty)
+      p->second = begin - p->first;
+
+      // Handle splits
+      if (end < pend) {
+        _size += pend - end;
+        // For some maps, inserting here corrupts p, so we need
+        // to insert, then recover p, so that we can delete it if needed.
+        p = m.insert(p, std::pair(end, pend-end));
+        --p;
+      }
+
+      // Erase empty interval or move on.
+      if (!p->second) p = m.erase(p);
+      else ++p;
+
+      begin = pend;
+    }
+  }
+
+  /** This general erase method erases after a particular offset.
+ */
+  void erase_after(T start) {
+    T begin = start;
+
+    auto p = find_inc_m(begin);
+
+    while ( p != m.end()) {
+      T pend = p->first + p->second;
+
+      // Skip any gap.
+      if (begin < p->first) begin = p->first;
+      _size -= pend - begin;
+
+      // Truncate (delete later if empty)
+      p->second = begin - p->first;
+
+      // Erase empty interval or move on.
+      if (!p->second) p = m.erase(p);
+      else ++p;
+
+      begin = pend;
+    }
+  }
+
   void subtract(const interval_set &a) {
-    for (const auto& [start, len] : a.m) {
-      erase(start, len);
+    if (empty() || a.empty()) return;
+
+    auto start = range_start();
+    auto end = range_end();
+
+    /* Only loop over the overlapping range of a */
+    for (auto ap = a.find_inc(start);
+         ap != a.m.end() && ap->first <= end;
+        ++ap) {
+      erase(ap->first, ap->second);
     }
   }
 
