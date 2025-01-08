@@ -64,7 +64,7 @@ class BaseObjectStore:
                             osd_uuid: str) -> Optional["Volume"]:
         raise NotImplementedError()
 
-    def safe_prepare(self, args: "argparse.Namespace") -> None:
+    def safe_prepare(self, args: Optional["argparse.Namespace"] = None) -> None:
         raise NotImplementedError()
 
     def add_objectstore_opts(self) -> None:
