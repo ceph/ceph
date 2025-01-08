@@ -176,22 +176,22 @@ class CertKeyStore():
         """Translate a certificate reference name to its corresponding key reference name."""
         return cert_ref.replace("_cert", "_key")
 
-    def get_cert(self, entity: str, service_name: str = '', host: str = '') -> str:
+    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[Cert]:
         self._validate_cert_entity(entity, service_name, host)
 
         cert = Cert()
         if entity in self.service_name_cert or entity in self.host_cert:
             var = service_name if entity in self.service_name_cert else host
             if var not in self.known_certs[entity]:
-                return ''
+                return None
             cert = self.known_certs[entity][var]
         else:
             cert = self.known_certs[entity]
         if not cert or not isinstance(cert, Cert):
-            return ''
-        return cert.cert
+            return None
+        return cert
 
-    def save_cert(self, entity: str, cert: str, service_name: str = '', host: str = '', user_made: bool = False) -> None:
+    def save_cert(self, entity: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self._validate_cert_entity(entity, service_name, host)
 
         cert_obj = Cert(cert, user_made)
@@ -208,10 +208,10 @@ class CertKeyStore():
             j = Cert.to_json(cert_obj)
         self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
 
-    def rm_cert(self, entity: str, service_name: str = '', host: str = '') -> None:
+    def rm_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.save_cert(entity, cert='', service_name=service_name, host=host)
 
-    def _validate_cert_entity(self, entity: str, service_name: str = '', host: str = '') -> None:
+    def _validate_cert_entity(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         if entity not in self.known_certs.keys():
             raise OrchestratorError(f'Attempted to access cert for unknown entity {entity}')
 
@@ -231,22 +231,22 @@ class CertKeyStore():
                 ls[k] = bool(v)
         return ls
 
-    def get_key(self, entity: str, service_name: str = '', host: str = '') -> str:
+    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[PrivKey]:
         self._validate_key_entity(entity, host)
 
         key = PrivKey()
         if entity in self.host_key or entity in self.service_name_key:
             var = service_name if entity in self.service_name_key else host
             if var not in self.known_keys[entity]:
-                return ''
+                return None
             key = self.known_keys[entity][var]
         else:
             key = self.known_keys[entity]
         if not key or not isinstance(key, PrivKey):
-            return ''
-        return key.key
+            return None
+        return key
 
-    def save_key(self, entity: str, key: str, service_name: str = '', host: str = '', user_made: bool = False) -> None:
+    def save_key(self, entity: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self._validate_key_entity(entity, host)
 
         pkey = PrivKey(key, user_made)
@@ -263,10 +263,10 @@ class CertKeyStore():
             j = PrivKey.to_json(pkey)
         self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
 
-    def rm_key(self, entity: str, service_name: str = '', host: str = '') -> None:
+    def rm_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.save_key(entity, key='', service_name=service_name, host=host)
 
-    def _validate_key_entity(self, entity: str, host: str = '') -> None:
+    def _validate_key_entity(self, entity: str, host: Optional[str] = None) -> None:
         if entity not in self.known_keys.keys():
             raise OrchestratorError(f'Attempted to access priv key for unknown entity {entity}')
 
@@ -330,13 +330,21 @@ class CertMgr:
             return getattr(self.cert_key_store, name)
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
+    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
+        cert_obj = self.cert_key_store.get_cert(entity, service_name, host)
+        return cert_obj.cert if cert_obj else None
+
+    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
+        key_obj = self.cert_key_store.get_key(entity, service_name, host)
+        return key_obj.key if key_obj else None
+
     def _initialize_root_ca(self, ip: str) -> None:
         self.ssl_certs: SSLCerts = SSLCerts(self.certificate_duration_days)
         old_cert = self.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
         old_key = self.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
         if old_key and old_cert:
             try:
-                self.ssl_certs.load_root_credentials(old_cert, old_key)
+                self.ssl_certs.load_root_credentials(old_cert.cert, old_key.key)
             except SSLConfigException as e:
                 raise SSLConfigException("Cannot load cephadm root CA certificates.") from e
         else:
@@ -355,60 +363,75 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def _check_certificate(self, cert_ref: str, cert: str, key: str, instance: str = '') -> Optional[str]:
+    def is_valid_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> (bool, bool):
         """Helper method to validate a cert/key pair and handle errors."""
-        if not cert.strip() and not key.strip():
-            # Both cert and key are empty, nothing to check
-            return
+        key = key_obj.key
+        cert = cert_obj.cert
+        is_valid = True
+        is_close_to_expiration = False
+        exception_info = ''
         try:
             (org, cn) = get_cert_issuer_info(cert)
             days_to_expiration = verify_tls(cert, key)
-            if days_to_expiration < self.renewal_threshold_days:
-                # trigger certificate renewal using local self-signed certificates
+            is_close_to_expiration = (days_to_expiration < self.renewal_threshold_days)
+            if is_close_to_expiration:
                 logger.info(f'Certificate for "{cert_ref}" must be renewed as only {days_to_expiration} are left for expiration.')
-                if org == 'Ceph' and cn == 'cephadm':
-                    new_cert, new_key = self.ssl_certs.renew_cert(cert, self.certificate_duration_days)
-                    self.ssl_certs.save_cert(cert_ref, new_cert)
-                    self.ssl_certs.save_key(cert_ref, new_key)
-                    return True
-                else:
-                    # TODO(redo): contact ACME to get a new certificate
-                    # self.enqueue_acme_certificate_renewal(cert_ref)
-                    pass
-            else:
-                logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
-            # self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
         except ServerConfigException as e:
-            instance_info = f" ({instance})" if instance else ""
-            err_msg = f"""
-            Detected invalid certificate for {cert_ref}{instance_info}. Please, use the appropriate commands to set a valid
-            key and certificate or reset their value to an empty string if you want cephadm to generate self-signed certificates.
-            Once done, reconfigure the affected daemons as needed.
-            """
-            logger.error(f'Detected invalid certificate for {cert_ref}{instance_info}: {e}')
-            self.mgr.set_health_warning(
-                'CEPHADM_CERT_ERROR',
-                f'Invalid certificate for {cert_ref}{instance_info}: {e}',
-                1,
-                [err_msg]
-            )
-            return False
+            is_valid = False
+            exception_info = f'{e}'
 
-    def check_certificates(self) -> None:
+        if is_close_to_expiration or not is_valid:
+            if cert_obj.user_made:
+                # TODO(redo): contact ACME to get a new certificate
+                # logger.info(f'Triggering ACME certificate renewal for {cert_ref}')
+                # self.enqueue_acme_certificate_renewal(cert_ref)
+                entity_info = f" ({entity})" if entity else ""
+                err_msg = f"""
+                Detected invalid certificate for {cert_ref}{entity_info}. Please, use the appropriate commands to set a valid
+                key and certificate or reset their value to an empty string if you want cephadm to generate self-signed certificates.
+                Once done, reconfigure the affected daemons as needed.
+                """
+                logger.error(f'Detected invalid certificate for {cert_ref}{entity_info}: {exception_info}')
+                self.mgr.set_health_warning(
+                    'CEPHADM_CERT_ERROR',
+                    f'Invalid certificate for {cert_ref}{entity_info}: {exception_info}',
+                    1,
+                    [err_msg]
+                )
+            else:
+                # Trigger automated certificate renewal using local self-signed certificates
+                logger.info(f'Triggering local certificate renewal for {cert_ref}')
+                if is_close_to_expiration:
+                    logger.info(f'Certificate {cert_ref} is valid, trying to renew self-signed certificates')
+                    new_cert, new_key = self.ssl_certs.renew_cert(cert, self.certificate_duration_days)
+                    self.cert_key_store.save_cert(cert_ref, new_cert)
+                    self.cert_key_store.save_key(cert_ref, new_key)
+                else:
+                    service_name, host = self.get_service_or_host(cert_ref, entity)
+                    logger.info(f'Certificate {cert_ref} is not valid, removing to force a new certificate generation service_name: {service_name}, host: {host}')
+                    self.cert_key_store.rm_cert(cert_ref, service_name, host)
 
-        def get_service_or_host(cert_ref: str, instance: str) -> Tuple[str, str]:
-            """Determine the service name or host based on the cert_ref."""
-            service_name = instance if cert_ref in self.cert_key_store.service_name_cert else None
-            host = instance if cert_ref in self.cert_key_store.host_cert else None
-            return service_name, host
+        else:
+            logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
+            self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
 
-        def get_cert_and_key(cert_ref: str, instance: str = '') -> Tuple[str, str, str]:
+        return is_valid
+
+    def get_service_or_host(self, cert_ref: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
+        """Determine the service name or host based on the cert_ref."""
+        service_name = entity if cert_ref in self.cert_key_store.service_name_cert else None
+        host = entity if cert_ref in self.cert_key_store.host_cert else None
+        return service_name, host
+
+    def check_certificates(self) -> List[str]:
+
+        def get_cert_and_key(cert_ref: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
             """Retrieve certificate and key, translating names as necessary."""
-            service_name, host = get_service_or_host(cert_ref, instance) if instance else (None, None)
+            service_name, host = self.get_service_or_host(cert_ref, entity) if entity else (None, None)
             cert = self.cert_key_store.get_cert(cert_ref, service_name=service_name, host=host)
             key_ref = self.cert_key_store.get_key_name_from_cert(cert_ref)
             key = self.cert_key_store.get_key(key_ref, service_name=service_name, host=host)
-            return cert, key, instance
+            return cert, key, entity
 
         # services_to_reconfig = self.get_acme_ready_certificates()
         services_to_reconfig = []
@@ -419,17 +442,18 @@ class CertMgr:
 
             if isinstance(cert_entries, dict):
                 # Process only valid instances
-                instances = [instance for instance, exists in cert_entries.items() if exists]
-                for instance in instances:
-                    cert, key, instance_info = get_cert_and_key(cert_ref, instance)
-                    if self._check_certificate(cert_ref, cert, key, instance_info):
-                        # TODO(redo): get srv name from the instance info
+                for entity in [entry for entry, exists in cert_entries.items() if exists]:
+                    cert, key, entity = get_cert_and_key(cert_ref, entity)
+                    if (cert and key) and not self.is_valid_certificate(cert_ref, cert, key, entity):
+                        # TODO(redo): get srv name from the entity info
                         services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
             else:
                 # Global cert case
                 cert, key, _ = get_cert_and_key(cert_ref)
-                if self._check_certificate(cert_ref, cert, key):
+                if (cert and key) and not self.is_valid_certificate(cert_ref, cert, key):
                     services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
+
+        logger.info(f'redo: services to reconfigure {services_to_reconfig}')
 
         # return the list of services that need reconfiguration
         return services_to_reconfig
