@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { SMBCluster } from '~/app/ceph/smb/smb.model';
+import { SMBCluster, SMBShare } from '~/app/ceph/smb/smb.model';
 
 @Injectable({
   providedIn: 'root'
@@ -14,5 +14,9 @@ export class SmbService {
 
   listClusters(): Observable<SMBCluster[]> {
     return this.http.get<SMBCluster[]>(`${this.baseURL}/cluster`);
+  }
+
+  listShares(clusterId: string): Observable<SMBShare[]> {
+    return this.http.get<SMBShare[]>(`${this.baseURL}/share?cluster_id=${clusterId}`);
   }
 }

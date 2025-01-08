@@ -18,6 +18,8 @@ import {
 
 import Close from '@carbon/icons/es/close/32';
 import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.component';
+import { SmbClusterTabsComponent } from './smb-cluster-tabs/smb-cluster-tabs.component';
+import { SmbShareListComponent } from './smb-share-list/smb-share-list.component';
 
 @NgModule({
   imports: [
@@ -35,7 +37,7 @@ import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.com
     IconModule
   ],
   exports: [SmbClusterListComponent],
-  declarations: [SmbClusterListComponent]
+  declarations: [SmbClusterListComponent, SmbClusterTabsComponent, SmbShareListComponent]
 })
 export class SmbModule {
   constructor(private iconService: IconService) {

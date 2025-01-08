@@ -23,9 +23,15 @@ describe('SmbService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call list', () => {
+  it('should call list clusters', () => {
     service.listClusters().subscribe();
     const req = httpTesting.expectOne('api/smb/cluster');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call list shares for a given cluster', () => {
+    service.listShares('tango').subscribe();
+    const req = httpTesting.expectOne('api/smb/share?cluster_id=tango');
     expect(req.request.method).toBe('GET');
   });
 });
