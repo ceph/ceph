@@ -144,7 +144,7 @@ public:
     DECODE_FINISH(bl);
   }
 
-  void get_health_checks(health_check_map_t *checks) const;
+  void get_health_checks(health_check_map_t *checks);
 };
 
 #include "NVMeofGwSerialize.h"

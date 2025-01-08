@@ -91,6 +91,13 @@ options:
   default: 1000
   services:
   - mon
+- name: mon_nvmeofgw_delete_grace
+  type: secs
+  level: advanced
+  desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed 
+  default: 15_min
+  services:
+  - mon
 - name: mon_mgr_inactive_grace
   type: int
   level: advanced
