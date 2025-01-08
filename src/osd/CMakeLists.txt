@@ -44,9 +44,9 @@ set(osd_srcs
   ECCommonL.cc
   ECBackendL.cc
   ECExtentCacheL.cc
+  ECTransactionL.cc
   ECUtilL.cc
   ECUtil.cc
-  ECTransactionL.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
