@@ -414,7 +414,9 @@ public:
       handle(std::move(handle)),
       on_destruct(std::move(f)),
       src(src),
-      trans_id(trans_id)
+      trans_id(trans_id),
+      lba_ver(0),
+      backref_ver(0)
   {}
 
   void invalidate_clear_write_set() {
@@ -467,6 +469,8 @@ public:
     }
     get_handle().exit();
     views.clear();
+    lba_ver = 0;
+    backref_ver = 0;
   }
 
   bool did_reset() const {
@@ -571,6 +575,22 @@ public:
 
   const auto& get_pre_alloc_list() {
     return pre_alloc_list;
+  }
+
+  btree_iter_version_t get_lba_iter_ver() const {
+    return lba_ver;
+  }
+
+  void inc_lba_iter_ver() {
+    lba_ver++;
+  }
+
+  btree_iter_version_t get_backref_iter_ver() const {
+    return backref_ver;
+  }
+
+  void inc_backref_iter_ver() {
+    backref_ver++;
   }
 
 private:
@@ -682,6 +702,9 @@ private:
   seastar::lw_shared_ptr<rbm_pending_ool_t> pending_ool;
 
   backref_entry_refs_t backref_entries;
+
+  btree_iter_version_t lba_ver;
+  btree_iter_version_t backref_ver;
 };
 using TransactionRef = Transaction::Ref;
 

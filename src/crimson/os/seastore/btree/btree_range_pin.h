@@ -112,14 +112,23 @@ protected:
    */
   CachedExtentRef parent;
 
-  pladdr_t value;
+  std::variant<laddr_t, paddr_t> value;
   extent_len_t len = 0;
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
+  btree_iter_version_t ver;
 
   virtual std::unique_ptr<BtreeNodeMapping> _duplicate(op_context_t<key_t>) const = 0;
   fixed_kv_node_meta_t<key_t> _get_pin_range() const {
     return range;
+  }
+
+  bool value_is_laddr() const {
+    return value.index() == 0;
+  }
+
+  bool value_is_paddr() const {
+    return value.index() == 1;
   }
 
 public:
@@ -130,19 +139,25 @@ public:
     op_context_t<key_t> ctx,
     CachedExtentRef parent,
     uint16_t pos,
-    pladdr_t value,
+    std::variant<laddr_t, paddr_t> value,
     extent_len_t len,
-    fixed_kv_node_meta_t<key_t> meta)
+    fixed_kv_node_meta_t<key_t> meta,
+    btree_iter_version_t ver)
     : ctx(ctx),
       parent(parent),
       value(value),
       len(len),
       range(meta),
-      pos(pos)
+      pos(pos),
+      ver(ver)
   {
     if (!parent->is_pending()) {
       this->child_pos = {parent, pos};
     }
+  }
+
+  btree_iter_version_t get_iter_ver() const final {
+    return ver;
   }
 
   CachedExtentRef get_parent() const final {
@@ -169,10 +184,10 @@ public:
 
   val_t get_val() const final {
     if constexpr (std::is_same_v<val_t, paddr_t>) {
-      return value.get_paddr();
+      return std::get<1>(value);
     } else {
       static_assert(std::is_same_v<val_t, laddr_t>);
-      return value.get_laddr();
+      return std::get<0>(value);
     }
   }
 
@@ -194,36 +209,17 @@ public:
     return parent->has_been_invalidated();
   }
 
-  bool is_unviewable_by_trans(CachedExtent& extent, Transaction &t) const {
-    if (!extent.is_valid()) {
-      return true;
-    }
-    if (extent.is_pending()) {
-      assert(extent.is_pending_in_trans(t.get_trans_id()));
-      return false;
-    }
-    auto &pendings = extent.mutation_pendings;
-    auto trans_id = t.get_trans_id();
-    bool unviewable = (pendings.find(trans_id, trans_spec_view_t::cmp_t()) !=
-		       pendings.end());
-    if (!unviewable) {
-      auto &trans = extent.retired_transactions;
-      unviewable = (trans.find(trans_id, trans_spec_view_t::cmp_t()) !=
-		 trans.end());
-      assert(unviewable == t.is_retired(extent.get_paddr(), extent.get_length()));
-    }
-    return unviewable;
-  }
-
   get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction&) final;
   bool is_stable() const final;
   bool is_data_stable() const final;
   bool is_parent_viewable() const final {
     ceph_assert(parent);
-    if (!parent->is_valid()) {
-      return false;
+    auto [viewable, state] = parent->is_viewable_by_trans(
+      ctx.trans.get_trans_id());
+    if (state == CachedExtent::viewable_state_t::stable_retired) {
+      assert(ctx.trans.is_retired(parent->get_paddr(), parent->get_length()));
     }
-    return !is_unviewable_by_trans(*parent, ctx.trans);
+    return viewable;
   }
   bool is_parent_valid() const final {
     ceph_assert(parent);

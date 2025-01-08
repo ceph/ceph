@@ -54,16 +54,35 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
-  const uint32_t default_metadata_offset = 0;
-  const uint32_t default_metadata_range = 0;
+  virtual laddr_hint_t generate_data_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_data_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_metadata_hint(
+    std::optional<local_object_id_t> object_id,
+    std::optional<local_clone_id_t> clone_id,
+    extent_len_t block_size) const = 0;
+
+  virtual laddr_hint_t generate_metadata_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size) const = 0;
+
   const hobject_t hobj;
+
+  void validate_root_laddr(laddr_t laddr) const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      ceph_assert(laddr.get_clone_prefix() == prefix->get_clone_prefix());
+    }
+  }
+
 public:
-  Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
-    : default_metadata_offset(ddr),
-      default_metadata_range(dmr),
-      hobj(hobj)
-  {}
+  explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
@@ -78,17 +97,90 @@ public:
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
-    assert(default_metadata_range);
-    uint64_t range_blocks = default_metadata_range / block_size;
-    auto random_offset = default_metadata_offset +
-        (((uint32_t)std::rand() % range_blocks) * block_size);
-    return (get_hint() + random_offset).checked_to_laddr();
+  laddr_hint_t get_data_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      return generate_data_hint(
+        prefix->get_local_object_id(),
+        prefix->get_local_clone_id(),
+        block_size);
+    } else {
+      return generate_data_hint(std::nullopt, std::nullopt, block_size);
+    }
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+  laddr_hint_t get_data_clone_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE) const {
+    auto prefix = get_object_prefix();
+    assert(prefix);
+    return generate_data_clone_hint(prefix->get_local_object_id(), block_size);
   }
+  laddr_hint_t get_metadata_hint(extent_len_t block_size) const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      return generate_metadata_hint(
+        prefix->get_local_object_id(),
+        prefix->get_local_clone_id(),
+        block_size);
+    } else {
+      return generate_metadata_hint(std::nullopt, std::nullopt, block_size);
+    }
+  }
+  laddr_hint_t get_metadata_clone_hint(extent_len_t block_size) const {
+    auto prefix = get_object_prefix();
+    assert(prefix);
+    return generate_metadata_clone_hint(prefix->get_local_object_id(), block_size);
+  }
+
+  std::optional<laddr_t> get_clone_prefix() const {
+    std::optional<laddr_t> prefix = std::nullopt;
+
+    const auto &layout = get_layout();
+    auto omap_root = layout.omap_root.get(LADDR_HINT_NULL);
+    if (!omap_root.is_null()) {
+      prefix.emplace(omap_root.addr.get_clone_prefix());
+    }
+
+    auto xattr_root = layout.xattr_root.get(LADDR_HINT_NULL);
+    if (!xattr_root.is_null()) {
+      auto laddr = xattr_root.addr.get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    auto obj_data = layout.object_data.get();
+    if (!obj_data.is_null()) {
+      auto laddr = obj_data.get_reserved_data_base().get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    return prefix;
+  }
+
+  std::optional<laddr_t> get_object_prefix() const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      return prefix->get_object_prefix();
+    }
+    return prefix;
+  }
+
+  void validate_prefix(shard_t shard, pool_t pool, crush_hash_t crush) const {
+    auto prefix = get_object_prefix();
+    if (prefix) {
+      ceph_assert(prefix->match_shard_bits(shard));
+      ceph_assert(prefix->match_pool_bits(pool));
+      ceph_assert(prefix->get_reversed_hash() == crush);
+    }
+  }
+
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 

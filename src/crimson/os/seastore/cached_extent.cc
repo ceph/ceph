@@ -16,6 +16,14 @@ namespace {
 
 namespace crimson::os::seastore {
 
+bool is_valid_child_ptr(ChildableCachedExtent* child) {
+  return child != nullptr && child != get_reserved_ptr();
+}
+
+bool is_reserved_ptr(ChildableCachedExtent* child) {
+  return child == get_reserved_ptr();
+}
+
 #ifdef DEBUG_CACHED_EXTENT_REF
 
 void intrusive_ptr_add_ref(CachedExtent *ptr)
@@ -131,9 +139,23 @@ LogicalCachedExtent::~LogicalCachedExtent() {
   }
 }
 
-void LogicalCachedExtent::on_replace_prior() {
-  assert(is_mutation_pending());
-  take_prior_parent_tracker();
+void RemappedExtentPlaceholder::unlink_parent() {
+  if (has_parent_tracker()) {
+    assert(get_parent_node());
+    auto parent = get_parent_node<FixedKVNode<laddr_t>>();
+    auto off = parent->lower_bound_offset(get_laddr());
+    assert(parent->get_key_from_idx(off) == get_laddr());
+    assert(parent->children[off] == this);
+    parent->children[off] = nullptr;
+    reset_parent_tracker();
+  }
+}
+
+void LogicalCachedExtent::replace(
+  TCachedExtentRef<LogicalCachedExtent> prior)
+{
+  assert(prior->has_parent_tracker());
+  take_prior_parent_tracker(prior);
   assert(get_parent_node());
   auto parent = get_parent_node<FixedKVNode<laddr_t>>();
   //TODO: can this search be avoided?
@@ -142,12 +164,13 @@ void LogicalCachedExtent::on_replace_prior() {
   parent->children[off] = this;
 }
 
+void LogicalCachedExtent::on_replace_prior() {
+  assert(is_mutation_pending());
+  replace(get_prior_instance()->cast<LogicalCachedExtent>());
+}
+
 parent_tracker_t::~parent_tracker_t() {
-  // this is parent's tracker, reset it
-  auto &p = (FixedKVNode<laddr_t>&)*parent;
-  if (p.my_tracker == this) {
-    p.my_tracker = nullptr;
-  }
+  parent->maybe_reset_parent_tracker(this);
 }
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
@@ -174,6 +197,26 @@ std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)
     first = false;
   }
   return out << ']';
+}
+
+std::ostream &operator<<(
+  std::ostream &out,
+  const CachedExtent::viewable_state_t &state)
+{
+  switch(state) {
+  case CachedExtent::viewable_state_t::stable:
+    return out << "stable";
+  case CachedExtent::viewable_state_t::pending:
+    return out << "pending";
+  case CachedExtent::viewable_state_t::invalid:
+    return out << "invalid";
+  case CachedExtent::viewable_state_t::stable_retired:
+    return out << "stable_retired";
+  case CachedExtent::viewable_state_t::stable_with_pending:
+    return out << "stable_with_pending";
+  default:
+    __builtin_unreachable();
+  }
 }
 
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const

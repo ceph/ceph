@@ -17,16 +17,6 @@ SET_SUBSYS(seastore_lba);
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
-{
-  return out << "lba_map_val_t("
-             << v.pladdr
-             << "~" << v.len
-             << ", refcount=" << v.refcount
-             << ", checksum=" << v.checksum
-             << ")";
-}
-
 std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
 {
   out << ", size=" << this->get_size()
@@ -83,7 +73,8 @@ BtreeLBAMappingRef LBALeafNode::get_mapping(
     this,
     iter.get_offset(),
     val,
-    lba_node_meta_t{laddr, (laddr + val.len).checked_to_laddr(), 0});
+    lba_node_meta_t{laddr, (laddr + val.len).checked_to_laddr(), 0},
+    c.trans.get_lba_iter_ver());
 }
 
 }

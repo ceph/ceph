@@ -67,17 +67,19 @@ public:
     LBALeafNodeRef parent,
     uint16_t pos,
     lba_map_val_t &val,
-    lba_node_meta_t meta)
+    lba_node_meta_t meta,
+    btree_iter_version_t ver)
     : BtreeNodeMapping(
 	c,
 	parent,
 	pos,
 	val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL,
 	val.len,
-	meta),
+	meta,
+	ver),
       key(meta.begin),
       indirect(val.pladdr.is_laddr()),
-      intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),
+      intermediate_key(indirect ? val.pladdr.build_laddr(key) : L_ADDR_NULL),
       intermediate_length(indirect ? val.len : 0),
       raw_val(val.pladdr),
       map_val(val),
@@ -151,7 +153,7 @@ public:
     laddr_t interkey = L_ADDR_NULL)
   {
     assert(indirect);
-    assert(value.is_paddr());
+    assert(value_is_paddr());
     intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
     key = new_key;
     len = length;
@@ -270,39 +272,51 @@ public:
   struct alloc_mapping_info_t {
     laddr_t key = L_ADDR_NULL; // once assigned, the allocation to
 			       // key must be exact and successful
-    extent_len_t len = 0;
-    pladdr_t val;
-    uint32_t checksum = 0;
+    lba_map_val_t value;
     LogicalCachedExtent* extent = nullptr;
 
     static alloc_mapping_info_t create_zero(extent_len_t len) {
-      return {L_ADDR_NULL, len, P_ADDR_ZERO, 0, nullptr};
+      return {
+	L_ADDR_NULL,
+	lba_map_val_t{
+	  len,
+	  pladdr_t(P_ADDR_ZERO),
+	  EXTENT_DEFAULT_REF_COUNT,
+	  0
+	},
+	nullptr
+      };
     }
     static alloc_mapping_info_t create_indirect(
       laddr_t laddr,
       extent_len_t len,
       laddr_t intermediate_key) {
+      assert(laddr.get_object_prefix() == intermediate_key.get_object_prefix());
       return {
 	laddr,
-	len,
-	intermediate_key,
-	0,	// crc will only be used and checked with LBA direct mappings
+	{
+	  len,
+	  pladdr_t(intermediate_key.get_local_clone_id()),
+	  EXTENT_DEFAULT_REF_COUNT,
+	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
+	},
 	nullptr};
     }
     static alloc_mapping_info_t create_direct(
       laddr_t laddr,
       extent_len_t len,
       paddr_t paddr,
+      extent_ref_count_t refcount,
       uint32_t checksum,
       LogicalCachedExtent *extent) {
-      return {laddr, len, paddr, checksum, extent};
+      return {laddr, {len, pladdr_t(paddr), refcount, checksum}, extent};
     }
   };
 
   alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t len) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
@@ -313,8 +327,7 @@ public:
       return _alloc_extents(
 	t,
 	hint,
-	alloc_infos,
-	EXTENT_DEFAULT_REF_COUNT
+	alloc_infos
       ).si_then([](auto mappings) {
 	assert(mappings.size() == 1);
 	auto mapping = std::move(mappings.front());
@@ -335,7 +348,7 @@ public:
 	laddr, len, intermediate_key)};
     return alloc_cloned_mappings(
       t,
-      laddr,
+      laddr_hint_t::create_as_fixed(laddr),
       std::move(alloc_infos)
     ).si_then([&t, this, intermediate_base](auto imappings) {
       assert(imappings.size() == 1);
@@ -360,7 +373,7 @@ public:
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalCachedExtent &ext,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
   {
@@ -372,16 +385,16 @@ public:
 	L_ADDR_NULL,
 	ext.get_length(),
 	ext.get_paddr(),
+	refcount,
 	ext.get_last_committed_crc(),
 	&ext)};
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
+      [this, &t, hint](auto &alloc_infos) {
       return _alloc_extents(
 	t,
 	hint,
-	alloc_infos,
-	refcount
+	alloc_infos
       ).si_then([](auto mappings) {
 	assert(mappings.size() == 1);
 	auto mapping = std::move(mappings.front());
@@ -392,7 +405,7 @@ public:
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalCachedExtentRef> extents,
     extent_ref_count_t refcount) final
   {
@@ -403,13 +416,14 @@ public:
 	  extent->has_laddr() ? extent->get_laddr() : L_ADDR_NULL,
 	  extent->get_length(),
 	  extent->get_paddr(),
+	  refcount,
 	  extent->get_last_committed_crc(),
 	  extent.get()));
     }
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
-      return _alloc_extents(t, hint, alloc_infos, refcount);
+      [this, &t, hint](auto &alloc_infos) {
+      return _alloc_extents(t, hint, alloc_infos);
     });
   }
 
@@ -434,7 +448,7 @@ public:
   remap_ret remap_mappings(
     Transaction &t,
     LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
+    std::vector<remap_entry_t> remaps,
     std::vector<LogicalCachedExtentRef> extents) final {
     LOG_PREFIX(BtreeLBAManager::remap_mappings);
     assert((orig_mapping->is_indirect())
@@ -491,7 +505,8 @@ public:
 	  }
 	  fut = alloc_cloned_mappings(
 	    t,
-	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
+	    laddr_hint_t::create_as_fixed(
+	      (remaps.front().offset + orig_laddr).checked_to_laddr()),
 	    std::move(alloc_infos)
 	  ).si_then([&orig_mapping](auto imappings) mutable {
 	    std::vector<LBAMappingRef> mappings;
@@ -510,7 +525,8 @@ public:
 	} else { // !orig_mapping->is_indirect()
 	  fut = alloc_extents(
 	    t,
-	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
+	    laddr_hint_t::create_as_fixed(
+	      (remaps.front().offset + orig_laddr).checked_to_laddr()),
 	    std::move(extents),
 	    EXTENT_DEFAULT_REF_COUNT);
 	}
@@ -586,9 +602,130 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
+
+  /// ==========================================================================
+  ///                       New iterator based interface
+  /// ==========================================================================
+
+  base_iertr::future<LBAIter> begin(Transaction &t) final;
+
+  base_iertr::future<LBAIter> end(Transaction &t) final;
+
+  base_iertr::future<bool> is_begin(Transaction &t, LBAIter iter) final;
+
+  base_iertr::future<bool> is_end(Transaction &t, LBAIter iter) final;
+
+  make_mapping_ret make_mapping(
+    Transaction &t,
+    LBAIter iter) final;
+
+  make_iterator_ret make_iterator(
+    Transaction &t,
+    LogicalCachedExtentRef extent) final;
+
+  make_iterator_ret make_direct_iterator(
+    Transaction &t,
+    const LBAMapping & mapping) final;
+
+  make_iterator_ret refresh_iterator(
+    Transaction &t,
+    LBAIter iter) final;
+
+  make_iterator_ret prev_iterator(
+    Transaction &t,
+    LBAIter iter) final;
+
+  make_iterator_ret next_iterator(
+    Transaction &t,
+    LBAIter iter) final;
+
+  make_iterator_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  make_iterator_ret upper_bound(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  make_iterator_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  find_region_ret find_region(
+    Transaction &t,
+    laddr_hint_t hint,
+    extent_len_t length) final;
+
+  get_iterator_ret get_iterator(
+    Transaction &t,
+    laddr_t laddr) final;
+
+  get_iterators_ret get_iterators(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length) final;
+
+  insert_mapping_ret insert_mapping(
+    Transaction &t,
+    LBAIter iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) final;
+
+  change_mapping_ret change_mapping(
+    Transaction &t,
+    LBAIter iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) final;
+
+  remove_mapping_ret remove_mapping(
+    Transaction &t,
+    LBAIter iter) final;
+
 private:
   Cache &cache;
 
+  change_mapping_ret change_mapping_value(
+    Transaction &t,
+    LBAIter iter,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent);
+
+  change_mapping_ret change_mapping_key_and_value(
+    Transaction &t,
+    LBAIter iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent);
+
+  using make_btree_iter_ret = make_iterator_iertr::future<
+    LBABtree::iterator>;
+  make_btree_iter_ret make_btree_iter(
+    op_context_t<laddr_t> c,
+    LBABtree &btree,
+    CachedExtentRef parent,
+    laddr_t laddr,
+    std::optional<btree_iter_version_t> ver = std::nullopt,
+    std::optional<uint16_t> pos = std::nullopt);
+
+  struct search_insert_pos_result_t {
+    search_insert_pos_result_t(laddr_t laddr, LBABtree::iterator &&iter)
+	: laddr(laddr), iter(iter) {}
+    // Point to insert position.
+    laddr_t laddr;
+    // Point to insert position.
+    LBABtree::iterator iter;
+  };
+  using search_insert_pos_iertr = base_iertr;
+  using search_insert_pos_ret = search_insert_pos_iertr::future<
+    search_insert_pos_result_t>;
+  // Search for a suitable position and laddr according to hint~length.
+  search_insert_pos_ret search_insert_pos(
+    Transaction &t,
+    LBABtree &btree,
+    laddr_hint_t hint,
+    extent_len_t length);
 
   struct {
     uint64_t num_alloc_extents = 0;
@@ -641,11 +778,15 @@ private:
     update_func_t &&f,
     LogicalCachedExtent*);
 
+  // Allocate a list of pins.
+  // If alloc_mapping_info_t::key in alloc_infos are all L_ADDR_NULL, allocate a
+  // consecutive pins of the total length based on the hint.
+  // If the keys are all not L_ADDR_NULL, allocate a list of ordered pins based
+  // on each key. The hint must equal to the key of first entriy in alloc_infos.
   alloc_extents_ret _alloc_extents(
     Transaction &t,
-    laddr_t hint,
-    std::vector<alloc_mapping_info_t> &alloc_infos,
-    extent_ref_count_t refcount);
+    laddr_hint_t hint,
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   ref_ret _incref_extent(
     Transaction &t,
@@ -660,22 +801,23 @@ private:
 
   alloc_extent_iertr::future<std::vector<BtreeLBAMappingRef>> alloc_cloned_mappings(
     Transaction &t,
-    laddr_t laddr,
+    laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> alloc_infos)
   {
 #ifndef NDEBUG
     for (auto &alloc_info : alloc_infos) {
-      assert(alloc_info.val.get_laddr() != L_ADDR_NULL);
+      assert(alloc_info.value.pladdr.is_laddr());
+      assert(alloc_info.value.pladdr.get_local_clone_id()
+	     != LOCAL_CLONE_ID_NULL);
     }
 #endif
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, laddr](auto &alloc_infos) {
+      [this, &t, hint](auto &alloc_infos) {
       return _alloc_extents(
 	t,
-	laddr,
-	alloc_infos,
-	EXTENT_DEFAULT_REF_COUNT
+	hint,
+	alloc_infos
       ).si_then([&alloc_infos](auto mappings) {
 	assert(alloc_infos.size() == mappings.size());
 	std::vector<BtreeLBAMappingRef> rets;
@@ -685,9 +827,9 @@ private:
 	  auto mapping = static_cast<BtreeLBAMapping*>(mit->release());
 	  auto &alloc_info = *ait;
 	  assert(mapping->get_key() == alloc_info.key);
-	  assert(mapping->get_raw_val().get_laddr() ==
-	    alloc_info.val.get_laddr());
-	  assert(mapping->get_length() == alloc_info.len);
+	  assert(mapping->get_raw_val().get_local_clone_id() ==
+	    alloc_info.value.pladdr.get_local_clone_id());
+	  assert(mapping->get_length() == alloc_info.value.len);
 	  rets.emplace_back(mapping);
 	}
 	return rets;

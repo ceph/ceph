@@ -402,7 +402,6 @@ public:
       internal_context_t &ctx,
       CollectionRef &col,
       std::vector<OnodeRef> &onodes,
-      std::vector<OnodeRef> &d_onodes,
       ceph::os::Transaction::iterator &i);
 
     tm_ret _remove_omaps(
@@ -430,11 +429,13 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode,
-      const omap_type_t otype);
+      const omap_type_t otype,
+      laddr_hint_t init_hint);
     tm_ret _clone(
       internal_context_t &ctx,
       OnodeRef &onode,
-      OnodeRef &d_onode);
+      OnodeRef &d_onode,
+      bool src_is_head);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -495,7 +496,8 @@ public:
       const OnodeRef &onode,
       const omap_root_le_t& omap_root,
       Transaction& t,
-      std::map<std::string, ceph::bufferlist>&& kvs);
+      std::map<std::string, ceph::bufferlist>&& kvs,
+      laddr_hint_t hint);
 
     boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 
