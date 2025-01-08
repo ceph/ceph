@@ -157,6 +157,9 @@ class BaseObjectStore:
     def activate(self) -> None:
         raise NotImplementedError()
 
+    def activate_all(self) -> None:
+        raise NotImplementedError()
+
     def enroll_tpm2(self, device: str) -> None:
         """
         Enrolls a device with TPM2 (Trusted Platform Module 2.0) using systemd-cryptenroll.
