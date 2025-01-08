@@ -1665,6 +1665,14 @@ Some of the gateways are in the GW_UNAVAILABLE state. If a NVMeoF daemon has
 crashed, the daemon log file (found at ``/var/log/ceph/``) may contain
 troubleshooting information.
 
+NVMEOF_BAD_CREATED_STATE
+________________________
+
+NVMeoF gateways are unexpectedly in CREATED state. If a gateway has both 
+subsystems and listeners but is still in CREATED state, then it indicates
+an issue.
+Possible reason is that no beacons were recieved from gateway, which indicates 
+hardware issue.
 
 Miscellaneous
 -------------
