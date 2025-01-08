@@ -82,12 +82,15 @@ seastar::future<> RepRequest::with_pg(
       });
     }).then_interruptible([this, pg] (auto) {
       return pg->handle_rep_op(req);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
   }, [](std::exception_ptr) {
     return seastar::now();
   }, pg, pg->get_osdmap_epoch()).finally([this, ref=std::move(ref)] {
     logger().debug("{}: exit", *this);
-    return handle.complete();
+    handle.exit();
   });
 }
 
