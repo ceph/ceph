@@ -2289,6 +2289,26 @@ string camelcase_dash_http_attr(const string& orig, bool convert2dash)
   return string(buf);
 }
 
+
+void rgw_bucket_local_info::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(snap_mgr, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rgw_bucket_local_info::decode(bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(snap_mgr, bl);
+  DECODE_FINISH(bl);
+}
+
+void rgw_bucket_local_info::dump(Formatter *f) const
+{
+  encode_json("snap_mgr", snap_mgr, f);
+}
+
 RGWBucketInfo::RGWBucketInfo()
 {
 }
@@ -2304,7 +2324,7 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   const rgw_user* user = std::get_if<rgw_user>(&owner);
   std::string empty;
 
-  ENCODE_START(24, 4, bl);
+  ENCODE_START(25, 4, bl);
   encode(bucket, bl);
   if (user) {
     encode(user->id, bl);
@@ -2351,12 +2371,13 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
     encode(empty, bl);
   }
   ceph::versioned_variant::encode(owner, bl); // v24
+  encode(local, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   rgw_user user;
-  DECODE_START_LEGACY_COMPAT_LEN_32(24, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN_32(25, 4, 4, bl);
   decode(bucket, bl);
   if (struct_v >= 2) {
     string s;
@@ -2442,6 +2463,10 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   if (layout.logs.empty() &&
       layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
     layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index));
+  }
+
+  if (struct_v >= 25) {
+    decode(local, bl);
   }
   DECODE_FINISH(bl);
 }

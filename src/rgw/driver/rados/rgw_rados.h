@@ -33,6 +33,7 @@
 #include "rgw_sal_store.h"
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
+#include "rgw_bucket_snap.h"
 
 #include "services/svc_bi_rados.h"
 #include "common/Throttle.h"
@@ -991,6 +992,7 @@ public:
                    const std::string& etag, const std::string& content_type,
                    const std::string& storage_class,
                    const ACLOwner& owner, RGWObjCategory category,
+                   rgw_bucket_snap_id snap_id,
 		   std::list<rgw_obj_index_key> *remove_objs,
 		   optional_yield y,
 		   const std::string *user_data = nullptr,
@@ -999,6 +1001,7 @@ public:
       int complete_del(const DoutPrefixProvider *dpp,
                        int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
+                       rgw_bucket_snap_id snap_id,
                        std::list<rgw_obj_index_key> *remove_objs,
                        optional_yield y,
                        bool log_op = true);
@@ -1514,7 +1517,8 @@ public:
                            RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
                            rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
-                           ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs,
+                           ceph::real_time& removed_mtime, rgw_bucket_snap_id snap_id,
+                           std::list<rgw_obj_index_key> *remove_objs,
                            uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
                               std::list<rgw_obj_index_key> *remove_objs,

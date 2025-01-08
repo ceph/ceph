@@ -199,6 +199,10 @@ inline std::ostream& operator<<(std::ostream& out, RGWObjCategory c) {
   return out << to_string(c);
 }
 
+using rgw_bucket_snap_id = uint64_t;
+
+#define RGW_BUCKET_NO_SNAP (rgw_bucket_snap_id)-1
+
 struct rgw_bucket_dir_entry_meta {
   RGWObjCategory category = RGWObjCategory::None;
   uint64_t size = 0;
@@ -211,9 +215,10 @@ struct rgw_bucket_dir_entry_meta {
   std::string user_data;
   std::string storage_class;
   bool appendable = false;
+  rgw_bucket_snap_id snap_id = RGW_BUCKET_NO_SNAP;
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 3, bl);
+    ENCODE_START(8, 3, bl);
     encode(category, bl);
     encode(size, bl);
     encode(mtime, bl);
@@ -225,6 +230,7 @@ struct rgw_bucket_dir_entry_meta {
     encode(user_data, bl);
     encode(storage_class, bl);
     encode(appendable, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -248,6 +254,8 @@ struct rgw_bucket_dir_entry_meta {
       decode(storage_class, bl);
     if (struct_v >= 7)
       decode(appendable, bl);
+    if (struct_v >= 8)
+      decode(snap_id, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;

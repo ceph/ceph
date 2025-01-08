@@ -1067,6 +1067,15 @@ class RGWSI_Zone;
 
 // this represents the at-rest bucket instance object and is stored as
 // a system object
+struct rgw_bucket_local_info {
+  RGWBucketSnapMgr snap_mgr;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& bl);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_bucket_local_info)
+
 struct RGWBucketInfo {
   rgw_bucket bucket;
   rgw_owner owner;
@@ -1103,7 +1112,8 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   std::optional<rgw_sync_policy_info> sync_policy;
-  RGWBucketSnapMgr snap_mgr;
+
+  rgw_bucket_local_info local;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
