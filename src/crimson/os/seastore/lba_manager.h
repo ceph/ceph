@@ -19,6 +19,7 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/lba_mapping.h"
 
 namespace crimson::os::seastore {
 
