@@ -52,9 +52,11 @@ class MgmtGatewayService(CephadmService):
     def get_external_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         cert = self.mgr.cert_mgr.get_cert('mgmt_gw_cert')
         key = self.mgr.cert_mgr.get_key('mgmt_gw_key')
+        user_made = False
         if not (cert and key):
             # not available on store, check if provided on the spec
             if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
+                user_made = True
                 cert = svc_spec.ssl_certificate
                 key = svc_spec.ssl_certificate_key
             else:
@@ -64,8 +66,8 @@ class MgmtGatewayService(CephadmService):
                 cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
             # save certificates
             if cert and key:
-                self.mgr.cert_mgr.save_cert('mgmt_gw_cert', cert)
-                self.mgr.cert_mgr.save_key('mgmt_gw_key', key)
+                self.mgr.cert_mgr.save_cert('mgmt_gw_cert', cert, user_made=user_made)
+                self.mgr.cert_mgr.save_key('mgmt_gw_key', key, user_made=user_made)
             else:
                 logger.error("Failed to obtain certificate and key from mgmt-gateway.")
         return cert, key
