@@ -2690,13 +2690,22 @@ void OSDMap::_pg_to_raw_osds(
     *ppps = pps;
 }
 
-int OSDMap::_pick_primary(const vector<int>& osds) const
+int OSDMap::_pick_primary(const pg_pool_t& pool, const vector<int>& osds) const
 {
+  shard_id_t shard(0);
+  for (auto osd : osds) {
+    if (!pool.is_nonprimary_shard(shard) && osd != CRUSH_ITEM_NONE) {
+      return osd;
+    }
+    ++shard;
+  }
+  // PG is incomplete - pick any available OSD
   for (auto osd : osds) {
     if (osd != CRUSH_ITEM_NONE) {
       return osd;
     }
   }
+  // PG is empty
   return -1;
 }
 
@@ -2873,9 +2882,20 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
     *temp_primary = pp->second;
   } else if (!temp_pg->empty()) { // apply pg_temp's primary
     for (unsigned i = 0; i < temp_pg->size(); ++i) {
+      if (pool.is_nonprimary_shard(shard_id_t(i))) {
+	// Shard cannot be a primary
+	continue;
+      }
       if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
 	*temp_primary = (*temp_pg)[i];
-	break;
+	return;
+      }
+    }
+    // PG is incomplete - choose any shard
+    for (unsigned i = 0; i < temp_pg->size(); ++i) {
+      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = (*temp_pg)[i];
+	return;
       }
     }
   }
@@ -2890,7 +2910,7 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
     return;
   }
   _pg_to_raw_osds(*pool, pg, raw, NULL);
-  *primary = _pick_primary(*raw);
+  *primary = _pick_primary(*pool, *raw);
 }
 
 void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int>*raw,
@@ -2919,7 +2939,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _pg_to_raw_osds(*pool, pg, &raw, &pps);
   _apply_upmap(*pool, pg, &raw);
   _raw_to_up_osds(*pool, raw, up);
-  *primary = _pick_primary(raw);
+  *primary = _pick_primary(*pool, raw);
   _apply_primary_affinity(pps, *pool, up, primary);
 }
 
@@ -2952,7 +2972,7 @@ void OSDMap::_pg_to_up_acting_osds(
     _pg_to_raw_osds(*pool, pg, &raw, &pps);
     _apply_upmap(*pool, pg, &raw);
     _raw_to_up_osds(*pool, raw, &_up);
-    _up_primary = _pick_primary(_up);
+    _up_primary = _pick_primary(*pool, _up);
     _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
     if (_acting.empty()) {
       _acting = _up;
@@ -2966,7 +2986,12 @@ void OSDMap::_pg_to_up_acting_osds(
     if (up_primary)
       *up_primary = _up_primary;
   }
-
+  if (std::find(_acting.begin(), _acting.end(), _acting_primary) == _acting.end()) {
+    // https://tracker.ceph.com/issues/59491
+    // primary-temp has selected an OSD outside of the acting
+    // set - ignore it and make a sensible choice
+    _acting_primary = _pick_primary(*pool, _acting);
+  }
   if (acting)
     acting->swap(_acting);
   if (acting_primary)

@@ -1298,6 +1298,7 @@ struct pg_pool_t {
     // Pool features are restricted to those supported by crimson-osd.
     // Note, does not prohibit being created on classic osd.
     FLAG_CRIMSON = 1<<18,
+    FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1321,6 +1322,7 @@ struct pg_pool_t {
     case FLAG_EIO: return "eio";
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
+    case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
     default: return "???";
     }
   }
@@ -1377,6 +1379,8 @@ struct pg_pool_t {
       return FLAG_BULK;
     if (name == "crimson")
       return FLAG_CRIMSON;
+    if (name == "ec_optimizations")
+      return FLAG_EC_OPTIMIZATIONS;
     return 0;
   }
 
@@ -1609,7 +1613,7 @@ public:
   uint64_t expected_num_objects = 0; ///< expected number of objects on this pool, a value of 0 indicates
                                      ///< user does not specify any expected value
   bool fast_read = false;            ///< whether turn on fast read on the pool or not
-
+  shard_id_set nonprimary_shards; ///< EC partial writes: shards that cannot become a primary
   pool_opts_t opts; ///< options
 
   typedef enum {
@@ -1779,6 +1783,10 @@ public:
     return has_flag(FLAG_EC_OVERWRITES);
   }
 
+  bool allows_ecoptimizations() const {
+    return has_flag(FLAG_EC_OPTIMIZATIONS);
+  }
+
   bool is_crimson() const {
     return has_flag(FLAG_CRIMSON);
   }
@@ -1909,6 +1917,11 @@ public:
 
   /// choose a random hash position within a pg
   uint32_t get_random_pg_position(pg_t pgid, uint32_t seed) const;
+
+  /// EC partial writes: test if a shard is a non-primary
+  bool is_nonprimary_shard(const shard_id_t shard) const {
+    return !nonprimary_shards.empty() && nonprimary_shards.contains(shard);
+  }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
@@ -3031,6 +3044,7 @@ struct pg_info_t {
 
   interval_set<snapid_t> purged_snaps;
 
+  std::map<shard_id_t,eversion_t> partial_writes_last_complete; ///< last_complete for shards not modified by a partial write
   pg_stat_t stats;
 
   pg_history_t history;
@@ -3047,6 +3061,7 @@ struct pg_info_t {
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
       l.purged_snaps == r.purged_snaps &&
+      l.partial_writes_last_complete == r.partial_writes_last_complete &&
       l.stats == r.stats &&
       l.history == r.history &&
       l.hit_set == r.hit_set;
@@ -3123,6 +3138,7 @@ struct pg_fast_info_t {
   eversion_t last_update;
   eversion_t last_complete;
   version_t last_user_version;
+  std::map<shard_id_t,eversion_t> partial_writes_last_complete;
   struct { // pg_stat_t stats
     eversion_t version;
     version_t reported_seq;
@@ -3152,6 +3168,7 @@ struct pg_fast_info_t {
     last_update = info.last_update;
     last_complete = info.last_complete;
     last_user_version = info.last_user_version;
+    partial_writes_last_complete = info.partial_writes_last_complete;
     stats.version = info.stats.version;
     stats.reported_seq = info.stats.reported_seq;
     stats.last_fresh = info.stats.last_fresh;
@@ -3178,6 +3195,7 @@ struct pg_fast_info_t {
     info->last_update = last_update;
     info->last_complete = last_complete;
     info->last_user_version = last_user_version;
+    info->partial_writes_last_complete = partial_writes_last_complete;
     info->stats.version = stats.version;
     info->stats.reported_seq = stats.reported_seq;
     info->stats.last_fresh = stats.last_fresh;
@@ -3201,7 +3219,7 @@ struct pg_fast_info_t {
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(last_update, bl);
     encode(last_complete, bl);
     encode(last_user_version, bl);
@@ -3223,10 +3241,11 @@ struct pg_fast_info_t {
     encode(stats.stats.sum.num_wr, bl);
     encode(stats.stats.sum.num_wr_kb, bl);
     encode(stats.stats.sum.num_objects_dirty, bl);
+    encode(partial_writes_last_complete, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     decode(last_update, p);
     decode(last_complete, p);
     decode(last_user_version, p);
@@ -3248,12 +3267,22 @@ struct pg_fast_info_t {
     decode(stats.stats.sum.num_wr, p);
     decode(stats.stats.sum.num_wr_kb, p);
     decode(stats.stats.sum.num_objects_dirty, p);
+    if (struct_v >= 2)
+      decode(partial_writes_last_complete, p);
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_stream("last_update") << last_update;
     f->dump_stream("last_complete") << last_complete;
     f->dump_stream("last_user_version") << last_user_version;
+    f->open_array_section("partial_writes_last_complete");
+    for (const auto & [shard, version] : partial_writes_last_complete) {
+      f->open_object_section("shard");
+      f->dump_int("id", int(shard));
+      f->dump_stream("version") << version;
+      f->close_section();
+    }
+    f->close_section();
     f->open_object_section("stats");
     f->dump_stream("version") << stats.version;
     f->dump_unsigned("reported_seq", stats.reported_seq);
@@ -3442,6 +3471,8 @@ public:
     uint32_t new_crush_barrier,
     int32_t old_crush_member,
     int32_t new_crush_member,
+    bool old_allow_ec_optimizations,
+    bool new_allow_ec_optimizations,
     pg_t pgid
     );
 
@@ -4004,8 +4035,10 @@ public:
     virtual void create() {}
     virtual void update_snaps(const std::set<snapid_t> &old_snaps) {}
     virtual void rollback_extents(
-      version_t gen,
-      const std::vector<std::pair<uint64_t, uint64_t> > &extents) {}
+      const version_t gen,
+      const std::vector<std::pair<uint64_t, uint64_t>> &extents,
+      const uint64_t object_size,
+      const std::vector<shard_id_set> &shards) {}
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
@@ -4103,7 +4136,27 @@ public:
     ENCODE_FINISH(bl);
   }
   void rollback_extents(
-    version_t gen, const std::vector<std::pair<uint64_t, uint64_t> > &extents) {
+   const version_t gen,
+   const std::vector<std::pair<uint64_t, uint64_t>> &extents,
+   const uint64_t object_size,
+   const std::vector<shard_id_set> &shards) {
+    ceph_assert(can_local_rollback);
+    ceph_assert(!rollback_info_completed);
+    if (max_required_version < 2)
+      max_required_version = 2;
+    ENCODE_START(3, 2, bl);
+    append_id(ROLLBACK_EXTENTS);
+    encode(gen, bl);
+    encode(extents, bl);
+    encode(object_size, bl);
+    encode(shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  // Version for legacy EC (can be deleted when EC*L.cc is deleted.
+  void rollback_extents(
+   const version_t gen,
+   const std::vector<std::pair<uint64_t, uint64_t>> &extents) {
     ceph_assert(can_local_rollback);
     ceph_assert(!rollback_info_completed);
     if (max_required_version < 2)
@@ -4415,6 +4468,8 @@ struct pg_log_entry_t {
   bool invalid_pool; // only when decoding pool-less hobject based entries
   ObjectCleanRegions clean_regions;
 
+  shard_id_set written_shards; // EC partial writes do not update every shard
+
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
      invalid_hash(false), invalid_pool(false) {
@@ -4483,6 +4538,12 @@ struct pg_log_entry_t {
   }
 
   std::string get_key_name() const;
+
+  /// EC partial writes: test if a shard was written
+  bool is_written_shard(const shard_id_t shard) const {
+    return written_shards.empty() || written_shards.contains(shard);
+  }
+
   void encode_with_checksum(ceph::buffer::list& bl) const;
   void decode_with_checksum(ceph::buffer::list::const_iterator& p);
 
@@ -4729,16 +4790,20 @@ public:
    *
    * @param other pg_log_t to copy from
    * @param from copy entries after this version
+   * @param pool
+   * @param shard shard that is receiving the entries
    */
-  void copy_after(CephContext* cct, const pg_log_t &other, eversion_t from);
+  void copy_after(CephContext* cct, const pg_log_t &other, eversion_t from, const pg_pool_t &pool, shard_id_t shard);
 
   /**
    * copy up to N entries
    *
    * @param other source log
    * @param max max number of entries to copy
+   * @param pool
+   * @param shard shard that is receiving the entries
    */
-  void copy_up_to(CephContext* cct, const pg_log_t &other, int max);
+  void copy_up_to(CephContext* cct, const pg_log_t &other, int max, const pg_pool_t &pool, shard_id_t shard);
 
   std::ostream& print(std::ostream& out) const;
 
@@ -6032,6 +6097,8 @@ struct object_info_t {
   uint32_t alloc_hint_flags;
 
   struct object_manifest_t manifest;
+
+  std::map<shard_id_t,eversion_t> shard_versions;
 
   void copy_user_bits(const object_info_t& other);
 

@@ -29,7 +29,7 @@ class ECSwitch : public PGBackend
   friend class ECReadPred;
 
   ECLegacy::ECBackendL legacy;
-  ECLegacy::ECBackendL optimized;
+  ECBackend optimized;
   bool is_optimized_actual;
 
 public:
@@ -40,16 +40,18 @@ public:
     ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width) :
-    PGBackend(cct, pg, store, coll, ch),
-    legacy(pg, cct, ec_impl, stripe_width, this),
-    optimized(pg, cct, ec_impl, stripe_width, this),
-    is_optimized_actual(false) {}
+    uint64_t stripe_width,
+    ECExtentCache::LRU &lru) :
+  PGBackend(cct, pg, store, coll, ch),
+  legacy(pg, cct, ec_impl, stripe_width, this),
+  optimized(pg, cct, ec_impl, stripe_width, this, lru),
+    is_optimized_actual(get_parent()->get_pool().allows_ecoptimizations()) {}
 
   bool is_optimized() const
   {
-    // FIXME: Interface not yet implemented.
-    //ceph_assert(is_optimized_actual == get_parent()->get_pool().allows_ecoptimizations());
+    // FIXME: Once we trust this, we can remove this assert, as it adds
+    //        function call overhead.
+    ceph_assert(is_optimized_actual == get_parent()->get_pool().allows_ecoptimizations());
     return is_optimized_actual;
   }
 
@@ -84,7 +86,7 @@ public:
   private:
     const ECSwitch *switcher;
     std::unique_ptr<ECLegacy::ECBackendL::ECRecPred> legacy;
-    std::unique_ptr<ECLegacy::ECBackendL::ECRecPred> optimized;
+    std::unique_ptr<ECBackend::ECRecPred> optimized;
   };
 
   class ECReadPred : public IsPGReadablePredicate
@@ -111,7 +113,7 @@ public:
   private:
     const ECSwitch *switcher;
     std::unique_ptr<ECLegacy::ECBackendL::ECReadPred> legacy;
-    std::unique_ptr<ECLegacy::ECBackendL::ECReadPred> optimized;
+    std::unique_ptr<ECBackend::ECReadPred> optimized;
   };
 
   RecoveryHandle *open_recovery_op() override
@@ -181,7 +183,11 @@ public:
     else {
       legacy.on_change();
     }
-    //FIXME: Switch to new EC here.
+
+    if (!is_optimized_actual)
+      is_optimized_actual = get_parent()->get_pool().allows_ecoptimizations();
+    else
+      ceph_assert(get_parent()->get_pool().allows_ecoptimizations());
   }
 
   void clear_recovery_state() override
@@ -286,10 +292,11 @@ public:
     return legacy.auto_repair_supported();
   }
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final
-  {
-    if (is_optimized()) {
-      return optimized.be_get_ondisk_size(logical_size);
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t shard_id) const final {
+    if (is_optimized())
+     {
+      return optimized.be_get_ondisk_size(logical_size, shard_id);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }
@@ -342,10 +349,10 @@ public:
   }
 
   uint64_t
-  object_size_to_shard_size(const uint64_t size, int shard) const override
+  object_size_to_shard_size(const uint64_t size, shard_id_t shard) const override
   {
     if (is_optimized()) {
-      return optimized.object_size_to_shard_size(size);
+      return optimized.object_size_to_shard_size(size, shard);
     }
     return legacy.object_size_to_shard_size(size);
     // All shards are the same size.

@@ -9,6 +9,7 @@
 
 #include "buffer.h"
 #include "rados_types.h"
+#include "include/types.h"
 
 namespace librados {
 
@@ -173,7 +174,7 @@ struct shard_info_t : err_t {
 
 struct osd_shard_t {
   int32_t osd;
-  int8_t shard;
+  shard_id_t shard;
 };
 
 inline bool operator<(const osd_shard_t &lhs, const osd_shard_t &rhs) {

@@ -38,7 +38,6 @@ set(osd_srcs
   scheduler/mClockScheduler.cc
   PeeringState.cc
   PGStateUtils.cc
-  recovery_types.cc
   MissingLoc.cc
   osd_perf_counters.cc
   ECCommonL.cc
@@ -48,7 +47,7 @@ set(osd_srcs
   ECUtilL.cc
   ECCommon.cc
   ECBackend.cc
-  ExtentCache.cc
+  ECExtentCache.cc
   ECTransaction.cc
   ECUtil.cc
   ECInject.cc

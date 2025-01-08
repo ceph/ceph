@@ -205,7 +205,7 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
     return lhs << "?";
   if (rhs.shard == shard_id_t::NO_SHARD)
     return lhs << rhs.get_osd();
-  return lhs << rhs.get_osd() << '(' << (unsigned)(rhs.shard) << ')';
+  return lhs << rhs.get_osd() << '(' << int(rhs.shard) << ')';
 }
 
 void dump(Formatter* f, const osd_alerts_t& alerts)
@@ -1636,6 +1636,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
+  f->dump_stream("nonprimary_shards") << nonprimary_shards;
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -1955,7 +1956,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 30;
+  uint8_t v = 31;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
@@ -1968,8 +1969,10 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     v = 26;
   } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 27;
-  } else if (!is_stretch_pool()) {
+  } else if (!is_stretch_pool() && !allows_ecoptimizations()) {
     v = 29;
+  } else if (!allows_ecoptimizations()) {
+    v = 30;
   }
 
   ENCODE_START(v, 5, bl);
@@ -2066,12 +2069,15 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(peering_crush_bucket_barrier, bl);
     encode(peering_crush_mandatory_member, bl);
   }
+  if (v >= 31) {
+    encode(nonprimary_shards, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(30, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(31, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2252,6 +2258,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(peering_crush_bucket_barrier, bl);
     decode(peering_crush_mandatory_member, bl);
   }
+  if (struct_v >= 31) {
+    decode(nonprimary_shards, bl);
+  } else {
+    nonprimary_shards.clear();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2353,6 +2364,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.nonprimary_shards.clear();
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 }
@@ -3586,7 +3598,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(32, 26, bl);
+  ENCODE_START(33, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3602,12 +3614,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_backfill, bl);
   encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
+  encode(partial_writes_last_complete, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(32, bl);
+  DECODE_START(33, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3636,6 +3649,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     last_interval_started = last_epoch_started;
   }
+  if (struct_v >= 33) {
+    decode(partial_writes_last_complete, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3644,12 +3660,20 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 void pg_info_t::dump(Formatter *f) const
 {
   f->dump_stream("pgid") << pgid;
-  f->dump_stream("shared") << pgid.shard;
+  f->dump_stream("shard") << pgid.shard;
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
+  f->open_array_section("partial_writes_last_complete");
+  for (const auto & [shard, version] : partial_writes_last_complete) {
+    f->open_object_section("shard");
+    f->dump_int("id", int(shard));
+    f->dump_stream("version") << version;
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
@@ -3765,8 +3789,8 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
       << " " << notify.info;
   if (notify.from != shard_id_t::NO_SHARD ||
       notify.to != shard_id_t::NO_SHARD)
-    lhs << " " << (unsigned)notify.from
-	<< "->" << (unsigned)notify.to;
+    lhs << " " << int(notify.from)
+	<< "->" << int(notify.to);
   lhs << " " << notify.past_intervals;
   return lhs << ")";
 }
@@ -4168,6 +4192,8 @@ bool PastIntervals::is_new_interval(
   uint32_t new_crush_barrier,
   int32_t old_crush_member,
   int32_t new_crush_member,
+  bool old_allow_ec_optimizations,
+  bool new_allow_ec_optimizations,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -4191,7 +4217,8 @@ bool PastIntervals::is_new_interval(
     old_crush_count != new_crush_count ||
     old_crush_target != new_crush_target ||
     old_crush_barrier != new_crush_barrier ||
-    old_crush_member != new_crush_member;
+    old_crush_member != new_crush_member ||
+    old_allow_ec_optimizations != new_allow_ec_optimizations;
 }
 
 bool PastIntervals::is_new_interval(
@@ -4240,6 +4267,7 @@ bool PastIntervals::is_new_interval(
 		    plast->peering_crush_bucket_target, pi->peering_crush_bucket_target,
 		    plast->peering_crush_bucket_barrier, pi->peering_crush_bucket_barrier,
 		    plast->peering_crush_mandatory_member, pi->peering_crush_mandatory_member,
+		    plast->allows_ecoptimizations(),   pi->allows_ecoptimizations(),
 		    pgid);
 }
 
@@ -4609,11 +4637,23 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case ROLLBACK_EXTENTS: {
-	vector<pair<uint64_t, uint64_t> > extents;
+	vector<pair<uint64_t, uint64_t>> extents;
 	version_t gen;
+	uint64_t object_size;
+	vector<shard_id_set> shards;
 	decode(gen, bp);
 	decode(extents, bp);
-	visitor->rollback_extents(gen,extents);
+	if (struct_v < 3) {
+	  // Object size is used by newer code which does not pad objects to a
+	  // multiple of the strip size to truncate the rollback clone
+	  // operations. Older code pads the object so use a large object size
+	  // to avoid doing any truncation.
+	  object_size = 0xffffffffffffffffUL;
+	} else {
+	  decode(object_size, bp);
+	  decode(shards, bp);
+	}
+	visitor->rollback_extents(gen, extents, object_size, shards);
 	break;
       }
       default:
@@ -4669,11 +4709,16 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->close_section();
   }
   void rollback_extents(
-    version_t gen,
-    const vector<pair<uint64_t, uint64_t> > &extents) override {
+    const version_t gen,
+    const vector<pair<uint64_t, uint64_t>> &extents,
+    const uint64_t object_size,
+    const vector<shard_id_set> &shards) override {
     f->open_object_section("op");
     f->dump_string("code", "ROLLBACK_EXTENTS");
     f->dump_unsigned("gen", gen);
+    f->dump_unsigned("object_size", object_size);
+    f->dump_stream("extents") << extents;
+    f->dump_stream("shards") << shards;
     f->dump_stream("snaps") << extents;
     f->close_section();
   }
@@ -4895,7 +4940,7 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
 
 void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(14, 4, bl);
+  ENCODE_START(15, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4928,12 +4973,13 @@ void pg_log_entry_t::encode(ceph::buffer::list &bl) const
   if (op != ERROR)
     encode(return_code, bl);
   encode(op_returns, bl);
+  encode(written_shards, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -4999,6 +5045,9 @@ void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
     }
     decode(op_returns, bl);
   }
+  if (struct_v >= 15) {
+    decode(written_shards, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5048,6 +5097,7 @@ void pg_log_entry_t::dump(Formatter *f) const
       f->dump_unsigned("snap", *p);
     f->close_section();
   }
+  f->dump_stream("written_shards") << written_shards;
   {
     f->open_object_section("mod_desc");
     mod_desc.dump(f);
@@ -5324,7 +5374,7 @@ static void _handle_dups(CephContext* cct, pg_log_t &target, const pg_log_t &oth
 }
 
 
-void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
+void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v, const pg_pool_t &pool, shard_id_t shard)
 {
   can_rollback_to = other.can_rollback_to;
   head = other.head;
@@ -5334,13 +5384,17 @@ void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
 				 << " other.dups.size()=" << other.dups.size() << dendl;
   for (auto i = other.log.crbegin(); i != other.log.crend(); ++i) {
     ceph_assert(i->version > other.tail);
-    if (i->version <= v) {
-      // make tail accurate.
-      tail = i->version;
-      break;
+    if (pool.is_nonprimary_shard(shard) && !i->is_written_shard(shard)) {
+      lgeneric_subdout(cct, osd, 20) << __func__ << " BILLCOPYAFTER: skipping partial write log version " << i->version << " " << i->written_shards << dendl;
+    } else {
+      if (i->version <= v) {
+	// make tail accurate.
+	tail = i->version;
+	break;
+      }
+      lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
+      log.push_front(*i);
     }
-    lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
-    log.push_front(*i);
   }
   _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
   lgeneric_subdout(cct, osd, 20) << __func__ << " END v " << v
@@ -5348,7 +5402,7 @@ void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
 				 << " other.dups.size()=" << other.dups.size() << dendl;
 }
 
-void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
+void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max, const pg_pool_t &pool, shard_id_t shard)
 {
   can_rollback_to = other.can_rollback_to;
   int n = 0;
@@ -5359,12 +5413,16 @@ void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
 				<< " other.dups.size()=" << other.dups.size() << dendl;
   for (auto i = other.log.crbegin(); i != other.log.crend(); ++i) {
     ceph_assert(i->version > other.tail);
-    if (n++ >= max) {
-      tail = i->version;
-      break;
+    if (pool.is_nonprimary_shard(shard) && !i->is_written_shard(shard)) {
+      lgeneric_subdout(cct, osd, 20) << __func__ << " BILLCOPYUPTO: skipping partial write log version " << i->version << dendl;
+    } else {
+      if (n++ >= max) {
+	tail = i->version;
+	break;
+      }
+      lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
+      log.push_front(*i);
     }
-    lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
-    log.push_front(*i);
   }
   _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
   lgeneric_subdout(cct, osd, 20) << __func__ << " END max " << max
@@ -6399,7 +6457,7 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(17, 8, bl);
+  ENCODE_START(18, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6433,13 +6491,14 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (has_manifest()) {
     encode(manifest, bl);
   }
+  encode(shard_versions, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   decode(soid, bl);
   decode(myoloc, bl);
@@ -6525,6 +6584,9 @@ void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
       decode(manifest, bl);
     }
   }
+  if (struct_v >= 18) {
+    decode(shard_versions, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6561,6 +6623,14 @@ void object_info_t::dump(Formatter *f) const
     *css << p->first.second;
     f->open_object_section(css->strv());
     p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("shard_versions");
+  for (auto p = shard_versions.cbegin(); p != shard_versions.cend(); ++p) {
+    f->open_object_section("shard");
+    f->dump_int("id", int(p->first));
+    f->dump_stream("version") << p->second;
     f->close_section();
   }
   f->close_section();

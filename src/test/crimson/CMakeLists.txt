@@ -2,8 +2,7 @@
 add_executable(unittest-crimson-backfill
   test_backfill.cc
   ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/crimson/osd/backfill_state.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc)
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/backfill_state.cc)
 add_ceph_unittest(unittest-crimson-backfill
   --memory 256M --smp 1)
 target_link_libraries(unittest-crimson-backfill crimson GTest::Main)

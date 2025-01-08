@@ -39,7 +39,7 @@ namespace ECLegacy {
          i != to_decode.end();
          ++i) {
       ceph_assert(i->second.length() == total_data_size);
-         }
+    }
 
     if (total_data_size == 0)
       return 0;
@@ -50,7 +50,7 @@ namespace ECLegacy {
            j != to_decode.end();
            ++j) {
         chunks[j->first].substr_of(j->second, i, sinfo.get_chunk_size());
-           }
+      }
       bufferlist bl;
 IGNORE_DEPRECATED
       int r = ec_impl->decode_concat(want_to_read, chunks, &bl);

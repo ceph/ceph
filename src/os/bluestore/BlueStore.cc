@@ -15758,7 +15758,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
 
-  _dump_transaction<30>(cct, t);
+  _dump_transaction<20>(cct, t);
 
   vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
