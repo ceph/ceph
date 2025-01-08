@@ -131,7 +131,7 @@ class LvmBlueStore(BlueStore):
         except Exception:
             logger.exception('lvm prepare was unable to complete')
             logger.info('will rollback OSD ID creation')
-            rollback_osd(self.args, self.osd_id)
+            rollback_osd(self.osd_id)
             raise
         terminal.success("ceph-volume lvm prepare successful for: %s" %
                          self.args.data)
