@@ -202,6 +202,8 @@ inline namespace v14_2_0 {
     int set_complete_callback(void *cb_arg, callback_t cb);
     int set_safe_callback(void *cb_arg, callback_t cb)
       __attribute__ ((deprecated));
+    /// Request immediate cancellation as if by IoCtx::aio_cancel().
+    int cancel();
     int wait_for_complete();
     int wait_for_safe() __attribute__ ((deprecated));
     int wait_for_complete_and_cb();
@@ -772,17 +774,30 @@ inline namespace v14_2_0 {
     void tier_evict();
   };
 
-  /* IoCtx : This is a context in which we can perform I/O.
-   * It includes a Pool,
+  /**
+   * @brief A handle to a RADOS pool used to perform I/O operations.
    *
    * Typical use (error checking omitted):
-   *
+   * @code
    * IoCtx p;
    * rados.ioctx_create("my_pool", p);
-   * p->stat(&stats);
-   * ... etc ...
+   * p.stat("my_object", &size, &mtime);
+   * @endcode
    *
-   * NOTE: be sure to call watch_flush() prior to destroying any IoCtx
+   * IoCtx holds a pointer to its underlying implementation. The dup()
+   * method performs a deep copy of this implementation, but the copy
+   * construction and assignment operations perform shallow copies by
+   * sharing that pointer.
+   *
+   * Function names starting with aio_ are asynchronous operations that
+   * return immediately after submitting a request, and whose completions
+   * are managed by the given AioCompletion pointer. The IoCtx's underlying
+   * implementation is involved in the delivery of these completions, so
+   * the caller must guarantee that its lifetime is preserved until then -
+   * if not by preserving the IoCtx instance that submitted the request,
+   * then by a copied/moved instance that shares the same implementation.
+   *
+   * @note Be sure to call watch_flush() prior to destroying any IoCtx
    * that is used for watch events to ensure that racing callbacks
    * have completed.
    */
@@ -791,9 +806,13 @@ inline namespace v14_2_0 {
   public:
     IoCtx();
     static void from_rados_ioctx_t(rados_ioctx_t p, IoCtx &pool);
+    /// Construct a shallow copy of rhs, sharing its underlying implementation.
     IoCtx(const IoCtx& rhs);
+    /// Assign a shallow copy of rhs, sharing its underlying implementation.
     IoCtx& operator=(const IoCtx& rhs);
+    /// Move construct from rhs, transferring its underlying implementation.
     IoCtx(IoCtx&& rhs) noexcept;
+    /// Move assign from rhs, transferring its underlying implementation.
     IoCtx& operator=(IoCtx&& rhs) noexcept;
 
     ~IoCtx();
@@ -1150,7 +1169,8 @@ inline namespace v14_2_0 {
     int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, struct timespec *pts);
 
     /**
-     * Cancel aio operation
+     * Request immediate cancellation with error code -ECANCELED
+     * if the operation hasn't already completed.
      *
      * @param c completion handle
      * @returns 0 on success, negative error code on failure
