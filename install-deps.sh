@@ -191,11 +191,6 @@ function install_boost_on_ubuntu {
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
-    if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$boost_ver"; then
-            return
-        fi
-    fi
     local codename=$1
     local project=libboost
     local sha1=55f34507d322314fb0294629b7c0bb406de07aec
