@@ -97,6 +97,161 @@ public:
   }
 
   /**
+   * relocate_logical_extent
+   *
+   * Make a new logical extent to update its laddr. The caller is
+   * responsible to update the corresponding lba mapping.
+   */
+  base_iertr::future<LogicalCachedExtentRef> relocate_logical_extent(
+    Transaction &t,
+    LBAMappingRef mapping)
+  {
+    LOG_PREFIX(TransactionManager::relocate_logical_extent);
+    SUBDEBUGT(seastore_tm, "relocate {}", t, *mapping);
+    assert(mapping);
+    assert(!mapping->is_indirect());
+    assert(!mapping->is_zero_reserved());
+    assert(mapping->is_parent_viewable());
+    auto laddr = mapping->get_key();
+    return seastar::do_with(
+      std::move(mapping),
+      [this, &t](LBAMappingRef &mapping) {
+	auto v = mapping->get_logical_extent(t);
+	if (v.has_child()) {
+	  return v.get_child_fut().si_then([this, &t](auto extent) {
+	    cache->retire_extent(t, extent);
+	    return base_iertr::make_ready_future<
+	      CachedExtentRef>(extent);
+	  });
+	} else {
+	  auto ext = cache->retire_absent_extent_addr(
+	    t, mapping->get_val(), mapping->get_length());
+	  return base_iertr::make_ready_future<
+	    CachedExtentRef>(std::move(ext));
+	}
+      }).si_then([this, &t, laddr](CachedExtentRef extent) {
+	auto type = extent->get_type();
+	auto ext = is_retired_placeholder_type(type)
+	    ? cache->alloc_remapped_placeholder(
+	      t, laddr, extent->get_paddr(), extent->get_length())
+	    ->template cast<LogicalCachedExtent>()
+	    : cache->alloc_remapped_extent_by_type(
+	      t, type, laddr, extent->get_paddr(),
+	      extent->get_length(), laddr, std::nullopt)
+	    ->template cast<LogicalCachedExtent>();
+	return base_iertr::make_ready_future<
+	  LogicalCachedExtentRef>(std::move(ext));
+      });
+  }
+
+
+  using make_mapping_ret = LBAManager::make_mapping_ret;
+  make_mapping_ret make_mapping(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->make_mapping(t, iter);
+  }
+
+  using make_iterator_ret = LBAManager::make_iterator_ret;
+  make_iterator_ret make_iterator(
+    Transaction &t,
+    LogicalCachedExtentRef ext) {
+    return lba_manager->make_iterator(t, ext);
+  }
+
+  make_iterator_ret make_iterator(
+    Transaction &t,
+    const LBAMapping &mapping) {
+    return lba_manager->make_direct_iterator(t, mapping);
+  }
+
+  make_iterator_ret refresh_iterator(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->refresh_iterator(t, iter);
+  }
+
+  make_iterator_ret prev_iterator(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->prev_iterator(t, iter);
+  }
+
+  make_iterator_ret next_iterator(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->next_iterator(t, iter);
+  }
+
+  make_iterator_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->lower_bound(t, laddr);
+  }
+
+  make_iterator_ret upper_bound(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->upper_bound(t, laddr);
+  }
+
+  make_iterator_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->upper_bound_right(t, laddr);
+  }
+
+  using find_region_ret = LBAManager::find_region_ret;
+  find_region_ret find_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t length) {
+    return lba_manager->find_region(t, hint, length);
+  }
+
+  using get_iterator_ret = LBAManager::get_iterator_ret;
+  get_iterator_ret get_iterator(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->get_iterator(t, laddr);
+  }
+
+  using get_iterators_ret = LBAManager::get_iterators_ret;
+  get_iterators_ret get_iterators(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length) {
+    return lba_manager->get_iterators(t, laddr, length);
+  }
+
+  using insert_mapping_ret = LBAManager::insert_mapping_ret;
+  insert_mapping_ret insert_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) {
+    return lba_manager->insert_mapping(t, iter, laddr, value, nextent);
+  }
+
+  using change_mapping_ret = LBAManager::change_mapping_ret;
+  change_mapping_ret change_mapping(
+    Transaction &t,
+    const LBAIter &iter,
+    laddr_t laddr,
+    lba_map_val_t value,
+    LogicalCachedExtent *nextent) {
+    return lba_manager->change_mapping(t, iter, laddr, value, nextent);
+  }
+
+  using remove_mapping_ret = LBAManager::remove_mapping_ret;
+  remove_mapping_ret remove_mapping(
+    Transaction &t,
+    const LBAIter &iter) {
+    return lba_manager->remove_mapping(t, iter);
+  }
+
+  /**
    * get_pin
    *
    * Get the logical pin at offset
@@ -965,7 +1120,7 @@ private:
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=std::move(pin)](auto extent) {
+      ).si_then([this, &t, pin=std::move(pin)](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalCachedExtent>();
         auto pin_laddr = pin->get_key();
@@ -974,7 +1129,12 @@ private:
         }
         assert(lextent->get_laddr() == pin_laddr);
 #endif
-	return extent->template cast<T>();
+	if (is_remapped_placeholder_type(extent->get_type())) {
+	  return cache->template replace_remapped_placeholder<T>(
+	    t, extent->template cast<LogicalCachedExtent>());
+	} else {
+	  return extent->template cast<T>();
+	}
       });
     } else {
       return pin;

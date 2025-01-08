@@ -1700,128 +1700,343 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
     });
 }
 
-ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
-  context_t ctx,
-  object_data_t &object_data,
-  lba_pin_list_t &pins,
-  laddr_t data_base)
+ObjectDataHandler::clone_ret
+ObjectDataHandler::clone_mappings(context_t ctx)
 {
-  LOG_PREFIX(ObjectDataHandler::clone_extents);
-  TRACET("object_data: {}~0x{:x}, data_base: 0x{:x}",
-    ctx.t,
-    object_data.get_reserved_data_base(),
-    object_data.get_reserved_data_len(),
-    data_base);
-  return ctx.tm.remove(
-    ctx.t,
-    object_data.get_reserved_data_base()
-  ).si_then(
-    [&pins, &object_data, ctx, data_base](auto) mutable {
+  LOG_PREFIX(ObjectDataHandler::clone_mappings);
+  struct lba_entry_t {
+    laddr_t laddr;
+    lba_map_val_t value;
+    LogicalCachedExtent *nextent;
+    bool update_refcount;
+  };
+  struct state_t {
+    state_t(object_data_t &src, object_data_t &dst)
+        : src(src), dst(dst) {}
+    object_data_t &src;
+    object_data_t &dst;
+    laddr_t dst_base;
+    std::vector<lba_entry_t> direct_entries;
+    std::vector<lba_entry_t> indriect_entries;
+    LBAIter lba_iter;
+    LBAIter second_iter;
+  };
+
+  return with_objects_data(
+    ctx,
+    [ctx, FNAME](object_data_t &src, object_data_t &dst) {
+      ceph_assert(dst.is_null());
+      if (src.is_null()) {
+        return clone_iertr::now();
+      }
+
       return seastar::do_with(
-	(extent_len_t)0,
-	[&object_data, ctx, data_base, &pins](auto &last_pos) {
-	return trans_intr::do_for_each(
-	  pins,
-	  [&last_pos, &object_data, ctx, data_base](auto &pin) {
-	  auto offset = pin->get_key().template get_byte_distance<
-	    extent_len_t>(data_base);
-	  ceph_assert(offset == last_pos);
-	  auto fut = TransactionManager::alloc_extent_iertr
-	    ::make_ready_future<LBAMappingRef>();
-	  laddr_t addr = (object_data.get_reserved_data_base() + offset)
-	      .checked_to_laddr();
-	  if (pin->get_val().is_zero()) {
-	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
-	  } else {
-	    fut = ctx.tm.clone_pin(ctx.t, addr, *pin);
-	  }
-	  return fut.si_then(
-	    [&pin, &last_pos, offset](auto) {
-	    last_pos = offset + pin->get_length();
-	    return seastar::now();
-	  }).handle_error_interruptible(
-	    crimson::ct_error::input_output_error::pass_further(),
-	    crimson::ct_error::assert_all("not possible")
-	  );
-	}).si_then([&last_pos, &object_data, ctx] {
-	  if (last_pos != object_data.get_reserved_data_len()) {
-	    return ctx.tm.reserve_region(
+	state_t(src, dst),
+	[ctx, FNAME](state_t &state) {
+	  auto length = state.src.get_reserved_data_len();
+	  // find a suitable region for direct mappings of src onode,
+	  // these mappings will be moved to returned address.
+	  return ctx.tm.find_region(
+	    ctx.t,
+	    ctx.onode.get_data_hint(),
+	    // we try to find a region that's TWO times of the src's
+	    // reserved data length, because we need to preserve the
+	    // invariant that the direct mapping laddr range comes
+	    // right after the clone laddr range, which would benefit
+	    // the CLONERANGE support. Otherwise, we need record the
+	    // direct mapping range somewhere, so that later CLONERANGEs
+	    // can know where to put direct mappings.
+	    length * 2
+	  ).si_then([ctx, &state, length, FNAME](auto res) {
+	    DEBUGT("reserve {}~{} for direct mappings",
+		   ctx.t, res.laddr, length);
+	    state.dst_base = (res.laddr + length).checked_to_laddr();
+	    state.second_iter = res.iter;
+	    return ctx.tm.get_iterators(
 	      ctx.t,
-	      (object_data.get_reserved_data_base() + last_pos).checked_to_laddr(),
-	      object_data.get_reserved_data_len() - last_pos
-	    ).si_then([](auto) {
-	      return seastar::now();
-	    });
-	  }
-	  return TransactionManager::reserve_extent_iertr::now();
-	});
-      });
-    }
-  ).handle_error_interruptible(
-    ObjectDataHandler::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "object_data_handler::clone invalid error"
-  });
+	      state.src.get_reserved_data_base(),
+	      state.src.get_reserved_data_len());
+	  }).si_then([ctx, &state, FNAME](std::vector<LBAIter> iters) {
+	    assert(!iters.empty());
+	    // state.lba_iter should be updated to next mapping
+	    // at the end of each cycle.
+	    state.lba_iter = iters.front();
+	    // start to collect the information about src onode
+	    // 1. for indirect mappings, put lba entry to
+	    //    state.indirect_entries
+	    // 2. for direct mappings, put lba entry to state.direct_entries,
+	    //    turn the lba mapping to indirect, the intermediate key points
+	    //    to the region found before, put the newly updated mapping
+	    //    to state.indriect_entries.
+	    return trans_intr::do_for_each(
+	      boost::make_counting_iterator<size_t>(0),
+	      boost::make_counting_iterator<size_t>(iters.size()),
+	      [ctx, &state, FNAME](auto) {
+		bool cur_is_direct =
+		    state.lba_iter.val.pladdr.is_paddr() &&
+		    state.lba_iter.val.pladdr.get_paddr() != P_ADDR_ZERO;
+		return seastar::futurize_invoke([ctx, &state, cur_is_direct] {
+		  if (cur_is_direct) {
+		    return ctx.tm.make_mapping(ctx.t, state.lba_iter
+		    ).si_then([ctx](auto mapping) {
+		      // The laddr of extent is updated below.
+		      return ctx.tm.relocate_logical_extent(
+			ctx.t, std::move(mapping));
+		    });
+		  } else {
+		    return clone_iertr::make_ready_future<
+		      LogicalCachedExtentRef>();
+		  }
+		}).si_then([ctx, &state, cur_is_direct, FNAME](auto ext) {
+		  lba_entry_t entry {
+		    state.lba_iter.key,
+		    state.lba_iter.val,
+		    ext.get(),
+		    false
+		  };
+
+		  if (cur_is_direct) {
+		    assert(entry.value.pladdr.is_paddr());
+		    assert(entry.value.pladdr.get_paddr() != P_ADDR_ZERO);
+		    // rebase the laddr from src onode base to reserved addr.
+		    auto offset = entry.laddr.get_byte_distance<
+		      loffset_t>(state.src.get_reserved_data_base());
+		    auto dst_laddr = (state.dst_base + offset).checked_to_laddr();
+
+		    auto dst_entry = entry;
+		    dst_entry.laddr = dst_laddr;
+		    dst_entry.value.refcount++;
+		    // This is the clone procedure, so that only the head and
+		    // clone onode will reference this mapping.
+		    assert(dst_entry.value.refcount == 2);
+		    DEBUGT("move {} to {} {}",
+			   ctx.t, state.lba_iter,
+			   dst_entry.laddr, dst_entry.value);
+		    state.direct_entries.push_back(dst_entry);
+		    if (ext) {
+		      ext->set_laddr(dst_laddr);
+		    }
+
+		    // make current mapping indirect
+		    auto new_val = state.lba_iter.val;
+		    new_val.pladdr = dst_laddr;
+		    assert(new_val.refcount == EXTENT_DEFAULT_REF_COUNT);
+		    DEBUGT("make {} indirect: {}",
+			   ctx.t, state.lba_iter, new_val);
+		    return ctx.tm.change_mapping(
+		      ctx.t,
+		      state.lba_iter,
+		      state.lba_iter.key,
+		      new_val,
+		      // avoid copying original child
+		      (LogicalCachedExtent*)get_reserved_ptr()
+		    ).si_then([&state, dst_laddr](LBAIter iter) {
+		      boost::ignore_unused(dst_laddr);
+		      assert(iter.val.pladdr.is_laddr());
+		      assert(iter.val.pladdr.get_laddr() == dst_laddr);
+		      lba_entry_t entry {
+			iter.key,
+			iter.val,
+			nullptr,
+			false
+		      };
+		      state.indriect_entries.push_back(entry);
+		      state.lba_iter = iter;
+		    });
+		  } else { // entry.value.pladdr is laddr or P_ADDR_ZERO
+		    // update the refcount the direct mapping.
+		    entry.update_refcount = entry.value.pladdr.is_laddr();
+		    DEBUGT("copy {} {}", ctx.t, entry.laddr, entry.value);
+		    state.indriect_entries.push_back(entry);
+		    return clone_iertr::now();
+		  }
+		}).si_then([ctx, &state] {
+		  // We alway move the updated iter to next instead
+		  // making iterator from the existing next mapping,
+		  // which will benefit from variadic LBA extent layout
+		  // in the future.
+		  return ctx.tm.next_iterator(ctx.t, state.lba_iter);
+		}).si_then([&state](LBAIter iter) {
+		  state.lba_iter = iter;
+		});
+	      });
+	  }).si_then([ctx, &state] {
+	    // The parent leaf node of state.second_iter might become
+	    // invalid after the process of src mappings.
+	    return ctx.tm.refresh_iterator(ctx.t, state.second_iter);
+	  }).si_then([ctx, &state, FNAME](LBAIter iter) {
+	    state.lba_iter = iter;
+	    // Insert the direct mappings in reversed order to avoid
+	    // invoking next method after each insertion.
+	    return trans_intr::do_for_each(
+	      state.direct_entries.rbegin(),
+	      state.direct_entries.rend(),
+	      [ctx, &state, FNAME](lba_entry_t &entry) {
+		assert(entry.value.pladdr.is_paddr());
+		assert(entry.value.pladdr.get_paddr() != P_ADDR_ZERO);
+		assert(entry.value.refcount == 2);
+		assert(entry.laddr.get_byte_distance<loffset_t>(state.dst_base)
+		       < state.src.get_reserved_data_len());
+		DEBUGT("insert {} {} {} at {}",
+		       ctx.t, entry.laddr, entry.value,
+		       (void*)entry.nextent, state.lba_iter);
+		return ctx.tm.insert_mapping(
+		  ctx.t,
+		  state.lba_iter,
+		  entry.laddr,
+		  entry.value,
+		  entry.nextent
+		).si_then([&entry, &state](LBAIter iter) {
+		  boost::ignore_unused(entry);
+		  assert(entry.laddr == iter.key);
+		  state.lba_iter = iter;
+		});
+	      });
+	  }).si_then([ctx, &state, length, FNAME] {
+	    // calculate the laddr range for the clone
+	    state.dst_base = (state.dst_base - length).checked_to_laddr();
+	    state.dst.update_reserved(state.dst_base, length);
+	    // insert mappings in reversed order
+	    return trans_intr::do_for_each(
+	      state.indriect_entries.rbegin(),
+	      state.indriect_entries.rend(),
+	      [ctx, &state, FNAME](lba_entry_t &entry) {
+		assert(entry.value.pladdr.is_laddr() ||
+		       entry.value.pladdr.get_paddr() == P_ADDR_ZERO);
+		auto offset = entry.laddr.get_byte_distance<
+		  loffset_t>(state.src.get_reserved_data_base());
+		auto laddr = (state.dst_base + offset).checked_to_laddr();
+		DEBUGT("insert {} {} for clone onode",
+		       ctx.t, laddr, entry.value);
+		return ctx.tm.insert_mapping(
+		  ctx.t,
+		  state.lba_iter,
+		  laddr,
+		  entry.value,
+		  entry.nextent
+		).si_then([ctx, &state, &entry, FNAME](LBAIter iter) {
+		  state.lba_iter = iter;
+		  if (!entry.update_refcount) {
+		    return clone_iertr::now();
+		  } else {
+		    auto key = entry.value.pladdr.get_laddr();
+		    DEBUGT("update refcount for {}", ctx.t, key);
+		    return ctx.tm.get_iterators(ctx.t, key, entry.value.len
+		    ).si_then([ctx, &state](std::vector<LBAIter> iters) {
+		      assert(iters.size() == 1);
+		      state.second_iter = iters.front();
+		      state.second_iter.val.refcount++;
+		      return ctx.tm.change_mapping(
+			ctx.t,
+			state.second_iter,
+			state.second_iter.key,
+			state.second_iter.val,
+			nullptr
+		      ).discard_result();
+		    });
+		  }
+		});
+	      });
+	  });
+        });
+    });
+}
+
+ObjectDataHandler::clone_ret
+ObjectDataHandler::copy_indirect_mappings(
+  context_t ctx)
+{
+  LOG_PREFIX(ObjectDataHandler::copy_indirect_mappings);
+  struct state_t {
+    state_t(object_data_t &src, object_data_t &dst)
+        : src(src), dst(dst), src_iters(), dst_base(L_ADDR_NULL) {}
+    object_data_t &src;
+    object_data_t &dst;
+    std::vector<LBAIter> src_iters;
+    laddr_t dst_base;
+    LBAIter insert_iter;
+    LBAIter second_iter;
+  };
+  return with_objects_data(
+    ctx,
+    [ctx, FNAME](object_data_t &src, object_data_t &dst) {
+      ceph_assert(!src.is_null());
+      ceph_assert(dst.is_null());
+      return seastar::do_with(
+        state_t(src, dst),
+        [ctx, FNAME](state_t &state) {
+	  return ctx.tm.get_iterators(
+	    ctx.t,
+	    state.src.get_reserved_data_base(),
+	    state.src.get_reserved_data_len()
+	  ).si_then([ctx, &state](std::vector<LBAIter> iters) {
+	    state.src_iters = std::move(iters);
+	    return ctx.tm.find_region(
+	      ctx.t,
+	      ctx.d_onode->get_data_hint(),
+	      state.src.get_reserved_data_len());
+	  }).si_then([ctx, &state, FNAME](auto res) {
+	    auto length = state.src.get_reserved_data_len();
+	    DEBUGT("find region {}~{} for onode",
+		   ctx.t, res.laddr, length);
+	    state.dst.update_reserved(res.laddr, length);
+	    state.dst_base = res.laddr;
+	    state.insert_iter = res.iter;
+	    return trans_intr::do_for_each(
+	      state.src_iters.rbegin(),
+	      state.src_iters.rend(),
+	      [ctx, &state, FNAME](LBAIter &iter) {
+		auto offset = iter.key.get_byte_distance<
+		  loffset_t>(state.src.get_reserved_data_base());
+		auto laddr = (state.dst_base + offset).checked_to_laddr();
+		DEBUGT("copy {} to {}", ctx.t, iter, laddr);
+		return ctx.tm.insert_mapping(
+		  ctx.t,
+		  state.insert_iter,
+		  laddr,
+		  iter.val,
+		  nullptr
+		).si_then([ctx, &state, FNAME](LBAIter iter) {
+		  state.insert_iter = iter;
+		  auto &value = iter.val;
+		  if (value.pladdr.is_paddr()) {
+		    assert(value.pladdr.get_paddr() == P_ADDR_ZERO);
+		    return clone_iertr::now();
+		  } else {
+		    auto laddr = value.pladdr.get_laddr();
+		    DEBUGT("increase the refcount of {}", ctx.t, laddr);
+		    return ctx.tm.get_iterators(
+		      ctx.t,
+		      laddr,
+		      value.len
+		    ).si_then([ctx, &state](std::vector<LBAIter> iters) {
+		      assert(iters.size() == 1);
+		      state.second_iter = iters.front();
+		      state.second_iter.val.refcount++;
+		      return ctx.tm.change_mapping(
+			ctx.t,
+			state.second_iter,
+			state.second_iter.key,
+			state.second_iter.val,
+			nullptr
+		      ).discard_result();
+		    });
+		  }
+		});
+	      });
+	  });
+        });
+    });
 }
 
 ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   context_t ctx)
 {
-  // the whole clone procedure can be seperated into the following steps:
-  // 	1. let clone onode(d_object_data) take the head onode's
-  // 	   object data base;
-  // 	2. reserve a new region in lba tree for the head onode;
-  // 	3. clone all extents of the clone onode, see transaction_manager.h
-  // 	   for the details of clone_pin;
-  // 	4. reserve the space between the head onode's size and its reservation
-  // 	   length.
-  return with_objects_data(
-    ctx,
-    [ctx, this](auto &object_data, auto &d_object_data) {
-    ceph_assert(d_object_data.is_null());
-    if (object_data.is_null()) {
-      return clone_iertr::now();
-    }
-    return prepare_data_reservation(
-      ctx,
-      d_object_data,
-      object_data.get_reserved_data_len()
-    ).si_then([&object_data, &d_object_data, ctx, this] {
-      assert(!object_data.is_null());
-      auto base = object_data.get_reserved_data_base();
-      auto len = object_data.get_reserved_data_len();
-      object_data.clear();
-      LOG_PREFIX(ObjectDataHandler::clone);
-      DEBUGT("cloned obj reserve_data_base: {}, len 0x{:x}",
-	ctx.t,
-	d_object_data.get_reserved_data_base(),
-	d_object_data.get_reserved_data_len());
-      return prepare_data_reservation(
-	ctx,
-	object_data,
-	d_object_data.get_reserved_data_len()
-      ).si_then([&d_object_data, ctx, &object_data, base, len, this] {
-	LOG_PREFIX("ObjectDataHandler::clone");
-	DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
-	  ctx.t,
-	  object_data.get_reserved_data_base(),
-	  object_data.get_reserved_data_len());
-	return ctx.tm.get_pins(ctx.t, base, len
-	).si_then([ctx, &object_data, &d_object_data, base, this](auto pins) {
-	  return seastar::do_with(
-	    std::move(pins),
-	    [ctx, &object_data, &d_object_data, base, this](auto &pins) {
-	    return clone_extents(ctx, object_data, pins, base
-	    ).si_then([ctx, &d_object_data, base, &pins, this] {
-	      return clone_extents(ctx, d_object_data, pins, base);
-	    }).si_then([&pins, ctx] {
-	      return do_removals(ctx, pins);
-	    });
-	  });
-	});
-      });
-    });
-  });
+  if (ctx.src_is_head) {
+    return clone_mappings(ctx);
+  } else {
+    return copy_indirect_mappings(ctx);
+  }
 }
 
 } // namespace crimson::os::seastore

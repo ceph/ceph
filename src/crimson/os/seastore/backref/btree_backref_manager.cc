@@ -104,7 +104,7 @@ BtreeBackrefManager::get_mapping(
       c, offset
     ).si_then([offset, c](auto iter) -> get_mapping_ret {
       LOG_PREFIX(BtreeBackrefManager::get_mapping);
-      if (iter.is_end() || iter.get_key() != offset) {
+      if (iter.is_tree_end(c.trans) || iter.get_key() != offset) {
 	ERRORT("{} doesn't exist", c.trans, offset);
 	return crimson::ct_error::enoent::make();
       } else {
@@ -136,7 +136,7 @@ BtreeBackrefManager::get_mappings(
 	btree.upper_bound_right(c, offset),
 	[&ret, offset, end, c](auto &pos) {
 	  LOG_PREFIX(BtreeBackrefManager::get_mappings);
-	  if (pos.is_end() || pos.get_key() >= end) {
+	  if (pos.is_tree_end(c.trans) || pos.get_key() >= end) {
 	    TRACET("{}~{} done with {} results",
 	           c.trans, offset, end, ret.size());
 	    return BackrefBtree::iterate_repeat_ret_inner(
@@ -195,7 +195,7 @@ BtreeBackrefManager::new_mapping(
 	[&state, len, addr, &t, key/*, lookup_attempts*/](auto &pos) {
 	  LOG_PREFIX(BtreeBackrefManager::new_mapping);
 	  //++stats.num_alloc_extents_iter_nexts;
-	  if (pos.is_end()) {
+	  if (pos.is_tree_end(t)) {
 	    DEBUGT("{}~{}, paddr={}, state: end, insert at {}",
                    t, addr, len, key,
                    //stats.num_alloc_extents_iter_nexts - lookup_attempts,
@@ -248,6 +248,24 @@ BtreeBackrefManager::new_mapping(
     });
 }
 
+struct removed_mappings_t {
+  using entry_t = BackrefManager::remove_mapping_result_t;
+  std::map<paddr_t, entry_t> mappings;
+
+  void insert(paddr_t key, entry_t val) {
+    mappings.insert_or_assign(key, val);
+  }
+  entry_t find(paddr_t paddr, extent_len_t length) {
+    assert(!mappings.empty());
+    auto iter = mappings.upper_bound(paddr);
+    assert(iter != mappings.begin());
+    --iter;
+    assert(iter->first <= paddr);
+    assert(iter->first + iter->second.len >= paddr + length);
+    return iter->second;
+  }
+};
+
 BtreeBackrefManager::merge_cached_backrefs_ret
 BtreeBackrefManager::merge_cached_backrefs(
   Transaction &t,
@@ -264,9 +282,12 @@ BtreeBackrefManager::merge_cached_backrefs(
     return seastar::do_with(
       backref_entryrefs_by_seq.begin(),
       JOURNAL_SEQ_NULL,
-      [this, &t, &limit, &backref_entryrefs_by_seq, max](auto &iter, auto &inserted_to) {
+      removed_mappings_t{},
+      [this, &t, &limit, &backref_entryrefs_by_seq, max]
+      (auto &iter, auto &inserted_to, auto &removed_mappings) {
       return trans_intr::repeat(
-        [&iter, this, &t, &limit, &backref_entryrefs_by_seq, max, &inserted_to]()
+        [&iter, this, &t, &limit, &backref_entryrefs_by_seq,
+	 max, &inserted_to, &removed_mappings]()
         -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
         if (iter == backref_entryrefs_by_seq.end()) {
           return seastar::make_ready_future<seastar::stop_iteration>(
@@ -281,21 +302,31 @@ BtreeBackrefManager::merge_cached_backrefs(
           inserted_to = seq;
           return trans_intr::do_for_each(
             backref_entry_refs,
-            [this, &t](auto &backref_entry_ref) {
+            [this, &t, &removed_mappings](auto &backref_entry_ref) {
             LOG_PREFIX(BtreeBackrefManager::merge_cached_backrefs);
             auto &backref_entry = *backref_entry_ref;
             if (backref_entry.laddr != L_ADDR_NULL) {
-              DEBUGT("new mapping: {}~{} -> {}",
-                t,
-                backref_entry.paddr,
-                backref_entry.len,
-                backref_entry.laddr);
+	      auto type = backref_entry.type;
+	      auto op = "new";
+	      if (is_remapped_placeholder_type(type)) {
+		auto v = removed_mappings.find(
+		  backref_entry.paddr, backref_entry.len);
+		type = v.type;
+		op = "remap";
+	      }
+	      DEBUGT("{} mapping: {}~{} {} -> {}",
+		     t,
+		     op,
+		     backref_entry.paddr,
+		     backref_entry.len,
+		     type,
+		     backref_entry.laddr);
               return new_mapping(
                 t,
                 backref_entry.paddr,
                 backref_entry.len,
                 backref_entry.laddr,
-                backref_entry.type).si_then([](auto &&pin) {
+                type).si_then([](auto &&pin) {
                 return seastar::now();
               });
             } else {
@@ -303,7 +334,9 @@ BtreeBackrefManager::merge_cached_backrefs(
               return remove_mapping(
                 t,
                 backref_entry.paddr
-              ).si_then([](auto&&) {
+              ).si_then([&removed_mappings, paddr=backref_entry.paddr]
+			(auto&& res) {
+		removed_mappings.insert(paddr, res);
                 return seastar::now();
               }).handle_error_interruptible(
                 crimson::ct_error::input_output_error::pass_further(),
@@ -352,7 +385,7 @@ BtreeBackrefManager::scan_mapped_space(
 	  c,
 	  P_ADDR_MIN),
 	[c, &scan_visitor, block_size, FNAME](auto &pos) {
-	  if (pos.is_end()) {
+	  if (pos.is_tree_end(c.trans)) {
 	    return BackrefBtree::iterate_repeat_ret_inner(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::yes);
@@ -442,8 +475,8 @@ BtreeBackrefManager::scan_mapped_space(
 	      c,
 	      P_ADDR_MIN,
 	      &tree_visitor),
-	    [](auto &pos) {
-	      if (pos.is_end()) {
+	    [c](auto &pos) {
+	      if (pos.is_tree_end(c.trans)) {
 		return BackrefBtree::iterate_repeat_ret_inner(
 		  interruptible::ready_future_marker{},
 		  seastar::stop_iteration::yes);
@@ -517,7 +550,7 @@ BtreeBackrefManager::remove_mapping(
 	c, addr
       ).si_then([&btree, c, addr](auto iter)
 		-> remove_mapping_ret {
-	if (iter.is_end() || iter.get_key() != addr) {
+	if (iter.is_tree_end(c.trans) || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeBackrefManager::remove_mapping);
 	  WARNT("paddr={} doesn't exist, state: {}, leaf {}",
 	    c.trans, addr, iter.get_key(), *iter.get_leaf_node());
@@ -528,11 +561,13 @@ BtreeBackrefManager::remove_mapping(
 	auto ret = remove_mapping_result_t{
 	  iter.get_key(),
 	  iter.get_val().len,
-	  iter.get_val().laddr};
+	  iter.get_val().laddr,
+	  iter.get_val().type
+	};
 	return btree.remove(
 	  c,
 	  iter
-	).si_then([ret] {
+	).si_then([ret](auto) {
 	  return ret;
 	});
       });

@@ -28,30 +28,6 @@ using LBANode = FixedKVNode<laddr_t>;
 
 class BtreeLBAMapping;
 
-/**
- * lba_map_val_t
- *
- * struct representing a single lba mapping
- */
-struct lba_map_val_t {
-  extent_len_t len = 0;  ///< length of mapping
-  pladdr_t pladdr;         ///< physical addr of mapping or
-			   //	laddr of a physical lba mapping(see btree_lba_manager.h)
-  extent_ref_count_t refcount = 0; ///< refcount
-  uint32_t checksum = 0; ///< checksum of original block written at paddr (TODO)
-
-  lba_map_val_t() = default;
-  lba_map_val_t(
-    extent_len_t len,
-    pladdr_t pladdr,
-    extent_ref_count_t refcount,
-    uint32_t checksum)
-    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
-  bool operator==(const lba_map_val_t&) const = default;
-};
-
-std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
-
 constexpr size_t LBA_BLOCK_SIZE = 4096;
 
 using lba_node_meta_t = fixed_kv_node_meta_t<laddr_t>;
@@ -118,30 +94,6 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  */
 constexpr size_t LEAF_NODE_CAPACITY = 140;
 
-/**
- * lba_map_val_le_t
- *
- * On disk layout for lba_map_val_t.
- */
-struct __attribute__((packed)) lba_map_val_le_t {
-  extent_len_le_t len = init_extent_len_le(0);
-  pladdr_le_t pladdr;
-  extent_ref_count_le_t refcount{0};
-  ceph_le32 checksum{0};
-
-  lba_map_val_le_t() = default;
-  lba_map_val_le_t(const lba_map_val_le_t &) = default;
-  explicit lba_map_val_le_t(const lba_map_val_t &val)
-    : len(init_extent_len_le(val.len)),
-      pladdr(pladdr_le_t(val.pladdr)),
-      refcount(val.refcount),
-      checksum(val.checksum) {}
-
-  operator lba_map_val_t() const {
-    return lba_map_val_t{ len, pladdr, refcount, checksum };
-  }
-};
-
 struct LBALeafNode
   : FixedKVLeafNode<
       LEAF_NODE_CAPACITY,
@@ -202,13 +154,17 @@ struct LBALeafNode
       SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
 	this->pending_for_transaction,
 	iter.get_offset(),
-	*nextent);
+	(void*)nextent);
       // child-ptr may already be correct, see LBAManager::update_mappings()
-      if (!nextent->has_parent_tracker()) {
+      if (is_reserved_ptr(nextent)) {
+	children[iter.get_offset()] = nextent;
+      } else if (!nextent->has_parent_tracker()) {
 	this->update_child_ptr(iter, nextent);
       }
-      assert(nextent->has_parent_tracker()
-	&& nextent->get_parent_node<LBALeafNode>().get() == this);
+      assert(
+	is_reserved_ptr(nextent) ||
+	(nextent->has_parent_tracker() &&
+	 nextent->get_parent_node<LBALeafNode>().get() == this));
     }
     this->on_modify();
     if (val.pladdr.is_paddr()) {
@@ -308,7 +264,6 @@ using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_node_meta_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBAInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba_manager::btree::LBALeafNode> : fmt::ostream_formatter {};
 #endif
