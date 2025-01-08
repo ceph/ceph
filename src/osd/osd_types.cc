@@ -7425,6 +7425,10 @@ void init_pg_ondisk(
 
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   t.touch(coll, pgmeta_oid);
+  if (pool && pool->is_crimson()) {
+    t.set_alloc_hint(coll, pgmeta_oid,
+      0, 0, CEPH_OSD_ALLOC_HINT_FLAG_LOG);
+  }
   map<string,bufferlist> values;
   __u8 struct_v = pg_latest_struct_v;
   encode(struct_v, values[string(infover_key)]);
