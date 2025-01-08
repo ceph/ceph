@@ -16,6 +16,7 @@
 #include <cerrno>
 
 #include "Objecter.h"
+#include <fmt/format.h>
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
 #include "Filer.h"
@@ -96,6 +97,22 @@ namespace bs = boost::system;
 namespace ca = ceph::async;
 namespace cb = ceph::buffer;
 namespace asio = boost::asio;
+
+#ifdef WITH_LTTNG
+#define _SDT_HAS_SEMAPHORES 1
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#include "tracing/osdc.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
+CEPH_UST_SEMAPHORE(osdc, objecter_send_op);
+CEPH_UST_SEMAPHORE(osdc, objecter_finish_op);
+#else
+#define tracepoint(...)
+#define do_tracepoint(...)
+#define LTTNG_UST_STAP_PROBEV(...)
+#define CEPH_TRACEPOINT_ENABLED(...) false
+#endif
 
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
@@ -3206,6 +3223,8 @@ void Objecter::_finish_op(Op *op, int r)
 
   inflight_ops--;
 
+  tracepoint(osdc, objecter_finish_op, op->tid, op->target.osd);
+
   op->put();
 }
 
@@ -3338,6 +3357,31 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
+
+  if (CEPH_TRACEPOINT_ENABLED(osdc, objecter_send_op)) {
+    const std::string op_names = std::accumulate(
+        std::next(op->ops.begin()), op->ops.end(),
+        fmt::format("{}", op->ops.front()),
+        [](const std::string& a, const auto& op) {
+          return fmt::format("{};{}", a, op);
+        });
+    size_t op_indata_total = 0;
+    size_t op_outdata_total = 0;
+    for (const auto& op : op->ops) {
+      op_indata_total += op.indata.length();
+      op_outdata_total += op.outdata.length();
+    }
+    do_tracepoint(
+        osdc, objecter_send_op, op->tid, op->target.osd,
+        op->target.base_oid.name.c_str(), op->target.base_oid.name.length(),
+        op->target.pgid.pool(), op_names.c_str(), op_names.length(),
+        op_indata_total, op_outdata_total);
+    LTTNG_UST_STAP_PROBEV(
+        osdc, objecter_send_op, op->tid, op->target.osd,
+        op->target.base_oid.name.c_str(), op->target.pgid.pool(),
+        op_names.c_str(), op_indata_total, op_outdata_total);
+  }
+
   op->session->con->send_message(m);
 }
 
