@@ -165,26 +165,26 @@ Evaluate strays using recursive scrub
 
 Dump stray folder content
 =====================================
-- In order to dump stray folder content on specific MDS, use the following command::
 
-   ceph tell mds.<fsname>:0 dump stray
-   [
-    "stray_inode": {
-        "ino": "0x100000001f7",
-        "stray_prior_path": "/dir/dir1",
-        "client_caps": [
-            {
-                "client_id": 4156,
-                "pending": "pAsLsXsFscr",
-                "issued": "pAsLsXsFscr",
-                "wanted": "-",
-                "last_sent": 3
-            }
-        ],
-        "loner": -1,
-        "want_loner": -1,
-        "mds_caps_wanted": [],
-        "is_subvolume": false
-    }
-]
+- In order to dump stray folder content on a specific MDS, use the following command::
 
+    ceph tell mds.<fsname>:0 dump stray
+    [
+        "stray_inode": {
+            "ino": "0x100000001f7",
+            "stray_prior_path": "/dir/dir1",
+            "client_caps": [
+                {
+                    "client_id": 4156,
+                    "pending": "pAsLsXsFscr",
+                    "issued": "pAsLsXsFscr",
+                    "wanted": "-",
+                    "last_sent": 3
+                }
+            ],
+            "loner": -1,
+            "want_loner": -1,
+            "mds_caps_wanted": [],
+            "is_subvolume": false
+        }
+    ]
