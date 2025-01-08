@@ -5,6 +5,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2020 Red Hat, Inc.
+ * Copyright (C) 2024 IBM
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -13,9 +14,12 @@
  *
  */
 
+#include "radosgw-admin/sync_checkpoint.h"
+
 #include <fmt/format.h>
+
 #include "common/errno.h"
-#include "rgw_sync_checkpoint.h"
+
 #include "rgw_sal_rados.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_data_sync.h"
