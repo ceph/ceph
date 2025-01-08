@@ -379,7 +379,40 @@
             },
             "documentation":"<p>A filter for all log object. Filter for the object by its key (prefix, suffix and regex).</p>",
             "locationName":"Filter"
-        }
+        },
+        "CreateBucketConfiguration":{
+            "type":"structure",
+            "members":{
+                "BucketIndex":{
+                    "shape":"BucketIndex",
+                    "documentation":"<p>Configuration to customize the bucket index layout.</p> <note> <p>This element is a Ceph RGW extension.</p> </note>"
+                }
+            }
+        },
+        "BucketIndex":{
+            "type":"structure",
+            "required":[
+                "Type"
+            ],
+            "members":{
+                "Type":{
+                    "shape":"BucketIndexType",
+                    "documentation":"<p>Bucket index type: Normal or Indexless.</p>"
+                },
+                "NumShards":{
+                    "shape":"BucketIndexNumShards",
+                    "documentation":"<p>Number of initial bucket index shards. Only valid for the <code>Normal</code> index type.</p>"
+                }
+            }
+        },
+        "BucketIndexType":{
+            "type":"string",
+            "enum":[
+                "Normal",
+                "Indexless"
+            ]
+        },
+        "BucketIndexNumShards":{"type":"integer"}
     },
     "documentation":"<p/>"
 }
