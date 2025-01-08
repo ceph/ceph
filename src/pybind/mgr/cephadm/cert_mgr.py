@@ -4,7 +4,7 @@ import logging
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from orchestrator import OrchestratorError
-from mgr_util import verify_tls, get_cert_issuer_info, ServerConfigException
+from mgr_util import verify_tls, get_cert_issuer_info, ServerConfigException, verify_cacrt_content
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -153,8 +153,8 @@ class CertKeyStore():
             'nvmeof_server_cert': {},  # service-name -> cert
             'nvmeof_client_cert': {},  # service-name -> cert
             'nvmeof_root_ca_cert': {},  # service-name -> cert
-            'mgmt_gw_cert': Cert(),  # cert
-            'oauth2_proxy_cert': Cert(),  # cert
+            'mgmt_gw_cert': {},  # cert
+            'oauth2_proxy_cert': {},  # cert
             'cephadm_root_ca_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
         }
@@ -162,9 +162,9 @@ class CertKeyStore():
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
         self.known_keys = {
-            'mgmt_gw_key': PrivKey(),  # cert
-            'oauth2_proxy_key': PrivKey(),  # cert
-            'cephadm_root_ca_key': PrivKey(),  # cert
+            'mgmt_gw_key': {},  # key
+            'oauth2_proxy_key': {},  # key
+            'cephadm_root_ca_key': PrivKey(),  # key
             'grafana_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
             'ingress_ssl_key': {},  # service-name -> key
@@ -221,14 +221,36 @@ class CertKeyStore():
         if entity in self.service_name_cert and not service_name:
             raise OrchestratorError(f'Need service name to access cert for entity {entity}')
 
-    def cert_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
+    def cert_ls(self, show_details: bool = True) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
+
+        def get_cert_info(cert: Cert) -> Dict:
+            try:
+                org, cn = get_cert_issuer_info(cert.cert)
+                days_to_expiration = verify_cacrt_content(cert.cert)
+                return {
+                        'user_made': cert.user_made,
+                        'org': org,
+                        'cn': cn,
+                        'days_to_expiration': days_to_expiration,
+                }
+            except ServerConfigException as e:
+                return {
+                        'user_made': cert.user_made,
+                        'invalid_certificate': f'{e}'
+                }
+
         ls: Dict[str, Any] = {}
         for k, v in self.known_certs.items():
             if k in self.service_name_cert or k in self.host_cert:
-                tmp: Dict[str, Any] = {key: True for key in v if v[key]}
+                # For service-name or host-specific certificates
+                tmp: Dict[str, Any] = {
+                    key: get_cert_info(v[key]) for key in v if v[key]
+                }
                 ls[k] = tmp if tmp else False
             else:
-                ls[k] = bool(v)
+                # For standalone certificates
+                ls[k] = get_cert_info(v) if isinstance(v, Cert) else False
+
         return ls
 
     def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[PrivKey]:
@@ -363,7 +385,7 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def is_valid_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> (bool, bool):
+    def is_valid_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> bool:
         """Helper method to validate a cert/key pair and handle errors."""
         key = key_obj.key
         cert = cert_obj.cert
