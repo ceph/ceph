@@ -1,8 +1,8 @@
 # test_rados
-add_executable(ceph_test_rados 
+add_executable(ceph_test_rados
   TestRados.cc
   TestOpStat.cc
-  Object.cc 
+  Object.cc
   RadosModel.cc
   )
 target_link_libraries(ceph_test_rados
@@ -20,7 +20,7 @@ install(TARGETS
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(ceph_test_rados_io_sequence
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados_io_sequence.cc)
+  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados_io_sequence/ceph_test_rados_io_sequence.cc)
 target_link_libraries(ceph_test_rados_io_sequence
   librados global object_io_exerciser json_structures)
 install(TARGETS
