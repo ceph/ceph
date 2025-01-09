@@ -84,6 +84,8 @@ import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
 import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 
 @NgModule({
   imports: [
@@ -171,7 +173,9 @@ import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw
     RgwUserAccountsFormComponent,
     RgwUserAccountsDetailsComponent,
     RgwStorageClassListComponent,
-    RgwStorageClassDetailsComponent
+    RgwStorageClassDetailsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -358,6 +362,11 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'topic',
+    data: { breadcrumbs: 'Topic' },
+    children: [{ path: '', component: RgwTopicListComponent }]
   }
 ];
 
