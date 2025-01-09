@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import _ from 'lodash';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -13,14 +13,22 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { Topic } from '~/app/shared/models/topic.model';
+import { BehaviorSubject, Observable, of, Subscriber } from 'rxjs';
 import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
+const BASE_URL = 'rgw/topic';
 @Component({
   selector: 'cd-rgw-topic-list',
   templateUrl: './rgw-topic-list.component.html',
-  styleUrls: ['./rgw-topic-list.component.scss']
+  styleUrls: ['./rgw-topic-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
@@ -31,15 +39,19 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
   context: CdTableFetchDataContext;
   errorMessage: string;
   selection: CdTableSelection = new CdTableSelection();
-  topic$: Observable<Topic[]>;
-  subject = new BehaviorSubject<Topic[]>([]);
+  topicsSubject = new BehaviorSubject<Topic[]>([]);
+  topics$ = this.topicsSubject.asObservable();
   name: string;
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
-    private rgwTopicService: RgwTopicService
+    private rgwTopicService: RgwTopicService,
+    private modalService: ModalCdsService,
+    private urlBuilder: URLBuilderService,
+    private taskWrapper: TaskWrapperService,
+    protected ngZone: NgZone
   ) {
-    super();
+    super(ngZone);
     this.permission = this.authStorageService.getPermissions().rgw;
   }
 
@@ -66,7 +78,35 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       }
     ];
-    this.topic$ = this.subject.pipe(
+
+    const getBucketUri = () =>
+      this.selection.first() && `${encodeURIComponent(this.selection.first().key)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
+      name: this.actionLabels.EDIT
+    };
+
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteAction(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.DELETE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
+    this.setTableRefreshTimeout();
+    this.topics$ = this.topicsSubject.pipe(
       switchMap(() =>
         this.rgwTopicService.listTopic().pipe(
           catchError(() => {
@@ -78,12 +118,40 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
       shareReplay(1)
     );
   }
-
   fetchData() {
-    this.subject.next([]);
+    this.topicsSubject.next([]);
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  deleteAction() {
+    const key = this.selection.first().key;
+    const name = this.selection.first().name;
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`Topic`,
+      itemNames: [name],
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rgw/topic/delete', {
+                name: [name]
+              }),
+              call: this.rgwTopicService.delete(key)
+            })
+            .subscribe({
+              error: (error: any) => {
+                observer.error(error);
+              },
+              complete: () => {
+                observer.complete();
+                this.table.refreshBtn();
+              }
+            });
+        });
+      }
+    });
   }
 }

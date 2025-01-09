@@ -1,6 +1,6 @@
 import { Component, Input, SimpleChanges, OnChanges } from '@angular/core';
 
-import { TopicDetails } from '~/app/shared/models/topic.model';
+import { Topic } from '~/app/shared/models/topic.model';
 import * as _ from 'lodash';
 
 @Component({
@@ -10,8 +10,8 @@ import * as _ from 'lodash';
 })
 export class RgwTopicDetailsComponent implements OnChanges {
   @Input()
-  selection: TopicDetails;
-  policy: string;
+  selection: Topic;
+  policy: string | object = '{}';
   constructor() {}
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selection'] && this.selection) {

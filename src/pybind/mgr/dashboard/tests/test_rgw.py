@@ -551,6 +551,7 @@ class TestRgwTopicController(ControllerTestCase):
                 "arn": "arn:aws:sns:zg1-realm1::HttpTest",
                 "opaqueData": "test123",
                 "policy": "{}",
+                "key": "RGW22222222222222222:HttpTest",
                 "subscribed_buckets": []
             }
         ]
@@ -580,6 +581,7 @@ class TestRgwTopicController(ControllerTestCase):
                 "arn": "arn:aws:sns:zg1-realm1::HttpTest",
                 "opaqueData": "test123",
                 "policy": "{}",
+                "key": "RGW22222222222222222:HttpTest",
                 "subscribed_buckets": []
             }
         ]
@@ -595,6 +597,6 @@ class TestRgwTopicController(ControllerTestCase):
         mock_delete_topic.return_value = None
 
         controller = RgwTopic()
-        result = controller.delete(name='HttpTest', tenant=None)
-        mock_delete_topic.assert_called_with(name='HttpTest', tenant=None)
+        result = controller.delete(key='RGW22222222222222222:HttpTest')
+        mock_delete_topic.assert_called_with(key='RGW22222222222222222:HttpTest')
         self.assertEqual(result, None)
