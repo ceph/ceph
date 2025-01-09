@@ -202,7 +202,7 @@ public:
       } else {
         // replace CEPH_NOSNAP with 0 as the former is negative
         // and hence might be confused with an error.
-        r = stx.stx_dev == CEPH_NOSNAP ? 0 : stx.stx_dev;
+        r = (uint64_t)stx.stx_dev == CEPH_NOSNAP ? 0 : stx.stx_dev;
         std::cout << "stx=" << stx.stx_ino << "." << r << std::endl;
       }
     }
@@ -219,7 +219,7 @@ public:
       } else {
         // replace CEPH_NOSNAP with 0 as the former is negative
         // and hence might be confused with an error.
-        r = stx.stx_dev == CEPH_NOSNAP ? 0 : stx.stx_dev;
+        r = (uint64_t)stx.stx_dev == CEPH_NOSNAP ? 0 : stx.stx_dev;
         std::cout << "stx=" << stx.stx_ino << "." << r << std::endl;
       }
     }
