@@ -12,6 +12,7 @@ from mgr_util import CephFSEarmarkResolver
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
 from .utils import available_clusters
+from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType
 
 log = logging.getLogger(__name__)
 
@@ -225,3 +226,84 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def fetch_nfs_cluster_obj(self) -> NFSCluster:
         return self.nfs
+
+    @CLICommand('nfs export qos enable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_export_qos_bw_enable(self,
+                                  cluster_id: str,
+                                  pseudo_path: str,
+                                  combined_rw_bw_ctrl: bool = False,
+                                  max_export_write_bw: str = '0',
+                                  max_export_read_bw: str = '0',
+                                  max_client_write_bw: str = '0',
+                                  max_client_read_bw: str = '0',
+                                  max_export_combined_bw: str = '0',
+                                  max_client_combined_bw: str = '0'
+                                  ) -> None:
+        """enable QOS config for NFS export and set different bandwidth"""
+        try:
+            bw_obj = QOSBandwidthControl(enable_bw_ctrl=True,
+                                         combined_bw_ctrl=combined_rw_bw_ctrl,
+                                         export_writebw=max_export_write_bw,
+                                         export_readbw=max_export_read_bw,
+                                         client_writebw=max_client_write_bw,
+                                         client_readbw=max_client_read_bw,
+                                         export_rw_bw=max_export_combined_bw,
+                                         client_rw_bw=max_client_combined_bw)
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.export_mgr.enable_export_qos_bw(cluster_id=cluster_id,
+                                                    pseudo_path=pseudo_path,
+                                                    bw_obj=bw_obj)
+
+    @CLICommand('nfs export qos get', perm='r')
+    @object_format.Responder()
+    def _cmd_export_qos_get(self, cluster_id: str, pseudo_path: str) -> Dict[str, int]:
+        """Get NFS export QOS config"""
+        return self.export_mgr.get_export_qos(cluster_id, pseudo_path)
+
+    @CLICommand('nfs export qos disable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_export_qos_bw_disable(self, cluster_id: str, pseudo_path: str) -> None:
+        """Disable NFS export QOS config"""
+        return self.export_mgr.disable_export_qos_bw(cluster_id, pseudo_path)
+
+    @CLICommand('nfs cluster qos enable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_cluster_qos_bw_enable(self,
+                                   cluster_id: str,
+                                   qos_type: UserQoSType,
+                                   combined_rw_bw_ctrl: bool = False,
+                                   max_export_write_bw: str = '0',
+                                   max_export_read_bw: str = '0',
+                                   max_client_write_bw: str = '0',
+                                   max_client_read_bw: str = '0',
+                                   max_export_combined_bw: str = '0',
+                                   max_client_combined_bw: str = '0') -> None:
+        """Enable QOS ratelimiting for NFS cluster and set default export and client max bandwidth"""
+        try:
+            bw_obj = QOSBandwidthControl(enable_bw_ctrl=True,
+                                         combined_bw_ctrl=combined_rw_bw_ctrl,
+                                         export_writebw=max_export_write_bw,
+                                         export_readbw=max_export_read_bw,
+                                         client_writebw=max_client_write_bw,
+                                         client_readbw=max_client_read_bw,
+                                         export_rw_bw=max_export_combined_bw,
+                                         client_rw_bw=max_client_combined_bw)
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.nfs.enable_cluster_qos_bw(cluster_id=cluster_id,
+                                              qos_type=QOSType[qos_type.value],
+                                              bw_obj=bw_obj)
+
+    @CLICommand('nfs cluster qos disable bandwidth_control', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_cluster_qos_bw_disable(self, cluster_id: str) -> None:
+        """Disable QOS for NFS cluster"""
+        return self.nfs.disable_cluster_qos_bw(cluster_id)
+
+    @CLICommand('nfs cluster qos get', perm='r')
+    @object_format.Responder()
+    def _cmd_cluster_qos_get(self, cluster_id: str) -> Dict[str, Any]:
+        """Get QOS configuration of NFS cluster"""
+        return self.nfs.get_cluster_qos(cluster_id)
