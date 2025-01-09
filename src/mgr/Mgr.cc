@@ -77,7 +77,6 @@ Mgr::~Mgr()
 }
 
 void MetadataUpdate::finish(int r)
-try
 {
   daemon_state.clear_updating(key);
   if (r == 0) {
@@ -159,10 +158,6 @@ try
     dout(1) << "mon failed to return metadata for " << key
 	    << ": " << cpp_strerror(r) << dendl;
   }
-}
-catch(const std::exception& e)
-{
-    dout(1) << "!!JFW: mon caught: " << e.what() << dendl;
 }
 
 void Mgr::background_init(Context *completion)
@@ -399,7 +394,6 @@ void Mgr::init()
 }
 
 void Mgr::load_all_metadata()
-try
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
@@ -490,10 +484,6 @@ try
 
     daemon_state.insert(dm);
   }
-}
-catch(const std::exception& e)
-{
-      dout(1) << "JFW: load_all_metadata(): caught " << e.what() << dendl;
 }
 
 void Mgr::handle_osd_map()

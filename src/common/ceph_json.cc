@@ -6,17 +6,25 @@
 #include <boost/lexical_cast.hpp>
 #include <include/types.h>
 
-// Enable boost.json's header-only mode ("https://github.com/boostorg/json?tab=readme-ov-file#header-only"):
+/* Enable boost.json's header-only mode:
+	(see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
 #include <boost/json/src.hpp>
 
 #include <memory>
+#include <string>
 #include <fstream>
 
 using std::ifstream;
-using std::pair;
 using std::ostream;
-using std::string;
+
+using std::begin;
+using std::end;
+
+using std::pair;
 using std::vector;
+
+using std::string;
+using std::string_view;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -25,38 +33,13 @@ using ceph::Formatter;
 
 static JSONFormattable default_formattable;
 
-void JSONObjIter::set(const JSONObjIter::map_iter_t &_cur, const JSONObjIter::map_iter_t &_last)
-{
-  cur = _cur;
-  last = _last;
-}
-
-void JSONObjIter::operator++()
-{
-  if (cur != last)
-    ++cur;
-}
-
-// IMPORTANT: The returned pointer is intended as NON-OWNING (i.e. the JSONObjIter is responsible for it):
-JSONObj *JSONObjIter::operator*()
-{
-  return cur->second.get();
-}
-
 // does not work, FIXME
 ostream& operator<<(ostream &out, const JSONObj &obj) {
    out << obj.name << ": " << obj.val;
    return out;
 }
 
-void JSONObj::add_child(string el, JSONObj *obj)
-{
-  auto p = std::unique_ptr<JSONObj>(obj);
-
-  children.insert({el, std::move(p)});
-}
-
-bool JSONObj::get_attr(string name, data_val& attr)
+bool JSONObj::get_attr(const string name, data_val& attr)
 {
   auto iter = attr_map.find(name);
   if (iter == attr_map.end())
@@ -95,7 +78,7 @@ JSONObj *JSONObj::find_obj(const string& name)
 {
   JSONObjIter iter = find(name);
   if (iter.end())
-    return NULL;
+    return nullptr;
 
   return *iter;
 }
@@ -118,101 +101,80 @@ bool JSONObj::get_data(const string& key, data_val *dest)
 void JSONObj::handle_value(boost::json::value v)
 {
   if (auto op = v.if_object()) {
-
-	for (const auto& kvp : *op)
-	 {
-		JSONObj *child = new JSONObj;
-
-		child->init(this, kvp.value(), kvp.key());
-
-		add_child(kvp.key(), child);
+	for (const auto& kvp : *op) {
+		auto child = std::make_unique<JSONObj>(this, kvp.key(), kvp.value());
+		children.insert(std::pair { kvp.key(), std::move(child) });
 	 }
 
 	return;
   }
 
  if (auto ap = v.if_array()) {
-	for (const auto& kvp : *ap)
-	 {
-		JSONObj *child = new JSONObj;
-		child->init(this, kvp, ""); 
-
-		add_child(child->get_name(), child);
+	for (const auto& kvp : *ap) {
+		auto child = std::make_unique<JSONObj>(this, "", kvp);
+		children.insert(std::pair { child->get_name(), std::move(child) });
 	 }
  }
 
  // unknown type is not-an-error
 }
 
-void JSONObj::init(JSONObj *parent_node, boost::json::value data_in, std::string name_in)
-{
-  parent = parent_node;
-  data = data_in;
-  name = name_in;
-
-  handle_value(data_in);
-
-  if (auto vp = data_in.if_string())
-   val.set(*vp, true); 
-  else {
-   val.set(boost::json::serialize(data_in), false);
-  }
-
-  attr_map.insert({name, val});
-}
-
-JSONObj *JSONObj::get_parent()
-{
-  return parent;
-}
-
-bool JSONObj::is_object()
-{
-  return data.is_object();
-}
-
-bool JSONObj::is_array()
-{
-  return data.is_array();
-}
-
 vector<string> JSONObj::get_array_elements()
 {
  vector<string> elements;
 
- boost::json::array temp_array;
+ if(!data.is_array())
+  return elements;
 
- if (auto ap = data.if_array())
-  temp_array = *ap;
-
- auto array_size = temp_array.size();
-
- if (array_size > 0) {
-	for (boost::json::array::size_type i = 0; i < array_size; i++) {
-	      boost::json::value temp_value = temp_array[i];
-	      string temp_string;
-	      temp_string = boost::json::serialize(temp_value);
-	      elements.push_back(temp_string);
-	}
-  }
+ std::ranges::for_each(data.as_array(), [&elements](const auto& i) {
+ 	elements.emplace_back(boost::json::serialize(i));
+ });
 
   return elements;
 }
 
-void JSONParser::handle_data(const char *s, int len)
+// parse the complete internal json_buffer
+bool JSONParser::parse()
 {
-  json_buffer.append(s, len); // check for problems with null termination FIXME
-  buf_len += len;
+  std::error_code ec;
+ 
+  data = boost::json::parse(json_buffer, ec);
+
+  if(ec)
+   return false;
+
+  handle_value(data);
+
+  return true;
+}
+
+// parse the internal json_buffer up to len
+bool JSONParser::parse(int len)
+{
+  std::string_view json_string(std::begin(json_buffer), len + std::begin(json_buffer));
+
+  std::error_code ec;
+  if(data = boost::json::parse(json_string, ec); ec)
+   return false;
+
+  handle_value(data);
+
+  return true;
 }
 
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
-  if (!buf_ || 0 >= len) {
-    return false;
-  }
+ return buf_ ? 
+	 parse(std::string_view { buf_, static_cast<std::string_view::size_type>(len) }) 
+	: false;
+}
 
-  std::string_view json_string_view(buf_, len);
+// parse a supplied JSON fragment:
+bool JSONParser::parse(std::string_view json_string_view)
+{
+  if(json_string_view.empty())
+   return false;
 
   std::error_code ec; 
   data = boost::json::parse(json_string_view, ec);
@@ -234,42 +196,14 @@ bool JSONParser::parse(const char *buf_, int len)
   // For any other kind of value:
   std::string s = boost::json::serialize(data);
 
-  if (s.size() == static_cast<uint64_t>(len)) { // entire string was read
+  // Was the entire string read?
+  if (s.size() == static_cast<uint64_t>(json_string_view.length())) { 
     val.set(s, false);
     return true;
    }
 
   // Could not parse and convert:
   return false; 
-}
-
-// parse the internal json_buffer up to len
-bool JSONParser::parse(int len)
-{
-  std::string_view json_string(std::begin(json_buffer), len + std::begin(json_buffer));
-
-  std::error_code ec;
-  if(data = boost::json::parse(json_string, ec); ec)
-   return false;
-
-  handle_value(data);
-
-  return true;
-}
-
-// parse the complete internal json_buffer
-bool JSONParser::parse()
-{
-  std::error_code ec;
- 
-  data = boost::json::parse(json_buffer, ec);
-
-  if(ec)
-   return false;
-
-  handle_value(data);
-
-  return true;
 }
 
 // parse a supplied ifstream:
@@ -359,9 +293,9 @@ long long JSONFormattable::val_long_long() const {
 
 bool JSONFormattable::val_bool() const {
   return (boost::iequals(value.str, "true") ||
+	  boost::iequals(value.str, "1") ||
           boost::iequals(value.str, "on") ||
-          boost::iequals(value.str, "yes") ||
-          boost::iequals(value.str, "1"));
+          boost::iequals(value.str, "yes"));
 }
 
 string JSONFormattable::def(const string& def_val) const {
@@ -406,7 +340,8 @@ struct field_entity {
   int index{0}; /* if array */
   bool append{false};
 
-  field_entity() {}
+  field_entity() = default;
+  explicit field_entity(std::string_view sv) : is_obj(true), name(sv) {}
   explicit field_entity(const string& n) : is_obj(true), name(n) {}
   explicit field_entity(int i) : is_obj(false), index(i) {}
 };
@@ -421,12 +356,14 @@ static int parse_entity(const string& s, vector<field_entity> *result)
       if (ofs != 0) {
         return -EINVAL;
       }
-      result->push_back(field_entity(s));
+      result->emplace_back(field_entity(s));
       return 0;
     }
     if (next_arr > ofs) {
-      string field = s.substr(ofs, next_arr - ofs);
-      result->push_back(field_entity(field));
+
+      auto field = string_view(ofs + begin(s), next_arr - ofs + begin(s)); 
+
+      result->emplace_back(field_entity(field));
       ofs = next_arr;
     }
     size_t end_arr = s.find(']', next_arr + 1);
@@ -434,16 +371,22 @@ static int parse_entity(const string& s, vector<field_entity> *result)
       return -EINVAL;
     }
 
-    string index_str = s.substr(next_arr + 1, end_arr - next_arr - 1);
+    auto index_str = string_view(s).substr(1 + next_arr, end_arr - next_arr - 1);
 
     ofs = end_arr + 1;
 
     if (!index_str.empty()) {
-      result->push_back(field_entity(atoi(index_str.c_str())));
+
+	int x;
+	if(auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
+         result->emplace_back(field_entity(x));
+        else
+	 throw std::invalid_argument(fmt::format("{}", index_str));
+
     } else {
       field_entity f;
       f.append = true;
-      result->push_back(f);
+      result->emplace_back(f);
     }
   }
   return 0;
@@ -606,7 +549,7 @@ void JSONFormattable::derive_from(const JSONFormattable& parent)
 bool JSONFormattable::handle_value(std::string_view name, std::string_view s, bool quoted) {
   JSONFormattable *new_val;
   if (cur_enc->is_array()) {
-    cur_enc->arr.push_back(JSONFormattable());
+    cur_enc->arr.emplace_back(JSONFormattable());
     new_val = &cur_enc->arr.back();
   } else {
     cur_enc->set_type(JSONFormattable::FMT_OBJ);
@@ -622,7 +565,7 @@ bool JSONFormattable::handle_open_section(std::string_view name,
                                           const char *ns,
                                           bool section_is_array) {
   if (cur_enc->is_array()) {
-    cur_enc->arr.push_back(JSONFormattable());
+    cur_enc->arr.emplace_back(JSONFormattable());
     cur_enc = &cur_enc->arr.back();
   } else if (enc_stack.size() > 1) {
       /* only open a new section if already nested,
@@ -630,7 +573,7 @@ bool JSONFormattable::handle_open_section(std::string_view name,
        */
     cur_enc = &cur_enc->obj[string{name}];
   }
-  enc_stack.push_back(cur_enc);
+  enc_stack.emplace_back(cur_enc);
 
   if (section_is_array) {
     cur_enc->set_type(JSONFormattable::FMT_ARRAY);
