@@ -158,7 +158,7 @@ class RHDiskFailurePredictor(Predictor):
         # view structured array as 2d array for applying rolling window transforms
         # do not include capacity_bytes in this. only use smart_attrs
         disk_days_attrs = disk_days_sa[[attr for attr in model_smart_attr if 'smart_' in attr]]\
-            .view(np.float64).reshape(disk_days_sa.shape + (-1,))
+            .view(np.float64).reshape(disk_days_sa.shape + (-1,))  # type:ignore
 
         # featurize n (6 to 12) days data - mean,std,coefficient of variation
         # current model is trained on 6 days of data because that is what will be
