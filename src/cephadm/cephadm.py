@@ -98,7 +98,6 @@ from cephadmlib.data_utils import (
     normalize_image_digest,
     try_convert_datetime,
     read_config,
-    with_units_to_int,
     _extract_host_info_from_applied_spec,
 )
 from cephadmlib.file_utils import (
@@ -187,7 +186,7 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
-
+from ceph.utils import with_units_to_int
 
 FuncT = TypeVar('FuncT', bound=Callable)
 

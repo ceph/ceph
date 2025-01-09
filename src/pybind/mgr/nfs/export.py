@@ -28,7 +28,8 @@ from .ganesha_conf import (
     GaneshaConfParser,
     RGWFSAL,
     RawBlock,
-    format_block)
+    format_block,
+    QOS)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
     EXPORT_PREFIX,
@@ -152,11 +153,11 @@ class NFSRados:
             for obj in ioctx.list_objects():
                 obj.remove()
 
-    def check_user_config(self) -> bool:
+    def check_config(self, config: str = USER_CONF_PREFIX) -> bool:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             for obj in ioctx.list_objects():
-                if obj.key.startswith(USER_CONF_PREFIX):
+                if obj.key.startswith(config):
                     return True
         return False
 
@@ -925,6 +926,68 @@ class ExportMgr:
             if export['fsal']['name'] == 'CEPH' and export['fsal']['cmount_path'] == cmount_path and export['fsal']['fs_name'] == fs_name:
                 exports_count += 1
         return exports_count
+
+    def update_export_qos(self,
+                          cluster_id: str,
+                          pseudo_path: str,
+                          enable_qos: bool,
+                          enable_bw_ctrl: bool,
+                          **kwargs: Any) -> None:
+        """Update Export QOS block"""
+        self._validate_cluster_id(cluster_id)
+        assert pseudo_path
+        export = self._fetch_export(cluster_id, pseudo_path)
+        if not export:
+            raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
+        # if qos_block does not exists in export create one else update existing block
+        if not export.qos_block:
+            log.debug(f"Creating new QOS block for export {pseudo_path} of cluster {cluster_id}")
+            export.qos_block = QOS(enable_qos=enable_qos,
+                                   enable_bw_ctrl=enable_bw_ctrl,
+                                   **kwargs)
+        else:
+            log.debug("Updating existing QOS block of export {pseudo_path} of cluster {cluster_id}")
+            export.qos_block.enable_qos = enable_qos
+            export.qos_block.enable_bw_ctrl = enable_bw_ctrl
+            if kwargs:
+                export.qos_block.update_bandwidths(**kwargs)
+            else:
+                export.qos_block.update_bandwidths('0', '0', '0', '0')
+
+        self.exports[cluster_id].remove(export)
+        self._update_export(cluster_id, export, False)
+        log.debug(f"Successfully updated QOS bandwidth control config for export {pseudo_path} of cluster {cluster_id}")
+
+    def enable_export_qos(self,
+                          cluster_id: str,
+                          pseudo_path: str,
+                          **kwargs: Any
+                          ) -> None:
+        try:
+            if all(value == '0' for value in kwargs.values()):
+                raise Exception("This command needs at least one of the bandwidth value")
+            self.update_export_qos(cluster_id, pseudo_path, True, True, **kwargs)
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QOS bandwidth control config failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def get_export_qos(self, cluster_id: str, pseudo_path: str) -> Dict[str, int]:
+        try:
+            self._validate_cluster_id(cluster_id)
+            export = self._fetch_export(cluster_id, pseudo_path)
+            if not export:
+                raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
+            return export.qos_block.to_dict() if export.qos_block else {}
+        except Exception as e:
+            log.exception(f"Failed to get QOS configuration for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def disable_export_qos(self, cluster_id: str, pseudo_path: str) -> None:
+        try:
+            self.update_export_qos(cluster_id, pseudo_path, False, False)
+        except Exception as e:
+            log.exception(f"Setting NFS-Ganesha QOS bandwidth control Config failed for {pseudo_path} of {cluster_id}")
+            raise ErrorResponse.wrap(e)
 
 
 def get_user_id(cluster_id: str, fs_name: str, cmount_path: str) -> str:

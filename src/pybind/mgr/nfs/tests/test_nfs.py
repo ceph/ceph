@@ -13,7 +13,7 @@ from rados import ObjectNotFound
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
-from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock
+from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock, QOS, QOSType
 from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
@@ -133,6 +133,48 @@ EXPORT {
 %url "rados://{NFS_POOL_NAME}/{cluster_id}/export-1"
 
 %url "rados://{NFS_POOL_NAME}/{cluster_id}/export-2"'''
+
+    qos_cluster_block = """
+QOS {
+    enable_qos = true;
+    enable_bw_control = true;
+    qos_type = 1;
+    max_export_write_bw = 10000;
+    max_export_read_bw = 20000;
+    max_client_write_bw = 30000;
+    max_client_read_bw = 40000;
+}
+"""
+
+    qos_export_block = """
+QOS_BLOCK {
+    enable_qos = true;
+    enable_bw_control = true;
+    max_export_write_bw = 1000;
+    max_export_read_bw = 2000;
+    max_client_write_bw = 3000;
+    max_client_read_bw = 4000;
+}
+"""
+
+    qos_cluster_dict = {
+        "enable_bw_control": True,
+        "enable_qos": True,
+        "max_client_read_bw": "40.0KB",
+        "max_client_write_bw": "30.0KB",
+        "max_export_read_bw": "20.0KB",
+        "max_export_write_bw": "10.0KB",
+        "qos_type": "PerShare"
+    }
+
+    qos_export_dict = {
+        "enable_bw_control": True,
+        "enable_qos": True,
+        "max_client_read_bw": "4.0KB",
+        "max_client_write_bw": "3.0KB",
+        "max_export_read_bw": "2.0KB",
+        "max_export_write_bw": "1.0KB"
+    }
 
     class RObject(object):
         def __init__(self, key: str, raw: str) -> None:
@@ -1255,6 +1297,36 @@ NFS_CORE_PARAM {
 
     def test_cluster_config(self):
         self._do_mock_test(self._do_test_cluster_config)
+
+    def test_qos_from_dict(self):
+        qos = QOS.from_dict(self.qos_cluster_dict, True)
+        assert qos.enable_qos == True
+        assert qos.enable_bw_ctrl == True
+        assert isinstance(qos.qos_type, QOSType)
+        assert qos.export_writebw == 10000
+        assert qos.export_readbw == 20000
+        assert qos.client_writebw == 30000
+        assert qos.client_readbw == 40000
+
+        qos = QOS.from_dict(self.qos_export_dict)
+        assert qos.enable_qos == True
+        assert qos.enable_bw_ctrl == True
+        assert qos.qos_type is None
+        assert qos.export_writebw == 1000
+        assert qos.export_readbw == 2000
+        assert qos.client_writebw == 3000
+        assert qos.client_readbw == 4000
+
+    @pytest.mark.parametrize("qos_block, qos_dict", [
+        (qos_cluster_block, qos_cluster_dict),
+        (qos_cluster_block, qos_cluster_dict)
+        ])
+    def test_qos_from_block(self, qos_block, qos_dict):
+        blocks = GaneshaConfParser(qos_block).parse()
+        assert isinstance(blocks, list)
+        assert len(blocks) == 1
+        qos = QOS.from_qos_block(blocks[0], True)
+        assert qos.to_dict() == qos_dict
 
 
 @pytest.mark.parametrize(
