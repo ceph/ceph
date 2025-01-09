@@ -25,6 +25,7 @@
 #include <vector>
 #include <optional>
 #include <ostream>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "common/convenience.h" // for ceph::for_each()
