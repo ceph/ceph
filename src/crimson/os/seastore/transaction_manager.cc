@@ -66,6 +66,7 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
       "mkfs_tm",
+      CACHE_HINT_TOUCH,
       [this, FNAME](auto& t)
     {
       cache->init();
@@ -131,6 +132,7 @@ TransactionManager::mount()
     journal->get_trimmer().set_journal_head(start_seq);
     return with_transaction_weak(
       "mount",
+      CACHE_HINT_TOUCH,
       [this](auto &t)
     {
       return cache->init_cached_extents(t, [this](auto &t, auto &e) {

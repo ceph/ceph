@@ -54,7 +54,8 @@ public:
 
     virtual base_errorator::future<bool> exists(
       CollectionRef c,
-      const ghobject_t& oid) = 0;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) = 0;
 
     using get_attr_errorator = crimson::errorator<
       crimson::ct_error::enoent,
@@ -62,42 +63,49 @@ public:
     virtual get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
-      std::string_view name) const = 0;
+      std::string_view name,
+      uint32_t op_flags = 0) const = 0;
 
     using get_attrs_ertr = crimson::errorator<
       crimson::ct_error::enoent>;
     using attrs_t = std::map<std::string, ceph::bufferlist, std::less<>>;
     virtual get_attrs_ertr::future<attrs_t> get_attrs(
       CollectionRef c,
-      const ghobject_t& oid) = 0;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) = 0;
 
     virtual seastar::future<struct stat> stat(
       CollectionRef c,
-      const ghobject_t& oid) = 0;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) = 0;
 
     using omap_values_t = attrs_t;
     using omap_keys_t = std::set<std::string>;
     virtual read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,
-      const omap_keys_t& keys) = 0;
+      const omap_keys_t& keys,
+      uint32_t op_flags = 0) = 0;
 
     using omap_values_paged_t = std::tuple<bool, omap_values_t>;
     virtual read_errorator::future<omap_values_paged_t> omap_get_values(
       CollectionRef c,           ///< [in] collection
       const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start ///< [in] start, empty for begin
+      const std::optional<std::string> &start, ///< [in] start, empty for begin
+      uint32_t op_flags = 0
       ) = 0; ///< @return <done, values> values.empty() only if done
 
     virtual get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,
-      const ghobject_t& oid) = 0;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) = 0;
 
     virtual seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
       CollectionRef c,
       const ghobject_t& start,
       const ghobject_t& end,
-      uint64_t limit) const = 0;
+      uint64_t limit,
+      uint32_t op_flags = 0) const = 0;
 
     virtual seastar::future<CollectionRef> create_new_collection(const coll_t& cid) = 0;
 
@@ -153,7 +161,8 @@ public:
       CollectionRef ch,
       const ghobject_t& oid,
       uint64_t off,
-      uint64_t len) = 0;
+      uint64_t len,
+      uint32_t op_flags = 0) = 0;
 
     virtual unsigned get_max_attr_name_length() const = 0;
   };
