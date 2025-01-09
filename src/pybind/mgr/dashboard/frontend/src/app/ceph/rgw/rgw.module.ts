@@ -73,9 +73,12 @@ import {
   CodeSnippetModule,
   InputModule,
   CheckboxModule,
-  TreeviewModule
+  TreeviewModule,
+  TabsModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 
 @NgModule({
   imports: [
@@ -103,7 +106,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     IconModule,
     NgbProgressbar,
     InputModule,
-    CheckboxModule
+    CheckboxModule,
+    TabsModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -154,7 +158,9 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RgwMultisiteSyncPolicyDetailsComponent,
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
-    RgwMultisiteTabsComponent
+    RgwMultisiteTabsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -315,6 +321,11 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'topic',
+    data: { breadcrumbs: 'Topic' },
+    children: [{ path: '', component: RgwTopicListComponent }]
   }
 ];
 

@@ -1,0 +1,7 @@
+::ng-deep.cds--tabs .cds--tab--list {
+  width: 100%;
+}
+
+::ng-deep.cds--tabs .cds--tabs__nav-item--selected {
+  border-block-end: 2px solid #25828e;
+}
