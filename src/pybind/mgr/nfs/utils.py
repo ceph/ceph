@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
+QOS_CONF_PREFIX: str = "qosconf-nfs."
 
 log = logging.getLogger(__name__)
 
@@ -57,8 +58,13 @@ def conf_obj_name(cluster_id: str) -> str:
 
 
 def user_conf_obj_name(cluster_id: str) -> str:
-    """Returna a rados object name for the user config."""
+    """Return a rados object name for the user config."""
     return f"{USER_CONF_PREFIX}{cluster_id}"
+
+
+def qos_conf_obj_name(cluster_id: str) -> str:
+    """Return a rados object name for the qos config."""
+    return f"{QOS_CONF_PREFIX}{cluster_id}"
 
 
 def available_clusters(mgr: 'Module') -> List[str]:
