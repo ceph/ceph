@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug rbd: 20
+tasks:
+- install:
+    extra_system_packages:
+      - fio
+- workunit:
+    clients:
+      client.0:
+        - rbd/rbd_support_module_recovery.sh

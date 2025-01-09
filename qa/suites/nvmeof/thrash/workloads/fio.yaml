@@ -1,0 +1,11 @@
+tasks:
+- workunit:
+    no_coverage_and_limits: true
+    timeout: 60m
+    clients:
+      client.0:
+        - nvmeof/fio_test.sh --random_devices 200
+    env:
+      RBD_POOL: mypool
+      IOSTAT_INTERVAL: '10'
+      RUNTIME: '1800'
