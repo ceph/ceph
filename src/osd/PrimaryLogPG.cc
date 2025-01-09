@@ -55,6 +55,7 @@
 #include "osd/scrubber/PrimaryLogScrub.h"
 #include "osd/scrubber/ScrubStore.h"
 #include "osd/scrubber/pg_scrubber.h"
+#include "ECInject.h"
 
 #include "OSD.h"
 #include "OpRequest.h"
@@ -2289,7 +2290,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (cct->_conf->bluestore_debug_inject_read_err &&
       op->may_write() &&
       pool.info.is_erasure() &&
-      ec_inject_test_write_error0(m->get_hobj(), m->get_reqid())) {
+      ECInject::test_write_error0(m->get_hobj(), m->get_reqid())) {
     // Fail retried write with error
     dout(0) << __func__ << " Error inject - Fail retried write with EINVAL" << dendl;
     osd->reply_op_error(op, -EINVAL);
