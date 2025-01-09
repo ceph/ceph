@@ -55,14 +55,16 @@ constexpr unsigned char BI_PREFIX_CHAR = 0x80;
 #define BI_BUCKET_OBJ_INSTANCE_INDEX  2
 #define BI_BUCKET_OLH_DATA_INDEX      3
 #define BI_BUCKET_RESHARD_LOG_INDEX   4
+#define BI_BUCKET_SNAP_INDEX          5
 
-#define BI_BUCKET_LAST_INDEX          5
+#define BI_BUCKET_LAST_INDEX          6
 
 static std::string bucket_index_prefixes[] = { "", /* special handling for the objs list index */
 					       "0_",     /* bucket log index */
 					       "1000_",  /* obj instance index */
 					       "1001_",  /* olh data index */
 					       "2001_",   /* reshard log index */
+					       "3001_",   /* snapshot data index */
 
 					       /* this must be the last index */
 					       "9999_",};
@@ -364,10 +366,8 @@ static void get_list_index_key(rgw_bucket_dir_entry& entry, string *index_key)
   index_key->append(entry.key.instance);
 }
 
-static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *index_key, bool append_delete_marker_suffix = false)
+static void _append_obj_versioned_data_key(string *index_key, const cls_rgw_obj_key& key, bool append_delete_marker_suffix = false)
 {
-  *index_key = BI_PREFIX_CHAR;
-  index_key->append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
   index_key->append(key.name);
   string delim("\0i", 2);
   index_key->append(delim);
@@ -376,6 +376,13 @@ static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *in
     string dm("\0d", 2);
     index_key->append(dm);
   }
+}
+
+static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *index_key, bool append_delete_marker_suffix = false)
+{
+  *index_key = BI_PREFIX_CHAR;
+  index_key->append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
+  _append_obj_versioned_data_key(index_key, key, append_delete_marker_suffix);
 }
 
 static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
@@ -392,6 +399,16 @@ static void encode_olh_data_key(const cls_rgw_obj_key& key, string *index_key)
   *index_key = BI_PREFIX_CHAR;
   index_key->append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
   index_key->append(key.name);
+}
+
+static void encode_snap_index_key(const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id, string *index_key)
+{
+  *index_key = BI_PREFIX_CHAR;
+  index_key->append(bucket_index_prefixes[BI_BUCKET_SNAP_INDEX]);
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld_", (long long)snap_id);
+  index_key->append(buf);
+  _append_obj_versioned_data_key(index_key, key, false);
 }
 
 template <class T>
@@ -750,6 +767,21 @@ static int write_entry(cls_method_context_t hctx, T& entry, const string& key,
     header.reshardlog_entries++;
   }
   return ret;
+}
+
+template <class T>
+static int write_snap_entry(cls_method_context_t hctx, T& entry, cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id)
+{
+  string snap_index_key;
+  encode_snap_index_key(key, snap_id, &snap_index_key);
+      
+  bufferlist bl;
+  encode(entry, bl);
+  int ret = cls_cxx_map_set_val(hctx, snap_index_key, &bl);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
 }
 
 static int remove_entry(cls_method_context_t hctx, const string& idx,
@@ -1308,6 +1340,15 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   "ERROR: %s: unable to set map value at key=%s, rc=%d",
 		   __func__, escape_str(idx).c_str(), rc);
       return rc;
+    }
+    if (entry.meta.snap_id != RGW_BUCKET_NO_SNAP) {
+      rc = write_snap_entry(hctx, entry, op.key, entry.meta.snap_id);
+      if (rc < 0) {
+        CLS_LOG_BITX(bitx_inst, 1,
+                 "ERROR: %s: unable to set write snap index value at key=%s, rc=%d",
+                 __func__, op.key.to_string().c_str(), rc);
+        return rc;
+      }
     }
   } // CLS_RGW_OP_ADD
 
