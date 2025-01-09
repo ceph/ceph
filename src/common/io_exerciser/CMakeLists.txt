@@ -5,9 +5,11 @@ add_library(object_io_exerciser STATIC
   Model.cc
   ObjectModel.cc
   RadosIo.cc
+  EcIoSequence.cc
 )
 
 target_link_libraries(object_io_exerciser
-  librados 
+  librados
   global
+  json_structures
 )

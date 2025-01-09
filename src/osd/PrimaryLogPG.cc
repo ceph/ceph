@@ -2286,6 +2286,16 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  if (cct->_conf->bluestore_debug_inject_read_err &&
+      op->may_write() &&
+      pool.info.is_erasure() &&
+      ec_inject_test_write_error0(m->get_hobj(), m->get_reqid())) {
+    // Fail retried write with error
+    dout(0) << __func__ << " Error inject - Fail retried write with EINVAL" << dendl;
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
+
   ObjectContextRef obc;
   bool can_create = op->may_write();
   hobject_t missing_oid;
