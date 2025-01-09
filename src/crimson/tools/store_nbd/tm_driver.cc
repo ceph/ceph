@@ -25,6 +25,7 @@ seastar::future<> TMDriver::write(
       return tm->with_transaction_intr(
         Transaction::src_t::MUTATE,
         "write",
+	CACHE_HINT_TOUCH,
         [this, offset, &ptr](auto& t)
       {
         return tm->remove(t, laddr_t::from_byte_offset(offset)
@@ -112,6 +113,7 @@ seastar::future<bufferlist> TMDriver::read(
     return tm->with_transaction_intr(
       Transaction::src_t::READ,
       "read",
+      CACHE_HINT_TOUCH,
       [=, &blret, this](auto& t)
     {
       return read_extents(t, laddr_t::from_byte_offset(offset), size

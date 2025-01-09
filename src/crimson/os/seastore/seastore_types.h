@@ -20,8 +20,41 @@
 #include "include/intarith.h"
 #include "include/interval_set.h"
 #include "include/uuid.h"
+#include "include/rados.h"
 
 namespace crimson::os::seastore {
+
+class cache_hint_t {
+  enum hint_t {
+    TOUCH,
+    NOCACHE
+  };
+public:
+  static constexpr cache_hint_t get_touch() {
+    return hint_t::TOUCH;
+  }
+  static constexpr cache_hint_t get_nocache() {
+    return hint_t::NOCACHE;
+  }
+  cache_hint_t(uint32_t flags) {
+    if (unlikely(flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED) ||
+	unlikely(flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) {
+      hint = NOCACHE;
+    }
+  }
+  bool operator==(const cache_hint_t &other) const {
+    return hint == other.hint;
+  }
+  bool operator!=(const cache_hint_t &other) const {
+    return hint != other.hint;
+  }
+private:
+  constexpr cache_hint_t(hint_t hint) : hint(hint) {}
+  hint_t hint = hint_t::TOUCH;
+};
+
+inline constexpr cache_hint_t CACHE_HINT_TOUCH = cache_hint_t::get_touch();
+inline constexpr cache_hint_t CACHE_HINT_NOCACHE = cache_hint_t::get_nocache();
 
 /* using a special xattr key "omap_header" to store omap header */
   const std::string OMAP_HEADER_XATTR_KEY = "omap_header";

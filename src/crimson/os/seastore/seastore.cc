@@ -408,6 +408,7 @@ SeaStore::Shard::mkfs_managers()
       return transaction_manager->with_transaction_intr(
 	Transaction::src_t::MUTATE,
 	"mkfs_seastore",
+	CACHE_HINT_TOUCH,
 	[this](auto& t)
       {
         LOG_PREFIX(SeaStoreS::mkfs_managers);
@@ -897,9 +898,10 @@ get_ranges(CollectionRef ch,
 
 seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
 SeaStore::Shard::list_objects(CollectionRef ch,
-                       const ghobject_t& start,
-                       const ghobject_t& end,
-                       uint64_t limit) const
+			      const ghobject_t& start,
+			      const ghobject_t& end,
+			      uint64_t limit,
+			      uint32_t op_flags) const
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -910,13 +912,14 @@ SeaStore::Shard::list_objects(CollectionRef ch,
   return seastar::do_with(
     RetType(std::vector<ghobject_t>(), start),
     std::move(limit),
-    [this, ch, start, end](auto& ret, auto& limit) {
-    return repeat_eagain([this, ch, start, end, &limit, &ret] {
+    [this, ch, start, end, op_flags](auto& ret, auto& limit) {
+    return repeat_eagain([this, ch, start, end, &limit, &ret, op_flags] {
       ++(shard_stats.repeat_read_num);
 
       return transaction_manager->with_transaction_intr(
         Transaction::src_t::READ,
         "list_objects",
+	op_flags,
         [this, ch, start, end, &limit, &ret](auto &t)
       {
         LOG_PREFIX(SeaStoreS::list_objects);
@@ -1054,6 +1057,7 @@ SeaStore::Shard::list_collections()
         return transaction_manager->with_transaction_intr(
           Transaction::src_t::READ,
           "list_collections",
+	  CACHE_HINT_TOUCH,
           [this, &ret](auto& t)
         {
           LOG_PREFIX(SeaStoreS::list_collections);
@@ -1137,6 +1141,7 @@ SeaStore::Shard::read(
     Transaction::src_t::READ,
     "read",
     op_type_t::READ,
+    op_flags,
     [this, offset, len, op_flags](auto &t, auto &onode) {
     return _read(t, onode, offset, len, op_flags);
   }).finally([this] {
@@ -1148,7 +1153,8 @@ SeaStore::Shard::read(
 SeaStore::Shard::base_errorator::future<bool>
 SeaStore::Shard::exists(
   CollectionRef c,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
 {
   LOG_PREFIX(SeaStoreS::exists);
   ++(shard_stats.read_num);
@@ -1160,6 +1166,7 @@ SeaStore::Shard::exists(
     Transaction::src_t::READ,
     "exists",
     op_type_t::READ,
+    op_flags,
     [FNAME](auto& t, auto&) {
     DEBUGT("exists", t);
     return seastar::make_ready_future<bool>(true);
@@ -1240,7 +1247,8 @@ SeaStore::Shard::get_attr_errorator::future<ceph::bufferlist>
 SeaStore::Shard::get_attr(
   CollectionRef ch,
   const ghobject_t& oid,
-  std::string_view name) const
+  std::string_view name,
+  uint32_t op_flags) const
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1251,6 +1259,7 @@ SeaStore::Shard::get_attr(
     Transaction::src_t::READ,
     "get_attr",
     op_type_t::GET_ATTR,
+    op_flags,
     [this, name](auto &t, auto& onode) {
     return _get_attr(t, onode, name);
   }).handle_error(
@@ -1296,7 +1305,8 @@ SeaStore::Shard::_get_attrs(
 SeaStore::Shard::get_attrs_ertr::future<SeaStore::Shard::attrs_t>
 SeaStore::Shard::get_attrs(
   CollectionRef ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1307,6 +1317,7 @@ SeaStore::Shard::get_attrs(
     Transaction::src_t::READ,
     "get_attrs",
     op_type_t::GET_ATTRS,
+    op_flags,
     [this](auto &t, auto& onode) {
     return _get_attrs(t, onode);
   }).handle_error(
@@ -1338,7 +1349,8 @@ seastar::future<struct stat> SeaStore::Shard::_stat(
 
 seastar::future<struct stat> SeaStore::Shard::stat(
   CollectionRef c,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1349,6 +1361,7 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     Transaction::src_t::READ,
     "stat",
     op_type_t::STAT,
+    op_flags,
     [this, oid](auto &t, auto &onode) {
     return _stat(t, onode, oid);
   }).handle_error(
@@ -1364,9 +1377,10 @@ seastar::future<struct stat> SeaStore::Shard::stat(
 SeaStore::Shard::get_attr_errorator::future<ceph::bufferlist>
 SeaStore::Shard::omap_get_header(
   CollectionRef ch,
-  const ghobject_t& oid)
+  const ghobject_t& oid,
+  uint32_t op_flags)
 {
-  return get_attr(ch, oid, OMAP_HEADER_XATTR_KEY);
+  return get_attr(ch, oid, OMAP_HEADER_XATTR_KEY, op_flags);
 }
 
 SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
@@ -1389,7 +1403,8 @@ SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
   const ghobject_t &oid,
-  const omap_keys_t &keys)
+  const omap_keys_t &keys,
+  uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1400,6 +1415,7 @@ SeaStore::Shard::omap_get_values(
     Transaction::src_t::READ,
     "omap_get_values",
     op_type_t::OMAP_GET_VALUES,
+    op_flags,
     [this, keys](auto &t, auto &onode) {
     return do_omap_get_values(t, onode, keys);
   }).finally([this] {
@@ -1529,7 +1545,8 @@ SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omap_get_values(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<std::string> &start)
+  const std::optional<std::string> &start,
+  uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1540,6 +1557,7 @@ SeaStore::Shard::omap_get_values(
     Transaction::src_t::READ,
     "omap_get_values2",
     op_type_t::OMAP_GET_VALUES2,
+    op_flags,
     [this, start](auto &t, auto &onode) {
     return do_omap_get_values(t, onode, start);
   }).finally([this] {
@@ -1589,7 +1607,8 @@ SeaStore::Shard::fiemap(
   CollectionRef ch,
   const ghobject_t& oid,
   uint64_t off,
-  uint64_t len)
+  uint64_t len,
+  uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
@@ -1600,6 +1619,7 @@ SeaStore::Shard::fiemap(
     Transaction::src_t::READ,
     "fiemap",
     op_type_t::READ,
+    op_flags,
     [this, off, len](auto &t, auto &onode) {
     return _fiemap(t, onode, off, len);
   }).finally([this] {
@@ -2677,6 +2697,7 @@ seastar::future<> SeaStore::Shard::write_meta(
     return transaction_manager->with_transaction_intr(
       Transaction::src_t::MUTATE,
       "write_meta",
+      CACHE_HINT_NOCACHE,
       [this, &key, &value](auto& t)
     {
       LOG_PREFIX(SeaStoreS::write_meta);

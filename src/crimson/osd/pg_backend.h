@@ -315,7 +315,8 @@ public:
     CollectionRef c,
     const ghobject_t& oid,
     uint64_t off,
-    uint64_t len);
+    uint64_t len,
+    uint32_t op_flags = 0);
 
   write_iertr::future<> tmapput(
     ObjectState& os,
@@ -375,11 +376,13 @@ public:
     object_stat_sum_t& delta_stats);
   ll_read_ierrorator::future<ceph::bufferlist> omap_get_header(
     const crimson::os::CollectionRef& c,
-    const ghobject_t& oid) const;
+    const ghobject_t& oid,
+    uint32_t op_flags = 0) const;
   ll_read_ierrorator::future<> omap_get_header(
     const ObjectState& os,
     OSDOp& osd_op,
-    object_stat_sum_t& delta_stats) const;
+    object_stat_sum_t& delta_stats,
+    uint32_t op_flags = 0) const;
   interruptible_future<> omap_set_header(
     ObjectState& os,
     const OSDOp& osd_op,
