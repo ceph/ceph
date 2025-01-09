@@ -242,7 +242,6 @@ export class ActionLabelsI18n {
     this.DISCONNECT = $localize`Disconnect`;
     this.RECONNECT = $localize`Reconnect`;
     this.EXPAND_CLUSTER = $localize`Expand Cluster`;
-
     this.NFS_EXPORT = $localize`Create NFS Export`;
   }
 }
