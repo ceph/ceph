@@ -1,0 +1,127 @@
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
+    <a ngbNavLink
+       i18n>Hosts List</a>
+    <ng-template ngbNavContent>
+      <cd-table #table
+                [data]="hosts"
+                [columns]="columns"
+                columnMode="flex"
+                (fetchData)="getHosts($event)"
+                selectionType="single"
+                [searchableObjects]="true"
+                [hasDetails]="hasTableDetails"
+                [serverSide]="true"
+                [count]="count"
+                [maxLimit]="25"
+                (setExpandedRow)="setExpandedRow($event)"
+                (updateSelection)="updateSelection($event)"
+                [toolHeader]="!hideToolHeader"
+                [showMenu]="showMenu">
+        <div class="table-actions">
+          <cd-table-actions [permission]="permissions.hosts"
+                            [selection]="selection"
+                            class="btn-group"
+                            id="host-actions"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+          <cd-table-actions [permission]="permissions.hosts"
+                            [selection]="selection"
+                            btnColor="light"
+                            class="btn-group"
+                            [tableActions]="expandClusterActions">
+          </cd-table-actions>
+        </div>
+        <cd-host-details *cdTableDetail
+                         [permissions]="permissions"
+                         [selection]="expandedRow">
+        </cd-host-details>
+      </cd-table>
+    </ng-template>
+  </ng-container>
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
+  </ng-container>
+  <ng-container ngbNavItem
+                *ngIf="permissions.grafana.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana i18n-title
+                  title="Host overview"
+                  [grafanaPath]="'host-overview?'"
+                  [type]="'metrics'"
+                  uid="y0KGL0iZz"
+                  grafanaStyle="two">
+      </cd-grafana>
+    </ng-template>
+  </ng-container>
+</nav>
+
+<div [ngbNavOutlet]="nav"></div>
+
+<ng-template #servicesTpl
+             let-services="data.value">
+  <span *ngFor="let service of services">
+    <cd-label [key]="service['type']"
+              [value]="service['count']"
+              class="me-1"></cd-label>
+  </span>
+</ng-template>
+
+<ng-template #hostNameTpl
+             let-row="data.row">
+  <span [ngClass]="row">
+    {{ row.hostname }}
+  </span><br>
+  <span class="text-muted fst-italic"
+        *ngIf="row.addr">
+    ({{ row.addr }})
+  </span>
+</ng-template>
+
+<ng-template #maintenanceConfirmTpl>
+  <div *ngFor="let msg of errorMessage; let last=last">
+    <ul *ngIf="!last || errorMessage.length === '1'">
+      <li i18n>{{ msg }}</li>
+    </ul>
+  </div>
+  <ng-container i18n
+                *ngIf="showSubmit">Are you sure you want to continue?</ng-container>
+</ng-template>
+
+
+<ng-template #hostMetricTmpl
+             let-value="data.value">
+  <div *ngIf="validValue(value)">
+    <span>{{ value }}</span>
+  </div>
+  <div *ngIf="!validValue(value)">
+    <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+  </div>
+</ng-template>
+
+<ng-template #hostDimlessTmpl
+             let-value="data.value">
+  <div *ngIf="!validValue(value)">
+    <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+  </div>
+  <div *ngIf="validValue(value)">
+    <span>{{ value | dimlessBinary }}</span>
+  </div>
+</ng-template>
+
+<ng-template #orchTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Data will be available only if Orchestrator is available.">-</span>
+</ng-template>
+
+<ng-template #flashTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="SSD, NVMEs">Flash</span>
+</ng-template>
+<router-outlet name="modal"></router-outlet>
