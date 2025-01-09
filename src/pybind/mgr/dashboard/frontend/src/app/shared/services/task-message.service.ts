@@ -404,6 +404,31 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
+    // smb
+    'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.smbCluster(metadata)
+    ),
+    'smb/ad/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.smbJoinAuth(metadata)
+    ),
+    'smb/ad/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbJoinAuth(metadata)
+    ),
+    'smb/ad/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.smbJoinAuth(metadata)
+    ),
+    'smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.smbUsersgroups(metadata)
+    ),
+    'smb/standalone/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbUsersgroups(metadata)
+    ),
+    'smb/standalone/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.smbUsersgroups(metadata)
+    ),
+    'rgw/topic/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.topic(metadata)
+    ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
       this.commonOperations.update,
@@ -615,6 +640,9 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
+  topic(metadata: any) {
+    return $localize`Topic  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }

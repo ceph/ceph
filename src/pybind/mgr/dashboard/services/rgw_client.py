@@ -22,7 +22,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -1121,14 +1121,15 @@ class RgwClient(RestClient):
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
+                     daemon_name: str = '',
                      push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
                      persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
                      max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
                      policy: Optional[str] = '',
                      verify_ssl: Optional[bool] = False, cloud_events: Optional[bool] = False,
                      ca_location: Optional[str] = None, amqp_exchange: Optional[str] = None,
-                     amqp_ack_level: Optional[str] = None,
-                     use_ssl: Optional[bool] = False, kafka_ack_level: Optional[str] = None,
+                     ack_level: Optional[str] = None,
+                     use_ssl: Optional[bool] = False,
                      kafka_brokers: Optional[str] = None, mechanism: Optional[str] = None,
                      ):
         params = {'Name': name}
@@ -1155,21 +1156,31 @@ class RgwClient(RestClient):
             params['ca_location'] = ca_location
         if amqp_exchange:
             params['amqp_exchange'] = amqp_exchange
-        if amqp_ack_level:
-            params['amqp_ack_level'] = amqp_ack_level
+        if ack_level:
+            params['ack_level'] = ack_level
         if use_ssl:
             params['use_ssl'] = 'true' if use_ssl else 'false'
-        if kafka_ack_level:
-            params['kafka_ack_level'] = kafka_ack_level
         if kafka_brokers:
             params['kafka_brokers'] = kafka_brokers
         if mechanism:
             params['mechanism'] = mechanism
+        if push_endpoint and '://' in push_endpoint and '@' in push_endpoint:
+            try:
+                full_daemon_name = f'rgw.{daemon_name}'
+                CephService.send_command(
+                    'mon', 'config set',
+                    who=name_to_config_section(full_daemon_name),
+                    name='rgw_allow_notification_secrets_in_cleartext',
+                    value='true'
+                )
+            except Exception as e:
+                raise DashboardException(
+                    msg=f'Failed to set cleartext secret config: {e}', component='rgw'
+                )
         try:
             result = request(params=params)
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
-
         return result
 
 
