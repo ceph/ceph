@@ -250,6 +250,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectRetention:
   case s3GetObjectLegalHold:
   case s3GetObjectAttributes:
+  case s3GetObjectVersionAttributes:
   case s3ListAllMyBuckets:
   case s3ListBucket:
   case s3ListBucketMultipartUploads:
