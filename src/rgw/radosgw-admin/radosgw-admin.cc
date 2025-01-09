@@ -716,6 +716,8 @@ enum class OPT {
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   BUCKET_LOGGING_FLUSH,
   BUCKET_LOGGING_INFO,
+  BUCKET_SNAP_CREATE,
+  BUCKET_SNAP_LIST,
   POLICY,
   LOG_LIST,
   LOG_SHOW,
@@ -959,6 +961,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
   { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
+  { "bucket snap create", OPT::BUCKET_SNAP_CREATE },
+  { "bucket snap list", OPT::BUCKET_SNAP_LIST },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -3779,6 +3783,8 @@ int main(int argc, const char **argv)
   std::optional<string> opt_dest_bucket_id;
   std::optional<string> opt_effective_zone_name;
   std::optional<rgw_zone_id> opt_effective_zone_id;
+  
+  std::optional<string> opt_snap_name;
 
   std::optional<string> opt_prefix;
   std::optional<string> opt_prefix_rm;
@@ -4071,6 +4077,8 @@ int main(int argc, const char **argv)
       for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
 	categories[*iter] = true;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--snap-name", (char*)NULL)) {
+      opt_snap_name = val;
     } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
@@ -7763,6 +7771,50 @@ int main(int argc, const char **argv)
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SNAP_CREATE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name not specified" << std::endl;
+      return EINVAL;
+    }
+
+    if (!opt_snap_name) {
+      cerr << "ERROR: --snap-name not specified" << std::endl;
+      return EINVAL;
+    }
+
+    bucket_op.set_bucket_name(bucket_name);
+    string err;
+
+    rgw_bucket_snap_info snap_info;
+    snap_info.name = *opt_snap_name;
+    snap_info.description = description;
+    snap_info.creation_time = real_clock::now();
+
+    int r = RGWBucketAdminOp::snap_create(driver, bucket_op, snap_info, dpp(), null_yield, &err);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+      return -r;
+    }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SNAP_LIST) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name not specified" << std::endl;
+      return EINVAL;
+    }
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    auto& bucket_info = bucket->get_info();
+    const auto& snaps = bucket_info.local.snap_mgr.get_snaps();
+
+    encode_json("snaps", snaps, formatter.get());
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::BUCKET_LOGGING_FLUSH) {

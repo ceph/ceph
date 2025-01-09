@@ -366,6 +366,9 @@ public:
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y, const DoutPrefixProvider *dpp);
   int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
+  int snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info,
+                  optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+
   void clear_failure() { failure = false; }
 
   const RGWBucketInfo& get_bucket_info() const { return bucket->get_info(); }
@@ -414,6 +417,8 @@ public:
 			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y, bool dry_run = false);
 
   static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
+
+  static int snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 };
 
 struct rgw_ep_info {

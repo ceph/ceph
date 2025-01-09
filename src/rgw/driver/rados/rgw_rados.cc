@@ -3386,7 +3386,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                         meta.set_mtime, etag, content_type,
                         storage_class,
                         meta.owner, meta.category,
-                        target->get_bucket_info().local.snap_mgr.get_cur_snap(),
+                        target->get_bucket_info().local.snap_mgr.get_cur_snap_id(),
                         meta.remove_objs, rctx.y,
                         meta.user_data, meta.appendable, log_op);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
@@ -4033,7 +4033,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    storage_class,
 			    owner,
 			    RGWObjCategory::Main, // RGWObjCategory category,
-                            bucket_info.local.snap_mgr.get_cur_snap(),
+                            bucket_info.local.snap_mgr.get_cur_snap_id(),
 			    nullptr, // remove_objs list
 			    y,
 			    nullptr, // user data string
@@ -6502,7 +6502,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap();
+    auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap_id();
     r = index_op.complete_del(dpp, poolid, epoch, state->mtime, cur_snap, params.remove_objs,
                               y, log_op);
 
@@ -6591,7 +6591,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-  auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap();
+  auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap_id();
   return index_op.complete_del(dpp, -1 /* pool */, 0, mtime, cur_snap, nullptr, y);
 }
 
@@ -7280,7 +7280,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
         } catch (buffer::error& err) {
         }
       }
-      auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap();
+      auto cur_snap = bucket_info.local.snap_mgr.get_cur_snap_id();
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
                             category, cur_snap, nullptr, y, nullptr, false, log_op);

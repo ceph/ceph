@@ -288,6 +288,24 @@ int RGWBucket::remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpStat
   return 0;
 }
 
+int RGWBucket::snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info,
+                           optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
+{
+  bucket = op_state.get_bucket()->clone();
+
+  int r = bucket->get_info().local.snap_mgr.create_snap(snap_info);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed creating new snapshot: " + cpp_strerror(-r));
+    return r;
+  }
+  r = bucket->put_info(dpp, false, real_time(), y);
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
+    return r;
+  }
+  return r;
+}
+
 static void dump_bucket_index(const vector<rgw_bucket_dir_entry>& objs,  Formatter *f)
 {
   for (auto iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -1346,6 +1364,17 @@ int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_
 
   return bucket.chown(op_state, marker, y, dpp, err);
 
+}
+
+int RGWBucketAdminOp::snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y, string *err)
+{
+  RGWBucket bucket;
+
+  int ret = bucket.init(driver, op_state, y, dpp, err);
+  if (ret < 0)
+    return ret;
+
+  return bucket.snap_create(op_state, snap_info, y, dpp, err);
 }
 
 int RGWBucketAdminOp::check_index_olh(rgw::sal::RadosStore* store, RGWBucketAdminOpState& op_state,
