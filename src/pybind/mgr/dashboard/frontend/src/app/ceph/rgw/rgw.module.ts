@@ -96,6 +96,8 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 
 @NgModule({
   imports: [
@@ -128,11 +130,11 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
     SelectModule,
     NumberModule,
     TabsModule,
-    RadioModule,
     TagModule,
     TooltipModule,
     ComboBoxModule,
-    ToggletipModule
+    ToggletipModule,
+    RadioModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -193,7 +195,9 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
     RgwStorageClassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
-    RgwRateLimitDetailsComponent
+    RgwRateLimitDetailsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -392,6 +396,11 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'topic',
+    data: { breadcrumbs: 'Topic' },
+    children: [{ path: '', component: RgwTopicListComponent }]
   }
 ];
 
