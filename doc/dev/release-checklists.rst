@@ -46,7 +46,7 @@ Github Actions
 Scripts
 ~~~~~~~
 
-- [ ] src/script/backport-create-issue (`releases()`)
+- [x] src/script/backport-create-issue (`releases()`)
 - [ ] src/script/ceph-release-notes (up to X)
 
 Misc
