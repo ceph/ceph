@@ -46,8 +46,8 @@ Scripts
 
 Misc
 ~~~~
-- [ ] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
-- [ ] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` and `LATEST_STABLE_RELEASE` to X)
+- [x] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
+- [x] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` and `LATEST_STABLE_RELEASE` to X)
 
 Feature bits
 ------------
