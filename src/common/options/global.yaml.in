@@ -6595,10 +6595,10 @@ options:
   default: 1
   with_legacy: true
 - name: bdev_discard_queue_threshold
-  type: uint
+  type: size
   level: advanced
-  desc: A threshold to warn if the discard queue size exceeds bdev_discard_queue_threshold
-  default: 100000
+  desc: Excessive discard queue depletes disk space for allocation, increasing fragmentation and reducing performance, This configurable threshold triggers a health warning when the discard queue exceeds the limit
+  default: 100_K
   with_legacy: true
 - name: bdev_debug_discard_sleep
   type: uint

@@ -305,7 +305,7 @@ public:
 
   struct hugepaged_raw_marker_t {};
 
-  std::atomic<uint64_t> discarded_bytes = 0;
+  std::atomic<size_t> discarded_bytes = 0;
 
 protected:
   bool is_valid_io(uint64_t off, uint64_t len) const;
