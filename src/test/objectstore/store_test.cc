@@ -218,6 +218,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     store->umount();
     mounted = false;
   }
+#ifdef WITH_BLUESTORE
   bool bdev_supports_label() {
     BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
     if (!bstore) return false;
@@ -225,6 +226,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     if (!bdev) return false;
     return bdev->supported_bdev_label();
   }
+#endif // WITH_BLUESTORE
   bool corrupt_disk_at(uint64_t position) {
     int fd = -1;
     auto close_fd = make_scope_guard([&] {
@@ -239,6 +241,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     if (r != 0) return false;
     return true;
   }
+#ifdef WITH_BLUESTORE
   bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
     unique_ptr<BlockDevice> bdev(BlockDevice::create(
@@ -261,6 +264,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     bdev->close();
     return r;
   }
+#endif // WITH_BLUESTORE
   protected:
   void DeferredSetup() {
     StoreTest::SetUp();
@@ -7239,6 +7243,8 @@ public:
   std::vector<uint32_t> lengths = {1, 1000, 4096, 12000, 32768, 30000, 80000, 128 * 1024};
 };
 
+#ifdef WITH_BLUESTORE
+
 TEST_P(DeferredWriteTest, NewData) {
   const bool print = false;
   deferred_test_t t = GetParam();
@@ -7311,7 +7317,6 @@ TEST_P(DeferredWriteTest, NewData) {
   }
 }
 
-#if defined(WITH_BLUESTORE)
 INSTANTIATE_TEST_SUITE_P(
   BlueStore,
   DeferredWriteTest,
