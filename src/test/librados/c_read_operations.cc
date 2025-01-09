@@ -14,15 +14,15 @@
 #include "test/librados/TestCase.h"
 #include "test/librados/test.h"
 
-const char *data = "testdata";
+static constexpr std::string_view data = "testdata";
 const char *obj = "testobj";
-const size_t len = strlen(data);
+static constexpr size_t len = data.size();
 
 class CReadOpsTest : public RadosTest {
 protected:
   void write_object() {
     // Create an object and write to it
-    ASSERT_EQ(0, rados_write(ioctx, obj, data, len, 0));
+    ASSERT_EQ(0, rados_write(ioctx, obj, data.data(), len, 0));
   }
   void remove_object() {
     ASSERT_EQ(0, rados_remove(ioctx, obj));
@@ -55,12 +55,10 @@ protected:
     ASSERT_EQ(0, r_keys);
     ASSERT_EQ(0, r_vals_by_key);
 
-    const char *zeros[len];
-    size_t zero_lens[len];
-    memset(zeros, 0, sizeof(zeros));
-    memset(zero_lens, 0, sizeof(zero_lens));
+    std::vector<const char*> zeros(len, nullptr);
+    std::vector<size_t> zero_lens(len, 0);
     compare_omap_vals(keys, vals, lens, len, iter_vals);
-    compare_omap_vals(keys, zeros, zero_lens, len, iter_keys);
+    compare_omap_vals(keys, zeros.data(), zero_lens.data(), len, iter_keys);
     compare_omap_vals(keys, vals, lens, len, iter_vals_by_key);
   }
 
@@ -324,7 +322,7 @@ TEST_F(CReadOpsTest, Read) {
     rados_read_op_t op = rados_create_read_op();
     rados_read_op_read(op, 0, len, buf, NULL, NULL);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -334,7 +332,7 @@ TEST_F(CReadOpsTest, Read) {
     rados_read_op_read(op, 0, len, buf, NULL, &rval);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(0, rval);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -344,7 +342,7 @@ TEST_F(CReadOpsTest, Read) {
     rados_read_op_read(op, 0, len, buf, &bytes_read, NULL);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(len, bytes_read);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -356,7 +354,7 @@ TEST_F(CReadOpsTest, Read) {
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(len, bytes_read);
     ASSERT_EQ(0, rval);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -369,7 +367,7 @@ TEST_F(CReadOpsTest, Read) {
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(len, bytes_read);
     ASSERT_EQ(0, rval);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -401,7 +399,7 @@ TEST_F(CReadOpsTest, Checksum) {
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(1U, crc[0]);
     uint32_t expected_crc = ceph_crc32c(
-      -1, reinterpret_cast<const uint8_t*>(data), static_cast<uint32_t>(len));
+      -1, reinterpret_cast<const uint8_t*>(data.data()), static_cast<uint32_t>(len));
     ASSERT_EQ(expected_crc, crc[1]);
     rados_release_read_op(op);
   }
@@ -431,9 +429,9 @@ TEST_F(CReadOpsTest, Checksum) {
     ASSERT_EQ(2U, crc[0]);
     uint32_t expected_crc[2];
     expected_crc[0] = ceph_crc32c(
-      -1, reinterpret_cast<const uint8_t*>(data), 4U);
+      -1, reinterpret_cast<const uint8_t*>(data.data()), 4U);
     expected_crc[1] = ceph_crc32c(
-      -1, reinterpret_cast<const uint8_t*>(data + 4), 4U);
+      -1, reinterpret_cast<const uint8_t*>(data.data() + 4), 4U);
     ASSERT_EQ(expected_crc[0], crc[1]);
     ASSERT_EQ(expected_crc[1], crc[2]);
     ASSERT_EQ(0, rval);
@@ -456,7 +454,7 @@ TEST_F(CReadOpsTest, RWOrderedRead) {
 				     LIBRADOS_OPERATION_ORDER_READS_WRITES));
   ASSERT_EQ(len, bytes_read);
   ASSERT_EQ(0, rval);
-  ASSERT_EQ(0, memcmp(data, buf, len));
+  ASSERT_EQ(0, memcmp(data.data(), buf, len));
   rados_release_read_op(op);
 
   remove_object();
@@ -472,7 +470,7 @@ TEST_F(CReadOpsTest, ShortRead) {
     rados_read_op_t op = rados_create_read_op();
     rados_read_op_read(op, 0, len * 2, buf, NULL, NULL);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -482,7 +480,7 @@ TEST_F(CReadOpsTest, ShortRead) {
     rados_read_op_read(op, 0, len * 2, buf, NULL, &rval);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(0, rval);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -492,7 +490,7 @@ TEST_F(CReadOpsTest, ShortRead) {
     rados_read_op_read(op, 0, len * 2, buf, &bytes_read, NULL);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(len, bytes_read);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -504,7 +502,7 @@ TEST_F(CReadOpsTest, ShortRead) {
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(len, bytes_read);
     ASSERT_EQ(0, rval);
-    ASSERT_EQ(0, memcmp(data, buf, len));
+    ASSERT_EQ(0, memcmp(data.data(), buf, len));
     rados_release_read_op(op);
   }
 
@@ -587,7 +585,7 @@ TEST_F(CReadOpsTest, Stat) {
 
   time_t ts = 1457129052;
   rados_write_op_t wop = rados_create_write_op();
-  rados_write_op_write(wop, data, len, 0);
+  rados_write_op_write(wop, data.data(), len, 0);
   ASSERT_EQ(0, rados_write_op_operate(wop, ioctx, obj, &ts, 0));
   rados_release_write_op(wop);
 
@@ -627,7 +625,7 @@ TEST_F(CReadOpsTest, Stat2) {
   ts.tv_sec = 1457129052;
   ts.tv_nsec = 123456789;
   rados_write_op_t wop = rados_create_write_op();
-  rados_write_op_write(wop, data, len, 0);
+  rados_write_op_write(wop, data.data(), len, 0);
   ASSERT_EQ(0, rados_write_op_operate2(wop, ioctx, obj, &ts, 0));
   rados_release_write_op(wop);
 
@@ -868,11 +866,11 @@ TEST_F(CReadOpsTest, CmpExt) {
   rados_read_op_t op = rados_create_read_op();
   ASSERT_TRUE(op);
   // @obj, @data and @len correspond to object initialised by write_object()
-  rados_read_op_cmpext(op, data, len, 0, &cmpext_val);
+  rados_read_op_cmpext(op, data.data(), len, 0, &cmpext_val);
   rados_read_op_read(op, 0, len, buf, &bytes_read, &read_val);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   ASSERT_EQ(len, bytes_read);
-  ASSERT_EQ(0, memcmp(data, buf, len));
+  ASSERT_EQ(0, memcmp(data.data(), buf, len));
   ASSERT_EQ(cmpext_val, 0);
   rados_release_read_op(op);
 

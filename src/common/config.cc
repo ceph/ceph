@@ -869,10 +869,10 @@ int md_config_t::injectargs(ConfigValues& values,
 			    const std::string& s, std::ostream *oss)
 {
   int ret;
-  char b[s.length()+1];
-  strcpy(b, s.c_str());
+  std::vector<char> b(s.length() + 1);
+  strcpy(b.data(), s.c_str());
   std::vector<const char*> nargs;
-  char *p = b;
+  char *p = b.data();
   while (*p) {
     nargs.push_back(p);
     while (*p && *p != ' ') p++;

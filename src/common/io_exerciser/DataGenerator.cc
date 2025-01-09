@@ -43,13 +43,13 @@ bufferlist DataGenerator::generate_wrong_data(uint64_t offset, uint64_t length)
 {
   bufferlist retlist;
   uint64_t block_size = m_model.get_block_size();
-  char buffer[block_size];
+  std::vector<char> buffer(block_size);
   for (uint64_t block_offset = offset;
        block_offset < offset + length;
        block_offset++)
   {
-    std::memset(buffer, 0, block_size);
-    retlist.append(ceph::bufferptr(buffer, block_size));
+    std::memset(buffer.data(), 0, block_size);
+    retlist.append(ceph::bufferptr(buffer.data(), block_size));
   }
   return retlist;
 }
@@ -62,7 +62,7 @@ bool DataGenerator::validate(bufferlist& bufferlist, uint64_t offset, uint64_t l
 ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset)
 {
   uint64_t block_size = m_model.get_block_size();
-  char buffer[block_size];
+  std::vector<char> buffer(block_size * 2);
 
   std::mt19937_64 random_generator(m_model.get_seed(block_offset));
   uint64_t rand1 = random_generator();
@@ -72,29 +72,32 @@ ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset)
 
   for (uint64_t i = 0; i < block_size; i+=(2*generation_length), rand1++, rand2--)
   {
-    std::memcpy(buffer + i, &rand1, generation_length);
-    std::memcpy(buffer + i + generation_length, &rand2, generation_length);
+    std::memcpy(buffer.data() + i, &rand1, generation_length);
+    std::memcpy(buffer.data() + i + generation_length, &rand2, generation_length);
   }
 
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length)
   {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
+    std::memcpy(buffer.data() + block_size - remainingBytes, &rand1,
+		std::min(sizeof(rand1), remainingBytes));
+    std::memcpy(buffer.data() + block_size - remainingBytes2, &rand2,
+		std::min(sizeof(rand2), remainingBytes2));
   }
   else if (remainingBytes > 0)
   {
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer.data() + block_size - remainingBytes, &rand1,
+		std::min(sizeof(rand1), remainingBytes));
   }
 
-  return ceph::bufferptr(buffer, block_size);
+  return ceph::bufferptr(buffer.data(), block_size);
 }
 
 ceph::bufferptr SeededRandomGenerator::generate_wrong_block(uint64_t block_offset)
 {
   uint64_t block_size = m_model.get_block_size();
-  char buffer[block_size];
+  std::vector<char> buffer(block_size);
 
   std::mt19937_64 random_generator(m_model.get_seed(block_offset));
   uint64_t rand1 = random_generator() - 1;
@@ -104,23 +107,25 @@ ceph::bufferptr SeededRandomGenerator::generate_wrong_block(uint64_t block_offse
 
   for (uint64_t i = 0; i < block_size; i+=(2*generation_length), rand1++, rand2--)
   {
-    std::memcpy(buffer + i, &rand1, generation_length);
-    std::memcpy(buffer + i + generation_length, &rand2, generation_length);
+    std::memcpy(buffer.data() + i, &rand1, generation_length);
+    std::memcpy(buffer.data() + i + generation_length, &rand2, generation_length);
   }
 
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length)
   {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
+    std::memcpy(buffer.data() + block_size - remainingBytes, &rand1,
+		std::min(sizeof(rand1), remainingBytes));
+    std::memcpy(buffer.data() + block_size - remainingBytes2, &rand2,
+		std::min(sizeof(rand2), remainingBytes2));
   }
   else if (remainingBytes > 0)
   {
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    std::memcpy(buffer.data() + block_size - remainingBytes, &rand1, remainingBytes);
   }
 
-  return ceph::bufferptr(buffer, block_size);
+  return ceph::bufferptr(buffer.data(), block_size);
 }
 
 bufferlist SeededRandomGenerator::generate_data(uint64_t offset, uint64_t length)
@@ -301,8 +306,8 @@ void HeaderedSeededRandomGenerator
   TimeBytes read_time = 0;
   std::time_t ttp;
 
-  char read_bytes[m_model.get_block_size()];
-  char generated_bytes[m_model.get_block_size()];
+  std::vector<char> read_bytes(m_model.get_block_size());
+  std::vector<char> generated_bytes(m_model.get_block_size());
 
   if (blockError == ErrorType::DATA_MISMATCH || blockError == ErrorType::UNKNOWN)
   {
@@ -310,10 +315,10 @@ void HeaderedSeededRandomGenerator
     std::chrono::system_clock::time_point time_point{std::chrono::milliseconds{read_time}};
     ttp = std::chrono::system_clock::to_time_t(time_point);
 
-    std::memcpy(&read_bytes,
+    std::memcpy(read_bytes.data(),
                 &bufferlist[((block_offset - read_offset) * m_model.get_block_size())],
                 m_model.get_block_size() - bodyStart());
-    std::memcpy(&generated_bytes,
+    std::memcpy(generated_bytes.data(),
                 generate_block(block_offset).c_str(),
                 m_model.get_block_size() - bodyStart());
   }
@@ -372,8 +377,8 @@ void HeaderedSeededRandomGenerator
           block_offset,
           block_offset * m_model.get_block_size(),
           std::ctime(&ttp),
-          fmt::join(generated_bytes, generated_bytes + m_model.get_block_size(), ""),
-          fmt::join(read_bytes, read_bytes + m_model.get_block_size(), ""));
+	  fmt::join(generated_bytes.data(), generated_bytes.data() + m_model.get_block_size(), ""),
+	  fmt::join(read_bytes.data(), read_bytes.data() + m_model.get_block_size(), ""));
     }
     break;
 
@@ -400,8 +405,8 @@ void HeaderedSeededRandomGenerator
         " (byte offset {}).\nExpected data:\n{:02x}\nRead data:\n{:02x}",
           block_offset,
           block_offset * m_model.get_block_size(),
-          fmt::join(generated_bytes, generated_bytes + m_model.get_block_size(), ""),
-          fmt::join(read_bytes, read_bytes + m_model.get_block_size(), ""));
+	  fmt::join(generated_bytes.data(), generated_bytes.data() + m_model.get_block_size(), ""),
+          fmt::join(read_bytes.data(), read_bytes.data() + m_model.get_block_size(), ""));
     }
     break;
   }

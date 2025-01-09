@@ -219,7 +219,7 @@ TEST_F(LibRadosIoPP, SparseReadOpPP) {
 }
 
 TEST_F(LibRadosIoPP, SparseReadExtentArrayOpPP) {
-  int buf_len = 32;
+  static constexpr int buf_len = 32;
   char buf[buf_len], zbuf[buf_len];
   memset(buf, 0xcc, buf_len);
   memset(zbuf, 0, buf_len);
