@@ -836,6 +836,7 @@ class Volume:
         self.lv_name: str = ''
         self.lv_uuid: str = ''
         self.vg_name: str = ''
+        self.lv_size: str = ''
         self.lv_tags: Dict[str, Any] = {}
         for k, v in kw.items():
             setattr(self, k, v)
