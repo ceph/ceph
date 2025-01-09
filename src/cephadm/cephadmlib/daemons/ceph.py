@@ -343,13 +343,9 @@ class CephExporter(ContainerDaemonForm):
             )
         return args
 
-    def validate(self) -> None:
-        if not os.path.isdir(self.sock_dir):
-            raise Error(
-                f'Desired sock dir for ceph-exporter is not directory: {self.sock_dir}'
-            )
-
     def container(self, ctx: CephadmContext) -> CephContainer:
+        uid, gid = self.uid_gid(ctx)
+        make_run_dir(ctx.fsid, uid, gid)
         ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
@@ -366,6 +362,9 @@ class CephExporter(ContainerDaemonForm):
     ) -> None:
         cm = Ceph.get_ceph_mounts(ctx, self.identity)
         mounts.update(cm)
+        # we want to always mount /var/run/ceph/<fsid> to the sock
+        # dir within the container. See https://tracker.ceph.com/issues/69475
+        mounts.update({f'/var/run/ceph/{ctx.fsid}': self.sock_dir})
         if self.https_enabled:
             data_dir = self.identity.data_dir(ctx.data_dir)
             mounts.update({os.path.join(data_dir, 'etc/certs'): '/etc/certs'})
@@ -389,13 +388,6 @@ class CephExporter(ContainerDaemonForm):
 
     def default_entrypoint(self) -> str:
         return self.entrypoint
-
-    def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
-        if not os.path.exists(self.sock_dir):
-            os.mkdir(self.sock_dir)
-        # part of validation is for the sock dir, so we postpone
-        # it until now
-        self.validate()
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
