@@ -41,7 +41,7 @@ Make sure X (and, ideally, X+1) is defined:
 Scripts
 ~~~~~~~
 
-- [ ] src/script/backport-create-issue (`releases()`)
+- [x] src/script/backport-create-issue (`releases()`)
 - [ ] src/script/ceph-release-notes (up to X)
 
 Misc
