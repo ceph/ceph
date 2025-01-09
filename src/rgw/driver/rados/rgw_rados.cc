@@ -5645,7 +5645,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
   // delete_bucket checks for objects in the bucket on other zones,
   // if there is bucket sync policy configured, by doing unordered
   // listing with max_key=1. if objects are found, don't delete the bucket.
-  if (svc.zone->is_syncing_bucket_meta(bucket)) {
+  if (svc.zone->is_syncing_bucket_meta()) {
     // check if asymmetric replication policy exists either at zonegroup or bucket level
     auto zg_sync_policy = svc.zone->get_zonegroup().sync_policy;
     bool is_zg_policy_directional = zg_sync_policy.is_directional();
@@ -5704,7 +5704,6 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
 
   /* if the bucket is not synced we can remove the meta file */
   if (!svc.zone->is_syncing_bucket_meta()) {
-    RGWObjVersionTracker objv_tracker;
     r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
     if (r < 0) {
       return r;
