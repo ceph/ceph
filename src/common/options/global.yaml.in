@@ -2690,8 +2690,8 @@ options:
   type: bool
   level: advanced
   desc: set bulk flag on new pools
-  fmt_desc: Set the ``bulk`` flag on new pools. Allowing autoscaler to use scale-down mode.
-  default: false
+  fmt_desc: Set the ``bulk`` flag on new pools, allowing autoscaler to use scale-down mode.  Existing pools would need manual adjustment.
+  default: true
   services:
   - mon
   with_legacy: true
