@@ -9,57 +9,8 @@
 #include "common/Formatter.h"
 #include "common/ceph_time.h"
 
-using rgw_bucket_snap_id = uint64_t;
+#include "rgw_bucket_snap_types.h"
 
-#define RGW_BUCKET_SNAP_NOSNAP ((rgw_bucket_snap_id)-1)
-#define RGW_BUCKET_SNAP_START ((rgw_bucket_snap_id)1)
-
-struct rgw_bucket_snap_info {
-  std::string name;
-  std::string description;
-  ceph::real_time creation_time;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(name, bl);
-    encode(description, bl);
-    encode(creation_time, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(name, bl);
-    decode(description, bl);
-    decode(creation_time, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_bucket_snap_info)
-
-struct rgw_bucket_snap {
-  rgw_bucket_snap_id id;
-  rgw_bucket_snap_info info;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(id, bl);
-    encode(info, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(id, bl);
-    decode(info, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_bucket_snap)
 
 class RGWBucketSnapMgr
 {

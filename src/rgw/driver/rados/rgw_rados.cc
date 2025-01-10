@@ -3152,7 +3152,14 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (r < 0)
     return r;
 
-  rgw_obj& obj = target->get_obj();
+  rgw_obj obj = target->get_obj();
+
+  auto& bucket_info = target->get_bucket_info();
+  auto& snap_mgr = bucket_info.local.snap_mgr;
+
+  if (snap_mgr.is_enabled()) {
+    obj.key.set_snap_id(snap_mgr.get_cur_snap_id());
+  }
 
   if (obj.get_oid().empty()) {
     ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
@@ -3796,6 +3803,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     // the instance info
     rgw_obj olh_obj = head_obj;
     olh_obj.key.instance.clear();
+    olh_obj.key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
 
     RGWObjState* olh_state { nullptr };
     RGWObjManifest* olh_manifest { nullptr }; // we don't use, but must send in
@@ -8848,6 +8856,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
 
   rgw_obj olh_obj = target_obj;
   olh_obj.key.instance.clear();
+  olh_obj.key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
 
   RGWObjState *state = NULL;
   RGWObjManifest *manifest = nullptr;
@@ -8935,6 +8944,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& o
 
   rgw_obj olh_obj = target_obj;
   olh_obj.key.instance.clear();
+  olh_obj.key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
 
   RGWObjState *state = NULL;
   RGWObjManifest *manifest = NULL;

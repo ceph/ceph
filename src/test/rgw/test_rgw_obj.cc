@@ -52,7 +52,7 @@ void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, 
   string strip_name = obj.get_oid();
   string strip_ns, strip_instance;
 
-  ASSERT_EQ(true, rgw_obj_key::strip_namespace_from_name(strip_name, strip_ns, strip_instance));
+  ASSERT_EQ(true, rgw_obj_key::strip_namespace_from_name(strip_name, strip_ns, strip_instance, RGW_BUCKET_SNAP_NOSNAP));
 
   cout << "stripped: " << strip_name << " ns=" << strip_ns << " i=" << strip_instance << std::endl;
 
