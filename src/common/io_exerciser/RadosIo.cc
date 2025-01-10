@@ -11,6 +11,30 @@
 
 using RadosIo = ceph::io_exerciser::RadosIo;
 
+namespace {
+template <typename S>
+int send_osd_command(int osd, S& s, librados::Rados& rados, const char* name,
+                     ceph::buffer::list& inbl, ceph::buffer::list* outbl,
+                     Formatter* f) {
+  std::ostringstream oss;
+  encode_json(name, s, f);
+  f->flush(oss);
+  int rc = rados.osd_command(osd, oss.str(), inbl, outbl, nullptr);
+  return rc;
+}
+
+template <typename S>
+int send_mon_command(S& s, librados::Rados& rados, const char* name,
+                     ceph::buffer::list& inbl, ceph::buffer::list* outbl,
+                     Formatter* f) {
+  std::ostringstream oss;
+  encode_json(name, s, f);
+  f->flush(oss);
+  int rc = rados.mon_command(oss.str(), inbl, outbl, nullptr);
+  return rc;
+}
+}  // namespace
+
 RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& oid,
                  const std::optional<std::vector<int>>& cached_shard_order,
@@ -293,15 +317,13 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
 void RadosIo::applyInjectOp(IoOp& op) {
   bufferlist osdmap_inbl, inject_inbl, osdmap_outbl, inject_outbl;
   auto formatter = std::make_unique<JSONFormatter>(false);
-  std::ostringstream oss;
 
   int osd = -1;
   std::vector<int> shard_order;
 
   ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, get_oid(), ""};
-  encode_json("OSDMapRequest", osdMapRequest, formatter.get());
-  formatter->flush(oss);
-  int rc = rados.mon_command(oss.str(), osdmap_inbl, &osdmap_outbl, nullptr);
+  int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", osdmap_inbl,
+                            &osdmap_outbl, formatter.get());
   ceph_assert(rc == 0);
 
   JSONParser p;
@@ -322,22 +344,22 @@ void RadosIo::applyInjectOp(IoOp& op) {
         ceph::messaging::osd::InjectECErrorRequest<InjectOpType::ReadEIO>
             injectErrorRequest{pool,         oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
-        encode_json("InjectECErrorRequest", injectErrorRequest,
-                    formatter.get());
+        int rc = send_osd_command(osd, injectErrorRequest, rados,
+                                  "InjectECErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else if (errorOp.type == 1) {
         ceph::messaging::osd::InjectECErrorRequest<
             InjectOpType::ReadMissingShard>
             injectErrorRequest{pool,         oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
-        encode_json("InjectECErrorRequest", injectErrorRequest,
-                    formatter.get());
+        int rc = send_osd_command(osd, injectErrorRequest, rados,
+                                  "InjectECErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else {
         ceph_abort_msg("Unsupported inject type");
       }
-      formatter->flush(oss);
-      int rc = rados.osd_command(osd, oss.str(), inject_inbl, &inject_outbl,
-                                 nullptr);
-      ceph_assert(rc == 0);
       break;
     }
     case OpType::InjectWriteError: {
@@ -348,14 +370,18 @@ void RadosIo::applyInjectOp(IoOp& op) {
             InjectOpType::WriteFailAndRollback>
             injectErrorRequest{pool,         oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
-        encode_json("InjectECErrorRequest", injectErrorRequest,
-                    formatter.get());
+        int rc = send_osd_command(osd, injectErrorRequest, rados,
+                                  "InjectECErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else if (errorOp.type == 3) {
         ceph::messaging::osd::InjectECErrorRequest<InjectOpType::WriteOSDAbort>
             injectErrorRequest{pool,         oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
-        encode_json("InjectECErrorRequest", injectErrorRequest,
-                    formatter.get());
+        int rc = send_osd_command(osd, injectErrorRequest, rados,
+                                  "InjectECErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
 
         // This inject is sent directly to the shard we want to inject the error
         // on
@@ -364,10 +390,6 @@ void RadosIo::applyInjectOp(IoOp& op) {
         ceph_abort("Unsupported inject type");
       }
 
-      formatter->flush(oss);
-      int rc = rados.osd_command(osd, oss.str(), inject_inbl, &inject_outbl,
-                                 nullptr);
-      ceph_assert(rc == 0);
       break;
     }
     case OpType::ClearReadErrorInject: {
@@ -377,22 +399,22 @@ void RadosIo::applyInjectOp(IoOp& op) {
       if (errorOp.type == 0) {
         ceph::messaging::osd::InjectECClearErrorRequest<InjectOpType::ReadEIO>
             clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
-        encode_json("InjectECClearErrorRequest", clearErrorInject,
-                    formatter.get());
+        int rc = send_osd_command(osd, clearErrorInject, rados,
+                                  "InjectECClearErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else if (errorOp.type == 1) {
         ceph::messaging::osd::InjectECClearErrorRequest<
             InjectOpType::ReadMissingShard>
             clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
-        encode_json("InjectECClearErrorRequest", clearErrorInject,
-                    formatter.get());
+        int rc = send_osd_command(osd, clearErrorInject, rados,
+                                  "InjectECClearErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else {
         ceph_abort("Unsupported inject type");
       }
 
-      formatter->flush(oss);
-      int rc = rados.osd_command(osd, oss.str(), inject_inbl, &inject_outbl,
-                                 nullptr);
-      ceph_assert(rc == 0);
       break;
     }
     case OpType::ClearWriteErrorInject: {
@@ -403,22 +425,22 @@ void RadosIo::applyInjectOp(IoOp& op) {
         ceph::messaging::osd::InjectECClearErrorRequest<
             InjectOpType::WriteFailAndRollback>
             clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
-        encode_json("InjectECClearErrorRequest", clearErrorInject,
-                    formatter.get());
+        int rc = send_osd_command(osd, clearErrorInject, rados,
+                                  "InjectECClearErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else if (errorOp.type == 3) {
         ceph::messaging::osd::InjectECClearErrorRequest<
             InjectOpType::WriteOSDAbort>
             clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
-        encode_json("InjectECClearErrorRequest", clearErrorInject,
-                    formatter.get());
+        int rc = send_osd_command(osd, clearErrorInject, rados,
+                                  "InjectECClearErrorRequest", inject_inbl,
+                                  &inject_outbl, formatter.get());
+        ceph_assert(rc == 0);
       } else {
         ceph_abort("Unsupported inject type");
       }
 
-      formatter->flush(oss);
-      int rc = rados.osd_command(osd, oss.str(), inject_inbl, &inject_outbl,
-                                 nullptr);
-      ceph_assert(rc == 0);
       break;
     }
     default:
