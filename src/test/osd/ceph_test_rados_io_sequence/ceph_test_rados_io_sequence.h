@@ -2,6 +2,7 @@
 #include <optional>
 #include <utility>
 
+#include "ProgramOptionReader.h"
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
 #include "common/io_exerciser/Model.h"
@@ -18,22 +19,8 @@
 
 /* Overview
  *
- * class ProgramOptionSelector
- *   Base class for selector objects below with common code for
- *   selecting options
- *
  * class SelectObjectSize
  *   Selects min and max object sizes for a test
- *
- * class SelectErasureKM
- *   Selects an EC k and m value for a test
- *
- * class SelectErasurePlugin
- *   Selects an plugin for a test
- *
- * class SelectECPool
- *   Selects an EC pool (plugin,k and m) for a test. Also creates the
- *   pool as well.
  *
  * class SelectBlockSize
  *   Selects a block size for a test
@@ -41,12 +28,33 @@
  * class SelectNumThreads
  *   Selects number of threads for a test
  *
+ * class SelectErasureKM
+ *   Selects an EC k and m value for a test
+ *
+ * class SelectErasureChunkSize
+ *   Selects a chunk size/stripe unit for the test
+ *
+ * class SelectErasurePlugin
+ *   Selects an plugin for a test
+ *
+ * class SelectErasurePool
+ *   Selects an EC pool (plugin,k and m) for a test. Also creates the
+ *   pool as well.
+ *
  * class SelectSeqRange
  *   Selects a sequence or range of sequences for a test
+ *
+ * class SelectErasurePool
+ *   Selects a pool name for a test
  *
  * class TestObject
  *   Runs a test against an object, generating IOSequence
  *   and applying them to an IoExerciser
+ *
+ * class TestRunner
+ *   Determines test type to run, creates and orchestrates automated and
+ *   interactive tests as well as creating a test object for each automated test
+ *   we want to run in parallel
  *
  * main
  *   Run sequences of I/O with data integrity checking to
@@ -61,10 +69,12 @@
 namespace po = boost::program_options;
 
 namespace ceph {
-namespace io_sequence::tester {
+namespace io_sequence {
+namespace tester {
 // Choices for min and max object size
-inline constexpr size_t objectSizeSize = 10;
-inline constexpr std::array<std::pair<int, int>, objectSizeSize>
+// Choices for min and max object size
+inline static constexpr size_t objectSizeSize = 10;
+inline static constexpr std::array<std::pair<int, int>, objectSizeSize>
     objectSizeChoices = {{{1, 32},  // Default - best for boundary checking
                           {12, 14},
                           {28, 30},
@@ -76,17 +86,32 @@ inline constexpr std::array<std::pair<int, int>, objectSizeSize>
                           {83, 83},
                           {97, 97}}};
 
+using SelectObjectSize =
+    ProgramOptionSelector<std::pair<int, int>,
+                          io_sequence::tester ::objectSizeSize,
+                          io_sequence::tester ::objectSizeChoices>;
+
 // Choices for block size
-inline constexpr int blockSizeSize = 5;
-inline constexpr std::array<uint64_t, blockSizeSize> blockSizeChoices = {
+inline static constexpr int blockSizeSize = 5;
+inline static constexpr std::array<uint64_t, blockSizeSize> blockSizeChoices = {
     {2048,  // Default - test boundaries for EC 4K chunk size
      512, 3767, 4096, 32768}};
 
+using SelectBlockSize =
+    ProgramOptionSelector<uint64_t,
+                          io_sequence::tester ::blockSizeSize,
+                          io_sequence::tester ::blockSizeChoices>;
+
 // Choices for number of threads
-inline constexpr int threadArraySize = 4;
-inline constexpr std::array<int, threadArraySize> threadCountChoices = {
+inline static constexpr int threadArraySize = 4;
+inline static constexpr std::array<int, threadArraySize> threadCountChoices = {
     {1,  // Default
      2, 4, 8}};
+
+using SelectNumThreads =
+    ProgramOptionSelector<int,
+                          io_sequence::tester ::threadArraySize,
+                          io_sequence::tester ::threadCountChoices>;
 
 // Choices for EC k+m profile
 inline constexpr int kmSize = 6;
@@ -98,115 +123,52 @@ inline constexpr std::array<std::pair<int, int>, kmSize> kmChoices = {
      {4, 2},
      {5, 1}}};
 
+using SelectErasureKM =
+    ProgramOptionSelector<std::pair<int, int>,
+                          io_sequence::tester ::kmSize,
+                          io_sequence::tester::kmChoices>;
+
 // Choices for EC chunk size
-inline constexpr int chunkSizeSize = 3;
-inline constexpr std::array<uint64_t, chunkSizeSize> chunkSizeChoices = {
+inline static constexpr int chunkSizeSize = 3;
+inline static constexpr std::array<uint64_t, chunkSizeSize> chunkSizeChoices = {
     {4 * 1024, 64 * 1024, 256 * 1024}};
 
+using SelectErasureChunkSize =
+    ProgramOptionSelector<uint64_t,
+                          io_sequence::tester ::chunkSizeSize,
+                          io_sequence::tester::chunkSizeChoices>;
+
 // Choices for plugin
-inline constexpr int pluginListSize = 2;
-inline constexpr std::array<std::string_view, pluginListSize> pluginChoices = {
-    {"jerasure", "isa"}};
+inline static constexpr int pluginListSize = 2;
+inline static constexpr std::array<std::string_view, pluginListSize>
+    pluginChoices = {{"jerasure", "isa"}};
 
-inline constexpr std::array<
-    std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>, 0>
-    sequencePairs = {{}};
-
-inline constexpr std::array<std::string, 0> poolChoices = {{}};
-
-template <typename T, int N, const std::array<T, N>& Ts>
-class ProgramOptionSelector {
- public:
-  ProgramOptionSelector(ceph::util::random_number_generator<int>& rng,
-                        po::variables_map vm, const std::string& option_name,
-                        bool set_forced, bool select_first);
-  virtual ~ProgramOptionSelector() = default;
-  bool isForced();
-  virtual const T choose();
-
- protected:
-  ceph::util::random_number_generator<int>& rng;
-  static constexpr std::array<T, N> choices = Ts;
-
-  std::optional<T> force_value;
-  std::optional<T> first_value;
-
-  std::string option_name;
-};
-
-class SelectObjectSize
-    : public ProgramOptionSelector<std::pair<int, int>,
-                                   io_sequence::tester::objectSizeSize,
-                                   io_sequence::tester::objectSizeChoices> {
- public:
-  SelectObjectSize(ceph::util::random_number_generator<int>& rng,
-                   po::variables_map vm);
-};
-
-class SelectBlockSize
-    : public ProgramOptionSelector<uint64_t, io_sequence::tester::blockSizeSize,
-                                   io_sequence::tester::blockSizeChoices> {
- public:
-  SelectBlockSize(ceph::util::random_number_generator<int>& rng,
-                  po::variables_map vm);
-};
-
-class SelectNumThreads
-    : public ProgramOptionSelector<int, io_sequence::tester::threadArraySize,
-                                   io_sequence::tester::threadCountChoices> {
- public:
-  SelectNumThreads(ceph::util::random_number_generator<int>& rng,
-                   po::variables_map vm);
-};
+using SelectErasurePlugin =
+    ProgramOptionSelector<std::string_view,
+                          io_sequence::tester ::pluginListSize,
+                          io_sequence::tester ::pluginChoices>;
 
 class SelectSeqRange
-    : public ProgramOptionSelector<
-          std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>,
-          0, io_sequence::tester::sequencePairs> {
+    : public ProgramOptionReader<std::pair<ceph::io_exerciser ::Sequence,
+                                           ceph::io_exerciser ::Sequence>> {
  public:
-  SelectSeqRange(ceph::util::random_number_generator<int>& rng,
-                 po::variables_map vm);
-
+  SelectSeqRange(po::variables_map& vm);
   const std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>
-  choose() override;
+  select() override;
 };
 
-class SelectErasureKM
-    : public ProgramOptionSelector<std::pair<int, int>,
-                                   io_sequence::tester::kmSize,
-                                   io_sequence::tester::kmChoices> {
+class SelectErasurePool : public ProgramOptionReader<std::string> {
  public:
-  SelectErasureKM(ceph::util::random_number_generator<int>& rng,
-                  po::variables_map vm);
-};
-
-class SelectErasurePlugin
-    : public ProgramOptionSelector<std::string_view,
-                                   io_sequence::tester::pluginListSize,
-                                   io_sequence::tester::pluginChoices> {
- public:
-  SelectErasurePlugin(ceph::util::random_number_generator<int>& rng,
-                      po::variables_map vm);
-};
-
-class SelectErasureChunkSize
-    : public ProgramOptionSelector<uint64_t, io_sequence::tester::chunkSizeSize,
-                                   io_sequence::tester::chunkSizeChoices> {
- public:
-  SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng,
-                         po::variables_map vm);
-};
-
-class SelectECPool
-    : public ProgramOptionSelector<std::string, 0,
-                                   io_sequence::tester::poolChoices> {
- public:
-  SelectECPool(ceph::util::random_number_generator<int>& rng,
-               po::variables_map vm, librados::Rados& rados, bool dry_run,
-               bool allow_pool_autoscaling, bool allow_pool_balancer,
-               bool allow_pool_deep_scrubbing, bool allow_pool_scrubbing,
-               bool test_recovery);
-  const std::string choose() override;
+  SelectErasurePool(ceph::util::random_number_generator<int>& rng,
+                    po::variables_map vm,
+                    librados::Rados& rados,
+                    bool dry_run,
+                    bool allow_pool_autoscaling,
+                    bool allow_pool_balancer,
+                    bool allow_pool_deep_scrubbing,
+                    bool allow_pool_scrubbing,
+                    bool test_recovery);
+  const std::string select() override;
 
   bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
   bool get_allow_pool_balancer() { return allow_pool_balancer; }
@@ -216,9 +178,11 @@ class SelectECPool
   int getChosenM() const { return m; }
 
  private:
-  void create_pool(librados::Rados& rados, const std::string& pool_name,
-                   const std::string& plugin, uint64_t chunk_size, int k,
-                   int m);
+  void create_pool( librados::Rados& rados,
+                    const std::string& pool_name,
+                    const std::string& plugin,
+                    uint64_t chunk_size, int k,
+                    int m);
 
  protected:
   librados::Rados& rados;
@@ -238,16 +202,21 @@ class SelectECPool
 
 class TestObject {
  public:
-  TestObject(const std::string oid, librados::Rados& rados,
+  TestObject(const std::string oid,
+             librados::Rados& rados,
              boost::asio::io_context& asio,
              ceph::io_sequence::tester::SelectBlockSize& sbs,
-             ceph::io_sequence::tester::SelectECPool& spl,
+             ceph::io_sequence::tester::SelectErasurePool& spl,
              ceph::io_sequence::tester::SelectObjectSize& sos,
              ceph::io_sequence::tester::SelectNumThreads& snt,
              ceph::io_sequence::tester::SelectSeqRange& ssr,
-             ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
-             ceph::condition_variable& cond, bool dryrun, bool verbose,
-             std::optional<int> seqseed, bool testRecovery);
+             ceph::util::random_number_generator<int>& rng,
+             ceph::mutex& lock,
+             ceph::condition_variable& cond,
+             bool dryrun,
+             bool verbose,
+             std::optional<int> seqseed,
+             bool testRecovery);
 
   int get_num_io();
   bool readyForIo();
@@ -285,7 +254,7 @@ class TestRunner {
 
   ceph::io_sequence::tester::SelectBlockSize sbs;
   ceph::io_sequence::tester::SelectObjectSize sos;
-  ceph::io_sequence::tester::SelectECPool spo;
+  ceph::io_sequence::tester::SelectErasurePool spo;
   ceph::io_sequence::tester::SelectNumThreads snt;
   ceph::io_sequence::tester::SelectSeqRange ssr;
 
@@ -334,5 +303,6 @@ class TestRunner {
   void help();
   void list_sequence(bool testrecovery);
 };
-}  // namespace io_sequence::tester
+}  // namespace tester
+}  // namespace io_sequence
 }  // namespace ceph
