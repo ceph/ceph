@@ -25,7 +25,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
+import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import {
   AclPermissionsType,
@@ -45,7 +45,6 @@ import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml
   selector: 'cd-rgw-bucket-form',
   templateUrl: './rgw-bucket-form.component.html',
   styleUrls: ['./rgw-bucket-form.component.scss'],
-  providers: [RgwBucketEncryptionModel]
 })
 export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewChecked {
   @ViewChild('bucketPolicyTextArea')
@@ -97,7 +96,6 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private modalService: ModalService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
-    private rgwEncryptionModal: RgwBucketEncryptionModel,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
     private textAreaXmlFormatterService: TextAreaXmlFormatterService,
     public actionLabels: ActionLabelsI18n,
@@ -187,7 +185,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       )
     );
 
-    this.kmsProviders = this.rgwEncryptionModal.kmsProviders;
+    this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
       this.kmsVaultConfig = data[0];
       this.s3VaultConfig = data[1];

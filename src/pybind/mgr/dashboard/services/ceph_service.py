@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import json
 import logging
 
@@ -8,9 +7,11 @@ from mgr_module import CommandResult
 from mgr_util import get_most_recent_rate, get_time_series_rates, name_to_config_section
 
 from .. import mgr
+from ..model.rgw import EncryptionConfig, EncryptionTypes, KmipConfig, \
+    KmsConfig, KmsProviders, S3Config, VaultConfig
 
 try:
-    from typing import Any, Dict, Optional, Union
+    from typing import Any, Dict, List, Optional, Union
 except ImportError:
     pass  # For typing only
 
@@ -24,7 +25,7 @@ class SendCommandError(rados.Error):
         super(SendCommandError, self).__init__(err, errno)
 
 
-# pylint: disable=too-many-public-methods
+# pylint: disable=R0904
 class CephService(object):
 
     OSD_FLAG_NO_SCRUB = 'noscrub'
@@ -183,115 +184,85 @@ class CephService(object):
         return None
 
     @classmethod
-    def get_encryption_config(cls, daemon_name):
-        kms_vault_configured = False
-        s3_vault_configured = False
-        kms_backend: str = ''
-        sse_s3_backend: str = ''
-        vault_stats = []
-        full_daemon_name = 'rgw.' + daemon_name
+    def get_encryption_config(cls, daemon_name: str) -> Dict[str, Any]:
+        full_daemon_name = f'rgw.{daemon_name}'
 
-        kms_backend = CephService.send_command('mon', 'config get',
-                                               who=name_to_config_section(full_daemon_name),
-                                               key='rgw_crypt_s3_kms_backend')
-        sse_s3_backend = CephService.send_command('mon', 'config get',
-                                                  who=name_to_config_section(full_daemon_name),
-                                                  key='rgw_crypt_sse_s3_backend')
+        encryption_config = EncryptionConfig(kms=None, s3=None)
 
-        if kms_backend.strip() == 'vault':
-            kms_vault_auth: str = CephService.send_command('mon', 'config get',
-                                                           who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                           key='rgw_crypt_vault_auth')
-            kms_vault_engine: str = CephService.send_command('mon', 'config get',
-                                                             who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                             key='rgw_crypt_vault_secret_engine')
-            kms_vault_address: str = CephService.send_command('mon', 'config get',
-                                                              who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                              key='rgw_crypt_vault_addr')
-            kms_vault_token: str = CephService.send_command('mon', 'config get',
-                                                            who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                            key='rgw_crypt_vault_token_file')  # noqa E501 #pylint: disable=line-too-long
-            if (kms_vault_auth.strip() != "" and kms_vault_engine.strip() != "" and kms_vault_address.strip() != ""):  # noqa E501 #pylint: disable=line-too-long
-                if(kms_vault_auth == 'token' and kms_vault_token.strip() == ""):
-                    kms_vault_configured = False
-                else:
-                    kms_vault_configured = True
+        # Fetch configuration for KMS
+        if EncryptionTypes.KMS.value:
+            vault_config_data: Optional[Dict[str, Any]] = _get_conf_keys(
+                list(VaultConfig._fields), VaultConfig.required_fields(),
+                EncryptionTypes.KMS.value, KmsProviders.VAULT.value, full_daemon_name
+            )
 
-        if sse_s3_backend.strip() == 'vault':
-            s3_vault_auth: str = CephService.send_command('mon', 'config get',
-                                                          who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                          key='rgw_crypt_sse_s3_vault_auth')
-            s3_vault_engine: str = CephService.send_command('mon',
-                                                            'config get',
-                                                            who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                            key='rgw_crypt_sse_s3_vault_secret_engine')  # noqa E501 #pylint: disable=line-too-long
-            s3_vault_address: str = CephService.send_command('mon', 'config get',
-                                                             who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                             key='rgw_crypt_sse_s3_vault_addr')
-            s3_vault_token: str = CephService.send_command('mon', 'config get',
-                                                           who=name_to_config_section(full_daemon_name),  # noqa E501 #pylint: disable=line-too-long
-                                                           key='rgw_crypt_sse_s3_vault_token_file')  # noqa E501 #pylint: disable=line-too-long
+            kmip_config_data: Optional[Dict[str, Any]] = _get_conf_keys(
+                list(KmipConfig._fields), KmipConfig.required_fields(),
+                EncryptionTypes.KMS.value, KmsProviders.KMIP.value, full_daemon_name
+            )
 
-            if (s3_vault_auth.strip() != "" and s3_vault_engine.strip() != "" and s3_vault_address.strip() != ""):  # noqa E501 #pylint: disable=line-too-long
-                if(s3_vault_auth == 'token' and s3_vault_token.strip() == ""):
-                    s3_vault_configured = False
-                else:
-                    s3_vault_configured = True
+            kms_config: List[KmsConfig] = []
 
-        vault_stats.append(kms_vault_configured)
-        vault_stats.append(s3_vault_configured)
-        return vault_stats
+            if vault_config_data:
+                vault_config_data = _set_defaults_in_encryption_configs(
+                    vault_config_data, EncryptionTypes.KMS.value, KmsProviders.VAULT.value
+                )
+                kms_config.append(KmsConfig(vault=VaultConfig(**vault_config_data)))
+
+            if kmip_config_data:
+                kmip_config_data = _set_defaults_in_encryption_configs(
+                    kmip_config_data, EncryptionTypes.KMS.value, KmsProviders.KMIP.value
+                )
+                kms_config.append(KmsConfig(kmip=KmipConfig(**kmip_config_data)))
+
+            if kms_config:
+                encryption_config = encryption_config._replace(kms=kms_config)
+
+        # Fetch configuration for S3
+        if EncryptionTypes.S3.value:
+            s3_config_data: Optional[Dict[str, Any]] = _get_conf_keys(
+                list(VaultConfig._fields), VaultConfig.required_fields(),
+                EncryptionTypes.S3.value, KmsProviders.VAULT.value, full_daemon_name
+            )
+
+            s3_config: List[S3Config] = []
+            if s3_config_data:
+                s3_config_data = _set_defaults_in_encryption_configs(
+                    s3_config_data, EncryptionTypes.S3.value, KmsProviders.VAULT.value
+                )
+                s3_config.append(S3Config(vault=VaultConfig(**s3_config_data)))
+
+                encryption_config = encryption_config._replace(s3=s3_config)
+
+        return encryption_config.to_dict()
 
     @classmethod
-    def set_encryption_config(cls, encryption_type, kms_provider, auth_method,
-                              secret_engine, secret_path, namespace, address,
-                              token, daemon_name, ssl_cert, client_cert, client_key):
+    def set_encryption_config(cls, encryption_type: str, kms_provider: str,
+                              config: Union[VaultConfig, KmipConfig],
+                              daemon_name: str) -> None:
         full_daemon_name = 'rgw.' + daemon_name
-        if encryption_type == 'aws:kms':
 
-            KMS_CONFIG = [
-                ['rgw_crypt_s3_kms_backend', kms_provider],
-                ['rgw_crypt_vault_auth', auth_method],
-                ['rgw_crypt_vault_prefix', secret_path],
-                ['rgw_crypt_vault_namespace', namespace],
-                ['rgw_crypt_vault_secret_engine', secret_engine],
-                ['rgw_crypt_vault_addr', address],
-                ['rgw_crypt_vault_token_file', token],
-                ['rgw_crypt_vault_ssl_cacert', ssl_cert],
-                ['rgw_crypt_vault_ssl_clientcert', client_cert],
-                ['rgw_crypt_vault_ssl_clientkey', client_key]
-            ]
+        config_dict = config._asdict() if isinstance(config, (VaultConfig, KmipConfig)) else config
 
-            for (key, value) in KMS_CONFIG:
-                if value == 'null':
-                    continue
-                CephService.send_command('mon', 'config set',
-                                         who=name_to_config_section(full_daemon_name),
-                                         name=key, value=value)
+        if isinstance(config_dict, dict):
+            if kms_provider == KmsProviders.VAULT.value:
+                config = VaultConfig(**config_dict)
+            elif kms_provider == KmsProviders.KMIP.value:
+                config = KmipConfig(**config_dict)
 
-        if encryption_type == 'AES256':
+        for field in config._fields:
+            value = getattr(config, field)
+            if value is None:
+                continue
 
-            SSE_S3_CONFIG = [
-                ['rgw_crypt_sse_s3_backend', kms_provider],
-                ['rgw_crypt_sse_s3_vault_auth', auth_method],
-                ['rgw_crypt_sse_s3_vault_prefix', secret_path],
-                ['rgw_crypt_sse_s3_vault_namespace', namespace],
-                ['rgw_crypt_sse_s3_vault_secret_engine', secret_engine],
-                ['rgw_crypt_sse_s3_vault_addr', address],
-                ['rgw_crypt_sse_s3_vault_token_file', token],
-                ['rgw_crypt_sse_s3_vault_ssl_cacert', ssl_cert],
-                ['rgw_crypt_sse_s3_vault_ssl_clientcert', client_cert],
-                ['rgw_crypt_sse_s3_vault_ssl_clientkey', client_key]
-            ]
+            if isinstance(value, bool):
+                value = str(value).lower()
 
-            for (key, value) in SSE_S3_CONFIG:
-                if value == 'null':
-                    continue
-                CephService.send_command('mon', 'config set',
-                                         who=name_to_config_section(full_daemon_name),
-                                         name=key, value=value)
+            key = _generate_key(encryption_type, kms_provider, field)
 
-        return {}
+            CephService.send_command('mon', 'config set',
+                                     who=name_to_config_section(full_daemon_name),
+                                     name=key, value=value)
 
     @classmethod
     def set_multisite_config(cls, realm_name, zonegroup_name, zone_name, daemon_name):
@@ -569,3 +540,40 @@ class CephService(object):
             'statuses': pg_summary['all'],
             'pgs_per_osd': pgs_per_osd,
         }
+
+
+def _generate_key(encryption_type: str, backend: str, config_name: str):
+    if encryption_type == EncryptionTypes.KMS.value:
+        return f'rgw_crypt_{backend}_{config_name}'
+
+    if encryption_type == EncryptionTypes.S3.value:
+        return f'rgw_crypt_sse_s3_{backend}_{config_name}'
+    return None
+
+
+def _get_conf_keys(fields: List[str], req_fields: List[str], encryption_type: str,
+                   backend: str, daemon_name: str) -> Dict[str, Any]:
+    config: Dict[str, Any] = {}
+
+    for field in fields:
+        key = _generate_key(encryption_type, backend, field)
+        try:
+            value = CephService.send_command('mon', 'config get',
+                                             who=name_to_config_section(daemon_name), key=key)
+            if field in req_fields and not (isinstance(value, str) and value.strip()):
+                config = {}
+                break
+
+            config[field] = value.strip() if isinstance(value, str) else value
+        except Exception as e:  # pylint: disable=broad-except
+            logger.exception('Error %s while fetching configuration for %s', e, key)
+    return config
+
+
+def _set_defaults_in_encryption_configs(config: Dict[str, Any],
+                                        encryption_type: str,
+                                        kms_provider: str) -> Dict[str, Any]:
+    config['backend'] = kms_provider
+    config['encryption_type'] = encryption_type
+    config['unique_id'] = f'{encryption_type}-{kms_provider}'
+    return config
