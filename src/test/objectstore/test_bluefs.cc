@@ -1664,6 +1664,91 @@ TEST(BlueFS, test_log_runway_advance_seq) {
   fs.compact_log();
 }
 
+TEST(BlueFS, test_69481_truncate_corrupts_log) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+
+  BlueFS::FileWriter *f = nullptr;
+  BlueFS::FileWriter *a = nullptr;
+  ASSERT_EQ(0, fs.mkdir("dir"));
+  ASSERT_EQ(0, fs.open_for_write("dir", "test-file", &f, false));
+  ASSERT_EQ(0, fs.open_for_write("dir", "just-allocate", &a, false));
+
+  // create 4 distinct extents in file f
+  // a is here only to prevent f from merging extents together
+  fs.preallocate(f->file, 0, 0x10000);
+  fs.preallocate(a->file, 0, 0x10000);
+  fs.preallocate(f->file, 0, 0x20000);
+  fs.preallocate(a->file, 0, 0x20000);
+  fs.preallocate(f->file, 0, 0x30000);
+  fs.preallocate(a->file, 0, 0x30000);
+  fs.preallocate(f->file, 0, 0x40000);
+  fs.preallocate(a->file, 0, 0x40000);
+  fs.close_writer(a);
+
+  fs.truncate(f, 0);
+  fs.fsync(f);
+
+  bufferlist bl;
+  bl.append(std::string(0x15678, ' '));
+  f->append(bl);
+  fs.truncate(f, 0x15678);
+  fs.fsync(f);
+  fs.close_writer(f);
+
+  fs.umount();
+  // remount to verify
+  ASSERT_EQ(0, fs.mount());
+  fs.umount();
+}
+
+TEST(BlueFS, test_69481_truncate_asserts) {
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+
+  BlueFS::FileWriter *f = nullptr;
+  BlueFS::FileWriter *a = nullptr;
+  ASSERT_EQ(0, fs.mkdir("dir"));
+  ASSERT_EQ(0, fs.open_for_write("dir", "test-file", &f, false));
+  ASSERT_EQ(0, fs.open_for_write("dir", "just-allocate", &a, false));
+
+  // create 4 distinct extents in file f
+  // a is here only to prevent f from merging extents together
+  fs.preallocate(f->file, 0, 0x10000);
+  fs.preallocate(a->file, 0, 0x10000);
+  fs.preallocate(f->file, 0, 0x20000);
+  fs.preallocate(a->file, 0, 0x20000);
+  fs.preallocate(f->file, 0, 0x30000);
+  fs.preallocate(a->file, 0, 0x30000);
+  fs.preallocate(f->file, 0, 0x40000);
+  fs.preallocate(a->file, 0, 0x40000);
+  fs.close_writer(a);
+
+  fs.truncate(f, 0);
+  fs.fsync(f);
+
+  bufferlist bl;
+  bl.append(std::string(0x35678, ' '));
+  f->append(bl);
+  fs.truncate(f, 0x35678);
+  fs.fsync(f);
+  fs.close_writer(f);
+
+  fs.umount();
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {
