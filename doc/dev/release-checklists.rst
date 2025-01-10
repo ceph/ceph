@@ -104,8 +104,8 @@ Code cleanup
 QA suite
 --------
 
-- [ ] create qa/workunits/test_telemetry_(X-1).sh
-- [ ] create qa/workunits/test_telemetry_(X-1)_x.sh
+- [?] create qa/workunits/test_telemetry_(X-1).sh
+- [?] create qa/workunits/test_telemetry_(X-1)_x.sh
 - [ ] create qa/suites/upgrade/(X-1)-x
 - [ ] remove qa/suites/upgrade/(X-3)-x-*
 - [ ] create qa/releases/X.yaml
