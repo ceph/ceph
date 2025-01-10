@@ -10858,6 +10858,8 @@ paths:
                   type: string
                 tenant:
                   type: string
+              required:
+              - account_name
               type: object
       responses:
         '201':
@@ -10974,6 +10976,8 @@ paths:
                   type: string
                 tenant:
                   type: string
+              required:
+              - account_name
               type: object
       responses:
         '200':

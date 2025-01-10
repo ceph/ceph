@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -19,6 +19,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Observable, Subscriber, forkJoin as observableForkJoin } from 'rxjs';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
 const BASE_URL = 'rgw/accounts';
 
@@ -36,6 +37,7 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
   columns: CdTableColumn[] = [];
   accounts: Account[] = [];
   selection: CdTableSelection = new CdTableSelection();
+  declare staleTimeout: number;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -43,7 +45,8 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
     private router: Router,
     private rgwUserAccountsService: RgwUserAccountsService,
     private cdsModalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    protected ngZone: NgZone
   ) {
     super();
   }
@@ -74,27 +77,52 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
       {
         name: $localize`Max Users`,
         prop: 'max_users',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          '-1': $localize`Disabled`,
+          0: $localize`Unlimited`
+        }
       },
       {
         name: $localize`Max Roles`,
         prop: 'max_roles',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          '-1': $localize`Disabled`,
+          0: $localize`Unlimited`
+        }
       },
       {
         name: $localize`Max Groups`,
         prop: 'max_groups',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          '-1': $localize`Disabled`,
+          0: $localize`Unlimited`
+        }
       },
       {
         name: $localize`Max. buckets`,
         prop: 'max_buckets',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          '-1': $localize`Disabled`,
+          0: $localize`Unlimited`
+        }
       },
       {
         name: $localize`Max Access Keys`,
         prop: 'max_access_keys',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          '-1': $localize`Disabled`,
+          0: $localize`Unlimited`
+        }
       }
     ];
     const getEditURL = () => {
@@ -124,9 +152,11 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
       name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
+    this.setTableRefreshTimeout();
   }
 
   getAccountsList(context?: CdTableFetchDataContext) {
+    this.setTableRefreshTimeout();
     this.rgwUserAccountsService.list(true).subscribe({
       next: (accounts: Account[]) => {
         this.accounts = accounts;

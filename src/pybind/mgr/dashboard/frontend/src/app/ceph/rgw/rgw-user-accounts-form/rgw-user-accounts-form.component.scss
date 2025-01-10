@@ -1,0 +1,9 @@
+@use '@carbon/layout';
+
+::ng-deep .cds--form__helper-text {
+  white-space: pre-line;
+}
+
+.quota-heading {
+  margin-bottom: layout.$spacing-03;
+}
