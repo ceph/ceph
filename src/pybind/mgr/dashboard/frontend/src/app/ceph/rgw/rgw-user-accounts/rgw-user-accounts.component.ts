@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -36,6 +36,7 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
   columns: CdTableColumn[] = [];
   accounts: Account[] = [];
   selection: CdTableSelection = new CdTableSelection();
+  declare staleTimeout: number;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -43,7 +44,8 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
     private router: Router,
     private rgwUserAccountsService: RgwUserAccountsService,
     private cdsModalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    protected ngZone: NgZone
   ) {
     super();
   }
@@ -124,9 +126,11 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
       name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
+    this.setTableRefreshTimeout();
   }
 
   getAccountsList(context?: CdTableFetchDataContext) {
+    this.setTableRefreshTimeout();
     this.rgwUserAccountsService.list(true).subscribe({
       next: (accounts: Account[]) => {
         this.accounts = accounts;

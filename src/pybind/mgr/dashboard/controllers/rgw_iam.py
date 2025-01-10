@@ -11,10 +11,11 @@ from . import APIDoc, APIRouter, EndpointDoc, RESTController, allow_empty_body
 class RgwUserAccountsController(RESTController):
 
     @allow_empty_body
-    def create(self, account_name: Optional[str] = None, tenant: str = None,
-               email: Optional[str] = None, max_buckets: str = None,
-               max_users: str = None, max_roles: str = None, max_group: str = None,
-               max_access_keys: str = None):
+    def create(self, account_name: str, tenant: Optional[str] = None,
+               email: Optional[str] = None, max_buckets: Optional[int] = None,
+               max_users: Optional[int] = None, max_roles: Optional[int] = None,
+               max_group: Optional[int] = None,
+               max_access_keys: Optional[int] = None):
         return RgwAccounts.create_account(account_name, tenant, email,
                                           max_buckets, max_users, max_roles,
                                           max_group, max_access_keys)
@@ -36,11 +37,11 @@ class RgwUserAccountsController(RESTController):
     @EndpointDoc("Update RGW account info",
                  parameters={'account_id': (str, 'Account id')})
     @allow_empty_body
-    def set(self, account_id: str, account_name: Optional[str] = None,
-            email: Optional[str] = None, tenant: str = None,
-            max_buckets: str = None, max_users: str = None,
-            max_roles: str = None, max_group: str = None,
-            max_access_keys: str = None):
+    def set(self, account_id: str, account_name: str,
+            email: Optional[str] = None, tenant: Optional[str] = None,
+            max_buckets: Optional[int] = None, max_users: Optional[int] = None,
+            max_roles: Optional[int] = None, max_group: Optional[int] = None,
+            max_access_keys: Optional[int] = None):
         return RgwAccounts.modify_account(account_id, account_name, email, tenant,
                                           max_buckets, max_users, max_roles,
                                           max_group, max_access_keys)
