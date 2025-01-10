@@ -89,6 +89,7 @@ struct bluefs_fnode_t {
   void recalc_allocated() {
     allocated = 0;
     extents_index.reserve(extents.size());
+    extents_index.clear();
     for (auto& p : extents) {
       extents_index.emplace_back(allocated);
       allocated += p.length;
