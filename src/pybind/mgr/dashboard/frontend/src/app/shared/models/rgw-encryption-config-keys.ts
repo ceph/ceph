@@ -19,3 +19,34 @@ export enum rgwEncryptionConfigKeys {
   s3_key_template = 'S3 Key Template',
   username = 'Username'
 }
+
+export interface VaultConfig {
+  config: {
+    addr: string;
+    auth: string;
+    prefix: string;
+    secret_engine: string;
+    namespace: string;
+    token_file: string;
+    ssl_cacert: string;
+    ssl_clientcert: string;
+    ssl_clientkey: string;
+  };
+  kms_provider: string;
+  encryption_type: string;
+}
+
+export interface KmipConfig {
+  config: {
+    addr: string;
+    username: string;
+    password: string;
+    s3_key_template: string;
+    client_cert: string;
+    client_key: string;
+    ca_path: string;
+    kms_key_template: string;
+  };
+  encryption_type: string;
+  kms_provider: string;
+}
