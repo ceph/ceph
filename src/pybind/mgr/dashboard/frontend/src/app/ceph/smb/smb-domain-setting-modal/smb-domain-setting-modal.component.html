@@ -15,7 +15,6 @@
         <div class="form-item">
           <cds-text-label
             label="realm"
-            cdRequiredField="Realm Name"
             [invalid]="
               !domainSettingsForm.controls.realm.valid && domainSettingsForm.controls.realm.dirty
             "
@@ -25,7 +24,6 @@
             <input
               cdsText
               type="text"
-              placeholder="Realm name..."
               formControlName="realm"
               autofocus
             />
@@ -40,65 +38,86 @@
           </ng-template>
         </div>
 
-        <!-- Join Source -->
-        <ng-container
-          formArrayName="join_sources"
-          *ngFor="let joinSource of join_sources.controls; index as i"
-        >
-          <ng-container [formGroupName]="i">
-            <div cdsRow
-                 class="form-item form-item-append">
-              <div cdsCol
-                   [columnNumbers]="{ lg: 14 }">
-                <input
-                  cdsText
-                  type="text"
-                  placeholder="Id.."
-                  [id]="'ref' + i"
-                  formControlName="ref"
-                  modal-primary-focus
-                  [invalid]="
-                    !domainSettingsForm.controls['join_sources'].controls[i].valid &&
-                    domainSettingsForm.controls['join_sources'].dirty
-                  "
-                  [invalidText]="refError"
-                />
-                <ng-template #refError>
-                  <span
-                    class="invalid-feedback"
-                    *ngIf="domainSettingsForm.showError('join_sources', formDir, 'required')"
-                    i18n
-                    >This field is required.</span
+        <div
+          *ngIf="joinAuths$ | async as joinAuths"
+          class="form-item">
+          <ng-container
+            formArrayName="join_sources"
+            *ngFor="let _ of join_sources.controls; index as i"
+          >
+            <ng-container [formGroupName]="i">
+              <div
+                cdsRow
+                class="form-item form-item-append">
+                <div
+                  cdsCol
+                  [columnNumbers]="{ lg: 14 }"
+                >
+                  <cds-select
+                    label="Active Directory access resources"
+                    i18n-label
+                    formControlName="ref"
+                    [invalid]="domainSettingsForm.controls?.join_sources.controls[i].invalid && domainSettingsForm.controls?.join_sources.controls[i].controls.ref.dirty"
+                    [invalidText]="joinSourceError"
                   >
-                </ng-template>
+                    <option
+                      [value]="null"
+                      i18n
+                    >-- List of AD access resources --
+                    </option>
+                    <option *ngFor="let jA of joinAuths"
+                            [value]="jA.auth_id">{{ jA.auth_id }}</option>
+                  </cds-select>
+                  <ng-template #joinSourceError>
+                    <span
+                      class="invalid-feedback"
+                    >
+                      <ng-container i18n> This field is required. </ng-container>
+                    </span>
+                  </ng-template>
+                </div>
+                <div cdsCol
+                     *ngIf="i > 0"
+                     [columnNumbers]="{ lg: 1 }"
+                     class="item-action-btn spacing">
+                  <cds-icon-button kind="danger"
+                                   size="sm"
+                                   (click)="removeJoinSource(i)">
+                    <svg cdsIcon="trash-can"
+                         size="32"
+                         class="cds--btn__icon"></svg>
+                  </cds-icon-button>
+                </div>
               </div>
-              <div cdsCol
-                   *ngIf="i > 0"
-                   [columnNumbers]="{ lg: 1 }">
-                <cds-icon-button kind="danger"
-                                 size="sm"
-                                 (click)="removeJoinSource(i)">
-                  <svg cdsIcon="trash-can"
-                       size="32"
-                       class="cds--btn__icon"></svg>
-                </cds-icon-button>
-              </div>
-            </div>
+            </ng-container>
           </ng-container>
-        </ng-container>
-        <div class="form-item">
-          <button cdsButton="tertiary"
-                  type="button"
-                  (click)="addJoinSource()"
-                  i18n>
-            Add Join Source
-            <svg cdsIcon="add"
-                 size="32"
-                 class="cds--btn__icon"
-                 icon></svg>
-          </button>
+          <div class="form-item">
+            <button cdsButton="tertiary"
+                    type="button"
+                    (click)="addJoinSource()"
+                    i18n>
+              Add AD access resource
+              <svg cdsIcon="add"
+                   size="32"
+                   class="cds--btn__icon"
+                   icon></svg>
+            </button>
+            <button cdsButton="tertiary"
+                    type="button"
+                    (click)="navigateCreateJoinSource()"
+                    i18n>
+              Create AD access resource
+              <svg
+                cdsIcon="launch"
+                size="16"
+                class="cds--btn__icon"></svg>
+            </button>
+          </div>
         </div>
       </div>
+
+        <!-- Join Source -->
+
       <cd-form-button-panel
         (submitActionEvent)="submit()"
         [form]="domainSettingsForm"
