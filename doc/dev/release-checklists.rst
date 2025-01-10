@@ -46,7 +46,6 @@ Scripts
 - [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`)
 - [x] src/script/backport-create-issue (`releases()`)
 - [ ] src/script/ceph-release-notes (X-1)
-- [ ] ceph-build.git scripts/build_utils.sh `release_from_version()`
 
 Misc
 ~~~~
@@ -117,10 +116,10 @@ ceph-build
 ----------
 In the `ceph/ceph-build.git` repo:
 
-- [ ] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
-- [ ] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
-- [ ] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
-- [ ] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119)
+- [x] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
+- [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
+- [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
+- [x] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119 and https://github.com/ceph/ceph-build/pull/2315)
 
 
 ceph-container
