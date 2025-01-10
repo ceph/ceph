@@ -11564,33 +11564,13 @@ paths:
           application/json:
             schema:
               properties:
-                address:
-                  type: string
-                auth_method:
-                  type: string
-                client_cert:
-                  type: string
-                client_key:
+                config:
                   type: string
                 daemon_name:
                   type: string
                 encryption_type:
                   type: string
                 kms_provider:
-                  type: string
-                namespace:
-                  default: ''
-                  type: string
-                owner:
-                  type: string
-                secret_engine:
-                  type: string
-                secret_path:
-                  default: ''
-                  type: string
-                ssl_cert:
-                  type: string
-                token:
                   type: string
               type: object
       responses:
