@@ -37,21 +37,19 @@ Make sure X (and, ideally, X+1) is defined:
 - [x] src/common/ceph_strings.cc (`ceph_release_name()`)
 - [x] src/include/rados.h (`CEPH_RELEASE_*` and `MAX`)
 - [x] src/include/rbd/librbd.h (`LIBRBD_VER_MINOR` to X)
-- [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers; note that monmaptool CLI test output will need adjustment)
+- [x] src/mon/mon_types.h (`ceph::features::mon::FEATURE_*` and related structs and helpers)
 - [x] src/mds/cephfs_features.h (`CEPHFS_CURRENT_RELEASE`)
 
 Scripts
 ~~~~~~~
 
 - [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`... but for X-1)
-- [x] src/script/ceph-release-notes (X-1)
-- [ ] ceph-build.git scripts/build_utils.sh `release_from_version()`
+- [ ] src/script/ceph-release-notes (X-1)
 
 Misc
 ~~~~
 - [x] update src/ceph-volume/ceph_volume/__init__.py (`__release__`)
-- [x] update src/tools/monmaptool.cc (`min_mon_release` and corresponding output in `src/test/cli/monmaptool`)
-- [x] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` to X)
+- [x] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` and `LATEST_STABLE_RELEASE` to X)
 
 Feature bits
 ------------
@@ -89,6 +87,7 @@ OSDMap
 ------
 
 - [x] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
+- [ ] OSDMap::get_min_compat_client: core team evaluate
 
 Code cleanup
 ------------
@@ -107,6 +106,7 @@ QA suite
 - [x] create qa/workunits/test_telemetry_(X-1)_x.sh
 - [x] create qa/suites/upgrade/(X-1)-x
 - [x] remove qa/suites/upgrade/(X-3)-x-*
+- [x] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
 - [x] create qa/releases/X.yaml
 - [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
 
@@ -118,19 +118,19 @@ In the `ceph/ceph-build.git` repo:
 - [x] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
 - [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
 - [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
-- [x] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119)
+- [x] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119 and https://github.com/ceph/ceph-build/pull/2315)
 
 
 ceph-container
 --------------
 In the `ceph/ceph-container.git` repo:
 
-- [x] Add the release name to `Makefile`
-- [x] Update `ceph-releases/ALL/centos/daemon-base/__DOCKERFILE_INSTALL__` with the with the supported nfs-ganesha version
-- [x] Update `contrib/build-push-ceph-container-imgs.sh` with the new release
-- [x] Update `contrib/ceph-build-config.sh` with the release name
-- [x] Update `contrib/common.sh` with supported version numbers
-- [x] Update `maint-lib/ceph_version.sh` with the release name
+- [ ] Add the release name to `Makefile`
+- [ ] Update `ceph-releases/ALL/centos/daemon-base/__DOCKERFILE_INSTALL__` with the with the supported nfs-ganesha version
+- [ ] Update `contrib/build-push-ceph-container-imgs.sh` with the new release
+- [ ] Update `contrib/ceph-build-config.sh` with the release name
+- [ ] Update `contrib/common.sh` with supported version numbers
+- [ ] Update `maint-lib/ceph_version.sh` with the release name
 
 See https://github.com/ceph/ceph-container/pull/2109 as an example for what to do.
 
@@ -142,7 +142,7 @@ After dev freeze
 - [ ] remove ``doc/releases/*.rst``. This should leave behind ``doc/releases/releases.yml`` which is used for doc building purposes. See also commit 33d63c3 ("doc: remove release notes for release branch") for details.
 - [ ] cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
 - [ ] add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
-- [ ] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
+- [x] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
 - [ ] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
 
 First release candidate
