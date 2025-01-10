@@ -51,6 +51,7 @@
             <select id="kms_provider"
                     name="kms_provider"
                     class="form-select"
+                    (change)="setKmsProvider()"
                     formControlName="kms_provider">
               <option *ngIf="kmsProviders !== null && kmsProviders.length === 0"
                       ngValue="null"
@@ -69,7 +70,7 @@
       </div>
 
       <div *ngIf="kmsProviders.length !== 0 && configForm.getValue('kms_provider') !== ''">
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === 'aws:kms' && configForm.getValue('kms_provider') === 'vault') || configForm.getValue('encryptionType') === 'AES256'">
           <div class="form-group row">
             <label class="cd-col-form-label required"
                    for="auth_method"
@@ -89,7 +90,7 @@
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === 'aws:kms' && configForm.getValue('kms_provider') === 'vault') || configForm.getValue('encryptionType') === 'AES256'">
           <div class="form-group row">
             <label class="cd-col-form-label required"
                    for="secret_engine"
@@ -109,7 +110,7 @@
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === 'aws:kms' && configForm.getValue('kms_provider') === 'vault') || configForm.getValue('encryptionType') === 'AES256'">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="secret_path"
@@ -128,7 +129,7 @@
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
+        <div *ngIf="(configForm.getValue('encryptionType') === 'aws:kms' && configForm.getValue('kms_provider') == 'vault') || configForm.getValue('encryptionType') === 'AES256'">
           <div class="form-group row">
             <label class="cd-col-form-label"
                    for="namespace"
@@ -147,26 +148,33 @@
         <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
           <div class="form-group row">
             <label class="cd-col-form-label required"
-                   for="address"
-                   i18n>Vault Address
+                   for="addr"
+                   i18n>
+                   <span *ngIf="configForm.getValue('kms_provider') === 'vault'">
+                    Vault Address
+                   </span>
+                   <span *ngIf="configForm.getValue('kms_provider') === 'KMIP'">
+                    KMIP Address
+                   </span>
             </label>
             <div class="cd-col-form-input">
-              <input id="address"
-                     name="address"
+              <input id="addr"
+                     name="addr"
                      class="form-control"
-                     formControlName="address"
+                     formControlName="addr"
                      placeholder="http://127.0.0.1:8000">
               <span class="invalid-feedback"
-                    *ngIf="configForm.showError('address', frm, 'required')"
+                    *ngIf="configForm.showError('addr', frm, 'required')"
                     i18n>This field is required.</span>
             </div>
           </div>
         </div>
 
-        <div *ngIf="configForm.getValue('auth_method') === 'token'"
-             class="form-group row">
+        <div *ngIf="(configForm.getValue('encryptionType') === 'aws:kms' && configForm.getValue('kms_provider') == 'vault')|| configForm.getValue('encryptionType') === 'AES256'">
+          <div *ngIf="configForm.getValue('auth_method') === 'token'"
+                class="form-group row">
           <label class="cd-col-form-label required"
-                 for="token">
+                for="token">
           <span i18n>Token</span>
           <cd-helper i18n>
             The token authentication method expects a Vault token to be present in a plaintext file.
@@ -174,11 +182,73 @@
           </label>
           <div class="cd-col-form-input">
             <input type="file"
-                   formControlName="token"
-                   (change)="fileUpload($event.target.files, 'token')">
+                    formControlName="token"
+                    (change)="fileUpload($event.target.files, 'token')">
             <span class="invalid-feedback"
                   *ngIf="configForm.showError('token', frm, 'required')"
                   i18n>This field is required.</span>
+          </div>
+          </div>
+        </div>
+         <!-- code for KMIP  -->
+         
+         <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' && configForm.getValue('kms_provider') === 'KMIP'">
+          
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="kms_key_template"
+                   i18n>KMS Key Template
+            </label>
+            <div class="cd-col-form-input">
+              <input id="kms_key_template"
+                     name="kms_key_template"
+                     class="form-control"
+                     formControlName="kms_key_template">
+            </div>
+          </div>
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="s3_key_template"
+                   i18n>S3 Key Template
+            </label>
+            <div class="cd-col-form-input">
+              <input id="s3_key_template"
+                     name="s3_key_template"
+                     class="form-control"
+                     formControlName="s3_key_template">
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="username"
+                   i18n>Username
+            </label>
+            <div class="cd-col-form-input">
+              <input id="username"
+                     name="username"
+                     class="form-control"
+                     formControlName="username">
+              <span class="invalid-feedback"
+                    *ngIf="configForm.showError('username', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="password"
+                   i18n>Password
+            </label>
+            <div class="cd-col-form-input">
+              <input id="password"
+                     name="password"
+                     class="form-control"
+                     type="password"
+                     formControlName="password">
+              <span class="invalid-feedback"
+                    *ngIf="configForm.showError('password', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
           </div>
         </div>
 
