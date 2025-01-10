@@ -154,7 +154,9 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
     assert(it != extents_index.begin());
     --it;
     assert(offset >= *it);
-    p += it - extents_index.begin();
+    uint32_t skip = it - extents_index.begin();
+    ceph_assert(skip <= extents.size());
+    p += skip;
     offset -= *it;
   }
 
