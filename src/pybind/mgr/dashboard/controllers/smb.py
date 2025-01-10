@@ -1,6 +1,5 @@
 
 # -*- coding: utf-8 -*-
-
 import json
 import logging
 from functools import wraps
@@ -8,7 +7,7 @@ from typing import List
 
 from smb.enums import Intent
 from smb.proto import Simplified
-from smb.resources import Cluster, Share
+from smb.resources import Cluster, JoinAuth, Share, UsersAndGroups
 
 from dashboard.controllers._docs import EndpointDoc
 from dashboard.controllers._permissions import CreatePermission, DeletePermission
@@ -40,35 +39,6 @@ CLUSTER_SCHEMA = {
     "placement": ({
         "count": (int, "Number of instances to place")
     }, "Placement configuration for the resource")
-}
-
-CLUSTER_SCHEMA_RESULTS = {
-    "results": ([{
-        "resource": ({
-            "resource_type": (str, "ceph.smb.cluster"),
-            "cluster_id": (str, "Unique identifier for the cluster"),
-            "auth_mode": (str, "Either 'active-directory' or 'user'"),
-            "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
-            "domain_settings": ({
-                "realm": (str, "Domain realm, e.g., 'DOMAIN1.SINK.TEST'"),
-                "join_sources": ([{
-                    "source_type": (str, "resource"),
-                    "ref": (str, "Reference identifier for the join auth resource")
-                }], "List of join auth sources for domain settings")
-            }, "Domain-specific settings for active-directory auth mode"),
-            "user_group_settings": ([{
-                "source_type": (str, "resource"),
-                "ref": (str, "Reference identifier for the user group resource")
-            }], "User group settings for user auth mode (optional)"),
-            "custom_dns": ([str], "List of custom DNS server addresses (optional)"),
-            "placement": ({
-                "count": (int, "Number of instances to place")
-            }, "Placement configuration for the resource (optional)"),
-        }, "Resource details"),
-        "state": (str, "State of the resource"),
-        "success": (bool, "Indicates whether the operation was successful")
-    }], "List of results with resource details"),
-    "success": (bool, "Overall success status of the operation")
 }
 
 LIST_CLUSTER_SCHEMA = [CLUSTER_SCHEMA]
@@ -125,29 +95,26 @@ USERSGROUPS_SCHEMA = {
 
 LIST_USERSGROUPS_SCHEMA = [USERSGROUPS_SCHEMA]
 
-SHARE_SCHEMA_RESULTS = {
-    "results": ([{
-        "resource": ({
-            "resource_type": (str, "ceph.smb.share"),
-            "cluster_id": (str, "Unique identifier for the cluster"),
-            "share_id": (str, "Unique identifier for the share"),
-            "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
-            "name": (str, "Name of the share"),
-            "readonly": (bool, "Indicates if the share is read-only"),
-            "browseable": (bool, "Indicates if the share is browseable"),
-            "cephfs": ({
-                "volume": (str, "Name of the CephFS file system"),
-                "path": (str, "Path within the CephFS file system"),
-                "subvolumegroup": (str, "Subvolume Group in CephFS file system"),
-                "subvolume": (str, "Subvolume within the CephFS file system"),
-                "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'")
-            }, "Configuration for the CephFS share")
-        }, "Resource details"),
-        "state": (str, "State of the resource"),
-        "success": (bool, "Indicates whether the operation was successful")
-    }], "List of results with resource details"),
-    "success": (bool, "Overall success status of the operation")
-}
+
+def add_results_to_schema(schema):
+
+    results_field = {
+        "results": ([{
+            "resource": (schema, "Resource"),
+            "state": (str, "The current state of the resource,\
+                        e.g., 'created', 'updated', 'deleted'"),
+            "success": (bool, "Indicates if the operation was successful"),
+        }], "List of operation results"),
+        "success": (bool, "Indicates if the overall operation was successful")
+    }
+
+    return results_field
+
+
+CLUSTER_SCHEMA_RESULTS = add_results_to_schema(CLUSTER_SCHEMA)
+SHARE_SCHEMA_RESULTS = add_results_to_schema(SHARE_SCHEMA)
+JOIN_AUTH_SCHEMA_RESULTS = add_results_to_schema(JOIN_AUTH_SCHEMA)
+USERSGROUPS_SCHEMA_RESULTS = add_results_to_schema(JOIN_AUTH_SCHEMA_RESULTS)
 
 
 def raise_on_failure(func):
@@ -319,7 +286,7 @@ class SMBJoinAuth(RESTController):
     @ReadPermission
     @EndpointDoc("List smb join authorization resources",
                  responses={200: LIST_JOIN_AUTH_SCHEMA})
-    def list(self, join_auth: str = '') -> List[Share]:
+    def list(self) -> List[JoinAuth]:
         """
         List all smb join auth resources
 
@@ -329,8 +296,60 @@ class SMBJoinAuth(RESTController):
         res = mgr.remote(
             'smb',
             'show',
-            [f'{self._resource}.{join_auth}' if join_auth else self._resource])
+            [self._resource])
         return res['resources'] if 'resources' in res else [res]
+
+    @ReadPermission
+    @EndpointDoc("Get smb join authorization resource",
+                 responses={200: JOIN_AUTH_SCHEMA})
+    def get(self, auth_id: str) -> JoinAuth:
+        """
+        Get Join auth resource
+
+        :return: Returns join auth.
+        :rtype: Dict
+        """
+        res = mgr.remote(
+            'smb',
+            'show',
+            [f'{self._resource}.{auth_id}'])
+        return res['resources'] if 'resources' in res else res
+
+    @CreatePermission
+    @EndpointDoc("Create smb join auth",
+                 parameters={
+                     'auth_id': (str, 'auth_id'),
+                     'username': (str, 'username'),
+                     'password': (str, 'password')
+                 },
+                 responses={201: JOIN_AUTH_SCHEMA_RESULTS})
+    def create(self, join_auth: JoinAuth) -> Simplified:
+        """
+        Create smb join auth resource
+
+        :return: Returns join auth resource.
+        :rtype: Dict
+        """
+        return mgr.remote('smb', 'apply_resources', json.dumps(join_auth)).to_simplified()
+
+    @CreatePermission
+    @EndpointDoc("Delete smb join auth",
+                 parameters={
+                     'auth_id': (str, 'auth_id')
+                 },
+                 responses={204: None})
+    def delete(self, auth_id: str) -> None:
+        """
+        Delete smb join auth resource
+
+        :param auth_id: Join Auth identifier
+        :return: None.
+        """
+        resource = {}
+        resource['resource_type'] = self._resource
+        resource['auth_id'] = auth_id
+        resource['intent'] = Intent.REMOVED
+        return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
 
 
 @APIRouter('/smb/usersgroups', Scope.SMB)
@@ -341,18 +360,70 @@ class SMBUsersgroups(RESTController):
     @ReadPermission
     @EndpointDoc("List smb user resources",
                  responses={200: LIST_USERSGROUPS_SCHEMA})
-    def list(self, users_groups: str = '') -> List[Share]:
+    def list(self) -> List[UsersAndGroups]:
         """
         List all smb usersgroups resources
 
-        :return: Returns list of usersgroups.
+        :return: Returns list of usersgroups
         :rtype: List[Dict]
         """
         res = mgr.remote(
             'smb',
             'show',
-            [f'{self._resource}.{users_groups}' if users_groups else self._resource])
+            [self._resource])
         return res['resources'] if 'resources' in res else [res]
+
+    @ReadPermission
+    @EndpointDoc("Get smb usersgroups authorization resource",
+                 responses={200: USERSGROUPS_SCHEMA})
+    def get(self, users_groups_id: str) -> UsersAndGroups:
+        """
+        Get Users and groups resource
+
+        :return: Returns join auth.
+        :rtype: Dict
+        """
+        res = mgr.remote(
+            'smb',
+            'show',
+            [f'{self._resource}.{users_groups_id}'])
+        return res['resources'] if 'resources' in res else res
+
+    @CreatePermission
+    @EndpointDoc("Create smb usersgroups",
+                 parameters={
+                     'users_groups_id': (str, 'users_groups_id'),
+                     'username': (str, 'username'),
+                     'password': (str, 'password')
+                 },
+                 responses={201: USERSGROUPS_SCHEMA_RESULTS})
+    def create(self, usersgroups: UsersAndGroups) -> Simplified:
+        """
+        Create smb usersgroups resource
+
+        :return: Returns usersgroups resource.
+        :rtype: Dict
+        """
+        return mgr.remote('smb', 'apply_resources', json.dumps(usersgroups)).to_simplified()
+
+    @CreatePermission
+    @EndpointDoc("Delete smb join auth",
+                 parameters={
+                     'users_groups_id': (str, 'users_groups_id')
+                 },
+                 responses={204: None})
+    def delete(self, users_groups_id: str) -> None:
+        """
+        Delete smb usersgroups resource
+
+        :param users_group_id: Users  identifier
+        :return: None.
+        """
+        resource = {}
+        resource['resource_type'] = self._resource
+        resource['users_groups_id'] = users_groups_id
+        resource['intent'] = Intent.REMOVED
+        return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
 
 
 @UIRouter('/smb')
