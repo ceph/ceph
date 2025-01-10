@@ -564,6 +564,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_UMBRELLA);
   return compat;
 }
 
@@ -2572,6 +2573,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_TENTACLE));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_UMBRELLA)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_UMBRELLA));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_UMBRELLA));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_UMBRELLA);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2615,6 +2623,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_TENTACLE)) {
     required_features |= CEPH_FEATUREMASK_SERVER_TENTACLE;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_UMBRELLA)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_UMBRELLA;
   }
 
   // monmap
