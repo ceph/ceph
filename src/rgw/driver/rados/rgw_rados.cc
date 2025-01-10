@@ -3343,7 +3343,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
 
   bool versioned_target = (meta.olh_epoch && *meta.olh_epoch > 0) ||
-                          !obj.key.instance.empty();
+                          !obj.key.instance.empty() ||
+                          target->get_bucket_info().local.snap_mgr.is_enabled();
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
