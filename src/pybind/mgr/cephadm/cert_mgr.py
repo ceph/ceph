@@ -122,6 +122,7 @@ class CertKeyStore():
         'ingress_ssl_key',
         'nvmeof_server_key',
         'nvmeof_client_key',
+        'nvmeof_encryption_key',
     ]
 
     known_certs: Dict[str, Any] = {}
@@ -170,6 +171,7 @@ class CertKeyStore():
             'ingress_ssl_key': {},  # service-name -> key
             'nvmeof_server_key': {},  # service-name -> key
             'nvmeof_client_key': {},  # service-name -> key
+            'nvmeof_encryption_key': {},  # service-name -> key
         }
 
     def get_key_name_from_cert(self, cert_ref: str) -> str:
@@ -240,15 +242,15 @@ class CertKeyStore():
                 org, cn = get_cert_issuer_info(cert.cert)
                 days_to_expiration = verify_cacrt_content(cert.cert)
                 return {
-                        'user_made': cert.user_made,
-                        'org': org,
-                        'cn': cn,
-                        'days_to_expiration': days_to_expiration,
+                    'user_made': cert.user_made,
+                    'org': org,
+                    'cn': cn,
+                    'days_to_expiration': days_to_expiration,
                 }
             except ServerConfigException as e:
                 return {
-                        'user_made': cert.user_made,
-                        'invalid_certificate': f'{e}'
+                    'user_made': cert.user_made,
+                    'invalid_certificate': f'{e}'
                 }
 
         ls: Dict[str, Any] = {}
@@ -417,8 +419,7 @@ class CertMgr:
 
     def _validate_and_manage_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> Tuple[bool, bool]:
         """Helper method to validate a cert/key pair and handle errors."""
-        key = key_obj.key
-        cert = cert_obj.cert
+
         is_valid, is_close_to_expiration, days_to_expiration, exception_info = self.is_valid_certificate(cert_obj, key_obj)
 
         if is_close_to_expiration:

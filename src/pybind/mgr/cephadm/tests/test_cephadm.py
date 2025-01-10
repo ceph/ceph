@@ -1926,7 +1926,7 @@ class TestCephadm(object):
 
         assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1') == grafana_host1_key
         assert cephadm_module.cert_mgr.get_key('nvmeof_server_key', service_name='nvmeof.foo') == nvmeof_server_key
-        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') == is NOne
+        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') is None
         assert cephadm_module.cert_mgr.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
 
         with pytest.raises(OrchestratorError, match='Attempted to access priv key for unknown entity'):
