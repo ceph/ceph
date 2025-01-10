@@ -61,11 +61,11 @@ Feature bits
 Compatsets
 ----------
 
-- [ ] mon/Monitor.h (`CEPH_MON_FEATURE_INCOMPAT_X`)
-- [ ] mon/Monitor.cc (include in `get_supported_features()`)
-- [ ] mon/Monitor.cc (`apply_monmap_to_compatset_features()`)
-- [ ] mon/Monitor.cc (`calc_quorum_requirements()`)
-- [ ] test/cli/monmaptool/feature-set-unset-list.t (`supported`, `persistent`)
+- [x] mon/Monitor.h (`CEPH_MON_FEATURE_INCOMPAT_X`)
+- [x] mon/Monitor.cc (include in `get_supported_features()`)
+- [x] mon/Monitor.cc (`apply_monmap_to_compatset_features()`)
+- [x] mon/Monitor.cc (`calc_quorum_requirements()`)
+- [x] test/cli/monmaptool/feature-set-unset-list.t (`supported`, `persistent`)
 
 Mon
 ---
