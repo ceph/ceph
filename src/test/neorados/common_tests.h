@@ -72,6 +72,13 @@ std::string get_temp_pool_name(std::string_view prefix = {});
 /// \param token Boost.Asio completion token
 ///
 /// \return The ID of the newly created pool
+
+// This is a bug in Boost. It's fixed in 1.87 and these pragmata can
+// be removed then.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
 template<boost::asio::completion_token_for<
 	   void(boost::system::error_code, int64_t)> CompletionToken>
 auto create_pool(neorados::RADOS& r,
@@ -95,6 +102,8 @@ auto create_pool(neorados::RADOS& r,
      }, r.get_executor()),
      token, std::ref(r), std::move(pname));
 }
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
 
 /// \brief Create a new, empty RADOS object
 ///
