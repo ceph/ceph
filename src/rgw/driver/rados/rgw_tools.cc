@@ -354,21 +354,35 @@ int rgw_list_pool(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 10) << "failed to parse cursor: " << marker << dendl;
     return -EINVAL;
   }
-
-  auto iter = ioctx.nobjects_begin(oc);
+  librados::NObjectIterator iter;
+  try {
+    iter = ioctx.nobjects_begin(oc);
+  } catch (const std::system_error& e) {
+    ldpp_dout(dpp, 1) << "rgw_list_pool: Failed to begin iteration of pool "
+		      << ioctx.get_pool_name() << " with error "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
   /// Pool_iterate
   if (iter == ioctx.nobjects_end())
     return -ENOENT;
 
-  for (; oids->size() < max && iter != ioctx.nobjects_end(); ++iter) {
-    string oid = iter->get_oid();
-    ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
+  try {
+    for (; oids->size() < max && iter != ioctx.nobjects_end(); ++iter) {
+      string oid = iter->get_oid();
+      ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
-    // fill it in with initial values; we may correct later
-    if (filter && !filter(oid, oid))
-      continue;
+      // fill it in with initial values; we may correct later
+      if (filter && !filter(oid, oid))
+	continue;
 
-    oids->push_back(oid);
+      oids->push_back(oid);
+    }
+  } catch (const std::system_error& e) {
+    ldpp_dout(dpp, 1) << "rgw_list_pool: Failed iterating pool "
+		      << ioctx.get_pool_name() << " with error "
+		      << e.what() << dendl;
+    return ceph::from_error_code(e.code());
   }
 
   marker = iter.get_cursor().to_str();
