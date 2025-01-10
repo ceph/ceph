@@ -1189,13 +1189,12 @@ ReplicatedRecoveryBackend::prep_push_target(
   bool clear_omap,
   ObjectStore::Transaction* t,
   const map<string, bufferlist, less<>>& attrs,
-  bufferlist&& omap_header)
+  bufferlist omap_header)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::prep_push_target);
   if (!first) {
-    return seastar::make_ready_future<hobject_t>(
-      get_temp_recovery_object(recovery_info.soid,
-                               recovery_info.version));
+    co_return get_temp_recovery_object(recovery_info.soid,
+				       recovery_info.version);
   }
 
   ghobject_t target_oid;
@@ -1209,6 +1208,7 @@ ReplicatedRecoveryBackend::prep_push_target(
 	     pg, target_oid);
     add_temp_obj(target_oid.hobj);
   }
+
   // create a new object
   if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
@@ -1220,6 +1220,7 @@ ReplicatedRecoveryBackend::prep_push_target(
                       oi.expected_write_size,
                       oi.alloc_hint_flags);
   }
+
   if (complete) {
     // remove xattr and update later if overwrite on original object
     t->rmattrs(coll->get_cid(), target_oid);
@@ -1233,29 +1234,30 @@ ReplicatedRecoveryBackend::prep_push_target(
     t->omap_setheader(coll->get_cid(), target_oid, omap_header);
   }
   if (complete || !recovery_info.object_exist) {
-    return seastar::make_ready_future<hobject_t>(target_oid.hobj);
+    co_return target_oid.hobj;
   }
+
   // clone overlap content in local object if using a new object
-  return interruptor::make_interruptible(store->stat(coll, ghobject_t(recovery_info.soid)))
-  .then_interruptible(
-    [FNAME, this, &recovery_info, t, target_oid] (auto st) {
-    // TODO: pg num bytes counting
-    uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
-    interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
-    if (local_size) {
-      local_intervals_included.insert(0, local_size);
-      local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
-      local_intervals_included.subtract(local_intervals_excluded);
-    }
-    for (auto [off, len] : local_intervals_included) {
-      DEBUGDPP("clone_range {} {}~{}",
-	       pg, recovery_info.soid, off, len);
-      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
-                     target_oid, off, len, off);
-    }
-    return seastar::make_ready_future<hobject_t>(target_oid.hobj);
-  });
+  auto st = co_await interruptor::make_interruptible(
+    store->stat(coll, ghobject_t(recovery_info.soid)));
+
+  // TODO: pg num bytes counting
+  uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
+  interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
+  if (local_size) {
+    local_intervals_included.insert(0, local_size);
+    local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
+    local_intervals_included.subtract(local_intervals_excluded);
+  }
+  for (auto [off, len] : local_intervals_included) {
+    DEBUGDPP("clone_range {} {}~{}",
+	     pg, recovery_info.soid, off, len);
+    t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
+		   target_oid, off, len, off);
+  }
+  co_return target_oid.hobj;
 }
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::submit_push_data(
   const ObjectRecoveryInfo &recovery_info,

@@ -178,7 +178,7 @@ private:
     bool clear_omap,
     ObjectStore::Transaction* t,
     const std::map<std::string, bufferlist, std::less<>> &attrs,
-    bufferlist&& omap_header);
+    bufferlist omap_header);
   using interruptor = crimson::interruptible::interruptor<
     crimson::osd::IOInterruptCondition>;
 };
