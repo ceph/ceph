@@ -12,5 +12,13 @@
     (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadJoinAuth($event)"
   >
+    <div class="table-actions">
+      <cd-table-actions [permission]="permission"
+                        [selection]="selection"
+                        class="btn-group"
+                        id="join_auth-actions"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
   </cd-table>
 </ng-container>

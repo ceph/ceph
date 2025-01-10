@@ -12,5 +12,13 @@
     (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadUsersGroups($event)"
   >
-  </cd-table>
+      <div class="table-actions">
+        <cd-table-actions [permission]="permission"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="usersgroups-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
   </ng-container>

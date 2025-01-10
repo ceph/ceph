@@ -14,12 +14,19 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
-import { UsersGroups } from '../smb.model';
+import { SMBUsersgroups } from '../smb.model';
+import { Router } from '@angular/router';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+
+const BASE_URL = 'cephfs/smb/usersgroups'
 
 @Component({
   selector: 'cd-smb-users-list',
   templateUrl: './smb-usersgroups-list.component.html',
-  styleUrls: ['./smb-usersgroups-list.component.scss']
+  styleUrls: ['./smb-usersgroups-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class SmbUsersgroupsListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
@@ -29,10 +36,13 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
 
-  usersGroups$: Observable<UsersGroups[]>;
-  subject$ = new BehaviorSubject<UsersGroups[]>([]);
+  usersGroups$: Observable<SMBUsersgroups[]>;
+  subject$ = new BehaviorSubject<SMBUsersgroups[]>([]);
+  selection: CdTableSelection = new CdTableSelection();
 
   constructor(
+    private router: Router,
+    private urlBuilder: URLBuilderService,
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService
@@ -50,6 +60,23 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       }
     ];
 
+    this.tableActions = [
+      {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () =>
+          this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().auth_id))])
+      }
+    ];
+
     this.usersGroups$ = this.subject$.pipe(
       switchMap(() =>
         this.smbService.listUsersGroups().pipe(
@@ -64,5 +91,9 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
 
   loadUsersGroups() {
     this.subject$.next([]);
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 }

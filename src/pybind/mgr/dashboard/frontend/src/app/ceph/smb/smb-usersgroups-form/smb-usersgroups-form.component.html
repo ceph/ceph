@@ -1,0 +1,139 @@
+<div>
+    <form name="form"
+          #formDir="ngForm"
+          [formGroup]="form"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+      </div>
+
+      <!-- Users Groups Id -->
+      <div class="form-item">
+         <cds-text-label
+           for="users_groups_id"
+           i18n
+           helperText="Unique users groups identifier"
+           i18n-helperText
+           cdRequiredField="Users Groups Id"
+           [invalid]="form.controls.users_groups_id.invalid && form.controls.users_groups_id.dirty"
+           [invalidText]="usersgroupsError"
+           >Users Groups Id
+           <input
+             cdsText
+             type="text"
+             id="users_groups_id"
+             name="users_groups_id"
+             formControlName="users_groups_id"
+             [invalid]="form.controls.users_groups_id.invalid && form.controls.users_groups_id.dirty"
+           />
+         </cds-text-label>
+         <ng-template #usersgroupsError>
+           <span
+             class="invalid-feedback"
+             *ngIf="form.showError('users_groups_id', form, 'required')"
+             i18n
+             >This field is required.</span
+           >
+         </ng-template>
+      </div>
+
+
+      <ng-container formArrayName="users"
+      *ngFor="let _ of users.controls; index as i">
+        <div
+           [formGroupName]="i"
+        >
+        <div
+          cdsRow
+          class="form-item form-item-append"
+        >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 7 }"
+      >
+        <input
+            cdsText
+            type="text"
+            placeholder="Name"
+            label="Name"
+            formControlName="name"
+            [invalid]="
+              form.controls['users'].controls[i].controls.name.invalid &&
+              form.controls['users'].dirty
+            "
+            [invalidText]="refError"
+            modal-primary-focus
+            i18n
+          />
+          <ng-template #refError>
+            <span
+              class="invalid-feedback"
+              *ngIf="form.showError('users[i]', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+        <div cdsCol
+             [columnNumbers]="{ lg: 7 }">
+        <input
+            cdsText
+            type="password"
+            label="Password"
+            formControlName="password"
+            [invalid]="
+              form.controls['users'].controls[i].controls.password.invalid &&
+              form.controls['users'].dirty
+            "
+            [invalidText]="refError"
+            modal-primary-focus
+            i18n
+          />
+          <ng-template #refError>
+            <span
+              class="invalid-feedback"
+              *ngIf="form.showError('users[i]', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+        </div>
+      <div cdsCol
+             [columnNumbers]="{ lg: 1 }"
+             class="item-action-btn">
+          <cds-icon-button
+            kind="tertiary"
+            *ngIf="i > 0"
+            size="sm"
+            (click)="removeUser(i)"
+          >
+            <svg cdsIcon="trash-can"
+                 size="32"
+                 class="cds--btn__icon"></svg>
+          </cds-icon-button>
+        </div>
+    </div>
+    </ng-container>
+
+    <div class="form-item">
+      <button cdsButton="tertiary"
+              type="button"
+              (click)="addUser()"
+              i18n>
+        Add User
+        <svg cdsIcon="add"
+             size="32"
+             class="cds--btn__icon"
+             icon></svg>
+      </button>
+    </div>
+
+      <cd-form-button-panel
+          (submitActionEvent)="submit()"
+          [form]="form"
+          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+          wrappingClass="text-right"></cd-form-button-panel>
+      </form>
+  </div>

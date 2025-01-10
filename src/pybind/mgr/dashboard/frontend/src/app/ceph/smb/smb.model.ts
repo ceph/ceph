@@ -27,18 +27,16 @@ export interface AuthMode {
   activeDirectory: 'active-directory';
 }
 
-export interface JoinAuth {
-  resource_type: string;
+export interface SMBJoinAuth {
   auth_id: string;
-  intent: 'present' | 'removed';
+  intent?: 'present' | 'removed';
   auth: Auth;
   linked_to_cluster?: string;
 }
 
-export interface UsersGroups {
-  resource_type: string;
+export interface SMBUsersgroups {
   users_groups_id: string;
-  intent: 'present' | 'removed';
+  intent?: 'present' | 'removed';
   values: Value;
   linked_to_cluster?: string;
 }

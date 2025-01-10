@@ -21,6 +21,8 @@ import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.com
 import { SmbUsersgroupsListComponent } from './smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbTabsComponent } from './smb-tabs/smb-tabs.component';
 import { SmbJoinAuthListComponent } from './smb-join-auth-list/smb-join-auth-list.component';
+import { SmbJoinAuthFormComponent } from './smb-join-auth-form/smb-join-auth-form.component';
+import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form/smb-usersgroups-form.component';
 
 @NgModule({
   imports: [
@@ -42,7 +44,9 @@ import { SmbJoinAuthListComponent } from './smb-join-auth-list/smb-join-auth-lis
     SmbClusterListComponent,
     SmbUsersgroupsListComponent,
     SmbTabsComponent,
-    SmbJoinAuthListComponent
+    SmbJoinAuthListComponent,
+    SmbJoinAuthFormComponent,
+    SmbUsersgroupsFormComponent
   ]
 })
 export class SmbModule {
