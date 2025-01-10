@@ -783,113 +783,29 @@ def create_daemon_dirs(
         with write_new(keyring_path, owner=(uid, gid)) as f:
             f.write(keyring)
 
-    if daemon_type in Monitoring.components.keys():
-        config_json = fetch_configs(ctx)
+    daemon_classes = {
+        **{key: Monitoring for key in Monitoring.components.keys()},
+        NFSGanesha.daemon_type: NFSGanesha,
+        CephIscsi.daemon_type: CephIscsi,
+        CephNvmeof.daemon_type: CephNvmeof,
+        HAproxy.daemon_type: HAproxy,
+        Keepalived.daemon_type: Keepalived,
+        CustomContainer.daemon_type: CustomContainer,
+        SNMPGateway.daemon_type: SNMPGateway,
+        MgmtGateway.daemon_type: MgmtGateway,
+        OAuth2Proxy.daemon_type: OAuth2Proxy,
+        NodeProxy.daemon_type: NodeProxy,
+        CephExporter.daemon_type: CephExporter,
+    }
 
-        # Set up directories specific to the monitoring component
-        config_dir = ''
-        data_dir_root = ''
-        if daemon_type == 'prometheus':
-            data_dir_root = ident.data_dir(ctx.data_dir)
-            config_dir = 'etc/prometheus'
-            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
-            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
-            recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
-        elif daemon_type == 'grafana':
-            data_dir_root = ident.data_dir(ctx.data_dir)
-            config_dir = 'etc/grafana'
-            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/dashboards'), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o472)
-            touch(os.path.join(data_dir_root, 'data', 'grafana.db'), uid, gid)
-            recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
-        elif daemon_type == 'alertmanager':
-            data_dir_root = ident.data_dir(ctx.data_dir)
-            config_dir = 'etc/alertmanager'
-            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
-        elif daemon_type == 'promtail':
-            data_dir_root = ident.data_dir(ctx.data_dir)
-            config_dir = 'etc/promtail'
-            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
-        elif daemon_type == 'loki':
-            data_dir_root = ident.data_dir(ctx.data_dir)
-            config_dir = 'etc/loki'
-            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
-            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
-        elif daemon_type == 'node-exporter':
-            data_dir_root = ident.data_dir(ctx.data_dir)
-            config_dir = 'etc/node-exporter'
-            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
-            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
-
-        # populate the config directory for the component from the config-json
-        if 'files' in config_json:
-            for fname in config_json['files']:
-                # work around mypy wierdness where it thinks `str`s aren't Anys
-                # when used for dictionary values! feels like possibly a mypy bug?!
-                cfg = cast(Dict[str, Any], config_json['files'])
-                content = dict_get_join(cfg, fname)
-                if os.path.isabs(fname):
-                    fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
-                else:
-                    fpath = os.path.join(data_dir_root, config_dir, fname)
-                with write_new(fpath, owner=(uid, gid), encoding='utf-8') as f:
-                    f.write(content)
-
-    elif daemon_type == NFSGanesha.daemon_type:
-        nfs_ganesha = NFSGanesha.init(ctx, fsid, ident.daemon_id)
-        nfs_ganesha.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == CephIscsi.daemon_type:
-        ceph_iscsi = CephIscsi.init(ctx, fsid, ident.daemon_id)
-        ceph_iscsi.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == CephNvmeof.daemon_type:
-        ceph_nvmeof = CephNvmeof.init(ctx, fsid, ident.daemon_id)
-        ceph_nvmeof.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.init(ctx, fsid, ident.daemon_id)
-        haproxy.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == Keepalived.daemon_type:
-        keepalived = Keepalived.init(ctx, fsid, ident.daemon_id)
-        keepalived.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, fsid, ident.daemon_id)
-        cc.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == SNMPGateway.daemon_type:
-        sg = SNMPGateway.init(ctx, fsid, ident.daemon_id)
-        sg.create_daemon_conf()
-
-    elif daemon_type == MgmtGateway.daemon_type:
-        cg = MgmtGateway.init(ctx, fsid, ident.daemon_id)
-        cg.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == OAuth2Proxy.daemon_type:
-        co = OAuth2Proxy.init(ctx, fsid, ident.daemon_id)
-        co.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == NodeProxy.daemon_type:
-        node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
-        node_proxy.create_daemon_dirs(data_dir, uid, gid)
-
-    elif daemon_type == CephExporter.daemon_type:
-        ceph_exporter = CephExporter.init(ctx, fsid, ident.daemon_id)
-        ceph_exporter.create_daemon_dirs(data_dir, uid, gid)
-
+    if daemon_type in daemon_classes:
+        daemon_class = daemon_classes[daemon_type]
+        daemon_instance = daemon_class.init(ctx, fsid, ident.daemon_id)
+        daemon_instance.create_daemon_dirs(data_dir, uid, gid)
     else:
         daemon = daemon_form_create(ctx, ident)
         if isinstance(daemon, ContainerDaemonForm):
-            daemon.prepare_data_dir(data_dir, uid, gid)
+            daemon.create_daemon_dirs(data_dir, uid, gid)
 
     _write_custom_conf_files(ctx, ident, uid, gid)
 

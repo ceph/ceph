@@ -1,6 +1,6 @@
 import os
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast, Any
 
 from ..call_wrappers import call, CallVerbosity
 from ceph.cephadm.images import DefaultImages
@@ -17,7 +17,15 @@ from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
 from ..net_utils import get_fqdn, get_hostname, get_ip_addresses, wrap_ipv6
-
+from cephadmlib.file_utils import (
+    makedirs,
+    recursive_chown,
+    touch,
+    write_new,
+)
+from cephadmlib.data_utils import (
+    dict_get_join,
+)
 
 @register_daemon_form
 class Monitoring(ContainerDaemonForm):
@@ -385,6 +393,68 @@ class Monitoring(ContainerDaemonForm):
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         args.extend(self.get_daemon_args())
+
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+
+        ident = self.identity
+        daemon_type = self.identity.daemon_type
+        config_json = fetch_configs(self.ctx)
+
+        # Set up directories specific to the monitoring component
+        config_dir = ''
+        data_dir_root = ''
+        if daemon_type == 'prometheus':
+            data_dir_root = ident.data_dir(self.ctx.data_dir)
+            config_dir = 'etc/prometheus'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
+            recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
+        elif daemon_type == 'grafana':
+            data_dir_root = ident.data_dir(self.ctx.data_dir)
+            config_dir = 'etc/grafana'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/datasources'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'provisioning/dashboards'), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o472)
+            touch(os.path.join(data_dir_root, 'data', 'grafana.db'), uid, gid)
+            recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
+        elif daemon_type == 'alertmanager':
+            data_dir_root = ident.data_dir(self.ctx.data_dir)
+            config_dir = 'etc/alertmanager'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'promtail':
+            data_dir_root = ident.data_dir(self.ctx.data_dir)
+            config_dir = 'etc/promtail'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'loki':
+            data_dir_root = ident.data_dir(self.ctx.data_dir)
+            config_dir = 'etc/loki'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'node-exporter':
+            data_dir_root = ident.data_dir(self.ctx.data_dir)
+            config_dir = 'etc/node-exporter'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
+
+        # populate the config directory for the component from the config-json
+        if 'files' in config_json:
+            for fname in config_json['files']:
+                # work around mypy wierdness where it thinks `str`s aren't Anys
+                # when used for dictionary values! feels like possibly a mypy bug?!
+                cfg = cast(Dict[str, Any], config_json['files'])
+                content = dict_get_join(cfg, fname)
+                if os.path.isabs(fname):
+                    fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
+                else:
+                    fpath = os.path.join(data_dir_root, config_dir, fname)
+                with write_new(fpath, owner=(uid, gid), encoding='utf-8') as f:
+                    f.write(content)
 
     def default_entrypoint(self) -> str:
         return ''

@@ -689,7 +689,7 @@ class SMB(ContainerDaemonForm):
             if not any(ep.port == self.metrics_port for ep in endpoints):
                 endpoints.append(EndPoint('0.0.0.0', self.metrics_port))
 
-    def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
         ddir = pathlib.Path(data_dir)
         etc_samba_ctr = ddir / 'etc-samba-container'
