@@ -81,7 +81,7 @@ Mon
 - [x] mon/OSDMonitor.cc `preprocess_boot`: adjust "disallow boot of " condition to disallow X if `require_osd_release` < X-2.
 - [x] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
 - [x] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
-- [ ] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
+- [x] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
 
 OSDMap
 ------
