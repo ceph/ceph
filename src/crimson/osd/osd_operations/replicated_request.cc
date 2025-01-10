@@ -107,10 +107,11 @@ seastar::future<> RepRequest::with_pg(
     return with_pg_interruptible(pg);
   }, [](std::exception_ptr) {
     return seastar::now();
-  }, pg, pg->get_osdmap_epoch()).finally([this, ref=std::move(ref)]() mutable {
+  }, pg, pg->get_osdmap_epoch()
+  ).finally([this, pg, ref=std::move(ref)]() mutable {
     logger().debug("{}: exit", *this);
     return handle.complete(
-    ).finally([ref=std::move(ref)] {});
+    ).finally([ref=std::move(ref), pg=std::move(pg)] {});
   });
 }
 
