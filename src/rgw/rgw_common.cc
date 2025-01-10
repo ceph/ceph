@@ -3182,6 +3182,7 @@ void rgw_obj_key::dump(Formatter *f) const
   encode_json("name", name, f);
   encode_json("instance", instance, f);
   encode_json("ns", ns, f);
+  encode_json("snap_id", (int64_t)snap_id, f);
 }
 
 void rgw_obj_key::decode_json(JSONObj *obj)
@@ -3189,6 +3190,8 @@ void rgw_obj_key::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("instance", instance, obj);
   JSONDecoder::decode_json("ns", ns, obj);
+  static int64_t nosnap = (int64_t)RGW_BUCKET_SNAP_NOSNAP;
+  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, nosnap, obj);
 }
 
 void rgw_raw_obj::dump(Formatter *f) const
