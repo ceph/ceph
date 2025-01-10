@@ -39,12 +39,14 @@ class TestRgwUserAccountsController(TestCase):
         mock_create_account.return_value = mockReturnVal
 
         controller = RgwUserAccountsController()
-        result = controller.create(account_name='test_account', account_id='RGW18661471562806836',
-                                   email='test@example.com')
+        result = controller.create(account_name='test_account', tenant='',
+                                   email='test@example.com', max_buckets=1000,
+                                   max_users=1000, max_roles=1000, max_group=1000,
+                                   max_access_keys=4)
 
         # Check if the account creation method was called with the correct parameters
-        mock_create_account.assert_called_with('test_account', 'RGW18661471562806836',
-                                               'test@example.com')
+        mock_create_account.assert_called_with('test_account', '', 'test@example.com',
+                                               1000, 1000, 1000, 1000, 4)
         # Check the returned result
         self.assertEqual(result, mockReturnVal)
 
@@ -207,10 +209,12 @@ class TestRgwUserAccountsController(TestCase):
 
         controller = RgwUserAccountsController()
         result = controller.set(account_id='RGW59378973811515857', account_name='new_account_name',
-                                email='new_email@example.com')
+                                email='new_email@example.com', tenant='', max_buckets=1000,
+                                max_users=1000, max_roles=1000, max_group=1000, max_access_keys=4)
 
         mock_modify_account.assert_called_with('RGW59378973811515857', 'new_account_name',
-                                               'new_email@example.com')
+                                               'new_email@example.com', '', 1000, 1000, 1000,
+                                               1000, 4)
 
         self.assertEqual(result, mock_return_value)
 
@@ -246,9 +250,9 @@ class TestRgwUserAccountsController(TestCase):
 
         controller = RgwUserAccountsController()
         result = controller.set_quota(quota_type='account', account_id='RGW11111111111111111',
-                                      max_size='10GB', max_objects='1000')
+                                      max_size='10GB', max_objects='1000', enabled=True)
 
-        mock_set_quota.assert_called_with('account', 'RGW11111111111111111', '10GB', '1000')
+        mock_set_quota.assert_called_with('account', 'RGW11111111111111111', '10GB', '1000', True)
 
         self.assertEqual(result, mock_return_value)
 

@@ -94,15 +94,15 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
   mapValuesForMode(value: any, formControlName: string) {
     switch (value[formControlName]) {
       case -1:
-        value[`${formControlName}_mode`] = -1;
+        value[`${formControlName}_mode`] = '-1';
         value[formControlName] = '';
         break;
       case 0:
-        value[`${formControlName}_mode`] = 0;
+        value[`${formControlName}_mode`] = '0';
         value[formControlName] = '';
         break;
       default:
-        value[`${formControlName}_mode`] = 1;
+        value[`${formControlName}_mode`] = '1';
         break;
     }
   }
@@ -113,30 +113,50 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
       tenant: [''],
       name: ['', Validators.required],
       email: ['', CdValidators.email],
-      max_users_mode: [1],
+      max_users_mode: ['1'],
       max_users: [
         1000,
-        [CdValidators.requiredIf({ max_users_mode: '1' }), CdValidators.number(false)]
+        [
+          CdValidators.requiredIf({ max_users_mode: '1' }),
+          CdValidators.number(false),
+          Validators.min(1)
+        ]
       ],
-      max_roles_mode: [1],
+      max_roles_mode: ['1'],
       max_roles: [
         1000,
-        [CdValidators.requiredIf({ max_roles_mode: '1' }), CdValidators.number(false)]
+        [
+          CdValidators.requiredIf({ max_roles_mode: '1' }),
+          CdValidators.number(false),
+          Validators.min(1)
+        ]
       ],
-      max_groups_mode: [1],
+      max_groups_mode: ['1'],
       max_groups: [
         1000,
-        [CdValidators.requiredIf({ max_groups_mode: '1' }), CdValidators.number(false)]
+        [
+          CdValidators.requiredIf({ max_groups_mode: '1' }),
+          CdValidators.number(false),
+          Validators.min(1)
+        ]
       ],
-      max_access_keys_mode: [1],
+      max_access_keys_mode: ['1'],
       max_access_keys: [
         4,
-        [CdValidators.requiredIf({ max_access_keys_mode: '1' }), CdValidators.number(false)]
+        [
+          CdValidators.requiredIf({ max_access_keys_mode: '1' }),
+          CdValidators.number(false),
+          Validators.min(1)
+        ]
       ],
-      max_buckets_mode: [1],
+      max_buckets_mode: ['1'],
       max_buckets: [
         1000,
-        [CdValidators.requiredIf({ max_buckets_mode: '1' }), CdValidators.number(false)]
+        [
+          CdValidators.requiredIf({ max_buckets_mode: '1' }),
+          CdValidators.number(false),
+          Validators.min(1)
+        ]
       ],
       account_quota_enabled: [false],
       account_quota_max_size_unlimited: [true],
@@ -307,7 +327,7 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
         this.accountForm.getValue(`${quotaType}_quota_max_size`)
       );
       // Finally convert the value to KiB.
-      result['max_size'] = (bytes / 1024).toFixed(0) as any;
+      result['max_size'] = bytes.toFixed(0) as any;
     }
     if (!this.accountForm.getValue(`${quotaType}_quota_max_objects_unlimited`)) {
       result['max_objects'] = `${this.accountForm.getValue(`${quotaType}_quota_max_objects`)}`;
@@ -353,5 +373,18 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
     return formvalue[`${formControlName}_mode`] == 1
       ? formvalue[formControlName]
       : formvalue[`${formControlName}_mode`];
+  }
+
+  getHelperTextForMode(formControl: string) {
+    const resourceName =
+      formControl.split('_').length > 3
+        ? formControl.split('_')[1] + ' ' + formControl.split('_')[2]
+        : formControl.split('_')[1];
+    if (this.accountForm.getValue(formControl) == -1) {
+      return `${resourceName[0].toUpperCase() + resourceName.slice(1, -1)} creation is disabled.`;
+    } else if (this.accountForm.getValue(formControl) == 0) {
+      return `Unlimited ${resourceName.slice(0, -1)} creation allowed.`;
+    }
+    return '';
   }
 }

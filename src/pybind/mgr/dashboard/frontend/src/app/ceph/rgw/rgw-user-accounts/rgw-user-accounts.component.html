@@ -2,8 +2,7 @@
 <legend i18n>
   User Accounts
   <cd-help-text>
-    This feature allows administrators to assign unique credentials to individual users or applications,
-    ensuring granular access control and improved security across the cluster.
+    Administrators can assign unique credentials to users or applications, enabling granular access control and enhancing security across the cluster.
   </cd-help-text>
 </legend>
 <cd-table #table
@@ -16,7 +15,8 @@
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)"
           identifier="id"
-          (fetchData)="getAccountsList($event)">
+          (fetchData)="getAccountsList($event)"
+          [status]="tableStatus">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
                     [selection]="selection"
