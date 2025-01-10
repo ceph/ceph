@@ -1264,72 +1264,62 @@ ReplicatedRecoveryBackend::submit_push_data(
   bool first,
   bool complete,
   bool clear_omap,
-  interval_set<uint64_t>&& data_zeros,
-  interval_set<uint64_t>&& intervals_included,
-  bufferlist&& data_included,
-  bufferlist&& omap_header,
+  interval_set<uint64_t> data_zeros,
+  interval_set<uint64_t> intervals_included,
+  bufferlist data_included,
+  bufferlist omap_header,
   const map<string, bufferlist, less<>> &attrs,
-  map<string, bufferlist>&& omap_entries,
+  map<string, bufferlist> omap_entries,
   ObjectStore::Transaction *t)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::submit_push_data);
   DEBUGDPP("", pg);
-  return prep_push_target(recovery_info, first, complete,
-                          clear_omap, t, attrs,
-                          std::move(omap_header)).then_interruptible(
-    [FNAME, this,
-     &recovery_info, t,
-     first, complete,
-     data_zeros=std::move(data_zeros),
-     intervals_included=std::move(intervals_included),
-     data_included=std::move(data_included),
-     omap_entries=std::move(omap_entries),
-     &attrs](auto target_oid) mutable {
+  auto target_oid  = co_await prep_push_target(
+    recovery_info, first, complete,
+    clear_omap, t, attrs,
+    std::move(omap_header));
 
-    uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
-    // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
-    if (!data_zeros.empty()) {
-      data_zeros.intersection_of(recovery_info.copy_subset);
-      assert(intervals_included.subset_of(data_zeros));
-      data_zeros.subtract(intervals_included);
+  uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
+  // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
+  if (!data_zeros.empty()) {
+    data_zeros.intersection_of(recovery_info.copy_subset);
+    assert(intervals_included.subset_of(data_zeros));
+    data_zeros.subtract(intervals_included);
 
-      DEBUGDPP("recovering object {} copy_subset: {} "
-	       "intervals_included: {} data_zeros: {}",
-	       pg, recovery_info.soid, recovery_info.copy_subset,
-	       intervals_included, data_zeros);
+    DEBUGDPP("recovering object {} copy_subset: {} "
+	     "intervals_included: {} data_zeros: {}",
+	     pg, recovery_info.soid, recovery_info.copy_subset,
+	     intervals_included, data_zeros);
 
-      for (auto [start, len] : data_zeros) {
-        t->zero(coll->get_cid(), ghobject_t(target_oid), start, len);
-      }
+    for (auto [start, len] : data_zeros) {
+      t->zero(coll->get_cid(), ghobject_t(target_oid), start, len);
     }
-    uint64_t off = 0;
-    for (auto [start, len] : intervals_included) {
-      bufferlist bit;
-      bit.substr_of(data_included, off, len);
-      t->write(coll->get_cid(), ghobject_t(target_oid),
-	       start, len, bit, fadvise_flags);
-      off += len;
-    }
+  }
+  uint64_t off = 0;
+  for (auto [start, len] : intervals_included) {
+    bufferlist bit;
+    bit.substr_of(data_included, off, len);
+    t->write(coll->get_cid(), ghobject_t(target_oid),
+	     start, len, bit, fadvise_flags);
+    off += len;
+  }
 
-    if (!omap_entries.empty())
-      t->omap_setkeys(coll->get_cid(), ghobject_t(target_oid), omap_entries);
-    if (!attrs.empty())
-      t->setattrs(coll->get_cid(), ghobject_t(target_oid), attrs);
+  if (!omap_entries.empty())
+    t->omap_setkeys(coll->get_cid(), ghobject_t(target_oid), omap_entries);
+  if (!attrs.empty())
+    t->setattrs(coll->get_cid(), ghobject_t(target_oid), attrs);
 
-    if (complete) {
-      if (!first) {
-	DEBUGDPP("Removing oid {} from the temp collection",
-		 pg, target_oid);
-	clear_temp_obj(target_oid);
-	t->remove(coll->get_cid(), ghobject_t(recovery_info.soid));
-	t->collection_move_rename(coll->get_cid(), ghobject_t(target_oid),
-				  coll->get_cid(), ghobject_t(recovery_info.soid));
-      }
-      submit_push_complete(recovery_info, t);
+  if (complete) {
+    if (!first) {
+      DEBUGDPP("Removing oid {} from the temp collection",
+	       pg, target_oid);
+      clear_temp_obj(target_oid);
+      t->remove(coll->get_cid(), ghobject_t(recovery_info.soid));
+      t->collection_move_rename(coll->get_cid(), ghobject_t(target_oid),
+				coll->get_cid(), ghobject_t(recovery_info.soid));
     }
-    DEBUGDPP("done", pg);
-    return seastar::make_ready_future<>();
-  });
+    submit_push_complete(recovery_info, t);
+  }
 }
 
 void ReplicatedRecoveryBackend::submit_push_complete(

@@ -93,12 +93,12 @@ protected:
     bool first,
     bool complete,
     bool clear_omap,
-    interval_set<uint64_t>&& data_zeros,
-    interval_set<uint64_t>&& intervals_included,
-    ceph::bufferlist&& data_included,
-    ceph::bufferlist&& omap_header,
+    interval_set<uint64_t> data_zeros,
+    interval_set<uint64_t> intervals_included,
+    ceph::bufferlist data_included,
+    ceph::bufferlist omap_header,
     const std::map<std::string, bufferlist, std::less<>> &attrs,
-    std::map<std::string, bufferlist>&& omap_entries,
+    std::map<std::string, bufferlist> omap_entries,
     ceph::os::Transaction *t);
   void submit_push_complete(
     const ObjectRecoveryInfo &recovery_info,
