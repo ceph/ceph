@@ -51,6 +51,7 @@ import {
 } from 'carbon-components-angular';
 
 import AddIcon from '@carbon/icons/es/add/32';
+import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
 
@@ -109,6 +110,6 @@ import Trash from '@carbon/icons/es/trash-can/32';
 })
 export class CephfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([AddIcon, Close, Trash]);
+    this.iconService.registerAll([AddIcon, LaunchIcon, Close, Trash]);
   }
 }

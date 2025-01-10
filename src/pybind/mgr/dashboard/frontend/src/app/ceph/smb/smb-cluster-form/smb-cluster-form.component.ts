@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { forkJoin, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -12,7 +12,9 @@ import {
   DomainSettings,
   JoinSource,
   CLUSTER_RESOURCE,
-  ClusterRequestModel
+  ClusterRequestModel,
+  SMBUsersGroups,
+  PublicAddress
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -31,6 +33,7 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
+import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 
 @Component({
   selector: 'cd-smb-cluster-form',
@@ -43,6 +46,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   hasOrchestrator: boolean;
   orchStatus$: Observable<any>;
   allClustering: string[] = [];
+  CLUSTERING = CLUSTERING;
   selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   action: string;
@@ -50,6 +54,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   icons = Icons;
   domainSettingsObject: DomainSettings;
   modalData$!: Observable<DomainSettings>;
+  usersGroups$: Observable<SMBUsersGroups[]>;
 
   constructor(
     private hostService: HostService,
@@ -59,7 +64,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     private orchService: OrchestratorService,
     private modalService: ModalCdsService,
     private taskWrapperService: TaskWrapperService,
-    private router: Router
+    private router: Router,
+    private cd: ChangeDetectorRef
   ) {
     super();
     this.resource = $localize`Cluster`;
@@ -67,12 +73,12 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
+    this.usersGroups$ = this.smbService.listUsersGroups();
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
       this.domainSettingsObject = data;
       this.smbForm.get('domain_settings').setValue(data?.realm);
     });
     this.createForm();
-
     this.hostsAndLabels$ = forkJoin({
       hosts: this.hostService.getAllHosts(),
       labels: this.hostService.getLabels()
@@ -114,7 +120,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       joinSources: new FormArray([]),
       clustering: new UntypedFormControl(
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
-      )
+      ),
+      public_addrs: new FormArray([])
     });
 
     this.orchService.status().subscribe((status) => {
@@ -148,7 +155,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       }
       // Domain Setting should be optional if authMode is "Users"
     } else if (authMode === AUTHMODE.User) {
-      const control = new FormControl('', Validators.required);
+      const control = new FormControl(null, Validators.required);
       userGroupSettingsControl.push(control);
       domainSettingsControl.setErrors(null);
       domainSettingsControl.clearValidators();
@@ -241,6 +248,14 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       requestModel.cluster_resource.custom_dns = rawFormValue.custom_dns;
     }
 
+    if (rawFormValue.public_addrs?.length > 0) {
+      requestModel.cluster_resource.public_addrs = rawFormValue.public_addrs.map(
+        (publicAddress: PublicAddress) => {
+          return publicAddress.destination ? publicAddress : { address: publicAddress.address };
+        }
+      );
+    }
+
     if (rawFormValue.clustering && rawFormValue.clustering.toLowerCase() !== CLUSTERING.Default) {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
@@ -290,9 +305,17 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     return this.smbForm.get('custom_dns') as FormArray;
   }
 
+  get public_addrs() {
+    return this.smbForm.get('public_addrs') as FormArray;
+  }
+
   addUserGroupSetting() {
-    const control = new FormControl('', Validators.required);
+    const control = new FormControl(null, Validators.required);
     this.joinSources.push(control);
+  }
+
+  navigateCreateUsersGroups() {
+    this.router.navigate([`${USERSGROUPS_URL}/${URLVerbs.CREATE}`]);
   }
 
   addCustomDns() {
@@ -300,11 +323,26 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     this.custom_dns.push(control);
   }
 
+  addPublicAddrs() {
+    const control = this.formBuilder.group({
+      address: ['', Validators.required],
+      destination: ['']
+    });
+    this.public_addrs.push(control);
+  }
+
   removeUserGroupSetting(index: number) {
     this.joinSources.removeAt(index);
+    this.cd.detectChanges();
   }
 
   removeCustomDNS(index: number) {
     this.custom_dns.removeAt(index);
+    this.cd.detectChanges();
+  }
+
+  removePublicAddrs(index: number) {
+    this.public_addrs.removeAt(index);
+    this.cd.detectChanges();
   }
 }
