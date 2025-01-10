@@ -24,14 +24,16 @@ export class RgwUserAccountsDetailsComponent implements OnChanges {
   createDisplayValues(quota_type: string) {
     return {
       Enabled: this.selection[quota_type].enabled ? 'Yes' : 'No',
-      'Maximum Size':
-        this.selection[quota_type].max_size <= -1
+      'Maximum size': this.selection[quota_type].enabled
+        ? this.selection[quota_type].max_size <= -1
           ? 'Unlimited'
-          : this.dimlessBinary.transform(this.selection[quota_type].max_size),
-      'Maximum objects':
-        this.selection[quota_type].max_objects <= -1
+          : this.dimlessBinary.transform(this.selection[quota_type].max_size)
+        : '-',
+      'Maximum objects': this.selection[quota_type].enabled
+        ? this.selection[quota_type].max_objects <= -1
           ? 'Unlimited'
           : this.selection[quota_type].max_objects
+        : '-'
     };
   }
 }

@@ -42,10 +42,10 @@ class RgwAccounts:
         return cls.send_rgw_cmd(get_account_cmd)
 
     @classmethod
-    def create_account(cls, account_name: Optional[str] = None, tenant: str = None,
-                       email: Optional[str] = None, max_buckets: str = None,
-                       max_users: str = None, max_roles: str = None,
-                       max_group: str = None, max_access_keys: str = None):
+    def create_account(cls, account_name: str, tenant: Optional[str] = None,
+                       email: Optional[str] = None, max_buckets: Optional[int] = None,
+                       max_users: Optional[int] = None, max_roles: Optional[int] = None,
+                       max_group: Optional[int] = None, max_access_keys: Optional[int] = None):
         create_accounts_cmd = ['account', 'create']
 
         create_accounts_cmd += cls.get_common_args_list(account_name, email,
@@ -56,11 +56,11 @@ class RgwAccounts:
         return cls.send_rgw_cmd(create_accounts_cmd)
 
     @classmethod
-    def modify_account(cls, account_id: str, account_name: Optional[str] = None,
-                       email: Optional[str] = None, tenant: str = None,
-                       max_buckets: str = None, max_users: str = None,
-                       max_roles: str = None, max_group: str = None,
-                       max_access_keys: str = None):
+    def modify_account(cls, account_id: str, account_name: str,
+                       email: Optional[str] = None, tenant: Optional[str] = None,
+                       max_buckets: Optional[int] = None, max_users: Optional[int] = None,
+                       max_roles: Optional[int] = None, max_group: Optional[int] = None,
+                       max_access_keys: Optional[int] = None):
         modify_accounts_cmd = ['account', 'modify', '--account-id', account_id]
 
         modify_accounts_cmd += cls.get_common_args_list(account_name, email,
@@ -101,11 +101,11 @@ class RgwAccounts:
         return cls.send_rgw_cmd(set_quota_status_cmd)
 
     @classmethod
-    def get_common_args_list(cls, account_name: Optional[str] = None,
-                             email: Optional[str] = None, tenant: str = None,
-                             max_buckets: str = None, max_users: str = None,
-                             max_roles: str = None, max_group: str = None,
-                             max_access_keys: str = None):
+    def get_common_args_list(cls, account_name: str, email: Optional[str] = None,
+                             tenant: Optional[str] = None, max_buckets: Optional[int] = None,
+                             max_users: Optional[int] = None, max_roles: Optional[int] = None,
+                             max_group: Optional[int] = None,
+                             max_access_keys: Optional[int] = None):
         common_cmd_list = []
         if account_name:
             common_cmd_list += ['--account-name', account_name]
