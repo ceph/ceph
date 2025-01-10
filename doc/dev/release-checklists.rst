@@ -74,7 +74,7 @@ Mon
 - [ ] src/test/cli/monmaptool/8.t: update output for monmaptool to X
 - [ ] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
 - [x] qa/standalone/mon/misc bump up `jqfilter='.monmap.features.persistent | length == N'` to `N+1`
-- [ ] mon/MgrMonitor.cc adjust `always_on_modules`
+- [x] mon/MgrMonitor.cc adjust `always_on_modules`
 - [ ] common/options/global.yaml.in define `mon_debug_no_require_X`
 - [ ] common/options/global.yaml.in remove `mon_debug_no_require_X-2`
 - [ ] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
