@@ -171,7 +171,7 @@ function TEST_mon_features() {
     CEPH_ARGS="--fsid=$fsid --auth-supported=none "
     CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
     CEPH_ARGS+="--mon-debug-no-initial-persistent-features "
-    CEPH_ARGS+="--mon-debug-no-require-tentacle"
+    CEPH_ARGS+="--mon-debug-no-require-umbrella"
 
     run_mon $dir a --public-addr $MONA || return 1
     run_mon $dir b --public-addr $MONB || return 1
@@ -204,6 +204,8 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "squid" || return 1
     jqfilter='.features.quorum_mon[]|select(. == "tentacle")'
     jq_success "$jqinput" "$jqfilter" "tentacle" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "umbrella")'
+    jq_success "$jqinput" "$jqfilter" "umbrella" || return 1
 
     # monmap must have no persistent features set, because we
     # don't currently have a quorum made out of all the monitors
@@ -239,6 +241,8 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "squid" || return 1
     jqfilter='.all.supported[] | select(. == "tentacle")'
     jq_success "$jqinput" "$jqfilter" "tentacle" || return 1
+    jqfilter='.all.supported[] | select(. == "umbrella")'
+    jq_success "$jqinput" "$jqfilter" "umbrella" || return 1
 
     # start third monitor
     run_mon $dir c --public-addr $MONC || return 1
@@ -281,7 +285,9 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "squid" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "tentacle")'
     jq_success "$jqinput" "$jqfilter" "tentacle" || return 1
-    jqfilter='.monmap.features.persistent | length == 12'
+    jqfilter='.monmap.features.persistent[]|select(. == "umbrella")'
+    jq_success "$jqinput" "$jqfilter" "tentacle" || return 1
+    jqfilter='.monmap.features.persistent | length == 13'
     jq_success "$jqinput" "$jqfilter" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
