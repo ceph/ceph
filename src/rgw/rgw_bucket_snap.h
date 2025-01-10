@@ -11,6 +11,9 @@
 
 using rgw_bucket_snap_id = uint64_t;
 
+#define RGW_BUCKET_SNAP_NOSNAP ((rgw_bucket_snap_id)-1)
+#define RGW_BUCKET_SNAP_START ((rgw_bucket_snap_id)1)
+
 struct rgw_bucket_snap_info {
   std::string name;
   std::string description;
@@ -61,7 +64,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_snap)
 class RGWBucketSnapMgr
 {
   bool enabled = false;
-  rgw_bucket_snap_id cur_snap;
+  rgw_bucket_snap_id cur_snap = RGW_BUCKET_SNAP_NOSNAP;
 
   std::map<rgw_bucket_snap_id, rgw_bucket_snap> snaps;
 
@@ -98,6 +101,18 @@ public:
 
   const std::map<rgw_bucket_snap_id, rgw_bucket_snap>& get_snaps() const {
     return snaps;
+  }
+
+  bool is_enabled() const {
+    return enabled;
+  }
+
+  void set_enabled(bool flag) {
+    enabled = flag;
+
+    if (enabled && cur_snap == RGW_BUCKET_SNAP_NOSNAP) {
+      cur_snap = RGW_BUCKET_SNAP_START;
+    }
   }
 };
 WRITE_CLASS_ENCODER(RGWBucketSnapMgr)
