@@ -5585,23 +5585,16 @@ int get_zone_ids(const DoutPrefixProvider *dpp,
 int list_remote_buckets(const DoutPrefixProvider *dpp,
 				               rgw::sal::RadosStore* const driver,
                        const rgw_zone_id source_zone,
+                       std::vector<rgw_zone_id> zids,
                        const rgw_bucket& bucket,
                        optional_yield y)
 {
-
-  std::vector<rgw_zone_id> zids;
-  int ret = get_zone_ids(dpp, driver, source_zone, bucket, zids, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 10) << "failed to get remote zones (r=" << ret << ")" << dendl;
-    return ret;
-  }
-
   std::vector<bucket_unordered_list_result> peer_status;
   peer_status.resize(zids.size());
 
   RGWCoroutinesManager crs(driver->ctx(), driver->getRados()->get_cr_registry());
   RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
-  ret = http.start();
+  int ret = http.start();
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
@@ -5617,6 +5610,62 @@ int list_remote_buckets(const DoutPrefixProvider *dpp,
     if (!list_result.entries.empty()) {
       return -ENOTEMPTY;
     }
+  }
+  return 0;
+}
+
+int check_remote_bucket_empty(const DoutPrefixProvider* dpp,
+                              rgw::sal::RadosStore* const driver,
+                              const rgw_zone_id source_zone,
+                              RGWBucketInfo& bucket_info,
+                              std::map<rgw_zone_id, RGWZone> zones,
+                              const rgw_sync_policy_info* zg_sync_policy,
+                              optional_yield y)
+{
+  std::vector<rgw_zone_id> zids;
+  int ret = get_zone_ids(dpp, driver, source_zone, bucket_info.bucket, zids, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << "failed to get remote zones (r=" << ret << ")" << dendl;
+    return ret;
+  }
+
+  /* when sync policy is configured to be unidirectional or some zones
+     opted out of sync or due to object filtering with prefix or tags,
+     the source and destination buckets can diverge. check for all such
+     cases, list the buckets in those zones and return enotempty */
+
+  bool is_zg_policy_directional = false;
+  if (zg_sync_policy) {
+    is_zg_policy_directional = zg_sync_policy->is_directional();
+  }
+
+  bool is_bucket_policy_directional = false;
+  bool bucket_has_filter = false;
+  auto bucket_sync_policy = bucket_info.sync_policy;
+  if (bucket_sync_policy) {
+    is_bucket_policy_directional = bucket_sync_policy->is_directional();
+    bucket_has_filter = bucket_sync_policy->has_filter();
+  }
+
+  if (is_zg_policy_directional || is_bucket_policy_directional ||
+      bucket_has_filter) {
+    ldpp_dout(dpp, 10) << "sync policy exists. listing remote zones" << dendl;
+    return list_remote_buckets(dpp, driver, source_zone, zids, bucket_info.bucket, y);
+  }
+
+  std::vector<rgw_zone_id> opt_out_zones; // zones not participating in sync
+  for (const auto& z : zones) {
+    if (std::find(zids.begin(), zids.end(), z.first) == zids.end()) {
+      if (z.first == source_zone) {
+        continue;
+      }
+      opt_out_zones.push_back(z.first);
+    }
+  }
+
+  if (!opt_out_zones.empty()) {
+    ldpp_dout(dpp, 10) << "sync policy exists. listing remote zones" << dendl;
+    return list_remote_buckets(dpp, driver, source_zone, opt_out_zones, bucket_info.bucket, y);
   }
   return 0;
 }
@@ -5642,30 +5691,19 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
     }
   }
 
-  // delete_bucket checks for objects in the bucket on other zones,
-  // if there is bucket sync policy configured, by doing unordered
-  // listing with max_key=1. if objects are found, don't delete the bucket.
+  // check if asymmetric replication policy exists either at zonegroup or bucket level.
+  // if objects still exist in remote zones, don't delete the bucket.
   if (svc.zone->is_syncing_bucket_meta()) {
-    // check if asymmetric replication policy exists either at zonegroup or bucket level
-    auto zg_sync_policy = svc.zone->get_zonegroup().sync_policy;
-    bool is_zg_policy_directional = zg_sync_policy.is_directional();
-
-    bool is_bucket_policy_directional = false;
-    auto bucket_sync_policy = bucket_info.sync_policy;
-    if (bucket_sync_policy) {
-      is_bucket_policy_directional = bucket_sync_policy->is_directional();
-    }
-    if (is_zg_policy_directional || is_bucket_policy_directional) {
-      ldpp_dout(dpp, 10) << "sync policy exists. listing remote zones" << dendl;
-      const rgw_zone_id source_zone = svc.zone->get_zone_params().get_id();
-      r = list_remote_buckets(dpp, driver, source_zone, bucket, y);
-      if (r == -ENOTEMPTY) {
-        ldpp_dout(dpp, 0) << "ERROR: cannot delete bucket. objects exist in the bucket on another zone " << dendl;
-        return r;
-      } else if (r < 0) {
-        ldpp_dout(dpp, 10) << "failed to list remote buckets" << dendl;
-        // don't return.
-      }
+    const rgw_zone_id source_zone = svc.zone->get_zone_params().get_id();
+    int r = check_remote_bucket_empty(dpp, driver, source_zone, bucket_info,
+                                      svc.zone->get_zonegroup().zones,
+                                      &svc.zone->get_zonegroup().sync_policy, y);
+    if (r == -ENOTEMPTY) {
+      ldpp_dout(dpp, 0) << "ERROR: cannot delete bucket. objects exist in the bucket on another zone " << dendl;
+      return r;
+    } else if (r < 0) {
+      ldpp_dout(dpp, 10) << "failed to list remote buckets" << dendl;
+      // don't return.
     }
   }
 
