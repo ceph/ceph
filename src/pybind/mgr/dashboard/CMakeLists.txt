@@ -25,9 +25,12 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
   add_custom_target(mgr-dashboard-services-deps
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway_pb2.py ${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway_pb2_grpc.py
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-  add_custom_target(default
+
+  add_custom_target(mgr-dashboard-services-build
     ALL
     DEPENDS mgr-dashboard-services-deps)
+
+  add_dependencies(tests mgr-dashboard-services-build)
 
 else()
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/frontend/dist)
