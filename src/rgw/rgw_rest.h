@@ -5,6 +5,8 @@
 
 #define TIME_BUF_SIZE 128
 
+#include <fmt/format.h>
+
 #include <string_view>
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
@@ -840,11 +842,7 @@ template <class... Args>
 inline void dump_header_quoted(req_state* s,
 			       const std::string_view& name,
 			       const std::string_view& val) {
-  /* We need two extra bytes for quotes. */
-  char qvalbuf[val.size() + 2 + 1];
-  const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
-                            static_cast<int>(val.length()), val.data());
-  return dump_header(s, name, std::string_view(qvalbuf, len));
+  return dump_header(s, name, fmt::format("\"{}\"", val));
 }
 
 template <class ValueT>
