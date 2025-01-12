@@ -161,6 +161,7 @@ set(librbd_internal_srcs
   mirror/snapshot/CreatePrimaryRequest.cc
   mirror/snapshot/DemoteRequest.cc
   mirror/snapshot/GetImageStateRequest.cc
+  mirror/snapshot/GroupCreatePrimaryRequest.cc
   mirror/snapshot/GroupGetInfoRequest.cc
   mirror/snapshot/GroupPrepareImagesRequest.cc
   mirror/snapshot/ImageMeta.cc
