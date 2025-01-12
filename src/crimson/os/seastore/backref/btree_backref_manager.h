@@ -15,7 +15,7 @@ public:
     : BackrefMapping(ctx) {}
   BtreeBackrefMapping(
     op_context_t<paddr_t> ctx,
-    CachedExtentRef parent,
+    BackrefLeafNodeRef parent,
     uint16_t pos,
     backref_map_val_t &val,
     backref_node_meta_t &&meta)

@@ -5,6 +5,10 @@
 
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 
+namespace crimson::os::seastore {
+class LogicalChildNode;
+}
+
 namespace crimson::os::seastore::backref {
 
 using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
@@ -86,6 +90,7 @@ class BackrefInternalNode
     check_capacity(BACKREF_NODE_SIZE),
     "INTERNAL_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
+  using key_type = paddr_t;
   template <typename... T>
   BackrefInternalNode(T&&... t) :
     FixedKVInternalNode(std::forward<T>(t)...) {}
@@ -104,12 +109,15 @@ class BackrefLeafNode
       paddr_t, paddr_le_t,
       backref_map_val_t, backref_map_val_le_t,
       BACKREF_NODE_SIZE,
+      BackrefInternalNode,
       BackrefLeafNode,
+      LogicalChildNode,
       false> {
   static_assert(
     check_capacity(BACKREF_NODE_SIZE),
     "LEAF_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
+  using key_type = paddr_t;
   template <typename... T>
   BackrefLeafNode(T&&... t) :
     FixedKVLeafNode(std::forward<T>(t)...) {}
@@ -124,7 +132,7 @@ public:
     const_iterator iter,
     paddr_t key,
     backref_map_val_t val,
-    LogicalCachedExtent*) final {
+    LogicalChildNode*) final {
     journal_insert(
       iter,
       key,
@@ -136,7 +144,7 @@ public:
   void update(
     const_iterator iter,
     backref_map_val_t val,
-    LogicalCachedExtent*) final {
+    LogicalChildNode*) final {
     return journal_update(
       iter,
       val,

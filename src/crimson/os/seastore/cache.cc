@@ -28,6 +28,27 @@ SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
 
+void CacheProxyImpl::account_absent_access(Transaction &t)
+{
+  cache.account_absent_access(t.get_src());
+}
+
+bool CacheProxyImpl::is_viewable_extent_stable(
+  Transaction &t, CachedExtent *extent) {
+  return cache.is_viewable_extent_stable(t, extent);
+}
+
+bool CacheProxyImpl::is_viewable_extent_data_stable(
+  Transaction &t, CachedExtent *extent) {
+  return cache.is_viewable_extent_data_stable(t, extent);
+}
+
+get_child_iertr::future<CachedExtentRef>
+CacheProxyImpl::_get_extent_viewable_by_trans(
+  Transaction &t, CachedExtentRef extent) {
+  return cache.get_extent_viewable_by_trans(t, extent);
+}
+
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
