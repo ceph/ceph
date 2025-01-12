@@ -904,6 +904,11 @@ private:
     const hobject_t &obj,
     const eversion_t &v,
     const std::vector<pg_shard_t> &peers);
+  void enqueue_delete_for_backfill(
+    const hobject_t &obj,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers);
+
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
   void context_registry_on_change();
