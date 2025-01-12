@@ -321,11 +321,11 @@ public:
   }
 
   /// Obtain mutable copy of extent
-  LogicalCachedExtentRef get_mutable_extent(Transaction &t, LogicalCachedExtentRef ref) {
+  LogicalChildNodeRef get_mutable_extent(Transaction &t, LogicalChildNodeRef ref) {
     LOG_PREFIX(TransactionManager::get_mutable_extent);
     auto ret = cache->duplicate_for_write(
       t,
-      ref)->cast<LogicalCachedExtent>();
+      ref)->cast<LogicalChildNode>();
     if (!ret->has_laddr()) {
       SUBDEBUGT(seastore_tm, "duplicate from {}", t, *ref);
       ret->set_laddr(ref->get_laddr());
@@ -343,7 +343,7 @@ public:
   /// Add refcount for ref
   ref_ret inc_ref(
     Transaction &t,
-    LogicalCachedExtentRef &ref);
+    LogicalChildNodeRef &ref);
 
   /// Add refcount for offset
   ref_ret inc_ref(
@@ -359,7 +359,7 @@ public:
    */
   ref_ret remove(
     Transaction &t,
-    LogicalCachedExtentRef &ref);
+    LogicalChildNodeRef &ref);
 
   ref_ret remove(
     Transaction &t,
@@ -433,7 +433,7 @@ public:
     return lba_manager->alloc_extents(
       t,
       laddr_hint,
-      std::vector<LogicalCachedExtentRef>(
+      std::vector<LogicalChildNodeRef>(
 	exts.begin(), exts.end()),
       EXTENT_DEFAULT_REF_COUNT
     ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
@@ -484,7 +484,7 @@ public:
     Transaction &t,
     LBAMappingRef &&pin,
     std::array<remap_entry, N> remaps) {
-    static_assert(std::is_base_of_v<LogicalCachedExtent, T>);
+    static_assert(std::is_base_of_v<LogicalChildNode, T>);
 
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
@@ -513,7 +513,7 @@ public:
 #endif
 
     return seastar::do_with(
-      std::vector<LogicalCachedExtentRef>(),
+      std::vector<LogicalChildNodeRef>(),
       std::move(pin),
       std::move(remaps),
       [&t, this](auto &extents, auto &pin, auto &remaps) {
@@ -968,7 +968,7 @@ private:
       return v.get_child_fut(
       ).si_then([pin=std::move(pin)](auto extent) {
 #ifndef NDEBUG
-        auto lextent = extent->template cast<LogicalCachedExtent>();
+        auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin->get_key();
         if (pin->is_indirect()) {
           pin_laddr = pin->get_intermediate_base();
@@ -982,7 +982,7 @@ private:
     }
   }
 
-  base_iertr::future<LogicalCachedExtentRef> read_pin_by_type(
+  base_iertr::future<LogicalChildNodeRef> read_pin_by_type(
     Transaction &t,
     LBAMappingRef pin,
     extent_types_t type)
@@ -1006,7 +1006,7 @@ private:
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
-    LogicalCachedExtentRef extent);
+    LogicalChildNodeRef extent);
 
   submit_transaction_direct_ret do_submit_transaction(
     Transaction &t,
@@ -1103,7 +1103,7 @@ private:
    * Get extent mapped at pin.
    */
   using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
-    LogicalCachedExtentRef>;
+    LogicalChildNodeRef>;
   pin_to_extent_by_type_ret pin_to_extent_by_type(
       Transaction &t,
       LBAMappingRef pin,
@@ -1130,7 +1130,7 @@ private:
       direct_key,
       direct_length,
       [&pref](CachedExtent &extent) mutable {
-	auto &lextent = static_cast<LogicalCachedExtent&>(extent);
+	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
 	assert(!pref.has_been_invalidated());
@@ -1167,7 +1167,7 @@ private:
       }
       return pin_to_extent_by_type_ret(
 	interruptible::ready_future_marker{},
-	std::move(ref->template cast<LogicalCachedExtent>()));
+	std::move(ref->template cast<LogicalChildNode>()));
     });
   }
 

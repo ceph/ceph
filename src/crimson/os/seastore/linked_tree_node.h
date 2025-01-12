@@ -942,7 +942,7 @@ private:
   friend class parent_tracker_t;
   template <typename>
   friend class child_pos_t;
-#ifndef UNIT_TESTS_BUILT
+#ifdef UNIT_TESTS_BUILT
   template <typename, typename, typename, typename, typename, size_t, bool>
   friend class FixedKVBtree;
 #endif

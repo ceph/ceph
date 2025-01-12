@@ -29,8 +29,6 @@ class LogicalCachedExtent;
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-struct LBALeafNode;
-
 class BtreeLBAMapping : public LBAMapping {
 // To support cloning, there are two kinds of lba mappings:
 // 	1. physical lba mapping: the pladdr in the value of which is the paddr of
@@ -86,7 +84,11 @@ public:
       raw_val(val.pladdr),
       map_val(val),
       parent_modifications(parent->modifications)
-  {}
+  {
+    if (!parent->is_pending()) {
+      this->child_pos = {parent, pos};
+    }
+  }
 
   lba_map_val_t get_map_val() const {
     return map_val;
@@ -196,7 +198,8 @@ public:
   }
   bool is_stable() const final;
   bool is_data_stable() const final;
-  get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction &t);
+  get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
+  get_logical_extent(Transaction &t);
 
 protected:
   LBAMappingRef _duplicate(
@@ -281,7 +284,7 @@ public:
     extent_len_t len = 0;
     pladdr_t val;
     uint32_t checksum = 0;
-    LogicalCachedExtent* extent = nullptr;
+    LogicalChildNode* extent = nullptr;
 
     static alloc_mapping_info_t create_zero(extent_len_t len) {
       return {L_ADDR_NULL, len, P_ADDR_ZERO, 0, nullptr};
@@ -303,7 +306,7 @@ public:
       extent_len_t len,
       paddr_t paddr,
       uint32_t checksum,
-      LogicalCachedExtent *extent) {
+      LogicalChildNode *extent) {
       return {laddr, len, paddr, checksum, extent};
     }
   };
@@ -369,7 +372,7 @@ public:
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    LogicalCachedExtent &ext,
+    LogicalChildNode &ext,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
   {
     // The real checksum will be updated upon transaction commit
@@ -401,7 +404,7 @@ public:
   alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
-    std::vector<LogicalCachedExtentRef> extents,
+    std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos;
@@ -443,7 +446,7 @@ public:
     Transaction &t,
     LBAMappingRef orig_mapping,
     std::vector<remap_entry> remaps,
-    std::vector<LogicalCachedExtentRef> extents) final {
+    std::vector<LogicalChildNodeRef> extents) final {
     LOG_PREFIX(BtreeLBAManager::remap_mappings);
     assert((orig_mapping->is_indirect())
       == (remaps.size() != extents.size()));
@@ -566,7 +569,9 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
+#ifdef UNIT_TESTS_BUILT
   check_child_trackers_ret check_child_trackers(Transaction &t) final;
+#endif
 
   scan_mappings_ret scan_mappings(
     Transaction &t,
@@ -586,7 +591,7 @@ public:
     extent_len_t len,
     paddr_t paddr,
     uint32_t checksum,
-    LogicalCachedExtent*) final;
+    LogicalChildNode*) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -647,7 +652,7 @@ private:
     Transaction &t,
     laddr_t addr,
     update_func_t &&f,
-    LogicalCachedExtent*);
+    LogicalChildNode*);
 
   alloc_extents_ret _alloc_extents(
     Transaction &t,
