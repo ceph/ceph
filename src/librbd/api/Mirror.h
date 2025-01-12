@@ -150,7 +150,12 @@ struct Mirror {
   static int group_demote(IoCtx &group_ioctx, const char *group_name,
                           uint32_t flags);
   static int group_resync(IoCtx &group_ioctx, const char *group_name);
-  static int group_snapshot_create(IoCtx& group_ioctx, const char *group_name,
+  static void group_snapshot_create(IoCtx& group_ioctx,
+                                    const std::string& group_name,
+                                    uint32_t flags, std::string *snap_id,
+                                    Context *on_finish);
+  static int group_snapshot_create(IoCtx& group_ioctx,
+                                   const std::string& group_name,
                                    uint32_t flags, std::string *snap_id);
 
   static int group_image_add(IoCtx &group_ioctx, const std::string &group_id,
