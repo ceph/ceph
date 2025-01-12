@@ -471,7 +471,7 @@ struct btree_lba_manager_test : btree_test_base {
       *t.t,
       [this](auto &t) {
 	return seastar::do_with(
-	  std::list<LogicalCachedExtentRef>(),
+	  std::list<LogicalChildNodeRef>(),
 	  std::list<CachedExtentRef>(),
 	  [this, &t](auto &lextents, auto &pextents) {
 	  auto chksum_func = [&lextents, &pextents](auto &extent) {
@@ -485,7 +485,7 @@ struct btree_lba_manager_test : btree_test_base {
 		extent->update_in_extent_chksum_field(crc);
 	      }
 	      assert(extent->calc_crc32c() == extent->get_last_committed_crc());
-	      lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
+	      lextents.emplace_back(extent->template cast<LogicalChildNode>());
 	    } else {
 	      pextents.push_back(extent);
 	    }
@@ -550,7 +550,7 @@ struct btree_lba_manager_test : btree_test_base {
 	    0,
 	    get_paddr());
 	return seastar::do_with(
-	  std::vector<LogicalCachedExtentRef>(
+	  std::vector<LogicalChildNodeRef>(
 	    extents.begin(), extents.end()),
 	  [this, &t, hint](auto &extents) {
 	  return lba_manager->alloc_extents(t, hint, std::move(extents), EXTENT_DEFAULT_REF_COUNT);

@@ -8,6 +8,7 @@
 
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 #include "crimson/os/seastore/lba_mapping.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
@@ -88,29 +89,10 @@ CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
   }
 }
 
-std::ostream &operator<<(std::ostream &out, const parent_tracker_t &tracker) {
-  return out << "tracker_ptr=" << (void*)&tracker
-	     << ", parent_ptr=" << (void*)tracker.get_parent().get();
-}
-
-std::ostream &ChildableCachedExtent::print_detail(std::ostream &out) const {
-  if (parent_tracker) {
-    out << ", parent_tracker(" << *parent_tracker << ")";
-  } else {
-    out << ", parent_tracker(nullptr)";
-  }
-  _print_detail(out);
-  return out;
-}
-
-std::ostream &LogicalCachedExtent::_print_detail(std::ostream &out) const
+std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
   out << ", laddr=" << laddr;
   return print_detail_l(out);
-}
-
-void child_pos_t::link_child(ChildableCachedExtent *c) {
-  get_parent<FixedKVNode<laddr_t>>()->link_child(c, pos);
 }
 
 void CachedExtent::set_invalid(Transaction &t) {
@@ -121,40 +103,10 @@ void CachedExtent::set_invalid(Transaction &t) {
   on_invalidated(t);
 }
 
-LogicalCachedExtent::~LogicalCachedExtent() {
-  if (has_parent_tracker() && is_valid() && !is_pending()) {
-    assert(get_parent_node());
-    auto parent = get_parent_node<FixedKVNode<laddr_t>>();
-    auto off = parent->lower_bound_offset(laddr);
-    assert(parent->get_key_from_idx(off) == laddr);
-    assert(parent->children[off] == this);
-    parent->children[off] = nullptr;
-  }
-}
-
-void LogicalCachedExtent::on_replace_prior() {
-  assert(is_mutation_pending());
-  take_prior_parent_tracker();
-  assert(get_parent_node());
-  auto parent = get_parent_node<FixedKVNode<laddr_t>>();
-  //TODO: can this search be avoided?
-  auto off = parent->lower_bound_offset(laddr);
-  assert(parent->get_key_from_idx(off) == laddr);
-  parent->children[off] = this;
-}
-
 void LogicalCachedExtent::maybe_set_intermediate_laddr(LBAMapping &mapping) {
   laddr = mapping.is_indirect()
     ? mapping.get_intermediate_base()
     : mapping.get_key();
-}
-
-parent_tracker_t::~parent_tracker_t() {
-  // this is parent's tracker, reset it
-  auto &p = (FixedKVNode<laddr_t>&)*parent;
-  if (p.my_tracker == this) {
-    p.my_tracker = nullptr;
-  }
 }
 
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const

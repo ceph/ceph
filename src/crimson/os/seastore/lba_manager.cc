@@ -9,7 +9,7 @@ namespace crimson::os::seastore {
 LBAManager::update_mappings_ret
 LBAManager::update_mappings(
   Transaction& t,
-  const std::list<LogicalCachedExtentRef>& extents)
+  const std::list<LogicalChildNodeRef>& extents)
 {
   return trans_intr::do_for_each(extents,
 				 [this, &t](auto &extent) {
