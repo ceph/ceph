@@ -35,6 +35,15 @@ ReplicatedRecoveryBackend::recover_object(
     logger().debug("recover_object: loading obc: {}", soid);
     return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
       [this, soid, need](auto head, auto obc) {
+      if (!obc->obs.exists) {
+        // XXX: this recovery must be triggered by backfills and the corresponding
+        //      object must have been deleted by some client request after the object
+        //      is enqueued for push but before the lock is acquired by the recovery.
+        //
+        //      Abort the recovery in this case, a "recover_delete" must have been
+        //      added for this object by the client request that deleted it.
+        return interruptor::now();
+      }
       logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
       recovery_waiter.obc = obc;
