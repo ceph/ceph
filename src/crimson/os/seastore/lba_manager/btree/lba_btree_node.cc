@@ -89,22 +89,12 @@ BtreeLBAMappingRef LBALeafNode::get_mapping(
 
 void LBALeafNode::update(
   internal_const_iterator_t iter,
-  lba_map_val_t val,
-  LogicalChildNode* nextent)
+  lba_map_val_t val)
 {
   LOG_PREFIX(LBALeafNode::update);
-  if (nextent) {
-    SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
-      this->pending_for_transaction,
-      iter.get_offset(),
-      *nextent);
-    // child-ptr may already be correct, see LBAManager::update_mappings()
-    if (!nextent->has_parent_tracker()) {
-      this->update_child_ptr(iter.get_offset(), nextent);
-    }
-    assert(nextent->has_parent_tracker()
-      && nextent->get_parent_node().get() == this);
-  }
+  SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}",
+    this->pending_for_transaction,
+    iter.get_offset());
   this->on_modify();
   if (val.pladdr.is_paddr()) {
     val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
@@ -118,17 +108,14 @@ void LBALeafNode::update(
 LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
   internal_const_iterator_t iter,
   laddr_t addr,
-  lba_map_val_t val,
-  LogicalChildNode* nextent)
+  lba_map_val_t val)
 {
   LOG_PREFIX(LBALeafNode::insert);
-  SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}, extent {}",
+  SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
     this->pending_for_transaction,
     iter.get_offset(),
-    addr,
-    (void*)nextent);
+    addr);
   this->on_modify();
-  this->insert_child_ptr(iter.get_offset(), nextent);
   if (val.pladdr.is_paddr()) {
     val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
   }

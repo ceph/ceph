@@ -33,7 +33,7 @@ constexpr size_t BACKREF_BLOCK_SIZE = 4096;
 
 using BackrefBtree = FixedKVBtree<
   paddr_t, backref_map_val_t, BackrefInternalNode,
-  BackrefLeafNode, BtreeBackrefMapping, BACKREF_BLOCK_SIZE, false>;
+  BackrefLeafNode, BtreeBackrefMapping, BACKREF_BLOCK_SIZE>;
 
 class BtreeBackrefManager : public BackrefManager {
 public:

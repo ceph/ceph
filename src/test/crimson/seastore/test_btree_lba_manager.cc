@@ -335,9 +335,13 @@ struct lba_btree_test : btree_test_base {
 	  extents,
 	  [this, addr, len, &t, &btree](auto &extent) {
 	  return btree.insert(
-	    get_op_context(t), addr, get_map_val(len), extent.get()
+	    get_op_context(t), addr, get_map_val(len)
 	  ).si_then([addr, extent](auto p){
 	    auto& [iter, inserted] = p;
+	    iter.get_leaf_node()->insert_child_ptr(
+	      iter.get_leaf_pos(),
+	      extent.get(),
+	      iter.get_leaf_node()->get_size() - 1);
 	    assert(inserted);
 	    extent->set_laddr(addr);
 	  });
