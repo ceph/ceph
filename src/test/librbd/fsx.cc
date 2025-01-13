@@ -1254,6 +1254,7 @@ nbd_open(const char *name, struct rbd_ctx *ctx)
 			   SubProcess::KEEP);
 	process.add_cmd_arg("map");
 	process.add_cmd_arg("--io-timeout=600");
+	process.add_cmd_arg("--try-netlink");
 	std::string img;
 	img.append(pool);
 	img.append("/");
