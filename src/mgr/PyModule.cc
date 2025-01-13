@@ -38,6 +38,18 @@ std::string PyModule::mgr_store_prefix = "mgr/";
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 // Boost apparently can't be bothered to fix its own usage of its own
 // deprecated features.
+
+// Fix instances of "'BOOST_PP_ITERATION_02' was not declared in this scope; did
+// you mean 'BOOST_PP_ITERATION_05'" and related macro error bullshit that spans
+// 300 lines of errors
+//
+// Apparently you can't include boost/python stuff _and_ have this header
+// defined
+//
+// Thanks to the ceph-aur folks for the fix at:
+// https://github.com/bazaah/aur-ceph/commit/8c5cc7d8deec002f7596b6d0860859a0a718f12b 
+#undef BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
+
 #include <boost/python/extract.hpp>
 #include <boost/python/import.hpp>
 #include <boost/python/object.hpp>

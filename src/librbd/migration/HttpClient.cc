@@ -193,7 +193,7 @@ protected:
     ldout(cct, 15) << dendl;
 
     boost::system::error_code ec;
-    boost::beast::get_lowest_layer(derived().stream()).socket().close(ec);
+    derived().stream().lowest_layer().close(ec);
   }
 
 private:
@@ -357,8 +357,7 @@ private:
   }
 
   int shutdown_socket() {
-    if (!boost::beast::get_lowest_layer(
-          derived().stream()).socket().is_open()) {
+    if (!derived().stream().lowest_layer().is_open()) {
       return 0;
     }
 
@@ -366,7 +365,7 @@ private:
     ldout(cct, 15) << dendl;
 
     boost::system::error_code ec;
-    boost::beast::get_lowest_layer(derived().stream()).socket().shutdown(
+    derived().stream().lowest_layer().shutdown(
       boost::asio::ip::tcp::socket::shutdown_both, ec);
 
     if (ec && ec != boost::beast::errc::not_connected) {
@@ -595,7 +594,7 @@ public:
     this->close_socket();
   }
 
-  inline boost::beast::tcp_stream&
+  inline boost::asio::ip::tcp::socket&
   stream() {
     return m_stream;
   }
@@ -607,12 +606,13 @@ protected:
     auto cct = http_client->m_cct;
     ldout(cct, 15) << dendl;
 
-    ceph_assert(!m_stream.socket().is_open());
-    m_stream.async_connect(
-      results,
-      [on_finish](boost::system::error_code ec, const auto& endpoint) {
-        on_finish->complete(-ec.value());
-      });
+    ceph_assert(!m_stream.is_open());
+    boost::asio::async_connect(m_stream,
+			       results,
+			       [on_finish](boost::system::error_code ec,
+					   const auto& endpoint) {
+				 on_finish->complete(-ec.value());
+			       });
   }
 
   void disconnect(Context* on_finish) override {
@@ -624,7 +624,7 @@ protected:
   }
 
 private:
-  boost::beast::tcp_stream m_stream;
+  boost::asio::ip::tcp::socket m_stream;
 };
 
 #undef dout_prefix
@@ -643,7 +643,7 @@ public:
     this->close_socket();
   }
 
-  inline boost::beast::ssl_stream<boost::beast::tcp_stream>&
+  inline boost::asio::ssl::stream<boost::asio::ip::tcp::socket>&
   stream() {
     return m_stream;
   }
@@ -655,8 +655,9 @@ protected:
     auto cct = http_client->m_cct;
     ldout(cct, 15) << dendl;
 
-    ceph_assert(!boost::beast::get_lowest_layer(m_stream).socket().is_open());
-    boost::beast::get_lowest_layer(m_stream).async_connect(
+    ceph_assert(!m_stream.lowest_layer().is_open());
+    async_connect(
+      m_stream.lowest_layer(),
       results,
       [this, on_finish](boost::system::error_code ec, const auto& endpoint) {
         handle_connect(-ec.value(), on_finish);
@@ -681,12 +682,12 @@ protected:
 
     // ssl_stream object can't be reused after shut down -- move-in
     // a freshly constructed instance
-    m_stream = boost::beast::ssl_stream<boost::beast::tcp_stream>(
+    m_stream = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>(
       http_client->m_strand, http_client->m_ssl_context);
   }
 
 private:
-  boost::beast::ssl_stream<boost::beast::tcp_stream> m_stream;
+  boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_stream;
 
   void handle_connect(int r, Context* on_finish) {
     auto http_client = this->m_http_client;
