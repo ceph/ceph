@@ -1846,7 +1846,7 @@ public:
   const std::set<pg_shard_t> &get_backfill_targets() const {
     return recovery_state.get_backfill_targets();
   }
-  bool is_async_recovery_target(pg_shard_t peer) const {
+  bool is_async_recovery_target(pg_shard_t peer) const override {
     return recovery_state.is_async_recovery_target(peer);
   }
   const std::set<pg_shard_t> &get_async_recovery_targets() const {
