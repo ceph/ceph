@@ -172,6 +172,10 @@ class SNMPGateway(ContainerDaemonForm):
     def conf_file_path(self) -> str:
         return os.path.join(self.data_dir, self.env_filename)
 
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+        # this daemon doesn't need any directories
+        self.create_daemon_conf()
+
     def create_daemon_conf(self) -> None:
         """Creates the environment file holding 'secrets' passed to the snmp-notifier daemon"""
         with write_new(self.conf_file_path) as f:

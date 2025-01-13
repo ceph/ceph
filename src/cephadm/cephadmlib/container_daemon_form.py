@@ -48,6 +48,11 @@ class ContainerDaemonForm(DaemonForm):
         """
         return []
 
+    def create_daemon_dirs(
+            self, data_dir: str, uid: int, gid: int
+    ) -> None:
+        pass
+
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]
     ) -> None:
