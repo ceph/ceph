@@ -6,6 +6,7 @@
     selectionType="single"
     [hasDetails]="false"
     (fetchData)="loadSMBShares()"
+    (updateSelection)="updateSelection($event)"
   >
     <div class="table-actions">
       <cd-table-actions

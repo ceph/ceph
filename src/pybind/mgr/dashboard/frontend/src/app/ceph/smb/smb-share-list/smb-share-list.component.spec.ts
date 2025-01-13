@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbShareListComponent } from './smb-share-list.component';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { ToastrModule } from 'ngx-toastr';
+import { SharedModule } from '~/app/shared/shared.module';
 
 describe('SmbShareListComponent', () => {
   let component: SmbShareListComponent;
@@ -9,8 +12,9 @@ describe('SmbShareListComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
-      declarations: [SmbShareListComponent]
+      imports: [ToastrModule.forRoot(), SharedModule],
+      declarations: [SmbShareListComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbShareListComponent);
