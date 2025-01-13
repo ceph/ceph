@@ -179,8 +179,8 @@ class TestAdminCommands(CephFSTestCase):
         self.config_set('mds', 'mds_debug_subtrees', 'true')
         # this will really really slow the trimming, so that MDS_TRIM stays
         # for longer.
-        self.config_set('mds', 'mds_log_trim_decay_rate', '60')
-        self.config_set('mds', 'mds_log_trim_threshold', '1')
+        self.config_set('mds', 'mds_log_max_segments', '0')
+        self.config_set('mds', 'mds_log_warn_factor', '1')
         self.mount_a.open_n_background('.', 400)
 
         self.wait_for_health(health_warn, 30)
