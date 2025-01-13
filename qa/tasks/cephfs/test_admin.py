@@ -220,6 +220,8 @@ class TestFsStatus(TestAdminCommands):
     Test "ceph fs status subcommand.
     """
 
+    MDSS_REQUIRED = 3
+
     def test_fs_status(self):
         """
         That `ceph fs status` command functions.
@@ -233,6 +235,31 @@ class TestFsStatus(TestAdminCommands):
 
         mdsmap = json.loads(self.get_ceph_cmd_stdout("fs", "status", "--format=json"))["mdsmap"]
         self.assertEqual(mdsmap[0]["state"], "active")
+
+    def test_fs_status_standby_replay(self):
+        """
+        That `ceph fs status` command functions.
+        """
+
+        self.fs.set_allow_standby_replay(True)
+
+        s = self.get_ceph_cmd_stdout("fs", "status")
+        self.assertTrue("active" in s)
+        self.assertTrue("standby-replay" in s)
+        self.assertTrue("0-s" in s)
+        self.assertTrue("standby" in s)
+
+        mdsmap = json.loads(self.get_ceph_cmd_stdout("fs", "status", "--format=json-pretty"))["mdsmap"]
+        self.assertEqual(mdsmap[0]["state"], "active")
+        self.assertEqual(mdsmap[1]["state"], "standby-replay")
+        self.assertEqual(mdsmap[1]["rank"], "0-s")
+        self.assertEqual(mdsmap[2]["state"], "standby")
+
+        mdsmap = json.loads(self.get_ceph_cmd_stdout("fs", "status", "--format=json"))["mdsmap"]
+        self.assertEqual(mdsmap[0]["state"], "active")
+        self.assertEqual(mdsmap[1]["state"], "standby-replay")
+        self.assertEqual(mdsmap[1]["rank"], "0-s")
+        self.assertEqual(mdsmap[2]["state"], "standby")
 
 
 class TestAddDataPool(TestAdminCommands):
