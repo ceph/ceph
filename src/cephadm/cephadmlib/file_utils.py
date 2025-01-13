@@ -5,6 +5,7 @@ import datetime
 import logging
 import os
 import tempfile
+import json
 
 from contextlib import contextmanager
 from pathlib import Path
@@ -157,3 +158,26 @@ def unlink_file(
     except Exception:
         if not ignore_errors:
             raise
+
+
+def update_meta_file(file_path: str, update_key_val: dict) -> None:
+    """Update key in the file with provided value"""
+    try:
+        with open(file_path, 'r') as fh:
+            data = json.load(fh)
+        file_stat = os.stat(file_path)
+    except FileNotFoundError:
+        raise
+    except Exception:
+        logger.exception(f'Failed to update {file_path}')
+        raise
+    data.update(
+        {key: value for key, value in update_key_val.items() if key in data}
+    )
+
+    with write_new(
+        file_path,
+        owner=(file_stat.st_uid, file_stat.st_gid),
+        perms=(file_stat.st_mode & 0o777),
+    ) as fh:
+        fh.write(json.dumps(data, indent=4) + '\n')
