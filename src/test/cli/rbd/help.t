@@ -908,7 +908,7 @@
                              [--group-namespace <group-namespace>] 
                              [--group <group>] [--image-pool <image-pool>] 
                              [--image-namespace <image-namespace>] 
-                             [--image <image>] [--pool <pool>] 
+                             [--image <image>] 
                              <group-spec> <image-spec> 
   
   Add an image to a group.
@@ -926,7 +926,6 @@
     --image-pool arg      image pool name
     --image-namespace arg image namespace name
     --image arg           image name
-    -p [ --pool ] arg     pool name unless overridden
   
   rbd help group image list
   usage: rbd group image list [--format <format>] [--pretty-format] 
@@ -952,8 +951,7 @@
                                 [--group-namespace <group-namespace>] 
                                 [--group <group>] [--image-pool <image-pool>] 
                                 [--image-namespace <image-namespace>] 
-                                [--image <image>] [--pool <pool>] 
-                                [--image-id <image-id>] 
+                                [--image <image>] [--image-id <image-id>] 
                                 <group-spec> <image-spec> 
   
   Remove an image from a group.
@@ -971,7 +969,6 @@
     --image-pool arg      image pool name
     --image-namespace arg image namespace name
     --image arg           image name
-    -p [ --pool ] arg     pool name unless overridden
     --image-id arg        image id
   
   rbd help group list

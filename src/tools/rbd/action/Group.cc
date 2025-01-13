@@ -28,6 +28,9 @@ static const std::string DEST_GROUP_NAME("dest-group");
 static const std::string GROUP_POOL_NAME("group-" + at::POOL_NAME);
 static const std::string IMAGE_POOL_NAME("image-" + at::POOL_NAME);
 
+static const std::string GROUP_NAMESPACE_NAME("group-" + at::NAMESPACE_NAME);
+static const std::string IMAGE_NAMESPACE_NAME("image-" + at::NAMESPACE_NAME);
+
 void add_group_option(po::options_description *opt,
 		      at::ArgumentModifier modifier) {
   std::string name = GROUP_NAME;
@@ -95,8 +98,8 @@ int execute_create(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
-    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -175,8 +178,8 @@ int execute_remove(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
-    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -209,8 +212,8 @@ int execute_rename(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
-    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -221,9 +224,9 @@ int execute_rename(const po::variables_map &vm,
 
   r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, at::DEST_POOL_NAME,
-    &dest_pool_name, &dest_namespace_name, DEST_GROUP_NAME, "group",
-    &dest_group_name, nullptr, true, utils::SNAPSHOT_PRESENCE_NONE,
-    utils::SPEC_VALIDATION_FULL);
+    &dest_pool_name, at::DEST_NAMESPACE_NAME, &dest_namespace_name,
+    DEST_GROUP_NAME, "group", &dest_group_name, nullptr, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -271,8 +274,9 @@ int execute_add(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, GROUP_POOL_NAME,
-    &group_pool_name, &group_namespace_name, GROUP_NAME, "group", &group_name,
-    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    &group_pool_name, GROUP_NAMESPACE_NAME, &group_namespace_name,
+    GROUP_NAME, "group", &group_name, nullptr, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -283,9 +287,9 @@ int execute_add(const po::variables_map &vm,
 
   r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, IMAGE_POOL_NAME,
-    &image_pool_name, &image_namespace_name, at::IMAGE_NAME, "image",
-    &image_name, nullptr, true, utils::SNAPSHOT_PRESENCE_NONE,
-    utils::SPEC_VALIDATION_FULL);
+    &image_pool_name, IMAGE_NAMESPACE_NAME, &image_namespace_name,
+    at::IMAGE_NAME, "image", &image_name, nullptr, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -329,8 +333,9 @@ int execute_remove_image(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, GROUP_POOL_NAME,
-    &group_pool_name, &group_namespace_name, GROUP_NAME, "group", &group_name,
-    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    &group_pool_name, GROUP_NAMESPACE_NAME, &group_namespace_name,
+    GROUP_NAME, "group", &group_name, nullptr, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -346,9 +351,9 @@ int execute_remove_image(const po::variables_map &vm,
 
   r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, IMAGE_POOL_NAME,
-    &image_pool_name, &image_namespace_name, at::IMAGE_NAME, "image",
-    &image_name, nullptr, image_id.empty(), utils::SNAPSHOT_PRESENCE_NONE,
-    utils::SPEC_VALIDATION_FULL);
+    &image_pool_name, IMAGE_NAMESPACE_NAME, &image_namespace_name,
+    at::IMAGE_NAME, "image", &image_name, nullptr, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -400,8 +405,8 @@ int execute_list_images(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
-    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -499,8 +504,9 @@ int execute_group_snap_create(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, &snap_name, true,
-    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -540,8 +546,9 @@ int execute_group_snap_remove(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, &snap_name, true,
-    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -576,8 +583,9 @@ int execute_group_snap_rename(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, &source_snap_name, true,
-    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    &source_snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -632,8 +640,8 @@ int execute_group_snap_list(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
-    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    nullptr, true, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -715,8 +723,9 @@ int execute_group_snap_rollback(const po::variables_map &vm,
 
   int r = utils::get_pool_generic_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
-    &namespace_name, GROUP_NAME, "group", &group_name, &snap_name, true,
-    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_FULL);
+    at::NAMESPACE_NAME, &namespace_name, GROUP_NAME, "group", &group_name,
+    &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -790,9 +799,6 @@ void get_add_arguments(po::options_description *positional,
   add_prefixed_pool_option(options, "image");
   add_prefixed_namespace_option(options, "image");
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
-
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
-	       " unless overridden");
 }
 
 void get_remove_image_arguments(po::options_description *positional,
@@ -815,8 +821,6 @@ void get_remove_image_arguments(po::options_description *positional,
   add_prefixed_namespace_option(options, "image");
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
 
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
-	       " unless overridden");
   at::add_image_id_option(options);
 }
 
