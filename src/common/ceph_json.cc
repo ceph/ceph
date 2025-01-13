@@ -162,14 +162,6 @@ bool JSONParser::parse(int len)
   return true;
 }
 
-// parse a supplied JSON fragment
-bool JSONParser::parse(const char *buf_, int len)
-{
- return buf_ ? 
-	 parse(std::string_view { buf_, static_cast<std::string_view::size_type>(len) }) 
-	: false;
-}
-
 // parse a supplied JSON fragment:
 bool JSONParser::parse(std::string_view json_string_view)
 {
