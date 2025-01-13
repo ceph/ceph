@@ -3,7 +3,6 @@ from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
 
-
 class TestFlush(CephFSTestCase):
     def test_flush(self):
         self.mount_a.run_shell(["mkdir", "mydir"])
@@ -44,7 +43,10 @@ class TestFlush(CephFSTestCase):
 
         # ...and the journal is truncated to just a single subtreemap from the
         # newly created segment
+        self.fs.fail()
         summary_output = self.fs.journal_tool(["event", "get", "summary"], 0)
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
         try:
             self.assertEqual(summary_output,
                              dedent(
@@ -72,6 +74,8 @@ class TestFlush(CephFSTestCase):
                              ).strip())
             flush_data = self.fs.mds_asok(["flush", "journal"])
             self.assertEqual(flush_data['return_code'], 0)
+
+            self.fs.fail()
             self.assertEqual(self.fs.journal_tool(["event", "get", "summary"], 0),
                              dedent(
                                  """
@@ -80,6 +84,8 @@ class TestFlush(CephFSTestCase):
                                  Errors: 0
                                  """
                              ).strip())
+            self.fs.set_joinable()
+            self.fs.wait_for_daemons()
 
         # Now for deletion!
         # We will count the RADOS deletions and MDS file purges, to verify that

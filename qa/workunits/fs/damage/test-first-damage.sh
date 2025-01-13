@@ -65,7 +65,7 @@ function recover {
   ceph fs fail "$FS"
   sleep 5
   cephfs-journal-tool --rank="$FS":0 event recover_dentries summary
-  cephfs-journal-tool --rank="$FS":0 journal reset
+  cephfs-journal-tool --rank="$FS":0 journal reset --yes-i-really-really-mean-it
   $FIRST_DAMAGE "$METADATA_POOL"
   $FIRST_DAMAGE --remove "$METADATA_POOL"
   ceph fs set "$FS" joinable true
