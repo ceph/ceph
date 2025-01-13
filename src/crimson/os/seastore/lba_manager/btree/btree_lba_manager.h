@@ -235,7 +235,7 @@ using BtreeLBAMappingRef = std::unique_ptr<BtreeLBAMapping>;
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE, true>;
+  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE>;
 
 /**
  * BtreeLBAManager
@@ -287,7 +287,12 @@ public:
     LogicalChildNode* extent = nullptr;
 
     static alloc_mapping_info_t create_zero(extent_len_t len) {
-      return {L_ADDR_NULL, len, P_ADDR_ZERO, 0, nullptr};
+      return {
+	L_ADDR_NULL,
+	len,
+	P_ADDR_ZERO,
+	0,
+	static_cast<LogicalChildNode*>(get_reserved_ptr<LBALeafNode, laddr_t>())};
     }
     static alloc_mapping_info_t create_indirect(
       laddr_t laddr,
@@ -299,7 +304,7 @@ public:
 	intermediate_key,
 	0,	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
-	nullptr};
+	static_cast<LogicalChildNode*>(get_reserved_ptr<LBALeafNode, laddr_t>())};
     }
     static alloc_mapping_info_t create_direct(
       laddr_t laddr,
@@ -409,6 +414,7 @@ public:
   {
     std::vector<alloc_mapping_info_t> alloc_infos;
     for (auto &extent : extents) {
+      assert(extent);
       alloc_infos.emplace_back(
 	alloc_mapping_info_t::create_direct(
 	  extent->has_laddr() ? extent->get_laddr() : L_ADDR_NULL,

@@ -198,6 +198,10 @@ protected:
   friend class ParentNode;
 };
 
+// this is to avoid mistakenly copying pointers from
+// copy sources when committing this lba node, because
+// we rely on pointers' "nullness" to avoid copying
+// pointers for updated values
 template <typename T, typename node_key_t>
 inline BaseChildNode<T, node_key_t>* get_reserved_ptr() {
   return (BaseChildNode<T, node_key_t>*)0x1;
@@ -353,6 +357,25 @@ public:
     update_child_ptr(pos, child);
   }
 
+  void insert_child_ptr(uint16_t offset, BaseChildNode<T, node_key_t>* child) {
+    assert(child);
+    auto &me = down_cast();
+    auto raw_children = children.data();
+    std::memmove(
+      &raw_children[offset + 1],
+      &raw_children[offset],
+      (me.get_size() - offset) * sizeof(BaseChildNode<T, node_key_t>*));
+    children[offset] = child;
+    if (!is_reserved_ptr(child)) {
+      set_child_ptracker(child);
+    }
+  }
+
+  void update_child_ptr(uint16_t pos, BaseChildNode<T, node_key_t>* child) {
+    children[pos] = child;
+    set_child_ptracker(child);
+  }
+
 protected:
   ParentNode(uint16_t capacity)
     : children(capacity, nullptr),
@@ -386,38 +409,12 @@ protected:
     copy_dests.dests_by_key.erase(dest);
   }
 
-  void update_child_ptr(uint16_t pos, BaseChildNode<T, node_key_t>* child) {
-    children[pos] = child;
-    set_child_ptracker(child);
-  }
-
   void set_child_ptracker(BaseChildNode<T, node_key_t> *child) {
     if (!this->my_tracker) {
       auto &me = down_cast();
       this->my_tracker = new parent_tracker_t(&me);
     }
     child->reset_parent_tracker(this->my_tracker);
-  }
-
-  void insert_child_ptr(uint16_t offset, BaseChildNode<T, node_key_t>* child) {
-    auto &me = down_cast();
-    auto raw_children = children.data();
-    std::memmove(
-      &raw_children[offset + 1],
-      &raw_children[offset],
-      (me.get_size() - offset) * sizeof(BaseChildNode<T, node_key_t>*));
-    if (child) {
-      children[offset] = child;
-      set_child_ptracker(child);
-    } else {
-      // this can happen when reserving lba spaces and cloning mappings
-      ceph_assert(me.is_leaf_and_has_children());
-      // this is to avoid mistakenly copying pointers from
-      // copy sources when committing this lba node, because
-      // we rely on pointers' "nullness" to avoid copying
-      // pointers for updated values
-      children[offset] = get_reserved_ptr<T, node_key_t>();
-    }
   }
 
   void remove_child_ptr(uint16_t offset) {
@@ -902,7 +899,7 @@ private:
   template <typename>
   friend class child_pos_t;
 #ifdef UNIT_TESTS_BUILT
-  template <typename, typename, typename, typename, typename, size_t, bool>
+  template <typename, typename, typename, typename, typename, size_t>
   friend class FixedKVBtree;
 #endif
 };

@@ -153,9 +153,8 @@ struct LBALeafNode
       lba_map_val_t, lba_map_val_le_t,
       LBA_BLOCK_SIZE,
       LBAInternalNode,
-      LBALeafNode,
-      LogicalChildNode,
-      true> {
+      LBALeafNode>,
+    ParentNode<LBALeafNode, laddr_t> {
   static_assert(
     check_capacity(LBA_BLOCK_SIZE),
     "LEAF_NODE_CAPACITY doesn't fit in LBA_BLOCK_SIZE");
@@ -166,30 +165,34 @@ struct LBALeafNode
 			  lba_map_val_t, lba_map_val_le_t,
 			  LBA_BLOCK_SIZE,
 			  LBAInternalNode,
-			  LBALeafNode,
-			  LogicalChildNode,
-			  true>;
+			  LBALeafNode>;
   using internal_const_iterator_t =
     typename parent_type_t::node_layout_t::const_iterator;
   using internal_iterator_t =
     typename parent_type_t::node_layout_t::iterator;
   using key_type = laddr_t;
-  template <typename... T>
-  LBALeafNode(T&&... t) :
-    parent_type_t(std::forward<T>(t)...) {}
+  using parent_node_t = ParentNode<LBALeafNode, laddr_t>;
+  using base_child_node_t = LogicalChildNode;
+  LBALeafNode(ceph::bufferptr &&ptr)
+    : parent_type_t(std::move(ptr)),
+      parent_node_t(LEAF_NODE_CAPACITY) {}
+  explicit LBALeafNode(extent_len_t length)
+    : parent_type_t(length),
+      parent_node_t(LEAF_NODE_CAPACITY) {}
+  LBALeafNode(const LBALeafNode &rhs)
+    : parent_type_t(rhs),
+      parent_node_t(rhs) {}
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
   void update(
     internal_const_iterator_t iter,
-    lba_map_val_t val,
-    LogicalChildNode* nextent) final;
+    lba_map_val_t val) final;
 
   internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     laddr_t addr,
-    lba_map_val_t val,
-    LogicalChildNode* nextent) final;
+    lba_map_val_t val) final;
 
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
@@ -242,6 +245,69 @@ struct LBALeafNode
 
   extent_types_t get_type() const final {
     return TYPE;
+  }
+
+  void _on_rewrite(Transaction &t, CachedExtent &extent) final {
+    this->parent_node_t::on_rewrite(t, static_cast<LBALeafNode&>(extent));
+  }
+
+  void on_replace_prior() final {
+    this->parent_node_t::on_replace_prior();
+    this->parent_type_t::on_replace_prior();
+  }
+
+  void prepare_commit() final {
+    this->parent_node_t::prepare_commit();
+    this->parent_type_t::prepare_commit();
+  }
+
+  bool is_child_stable(
+    op_context_t<laddr_t> c,
+    uint16_t pos,
+    laddr_t key) const {
+    return parent_node_t::_is_child_stable(c.trans, pos, key);
+  }
+  bool is_child_data_stable(
+    op_context_t<laddr_t> c,
+    uint16_t pos,
+    laddr_t key) const {
+    return parent_node_t::_is_child_stable(c.trans, pos, key, true);
+  }
+
+  void on_split(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right) {
+    left.set_cache_proxy(this->get_cache_proxy());
+    right.set_cache_proxy(this->get_cache_proxy());
+    this->split_child_ptrs(t, left, right);
+  }
+
+  void on_merge(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right) {
+    this->set_cache_proxy(left.get_cache_proxy());
+    this->merge_child_ptrs(t, left, right);
+  }
+
+  void on_balance(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right,
+    bool prefer_left,
+    LBALeafNode &replacement_left,
+    LBALeafNode &replacement_right) {
+    replacement_left.set_cache_proxy(this->get_cache_proxy());
+    replacement_right.set_cache_proxy(this->get_cache_proxy());
+    this->balance_child_ptrs(
+      t, left, right, prefer_left, replacement_left, replacement_right);
+  }
+
+  CachedExtentRef duplicate_for_write(Transaction&) final {
+    auto extent = new LBALeafNode(*this);
+    extent->set_cache_proxy(this->get_cache_proxy());
+    return CachedExtentRef(extent);
   }
 
   std::ostream &print_detail(std::ostream &out) const final;

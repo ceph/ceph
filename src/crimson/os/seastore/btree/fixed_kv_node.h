@@ -158,10 +158,6 @@ struct FixedKVInternalNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  bool is_leaf_and_has_children() const {
-    return false;
-  }
-
   uint16_t get_node_split_pivot() {
     return this->get_split_pivot().get_offset();
   }
@@ -475,9 +471,7 @@ template <
   typename VAL_LE,
   size_t node_size,
   typename internal_node_type_t,
-  typename node_type_t,
-  typename child_t,
-  bool has_children>
+  typename node_type_t>
 struct FixedKVLeafNode
   : FixedKVNode<NODE_KEY>,
     common::FixedKVNodeLayout<
@@ -487,7 +481,6 @@ struct FixedKVLeafNode
       NODE_KEY, NODE_KEY_LE,
       VAL, VAL_LE>,
     RootNode<RootBlock, node_type_t>,
-    ParentNode<node_type_t, NODE_KEY>,
     ChildNode<internal_node_type_t, node_type_t, NODE_KEY> {
   using Ref = TCachedExtentRef<node_type_t>;
   using node_layout_t =
@@ -508,25 +501,18 @@ struct FixedKVLeafNode
     VAL_LE,
     node_size,
     internal_node_type_t,
-    node_type_t,
-    child_t,
-    has_children>;
+    node_type_t>;
   using base_t = FixedKVNode<NODE_KEY>;
-  using parent_node_t = ParentNode<node_type_t, NODE_KEY>;
-  using base_child_node_t = child_t;
   using child_node_t = ChildNode<internal_node_type_t, node_type_t, NODE_KEY>;
   explicit FixedKVLeafNode(ceph::bufferptr &&ptr)
-    : FixedKVNode<NODE_KEY>(std::move(ptr)),
-      ParentNode<node_type_t, NODE_KEY>(has_children ? CAPACITY : 0){
+    : FixedKVNode<NODE_KEY>(std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
   }
   // Must be identical with FixedKVLeafNode(ptr) after on_fully_loaded()
   explicit FixedKVLeafNode(extent_len_t length)
-    : FixedKVNode<NODE_KEY>(length),
-      ParentNode<node_type_t, NODE_KEY>(has_children ? CAPACITY : 0) {}
+    : FixedKVNode<NODE_KEY>(length) {}
   FixedKVLeafNode(const FixedKVLeafNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
-      ParentNode<node_type_t, NODE_KEY>(rhs),
       modifications(rhs.modifications) {
     this->set_layout_buf(this->get_bptr().c_str());
   }
@@ -536,7 +522,6 @@ struct FixedKVLeafNode
 	   (this->range.is_root() && this->has_root_parent());
   }
 
-  static constexpr bool do_has_children = has_children;
   // for the stable extent, modifications is always 0;
   // it will increase for each transaction-local change, so that
   // modifications can be detected (see BtreeLBAMapping.parent_modifications)
@@ -552,12 +537,6 @@ struct FixedKVLeafNode
     this->child_node_t::on_initial_write();
   }
 
-  void _on_rewrite(Transaction &t, CachedExtent &extent) final {
-    if (do_has_children) {
-      this->parent_node_t::on_rewrite(t, static_cast<node_type_t&>(extent));
-    }
-  }
-
   void on_modify() {
     modifications++;
   }
@@ -567,25 +546,8 @@ struct FixedKVLeafNode
     return v != modifications;
   }
 
-  bool is_leaf_and_has_children() const {
-    return has_children;
-  }
-
   uint16_t get_node_split_pivot() {
     return this->get_split_pivot().get_offset();
-  }
-
-  bool is_child_stable(
-    op_context_t<NODE_KEY> c,
-    uint16_t pos,
-    NODE_KEY key) const {
-    return parent_node_t::_is_child_stable(c.trans, pos, key);
-  }
-  bool is_child_data_stable(
-    op_context_t<NODE_KEY> c,
-    uint16_t pos,
-    NODE_KEY key) const {
-    return parent_node_t::_is_child_stable(c.trans, pos, key, true);
   }
 
   virtual ~FixedKVLeafNode() {
@@ -599,18 +561,12 @@ struct FixedKVLeafNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  void prepare_commit() final {
-    if constexpr (has_children) {
-      parent_node_t::prepare_commit();
-    }
+  void prepare_commit() override {
     modifications = 0;
   }
 
-  void on_replace_prior() final {
+  void on_replace_prior() override {
     ceph_assert(!this->is_rewrite());
-    if constexpr (has_children) {
-      this->parent_node_t::on_replace_prior();
-    }
     if (this->is_root()) {
       this->RootNode<RootBlock, node_type_t>::on_replace_prior();
     } else {
@@ -642,57 +598,60 @@ struct FixedKVLeafNode
 
   CachedExtentRef duplicate_for_write(Transaction&) override {
     assert(delta_buffer.empty());
-    auto extent = new node_type_t(*this);
-    extent->set_cache_proxy(this->get_cache_proxy());
-    return CachedExtentRef(extent);
+    return CachedExtentRef(new node_type_t(*static_cast<node_type_t*>(this)));
   };
 
   virtual void update(
     internal_const_iterator_t iter,
-    VAL val,
-    base_child_node_t* nextent) = 0;
+    VAL val) = 0;
   virtual internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     NODE_KEY addr,
-    VAL val,
-    base_child_node_t* nextent) = 0;
+    VAL val) = 0;
   virtual void remove(internal_const_iterator_t iter) = 0;
+  virtual void on_split(
+    Transaction &t,
+    node_type_t &left,
+    node_type_t &right) = 0;
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_split_children(op_context_t<NODE_KEY> c) {
     auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    left->set_cache_proxy(this->get_cache_proxy());
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    right->set_cache_proxy(this->get_cache_proxy());
     auto pivot = this->split_into(*left, *right);
     left->range = left->get_meta();
     right->range = right->get_meta();
-    if constexpr (has_children) {
-      this->split_child_ptrs(c.trans, *left, *right);
-    }
+    this->on_split(c.trans, *left, *right);
     return std::make_tuple(
       left,
       right,
       pivot);
   }
 
+  virtual void on_merge(
+    Transaction &t,
+    node_type_t &left,
+    node_type_t &right) = 0;
   Ref make_full_merge(
     op_context_t<NODE_KEY> c,
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    replacement->set_cache_proxy(this->get_cache_proxy());
     replacement->merge_from(*this, *right->template cast<node_type_t>());
     replacement->range = replacement->get_meta();
-    if constexpr (has_children) {
-      replacement->merge_child_ptrs(
-	c.trans, static_cast<node_type_t&>(*this), *right);
-    }
+    replacement->on_merge(c.trans, static_cast<node_type_t&>(*this), *right);
     return replacement;
   }
 
+  virtual void on_balance(
+    Transaction &t,
+    node_type_t &left,
+    node_type_t &right,
+    bool prefer_left,
+    node_type_t &replacement_left,
+    node_type_t &replacement_right) = 0;
   std::tuple<Ref, Ref, NODE_KEY>
   make_balanced(
     op_context_t<NODE_KEY> c,
@@ -702,10 +661,8 @@ struct FixedKVLeafNode
     auto &right = *_right->template cast<node_type_t>();
     auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    replacement_left->set_cache_proxy(this->get_cache_proxy());
     auto replacement_right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    replacement_right->set_cache_proxy(this->get_cache_proxy());
 
     auto pivot = this->balance_into_new_nodes(
       *this,
@@ -715,15 +672,13 @@ struct FixedKVLeafNode
       *replacement_right);
     replacement_left->range = replacement_left->get_meta();
     replacement_right->range = replacement_right->get_meta();
-    if constexpr (has_children) {
-      this->balance_child_ptrs(
-	c.trans,
-	static_cast<node_type_t&>(*this),
-	right,
-	prefer_left,
-	*replacement_left,
-	*replacement_right);
-    }
+    this->on_balance(
+      c.trans,
+      static_cast<node_type_t&>(*this),
+      right,
+      prefer_left,
+      *replacement_left,
+      *replacement_right);
     return std::make_tuple(
       replacement_left,
       replacement_right,
