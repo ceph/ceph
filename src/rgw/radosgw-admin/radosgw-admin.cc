@@ -1,15 +1,13 @@
-/*
- * Copyright (C) 2025 IBM 
-*/
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <cerrno>
-#include <string>
-#include <sstream>
-#include <optional>
+#include <errno.h>
 #include <iostream>
+#include <sstream>
+#include <string>
+
+#include <boost/optional.hpp>
+#include <boost/asio/co_spawn.hpp>
 
 extern "C" {
 #include <liboath/oath.h>
@@ -31,6 +29,8 @@ extern "C" {
 #include "common/safe_io.h"
 #include "common/fault_injector.h"
 
+#include "common/async/blocked_completion.h"
+
 #include "include/util.h"
 
 #include "cls/rgw/cls_rgw_types.h"
@@ -40,9 +40,6 @@ extern "C" {
 
 #include "include/utime.h"
 #include "include/str_list.h"
-
-#include "radosgw-admin/orphan.h"
-#include "radosgw-admin/sync_checkpoint.h"
 
 #include "rgw_user.h"
 #include "rgw_otp.h"
@@ -74,6 +71,9 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 
+#include "radosgw-admin/orphan.h"
+#include "radosgw-admin/sync_checkpoint.h"
+
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -85,6 +85,11 @@ extern "C" {
 #include "driver/rados/rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
+
+#define SECRET_KEY_LEN 40
+#define PUBLIC_ID_LEN 20
+
+using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
@@ -116,12 +121,18 @@ static const DoutPrefixProvider* dpp() {
     } \
   } while (0)
 
-using namespace std;
-
-inline int posix_errortrans(int r)
+static inline int posix_errortrans(int r)
 {
- return ERR_NO_SUCH_BUCKET == r ? ENOENT : r;
+  switch(r) {
+  case ERR_NO_SUCH_BUCKET:
+    r = ENOENT;
+    break;
+  default:
+    break;
+  }
+  return r;
 }
+
 
 static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
 
@@ -288,6 +299,8 @@ void usage()
   cout << "  datalog trim                     trim data log\n";
   cout << "  datalog status                   read data log status\n";
   cout << "  datalog type                     change datalog type to --log_type={fifo,omap}\n";
+  cout << "  datalog semaphore list           List recovery semaphores\n";
+  cout << "  datalog semaphore reset          Reset recovery semaphore (use marker)\n";
   cout << "  orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish                   deprecated -- clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs                deprecated -- list the current job-ids for orphans search\n";
@@ -354,7 +367,6 @@ void usage()
   cout << "   --secret/--secret-key=<key>       specify secret key\n";
   cout << "   --gen-access-key                  generate random access key (for S3)\n";
   cout << "   --gen-secret                      generate random secret key\n";
-  cout << "   --generate-key                    create user with or without credentials\n";
   cout << "   --key-type=<type>                 key type, options are: swift, s3\n";
   cout << "   --key-active=<bool>               activate or deactivate a key\n";
   cout << "   --temp-url-key[-2]=<key>          temp url key\n";
@@ -375,6 +387,8 @@ void usage()
   cout << "   --end-date=<date>                 end date in the format yyyy-mm-dd\n";
   cout << "   --bucket-id=<bucket-id>           bucket id\n";
   cout << "   --bucket-new-name=<bucket>        for bucket link: optional new name\n";
+  cout << "   --count=<count>                   optional for:\n";
+  cout << "                                       datalog semaphore reset\n";
   cout << "   --shard-id=<shard-id>             optional for:\n";
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
@@ -808,6 +822,8 @@ enum class OPT {
   DATALOG_TRIM,
   DATALOG_TYPE,
   DATALOG_PRUNE,
+  DATALOG_SEMAPHORE_LIST,
+  DATALOG_SEMAPHORE_RESET,
   REALM_CREATE,
   REALM_DELETE,
   REALM_GET,
@@ -1051,6 +1067,8 @@ static SimpleCmd::Commands all_cmds = {
   { "datalog trim", OPT::DATALOG_TRIM },
   { "datalog type", OPT::DATALOG_TYPE },
   { "datalog prune", OPT::DATALOG_PRUNE },
+  { "datalog semaphore list", OPT::DATALOG_SEMAPHORE_LIST },
+  { "datalog semaphore reset", OPT::DATALOG_SEMAPHORE_RESET },
   { "realm create", OPT::REALM_CREATE },
   { "realm rm", OPT::REALM_DELETE },
   { "realm get", OPT::REALM_GET },
@@ -1265,7 +1283,7 @@ static int read_input(const string& infile, bufferlist& bl)
     }
   }
 
-  constexpr auto READ_CHUNK=8196;
+#define READ_CHUNK 8196
   int r;
   int err;
 
@@ -2547,104 +2565,35 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
 }
 
-struct bucket_source_sync_info {
-  const RGWZone& _source;
-  std::string_view error;
-  std::map<int,std::string> shards_behind;
-  int total_shards;
-  std::string_view status;
-  rgw_bucket bucket_source;
-
-  bucket_source_sync_info(const RGWZone& source): _source(source) {}
-
-  void _print_plaintext(std::ostream& out, int width) const {
-    out << indented{width, "source zone"} << _source.id << " (" << _source.name << ")" << std::endl;
-    if (!error.empty()) {
-      out << indented{width} << error << std::endl;
-      return;
-    }
-    out << indented{width, "source bucket"} << bucket_source << std::endl;
-    if (!status.empty()) {
-      out << indented{width} << status << std::endl;
-      return;
-    }
-    out << indented{width} << "incremental sync on " << total_shards << " shards\n";
-    if (!shards_behind.empty()) {
-      out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
-      set<int> shard_ids;
-      for (auto const& [shard_id, _] : shards_behind) {
-        shard_ids.insert(shard_id);
-      }
-      out << indented{width} << "behind shards: [" << shard_ids << "]\n";
-    } else {
-      out << indented{width} << "bucket is caught up with source\n";
-    }
-  }
-
-  void _print_formatter(std::ostream& out, Formatter* formatter) const {
-    formatter->open_object_section("source");
-    formatter->dump_string("source_zone", _source.id);
-    formatter->dump_string("source_name", _source.name);
-
-    if (!error.empty()) {
-      formatter->dump_string("error", error);
-      formatter->close_section();
-      formatter->flush(out);
-      return;
-    }
-
-    formatter->dump_string("source_bucket", bucket_source.name);
-    formatter->dump_string("source_bucket_id", bucket_source.bucket_id);
-
-    if (!status.empty()) {
-      formatter->dump_string("status", status);
-      formatter->close_section();
-      formatter->flush(out);
-      return;
-    }
-
-    formatter->dump_int("total_shards", total_shards);
-    formatter->open_array_section("behind_shards");
-    for (auto const& [id, marker] : shards_behind) {
-      formatter->open_object_section("shard");
-      formatter->dump_int("shard_id", id);
-      formatter->dump_string("shard_marker", marker);
-      formatter->close_section();
-    }
-    formatter->close_section();
-    formatter->close_section();
-    formatter->flush(out);
-  }
-};
-
-static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* driver,
-                                     const RGWZone& zone,
+static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* driver, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
                                      rgw_sync_bucket_pipe pipe,
-                                     bucket_source_sync_info& source_sync_info)
+                                     int width, std::ostream& out)
 {
+  out << indented{width, "source zone"} << source.id << " (" << source.name << ")" << std::endl;
+
   // syncing from this zone?
   if (!driver->svc()->zone->zone_syncs_from(zone, source)) {
-    source_sync_info.error = "does not sync from zone";
+    out << indented{width} << "does not sync from zone\n";
     return 0;
   }
 
   if (!pipe.source.bucket) {
-    source_sync_info.error = fmt::format("{} (): missing source bucket", __func__);
+    ldpp_dout(dpp, -1) << __func__ << "(): missing source bucket" << dendl;
     return -EINVAL;
   }
 
   std::unique_ptr<rgw::sal::Bucket> source_bucket;
   int r = init_bucket(*pipe.source.bucket, &source_bucket);
   if (r < 0) {
-    source_sync_info.error = fmt::format("failed to read source bucket info: {}", cpp_strerror(r));
+    ldpp_dout(dpp, -1) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  source_sync_info.bucket_source = source_bucket->get_key();
-
+  out << indented{width, "source bucket"} << source_bucket->get_key() << std::endl;
   pipe.source.bucket = source_bucket->get_key();
+
   pipe.dest.bucket = bucket_info.bucket;
 
   uint64_t gen = 0;
@@ -2655,15 +2604,15 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   r = rgw_read_bucket_full_sync_status(dpp, driver, pipe, &full_status, null_yield);
   if (r >= 0) {
     if (full_status.state == BucketSyncState::Init) {
-      source_sync_info.status = "init: bucket sync has not started";
+      out << indented{width} << "init: bucket sync has not started\n";
       return 0;
     }
     if (full_status.state == BucketSyncState::Stopped) {
-      source_sync_info.status = "stopped: bucket sync is disabled";
+      out << indented{width} << "stopped: bucket sync is disabled\n";
       return 0;
     }
     if (full_status.state == BucketSyncState::Full) {
-      source_sync_info.status = fmt::format("full sync: {} objects completed", full_status.full.count);
+      out << indented{width} << "full sync: " << full_status.full.count << " objects completed\n";
       return 0;
     }
     gen = full_status.incremental_gen;
@@ -2672,45 +2621,46 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     // no full status, but there may be per-shard status from before upgrade
     const auto& logs = source_bucket->get_info().layout.logs;
     if (logs.empty()) {
-      source_sync_info.status = "init: bucket sync has not started";
+      out << indented{width} << "init: bucket sync has not started\n";
       return 0;
     }
     const auto& log = logs.front();
     if (log.gen > 0) {
       // this isn't the backward-compatible case, so we just haven't started yet
-      source_sync_info.status = "init: bucket sync has not started";
+      out << indented{width} << "init: bucket sync has not started\n";
       return 0;
     }
     if (log.layout.type != rgw::BucketLogType::InIndex) {
-      source_sync_info.error = fmt::format("unrecognized log layout type {}", to_string(log.layout.type));
+      ldpp_dout(dpp, -1) << "unrecognized log layout type " << log.layout.type << dendl;
       return -EINVAL;
     }
     // use shard count from our log gen=0
     shard_status.resize(rgw::num_shards(log.layout.in_index));
   } else {
-    source_sync_info.error = fmt::format("failed to read bucket full sync status: {}", cpp_strerror(r));
+    lderr(driver->ctx()) << "failed to read bucket full sync status: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   r = rgw_read_bucket_inc_sync_status(dpp, driver, pipe, gen, &shard_status);
   if (r < 0) {
-    source_sync_info.error = fmt::format("failed to read bucket incremental sync status: {}", cpp_strerror(r));
+    lderr(driver->ctx()) << "failed to read bucket incremental sync status: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   const int total_shards = shard_status.size();
-  source_sync_info.total_shards = total_shards;
+
+  out << indented{width} << "incremental sync on " << total_shards << " shards\n";
 
   rgw_bucket_index_marker_info remote_info;
   BucketIndexShardsManager remote_markers;
   r = rgw_read_remote_bilog_info(dpp, conn, source_bucket->get_key(),
                                  remote_info, remote_markers, null_yield);
   if (r < 0) {
-    source_sync_info.error = fmt::format("failed to read remote log: {}", cpp_strerror(r));
+    ldpp_dout(dpp, -1) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  std::map<int, std::string> shards_behind;
+  std::set<int> shards_behind;
   for (const auto& r : remote_markers.get()) {
     auto shard_id = r.first;
     if (r.second.empty()) {
@@ -2718,17 +2668,21 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     }
     if (shard_id >= total_shards) {
       // unexpected shard id. we don't have status for it, so we're behind
-      shards_behind[shard_id] = r.second;
+      shards_behind.insert(shard_id);
       continue;
     }
     auto& m = shard_status[shard_id];
     const auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
     if (pos < r.second) {
-      shards_behind[shard_id] = r.second;
+      shards_behind.insert(shard_id);
     }
   }
-
-  source_sync_info.shards_behind = std::move(shards_behind);
+  if (!shards_behind.empty()) {
+    out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
+    out << indented{width} << "behind shards: [" << shards_behind << "]\n";
+  } else {
+    out << indented{width} << "bucket is caught up with source\n";
+  }
   return 0;
 }
 
@@ -2939,82 +2893,25 @@ static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
   return 0;
 }
 
-struct bucket_sync_status_info {
-  std::vector<bucket_source_sync_info> source_status_info;
-  rgw::sal::Zone* _zone;
-  const rgw::sal::ZoneGroup* _zonegroup;
-  const RGWBucketInfo& _bucket_info;
-  const int width = 15;
-  std::string error;
-
-  bucket_sync_status_info(const RGWBucketInfo& bucket_info): _bucket_info(bucket_info) {}
-
-  void print(std::ostream& out, bool use_formatter, Formatter* formatter) {
-    if (use_formatter) {
-      _print_formatter(out, formatter);
-    } else {
-      _print_plaintext(out);
-    }
-  }
-
-  void _print_plaintext(std::ostream& out) {
-    out << indented{width, "realm"} << _zone->get_realm_id() << " (" << _zone->get_realm_name() << ")" << std::endl;
-    out << indented{width, "zonegroup"} << _zonegroup->get_id() << " (" << _zonegroup->get_name() << ")" << std::endl;
-    out << indented{width, "zone"} << _zone->get_id() << " (" << _zone->get_name() << ")" << std::endl;
-    out << indented{width, "bucket"} << _bucket_info.bucket << std::endl;
-    out << indented{width, "current time"}
-      << to_iso_8601(ceph::real_clock::now(), iso_8601_format::YMDhms) << "\n\n";
-
-    if (!error.empty()){
-      out << error << std::endl;
-    }
-
-    for (const auto &info : source_status_info) {
-      info._print_plaintext(out, width);
-    }
-  }
-
-  void _print_formatter(std::ostream& out, Formatter* formatter) {
-    formatter->open_object_section("test");
-    formatter->dump_string("realm", _zone->get_realm_id());
-    formatter->dump_string("realm_name", _zone->get_realm_name());
-    formatter->dump_string("zonegroup", _zonegroup->get_id());
-    formatter->dump_string("zonegroup_name", _zonegroup->get_name());
-    formatter->dump_string("zone", _zone->get_id());
-    formatter->dump_string("zone_name", _zone->get_name());
-    formatter->dump_string("bucket", _bucket_info.bucket.name);
-    formatter->dump_string("bucket_instance_id", _bucket_info.bucket.bucket_id);
-    formatter->dump_string("current_time", to_iso_8601(ceph::real_clock::now(), iso_8601_format::YMDhms));
-
-    if (!error.empty()) {
-      formatter->dump_string("error", error);
-    }
-
-    formatter->open_array_section("sources");
-    for (const auto &info : source_status_info) {
-      info._print_formatter(out, formatter);
-    }
-    formatter->close_section();
-
-    formatter->close_section();
-    formatter->flush(out);
-  }
-
-};
-
 static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
-                              bucket_sync_status_info& bucket_sync_info)
+                              std::ostream& out)
 {
   const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
   rgw::sal::Zone* zone = driver->get_zone();
+  constexpr int width = 15;
 
-  bucket_sync_info._zone = zone;
-  bucket_sync_info._zonegroup = &zonegroup;
+  out << indented{width, "realm"} << zone->get_realm_id() << " (" << zone->get_realm_name() << ")\n";
+  out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
+  out << indented{width, "zone"} << zone->get_id() << " (" << zone->get_name() << ")\n";
+  out << indented{width, "bucket"} << info.bucket << "\n";
+  out << indented{width, "current time"}
+    << to_iso_8601(ceph::real_clock::now(), iso_8601_format::YMDhms) << "\n\n";
+
 
   if (!static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
-    bucket_sync_info.error = fmt::format("Sync is disabled for bucket {} or bucket has no sync sources", info.bucket.name);
+    out << "Sync is disabled for bucket " << info.bucket.name << " or bucket has no sync sources" << std::endl;
     return 0;
   }
 
@@ -3022,7 +2919,7 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
 
   int r = driver->get_sync_policy_handler(dpp(), std::nullopt, info.bucket, &handler, null_yield);
   if (r < 0) {
-    bucket_sync_info.error = fmt::format("ERROR: failed to get policy handler for bucket ({}): r={}: {}", info.bucket.name, r, cpp_strerror(-r));
+    ldpp_dout(dpp(), -1) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -3035,12 +2932,13 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
     std::unique_ptr<rgw::sal::Zone> zone;
     int ret = driver->get_zone()->get_zonegroup().get_zone_by_id(source_zone_id.id, &zone);
     if (ret < 0) {
-      bucket_sync_info.error = fmt::format("Source zone not found in zonegroup {}", zonegroup.get_name());
+      ldpp_dout(dpp(), -1) << "Source zone not found in zonegroup "
+          << zonegroup.get_name() << dendl;
       return -EINVAL;
     }
     auto c = zone_conn_map.find(source_zone_id);
     if (c == zone_conn_map.end()) {
-      bucket_sync_info.error = fmt::format("No connection to zone {}", zone->get_name());
+      ldpp_dout(dpp(), -1) << "No connection to zone " << zone->get_name() << dendl;
       return -EINVAL;
     }
     zone_ids.insert(source_zone_id);
@@ -3071,15 +2969,10 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
 	continue;
       }
       if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-        bucket_source_sync_info source_sync_info(z->second);
-	auto ret = bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
+	bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
 				  c->second,
 				  info, pipe,
-				  source_sync_info);
-
-        if (ret == 0) {
-          bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
-        }
+				  width, out);
       }
     }
   }
@@ -3474,6 +3367,27 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+int run_coro(asio::awaitable<void> coro, std::string_view name) {
+  try {
+    // Blocking in startup code, not ideal, but won't hurt anything.
+    std::exception_ptr eptr
+      = asio::co_spawn(static_cast<rgw::sal::RadosStore*>(driver)->get_io_context(),
+		       std::move(coro),
+		       async::use_blocked);
+    if (eptr) {
+      std::rethrow_exception(eptr);
+    }
+  } catch (boost::system::system_error& e) {
+    ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  } catch (std::exception& e) {
+    ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
 // coverity[root_function:SUPPRESS]
@@ -3550,13 +3464,6 @@ int main(int argc, const char **argv)
   OPT opt_cmd = OPT::NO_CMD;
   int gen_access_key = 0;
   int gen_secret_key = 0;
-  enum generate_key_enum {
-    OPTION_SET_FALSE = 0,
-    OPTION_SET_TRUE  = 1,
-    OPTION_NOT_SET   = 2,
-  };
-
-  generate_key_enum generate_key = OPTION_NOT_SET;
   bool set_perm = false;
   bool set_temp_url_key = false;
   map<int, string> temp_url_keys;
@@ -3600,6 +3507,7 @@ int main(int argc, const char **argv)
   bool account_root_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
+  std::optional<std::uint64_t> count;
   string client_id;
   string op_id;
   string op_mask_str;
@@ -3614,7 +3522,6 @@ int main(int argc, const char **argv)
   list<string> tags_rm;
   int placement_inline_data = true;
   bool placement_inline_data_specified = false;
-  bool format_arg_passed = false;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -3838,17 +3745,6 @@ int main(int argc, const char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         exit(1);
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--generate-key", (char*)NULL)) {
-      key_type_str = val;
-      if (key_type_str.compare("true") == 0) {
-	generate_key = OPTION_SET_TRUE;
-      } else if(key_type_str.compare("false") == 0) {
-	generate_key = OPTION_SET_FALSE;
-      } else {
-        cerr << "wrong value for --generate-key: " << key_type_str << " please specify either true or false" << std::endl;
-        exit(1);
-      }
-      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &key_active, NULL, "--key-active", (char*)NULL)) {
       key_active_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
@@ -3978,6 +3874,12 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       specified_shard_id = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--count", (char*)NULL)) {
+      count = strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse count: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--gen", (char*)NULL)) {
       gen = strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4005,7 +3907,6 @@ int main(int argc, const char **argv)
       new_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
-      format_arg_passed = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
       string cat_str = val;
       list<string> cat_list;
@@ -4461,6 +4362,7 @@ int main(int argc, const char **argv)
 			 OPT::BILOG_STATUS,
 			 OPT::DATA_SYNC_STATUS,
 			 OPT::DATALOG_LIST,
+			 OPT::DATALOG_SEMAPHORE_LIST,
 			 OPT::DATALOG_STATUS,
 			 OPT::REALM_GET,
 			 OPT::REALM_GET_DEFAULT,
@@ -4612,21 +4514,14 @@ int main(int argc, const char **argv)
     }
 
     /* check key parameter conflict */
-    if ((!access_key.empty()) && (gen_access_key || generate_key == OPTION_SET_TRUE)) {
-        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key/generate-key" << std::endl;
+    if ((!access_key.empty()) && gen_access_key) {
+        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
         return EINVAL;
     }
-    if ((!secret_key.empty()) && (gen_secret_key || generate_key == OPTION_SET_TRUE)) {
-        cerr << "ERROR: key parameter conflict, --secret & --gen-secret/generate-key" << std::endl;
+    if ((!secret_key.empty()) && gen_secret_key) {
+        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
         return EINVAL;
     }
-    if (generate_key == OPTION_SET_FALSE) {
-      if ((!access_key.empty()) || gen_access_key || (!secret_key.empty()) || gen_secret_key) {
-        cerr << "ERROR: key parameter conflict, if --generate-key is not set so no other key parameters can be set" << std::endl;
-        return EINVAL;
-      }
-    }
-
   }
 
   // default to pretty json
@@ -6791,7 +6686,7 @@ int main(int argc, const char **argv)
     }
     break;
   case OPT::USER_CREATE:
-    if (!user_op.has_existing_user() && (generate_key != OPTION_SET_FALSE)) {
+    if (!user_op.has_existing_user()) {
       user_op.set_generate_key(); // generate a new key by default
     }
     ret = ruser.add(dpp(), user_op, null_yield, &err_msg);
@@ -7745,7 +7640,7 @@ int main(int argc, const char **argv)
         << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
       return -ret;
     }
-    cout << "flushed pending logging object '" << obj_name
+    cerr << "flushed pending logging object '" << obj_name
       << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
     return 0;
   }
@@ -9590,7 +9485,7 @@ next:
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       void *handle;
-      list<cls_log_entry> entries;
+      vector<cls::log::entry> entries;
 
       meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
@@ -9601,8 +9496,8 @@ next:
           return -ret;
         }
 
-        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-          cls_log_entry& entry = *iter;
+        for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+          cls::log::entry& entry = *iter;
           static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
         }
         formatter->flush(cout);
@@ -10047,18 +9942,7 @@ next:
     if (ret < 0) {
       return -ret;
     }
-
-    auto bucket_info = bucket->get_info();
-    bucket_sync_status_info bucket_sync_info(bucket_info);
- 
-    ret = bucket_sync_status(driver, bucket_info, source_zone,
-        opt_source_bucket, bucket_sync_info);
-
-    if (ret == 0) {
-      bucket_sync_info.print(std::cout, format_arg_passed, formatter.get());
-    } else {
-      cerr << "failed to get bucket sync status. see logs for more info" << std::endl;
-    }
+    bucket_sync_status(driver, bucket->get_info(), source_zone, opt_source_bucket, std::cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SYNC_MARKERS) {
@@ -10215,7 +10099,7 @@ next:
       string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
 
       do {
-        list<cls_log_entry> entries;
+        vector<cls::log::entry> entries;
         ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->timelog.list(dpp(), oid, {}, {}, max_entries - count, entries, marker, &marker, &truncated,
 					      null_yield);
 	if (ret == -ENOENT) {
@@ -10717,6 +10601,35 @@ next:
     }
   }
 
+  if (opt_cmd == OPT::DATALOG_SEMAPHORE_LIST) {
+    auto datalog = static_cast<rgw::sal::RadosStore*>(driver)
+      ->svc()->datalog_rados;
+    std::optional<int> shard;
+    if (specified_shard_id) {
+      shard = shard_id;
+    }
+    ret = run_coro(datalog->admin_sem_list(shard, max_entries, marker,
+					   cout, *formatter),
+		   "datalog seamphore list");
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (opt_cmd == OPT::DATALOG_SEMAPHORE_RESET) {
+    if (marker.empty()) {
+      std::cerr << "Specify the semaphore key with --marker." << std::endl;
+      return -EINVAL;
+    }
+    auto datalog = static_cast<rgw::sal::RadosStore*>(driver)
+      ->svc()->datalog_rados;
+    ret = run_coro(datalog->admin_sem_reset(marker, count.value_or(0)),
+		   "datalog seamphore reset");
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   if (opt_cmd == OPT::DATALOG_LIST) {
     formatter->open_array_section("entries");
     bool truncated;
@@ -10745,7 +10658,7 @@ next:
     }
 
     auto datalog_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
-    RGWDataChangesLog::LogMarker log_marker;
+    RGWDataChangesLogMarker log_marker;
 
     do {
       std::vector<rgw_data_change_log_entry> entries;
@@ -10784,7 +10697,7 @@ next:
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
-      list<cls_log_entry> entries;
+      vector<cls::log::entry> entries;
 
       RGWDataChangesLogInfo info;
       static_cast<rgw::sal::RadosStore*>(driver)->svc()->

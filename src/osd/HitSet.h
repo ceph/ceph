@@ -171,7 +171,7 @@ private:
 WRITE_CLASS_ENCODER(HitSet)
 WRITE_CLASS_ENCODER(HitSet::Params)
 
-typedef boost::shared_ptr<HitSet> HitSetRef;
+typedef std::shared_ptr<HitSet> HitSetRef;
 
 std::ostream& operator<<(std::ostream& out, const HitSet::Params& p);
 
