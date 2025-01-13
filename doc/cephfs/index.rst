@@ -148,6 +148,7 @@ CephFS Concepts
     LazyIO <lazyio>
     Directory fragmentation <dirfrags>
     Multiple active MDS daemons <multimds>
+    Snapshots <snapshots>
 
 
 .. raw:: html
