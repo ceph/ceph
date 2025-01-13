@@ -18,7 +18,7 @@
 
 #include <fmt/format.h>
 
-#include "common/buffer.h"
+#include "include/buffer.h"
 #include "common/ceph_time.h"
 
 #include <include/types.h>
@@ -216,11 +216,11 @@ public:
   bool parse(int len);
 
  // operate on a string range or object:
-  bool parse(const std::string& s) const { return parse(std::string_view { s }); }
-  bool parse(std::string_view sv) const;
-  bool parse(const ceph:buffer::list& bl) const { return parse(std::string_view { std::begin(bl), std::end(bl) }); }
+  bool parse(const std::string& s) { return parse(std::string_view { s }); }
+  bool parse(std::string_view sv);
+  bool parse(ceph::buffer::list& bl) { return parse(std::string_view { bl.c_str(), bl.length() }); }
 
-  bool parse(const char *buf_, int len) const {
+  bool parse(const char *buf_, int len) {
  	return buf_ ? 
 	        parse(std::string_view { buf_, static_cast<std::string_view::size_type>(len) }) 
 	       : false;
@@ -230,7 +230,7 @@ public:
   bool parse(const char *file_name);
 
 public:
-  const char *get_json() const nothrow { return json_buffer.c_str(); }
+  const char *get_json() const noexcept{ return json_buffer.c_str(); }
 };
 
 class JSONDecoder final {

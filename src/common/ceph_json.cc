@@ -163,7 +163,7 @@ bool JSONParser::parse(int len)
 }
 
 // parse a supplied JSON fragment:
-bool JSONParser::parse(std::string_view json_string_view)
+bool JSONParser::parse(std::string_view json_string_view) 
 {
   if(json_string_view.empty())
    return false;
