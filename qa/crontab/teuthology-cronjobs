@@ -52,7 +52,6 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 00 05  * * 0,2,4   $CW $SS      1 --ceph main    --suite smoke -p 100 --force-priority
 08 05  * * 0       $CW $SS      1 --ceph squid   --suite smoke -p 100 --force-priority
 16 05  * * 0       $CW $SS      1 --ceph reef    --suite smoke -p 100 --force-priority
-24 05  * * 0       $CW $SS      1 --ceph quincy  --suite smoke -p 100 --force-priority
 
 ## ********** windows tests on main branch - weekly
 # 00 03 * * 1 CEPH_BRANCH=main; MACHINE_NAME=smithi; $CW teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s windows -k distro -e $CEPH_QA_EMAIL
@@ -122,7 +121,6 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 16 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-pacific-quincy --suite-branch pacific -p 820
 24 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:octopus-x -p 820
 32 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:pacific-x -p 820
-40 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade/quincy-p2p -p 820
 
 ### upgrade runs for reef release
 ###### on smithi
