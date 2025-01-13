@@ -3,4 +3,3 @@ overrides:
     conf:
       mon:
         mon op complaint time: 120
-        mon warn on pool no app: false
