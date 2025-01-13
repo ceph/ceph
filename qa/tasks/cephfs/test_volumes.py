@@ -7392,6 +7392,29 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 2)
 
+    def test_periodic_async_work(self):
+        """
+        to validate that the async thread (purge thread in this case) will
+        process a job that's manually created.
+        """
+
+        self.config_set('mgr', 'mgr/volumes/periodic_async_work', True)
+
+        trashdir = os.path.join("./", "volumes", "_deleting")
+        entry = os.path.join(trashdir, "subvol")
+        # hand create the directory
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', entry], omit_sudo=False)
+
+        # verify trash dir is processed
+        self._wait_for_trash_empty()
+
+        self.config_set('mgr', 'mgr/volumes/periodic_async_work', False)
+
+        # wait a bit so that the default wakeup time (5s) is consumed
+        # by the async threads (i.e., the default gets honoured before
+        # the file system gets purged).
+        time.sleep(10)
+
     def test_subvolume_under_group_snapshot_clone(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
