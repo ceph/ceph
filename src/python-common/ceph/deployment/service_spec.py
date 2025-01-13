@@ -2868,7 +2868,7 @@ class CephExporterSpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args)
 
         self.service_type = service_type
-        self.sock_dir = sock_dir
+        self.sock_dir = None
         self.addrs = addrs
         self.port = port
         self.prio_limit = prio_limit
@@ -2879,6 +2879,11 @@ class CephExporterSpec(ServiceSpec):
 
     def validate(self) -> None:
         super(CephExporterSpec, self).validate()
+
+        if self.sock_dir and self.sock_dir != '/var/run/ceph/':
+            raise SpecValidationError(
+                'sock_dir setting is deprecated and must be either unset or set to /var/run/ceph/'
+            )
 
         if not isinstance(self.prio_limit, int):
             raise SpecValidationError(
