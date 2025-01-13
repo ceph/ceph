@@ -436,14 +436,18 @@ BtreeLBAManager::_alloc_extents(
 	      alloc_info.len,
 	      pladdr_t(alloc_info.val),
 	      refcount,
-	      alloc_info.checksum},
-	    alloc_info.extent
+	      alloc_info.checksum}
 	  ).si_then([&state, c, addr, total_len, hint, FNAME,
 		    &alloc_info, &rets](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
+	    auto &leaf_node = *iter.get_leaf_node();
+	    leaf_node.insert_child_ptr(
+	      iter.get_leaf_pos(),
+	      alloc_info.extent,
+	      leaf_node.get_size() - 1 /*the size before the insert*/);
 	    TRACET("{}~{}, hint={}, inserted at {}",
 		   c.trans, addr, total_len, hint, state.last_end);
-	    if (alloc_info.extent) {
+	    if (is_valid_child_ptr(alloc_info.extent)) {
 	      ceph_assert(alloc_info.val.is_paddr());
 	      assert(alloc_info.val == iter.get_val().pladdr);
 	      assert(alloc_info.len == iter.get_val().len);
@@ -748,7 +752,7 @@ BtreeLBAManager::_decref_intermediate(
 	        std::make_optional<ref_update_result_t>(res));
 	  });
 	} else {
-	  return btree.update(c, iter, val, nullptr
+	  return btree.update(c, iter, val
 	  ).si_then([](auto) {
 	    return ref_iertr::make_ready_future<
 	      std::optional<ref_update_result_t>>(std::nullopt);
@@ -850,9 +854,17 @@ BtreeLBAManager::_update_mapping(
 	  return btree.update(
 	    c,
 	    iter,
-	    ret,
-	    nextent
-	  ).si_then([c, ret](auto iter) {
+	    ret
+	  ).si_then([c, ret, nextent](auto iter) {
+	    // child-ptr may already be correct,
+	    // see LBAManager::update_mappings()
+	    if (nextent && !nextent->has_parent_tracker()) {
+	      iter.get_leaf_node()->update_child_ptr(
+		iter.get_leaf_pos(), nextent);
+	    }
+	    assert(!nextent || 
+	      (nextent->has_parent_tracker()
+		&& nextent->get_parent_node().get() == iter.get_leaf_node().get()));
 	    return update_mapping_ret_bare_t{
 	      std::move(ret),
 	      iter.get_pin(c)

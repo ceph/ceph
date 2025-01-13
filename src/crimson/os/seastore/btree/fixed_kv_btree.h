@@ -42,8 +42,7 @@ template <
   typename internal_node_t,
   typename leaf_node_t,
   typename pin_t,
-  size_t node_size,
-  bool leaf_has_children>
+  size_t node_size>
 class FixedKVBtree {
   static constexpr size_t MAX_DEPTH = 16;
   using self_type = FixedKVBtree<
@@ -52,8 +51,7 @@ class FixedKVBtree {
     internal_node_t,
     leaf_node_t,
     pin_t,
-    node_size,
-    leaf_has_children>;
+    node_size>;
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
   using LeafNodeRef = TCachedExtentRef<leaf_node_t>;
@@ -64,6 +62,8 @@ public:
 
   class iterator;
   using iterator_fut = base_iertr::future<iterator>;
+  static constexpr bool leaf_has_children =
+    std::is_base_of_v<ParentNode<leaf_node_t, node_key_t>, leaf_node_t>;
 
   using mapped_space_visitor_t = std::function<
     void(paddr_t, node_key_t, extent_len_t, depth_t, extent_types_t, iterator&)>;
@@ -489,7 +489,6 @@ public:
     op_context_t<node_key_t> c,
     TCachedExtentRef<node_t> node)
   {
-    assert(leaf_has_children);
     for (auto i : *node) {
       CachedExtentRef child_node;
       Transaction::get_extent_ret ret;
@@ -572,12 +571,10 @@ public:
           {
             assert(!c.cache.test_query_cache(i->get_val()));
           } else {
-            if constexpr (leaf_has_children) {
-              assert(i->get_val().pladdr.is_paddr()
-                ? (bool)!c.cache.test_query_cache(
-                    i->get_val().pladdr.get_paddr())
-                : true);
-            }
+            assert(i->get_val().pladdr.is_paddr()
+              ? (bool)!c.cache.test_query_cache(
+                  i->get_val().pladdr.get_paddr())
+              : true);
           }
           if (is_reserved_ptr(child)) {
             if constexpr(
@@ -615,10 +612,8 @@ public:
       depth_t depth,
       extent_types_t,
       iterator& iter) {
-      if constexpr (!leaf_has_children) {
-        if (depth == 1) {
-          return seastar::now();
-        }
+      if (depth == 1) {
+        return seastar::now();
       }
       if (depth > 1) {
         auto &node = iter.get_internal(depth).node;
@@ -632,7 +627,7 @@ public:
         assert(depth == 1);
         auto &node = iter.leaf.node;
         assert(node->is_valid());
-        check_node<typename leaf_node_t::base_child_node_t>(c, node);
+        check_node<typename leaf_node_t::child_t>(c, node);
       }
       return seastar::now();
     };
@@ -723,8 +718,7 @@ public:
     op_context_t<node_key_t> c,
     iterator iter,
     node_key_t laddr,
-    node_val_t val,
-    leaf_node_t::base_child_node_t* nextent
+    node_val_t val
   ) {
     LOG_PREFIX(FixedKVBtree::insert);
     SUBTRACET(
@@ -735,10 +729,10 @@ public:
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
     return seastar::do_with(
       iter,
-      [this, c, laddr, val, nextent](auto &ret) {
+      [this, c, laddr, val](auto &ret) {
         return find_insertion(
           c, laddr, ret
-        ).si_then([this, c, laddr, val, &ret, nextent] {
+        ).si_then([this, c, laddr, val, &ret] {
           if (!ret.at_boundary() && ret.get_key() == laddr) {
             return insert_ret(
               interruptible::ready_future_marker{},
@@ -747,7 +741,7 @@ public:
             ++(get_tree_stats<self_type>(c.trans).num_inserts);
             return handle_split(
               c, ret
-            ).si_then([c, laddr, val, &ret, nextent] {
+            ).si_then([c, laddr, val, &ret] {
               if (!ret.leaf.node->is_mutable()) {
                 CachedExtentRef mut = c.cache.duplicate_for_write(
                   c.trans, ret.leaf.node
@@ -760,7 +754,7 @@ public:
               assert(iter == ret.leaf.node->end() || iter->get_key() > laddr);
               assert(laddr >= ret.leaf.node->get_meta().begin &&
                      laddr < ret.leaf.node->get_meta().end);
-              ret.leaf.node->insert(iter, laddr, val, nextent);
+              ret.leaf.node->insert(iter, laddr, val);
               return insert_ret(
                 interruptible::ready_future_marker{},
                 std::make_pair(ret, true));
@@ -773,12 +767,11 @@ public:
   insert_ret insert(
     op_context_t<node_key_t> c,
     node_key_t laddr,
-    node_val_t val,
-    leaf_node_t::base_child_node_t* nextent) {
+    node_val_t val) {
     return lower_bound(
       c, laddr
-    ).si_then([this, c, laddr, val, nextent](auto iter) {
-      return this->insert(c, iter, laddr, val, nextent);
+    ).si_then([this, c, laddr, val](auto iter) {
+      return this->insert(c, iter, laddr, val);
     });
   }
 
@@ -797,8 +790,7 @@ public:
   update_ret update(
     op_context_t<node_key_t> c,
     iterator iter,
-    node_val_t val,
-    leaf_node_t::base_child_node_t* nextent)
+    node_val_t val)
   {
     LOG_PREFIX(FixedKVBtree::update);
     SUBTRACET(
@@ -815,8 +807,7 @@ public:
     ++(get_tree_stats<self_type>(c.trans).num_updates);
     iter.leaf.node->update(
       iter.leaf.node->iter_idx(iter.leaf.pos),
-      val,
-      nextent);
+      val);
     return update_ret(
       interruptible::ready_future_marker{},
       iter);
@@ -2168,8 +2159,7 @@ template <
   typename internal_node_t,
   typename leaf_node_t,
   typename pin_t,
-  size_t node_size,
-  bool leaf_has_children>
+  size_t node_size>
 struct is_fixed_kv_tree<
   FixedKVBtree<
     node_key_t,
@@ -2177,8 +2167,7 @@ struct is_fixed_kv_tree<
     internal_node_t,
     leaf_node_t,
     pin_t,
-    node_size,
-    leaf_has_children>> : std::true_type {};
+    node_size>> : std::true_type {};
 
 template <
   typename tree_type_t,
