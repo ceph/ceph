@@ -165,6 +165,17 @@ class CephFSMount(object):
                      get_file(self.client_remote, self.client_keyring_path,
                               sudo=True).decode())
 
+    def is_blocked(self):                                                                                                                                                                                                                                     
+        self.fs = Filesystem(self.ctx, name=self.cephfs_name)
+
+        try: 
+            output = self.fs.get_ceph_cmd_stdout('osd blocklist ls')
+        except CommandFailedError:
+            # Fallback for older Ceph cluster
+            output = self.fs.get_ceph_cmd_stdout('osd blacklist ls')
+
+        return self.addr in output
+
     def is_mounted(self):
         return self.mounted
 
@@ -475,30 +486,21 @@ class CephFSMount(object):
                 raise RuntimeError('value of attributes should be either str '
                                    f'or None. {k} - {v}')
 
-    def update_attrs(self, client_id=None, client_keyring_path=None,
-                     client_remote=None, hostfs_mntpt=None, cephfs_name=None,
-                     cephfs_mntpt=None):
-        if not (client_id or client_keyring_path or client_remote or
-                cephfs_name or cephfs_mntpt or hostfs_mntpt):
-            return
+    def update_attrs(self, **kwargs):
+        verify_keys = [
+          'client_id',
+          'client_keyring_path',
+          'hostfs_mntpt',
+          'cephfs_name',
+          'cephfs_mntpt',
+        ]
 
-        self._verify_attrs(client_id=client_id,
-                           client_keyring_path=client_keyring_path,
-                           hostfs_mntpt=hostfs_mntpt, cephfs_name=cephfs_name,
-                           cephfs_mntpt=cephfs_mntpt)
+        self._verify_attrs(**{key: kwargs[key] for key in verify_keys if key in kwargs})
 
-        if client_id:
-            self.client_id = client_id
-        if client_keyring_path:
-            self.client_keyring_path = client_keyring_path
-        if client_remote:
-            self.client_remote = client_remote
-        if hostfs_mntpt:
-            self.hostfs_mntpt = hostfs_mntpt
-        if cephfs_name:
-            self.cephfs_name = cephfs_name
-        if cephfs_mntpt:
-            self.cephfs_mntpt = cephfs_mntpt
+        for k in verify_keys:
+            v = kwargs.get(k)
+            if v is not None:
+                setattr(self, k, v)
 
     def remount(self, **kwargs):
         """
@@ -521,7 +523,7 @@ class CephFSMount(object):
 
         self.update_attrs(**kwargs)
 
-        retval = self.mount(mntopts=mntopts, check_status=check_status)
+        retval = self.mount(mntopts=mntopts, check_status=check_status, **kwargs)
         # avoid this scenario (again): mount command might've failed and
         # check_status might have silenced the exception, yet we attempt to
         # wait which might lead to an error.
@@ -660,15 +662,19 @@ class CephFSMount(object):
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
 
-    def read_file(self, path):
+    def read_file(self, path, sudo=False):
         """
         Return the data from the file on given path.
         """
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        return self.run_shell(args=['cat', path]).\
-            stdout.getvalue().strip()
+        args = []
+        if sudo:
+            args.append('sudo')
+        args += ['cat', path]
+
+        return self.run_shell(args=args, omit_sudo=False).stdout.getvalue().strip()
 
     def create_destroy(self):
         assert(self.is_mounted())
