@@ -342,8 +342,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
         for d in self.daemons:
             d.remote.sh(d.status_cmd, check_status=False)
         check_cmd = [
-            'ceph', 'orch', 'ls',
-            run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof',
+            'ceph', 'orch', 'ls', '--refresh',
+            run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh',
             run.Raw('&&'), 'ceph', 'health', 'detail',
             run.Raw('&&'), 'ceph', '-s',
             run.Raw('&&'), 'sudo', 'nvme', 'list',
