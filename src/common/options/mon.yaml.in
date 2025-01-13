@@ -1117,6 +1117,87 @@ options:
   flags:
   - no_mon_update
   with_legacy: true
+- name: mon_backup_path
+  type: str
+  level: advanced
+  desc: path to mon database backups
+  fmt_desc: the monitor's backup location.
+  default: /var/backups/ceph/mon/$cluster-$id
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_auto_backup
+  type: bool
+  level: advanced
+  desc: automatically trigger backups on important database changes
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_backup_always_full
+  type: bool
+  level: advanced
+  desc: always create full backups, otherwise only externally triggered and every 5th backup is automatically full.
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_min_avail
+  type: int
+  level: advanced
+  desc: only start backups if available disk space is above percentage
+  default: 5
+  services:
+  - mon
+- name: mon_backup_keep_last
+  type: uint
+  level: advanced
+  desc: keep last N backups
+  fmt_desc: keep the last backups of the monitor database
+  default: 6
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_keep_hourly
+  type: uint
+  level: advanced
+  desc: number of hourly backups
+  default: 5
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_keep_daily
+  type: uint
+  level: advanced
+  desc: number of daily backups
+  fmt_desc: Keep a one backup of every specified days
+  default: 7
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_interval
+  type: uint
+  level: advanced
+  desc: automatic backups very N minutes
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_cleanup_interval
+  type: uint
+  level: advanced
+  desc: trigger backup cleanup very specified minutes
+  services:
+  - mon
+  flags:
+  - no_mon_update
 - name: mon_rocksdb_options
   type: str
   level: advanced
