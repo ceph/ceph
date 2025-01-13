@@ -28,6 +28,8 @@ alerting:
             password: {{ service_discovery_password }}
           tls_config:
             ca_file: root_cert.pem
+            cert_file: prometheus.crt
+            key_file:  prometheus.key
 {% else %}
     - scheme: http
       http_sd_configs:
@@ -56,6 +58,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     honor_labels: true
     http_sd_configs:
@@ -81,6 +85,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     http_sd_configs:
     - url: {{ node_exporter_sd_url }}
@@ -104,6 +110,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     http_sd_configs:
     - url: {{ haproxy_sd_url }}
@@ -128,6 +136,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     honor_labels: true
     http_sd_configs:
@@ -149,6 +159,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     http_sd_configs:
     - url: {{ nvmeof_sd_url }}
@@ -169,6 +181,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     http_sd_configs:
     - url: {{ nfs_sd_url }}
@@ -189,6 +203,8 @@ scrape_configs:
         password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
 {% else %}
     http_sd_configs:
     - url: {{ smb_sd_url }}
