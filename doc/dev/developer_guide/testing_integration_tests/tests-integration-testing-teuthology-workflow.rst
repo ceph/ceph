@@ -6,7 +6,8 @@ Integration Tests using Teuthology Workflow
 Infrastructure
 --------------
 
-Components:
+Components
+**********
 
 1. `ceph-ci`_: Clone of the main Ceph repository, used for triggering Jenkins 
    Ceph builds for development.
@@ -44,7 +45,27 @@ Components:
 Each Teuthology test *run* contains multiple test *jobs*. Each job runs in an 
 environment isolated from other jobs, on a different collection of test nodes.
 
-To test a change in Ceph, follow these steps:
+Workflow Overview
+*****************
+
+.. image:: workflow.png
+
+
+To test a change in Ceph, start by pushing a branch with your changes to the
+`ceph-ci`_ repository. This will automatically trigger the Jenkins process 
+to build Ceph binaries - the status of the build can be observed on `Shaman`_. 
+These built packages will be uploaded on `Chacra`_. 
+
+To schedule a Teuthology integration test against this new build, you will 
+need access to the Sepia lab. Once you have access, log into the Teuthology 
+machine and complete the one-time initial Teuthology setup required to run 
+Teuthology commands. After the setup, use the ``teuthology-suite`` command to schedule 
+a Teuthology run. In this command, use the ``-c <ceph-ci branch name>`` option to 
+specify your build. The results of your test can be observed on `Pulpito`_. 
+Log into a `developer playground machine`_ to review the Teuthology run's archive logs. 
+
+
+The rest of the document will explain these steps in detail: 
 
 1. Getting binaries - Build Ceph.
 2. Scheduling Test Run:
@@ -98,6 +119,31 @@ Ceph binaries must be built for your branch before you can use teuthology to run
 .. _the Chacra site: https://shaman.ceph.com/api/search/?status=ready&project=ceph
 
 
+Pushing to the ceph-ci repository
+*********************************
+
+Follow these steps to push to the ceph-ci repository. After pushing, a new build will 
+automatically be scheduled. 
+
+1. Add the ceph-ci repository as a remote to your local clone of the Ceph repository:
+
+   .. prompt:: bash $
+
+       git remote add ceph-ci git@github.com:ceph/ceph-ci.git  
+
+       $ git remote -v  
+       origin   git@github.com:ceph/ceph.git (fetch)  
+       origin   git@github.com:ceph/ceph.git (push)  
+       ceph-ci  git@github.com:ceph/ceph-ci.git (fetch)  
+       ceph-ci  git@github.com:ceph/ceph-ci.git (push)  
+
+2. Push your branch upstream by running a command of the following form:
+
+   .. prompt:: bash $
+
+       $ git push ceph-ci wip-yourname-feature-x 
+
+
 Naming the ceph-ci branch
 *************************
 Prepend your branch with your name before you push it to ceph-ci. For example,
@@ -110,15 +156,14 @@ the name of that stable branch in your ceph-ci branch name.
 For example, the ``feature-x`` PR branch should be named 
 ``wip-feature-x-nautilus``. *This is not just a convention. This ensures that your branch is built in the correct environment.*
 
-You can choose to only trigger a CentOS 9.Stream build (excluding other distro like ubuntu)
-by adding "centos9-only" at the end of the ceph-ci branch name. For example,
-``wip-$yourname-feature-centos9-only``. This helps to get quicker builds and save resources 
-when you don't require binaries for other distros. 
-
 Delete the branch from ceph-ci when you no longer need it. If you are
 logged in to GitHub, all your branches on ceph-ci can be found here:
 https://github.com/ceph/ceph-ci/branches.
 
+.. note:: You can choose to only trigger a CentOS 9.Stream build (excluding other 
+   distro like ubuntu) by adding "centos9-only" at the end of the ceph-ci branch name. 
+   For example, ``wip-$yourname-feature-centos9-only``. This helps to get quicker builds 
+   and save resources when you don't require binaries for other distros. 
 
 Scheduling Test Run
 -------------------
