@@ -334,6 +334,13 @@ class NvmeofThrasher(Thrasher, Greenlet):
     def stop(self):
         self.stopping.set()
 
+    def stop_and_join(self):
+        """
+        Stop the thrashing process and join the thread.
+        """
+        self.stop()
+        return self.join()
+
     def do_checks(self):
         """
         Run some checks to see if everything is running well during thrashing.
@@ -346,6 +353,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
             run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh',
             run.Raw('&&'), 'ceph', 'health', 'detail',
             run.Raw('&&'), 'ceph', '-s',
+            run.Raw('&&'), 'ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0',
             run.Raw('&&'), 'sudo', 'nvme', 'list',
         ]
         for dev in self.devices:
@@ -407,6 +415,12 @@ class NvmeofThrasher(Thrasher, Greenlet):
             ])
         elif killed_method == "systemctl_stop":
             daemon.restart() 
+        else:
+            name = '%s.%s' % (daemon.type_, daemon.id_)
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "start",
+                name
+            ])
 
     def do_thrash(self):
         self.log('start thrashing')
