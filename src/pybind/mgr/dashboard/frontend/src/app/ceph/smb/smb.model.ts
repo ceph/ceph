@@ -52,3 +52,9 @@ interface SMBShareLoginControl {
   category?: 'user' | 'group';
   access: 'read' | 'read-write' | 'none' | 'admin';
 }
+
+export interface SMBResult {
+  resource: SMBCluster | SMBShare;
+  state: string;
+  success: boolean;
+}

@@ -479,6 +479,9 @@ export class TaskMessageService {
     'cephfs/snapshot/schedule/deactivate': this.newTaskMessage(
       this.commonOperations.deactivate,
       (metadata) => this.snapshotSchedule(metadata)
+    ),
+    'cephfs/smb/share/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.smbShare(metadata)
     )
   };
 
@@ -577,6 +580,11 @@ export class TaskMessageService {
   snapshotSchedule(metadata: any) {
     return $localize`snapshot schedule for path '${metadata?.path}'`;
   }
+
+  smbShare(metadata: any) {
+    return $localize`SMB share '${metadata?.share_id}'`;
+  }
+
   crudMessageId(id: string) {
     return $localize`${id}`;
   }

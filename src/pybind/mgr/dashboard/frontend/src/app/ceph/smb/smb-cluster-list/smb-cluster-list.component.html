@@ -11,7 +11,8 @@
     (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadSMBCluster($event)"
   >
-    <cd-smb-cluster-tabs *cdTableDetail
+    <cd-smb-cluster-tabs
+      *cdTableDetail
       [selection]="expandedRow">
     </cd-smb-cluster-tabs>
   </cd-table>

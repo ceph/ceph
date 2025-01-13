@@ -1,21 +1,21 @@
 <ng-container *ngIf="selection">
-    <nav
-      ngbNav
-      #nav="ngbNav"
-      class="nav-tabs"
-      cdStatefulTab="cluster-tabs"
-    >
-      <ng-container ngbNavItem="shares">
-        <a
-          ngbNavLink
-          i18n>Shares</a>
-        <ng-template ngbNavContent>
-          <cd-smb-share-list
-            [clusterId]="selection.cluster_id"
-          ></cd-smb-share-list>
-        </ng-template>
-      </ng-container>
-    </nav>
+  <nav
+    ngbNav
+    #nav="ngbNav"
+    class="nav-tabs"
+    cdStatefulTab="cluster-tabs"
+  >
+    <ng-container ngbNavItem="shares">
+      <a
+        ngbNavLink
+        i18n>Shares</a>
+      <ng-template ngbNavContent>
+        <cd-smb-share-list
+          [clusterId]="selection.cluster_id"
+        ></cd-smb-share-list>
+      </ng-template>
+    </ng-container>
+  </nav>
 
-    <div [ngbNavOutlet]="nav"></div>
-  </ng-container>
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>
