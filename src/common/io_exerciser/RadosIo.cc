@@ -16,8 +16,9 @@ template <typename S>
 int send_osd_command(int osd, S& s, librados::Rados& rados, const char* name,
                      ceph::buffer::list& inbl, ceph::buffer::list* outbl,
                      Formatter* f) {
-  std::ostringstream oss;
   encode_json(name, s, f);
+
+  std::ostringstream oss;
   f->flush(oss);
   int rc = rados.osd_command(osd, oss.str(), inbl, outbl, nullptr);
   return rc;
@@ -27,8 +28,9 @@ template <typename S>
 int send_mon_command(S& s, librados::Rados& rados, const char* name,
                      ceph::buffer::list& inbl, ceph::buffer::list* outbl,
                      Formatter* f) {
-  std::ostringstream oss;
   encode_json(name, s, f);
+
+  std::ostringstream oss;
   f->flush(oss);
   int rc = rados.mon_command(oss.str(), inbl, outbl, nullptr);
   return rc;
