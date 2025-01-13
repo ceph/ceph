@@ -144,7 +144,7 @@ class SubvolumeBase(object):
         try:
             self.fs.stat(self.legacy_config_path)
             self.legacy_mode = True
-        except cephfs.Error as e:
+        except cephfs.Error:
             pass
 
         log.debug("loading config "
@@ -160,7 +160,7 @@ class SubvolumeBase(object):
 
     def get_attrs(self, pathname):
         # get subvolume attributes
-        attrs = {}  # type: Dict[str, Union[int, str, None]]
+        attrs: Dict[str, Union[int, str, None]] = {}
         stx = self.fs.statx(pathname,
                             cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID
                             | cephfs.CEPH_STATX_MODE,
