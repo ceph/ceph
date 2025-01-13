@@ -537,30 +537,6 @@ int MemStore::omap_get_values(
   return 0;
 }
 
-#ifdef WITH_SEASTAR
-int MemStore::omap_get_values(
-  CollectionHandle& ch,                    ///< [in] Collection containing oid
-  const ghobject_t &oid,       ///< [in] Object containing omap
-  const std::optional<std::string> &start_after,     ///< [in] Keys to get
-  std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
-  )
-{
-  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
-  Collection *c = static_cast<Collection*>(ch.get());
-  ObjectRef o = c->get_object(oid);
-  if (!o)
-    return -ENOENT;
-  assert(start_after);
-  std::lock_guard lock{o->omap_mutex};
-  for (auto it = o->omap.upper_bound(*start_after);
-       it != std::end(o->omap);
-       ++it) {
-    out->insert(*it);
-  }
-  return 0;
-}
-#endif
-
 int MemStore::omap_check_keys(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
@@ -622,6 +598,10 @@ public:
     std::lock_guard lock{o->omap_mutex};
     return it->second;
   }
+  std::string_view value_as_sv() override {
+    std::lock_guard lock{o->omap_mutex};
+    return std::string_view{it->second.c_str(), it->second.length()};
+  }
   int status() override {
     return 0;
   }
@@ -637,6 +617,48 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
   if (!o)
     return ObjectMap::ObjectMapIterator();
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o));
+}
+
+int MemStore::omap_iterate(
+  CollectionHandle &ch,   ///< [in] collection
+  const ghobject_t &oid, ///< [in] object
+  ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+  std::function<omap_iter_ret_t(std::string_view, std::string_view)> f)
+{
+  Collection *c = static_cast<Collection*>(ch.get());
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    return -ENOENT;
+  }
+
+  {
+    std::lock_guard lock{o->omap_mutex};
+
+    // obtain seek the iterator
+    decltype(o->omap)::iterator it;
+    {
+      if (start_from.seek_type == omap_iter_seek_t::LOWER_BOUND) {
+        it = o->omap.lower_bound(start_from.seek_position);
+      } else {
+        it = o->omap.upper_bound(start_from.seek_position);
+      }
+    }
+
+    // iterate!
+    while (it != o->omap.end()) {
+      // potentially rectifying memcpy but who cares for memstore?
+      omap_iter_ret_t ret =
+        f(it->first, std::string_view{it->second.c_str(), it->second.length()});
+      if (ret == omap_iter_ret_t::STOP) {
+        break;
+      } else if (ret == omap_iter_ret_t::NEXT) {
+        ++it;
+      } else {
+        ceph_abort();
+      }
+    }
+  }
+  return 0;
 }
 
 

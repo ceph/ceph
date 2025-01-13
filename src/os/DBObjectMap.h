@@ -393,6 +393,7 @@ private:
     int next() override { ceph_abort(); return 0; }
     std::string key() override { ceph_abort(); return ""; }
     ceph::buffer::list value() override { ceph_abort(); return ceph::buffer::list(); }
+    std::string_view value_as_sv() override { ceph_abort(); return std::string_view(); }
     int status() override { return 0; }
   };
 
@@ -431,6 +432,7 @@ private:
     int next() override;
     std::string key() override;
     ceph::buffer::list value() override;
+    std::string_view value_as_sv() override;
     int status() override;
 
     bool on_parent() {
