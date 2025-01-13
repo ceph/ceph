@@ -2036,8 +2036,8 @@ class CertKeyStore():
             var = service_name if entity in self.service_name_cert else host
             j = {}
             self.known_certs[entity][var] = cert_obj
-            for service_name in self.known_certs[entity].keys():
-                j[var] = Cert.to_json(self.known_certs[entity][var])
+            for cert_key in self.known_certs[entity]:
+                j[cert_key] = Cert.to_json(self.known_certs[entity][cert_key])
         else:
             self.known_certs[entity] = cert_obj
             j = Cert.to_json(cert_obj)
