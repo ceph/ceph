@@ -3289,6 +3289,10 @@ Then run the following:
         return self.cert_mgr.cert_ls()
 
     @handle_orch_error
+    def cert_store_reload(self) -> str:
+        return self.cert_mgr.reload()
+
+    @handle_orch_error
     def cert_store_cert_check(self) -> Dict[str, Any]:
         self.cert_mgr.check_certificates()
         return {}

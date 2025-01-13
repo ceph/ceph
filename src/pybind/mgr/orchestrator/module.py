@@ -1155,6 +1155,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 result_str += f'{indent}{k}: {v}\n'
         return result_str
 
+    @_cli_read_command('orch cert-store reload')
+    def _cert_store_reload(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_reload()
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
     @_cli_read_command('orch cert-store cert ls')
     def _cert_store_cert_ls(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_cert_ls()
