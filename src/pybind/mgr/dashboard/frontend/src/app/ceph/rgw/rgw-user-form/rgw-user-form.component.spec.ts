@@ -189,7 +189,9 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null
+        uid: null,
+        account_id: '',
+        account_root_user: false
       });
     });
 
@@ -203,7 +205,8 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: -1,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
     });
 
@@ -220,7 +223,9 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null
+        uid: null,
+        account_id: '',
+        account_root_user: false
       });
     });
 
@@ -234,7 +239,8 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 0,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
     });
 
@@ -242,6 +248,7 @@ describe('RgwUserFormComponent', () => {
       spyOn(rgwUserService, 'create');
       formHelper.setValue('max_buckets_mode', 1, true);
       formHelper.setValue('max_buckets', 100, true);
+
       component.onSubmit();
       expect(rgwUserService.create).toHaveBeenCalledWith({
         access_key: '',
@@ -252,7 +259,9 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null
+        uid: null,
+        account_id: '',
+        account_root_user: false
       });
     });
 
@@ -267,7 +276,8 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 100,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
     });
   });
@@ -291,7 +301,8 @@ describe('RgwUserFormComponent', () => {
         email: '',
         max_buckets: 1000,
         suspended: false,
-        system: false
+        system: false,
+        account_root_user: false
       });
     });
 
@@ -342,6 +353,45 @@ describe('RgwUserFormComponent', () => {
 
       const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
       expect(capabilityButton.disabled).toBeFalsy();
+    });
+  });
+
+  describe('RgwUserAccounts', () => {
+    it('create with account id & account root user', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('account_id', 'RGW12312312312312312', true);
+      formHelper.setValue('account_root_user', true, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 1000,
+        secret_key: '',
+        suspended: false,
+        system: false,
+        uid: null,
+        account_id: 'RGW12312312312312312',
+        account_root_user: true
+      });
+    });
+
+    it('edit to link account to existing user', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('account_id', 'RGW12312312312312312', true);
+      formHelper.setValue('account_root_user', true, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 1000,
+        suspended: false,
+        system: false,
+        account_id: 'RGW12312312312312312',
+        account_root_user: true
+      });
     });
   });
 });

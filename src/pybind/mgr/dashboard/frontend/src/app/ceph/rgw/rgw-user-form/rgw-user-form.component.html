@@ -110,6 +110,49 @@
           </div>
         </div>
 
+        <!-- Link Account -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="link_account"
+                 i18n>Link Account</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    formControlName="account_id"
+                    name="link_account"
+                    id="link_account">
+            <option i18n
+                    *ngIf="accounts === null"
+                    [ngValue]="null">Loading...</option>
+            <option i18n
+                    *ngIf="accounts !== null"
+                    [ngValue]="null">-- Select an Account --</option>
+            <option *ngFor="let account of accounts"
+                    [value]="account.id">{{ account.name }} {{account.tenant ? '- '+account.tenant : ''}}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('account_id', frm, 'tenantedAccount')"
+                  i18n>Only accounts with the same tenant name can be linked to a tenanted user.</span>
+          </div>
+        </div>
+
+        <!-- Account Root User -->
+        <div *ngIf="userForm.getValue('account_id')"
+             class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="account_root_user"
+                     type="checkbox"
+                     formControlName="account_root_user">
+              <label class="custom-control-label"
+                     for="account_root_user"
+                     i18n>Account Root user</label>
+              <cd-helper i18n>The account root user has full access to all resources and manages the account.
+                It's recommended to use this account for management tasks only and create additional users with specific permissions.</cd-helper>
+            </div>
+          </div>
+        </div>
+
         <!-- Max. buckets -->
         <div class="form-group row">
           <label class="cd-col-form-label"
