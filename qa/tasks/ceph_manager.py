@@ -3301,6 +3301,18 @@ class CephManager:
             if rule['rule_name'] == crush_rule_name:
                 return rule['rule_id']
         assert False, 'rule %s not found' % crush_rule_name
+    
+    def get_crush_rules(self):
+        """
+        Get crush rule
+        :returns: set -- crush rule names
+        """
+        out = self.raw_cluster_cmd('osd', 'crush', 'rule', 'dump', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        rules = set()
+        for rule in j:
+            rules.add(rule['rule_name'])
+        return rules
 
     def get_mon_dump_json(self):
         """

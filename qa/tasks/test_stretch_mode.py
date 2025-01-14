@@ -1,4 +1,5 @@
 import logging
+from stretch_mode_helper import setup_stretch_mode
 from tasks.mgr.mgr_test_case import MgrTestCase
 
 log = logging.getLogger(__name__)
@@ -6,15 +7,18 @@ log = logging.getLogger(__name__)
 class TestStretchMode(MgrTestCase):
     """
     Test the stretch mode feature of Ceph
+    NOTE : vstart cluster osd_pool_default_min_size is 1
     """
     POOL = 'stretch_pool'
     CLUSTER = "ceph"
+    CLIENT = "client.0"
     WRITE_PERIOD = 10
     RECOVERY_PERIOD = WRITE_PERIOD * 6
     SUCCESS_HOLD_TIME = 7
     STRETCH_CRUSH_RULE = 'stretch_rule'
     STRETCH_CRUSH_RULE_ID = None
     STRETCH_BUCKET_TYPE = 'datacenter'
+    STRETCH_SUB_BUCKET_TYPE = 'host'
     TIEBREAKER_MON_NAME = 'e'
     DEFAULT_POOL_TYPE = 'replicated'
     DEFAULT_POOL_CRUSH_RULE = 'replicated_rule'
@@ -60,7 +64,6 @@ class TestStretchMode(MgrTestCase):
         # Ensure we have at least 6 OSDs
         super(TestStretchMode, self).setUp()
         self.DEFAULT_POOL_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.DEFAULT_POOL_CRUSH_RULE)
-        self.STRETCH_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.STRETCH_CRUSH_RULE)
         if self._osd_count() < 4:
             self.skipTest("Not enough OSDS!")
 
@@ -80,6 +83,25 @@ class TestStretchMode(MgrTestCase):
                     pool['pool_name'],
                     pool['pool_name'],
                     '--yes-i-really-really-mean-it')
+
+        # Remove any existing crush rule that is not the default
+        for crush_rule in self.mgr_cluster.mon_manager.get_crush_rules():
+            if crush_rule != self.DEFAULT_POOL_CRUSH_RULE:
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'crush', 'rule', 'rm', crush_rule
+                )
+
+        # Ready the cluster for stretch mode
+        self.STRETCH_CRUSH_RULE_ID = setup_stretch_mode(
+            self.mgr_cluster,
+            self.ctx,
+            self.CLIENT,
+            self.STRETCH_BUCKET_TYPE,
+            self.STRETCH_SUB_BUCKET_TYPE,
+            self.STRETCH_CRUSH_RULE,
+            self.DC_OSDS,
+            self.DC_MONS
+        )
 
     def _setup_pool(
             self,
@@ -137,6 +159,16 @@ class TestStretchMode(MgrTestCase):
                 if osd in osds:
                     return node
         return None
+    
+    def _bring_back_osd(self, osd):
+        """
+        Bring back the osd.
+        """
+        try:
+            self.ctx.daemons.get_daemon('osd', osd, self.CLUSTER).restart()
+        except Exception:
+            log.error("Failed to bring back osd.{}".format(str(osd)))
+            pass
 
     def _move_osd_back_to_host(self, osd):
         """
@@ -147,8 +179,19 @@ class TestStretchMode(MgrTestCase):
         log.debug("Moving osd.%d back to %s", osd, host)
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'osd', 'crush', 'move', 'osd.{}'.format(str(osd)),
-            'host={}'.format(host)
+            'host={}'.format(host) 
         )
+    def _remove_crush_rule(self, crush_rule):
+        """
+        Remove the crush rule.
+        """
+        try:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'osd', 'crush', 'rule', 'rm', crush_rule
+            )
+        except Exception:
+            log.error("Failed to remove crush rule.{}".format(str(crush_rule)))
+            pass
 
     def tearDown(self):
         """
@@ -166,13 +209,25 @@ class TestStretchMode(MgrTestCase):
                     'osd', 'in', str(osd['osd']))
             # Bring back all the osds and move it back to the host.
             if osd['up'] == 0:
-                self.mgr_cluster.mon_manager.revive_osd(osd['osd'])
+                self._bring_back_osd(osd['osd'])
                 self._move_osd_back_to_host(osd['osd'])
         
         # Bring back all the mons
         mons = self._get_all_mons_from_all_dc()
         for mon in mons:
             self._bring_back_mon(mon)
+        
+        # Exit stretch mode if it is still enabled
+        if self.mgr_cluster.mon_manager.get_osd_dump_json()['stretch_mode']['stretch_mode_enabled']:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'mon', 'disable_stretch_mode',
+                self.DEFAULT_POOL_CRUSH_RULE,
+                '--yes-i-really-mean-it',
+            )
+
+        # Remove the CRUSH rule if it is still present
+        self._remove_crush_rule(self.STRETCH_CRUSH_RULE)
+
         super(TestStretchMode, self).tearDown()
 
     def _kill_osd(self, osd):
@@ -452,6 +507,16 @@ class TestStretchMode(MgrTestCase):
         1. Healthy Stretch Mode
         2. Degraded Stretch Mode
         """
+        # Enter stretch mode
+        self.assertEqual(
+            0,
+            self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+                'mon',
+                'enable_stretch_mode',
+                self.TIEBREAKER_MON_NAME,
+                self.STRETCH_CRUSH_RULE,
+                self.STRETCH_BUCKET_TYPE
+            ))
         # Create a pool
         self._setup_pool(self.POOL, 16, 'replicated', self.STRETCH_CRUSH_RULE, 4, 2)
         # Write some data to the pool
@@ -518,7 +583,7 @@ class TestStretchMode(MgrTestCase):
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # write some data to the pool
-        # self._write_some_data(self.WRITE_PERIOD)
+        self._write_some_data(self.WRITE_PERIOD)
         # Bring down dc1
         self._fail_over_all_osds_in_dc('dc1')
         self._fail_over_all_mons_in_dc('dc1')
