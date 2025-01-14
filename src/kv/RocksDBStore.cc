@@ -6,6 +6,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -47,6 +48,7 @@ using std::ostream;
 using std::pair;
 using std::set;
 using std::string;
+using std::string_view;
 using std::unique_ptr;
 using std::vector;
 
@@ -1974,7 +1976,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
   // Find separator inside Slice
   char* separator = (char*) memchr(in.data(), 0, in.size());
-  if (separator == NULL)
+  if (separator == nullptr)
      return -EINVAL;
   prefix_len = size_t(separator - in.data());
   if (prefix_len >= in.size())
@@ -1985,6 +1987,27 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
     *prefix = string(in.data(), prefix_len);
   if (key)
     *key = string(separator+1, in.size()-prefix_len-1);
+  return 0;
+}
+
+// TODO: deduplicate the code, preferrably by removing the string variant
+int RocksDBStore::split_key(rocksdb::Slice in, string_view *prefix, string_view *key)
+{
+  size_t prefix_len = 0;
+
+  // Find separator inside Slice
+  char* separator = (char*) memchr(in.data(), 0, in.size());
+  if (separator == nullptr)
+     return -EINVAL;
+  prefix_len = size_t(separator - in.data());
+  if (prefix_len >= in.size())
+    return -EINVAL;
+
+  // Fetch prefix and/or key directly from Slice
+  if (prefix)
+    *prefix = string_view(in.data(), prefix_len);
+  if (key)
+    *key = string_view(separator + 1, in.size() - prefix_len - 1);
   return 0;
 }
 
@@ -2208,12 +2231,24 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()
 {
   string out_key;
-  split_key(dbiter->key(), 0, &out_key);
+  split_key(dbiter->key(), nullptr, &out_key);
+  return out_key;
+}
+string_view RocksDBStore::RocksDBWholeSpaceIteratorImpl::key_as_sv()
+{
+  string_view out_key;
+  split_key(dbiter->key(), nullptr, &out_key);
   return out_key;
 }
 pair<string,string> RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key()
 {
   string prefix, key;
+  split_key(dbiter->key(), &prefix, &key);
+  return make_pair(prefix, key);
+}
+pair<string_view,string_view> RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key_as_sv()
+{
+  string_view prefix, key;
   split_key(dbiter->key(), &prefix, &key);
   return make_pair(prefix, key);
 }
@@ -2247,6 +2282,12 @@ bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
 {
   rocksdb::Slice val = dbiter->value();
   return bufferptr(val.data(), val.size());
+}
+
+std::string_view RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_sv()
+{
+  rocksdb::Slice val = dbiter->value();
+  return std::string_view{val.data(), val.size()};
 }
 
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
@@ -2330,8 +2371,14 @@ public:
   string key() override {
     return dbiter->key().ToString();
   }
+  string_view key_as_sv() override {
+    return dbiter->key().ToStringView();
+  }
   std::pair<std::string, std::string> raw_key() override {
     return make_pair(prefix, key());
+  }
+  std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
+    return make_pair(prefix, dbiter->key().ToStringView());
   }
   bufferlist value() override {
     return to_bufferlist(dbiter->value());
@@ -2339,6 +2386,10 @@ public:
   bufferptr value_as_ptr() override {
     rocksdb::Slice val = dbiter->value();
     return bufferptr(val.data(), val.size());
+  }
+  std::string_view value_as_sv() override {
+    rocksdb::Slice val = dbiter->value();
+    return std::string_view{val.data(), val.size()};
   }
   int status() override {
     return dbiter->status().ok() ? 0 : -1;
@@ -2650,12 +2701,30 @@ public:
     }
   }
 
+  std::string_view key_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->key_as_sv();
+    } else {
+      return current_shard->second->key_as_sv();
+    }
+  }
+
   std::pair<std::string,std::string> raw_key() override
   {
     if (smaller == on_main) {
       return main->raw_key();
     } else {
       return { current_shard->first, current_shard->second->key() };
+    }
+  }
+
+  std::pair<std::string_view,std::string_view> raw_key_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->raw_key_as_sv();
+    } else {
+      return { current_shard->first, current_shard->second->key_as_sv() };
     }
   }
 
@@ -2674,6 +2743,15 @@ public:
       return main->value();
     } else {
       return current_shard->second->value();
+    }
+  }
+
+  std::string_view value_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->value_as_sv();
+    } else {
+      return current_shard->second->value_as_sv();
     }
   }
 
@@ -2999,8 +3077,14 @@ public:
   string key() override {
     return iters[0]->key().ToString();
   }
+  string_view key_as_sv() override {
+    return iters[0]->key().ToStringView();
+  }
   std::pair<std::string, std::string> raw_key() override {
     return make_pair(prefix, key());
+  }
+  std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
+    return make_pair(prefix, iters[0]->key().ToStringView());
   }
   bufferlist value() override {
     return to_bufferlist(iters[0]->value());
@@ -3008,6 +3092,10 @@ public:
   bufferptr value_as_ptr() override {
     rocksdb::Slice val = iters[0]->value();
     return bufferptr(val.data(), val.size());
+  }
+  std::string_view value_as_sv() override {
+    rocksdb::Slice val = iters[0]->value();
+    return std::string_view{val.data(), val.size()};
   }
   int status() override {
     return iters[0]->status().ok() ? 0 : -1;
