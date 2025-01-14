@@ -24,7 +24,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix *_dout << "snap_mapper."
+#define dout_prefix *_dout << "snap_mapper "
 
 using std::make_pair;
 using std::map;
@@ -489,7 +489,7 @@ int SnapMapper::update_snaps(
   const set<snapid_t> *old_snaps_check,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << " " << new_snaps
+  dout(20) << *this << __func__ << " " << oid << " " << new_snaps
 	   << " was " << (old_snaps_check ? *old_snaps_check : set<snapid_t>())
 	   << dendl;
   ceph_assert(check(oid));
@@ -536,7 +536,7 @@ void SnapMapper::add_oid(
     object_snaps out;
     int r = get_snaps(oid, &out);
     if (r != -ENOENT) {
-      derr << __func__ << " found existing snaps mapped on " << oid
+      derr << *this << __func__ << " found existing snaps mapped on " << oid
 	   << ", removing" << dendl;
       ceph_assert(!cct->_conf->osd_debug_verify_snaps);
       remove_oid(oid, t);
@@ -554,7 +554,7 @@ void SnapMapper::add_oid(
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
-      dout(20) << __func__ << " set " << i.first << dendl;
+      dout(20) << *this << __func__ << " set " << i.first << dendl;
     }
   }
   backend.set_keys(to_add, t);
@@ -564,17 +564,17 @@ void SnapMapper::add_oid(
 void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
 {
   if (prefix_itr_snap == CEPH_NOSNAP) {
-    dout(10) << __func__ << "::from <CEPH_NOSNAP> to <" << snap << "> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::from <CEPH_NOSNAP> to <" << snap << "> ::" << s << dendl;
   }
   else if (snap == CEPH_NOSNAP) {
-    dout(10) << __func__ << "::from <"<< prefix_itr_snap << "> to <CEPH_NOSNAP> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::from <"<< prefix_itr_snap << "> to <CEPH_NOSNAP> ::" << s << dendl;
   }
   else if (prefix_itr_snap == snap) {
-    dout(10) << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
   }
   else {
     // This is unexpected!!
-    dout(10) << __func__ << "::from <"<< prefix_itr_snap << "> to <" << snap << "> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::from <"<< prefix_itr_snap << "> to <" << snap << "> ::" << s << dendl;
   }
   prefix_itr_snap = snap;
   prefix_itr      = prefixes.begin();
@@ -594,7 +594,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
       pair<string, ceph::buffer::list> next;
       // access RocksDB (an expensive operation!)
       int r = backend.get_next(pos, &next);
-      dout(20) << __func__ << " get_next(" << pos << ") returns " << r
+      dout(20) << *this << __func__ << " get_next(" << pos << ") returns " << r
 	       << " " << next.first << dendl;
       if (r != 0) {
 	return out; // Done
@@ -611,18 +611,18 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
 	break; // Done with this prefix
       }
 
-      dout(20) << __func__ << " " << next.first << dendl;
+      dout(20) <<  *this << __func__ << " found " << next.first << dendl;
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
       ceph_assert(next_decoded.first == snap);
       ceph_assert(check(next_decoded.second));
-
       out.push_back(next_decoded.second);
+
       pos = next.first;
     }
 
     if (out.size() >= max) {
-      dout(20) << fmt::format("{}: reached max of: {} returning",
-                              __func__, out.size())
+      dout(20) << *this << fmt::format("{}: reached max of: {} returning",
+                                       __func__, out.size())
                << dendl;
       return out;
     }
@@ -634,7 +634,7 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
   unsigned max)
 {
-  dout(20) << __func__ << "::snapid=" << snap << dendl;
+  dout(20) << *this << __func__ << "snapid=" << snap << dendl;
 
   // if max would be 0, we return ENOENT and the caller would mistakenly
   // trim the snaptrim queue
@@ -664,7 +664,7 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
     objs = get_objects_by_prefixes(snap, max);
 
     if (unlikely(objs.size() > 0)) {
-      derr << __func__ << "::New Clone-Objects were added to Snap " << snap
+      derr << *this << __func__ << " New Clone-Objects were added to Snap " << snap
 	   << " after trimming was started" << dendl;
     }
     reset_prefix_itr(CEPH_NOSNAP, "Trim was completed successfully");
@@ -682,7 +682,7 @@ int SnapMapper::remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << dendl;
+  dout(20) << *this << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
   return _remove_oid(oid, t);
 }
@@ -691,7 +691,7 @@ int SnapMapper::_remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << dendl;
+  dout(20) << *this << __func__ << " " << oid << dendl;
   object_snaps out;
   int r = get_snaps(oid, &out);
   if (r < 0)
@@ -707,7 +707,7 @@ int SnapMapper::_remove_oid(
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
-      dout(20) << __func__ << "::rm " << i << dendl;
+      dout(20) << *this << __func__ << "::rm " << i << dendl;
     }
   }
   backend.remove_keys(to_remove, t);
@@ -739,7 +739,7 @@ void SnapMapper::update_snap_map(
       i.soid,
       _t);
     if (r)
-      dout(20) << __func__ << " remove_oid " << i.soid << " failed with " << r << dendl;
+      dout(20) << *this << __func__ << " remove_oid " << i.soid << " failed with " << r << dendl;
     // On removal tolerate missing key corruption
     ceph_assert(r == 0 || r == -ENOENT);
   } else if (i.is_update()) {
@@ -750,7 +750,7 @@ void SnapMapper::update_snap_map(
     try {
       decode(snaps, p);
     } catch (...) {
-      dout(20) << __func__ << " decode snaps failure on " << i << dendl;
+      dout(20) << *this << __func__ << " decode snaps failure on " << i << dendl;
       snaps.clear();
     }
     std::set<snapid_t> _snaps(snaps.begin(), snaps.end());

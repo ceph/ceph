@@ -122,6 +122,8 @@ public:
 class SnapMapper : public Scrub::SnapMapReaderI {
   friend class MapperVerifier; // unit-test support
   friend class DirectMapper; // unit-test support
+  friend std::ostream& operator<<(std::ostream &lhs, const SnapMapper &sm);
+
 public:
   CephContext* cct;
   struct object_snaps {
@@ -413,5 +415,15 @@ private:
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
 WRITE_CLASS_ENCODER(SnapMapper::Mapping)
+
+inline std::ostream& operator<<(std::ostream& os, const SnapMapper& sm)
+{
+  os << fmt::format(" [pg_id:{:x}, match:{}, mask_bits:{}, "
+                    "last_key_checked:{}, pool:{}, shard:{}, "
+                    "shard_prefix: {}, prefixes: {}] ",
+                    sm.match, sm.match, sm.mask_bits, sm.last_key_checked,
+                    sm.pool, sm.shard.id, sm.shard_prefix, sm.prefixes);
+  return os;
+}
 
 #endif
