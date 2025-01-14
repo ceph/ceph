@@ -163,7 +163,7 @@ function wait_for_scrub_mod() {
         fi
         sleep 1
         # are we still the primary?
-        local current_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
+        local current_primary=`./bin/ceph pg $pgid query | jq '.acting[0]' `
         if [ $orig_primary != $current_primary ]; then
             echo $orig_primary no longer primary for $pgid
             return 0
@@ -194,7 +194,7 @@ function pg_scrub_mod() {
 
     local last_scrub=$(get_last_scrub_stamp $pgid)
     # locate the primary
-    local my_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
+    local my_primary=`./bin/ceph pg $pgid query | jq '.acting[0]' `
     local recovery=false
     ceph pg scrub $pgid
     #ceph --format json pg dump pgs | jq ".pg_stats | .[] | select(.pgid == \"$pgid\") | .state"
