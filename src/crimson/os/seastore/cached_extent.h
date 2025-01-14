@@ -1279,7 +1279,6 @@ private:
 };
 
 class ChildableCachedExtent;
-class LogicalCachedExtent;
 
 class child_pos_t {
 public:
@@ -1337,47 +1336,17 @@ using PhysicalNodeMappingRef = std::unique_ptr<PhysicalNodeMapping<key_t, val_t>
 template <typename key_t, typename val_t>
 class PhysicalNodeMapping {
 public:
+  PhysicalNodeMapping() = default;
+  PhysicalNodeMapping(const PhysicalNodeMapping&) = delete;
   virtual extent_len_t get_length() const = 0;
-  virtual extent_types_t get_type() const = 0;
   virtual val_t get_val() const = 0;
   virtual key_t get_key() const = 0;
-  virtual PhysicalNodeMappingRef<key_t, val_t> duplicate() const = 0;
-  virtual PhysicalNodeMappingRef<key_t, val_t> refresh_with_pending_parent() {
-    ceph_abort("impossible");
-    return {};
-  }
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
-  // An lba pin may be indirect, see comments in lba_manager/btree/btree_lba_manager.h
-  virtual bool is_indirect() const { return false; }
-  virtual key_t get_intermediate_key() const { return min_max_t<key_t>::null; }
-  virtual key_t get_intermediate_base() const { return min_max_t<key_t>::null; }
-  virtual extent_len_t get_intermediate_length() const { return 0; }
   virtual uint32_t get_checksum() const {
     ceph_abort("impossible");
     return 0;
-  }
-  // The start offset of the pin, must be 0 if the pin is not indirect
-  virtual extent_len_t get_intermediate_offset() const {
-    return std::numeric_limits<extent_len_t>::max();
-  }
-
-  virtual get_child_ret_t<LogicalCachedExtent>
-  get_logical_extent(Transaction &t) = 0;
-
-  void link_child(ChildableCachedExtent *c) {
-    ceph_assert(child_pos);
-    child_pos->link_child(c);
-  }
-
-  // For reserved mappings, the return values are
-  // undefined although it won't crash
-  virtual bool is_stable() const = 0;
-  virtual bool is_data_stable() const = 0;
-  virtual bool is_clone() const = 0;
-  bool is_zero_reserved() const {
-    return !get_val().is_real();
   }
   virtual bool is_parent_viewable() const = 0;
   virtual bool is_parent_valid() const = 0;
@@ -1391,23 +1360,7 @@ public:
   }
 
   virtual ~PhysicalNodeMapping() {}
-protected:
-  std::optional<child_pos_t> child_pos = std::nullopt;
 };
-
-using LBAMapping = PhysicalNodeMapping<laddr_t, paddr_t>;
-using LBAMappingRef = PhysicalNodeMappingRef<laddr_t, paddr_t>;
-
-std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);
-
-using lba_pin_list_t = std::list<LBAMappingRef>;
-
-std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
-
-using BackrefMapping = PhysicalNodeMapping<paddr_t, laddr_t>;
-using BackrefMappingRef = PhysicalNodeMappingRef<paddr_t, laddr_t>;
-
-using backref_pin_list_t = std::list<BackrefMappingRef>;
 
 /**
  * RetiredExtentPlaceholder
@@ -1522,6 +1475,8 @@ private:
     return out;
   }
 };
+
+class LBAMapping;
 /**
  * LogicalCachedExtent
  *
@@ -1556,11 +1511,7 @@ public:
     laddr = nladdr;
   }
 
-  void maybe_set_intermediate_laddr(LBAMapping &mapping) {
-    laddr = mapping.is_indirect()
-      ? mapping.get_intermediate_base()
-      : mapping.get_key();
-  }
+  void maybe_set_intermediate_laddr(LBAMapping &mapping);
 
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
@@ -1660,8 +1611,6 @@ using lextent_list_t = addr_extent_list_base_t<
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::lba_pin_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::LBAMapping> : fmt::ostream_formatter {};
 #endif

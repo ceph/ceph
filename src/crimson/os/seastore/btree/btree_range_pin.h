@@ -7,11 +7,12 @@
 
 #include "crimson/common/log.h"
 
-#include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
+class Cache;
 
 template <typename node_key_t>
 struct op_context_t {
@@ -116,8 +117,6 @@ protected:
   extent_len_t len = 0;
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
-
-  virtual std::unique_ptr<BtreeNodeMapping> _duplicate(op_context_t<key_t>) const = 0;
   fixed_kv_node_meta_t<key_t> _get_pin_range() const {
     return range;
   }
@@ -139,11 +138,7 @@ public:
       len(len),
       range(meta),
       pos(pos)
-  {
-    if (!parent->is_pending()) {
-      this->child_pos = {parent, pos};
-    }
-  }
+  {}
 
   CachedExtentRef get_parent() const final {
     return parent;
@@ -162,11 +157,6 @@ public:
     return len;
   }
 
-  extent_types_t get_type() const override {
-    ceph_abort("should never happen");
-    return extent_types_t::ROOT;
-  }
-
   val_t get_val() const final {
     if constexpr (std::is_same_v<val_t, paddr_t>) {
       return value.get_paddr();
@@ -178,16 +168,6 @@ public:
 
   key_t get_key() const override {
     return range.begin;
-  }
-
-  PhysicalNodeMappingRef<key_t, val_t> duplicate() const final {
-    auto ret = _duplicate(ctx);
-    ret->range = range;
-    ret->value = value;
-    ret->parent = parent;
-    ret->len = len;
-    ret->pos = pos;
-    return ret;
   }
 
   bool has_been_invalidated() const final {
@@ -215,9 +195,6 @@ public:
     return unviewable;
   }
 
-  get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction&) final;
-  bool is_stable() const final;
-  bool is_data_stable() const final;
   bool is_parent_viewable() const final {
     ceph_assert(parent);
     if (!parent->is_valid()) {
