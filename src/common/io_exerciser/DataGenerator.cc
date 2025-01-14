@@ -73,8 +73,10 @@ ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length) {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer.c_str() + block_size - remainingBytes2, &rand2, remainingBytes2);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1,
+		generation_length);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes2, &rand2,
+		std::min(generation_length, remainingBytes2));
   } else if (remainingBytes > 0) {
     std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
   }
@@ -102,8 +104,10 @@ ceph::bufferptr SeededRandomGenerator::generate_wrong_block(
   size_t remainingBytes = block_size % (generation_length * 2);
   if (remainingBytes > generation_length) {
     size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer.c_str() + block_size - remainingBytes2, &rand2, remainingBytes2);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1,
+		generation_length);
+    std::memcpy(buffer.c_str() + block_size - remainingBytes2, &rand2,
+		std::min(generation_length, remainingBytes2));
   } else if (remainingBytes > 0) {
     std::memcpy(buffer.c_str() + block_size - remainingBytes, &rand1, remainingBytes);
   }
@@ -288,10 +292,10 @@ void HeaderedSeededRandomGenerator ::printDebugInformationForBlock(
     ttp = std::chrono::system_clock::to_time_t(time_point);
 
     std::memcpy(
-        &read_bytes,
+        read_bytes.data(),
         &bufferlist[((block_offset - read_offset) * m_model.get_block_size())],
         m_model.get_block_size() - bodyStart());
-    std::memcpy(&generated_bytes, generate_block(block_offset).c_str(),
+    std::memcpy(generated_bytes.data(), generate_block(block_offset).c_str(),
                 m_model.get_block_size() - bodyStart());
   }
 
