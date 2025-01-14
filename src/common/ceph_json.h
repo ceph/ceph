@@ -12,6 +12,7 @@
 #include <strings.h>
 
 #include <boost/json.hpp>
+#include <boost/json/value_to.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/algorithm/string/predicate.hpp>
