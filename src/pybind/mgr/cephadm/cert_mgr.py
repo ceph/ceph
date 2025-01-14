@@ -117,6 +117,7 @@ class CertKeyStore():
         'ingress_ssl_key',
         'nvmeof_server_key',
         'nvmeof_client_key',
+        'nvmeof_encryption_key',
     ]
 
     known_certs: Dict[str, Any] = {}
@@ -153,6 +154,7 @@ class CertKeyStore():
             'ingress_ssl_key': {},  # service-name -> key
             'nvmeof_server_key': {},  # service-name -> key
             'nvmeof_client_key': {},  # service-name -> key
+            'nvmeof_encryption_key': {},  # service-name -> key
         }
 
     def get_cert(self, entity: str, service_name: str = '', host: str = '') -> str:
