@@ -1527,6 +1527,13 @@ private:
 
     //pool options
     pool_opts_t pool_opts;
+    std::optional<int> compression_algorithm;
+    std::optional<int> compression_mode;
+    std::optional<int> csum_type;
+    std::optional<int64_t> comp_min_blob_size;
+    std::optional<int64_t> comp_max_blob_size;
+    std::optional<double> compression_req_ratio;
+
     ContextQueue *commit_queue;
 
     OnodeCacheShard* get_onode_cache() const {
@@ -2345,7 +2352,8 @@ private:
 
   std::atomic<Compressor::CompressionMode> comp_mode =
     {Compressor::COMP_NONE}; ///< compression mode
-  CompressorRef compressor;
+  std::atomic<int> def_compressor_alg = {Compressor::COMP_ALG_NONE};
+  std::vector<CompressorRef> compressors;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
 
