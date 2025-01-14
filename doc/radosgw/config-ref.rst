@@ -75,10 +75,11 @@ aggressiveness of lifecycle processing:
 .. confval:: rgw_lc_max_wp_worker
 
 These values can be tuned based upon your specific workload to further increase the
-aggressiveness of lifecycle processing. For a workload with a larger number of buckets (thousands)
-you would look at increasing the :confval:`rgw_lc_max_worker` value from the default value of 3 whereas for a
-workload with a smaller number of buckets but higher number of objects (hundreds of thousands)
-per bucket you would consider increasing :confval:`rgw_lc_max_wp_worker` from the default value of 3.
+aggressiveness of lifecycle processing. For a workload with a large number of buckets (thousands)
+you would raise the number of workers by increasing :confval:`rgw_lc_max_worker`
+from the default value of 3. Whereas for a workload with a higher number of objects per bucket
+(hundreds of thousands) you would raise the number of parallel threads
+by increasing :confval:`rgw_lc_max_wp_worker` from the default value of 3.
 
 .. note:: When looking to tune either of these specific values please validate the
    current Cluster performance and Ceph Object Gateway utilization before increasing.
