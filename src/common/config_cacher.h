@@ -40,7 +40,7 @@ class md_config_cacher_t : public md_config_obs_t {
 
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override {
-    if (changed.count(keys[0])) {
+    if (changed.contains(keys[0])) {
       value_cache.store(conf.get_val<ValueT>(keys[0]));
     }
   }
