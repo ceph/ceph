@@ -427,13 +427,15 @@ class CertMgr:
 
         is_valid, is_close_to_expiration, days_to_expiration, exception_info = self.is_valid_certificate(cert_obj, key_obj)
 
+        entity_info = f" ({entity})" if entity else ""
+        cert_source = 'user-made' if cert_obj.user_made else 'self-signed'
+        cert_info = f'service: {cert_ref}{entity_info}, remaining days: {days_to_expiration}'
         if is_close_to_expiration:
-            self._renew_certificate(cert_ref, cert_obj)
+            logger.warning(f'Detected a {cert_source} certificate close to its expiration, {cert_info}')
+            self._renew_certificate(cert_ref, entity, cert_obj)
         elif not is_valid:
+            logger.warning(f'Detected a {cert_source} invalid certificate, {cert_info}')
             if cert_obj.user_made:
-                entity_info = f" ({entity})" if entity else ""
-                """Log an error and set a health warning for invalid user-made certificates."""
-                logger.error(f'Detected invalid user-made certificate for {cert_ref}{entity_info}: {exception_info}')
                 err_msg = (
                     f'Detected invalid certificate for {cert_ref}{entity_info}. '
                     'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
@@ -451,15 +453,26 @@ class CertMgr:
                 logger.info(f'Removing invalid certificate for {cert_ref} to trigger regeneration (service: {service_name}, host: {host}).')
                 self.cert_key_store.rm_cert(cert_ref, service_name, host)
         else:
-            logger.info(f'Certificate for "{cert_ref}" is still valid for {days_to_expiration} days.')
+            logger.info(f'Certificate for "{cert_ref}{entity_info}" is still valid for {days_to_expiration} days.')
             self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
 
         return is_valid, is_close_to_expiration
 
-    def _renew_certificate(self, cert_ref: str, cert_obj: Cert) -> None:
+    def _renew_certificate(self, cert_ref: str, entity: str, cert_obj: Cert) -> None:
         """Renew a self-signed certificate."""
         if cert_obj.user_made:
-            logger.info(f'Renewing user-generated certificate for {cert_ref} using ACME')
+            # By now we just trigger a health warning since we don't have ACME support yet
+            entity_info = f" ({entity})" if entity else ""
+            err_msg = (
+                f'The certificate for {cert_ref}{entity_info} is close to expiration. '
+                'Please replace it with a valid certificate and reconfigure the affected service(s) or daemon(s) as necessary.'
+            )
+            self.mgr.set_health_warning(
+                'CEPHADM_CERT_ERROR',
+                f'Certificate for {cert_ref}{entity_info} is close to expiration.',
+                1,
+                [err_msg]
+            )
         else:
             try:
                 logger.info(f'Renewing self-signed certificate for {cert_ref}')
