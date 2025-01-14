@@ -1,0 +1,20 @@
+mgrmodules:
+  sequential:
+    - exec:
+        mon.a:
+          - ceph config set mgr mgr/devicehealth/log_level debug
+
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug ms: 1
+        debug cephsqlite: 20
+      client:
+        debug ms: 1
+        debug cephsqlite: 20
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_devicehealth
