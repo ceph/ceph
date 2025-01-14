@@ -23,11 +23,15 @@
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/btree/btree_range_pin.h"
 
+namespace crimson::os::seastore {
+class LogicalCachedExtent;
+}
+
 namespace crimson::os::seastore::lba_manager::btree {
 
 struct LBALeafNode;
 
-class BtreeLBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
+class BtreeLBAMapping : public LBAMapping {
 // To support cloning, there are two kinds of lba mappings:
 // 	1. physical lba mapping: the pladdr in the value of which is the paddr of
 // 	   the corresponding extent;
@@ -61,14 +65,14 @@ class BtreeLBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
 // their keys.
 public:
   BtreeLBAMapping(op_context_t<laddr_t> ctx)
-    : BtreeNodeMapping(ctx) {}
+    : LBAMapping(ctx) {}
   BtreeLBAMapping(
     op_context_t<laddr_t> c,
     LBALeafNodeRef parent,
     uint16_t pos,
     lba_map_val_t &val,
     lba_node_meta_t meta)
-    : BtreeNodeMapping(
+    : LBAMapping(
 	c,
 	parent,
 	pos,
@@ -190,8 +194,12 @@ public:
     SUBDEBUGT(seastore_lba, "new pin {}", ctx.trans, static_cast<LBAMapping&>(*new_pin));
     return new_pin;
   }
+  bool is_stable() const final;
+  bool is_data_stable() const final;
+  get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction &t);
+
 protected:
-  std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
+  LBAMappingRef _duplicate(
     op_context_t<laddr_t> ctx) const final {
     auto pin = std::unique_ptr<BtreeLBAMapping>(new BtreeLBAMapping(ctx));
     pin->key = key;

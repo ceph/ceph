@@ -6,6 +6,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/backref_mapping.h"
 
 namespace crimson::os::seastore {
 
