@@ -398,7 +398,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 d_name
             ], check_status=False)
         elif chosen_method == "systemctl_stop":
-            daemon.stop()
+            # To bypass is_started logic of CephadmUnit
+            daemon.remote.sh(daemon.stop_cmd, check_status=False)
         elif chosen_method == "daemon_remove":
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "rm",
@@ -407,16 +408,20 @@ class NvmeofThrasher(Thrasher, Greenlet):
         return chosen_method
 
     def revive_daemon(self, daemon, killed_method):
+        name = '%s.%s' % (daemon.type_, daemon.id_)
         if killed_method == "ceph_daemon_stop":
-            name = '%s.%s' % (daemon.type_, daemon.id_)
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "restart",
                 name
             ])
+        # note: temporarily use 'daemon start' to restart
+        # daemons instead of 'systemctl start'
         elif killed_method == "systemctl_stop":
-            daemon.restart() 
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "start",
+                name
+            ])
         else:
-            name = '%s.%s' % (daemon.type_, daemon.id_)
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "start",
                 name
