@@ -57,11 +57,10 @@ private:
   struct log_channel_info {
 
     std::map<std::string,std::string> log_to_syslog;
-    std::map<std::string,std::string> syslog_level;
     std::map<std::string,std::string> syslog_facility;
     std::map<std::string,std::string> log_file;
     std::map<std::string,std::string> expanded_log_file;
-    std::map<std::string,std::string> log_file_level;
+    std::map<std::string,std::string> log_level;
     std::map<std::string,std::string> log_to_graylog;
     std::map<std::string,std::string> log_to_graylog_host;
     std::map<std::string,std::string> log_to_graylog_port;
@@ -84,9 +83,8 @@ private:
      */
     void expand_channel_meta() {
       expand_channel_meta(log_to_syslog);
-      expand_channel_meta(syslog_level);
       expand_channel_meta(syslog_facility);
-      expand_channel_meta(log_file_level);
+      expand_channel_meta(log_level);
     }
     void expand_channel_meta(std::map<std::string,std::string> &m);
     std::string expand_channel_meta(const std::string &input,
@@ -99,15 +97,10 @@ private:
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
 
-    std::string get_level(const std::string &channel) {
-      return get_str_map_key(syslog_level, channel,
-                             &CLOG_CONFIG_DEFAULT_KEY);
-    }
-
     std::string get_log_file(const std::string &channel);
 
-    std::string get_log_file_level(const std::string &channel) {
-      return get_str_map_key(log_file_level, channel,
+    std::string get_log_level(const std::string &channel) {
+      return get_str_map_key(log_level, channel,
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
 
@@ -192,10 +185,9 @@ private:
   const char **get_tracked_conf_keys() const override {
     static const char* KEYS[] = {
       "mon_cluster_log_to_syslog",
-      "mon_cluster_log_to_syslog_level",
       "mon_cluster_log_to_syslog_facility",
       "mon_cluster_log_file",
-      "mon_cluster_log_file_level",
+      "mon_cluster_log_level",
       "mon_cluster_log_to_graylog",
       "mon_cluster_log_to_graylog_host",
       "mon_cluster_log_to_graylog_port",
