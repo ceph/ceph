@@ -1724,7 +1724,25 @@ Options
 
 .. option:: -f {json,json-pretty,xml,xml-pretty,plain,yaml}, --format
 
-	Format of output. Note: yaml is only valid for orch commands. 
+	Format of output.
+
+    Note: yaml is only valid for orch commands.
+
+.. option:: --daemon-output-file OUTPUT_FILE
+
+    When using --format=json|json-pretty, you may specify a file name on the
+    host running the daemon to stream output to. Be mindful this is probably
+    not the same machine running the ceph command. So to analyze the output, it
+    will be necessary to fetch the file once the command completes.
+
+    OUTPUT_FILE may also be ``:tmp:``, indicating that the daemon should create
+    a temporary file (subject to configurations tmp_dir and tmp_file_template).
+
+    The ``tell`` command will output json with the path to the output file
+    written to, the size of the file, the result code of the command, and any
+    output produced by the command.
+
+    Note: this option is only used for ``ceph tell`` commands.
 
 .. option:: --connect-timeout CLUSTER_TIMEOUT
 
