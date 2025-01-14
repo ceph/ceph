@@ -11,11 +11,11 @@ from cephadm.serve import CephadmServe
 from cephadm.inventory import (
     HostCacheStatus,
     ClientKeyringSpec,
-    Cert,
-    PrivKey,
-    CERT_STORE_CERT_PREFIX,
-    CERT_STORE_KEY_PREFIX,
 )
+from cephadm.cert_mgr import (Cert,
+                              PrivKey,
+                              CERT_STORE_CERT_PREFIX,
+                              CERT_STORE_KEY_PREFIX)
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.utils import SpecialHostLabels
 
@@ -1735,7 +1735,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_key_store._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_known_cert_key_dicts()
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
@@ -1743,12 +1743,12 @@ class TestCephadm(object):
         nvmeof_root_ca_cert = 'fake-nvmeof-root-ca-cert'
         grafana_cert_host_1 = 'grafana-cert-host-1'
         grafana_cert_host_2 = 'grafana-cert-host-2'
-        cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_root_ca_cert', nvmeof_root_ca_cert, service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert_host_1, host='host-1', user_made=True)
-        cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert_host_2, host='host-2', user_made=True)
+        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_root_ca_cert', nvmeof_root_ca_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('grafana_cert', grafana_cert_host_1, host='host-1', user_made=True)
+        cephadm_module.cert_mgr.save_cert('grafana_cert', grafana_cert_host_2, host='host-2', user_made=True)
 
         expected_calls = [
             mock.call(f'{CERT_STORE_CERT_PREFIX}rgw_frontend_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
@@ -1763,7 +1763,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_cert_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_key_store._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_known_cert_key_dicts()
 
         expected_ls = {
             'rgw_frontend_ssl_cert': False,
@@ -1777,40 +1777,40 @@ class TestCephadm(object):
             'nvmeof_server_cert': False,
             'nvmeof_root_ca_cert': False,
         }
-        assert cephadm_module.cert_key_store.cert_ls() == expected_ls
+        assert cephadm_module.cert_mgr.cert_ls() == expected_ls
 
-        cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', 'xxx', service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', 'xxx', service_name='rgw.bar', user_made=True)
+        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', 'xxx', service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', 'xxx', service_name='rgw.bar', user_made=True)
         expected_ls['rgw_frontend_ssl_cert'] = {}
         expected_ls['rgw_frontend_ssl_cert']['rgw.foo'] = True
         expected_ls['rgw_frontend_ssl_cert']['rgw.bar'] = True
-        assert cephadm_module.cert_key_store.cert_ls() == expected_ls
+        assert cephadm_module.cert_mgr.cert_ls() == expected_ls
 
-        cephadm_module.cert_key_store.save_cert('nvmeof_client_cert', 'xxx', service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_server_cert', 'xxx', service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_root_ca_cert', 'xxx', service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', 'xxx', service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', 'xxx', service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_root_ca_cert', 'xxx', service_name='nvmeof.foo', user_made=True)
         expected_ls['nvmeof_client_cert'] = {}
         expected_ls['nvmeof_client_cert']['nvmeof.foo'] = True
         expected_ls['nvmeof_server_cert'] = {}
         expected_ls['nvmeof_server_cert']['nvmeof.foo'] = True
         expected_ls['nvmeof_root_ca_cert'] = {}
         expected_ls['nvmeof_root_ca_cert']['nvmeof.foo'] = True
-        assert cephadm_module.cert_key_store.cert_ls() == expected_ls
+        assert cephadm_module.cert_mgr.cert_ls() == expected_ls
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_save_key(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_key_store._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_known_cert_key_dicts()
 
         grafana_host1_key = 'fake-grafana-host1-key'
         grafana_host2_key = 'fake-grafana-host2-key'
         nvmeof_client_key = 'nvmeof-client-key'
         nvmeof_server_key = 'nvmeof-server-key'
         nvmeof_encryption_key = 'nvmeof-encryption-key'
-        cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
-        cephadm_module.cert_key_store.save_key('grafana_key', grafana_host2_key, host='host2')
-        cephadm_module.cert_key_store.save_key('nvmeof_client_key', nvmeof_client_key, service_name='nvmeof.foo')
-        cephadm_module.cert_key_store.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
-        cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host1_key, host='host1')
+        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host2_key, host='host2')
+        cephadm_module.cert_mgr.save_key('nvmeof_client_key', nvmeof_client_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
 
         expected_calls = [
             mock.call(f'{CERT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
@@ -1824,7 +1824,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_key_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_key_store._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_known_cert_key_dicts()
 
         expected_ls = {
             'grafana_key': False,
@@ -1837,22 +1837,22 @@ class TestCephadm(object):
             'nvmeof_server_key': False,
             'nvmeof_encryption_key': False,
         }
-        assert cephadm_module.cert_key_store.key_ls() == expected_ls
+        assert cephadm_module.cert_mgr.key_ls() == expected_ls
 
-        cephadm_module.cert_key_store.save_key('nvmeof_client_key', 'xxx', service_name='nvmeof.foo')
-        cephadm_module.cert_key_store.save_key('nvmeof_server_key', 'xxx', service_name='nvmeof.foo')
-        cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', 'xxx', service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_client_key', 'xxx', service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_server_key', 'xxx', service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_encryption_key', 'xxx', service_name='nvmeof.foo')
         expected_ls['nvmeof_server_key'] = {}
         expected_ls['nvmeof_server_key']['nvmeof.foo'] = True
         expected_ls['nvmeof_client_key'] = {}
         expected_ls['nvmeof_client_key']['nvmeof.foo'] = True
         expected_ls['nvmeof_encryption_key'] = {}
         expected_ls['nvmeof_encryption_key']['nvmeof.foo'] = True
-        assert cephadm_module.cert_key_store.key_ls() == expected_ls
+        assert cephadm_module.cert_mgr.key_ls() == expected_ls
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
     def test_cert_store_load(self, _get_store_prefix, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_key_store._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_known_cert_key_dicts()
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         grafana_host1_key = 'fake-grafana-host1-cert'
@@ -1882,57 +1882,57 @@ class TestCephadm(object):
                 raise Exception(f'Get store with unexpected value {key}')
 
         _get_store_prefix.side_effect = _fake_prefix_store
-        cephadm_module.cert_key_store.load()
-        assert cephadm_module.cert_key_store.known_certs['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
-        assert cephadm_module.cert_key_store.known_certs['nvmeof_server_cert']['nvmeof.foo'] == Cert(nvmeof_server_cert, True)
-        assert cephadm_module.cert_key_store.known_certs['nvmeof_client_cert']['nvmeof.foo'] == Cert(nvmeof_client_cert, True)
-        assert cephadm_module.cert_key_store.known_certs['nvmeof_root_ca_cert']['nvmeof.foo'] == Cert(nvmeof_root_ca_cert, True)
-        assert cephadm_module.cert_key_store.known_keys['grafana_key']['host1'] == PrivKey(grafana_host1_key)
-        assert cephadm_module.cert_key_store.known_keys['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
-        assert cephadm_module.cert_key_store.known_keys['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
-        assert cephadm_module.cert_key_store.known_keys['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
+        cephadm_module.cert_mgr.load()
+        assert cephadm_module.cert_mgr.known_certs['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
+        assert cephadm_module.cert_mgr.known_certs['nvmeof_server_cert']['nvmeof.foo'] == Cert(nvmeof_server_cert, True)
+        assert cephadm_module.cert_mgr.known_certs['nvmeof_client_cert']['nvmeof.foo'] == Cert(nvmeof_client_cert, True)
+        assert cephadm_module.cert_mgr.known_certs['nvmeof_root_ca_cert']['nvmeof.foo'] == Cert(nvmeof_root_ca_cert, True)
+        assert cephadm_module.cert_mgr.known_keys['grafana_key']['host1'] == PrivKey(grafana_host1_key)
+        assert cephadm_module.cert_mgr.known_keys['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
+        assert cephadm_module.cert_mgr.known_keys['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
+        assert cephadm_module.cert_mgr.known_keys['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
 
     def test_cert_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_key_store._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_known_cert_key_dicts()
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
         nvmeof_server_cert = 'fake-nvmeof-server-cert'
-        cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_key_store.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
 
-        assert cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') == rgw_frontend_rgw_foo_host2_cert
-        assert cephadm_module.cert_key_store.get_cert('nvmeof_server_cert', service_name='nvmeof.foo') == nvmeof_server_cert
-        assert cephadm_module.cert_key_store.get_cert('nvmeof_client_cert', service_name='nvmeof.foo') == nvmeof_client_cert
-        assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host1') == ''
-        assert cephadm_module.cert_key_store.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') == ''
-        assert cephadm_module.cert_key_store.get_cert('nvmeof_root_ca_cert', service_name='nvmeof.foo') == ''
+        assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') == rgw_frontend_rgw_foo_host2_cert
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_server_cert', service_name='nvmeof.foo') == nvmeof_server_cert
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_client_cert', service_name='nvmeof.foo') == nvmeof_client_cert
+        assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host1') == ''
+        assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') == ''
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name='nvmeof.foo') == ''
 
         with pytest.raises(OrchestratorError, match='Attempted to access cert for unknown entity'):
-            cephadm_module.cert_key_store.get_cert('unknown_entity')
+            cephadm_module.cert_mgr.get_cert('unknown_entity')
         with pytest.raises(OrchestratorError, match='Need host to access cert for entity'):
-            cephadm_module.cert_key_store.get_cert('grafana_cert')
+            cephadm_module.cert_mgr.get_cert('grafana_cert')
         with pytest.raises(OrchestratorError, match='Need service name to access cert for entity'):
-            cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', host='foo')
+            cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', host='foo')
 
         grafana_host1_key = 'fake-grafana-host1-cert'
         nvmeof_server_key = 'nvmeof-server-key'
         nvmeof_encryption_key = 'nvmeof-encryption-key'
-        cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
-        cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
-        cephadm_module.cert_key_store.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
-        cephadm_module.cert_key_store.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host1_key, host='host1')
+        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host1_key, host='host1')
+        cephadm_module.cert_mgr.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
 
-        assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1') == grafana_host1_key
-        assert cephadm_module.cert_key_store.get_key('nvmeof_server_key', service_name='nvmeof.foo') == nvmeof_server_key
-        assert cephadm_module.cert_key_store.get_key('nvmeof_client_key', service_name='nvmeof.foo') == ''
-        assert cephadm_module.cert_key_store.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
+        assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1') == grafana_host1_key
+        assert cephadm_module.cert_mgr.get_key('nvmeof_server_key', service_name='nvmeof.foo') == nvmeof_server_key
+        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') == ''
+        assert cephadm_module.cert_mgr.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
 
         with pytest.raises(OrchestratorError, match='Attempted to access priv key for unknown entity'):
-            cephadm_module.cert_key_store.get_key('unknown_entity')
+            cephadm_module.cert_mgr.get_key('unknown_entity')
         with pytest.raises(OrchestratorError, match='Need host to access priv key for entity'):
-            cephadm_module.cert_key_store.get_key('grafana_key')
+            cephadm_module.cert_mgr.get_key('grafana_key')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
