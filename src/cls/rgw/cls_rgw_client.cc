@@ -361,12 +361,13 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
 }
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
-                            const cls_rgw_obj_key& key, const bufferlist& olh_tag,
+                            const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id,
+                            const bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
 {
   librados::ObjectWriteOperation op;
-  cls_rgw_bucket_link_olh(op, key, olh_tag, delete_marker, op_tag, meta,
+  cls_rgw_bucket_link_olh(op, key, snap_id, olh_tag, delete_marker, op_tag, meta,
                           olh_epoch, unmod_since, high_precision_time, log_op,
                           zones_trace);
 
@@ -375,6 +376,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
 
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
+                             rgw_bucket_snap_id snap_id,
                             const bufferlist& olh_tag, bool delete_marker,
                             const string& op_tag, const rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, const rgw_zone_set& zones_trace)
@@ -382,6 +384,7 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
   bufferlist in, out;
   rgw_cls_link_olh_op call;
   call.key = key;
+  call.meta.snap_id = snap_id;
   call.olh_tag = olh_tag.to_str();
   call.op_tag = op_tag;
   call.delete_marker = delete_marker;

@@ -530,21 +530,24 @@ struct rgw_bucket_olh_log_entry {
   std::string op_tag;
   cls_rgw_obj_key key;
   bool delete_marker;
+  rgw_bucket_snap_id snap_id = RGW_BUCKET_NO_SNAP;
+
 
   rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
 
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(epoch, bl);
     encode((__u8)op, bl);
     encode(op_tag, bl);
     encode(key, bl);
     encode(delete_marker, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(epoch, bl);
     uint8_t c;
     decode(c, bl);
@@ -552,6 +555,9 @@ struct rgw_bucket_olh_log_entry {
     decode(op_tag, bl);
     decode(key, bl);
     decode(delete_marker, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<rgw_bucket_olh_log_entry*>& o);
@@ -562,6 +568,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 
 struct rgw_bucket_olh_entry {
   cls_rgw_obj_key key;
+  rgw_bucket_snap_id snap_id;
   bool delete_marker;
   uint64_t epoch;
   std::map<uint64_t, std::vector<struct rgw_bucket_olh_log_entry> > pending_log;
@@ -569,10 +576,10 @@ struct rgw_bucket_olh_entry {
   bool exists;
   bool pending_removal;
 
-  rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
+  rgw_bucket_olh_entry() : snap_id(RGW_BUCKET_NO_SNAP), delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(key, bl);
     encode(delete_marker, bl);
     encode(epoch, bl);
@@ -580,10 +587,11 @@ struct rgw_bucket_olh_entry {
     encode(tag, bl);
     encode(exists, bl);
     encode(pending_removal, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(key, bl);
     decode(delete_marker, bl);
     decode(epoch, bl);
@@ -591,6 +599,9 @@ struct rgw_bucket_olh_entry {
     decode(tag, bl);
     decode(exists, bl);
     decode(pending_removal, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;

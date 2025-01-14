@@ -8640,7 +8640,8 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
 		      librados::ObjectWriteOperation op;
 		      op.assert_exists(); // bucket index shard must exist
 		      cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
-		      cls_rgw_bucket_link_olh(op, key, olh_state.olh_tag,
+		      cls_rgw_bucket_link_olh(op, key, obj_instance.key.snap_id,
+                                              olh_state.olh_tag,
                                               delete_marker, op_tag, meta, olh_epoch,
 					      unmod_since, high_precision_time,
 					      log_data_change, zones_trace);
@@ -8928,6 +8929,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   bool need_to_link = false;
   uint64_t link_epoch = 0;
   cls_rgw_obj_key key;
+  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
   bool delete_marker = false;
   list<cls_rgw_obj_key> remove_instances;
   bool need_to_remove = false;
@@ -8967,10 +8969,11 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
         if (link_epoch < iter->first || key.instance.empty() ||
             key.instance > entry.key.instance) {
           ldpp_dout(dpp, 20) << "apply_olh_log applying key=" << entry.key << " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
-              << " over current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
+              << " over current=" << key << " snap_id=" << entry.snap_id << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
           need_to_link = true;
           need_to_remove = false;
           key = entry.key;
+          snap_id = entry.snap_id;
           delete_marker = entry.delete_marker;
         } else {
           ldpp_dout(dpp, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
@@ -9001,6 +9004,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 
   if (need_to_link) {
     rgw_obj target(bucket, key);
+    target.key.try_set_snap_id(snap_id);
     RGWOLHInfo info;
     info.target = target;
     info.removed = delete_marker;

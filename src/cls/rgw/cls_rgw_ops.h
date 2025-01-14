@@ -231,6 +231,7 @@ WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 
 struct rgw_cls_unlink_instance_op {
   cls_rgw_obj_key key;
+  rgw_bucket_snap_id snap_id;
   std::string op_tag;
   uint64_t olh_epoch;
   bool log_op;
@@ -238,7 +239,7 @@ struct rgw_cls_unlink_instance_op {
   std::string olh_tag;
   rgw_zone_set zones_trace;
 
-  rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
+  rgw_cls_unlink_instance_op() : snap_id(RGW_BUCKET_NO_SNAP), olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(3, 1, bl);
