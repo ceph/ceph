@@ -238,7 +238,7 @@ static int32_t libcephfsd_conf_set(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		option = CEPH_STR_GET(req->conf_set, option, data);
 		value = CEPH_STR_GET(req->conf_set, value,
-				     data + req->conf_set.option);
+				     (const char *)(data) + req->conf_set.option);
 
 		err = proxy_mount_set(mount, option, value);
 		TRACE("ceph_conf_set(%p, '%s', '%s') -> %d", mount, option,
@@ -810,7 +810,7 @@ static int32_t libcephfsd_ll_rename(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		old_name = CEPH_STR_GET(req->ll_rename, old_name, data);
 		new_name = CEPH_STR_GET(req->ll_rename, new_name,
-					data + req->ll_rename.old_name);
+					(const char *)data + req->ll_rename.old_name);
 
 		err = ceph_ll_rename(proxy_cmount(mount), old_parent, old_name,
 				     new_parent, new_name, perms);
@@ -1220,7 +1220,7 @@ static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
 	}
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_setxattr, name, data);
-		value = data + req->ll_setxattr.name;
+		value = (const char *)data + req->ll_setxattr.name;
 		size = req->ll_setxattr.size;
 		flags = req->ll_setxattr.flags;
 
@@ -1326,7 +1326,7 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 	if (err >= 0) {
 		name = CEPH_STR_GET(req->ll_symlink, name, data);
 		value = CEPH_STR_GET(req->ll_symlink, target,
-				     data + req->ll_symlink.name);
+				     (const char *)data + req->ll_symlink.name);
 		want = req->ll_symlink.want;
 		flags = req->ll_symlink.flags;
 
