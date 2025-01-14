@@ -60,6 +60,7 @@ void Beacon::shutdown()
   std::unique_lock<std::mutex> lock(mutex);
   if (!finished) {
     finished = true;
+    cvar.notify_all();
     lock.unlock();
     if (sender.joinable())
       sender.join();
