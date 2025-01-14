@@ -10,6 +10,7 @@ from ceph.deployment.service_spec import IscsiServiceSpec, ServiceSpec
 
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
+from .service_registry import register_cephadm_service
 from .. import utils
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ def get_trusted_ips(mgr: "CephadmOrchestrator", spec: IscsiServiceSpec) -> str:
     return trusted_ip_list
 
 
+@register_cephadm_service
 class IscsiService(CephService):
     TYPE = 'iscsi'
 

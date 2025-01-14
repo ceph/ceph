@@ -9,11 +9,13 @@ from ceph.deployment.service_spec import NvmeofServiceSpec
 
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
+from .service_registry import register_cephadm_service
 from .. import utils
 
 logger = logging.getLogger(__name__)
 
 
+@register_cephadm_service
 class NvmeofService(CephService):
     TYPE = 'nvmeof'
     PROMETHEUS_PORT = 10008
