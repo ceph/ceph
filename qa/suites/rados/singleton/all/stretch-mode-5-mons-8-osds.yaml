@@ -47,11 +47,6 @@ tasks:
       - \(OSD_DOWN\)
       - \(OSD_HOST_DOWN\)
 
-
-- workunit:
-    clients:
-      client.0:
-        - mon/mon-stretch-mode-5-mons-8-osds.sh
 - cephfs_test_runner:
     modules:
-      - tasks.stretch_mode_disable_enable
+      - tasks.test_stretch_mode
