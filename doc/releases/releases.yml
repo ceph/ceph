@@ -32,6 +32,7 @@ releases:
 
   quincy:
     target_eol: 2024-06-01
+    actual_eol: 2025-01-13
     releases:
       - version: 17.2.8
         released: 2024-11-25
