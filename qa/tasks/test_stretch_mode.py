@@ -610,3 +610,25 @@ class TestStretchMode(MgrTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
+
+    def test_create_pool_post_stretch(self):
+        """
+        Test creating a pool after stretch mode is enabled.
+        """
+        # Enter stretch mode
+        self.assertEqual(
+            0,
+            self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+                'mon',
+                'enable_stretch_mode',
+                self.TIEBREAKER_MON_NAME,
+                self.STRETCH_CRUSH_RULE,
+                self.STRETCH_BUCKET_TYPE
+            ))
+        # Create pool without specifying crush rule
+        self.assertEqual(
+            0,
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'osd', 'pool', 'create', self.POOL
+            )
+        )
