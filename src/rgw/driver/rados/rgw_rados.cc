@@ -8904,7 +8904,7 @@ int RGWRados::get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
     return r;
   }
 
-  auto iter = attrset.find(RGW_ATTR_OLH_VER);
+  auto iter = attrset.find(RGW_ATTR_OLH_INFO);
   if (iter == attrset.end()) { /* not an olh */
     return -EINVAL;
   }
