@@ -174,6 +174,11 @@ An existing user can be adopted into an account with ``user modify``::
 .. note:: Account membership is permanent. Once added, users cannot be
    removed from their account.
 
+.. note:: The IAM User API imposes additional requirements on the format
+   of ``UserName``, which is enforced when migrating users into an account.
+   If migration fails with "UserName contains invalid characters", the
+   ``--display-name`` should be modified to match ``[\w+=,.@-]+``.
+
 .. warning:: Ownership of the user's notification topics will not be
    transferred to the account. Notifications will continue to work, but
    the topics will no longer be visible to SNS Topic APIs. Topics and
