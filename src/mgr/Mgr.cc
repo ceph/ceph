@@ -190,7 +190,7 @@ std::map<std::string, std::string> Mgr::load_store()
   std::map<std::string, std::string> loaded;
   
   for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_string().c_str();
+    std::string const key = key_str.get_string();
     
     dout(20) << "saw key '" << key << "'" << dendl;
 
@@ -423,8 +423,8 @@ void Mgr::load_all_metadata()
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
     dm->key = DaemonKey{"mds",
-                        daemon_meta.at("name").get_string().c_str()};
-    dm->hostname = daemon_meta.at("hostname").get_string().c_str();
+                        daemon_meta.at("name").get_string()};
+    dm->hostname = daemon_meta.at("hostname").get_string();
 
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
@@ -445,8 +445,8 @@ void Mgr::load_all_metadata()
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
     dm->key = DaemonKey{"mon",
-                        daemon_meta.at("name").get_string().c_str()};
-    dm->hostname = daemon_meta.at("hostname").get_string().c_str();
+                        daemon_meta.at("name").get_string()};
+    dm->hostname = daemon_meta.at("hostname").get_string();
 
     daemon_meta.erase("name");
     daemon_meta.erase("hostname");
