@@ -2,12 +2,14 @@ import logging
 from typing import List, Any, Tuple, Dict, cast
 
 from ceph.deployment.service_spec import CustomContainerSpec
+from .service_registry import register_cephadm_service
 
 from .cephadmservice import CephadmService, CephadmDaemonDeploySpec
 
 logger = logging.getLogger(__name__)
 
 
+@register_cephadm_service
 class CustomContainerService(CephadmService):
     TYPE = 'container'
 
