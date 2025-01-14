@@ -1706,7 +1706,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 		   << " fnode=" << fnode
 		   << " delta=" << delta
 		   << dendl;
-	      ceph_assert(delta.offset == fnode.allocated);
+	      // be leanient, if there is no extents just produce error message
+	      ceph_assert(delta.offset == fnode.allocated || delta.extents.empty());
 	    }
 	    if (cct->_conf->bluefs_log_replay_check_allocations) {
               int r = _check_allocations(fnode,
@@ -3830,6 +3831,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
       fnode.size = offset;
       fnode.allocated = new_allocated;
       fnode.reset_delta();
+      fnode.recalc_allocated();
       log.t.op_file_update(fnode);
       // sad, but is_dirty must be set to signal flushing of the log
       h->file->is_dirty = true;
