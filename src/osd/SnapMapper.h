@@ -331,28 +331,12 @@ private:
     uint32_t bits,   ///< [in] current split bits
     int64_t pool,    ///< [in] pool
     shard_id_t shard ///< [in] shard
-    )
-    : cct(cct), backend(driver), mask_bits(bits), match(match), pool(pool),
-      shard(shard), shard_prefix(make_shard_prefix(shard)) {
-    update_bits(mask_bits);
-  }
+    );
 
   /// Update bits in case of pg split or merge
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
-    ) {
-    mask_bits = new_bits;
-    std::set<std::string> _prefixes = hobject_t::get_prefixes(
-      mask_bits,
-      match,
-      pool);
-    prefixes.clear();
-    for (auto i = _prefixes.begin(); i != _prefixes.end(); ++i) {
-      prefixes.insert(shard_prefix + *i);
-    }
-
-    reset_prefix_itr(CEPH_NOSNAP, "update_bits");
-  }
+    );
 
   const std::set<std::string>::iterator get_prefix_itr() {
     return prefix_itr;

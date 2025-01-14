@@ -205,6 +205,20 @@ int OSDriver::get_next_or_current(
 }
 #endif // WITH_SEASTAR
 
+  SnapMapper::SnapMapper(
+    CephContext* cct,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list> *driver,
+    uint32_t match,  ///< [in] pgid
+    uint32_t bits,   ///< [in] current split bits
+    int64_t pool,    ///< [in] pool
+    shard_id_t shard ///< [in] shard
+    )
+    : cct(cct), backend(driver), mask_bits(bits), match(match), pool(pool),
+      shard(shard), shard_prefix(make_shard_prefix(shard)) {
+    dout(10) << *this << __func__ << dendl;
+    update_bits(mask_bits);
+  }
+
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
   static_assert(sizeof(pool) == 8, "assumed by the formatting code");
@@ -482,6 +496,24 @@ void SnapMapper::set_snaps(
   }
   backend.set_keys(to_set, t);
 }
+
+void SnapMapper::update_bits(
+  uint32_t new_bits)  ///< [in] new split bits
+{
+    dout(20) << *this << __func__ << " new_bits: " << new_bits << dendl;
+    mask_bits = new_bits;
+    std::set<std::string> _prefixes = hobject_t::get_prefixes(
+      mask_bits,
+      match,
+      pool);
+    prefixes.clear();
+    for (auto i = _prefixes.begin(); i != _prefixes.end(); ++i) {
+      prefixes.insert(shard_prefix + *i);
+    }
+    dout(20) << *this <<__func__ << " prefix updated" << dendl;
+
+    reset_prefix_itr(CEPH_NOSNAP, "update_bits");
+  }
 
 int SnapMapper::update_snaps(
   const hobject_t &oid,
