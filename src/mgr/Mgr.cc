@@ -85,7 +85,7 @@ void MetadataUpdate::finish(int r)
 
       std::error_code ec;
 
-      boost::json::value json_result = boost::json::parse(outbl.to_str(), ec);
+      boost::json::value json_result = boost::json::parse(outbl, ec);
      
       if (ec) {
         dout(1) << "mon returned invalid JSON for " << key << dendl;
