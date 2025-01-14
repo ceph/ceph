@@ -440,8 +440,12 @@ BtreeLBAManager::_alloc_extents(
 	  ).si_then([&state, c, addr, total_len, hint, FNAME,
 		    &alloc_info, &rets](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
+	    TRACET("insert child ptr: {} at {}",
+	      c.trans, *iter.get_leaf_node(), iter.get_leaf_pos());
 	    iter.get_leaf_node()->insert_child_ptr(
 	      iter.get_leaf_pos(), alloc_info.extent);
+	    assert(iter.get_leaf_node()->get_size() ==
+		   iter.get_leaf_node()->get_num_children());
 	    TRACET("{}~{}, hint={}, inserted at {}",
 		   c.trans, addr, total_len, hint, state.last_end);
 	    if (is_valid_child_ptr(alloc_info.extent)) {

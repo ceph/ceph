@@ -79,7 +79,7 @@ struct FixedKVNode : CachedExtent {
     resolve_relative_addrs(record_block_offset);
   }
 
-  void on_clean_read() final {
+  void on_clean_read() override {
     // From initial write of block, relative addrs are necessarily block-relative
     resolve_relative_addrs(get_paddr());
   }
@@ -133,6 +133,12 @@ struct FixedKVInternalNode
   using parent_node_t = ParentNode<node_type_t, NODE_KEY>;
   using base_child_node_t = BaseChildNode<node_type_t, NODE_KEY>;
   using child_node_t = ChildNode<node_type_t, node_type_t, NODE_KEY>;
+
+  void on_clean_read() final {
+    // From initial write of block, relative addrs are necessarily block-relative
+    this->base_t::on_clean_read();
+    this->parent_node_t::on_clean_read();
+  }
 
   bool is_linked() const {
     return this->has_parent_tracker() ||
@@ -413,6 +419,7 @@ struct FixedKVInternalNode
   std::ostream &print_detail(std::ostream &out) const
   {
     out << ", size=" << this->get_size()
+	<< ", num_children=" << this->get_num_children()
 	<< ", meta=" << this->get_meta()
 	<< ", my_tracker=" << (void*)this->my_tracker;
     if (this->my_tracker) {
@@ -441,6 +448,7 @@ struct FixedKVInternalNode
     this->set_last_committed_crc(crc);
     this->update_in_extent_chksum_field(crc);
     resolve_relative_addrs(base);
+    this->update_num_children();
   }
 
   constexpr static size_t get_min_capacity() {
