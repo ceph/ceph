@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import List, Optional, Set, no_type_check
+from typing import Dict, List, Optional, Set, no_type_check
 
 import cherrypy
 from mgr_module import CLICommand, Option
+from mgr_util import CLIWarning
 
 from ..controllers.cephfs import CephFS
 from ..controllers.iscsi import Iscsi, IscsiTarget
@@ -26,6 +27,14 @@ class Features(Enum):
     RGW = 'rgw'
     NFS = 'nfs'
     DASHBOARD = 'dashboard'
+
+    # if we want to add any custom warning message when enabling a feature
+    # we can add it here as key-value pair in warn_msg.
+    # eg: Features.ISCSI.value: 'iscsi warning message'
+    @property
+    def warning(self):
+        warn_msg: Dict[str, str] = {}
+        return warn_msg.get(self.value, None)
 
 
 PREDISABLED_FEATURES = set()  # type: Set[str]
@@ -91,6 +100,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
                         mgr.set_module_option(
                             self.OPTION_FMT.format(feature),
                             action == Actions.ENABLE)
+                        if action == Actions.ENABLE and feature.warning:
+                            msg += [CLIWarning(feature.warning)]
                         msg += ["Feature '{.value}': {}".format(
                             feature,
                             'enabled' if action == Actions.ENABLE else
