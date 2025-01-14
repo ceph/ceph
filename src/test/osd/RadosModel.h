@@ -1355,10 +1355,12 @@ public:
   int snap;
   bool balance_reads;
   bool localize_reads;
+  uint8_t offlen_randomization_ratio;
 
   std::shared_ptr<int> in_use;
 
   std::vector<bufferlist> results;
+  std::vector<std::pair<uint64_t, uint64_t>> offlens;
   std::vector<int> retvals;
   std::vector<std::map<uint64_t, uint64_t>> extent_results;
   std::vector<bool> is_sparse_read;
@@ -1382,6 +1384,7 @@ public:
 	 const std::string &oid,
 	 bool balance_reads,
 	 bool localize_reads,
+	 uint8_t offlen_randomization_ratio,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completions(3),
@@ -1389,7 +1392,9 @@ public:
       snap(0),
       balance_reads(balance_reads),
       localize_reads(localize_reads),
+      offlen_randomization_ratio(offlen_randomization_ratio),
       results(3),
+      offlens(3),
       retvals(3),
       extent_results(3),
       is_sparse_read(3, false),
@@ -1399,24 +1404,45 @@ public:
       attrretval(0)
   {}
 
+  static std::pair<uint64_t, uint64_t> maybe_randomize_offlen(
+    uint8_t offlen_randomization_ratio,
+    uint64_t max_len)
+  {
+    if ((rand() % 100) < offlen_randomization_ratio && max_len > 0) {
+      // the random offset here is de dacto "first n bytes to skip in
+      // a chhunk" -- it doesn't care about good distrubution across
+      // entire object. imperfect but should be good enough for parital
+      // read testing.
+      const auto off = rand() % max_len;
+      return {off, max_len - off};
+    } else {
+      return {0, max_len};
+    }
+  }
+
   void _do_read(librados::ObjectReadOperation& read_op, int index) {
-    uint64_t len = 0;
-    if (old_value.has_contents())
-      len = old_value.most_recent_gen()->get_length(old_value.most_recent());
+    uint64_t max_len = 0;
+    if (old_value.has_contents()) {
+      max_len =
+        old_value.most_recent_gen()->get_length(old_value.most_recent());
+    }
+    offlens[index] =
+      maybe_randomize_offlen(offlen_randomization_ratio, max_len);
+    const auto [offset, length] = offlens[index];
     if (context->no_sparse || rand() % 2) {
       is_sparse_read[index] = false;
-      read_op.read(0,
-		   len,
+      read_op.read(offset,
+		   length,
 		   &results[index],
 		   &retvals[index]);
       bufferlist init_value_bl;
       encode(static_cast<uint32_t>(-1), init_value_bl);
-      read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, 0, len,
+      read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, offset, length,
 		       0, &checksums[index], &checksum_retvals[index]);
     } else {
       is_sparse_read[index] = true;
-      read_op.sparse_read(0,
-			  len,
+      read_op.sparse_read(offset,
+			  length,
 			  &extent_results[index],
 			  &results[index],
 			  &retvals[index]);
@@ -1576,12 +1602,12 @@ public:
 	}
         for (unsigned i = 0; i < results.size(); i++) {
 	  if (is_sparse_read[i]) {
-	    if (!old_value.check_sparse(extent_results[i], results[i])) {
+	    if (!old_value.check_sparse(extent_results[i], results[i], offlens[i])) {
 	      std::cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
 	      context->errors++;
 	    }
 	  } else {
-	    if (!old_value.check(results[i])) {
+	    if (!old_value.check(results[i], offlens[i])) {
 	      std::cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
 	      context->errors++;
 	    }
@@ -2176,6 +2202,7 @@ public:
   {}
 
   void _do_read(librados::ObjectReadOperation& read_op, uint32_t offset, uint32_t length, int index) {
+    std::cout << __func__ << ":" << __LINE__ << std::endl;
     read_op.read(offset,
 		 length,
 		 &results[index],

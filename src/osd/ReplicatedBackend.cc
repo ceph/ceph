@@ -289,7 +289,7 @@ int ReplicatedBackend::objects_readv_sync(
 
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+  const list<pair<ECCommon::ec_align_t,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete,
   bool fast_read)
