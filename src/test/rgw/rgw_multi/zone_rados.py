@@ -46,8 +46,8 @@ class RadosZone(Zone):
 
 
     class Conn(ZoneConn):
-        def __init__(self, zone, credentials):
-            super(RadosZone.Conn, self).__init__(zone, credentials)
+        def __init__(self, zone, credentials, alt_user_credentials):
+            super(RadosZone.Conn, self).__init__(zone, credentials, alt_user_credentials)
 
         def get_bucket(self, name):
             return self.conn.get_bucket(name)
@@ -142,6 +142,11 @@ class RadosZone(Zone):
                 return False
             return True
 
+        def put_role_policy(self, rolename, policyname, policy_document):
+            if policy_document is None:
+                policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Resource\":\"*\",\"Action\":\"s3:*\"}]}"
+            return self.iam_conn.put_role_policy(rolename, policyname, policy_document)
+
         def create_topic(self, topicname, attributes):
             result = self.sns_client.create_topic(Name=topicname, Attributes=attributes)
             self.topic_arn = result['TopicArn']
@@ -173,6 +178,13 @@ class RadosZone(Zone):
         def head_object(self, bucket_name, obj_name):
             return self.s3_client.head_object(Bucket=bucket_name, Key=obj_name)
 
-    def get_conn(self, credentials):
-        return self.Conn(self, credentials)
+        def assume_role_create_bucket(self, bucket, role_arn, session_name):
+            assumed_role_object = self.sts_conn.assume_role(role_arn, session_name)
+            assumed_role_credentials = assumed_role_object.credentials
+            credentials = Credentials(assumed_role_credentials.access_key, assumed_role_credentials.secret_key)
+            self.get_temp_s3_connection(credentials, assumed_role_credentials.session_token)
+            self.temp_s3_client.create_bucket(Bucket=bucket)
+
+    def get_conn(self, credentials, alt_user_credentials):
+        return self.Conn(self, credentials, alt_user_credentials)
 
