@@ -18,8 +18,8 @@ else
 fi
 
 RUNTIME=${RUNTIME:-600}
-# IOSTAT_INTERVAL=10
-
+filename=$(echo "$selected_drives" | sed -z 's/\n/:\/dev\//g' | sed 's/:\/dev\/$//')
+filename="/dev/$filename"
 
 cat >> $fio_file <<EOF
 [nvmeof-fio-test]
