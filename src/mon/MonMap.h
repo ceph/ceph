@@ -167,6 +167,7 @@ class MonMap {
   std::string tiebreaker_mon;
   std::set<std::string> stretch_marked_down_mons; // can't be leader or taken proposal in CONNECTIVITY 
                                                   // seriously until fully recovered
+  std::string stretch_crush_rule; // crush rule set/override when enabling stretch mode.
 
 public:
   void calc_legacy_ranks();

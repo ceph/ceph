@@ -1,5 +1,5 @@
 import logging
-from stretch_mode_helper import setup_stretch_mode, check_connection_score
+from tasks.stretch_mode_helper import setup_stretch_mode, check_connection_score
 from tasks.mgr.mgr_test_case import MgrTestCase
 
 log = logging.getLogger(__name__)
@@ -20,10 +20,10 @@ class TestStretchMode(MgrTestCase):
     STRETCH_BUCKET_TYPE = 'datacenter'
     STRETCH_SUB_BUCKET_TYPE = 'host'
     TIEBREAKER_MON_NAME = 'e'
-    DEFAULT_POOL_TYPE = 'replicated'
     DEFAULT_POOL_CRUSH_RULE = 'replicated_rule'
-    DEFAULT_POOL_SIZE = 3
-    DEFAULT_POOL_MIN_SIZE = 2
+    DEFAULT_POOL_TYPE = None
+    DEFAULT_POOL_SIZE = None
+    DEFAULT_POOL_MIN_SIZE = None
     DEFAULT_POOL_CRUSH_RULE_ID = None
     # This dictionary maps the datacenter to the osd ids and hosts
     DC_OSDS = {
@@ -64,7 +64,17 @@ class TestStretchMode(MgrTestCase):
         """
         # Ensure we have at least 6 OSDs
         super(TestStretchMode, self).setUp()
-        self.DEFAULT_POOL_CRUSH_RULE_ID = self.mgr_cluster.mon_manager.get_crush_rule_id(self.DEFAULT_POOL_CRUSH_RULE)
+        self.DEFAULT_POOL_TYPE = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'get', 'mon', 'osd_pool_default_type'
+        ).strip()
+        self.DEFAULT_POOL_SIZE = int(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'get', 'mon', 'osd_pool_default_size'
+        ).strip())
+        self.DEFAULT_POOL_MIN_SIZE = int(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'get', 'mon', 'osd_pool_default_min_size'
+        ).strip())
+        self.DEFAULT_POOL_CRUSH_RULE_ID = int(self.mgr_cluster.mon_manager.get_crush_rule_id(self.DEFAULT_POOL_CRUSH_RULE))
+
         if self._osd_count() < 4:
             self.skipTest("Not enough OSDS!")
 
@@ -421,6 +431,11 @@ class TestStretchMode(MgrTestCase):
             self.TIEBREAKER_MON_NAME,
             monmap['tiebreaker_mon']
         )
+        # expects stretch_crush_rule to be STRETCH_CRUSH_RULE
+        self.assertEqual(
+            self.STRETCH_CRUSH_RULE,
+            monmap['stretch_crush_rule']
+        )
 
     def _stretch_mode_disabled_correctly(self):
         """
@@ -506,6 +521,11 @@ class TestStretchMode(MgrTestCase):
         self.assertEqual(
             "",
             monmap['tiebreaker_mon']
+        )
+        # expects stretch_crush_rule to be empty
+        self.assertEqual(
+            "",
+            monmap['stretch_crush_rule']
         )
 
     def test_disable_stretch_mode(self):
@@ -617,3 +637,39 @@ class TestStretchMode(MgrTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
+
+    def test_create_pool_post_stretch(self):
+        """
+        Test creating a pool after stretch mode is enabled.
+        """
+        # Enter stretch mode
+        self.assertEqual(
+            0,
+            self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+                'mon',
+                'enable_stretch_mode',
+                self.TIEBREAKER_MON_NAME,
+                self.STRETCH_CRUSH_RULE,
+                self.STRETCH_BUCKET_TYPE
+            ))
+        # Create pool without specifying crush rule
+        self.assertEqual(
+            0,
+            self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
+                'osd', 'pool', 'create', self.POOL
+            )
+        )
+        # Expects the pool to be created with STRETCH_CRUSH_RULE
+        osdmap = self.mgr_cluster.mon_manager.get_osd_dump_json()
+        for pool in osdmap['pools']:
+            if pool['pool_name'] == self.POOL:
+                self.assertEqual(
+                    self.STRETCH_CRUSH_RULE_ID,
+                    pool['crush_rule']
+                )
+                break
+        else:
+            # Without finding the pool, fail the test
+            # (we failed to create the pool)
+            self.fail("Pool {} not found".format(self.POOL))
+        
