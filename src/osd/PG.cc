@@ -514,6 +514,8 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
+  dout(10) << __func__ << " split_bits " << split_bits << dendl;
+
   recovery_state.split_into(child_pgid, &child->recovery_state, split_bits);
 
   child->update_snap_mapper_bits(split_bits);
