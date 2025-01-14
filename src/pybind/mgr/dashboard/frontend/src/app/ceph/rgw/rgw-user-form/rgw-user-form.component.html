@@ -110,6 +110,28 @@
           </div>
         </div>
 
+        <!-- Link Account -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="link_account"
+                 i18n>Link Account</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    formControlName="account_id"
+                    name="link_account"
+                    id="link_account">
+            <option i18n
+                    *ngIf="accounts === null"
+                    [ngValue]="null">Loading...</option>
+            <option i18n
+                    *ngIf="accounts !== null"
+                    [ngValue]="null">-- Select an Account --</option>
+            <option *ngFor="let account of accounts"
+                    [value]="account">{{ account }}</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Max. buckets -->
         <div class="form-group row">
           <label class="cd-col-form-label"
@@ -176,6 +198,22 @@
                      for="system"
                      i18n>System user</label>
               <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform administrative tasks, manage buckets and objects</cd-helper>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account Root User -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="account_root_user"
+                     type="checkbox"
+                     formControlName="account_root_user">
+              <label class="custom-control-label"
+                     for="account_root_user"
+                     i18n>Account Root user</label>
+              <cd-helper i18n>The account root user manages the account and has full access to its resources. It's recommended to use it for management only and create other users with specific permissions.</cd-helper>
             </div>
           </div>
         </div>

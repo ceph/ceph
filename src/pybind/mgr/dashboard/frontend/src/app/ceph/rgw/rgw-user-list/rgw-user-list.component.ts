@@ -75,6 +75,11 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
         flexGrow: 1
       },
       {
+        name: $localize`Linked Account`,
+        prop: 'account_id',
+        flexGrow: 1
+      },
+      {
         name: $localize`Suspended`,
         prop: 'suspended',
         flexGrow: 1,
