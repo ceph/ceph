@@ -23,8 +23,8 @@ namespace swift {
 class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
-                 const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, std::nullopt, {}, LocalApplier::NO_SUBUSER,
+                 std::unique_ptr<rgw::sal::User> user)
+    : LocalApplier(cct, std::move(user), std::nullopt, {}, LocalApplier::NO_SUBUSER,
                    std::nullopt, LocalApplier::NO_ACCESS_KEY)
   {}
 
@@ -155,8 +155,8 @@ public:
 class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
   public:
     SwiftAnonymousApplier(CephContext* const cct,
-                          const RGWUserInfo& user_info)
-      : LocalApplier(cct, user_info, std::nullopt, {}, LocalApplier::NO_SUBUSER,
+                          std::unique_ptr<rgw::sal::User> user)
+      : LocalApplier(cct, std::move(user), std::nullopt, {}, LocalApplier::NO_SUBUSER,
                      std::nullopt, LocalApplier::NO_ACCESS_KEY) {
     }
     bool is_admin_of(const rgw_owner& o) const {return false;}
@@ -238,7 +238,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
-                            const RGWUserInfo& user_info,
+                            std::unique_ptr<rgw::sal::User> user,
                             std::optional<RGWAccountInfo> account,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
@@ -247,7 +247,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
     auto apl = \
       rgw::auth::add_3rdparty(driver, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, driver, s,
-          LocalApplier(cct, user_info, std::move(account), std::move(policies),
+          LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
                        subuser, perm_mask, access_key_id)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -259,7 +259,9 @@ class DefaultStrategy : public rgw::auth::Strategy,
     /* TempURL doesn't need any user account override. It's a Swift-specific
      * mechanism that requires  account name internally, so there is no
      * business with delegating the responsibility outside. */
-    return aplptr_t(new rgw::auth::swift::TempURLApplier(cct, user_info));
+    std::unique_ptr<rgw::sal::User> user = s->user->clone();
+    user->get_info() = user_info;
+    return aplptr_t(new rgw::auth::swift::TempURLApplier(cct, std::move(user)));
   }
 
 public:
