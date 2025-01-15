@@ -26,3 +26,29 @@ export interface AuthMode {
   user: 'User';
   activeDirectory: 'active-directory';
 }
+
+export interface SMBShare {
+  cluster_id: string;
+  share_id: string;
+  intent: string;
+  name?: string;
+  readonly?: boolean;
+  browseable?: boolean;
+  cephfs: SMBCephfs;
+  restrict_access?: boolean;
+  login_control?: SMBShareLoginControl;
+}
+
+interface SMBCephfs {
+  volume: string;
+  path: string;
+  subvolumegroup?: string;
+  subvolume?: string;
+  provider?: string;
+}
+
+interface SMBShareLoginControl {
+  name: string;
+  category?: 'user' | 'group';
+  access: 'read' | 'read-write' | 'none' | 'admin';
+}
