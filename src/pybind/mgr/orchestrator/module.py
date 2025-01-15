@@ -1942,6 +1942,12 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
+    def get_pool_details(self) -> List[str]:
+        output = self.check_mon_command({"prefix": "osd lspools"})
+        available_pools = output.stdout
+        pool_names = [line.split(' ')[1] for line in available_pools.strip().split('\n')]
+        return pool_names
+
     @_cli_write_command('orch apply nvmeof')
     def _apply_nvmeof(self,
                       pool: str,
@@ -1955,6 +1961,15 @@ Usage:
         """Scale an nvmeof service"""
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        pool_names = self.get_pool_details()
+
+        if pool not in pool_names:
+            raise OrchestratorValidationError(
+                f"Given pool: '{pool}' does not exist.\n"
+                f"Please choose from the available pools: {', '.join(pool_names)}\n"
+                "Or create a new pool if needed."
+            )
 
         spec = NvmeofServiceSpec(
             service_id=f'{pool}.{group}' if group else pool,
