@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError } from 'rxjs';
 
@@ -35,7 +35,7 @@ describe('RgwUserFormComponent', () => {
       SharedModule,
       ToastrModule.forRoot(),
       NgbTooltipModule,
-      NgxPipeFunctionModule
+      PipesModule
     ]
   });
 

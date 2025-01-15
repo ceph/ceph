@@ -22,11 +22,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
  */
 
-import { ActivatedRouteSnapshot, Resolve, UrlSegment } from '@angular/router';
+import { ActivatedRouteSnapshot, UrlSegment } from '@angular/router';
 
 import { Observable, of } from 'rxjs';
 
-export class BreadcrumbsResolver implements Resolve<IBreadcrumb[]> {
+export class BreadcrumbsResolver {
   public resolve(
     route: ActivatedRouteSnapshot
   ): Observable<IBreadcrumb[]> | Promise<IBreadcrumb[]> | IBreadcrumb[] {
