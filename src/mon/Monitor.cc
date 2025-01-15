@@ -184,7 +184,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader(0),
   quorum_con_features(0),
   // scrub
-  scrub_version(0),
   scrub_event(NULL),
   scrub_timeout_event(NULL),
 
@@ -5576,14 +5575,16 @@ int Monitor::scrub_start()
   dout(10) << __func__ << dendl;
   ceph_assert(is_leader());
 
-  if (!scrub_result.empty()) {
-    clog->info() << "scrub already in progress";
-    return -EBUSY;
+  if (boost::shared_ptr<ScrubContext> local_ctx = scrub_ctx.load(); local_ctx) {
+    if (!local_ctx->scrub_result.empty()) {
+      clog->info() << "scrub already in progress";
+      return -EBUSY;
+    }
+    local_ctx->scrub_result.clear();
   }
 
   scrub_event_cancel();
-  scrub_result.clear();
-  scrub_state.reset(new ScrubState);
+  scrub_ctx.store(boost::make_shared<ScrubContext>());
 
   scrub();
   return 0;
@@ -5592,12 +5593,15 @@ int Monitor::scrub_start()
 int Monitor::scrub()
 {
   ceph_assert(is_leader());
-  ceph_assert(scrub_state);
 
   scrub_cancel_timeout();
   wait_for_paxos_write();
-  scrub_version = paxos->get_version();
 
+  boost::shared_ptr<ScrubContext> local_ctx = scrub_ctx.load();
+  if (!local_ctx)
+    return -1; // scrub aborted
+
+  local_ctx->scrub_version = paxos->get_version();
 
   // scrub all keys if we're the only monitor in the quorum
   int32_t num_keys =
@@ -5608,18 +5612,18 @@ int Monitor::scrub()
        ++p) {
     if (*p == rank)
       continue;
-    MMonScrub *r = new MMonScrub(MMonScrub::OP_SCRUB, scrub_version,
+    MMonScrub *r = new MMonScrub(MMonScrub::OP_SCRUB, local_ctx->scrub_version,
                                  num_keys);
-    r->key = scrub_state->last_key;
+    r->key = local_ctx->scrub_state.last_key;
     send_mon_message(r, *p);
   }
 
   // scrub my keys
-  bool r = _scrub(&scrub_result[rank],
-                  &scrub_state->last_key,
+  bool r = _scrub(&local_ctx->scrub_result[rank],
+                  &local_ctx->scrub_state.last_key,
                   &num_keys);
 
-  scrub_state->finished = !r;
+  local_ctx->scrub_state.finished = !r;
 
   // only after we got our scrub results do we really care whether the
   // other monitors are late on their results.  Also, this way we avoid
@@ -5628,7 +5632,7 @@ int Monitor::scrub()
   scrub_reset_timeout();
 
   if (quorum.size() == 1) {
-    ceph_assert(scrub_state->finished == true);
+    ceph_assert(local_ctx->scrub_state.finished == true);
     scrub_finish();
   }
   return 0;
@@ -5663,28 +5667,33 @@ void Monitor::handle_scrub(MonOpRequestRef op)
     {
       if (!is_leader())
 	break;
-      if (m->version != scrub_version)
+
+      boost::shared_ptr<ScrubContext> local_ctx = scrub_ctx.load();
+      if (!local_ctx)
+        break; // scrub aborted
+
+      if (m->version != local_ctx->scrub_version)
 	break;
       // reset the timeout each time we get a result
       scrub_reset_timeout();
 
       int from = m->get_source().num();
-      ceph_assert(scrub_result.count(from) == 0);
-      scrub_result[from] = m->result;
+      ceph_assert(local_ctx->scrub_result.count(from) == 0);
+      local_ctx->scrub_result[from] = m->result;
 
-      if (scrub_result.size() == quorum.size()) {
+      if (local_ctx->scrub_result.size() == quorum.size()) {
         scrub_check_results();
-        scrub_result.clear();
-        if (scrub_state->finished) {
-          const utime_t lat = ceph_clock_now() - scrub_state->start;
+        local_ctx->scrub_result.clear();
+        if (local_ctx->scrub_state.finished) {
+          const utime_t lat = ceph_clock_now() - local_ctx->scrub_state.start;
           dout(10) << __func__ << " mon scrub latency: " << lat << dendl;
           scrub_finish();
         } else {
           scrub();
         }
       }
+      break;
     }
-    break;
   }
 }
 
@@ -5767,9 +5776,11 @@ void Monitor::scrub_check_results()
 
   // compare
   int errors = 0;
-  ScrubResult& mine = scrub_result[rank];
-  for (map<int,ScrubResult>::iterator p = scrub_result.begin();
-       p != scrub_result.end();
+
+  boost::shared_ptr<ScrubContext> local_ctx = scrub_ctx.load();
+  ScrubResult& mine = local_ctx->scrub_result[rank];
+  for (map<int,ScrubResult>::iterator p = local_ctx->scrub_result.begin();
+       p != local_ctx->scrub_result.end();
        ++p) {
     if (p->first == rank)
       continue;
@@ -5802,9 +5813,7 @@ void Monitor::scrub_reset()
 {
   dout(10) << __func__ << dendl;
   scrub_cancel_timeout();
-  scrub_version = 0;
-  scrub_result.clear();
-  scrub_state.reset();
+  scrub_ctx.store(nullptr);
 }
 
 inline void Monitor::scrub_update_interval(ceph::timespan interval)
@@ -5818,7 +5827,8 @@ inline void Monitor::scrub_update_interval(ceph::timespan interval)
 
   // if scrub already in progress, all changes will already be visible during
   // the next round.  Nothing to do.
-  if (scrub_state != NULL)
+  boost::shared_ptr<ScrubContext> local_ctx = scrub_ctx.load();
+  if (local_ctx)
     return;
 
   scrub_event_cancel();
