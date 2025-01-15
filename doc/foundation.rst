@@ -99,7 +99,7 @@ Members
 -------
 
 * Brett Kelly (45Drives)
-* Carlos Maltzahn (UCSC) - Associate member representative
+* Enrico Bocchi (CERN) - Associate member representative
 * Dan van der Ster (Clyso) - Ceph Council representative
 * Joachim Kraftmayer (Clyso)
 * Josh Durgin (IBM) - Ceph Council representative
