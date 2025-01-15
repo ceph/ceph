@@ -12,20 +12,18 @@
  *
  */
 
-#ifndef ECBACKEND_H
-#define ECBACKEND_H
+#pragma once
 
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 
-#include "ECCommon.h"
+#include "ECCommonL.h"
 #include "OSD.h"
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
-#include "ECUtil.h"
-#include "ECTransaction.h"
-#include "ExtentCache.h"
-#include "ECListener.h"
+#include "ECUtilL.h"
+#include "ECTransactionL.h"
+#include "ECExtentCacheL.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -35,7 +33,7 @@ struct ECSubReadReply;
 
 struct RecoveryMessages;
 
-class ECBackend : public PGBackend, public ECCommon {
+class ECBackendL : public PGBackend, public ECCommonL {
 public:
   RecoveryHandle *open_recovery_op() override;
 
@@ -144,7 +142,7 @@ public:
   void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
-    GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
+    GenContextURef<ECCommonL::ec_extents_t &&> &&func) override;
 
   void objects_read_async(
     const hobject_t &hoid,
@@ -193,12 +191,12 @@ public:
     CephContext* cct;
     const coll_t &coll;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     ReadPipeline& read_pipeline;
     UnstableHashInfoRegistry& unstable_hashinfo_registry;
     // TODO: lay an interface down here
     ECListener* parent;
-    ECBackend* ecbackend;
+    ECBackendL* ecbackend;
 
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -210,11 +208,11 @@ public:
     RecoveryBackend(CephContext* cct,
 		    const coll_t &coll,
 		    ceph::ErasureCodeInterfaceRef ec_impl,
-		    const ECUtil::stripe_info_t& sinfo,
+		    const ECUtilL::stripe_info_t& sinfo,
 		    ReadPipeline& read_pipeline,
 		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		    ECListener* parent,
-		    ECBackend* ecbackend);
+		    ECBackendL* ecbackend);
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
@@ -245,7 +243,7 @@ public:
     // must be filled if state == WRITING
     std::map<int, ceph::buffer::list> returned_data;
     std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
-    ECUtil::HashInfoRef hinfo;
+    ECUtilL::HashInfoRef hinfo;
     ObjectContextRef obc;
     std::set<pg_shard_t> waiting_on_pushes;
 
@@ -300,17 +298,17 @@ public:
   int get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
-  void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
+  void _failed_push(const hobject_t &hoid, ECCommonL::read_result_t &res);
   };
   struct ECRecoveryBackend : RecoveryBackend {
     ECRecoveryBackend(CephContext* cct,
 		      const coll_t &coll,
 		      ceph::ErasureCodeInterfaceRef ec_impl,
-		      const ECUtil::stripe_info_t& sinfo,
+		      const ECUtilL::stripe_info_t& sinfo,
 		      ReadPipeline& read_pipeline,
 		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		      Listener* parent,
-		      ECBackend* ecbackend)
+		      ECBackendL* ecbackend)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener(), ecbackend),
 	parent(parent) {
     }
@@ -399,9 +397,9 @@ public:
   }
 
 
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtilL::stripe_info_t sinfo;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
+  ECCommonL::UnstableHashInfoRegistry unstable_hashinfo_registry;
 
 
   std::tuple<
@@ -412,7 +410,7 @@ public:
 
 public:
   int object_stat(const hobject_t &hoid, struct stat* st);
-  ECBackend(
+  ECBackendL(
     PGBackend::Listener *pg,
     const coll_t &coll,
     ObjectStore::CollectionHandle &ch,
@@ -442,6 +440,5 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
+ostream &operator<<(ostream &lhs, const ECBackendL::RMWPipeline::pipeline_state_t &rhs);
 
-#endif

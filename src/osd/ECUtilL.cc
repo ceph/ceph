@@ -4,14 +4,14 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
-#include "ECUtil.h"
+#include "ECUtilL.h"
 
 using namespace std;
 using ceph::bufferlist;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
-std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to_chunk(
+std::pair<uint64_t, uint64_t> ECUtilL::stripe_info_t::chunk_aligned_offset_len_to_chunk(
   std::pair<uint64_t, uint64_t> in) const {
   pair<uint64_t, uint64_t> tmp = offset_len_to_stripe_bounds(in);
   return std::make_pair(
@@ -19,7 +19,7 @@ std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to
     chunk_aligned_logical_size_to_chunk_size(tmp.second));
 }
 
-int ECUtil::decode(
+int ECUtilL::decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
   const set<int> want_to_read,
@@ -59,7 +59,7 @@ int ECUtil::decode(
   return 0;
 }
 
-int ECUtil::decode(
+int ECUtilL::decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
   map<int, bufferlist> &to_decode,
@@ -132,7 +132,7 @@ int ECUtil::decode(
   return 0;
 }
 
-int ECUtil::encode(
+int ECUtilL::encode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
   bufferlist &in,
@@ -173,7 +173,7 @@ int ECUtil::encode(
   return 0;
 }
 
-void ECUtil::HashInfo::append(uint64_t old_size,
+void ECUtilL::HashInfo::append(uint64_t old_size,
 			      map<int, bufferlist> &to_append) {
   ceph_assert(old_size == total_chunk_size);
   uint64_t size_to_append = to_append.begin()->second.length();
@@ -191,7 +191,7 @@ void ECUtil::HashInfo::append(uint64_t old_size,
   total_chunk_size += size_to_append;
 }
 
-void ECUtil::HashInfo::encode(bufferlist &bl) const
+void ECUtilL::HashInfo::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
   encode(total_chunk_size, bl);
@@ -199,7 +199,7 @@ void ECUtil::HashInfo::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl)
+void ECUtilL::HashInfo::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(total_chunk_size, bl);
@@ -208,7 +208,7 @@ void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void ECUtil::HashInfo::dump(Formatter *f) const
+void ECUtilL::HashInfo::dump(Formatter *f) const
 {
   f->dump_unsigned("total_chunk_size", total_chunk_size);
   f->open_array_section("cumulative_shard_hashes");
@@ -221,7 +221,7 @@ void ECUtil::HashInfo::dump(Formatter *f) const
   f->close_section();
 }
 
-namespace ECUtil {
+namespace ECUtilL {
 std::ostream& operator<<(std::ostream& out, const HashInfo& hi)
 {
   ostringstream hashes;
@@ -231,7 +231,7 @@ std::ostream& operator<<(std::ostream& out, const HashInfo& hi)
 }
 }
 
-void ECUtil::HashInfo::generate_test_instances(list<HashInfo*>& o)
+void ECUtilL::HashInfo::generate_test_instances(list<HashInfo*>& o)
 {
   o.push_back(new HashInfo(3));
   {
@@ -249,12 +249,12 @@ void ECUtil::HashInfo::generate_test_instances(list<HashInfo*>& o)
 
 const string HINFO_KEY = "hinfo_key";
 
-bool ECUtil::is_hinfo_key_string(const string &key)
+bool ECUtilL::is_hinfo_key_string(const string &key)
 {
   return key == HINFO_KEY;
 }
 
-const string &ECUtil::get_hinfo_key()
+const string &ECUtilL::get_hinfo_key()
 {
   return HINFO_KEY;
 }
