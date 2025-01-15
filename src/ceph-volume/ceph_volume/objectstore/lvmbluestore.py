@@ -115,18 +115,6 @@ class LvmBlueStore(BlueStore):
             self.args = args
 
         try:
-            vgname, lvname = self.args.data.split('/')
-            lv = api.get_single_lv(filters={'lv_name': lvname,
-                                            'vg_name': vgname})
-        except ValueError:
-            lv = None
-
-        if lv is not None:
-            if api.is_ceph_device(lv):
-                logger.info("device {} is already used".format(self.args.data))
-                raise RuntimeError("skipping {}, it is already prepared".format(
-                    self.args.data))
-        try:
             self.prepare()
         except Exception:
             logger.exception('lvm prepare was unable to complete')
