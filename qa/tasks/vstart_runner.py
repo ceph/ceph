@@ -810,6 +810,8 @@ class LocalCephManager(CephManager):
         self.testdir = None
         self.RADOS_CMD = [RADOS_CMD]
 
+        self.save_conf_epoch()
+
     def get_ceph_cmd(self, **kwargs):
         return [CEPH_CMD]
 
