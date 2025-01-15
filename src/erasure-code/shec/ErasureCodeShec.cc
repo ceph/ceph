@@ -272,6 +272,53 @@ int ErasureCodeShecReedSolomonVandermonde::shec_decode(int *erased,
   return shec_matrix_decode(erased, avails, data, coding, blocksize);
 }
 
+void ErasureCodeShecReedSolomonVandermonde::encode_delta(const bufferptr &old_data,
+                                                         const bufferptr &new_data,
+                                                         bufferptr *delta)
+{
+  //TODO handle old_data or new_data being a special zero buffer.
+  if (&old_data != delta) {
+    memcpy(delta->c_str(), old_data.c_str(), delta->length());
+  }
+  char * new_data_p = const_cast<char*>(new_data.c_str());
+  char * delta_p = delta->c_str();
+  galois_region_xor(new_data_p, delta_p, delta->length());
+
+  //TODO return a special zero buffer if delta is all zeroes
+}
+
+void ErasureCodeShecReedSolomonVandermonde::apply_delta(const std::map<int, bufferptr> &in,
+                                                        std::map <int, bufferptr> &out)
+{
+  auto first = in.begin();
+  const unsigned blocksize = first->second.length();
+
+  for (auto const& [datashard, databuf] : in) {
+    if (datashard < k) {
+      for (auto const& [codingshard, codingbuf] : out) {
+        if (codingshard >= k) {
+          ceph_assert(codingbuf.length() == blocksize);
+          char* input_data = const_cast<char*>(databuf.c_str());
+          char* output_data = const_cast<char*>(codingbuf.c_str());
+          switch (w) {
+            case 8:
+              galois_w08_region_multiply(input_data, matrix[datashard + (k * (codingshard - k))], blocksize, output_data, 1);
+              break;
+            case 16:
+              galois_w16_region_multiply(input_data, matrix[datashard + (k * (codingshard - k))], blocksize, output_data, 1);
+              break;
+            case 32:
+              galois_w32_region_multiply(input_data, matrix[datashard + (k * (codingshard - k))], blocksize, output_data, 1);
+              break;
+          }
+          //}
+          //TODO return a special zero buffer if coding buffer is all zeroes
+        }
+      }
+    }
+  }
+}
+
 unsigned ErasureCodeShecReedSolomonVandermonde::get_alignment() const
 {
   return k*w*sizeof(int);
