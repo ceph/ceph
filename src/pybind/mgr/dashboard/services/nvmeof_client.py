@@ -13,8 +13,8 @@ try:
     import grpc._channel  # type: ignore
     from google.protobuf.message import Message  # type: ignore
 
-    from .proto import gateway_pb2 as pb2
-    from .proto import gateway_pb2_grpc as pb2_grpc
+    from .proto import gateway_pb2 as pb2  # type: ignore
+    from .proto import gateway_pb2_grpc as pb2_grpc  # type: ignore
 except ImportError:
     grpc = None
 else:
