@@ -2590,19 +2590,25 @@ public:
 
 class RGWDefaultSyncModuleInstance : public RGWSyncModuleInstance {
   RGWDefaultDataSyncModule data_handler;
+  bool skip_existing_objects{false};
 public:
-  RGWDefaultSyncModuleInstance() {}
+  RGWDefaultSyncModuleInstance(const RGWZoneGroup& zonegroup) {
+    skip_existing_objects = zonegroup.supports(rgw::zone_features::skip_existing_object_replication_policy);
+  }
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
   bool supports_user_writes() override {
     return true;
   }
+  bool should_full_sync() const override {
+    return !skip_existing_objects;
+  }
 };
 
-int RGWDefaultSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
+int RGWDefaultSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance)
 {
-  instance->reset(new RGWDefaultSyncModuleInstance());
+  instance->reset(new RGWDefaultSyncModuleInstance(zonegroup));
   return 0;
 }
 
@@ -3108,7 +3114,7 @@ public:
 class RGWArchiveSyncModuleInstance : public RGWDefaultSyncModuleInstance {
   RGWArchiveDataSyncModule data_handler;
 public:
-  RGWArchiveSyncModuleInstance() {}
+  RGWArchiveSyncModuleInstance(const RGWZoneGroup& zonegroup) : RGWDefaultSyncModuleInstance(zonegroup) {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
@@ -3128,9 +3134,9 @@ public:
   }
 };
 
-int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
+int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance)
 {
-  instance->reset(new RGWArchiveSyncModuleInstance());
+  instance->reset(new RGWArchiveSyncModuleInstance(zonegroup));
   return 0;
 }
 
@@ -3387,11 +3393,7 @@ public:
       yield {
         rgw_raw_obj obj(sync_env->svc->zone->get_zone_params().log_pool, sync_status_oid);
 
-        // whether or not to do full sync, incremental sync will follow anyway
-        if (sync_env->sync_module->should_full_sync()) {
-          const auto max_marker = marker_mgr.get(sync_pair.source_bs.shard_id, "");
-          status.inc_marker.position = max_marker;
-        }
+        status.inc_marker.position = marker_mgr.get(sync_pair.source_bs.shard_id, "");
         status.inc_marker.timestamp = ceph::real_clock::now();
         status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
 
@@ -3799,7 +3801,8 @@ public:
 	  return set_cr_error(retcode);
         }
 
-        if (sync_env->sync_module->should_full_sync()) {
+        // always init with full sync when the src and dest are the same buckets (force symmetry within the zonegroup)
+        if (sync_pair.is_symmetric_pair() || sync_env->sync_module->should_full_sync()) {
           status.state = BucketSyncState::Full;
         } else {
           status.state = BucketSyncState::Incremental;
@@ -6094,7 +6097,7 @@ int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  sync_module.reset(new RGWDefaultSyncModuleInstance());
+  sync_module.reset(new RGWDefaultSyncModuleInstance(driver->svc()->zone->get_zonegroup()));
   auto async_rados = driver->svc()->async_processor;
 
   sync_env.init(this, driver->ctx(), driver,
