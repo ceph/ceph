@@ -28,8 +28,14 @@ quick_install_options=''
   quick_install_options="--image localhost:5000/ceph"
 {% endif %}
 
-{% if nodes < 3 %}
+if [[ ${NODES} -lt 2 ]]; then
   bootstrap_extra_options+=" --config /root/initial-ceph.conf"
+fi
+
+{% if prefix is not defined %}
+  PREFIX="ceph"
+{% else %}
+  PREFIX="{{ prefix }}"
 {% endif %}
 
 {% if ceph_dev_folder is defined %}
@@ -41,13 +47,13 @@ $CEPHADM ${quick_install_options} bootstrap --mon-ip $mon_ip --initial-dashboard
 fsid=$(cat /etc/ceph/ceph.conf | grep fsid | awk '{ print $3}')
 cephadm_shell="$CEPHADM shell --fsid ${fsid} -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring"
 
-
-{% for number in range(1, nodes) %}
-  ssh-copy-id -f -i /etc/ceph/ceph.pub  -o StrictHostKeyChecking=no root@192.168.100.10{{ number }}
+for number in $(seq 1 $((NODES - 1))); do
+  LAST_OCTET=$((NODE_IP_OFFSET + $number))
+  ssh-copy-id -f -i /etc/ceph/ceph.pub  -o StrictHostKeyChecking=no root@192.168.100.${LAST_OCTET}
   {% if expanded_cluster is defined %}
-    ${cephadm_shell} ceph orch host add {{ prefix }}-node-0{{ number }} 192.168.100.10{{ number }}
+    ${cephadm_shell} ceph orch host add ${PREFIX}-node-0${number} 192.168.100.${LAST_OCTET}
   {% endif %}
-{% endfor %}
+done
 
 {% if expanded_cluster is defined %}
   ${cephadm_shell} ceph orch apply osd --all-available-devices
