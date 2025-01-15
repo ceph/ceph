@@ -413,6 +413,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
+            'certificate_automated_rotation_enabled',
+            type='bool',
+            default=True, # TODO(redo): only for testing .. should be disabled by default
+            desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
+        ),
+        Option(
             'certificate_duration_days',
             type='int',
             default=(3 * 365),
@@ -563,6 +569,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_keepalive_count_max = 0
             self.certificate_duration_days = 0
             self.renewal_threshold_days = 0
+            self.certificate_automated_rotation_enabled = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -614,6 +621,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.tuned_profile_utils = TunedProfileUtils(self)
 
         self.cert_mgr = CertMgr(self,
+                                self.certificate_automated_rotation_enabled,
                                 self.certificate_duration_days,
                                 self.renewal_threshold_days,
                                 self.get_mgr_ip())
@@ -3289,7 +3297,7 @@ Then run the following:
         return self.cert_mgr.cert_ls()
 
     @handle_orch_error
-    def cert_store_entity_ls(self) -> Dict[str, Any]:
+    def cert_store_entity_ls(self) -> List[str]:
         return self.cert_mgr.entity_ls()
 
     @handle_orch_error

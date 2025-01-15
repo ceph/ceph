@@ -357,11 +357,13 @@ class CertMgr:
 
     def __init__(self,
                  mgr: "CephadmOrchestrator",
+                 certificate_automated_rotation_enabled: bool,
                  certificate_duration_days: int,
                  renewal_threshold_days: int,
                  mgr_ip: str) -> None:
         self.mgr = mgr
         self.mgr_ip = mgr_ip
+        self.certificate_automated_rotation_enabled = certificate_automated_rotation_enabled
         self.certificate_duration_days = certificate_duration_days
         self.renewal_threshold_days = renewal_threshold_days
         self.cert_key_store = CertKeyStore(mgr)
@@ -412,6 +414,44 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
+    def _raise_certificate_health_warning(self,
+                                          cert_obj: Cert,
+                                          cert_info: str,
+                                          is_valid: bool = False,
+                                          is_expired: bool = False,
+                                          is_close_to_expiration: bool = False,
+                                          error_info: str = '') -> None:
+
+        short_err_msg = ''
+        detailed_err_msg = ''
+        if not is_valid:
+            short_err_msg = f'Invalid certificate for {cert_info}: {error_info}'
+            detailed_err_msg = (
+                f'Detected invalid certificate for {cert_info}. '
+                'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
+                'Reconfigure affected daemons as needed.'
+            )
+        elif is_close_to_expiration:
+            short_err_msg = f'Certificate for {cert_info} is close to expiration.'
+            detailed_err_msg = (
+                f'The certificate for {cert_info} is close to expiration. '
+                'Please replace it with a valid certificate and reconfigure the affected service(s) or daemon(s) as necessary.'
+            )
+        elif is_expired:
+            short_err_msg = f'Certificate for {cert_info}: has expired'
+            detailed_err_msg = (
+                f'Detected an expired certificate for {cert_info}. '
+                'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
+                'Reconfigure affected daemons as needed.'
+            )
+
+        self.mgr.set_health_warning('CEPHADM_CERT_ERROR',
+                                    short_err_msg,
+                                    1,
+                                    [detailed_err_msg]
+                                    )
+
+
     def is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
         """
         Checks if a certificate is valid and close to expiration.
@@ -437,25 +477,20 @@ class CertMgr:
         entity_info = f" ({entity})" if entity else ""
         cert_source = 'user-made' if cert_obj.user_made else 'self-signed'
         cert_info = f'service: {cert_ref}{entity_info}, remaining days: {days_to_expiration}'
+
         if is_close_to_expiration:
             logger.warning(f'Detected a {cert_source} certificate close to its expiration, {cert_info}')
-            self._renew_certificate(cert_ref, entity, cert_obj)
+            if self.certificate_automated_rotation_enabled:
+                self._renew_certificate(cert_ref, cert_info, cert_obj)
+            else:
+                self._raise_certificate_health_warning(cert_obj, cert_info, is_close_to_expiration=is_close_to_expiration)
         elif not is_valid:
             logger.warning(f'Detected a {cert_source} invalid certificate, {cert_info}')
             if cert_obj.user_made:
-                err_msg = (
-                    f'Detected invalid certificate for {cert_ref}{entity_info}. '
-                    'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
-                    'Reconfigure affected daemons as needed.'
-                )
-                self.mgr.set_health_warning(
-                    'CEPHADM_CERT_ERROR',
-                    f'Invalid certificate for {cert_ref}{entity_info}: {exception_info}',
-                    1,
-                    [err_msg]
-                )
+                # TODO(redo): should we proceed in this case once ACME is setup?
+                self._raise_certificate_health_warning(cert_obj, cert_info, is_valid=is_valid, error_info=exception_info)
             else:
-                # self-signed invalid certificate.. let's try to renew it
+                # self-signed invalid certificate.. shouldn't happen but let's try to renew it
                 service_name, host = self.get_service_or_host(cert_ref, entity)
                 logger.info(f'Removing invalid certificate for {cert_ref} to trigger regeneration (service: {service_name}, host: {host}).')
                 self.cert_key_store.rm_cert(cert_ref, service_name, host)
@@ -465,21 +500,11 @@ class CertMgr:
 
         return is_valid, is_close_to_expiration
 
-    def _renew_certificate(self, cert_ref: str, entity: str, cert_obj: Cert) -> None:
-        """Renew a self-signed certificate."""
+    def _renew_certificate(self, cert_ref: str, cert_info: str, cert_obj: Cert) -> None:
+        """Renew a self-signed or user-made certificate."""
         if cert_obj.user_made:
             # By now we just trigger a health warning since we don't have ACME support yet
-            entity_info = f" ({entity})" if entity else ""
-            err_msg = (
-                f'The certificate for {cert_ref}{entity_info} is close to expiration. '
-                'Please replace it with a valid certificate and reconfigure the affected service(s) or daemon(s) as necessary.'
-            )
-            self.mgr.set_health_warning(
-                'CEPHADM_CERT_ERROR',
-                f'Certificate for {cert_ref}{entity_info} is close to expiration.',
-                1,
-                [err_msg]
-            )
+            self._raise_certificate_health_warning(cert_obj, cert_info, is_close_to_expiration=True)
         else:
             try:
                 logger.info(f'Renewing self-signed certificate for {cert_ref}')
@@ -487,7 +512,7 @@ class CertMgr:
                 self.cert_key_store.save_cert(cert_ref, new_cert)
                 self.cert_key_store.save_key(cert_ref, new_key)
             except SSLConfigException as e:
-                logger.error(f'Error while trying o renew self-signed certificate for {cert_ref}: {e}')
+                logger.error(f'Error while trying to renew self-signed certificate for {cert_ref}: {e}')
 
     def get_service_or_host(self, cert_ref: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
         """Determine the service name or host based on the cert_ref."""
@@ -518,7 +543,7 @@ class CertMgr:
                 # Edge case where cert is present but key is None
                 # this could only happen if somebody has put manually a bad key!
                 logger.warning(f"Key is missing for certificate '{cert_ref}'. Attempting renewal.")
-                self._renew_certificate(cert_ref, cert)
+                self._renew_certificate(cert_ref, cert_ref, cert)
 
         for cert_ref, cert_entries in self.cert_key_store.get_services_certificates().items():
             if not cert_entries:

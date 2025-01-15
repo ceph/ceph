@@ -991,7 +991,7 @@ def password_hash(password: Optional[str], salt_password: Optional[str] = None) 
         salt = salt_password.encode('utf8')
     return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')
 
-def parse_combined_pem_file(pem_data):
+def parse_combined_pem_file(pem_data: str) -> Tuple[Optional[str], Optional[str]]:
 
     # Extract the certificate
     cert_start = "-----BEGIN CERTIFICATE-----"
