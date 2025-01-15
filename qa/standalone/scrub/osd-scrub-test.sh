@@ -597,17 +597,16 @@ function TEST_dump_scrub_schedule() {
     declare -A expct_dmp_duration=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
     wait_any_cond $pgid 10 $saved_last_stamp expct_dmp_duration "WaitingAfterScrub_dmp " sched_data || return 1
 
-    sleep 2
-
     #
     # step 2: set noscrub and request a "periodic scrub". Watch for the change in the 'is the scrub
     #         scheduled for the future' value
     #
 
-    ceph tell osd.* config set osd_scrub_chunk_max "3" || return 1
-    ceph tell osd.* config set osd_scrub_sleep "1.0" || return 1
     ceph osd set noscrub || return 1
     sleep 2
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max "3" || return 1
+    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
+    sleep 8
     saved_last_stamp=${sched_data['query_last_stamp']}
 
     ceph tell $pgid schedule-scrub
