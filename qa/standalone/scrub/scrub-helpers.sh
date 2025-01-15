@@ -320,7 +320,7 @@ function build_pg_dicts {
 
   # if the infile name is '-', fetch the dump directly from the ceph cluster
   if [[ $infile == "-" ]]; then
-    local -r ceph_cmd="bin/ceph pg dump pgs_brief -f=json-pretty"
+    local -r ceph_cmd="ceph pg dump pgs_brief -f=json-pretty"
     local -r ceph_cmd_out=$(eval $ceph_cmd)
     local -r ceph_cmd_rc=$?
     if [[ $ceph_cmd_rc -ne 0 ]]; then

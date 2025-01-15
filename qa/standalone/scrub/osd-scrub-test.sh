@@ -603,17 +603,16 @@ function TEST_dump_scrub_schedule() {
     declare -A expct_dmp_duration=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
     wait_any_cond $pgid 10 $saved_last_stamp expct_dmp_duration "WaitingAfterScrub_dmp " sched_data || return 1
 
-    sleep 2
-
     #
     # step 2: set noscrub and request a "periodic scrub". Watch for the change in the 'is the scrub
     #         scheduled for the future' value
     #
 
-    ceph tell osd.* config set osd_shallow_scrub_chunk_max "3" || return 1
-    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
     ceph osd set noscrub || return 1
     sleep 2
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max "3" || return 1
+    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
+    sleep 8
     saved_last_stamp=${sched_data['query_last_stamp']}
 
     ceph tell $pgid schedule-scrub
@@ -692,28 +691,28 @@ function wait_initial_scrubs() {
 
     # set a long schedule for the periodic scrubs. Wait for the
     # initial 'no previous scrub is known' scrubs to finish for all PGs.
-    bin/ceph tell osd.* config set osd_scrub_min_interval 7200
-    bin/ceph tell osd.* config set osd_deep_scrub_interval 14400
-    bin/ceph tell osd.* config set osd_max_scrubs 32
-    bin/ceph tell osd.* config set osd_scrub_sleep 0
-    bin/ceph tell osd.* config set osd_shallow_scrub_chunk_max 10
-    bin/ceph tell osd.* config set osd_scrub_chunk_max 10
+    ceph tell osd.* config set osd_scrub_min_interval 7200
+    ceph tell osd.* config set osd_deep_scrub_interval 14400
+    ceph tell osd.* config set osd_max_scrubs 32
+    ceph tell osd.* config set osd_scrub_sleep 0
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max 10
+    ceph tell osd.* config set osd_scrub_chunk_max 10
 
     for pg in "${!pg_to_prim_dict[@]}"; do
       (( extr_dbg >= 1 )) && echo "Scheduling initial scrub for $pg"
-      bin/ceph tell $pg scrub || return 1
+      ceph tell $pg scrub || return 1
     done
 
     sleep 1
-    (( extr_dbg >= 1 )) && bin/ceph pg dump pgs --format=json-pretty | \
+    (( extr_dbg >= 1 )) && ceph pg dump pgs --format=json-pretty | \
       jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
 
     tout=20
     while [ $tout -gt 0 ] ; do
       sleep 0.5
-      (( extr_dbg >= 2 )) && bin/ceph pg dump pgs --format=json-pretty | \
+      (( extr_dbg >= 2 )) && ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
-      not_done=$(bin/ceph pg dump pgs --format=json-pretty | \
+      not_done=$(ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})' | wc -l )
       # note that we should ignore a header line
       if [ "$not_done" -le 1 ]; then
@@ -782,14 +781,14 @@ function TEST_abort_periodic_for_operator() {
     wait_initial_scrubs pg_pr || return 1
 
     # limit all OSDs to one scrub at a time
-    bin/ceph tell osd.* config set osd_max_scrubs 1
-    bin/ceph tell osd.* config set osd_stats_update_period_not_scrubbing 1
+    ceph tell osd.* config set osd_max_scrubs 1
+    ceph tell osd.* config set osd_stats_update_period_not_scrubbing 1
 
     # configure for slow scrubs
-    bin/ceph tell osd.* config set osd_scrub_sleep 3
-    bin/ceph tell osd.* config set osd_shallow_scrub_chunk_max 2
-    bin/ceph tell osd.* config set osd_scrub_chunk_max 2
-    (( extr_dbg >= 2 )) && bin/ceph tell osd.2 dump_scrub_reservations --format=json-pretty
+    ceph tell osd.* config set osd_scrub_sleep 3
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max 2
+    ceph tell osd.* config set osd_scrub_chunk_max 2
+    (( extr_dbg >= 2 )) && ceph tell osd.2 dump_scrub_reservations --format=json-pretty
 
     # the first PG to work with:
     local pg1="1.0"
@@ -812,7 +811,7 @@ function TEST_abort_periodic_for_operator() {
     fi
 
     # the common primary is allowed two concurrent scrubs
-    bin/ceph tell osd."${pg_pr[$pg1]}" config set osd_max_scrubs 2
+    ceph tell osd."${pg_pr[$pg1]}" config set osd_max_scrubs 2
     echo "The two PGs to manipulate are $pg1 and $pg2"
 
     set_query_debug "$pg1"
@@ -821,31 +820,31 @@ function TEST_abort_periodic_for_operator() {
     local is_act
     for i in $( seq 1 3 )
     do
-      is_act=$(bin/ceph pg "$pg1" query | jq '.scrubber.active')
+      is_act=$(ceph pg "$pg1" query | jq '.scrubber.active')
       if [[ "$is_act" = "false" ]]; then
           break
       fi
       echo "Still waiting for pg $pg1 to finish scrubbing"
       sleep 0.7
     done
-    bin/ceph pg dump pgs
+    ceph pg dump pgs
     if [[ "$is_act" != "false" ]]; then
-      bin/ceph pg "$pg1" query
+      ceph pg "$pg1" query
       echo "PG $pg1 appears to be still scrubbing"
       return 1
     fi
     sleep 0.5
 
     echo "Initiating a periodic scrub of $pg1"
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
-    bin/ceph tell $pg1 schedule-deep-scrub || return 1
+    (( extr_dbg >= 2 )) && ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    ceph tell $pg1 schedule-deep-scrub || return 1
     sleep 1
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
 
     for i in $( seq 1 14 )
     do
       sleep 0.5
-      stt=$(bin/ceph pg "$pg1" query | jq '.scrubber')
+      stt=$(ceph pg "$pg1" query | jq '.scrubber')
       is_active=$(echo $stt | jq '.active')
       is_reserving_replicas=$(echo $stt | jq '.is_reserving_replicas')
       if [[ "$is_active" = "true" && "$is_reserving_replicas" = "false" ]]; then
@@ -854,49 +853,49 @@ function TEST_abort_periodic_for_operator() {
       echo "Still waiting for pg $pg1 to start scrubbing: $stt"
     done
     if [[ "$is_active" != "true" || "$is_reserving_replicas" != "false" ]]; then
-      bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+      ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
       echo "The scrub is not active or is reserving replicas"
       return 1
     fi
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
 
 
     # PG 1 is scrubbing, and has reserved the replicas - soem of which are shared
     # by PG 2. As the max-scrubs was set to 1, that should prevent PG 2 from
     # reserving its replicas.
 
-    (( extr_dbg >= 1 )) && bin/ceph tell osd.* dump_scrub_reservations --format=json-pretty
+    (( extr_dbg >= 1 )) && ceph tell osd.* dump_scrub_reservations --format=json-pretty
 
     # now - the 2'nd scrub - which should be blocked on reserving
     set_query_debug "$pg2"
-    bin/ceph tell "$pg2" schedule-deep-scrub
+    ceph tell "$pg2" schedule-deep-scrub
     sleep 0.5
     (( extr_dbg >= 2 )) && echo "===================================================================================="
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg2" query -f json-pretty | jq '.scrubber'
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && ceph pg "$pg2" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
     sleep 1
     (( extr_dbg >= 2 )) && echo "===================================================================================="
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg2" query -f json-pretty | jq '.scrubber'
-    (( extr_dbg >= 2 )) && bin/ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && ceph pg "$pg2" query -f json-pretty | jq '.scrubber'
+    (( extr_dbg >= 2 )) && ceph pg "$pg1" query -f json-pretty | jq '.scrubber'
 
     # make sure pg2 scrub is stuck in the reserving state
-    local stt2=$(bin/ceph pg "$pg2" query | jq '.scrubber')
+    local stt2=$(ceph pg "$pg2" query | jq '.scrubber')
     local pg2_is_reserving
     pg2_is_reserving=$(echo $stt2 | jq '.is_reserving_replicas')
     if [[ "$pg2_is_reserving" != "true" ]]; then
       echo "The scheduled scrub for $pg2 should have been stuck"
-      bin/ceph pg dump pgs
+      ceph pg dump pgs
       return 1
     fi
 
     # now - issue an operator-initiated scrub on pg2.
     # The periodic scrub should be aborted, and the operator-initiated scrub should start.
     echo "Instructing $pg2 to perform a high-priority scrub"
-    bin/ceph tell "$pg2" scrub
+    ceph tell "$pg2" scrub
     for i in $( seq 1 10 )
     do
       sleep 0.5
-      stt2=$(bin/ceph pg "$pg2" query | jq '.scrubber')
+      stt2=$(ceph pg "$pg2" query | jq '.scrubber')
       pg2_is_active=$(echo $stt2 | jq '.active')
       pg2_is_reserving=$(echo $stt2 | jq '.is_reserving_replicas')
       if [[ "$pg2_is_active" = "true" && "$pg2_is_reserving" != "true" ]]; then
