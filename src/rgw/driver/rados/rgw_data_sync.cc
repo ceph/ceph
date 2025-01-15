@@ -3021,7 +3021,7 @@ public:
 
           if (!dest_bucket_perms.verify_bucket_permission(dest_key.value_or(key), rgw::IAM::s3PutObject)) {
             ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bucket.get_key() << ")" << dendl;
-            return -EPERM;
+            return set_cr_error(-EPERM);
           }
         }
 
@@ -4520,7 +4520,7 @@ public:
           }
           tn->set_resource_name(SSTR(bucket_str_noinstance(bs.bucket) << "/" << key));
         }
-        if (retcode == -ERR_PRECONDITION_FAILED || retcode == -EPERM) {
+        if (retcode == -ERR_PRECONDITION_FAILED || retcode == -EPERM || retcode == -EACCES) {
 	  pretty_print(sc->env, "Skipping object s3://{}/{} in sync from zone {}\n",
 		       bs.bucket.name, key, zone_name);
           set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
