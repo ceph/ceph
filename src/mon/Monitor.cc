@@ -38,6 +38,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
+#include "messages/MMonQuorum.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -2394,6 +2395,21 @@ void Monitor::collect_metadata(Metadata *m)
   (*m)["created_at"] = created_at;
 }
 
+void Monitor::check_quorum_subs()
+{
+  dout(10) << __func__ << dendl;
+  const string quorum_type = "quorum_change";
+  with_session_map([this, &quorum_type]
+    (const MonSessionMap& session_map) {
+      auto subs = session_map.subs.find(quorum_type);
+      if (subs != session_map.subs.end()) {
+        for (auto sub : *subs->second) {
+          send_quorum_changed(sub);
+        }
+      }
+    });
+}
+
 void Monitor::finish_election()
 {
   apply_quorum_to_compatset_features();
@@ -2411,6 +2427,8 @@ void Monitor::finish_election()
     std::lock_guard l(auth_lock);
     authmon()->_set_mon_num_rank(monmap->size(), rank);
   }
+
+  check_quorum_subs();
 
   // am i named and located properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
@@ -4556,7 +4574,7 @@ void Monitor::_ms_dispatch(Message *m)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
-
+  dout(20) << "dispatch_op: " << op << " " << *op->get_req() << dendl;
   MonSession *s = op->get_session();
   ceph_assert(s);
   if (s->closed) {
@@ -5297,7 +5315,9 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
-    if (p->first == "monmap" || p->first == "config") {
+    dout(20) << __func__ << " " << p->first << " start " << p->second.start
+             << " flags " << p->second.flags << dendl;
+    if (p->first == "monmap" || p->first == "config" || p->first == "quorum_change") {
       // these require no caps
     } else if (!s->is_capable("mon", MON_CAP_R)) {
       dout(5) << __func__ << " " << op->get_req()->get_source_inst()
@@ -5316,6 +5336,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
 	  std::lock_guard l(session_map_lock);
+          dout(20) << __func__ << " removing conflicting sub " << it->first << dendl;
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -5364,6 +5385,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     }
     else if (p->first == "NVMeofGw") {
         nvmegwmon()->check_sub(s->sub_map[p->first]);
+    } else if (p->first == "quorum_change") {
+      send_quorum_changed(s->sub_map[p->first]);
     }
   }
 
@@ -5464,8 +5487,38 @@ bool Monitor::ms_handle_refused(Connection *con)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
+  dout(10) << __func__ << " sending latest monmap to "
+    << con->get_peer_entity_name().get_type_name()
+    << " type:" << con->get_peer_type()
+    << " id:" << con->get_peer_id()
+    << dendl;
   monmap->encode(bl, con->get_features());
   con->send_message(new MMonMap(bl));
+}
+
+void Monitor::send_quorum_changed(Subscription *sub)
+{
+  auto conn = sub->session->con.get();
+  if (!conn) {
+    dout(10) << __func__ << " no connection for sub " << sub << dendl;
+    return;
+  }
+
+  if (sub->next <= get_epoch() && get_quorum().size()) {
+    dout(20) << __func__ << " sending quorum: " << get_quorum() << " to " << sub->session->name
+      <<  " from mon." << name << " mon addr " << con_self->get_peer_addrs() << dendl;
+    conn->send_message(new MMonQuorum(con_self->get_peer_addrs(), get_epoch(), get_quorum()));
+
+    if (sub->onetime) {
+      with_session_map([sub](MonSessionMap& session_map) {
+        session_map.remove_sub(sub);
+      });
+    } else {
+      dout(20) << __func__ << " rescheduling quorum check for " << sub->session->name
+        << " sub->next (was)" << sub->next << " get_epoch() " << get_epoch() << dendl;
+      sub->next = get_epoch() + 1;
+    }
+  }
 }
 
 void Monitor::handle_mon_get_map(MonOpRequestRef op)
