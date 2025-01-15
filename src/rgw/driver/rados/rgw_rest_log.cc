@@ -1061,7 +1061,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
     if (!pipe.dest.bucket) {
       /* Uh oh, something went wrong */
-      ldpp_dout(this, 20) << "ERROR: RGWOp_BILog_Status::execute(optional_yield y): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
+      ldpp_dout(this, 0) << "ERROR: RGWOp_BILog_Status::execute(optional_yield y): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
       op_ret = -EIO;
       return;
     }
