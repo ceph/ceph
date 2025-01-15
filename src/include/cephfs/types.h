@@ -91,18 +91,33 @@ struct frag_info_t : public scatter_info_t {
 
   // *this += cur - acc;
   void add_delta(const frag_info_t &cur, const frag_info_t &acc, bool *touched_mtime=0, bool *touched_chattr=0) {
+    bool dir_changed = false;
+    int64_t nfiles_changed = 0;
+    int64_t nsubdirs_changed = 0;
+    
     if (cur.mtime > mtime) {
       mtime = cur.mtime;
       if (touched_mtime)
 	*touched_mtime = true;
+
+      dir_changed = true;
     }
-    if (cur.change_attr > change_attr) {
-      change_attr = cur.change_attr;
-      if (touched_chattr)
-	*touched_chattr = true;
+    if (cur.change_attr > acc.change_attr) {
+      dir_changed = true;
     }
-    nfiles += cur.nfiles - acc.nfiles;
-    nsubdirs += cur.nsubdirs - acc.nsubdirs;
+
+    nfiles_changed = cur.nfiles - acc.nfiles;
+    nfiles += nfiles_changed;
+    nsubdirs_changed = cur.nsubdirs - acc.nsubdirs;
+    nsubdirs += nsubdirs_changed;
+
+    if (nfiles_changed != 0 || nsubdirs_changed != 0) {
+        dir_changed = true;
+    }
+
+    if (dir_changed && touched_chattr){
+        *touched_chattr = true;
+    }
   }
 
   void add(const frag_info_t& other) {
