@@ -37,7 +37,8 @@ from ceph.deployment.service_spec import \
     ServiceSpec, PlacementSpec, \
     HostPlacementSpec, IngressSpec, \
     TunedProfileSpec, \
-    MgmtGatewaySpec
+    MgmtGatewaySpec, \
+    NvmeofServiceSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -3437,6 +3438,15 @@ Then run the following:
             mgmt_gw_daemons = self.cache.get_daemons_by_service('mgmt-gateway')
             if not mgmt_gw_daemons:
                 raise OrchestratorError("The 'oauth2-proxy' service depends on the 'mgmt-gateway' service, but it is not configured.")
+
+        if spec.service_type == 'nvmeof':
+            spec = cast(NvmeofServiceSpec, spec)
+            assert spec.pool is not None, "Pool cannot be None for nvmeof services"
+            try:
+                self._check_pool_exists(spec.pool, spec.service_name())
+            except OrchestratorError as e:
+                self.log.debug(f"{e}")
+                raise
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
