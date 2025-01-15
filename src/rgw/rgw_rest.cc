@@ -2273,6 +2273,52 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   return 0;
 }
 
+class RGWPrometheusMetricsHandler : public RGWHandler_REST {
+public:
+    explicit RGWPrometheusMetricsHandler(RGWRados* store) : store(store) {}
+
+    int init(RGWRados* store, req_state* s, RGWRestfulIO* rio) override {
+        return 0; // No initialization required
+    }
+
+    int handle(req_state* s, RGWRestfulIO* rio) override {
+        // Get the RGWExporter instance
+        RGWExporter* exporter = store->get_exporter();
+        if (!exporter) {
+            rio->send_status(s, 500, "Internal Server Error");
+            return -ENOENT;
+        }
+
+        // Fetch Prometheus metrics
+        std::string metrics = exporter->get_prometheus_metrics();
+
+        // Send response
+        rio->send_status(s, 200, "OK");
+        rio->set_req_header("Content-Type", "text/plain");  //hstdoubt: this is being used in dump_header, need to investigate if this header is needed to be set or not
+        rio->send_data(metrics.c_str(), metrics.size());
+        return 0;
+    }
+
+    void cleanup(RGWRados* store, req_state* s) override {
+        // No cleanup required
+    }
+
+private:
+    RGWRados* store;
+};
+
+void rgw_rest_init(CephContext* cct) {
+    // Existing endpoint registrations
+    rgw_rest_bucket = new RGWRESTMgr_Bucket;
+    rgw_rest_user = new RGWRESTMgr_User;
+
+    // Register Prometheus metrics endpoint
+    auto prometheus_mgr = new RGWRESTMgr();
+    prometheus_mgr->register_default_mgr(new RGWPrometheusMetricsHandler(cct->get_rados()));
+    rgw_rest_register_resource("metrics", prometheus_mgr);
+}
+
+
 RGWHandler_REST* RGWREST::get_handler(
   rgw::sal::Driver*  const driver,
   req_state* const s,

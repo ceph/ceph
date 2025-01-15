@@ -72,6 +72,7 @@ set(librgw_common_srcs
   rgw_cors_s3.cc
   rgw_env.cc
   rgw_es_query.cc
+  rgw_exporter.cc
   rgw_formats.cc
   rgw_http_client.cc
   rgw_keystone.cc
@@ -97,6 +98,7 @@ set(librgw_common_srcs
   rgw_policy_s3.cc
   rgw_public_access.cc
   rgw_putobj.cc
+  rgw_prometheus.cc
   rgw_quota.cc
   rgw_resolve.cc
   rgw_rest.cc
