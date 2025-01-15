@@ -328,19 +328,15 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const uint64_t offset,
   const uint64_t length,
   const ECUtil::stripe_info_t& sinfo,
-  const vector<int>& chunk_mapping,
   set<int> *want_to_read)
 {
   const auto [left_chunk_index, right_chunk_index] =
     sinfo.offset_length_to_data_chunk_indices(offset, length);
   const auto distance =
-    std::min(right_chunk_index - left_chunk_index,
-             sinfo.get_data_chunk_count());
+    std::min(right_chunk_index - left_chunk_index, (uint64_t)sinfo.get_k());
   for(uint64_t i = 0; i < distance; i++) {
-    auto raw_chunk = (left_chunk_index + i) % sinfo.get_data_chunk_count();
-    auto chunk = chunk_mapping.size() > raw_chunk ?
-      chunk_mapping[raw_chunk] : static_cast<int>(raw_chunk);
-    want_to_read->insert(chunk);
+    auto raw_shard = (left_chunk_index + i) % sinfo.get_k();
+    want_to_read->insert(sinfo.get_shard(raw_shard));
   }
 }
 
@@ -349,8 +345,7 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const uint64_t length,
   set<int> *want_to_read)
 {
-  get_min_want_to_read_shards(
-    offset, length, sinfo, ec_impl->get_chunk_mapping(), want_to_read);
+  get_min_want_to_read_shards(offset, length, sinfo, want_to_read);
   dout(20) << __func__ << ": offset " << offset << " length " << length
 	   << " want_to_read " << *want_to_read << dendl;
 }
@@ -508,10 +503,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 void ECCommon::ReadPipeline::get_want_to_read_shards(
   std::set<int> *want_to_read) const
 {
-  const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-  for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
-    int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
-    want_to_read->insert(chunk);
+  for (int i = 0; i < (int)sinfo.get_k(); ++i) {
+    want_to_read->insert(sinfo.get_shard(i));
   }
 }
 
@@ -537,12 +530,8 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
       const auto bounds = make_pair(read.offset, read.size);
-      // the configurable serves only the preservation of old behavior
-      // which will be dropped. ReadPipeline is actually able to handle
-      // reads aligned to chunk size.
-      const auto aligned = g_conf()->osd_ec_partial_reads \
-        ? read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds)
-        : read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
+      const auto aligned =
+	read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
       ceph_assert(res.returned.front().get<0>() == aligned.first);
       ceph_assert(res.returned.front().get<1>() == aligned.second);
       map<int, bufferlist> to_decode;
@@ -569,13 +558,30 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
-      auto off = read.offset - aligned.first;
-      auto len = std::min(read.size, bl.length() - off);
+      // If partial stripe reads are disabled aligned_offset_in_stripe will
+      // be 0 which will mean trim_offset is 0. When partial reads are enabled
+      // the shards read (wanted_to_read) is a union of the requirements for
+      // each stripe, each range being read may need to trim unneeded shards
+      uint64_t aligned_offset_in_stripe = aligned.first -
+	read_pipeline.sinfo.logical_to_prev_stripe_offset(aligned.first);
+      uint64_t chunk_size = read_pipeline.sinfo.get_chunk_size();
+      uint64_t trim_offset = 0;
+      for (auto shard : wanted_to_read) {
+	if (read_pipeline.sinfo.get_raw_shard(shard) * chunk_size <
+	    aligned_offset_in_stripe) {
+	  trim_offset += chunk_size;
+	} else {
+	  break;
+	}
+      }
+      auto off = read.offset + trim_offset - aligned.first;
       dout(20) << __func__ << " bl.length()=" << bl.length()
-	       << " len=" << len << " read.size=" << read.size
-	       << " off=" << off << " read.offset=" << read.offset
-	       << dendl;
-      trimmed.substr_of(bl, off, len);
+	       << " off=" << off
+	       << " read.offset=" << read.offset
+	       << " read.size=" << read.size
+	       << " trim_offset="<< trim_offset << dendl;
+      ceph_assert(read.size <= bl.length() - off);
+      trimmed.substr_of(bl, off, read.size);
       result.insert(
 	read.offset, trimmed.length(), std::move(trimmed));
       res.returned.pop_front();
