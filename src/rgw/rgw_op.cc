@@ -8582,6 +8582,10 @@ void RGWGetBucketPolicy::execute(optional_yield y)
 
 void RGWDeleteBucketPolicy::send_response()
 {
+  if (!op_ret) {
+    /* A successful Delete Bucket Policy should return a 204 on success */
+    op_ret = STATUS_NO_CONTENT;
+  }
   if (op_ret) {
     set_req_state_err(s, op_ret);
   }
@@ -9257,4 +9261,3 @@ void rgw_slo_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("etag", etag, obj);
   JSONDecoder::decode_json("size_bytes", size_bytes, obj);
 };
-
