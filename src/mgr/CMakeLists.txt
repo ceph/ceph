@@ -41,10 +41,20 @@ if(WITH_MGR)
   if(WITH_LIBCEPHSQLITE)
     target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)
   endif()
+  if(WITH_LIBCEPHFS)
+    # Linking Boost statically will cause erroneous behavior in the ceph-mgr
+    # because multiple instances of Boost::locale will be present when linking
+    # with Boost::Python. The CephFS Client will not work with normalization /
+    # case sensitivity.
+    if(Boost_USE_STATIC_LIBS)
+      message(WARNING "Linking Boost statically will cause erroneous behavior because multiple instances of Boost::locale will be present when linking with Boost::Python. Please rebuild with ENABLE_SHARED=ON.")
+    endif()
+    target_link_libraries(ceph-mgr client)
+  endif()
   target_include_directories(ceph-mgr PRIVATE
     $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
   target_link_libraries(ceph-mgr
-    osdc client heap_profiler
+    osdc heap_profiler
     global-static ceph-common
     Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
     Python3::Python

@@ -26,6 +26,8 @@
 
 #include "messages/MLock.h"
 
+#include "common/strescape.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix

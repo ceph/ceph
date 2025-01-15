@@ -729,17 +729,22 @@ if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND BOOST_COMPONENTS filesystem)
 endif()
 
+if(WITH_LIBCEPHFS)
+  find_package(ICU REQUIRED COMPONENTS uc i18n)
+  list(APPEND BOOST_COMPONENTS locale)
+endif()
+
 set(Boost_USE_MULTITHREADED ON)
 
 CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
   "NOT WITH_SYSTEM_BOOST" OFF)
 # require minimally the bundled version
+if(ENABLE_SHARED)
+  set(Boost_USE_STATIC_LIBS OFF)
+else()
+  set(Boost_USE_STATIC_LIBS ON)
+endif()
 if(WITH_SYSTEM_BOOST)
-  if(ENABLE_SHARED)
-    set(Boost_USE_STATIC_LIBS OFF)
-  else()
-    set(Boost_USE_STATIC_LIBS ON)
-  endif()
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
@@ -755,7 +760,6 @@ else()
     set(DEFAULT_BOOST_J 1)
   endif()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
-  set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
   build_boost(1.85
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
