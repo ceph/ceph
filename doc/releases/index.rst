@@ -65,6 +65,7 @@ Release timeline
 
 .. _Squid: squid
 .. _19.2.0: squid#v19-2-0-squid
+.. _19.2.1: squid#v19-2-1-squid
 
 .. _Reef: reef
 .. _18.2.0: reef#v18-2-0-reef
