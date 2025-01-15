@@ -15,6 +15,12 @@ The log bucket can accumulate logs from multiple buckets. It is recommended to c
 a different "prefix" for each bucket, so that the logs of different buckets will be stored
 in different objects in the log bucket.
 
+.. note::
+
+    - The log bucket must be created before enabling logging on a bucket
+    - The log bucket cannot be the same as the bucket being logged
+    - The log bucket cannot have logging enabled on it
+
 
 .. toctree::
    :maxdepth: 1
@@ -29,6 +35,7 @@ Adding a log object to the log bucket is done "lazily", meaning, that if no more
 remain outside of the log bucket even after the configured time has passed.
 To counter that, you can flush all logging objects on a given source bucket to log them,
 regardless if enough time passed or if no more records are written to the object.
+Flushing will happen automatically when logging is disabled on a bucket, its logging configuration is changed, or the bucket is deleted.
 
 Standard
 ````````
@@ -72,7 +79,7 @@ has the following format:
 
 ::
 
-  <prefix><bucket owner>/<source region>/<bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
+  <prefix><bucket owner>/<source region>/[tenant:]<bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
 
 For example:
 
@@ -90,7 +97,7 @@ Journal
 minimum amount of data used for journaling bucket changes (this is a Ceph extension).
 
   - bucket owner (or dash if empty)
-  - bucket name (or dash if empty)
+  - bucket name (or dash if empty). in the format: ``[tenant:]<bucket name>``
   - time in the following format: ``[day/month/year:hour:minute:second timezone]``
   - object key (or dash if empty)
   - operation in the following format: ``WEBSITE/REST.<HTTP method>.<resource>``
@@ -111,7 +118,7 @@ Standard
 based on `AWS Logging Record Format`_.
   
   - bucket owner (or dash if empty)
-  - bucket name (or dash if empty)
+  - bucket name (or dash if empty). in the format: ``[tenant:]<bucket name>``
   - time
   - remote IP (not supported, always a dash)
   - user or account (or dash if empty)
