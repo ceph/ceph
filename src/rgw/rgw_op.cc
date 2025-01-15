@@ -945,9 +945,11 @@ void handle_replication_status_header(
  *  `1`  :  restore is already in progress
  *  `2`  :  already restored
  */
+std::optional<uint64_t> RGWRestoreObj::modified_days = std::nullopt;
+
 int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                          rgw::sal::Attrs& attrs, bool sync_cloudtiered, std::optional<uint64_t> days,
-                         bool restore_op, optional_yield y)
+                         std::optional<uint64_t> modified_days, bool restore_op, optional_yield y)
 {
   int op_ret = 0;
   ldpp_dout(dpp, 20) << "reached handle cloud tier " << dendl;
@@ -1062,7 +1064,15 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
           return 1; // for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
         } 
     } else {
-      return 2; // corresponds to CLOUD_RESTORED
+      if (modified_days && *modified_days != days) {
+        op_ret = s->object->set_cloud_expiry_days(dpp, y, modified_days);
+        if (op_ret < 0) {
+          s->err.message = "failed to update object expiry days";
+          return op_ret;
+        } else {
+          return 2; // corresponds to CLOUD_RESTORED
+        }
+      }
     }
   } catch (const buffer::end_of_buffer&) {
     //empty manifest; it's not cloud-tiered
@@ -2469,7 +2479,7 @@ void RGWGetObj::execute(optional_yield y)
 
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     std::optional<uint64_t> days;
-    op_ret = handle_cloudtier_obj(s, this, driver, attrs, sync_cloudtiered, days, false, y);
+    op_ret = handle_cloudtier_obj(s, this, driver, attrs, sync_cloudtiered, days, nullopt, false, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
                        <<". Failing with " << op_ret << dendl;
@@ -5309,7 +5319,7 @@ void RGWRestoreObj::execute(optional_yield y)
   }
   rgw::sal::Attrs attrs;
   attrs = s->object->get_attrs();
-  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, true, y);
+  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, modified_days, true, y);
   restore_ret = op_ret;
   ldpp_dout(this, 20) << "Restore completed of object: " << *s->object << "with op ret: " << restore_ret <<dendl;
 

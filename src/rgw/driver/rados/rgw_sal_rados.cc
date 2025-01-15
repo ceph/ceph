@@ -3073,6 +3073,47 @@ int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   return ret;
 }
 
+int RadosObject::set_cloud_expiry_days(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+			          std::optional<uint64_t> modified_days)
+{
+  int ret = 0;
+  set_atomic();
+  CephContext *cct = store->ctx();
+  constexpr int32_t secs_in_a_day = 24 * 60 * 60;
+  ceph::real_time expiration_date ;
+  int expiry_days = modified_days.value();
+  ceph::real_time restore_time;
+
+  map<string, bufferlist> attrs = get_attrs();
+  auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TIME);
+  if (attr_iter != attrs.end()) {
+    bufferlist bl;
+    using ceph::decode;
+    decode(restore_time, attr_iter->second);
+  }
+  
+  if (cct->_conf->rgw_restore_debug_interval > 0) {
+    expiration_date = restore_time + make_timespan(double(expiry_days)*cct->_conf->rgw_restore_debug_interval);
+    ldpp_dout(dpp, 20) << "Setting expiration time to rgw_restore_debug_interval: " << double(expiry_days)*cct->_conf->rgw_restore_debug_interval << ", days:" << expiry_days << dendl;
+  } else {
+      expiration_date = restore_time + make_timespan(double(expiry_days) * secs_in_a_day);
+  }
+
+  bufferlist bl;
+  using ceph::encode;
+  encode(expiration_date, bl);
+
+  ret = modify_obj_attrs(RGW_ATTR_RESTORE_EXPIRY_DATE, bl, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to set restore expiry date ret=" << ret << dendl;
+    return ret;
+  }
+  ret = modify_obj_attrs(RGW_ATTR_DELETE_AT, bl, y, dpp);
+
+  return ret;
+}
+
 /*
  * If the object is restored temporarily and is expired, delete the data and
  * reset the HEAD object as cloud-transitioned.

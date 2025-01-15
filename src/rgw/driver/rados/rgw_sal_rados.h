@@ -685,6 +685,9 @@ class RadosObject : public StoreObject {
     int set_cloud_restore_status(const DoutPrefixProvider* dpp,
 			         optional_yield y,
 		                 RGWRestoreStatus restore_status);
+    int set_cloud_expiry_days(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+			          std::optional<uint64_t> modified_days);
     RGWObjManifest* get_manifest() { return manifest; }
     RGWObjectCtx& get_ctx() { return *rados_ctx; }
 

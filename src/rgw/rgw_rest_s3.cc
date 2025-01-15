@@ -3530,11 +3530,25 @@ int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   if (request.days) {
-    expiry_days = request.days.value();
-    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
+    uint64_t new_expiry_days = request.days.value();
+    expiry_days = new_expiry_days;
+    // Update modified_days only if the new value is different
+    if (!RGWRestoreObj::modified_days) {
+        // Initialize modified_days with the new value
+        RGWRestoreObj::modified_days = new_expiry_days;
+    } else if (*RGWRestoreObj::modified_days != new_expiry_days) {
+        // If modified_days exists but is different, update it
+        expiry_days = *RGWRestoreObj::modified_days;  // Retain previous value in expiry_days
+        RGWRestoreObj::modified_days = new_expiry_days;
+        ldpp_dout(this, 10) << "expiry_days updated to previous modified_days value: " << expiry_days << dendl;
+        ldpp_dout(this, 10) << "modified_days updated to: " << modified_days << dendl;
+
+    } else {
+        ldpp_dout(this, 10) << "modified_days remains unchanged: " << modified_days << dendl;
+    }
+
   } else {
-    expiry_days=nullopt;
-    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
+    expiry_days = std::nullopt;
   }
 
   return 0;
