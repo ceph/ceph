@@ -38,6 +38,10 @@
 #include "Client.h"
 #include "Fh.h"
 #include "ioctl.h"
+#include "fscrypt_uapi.h"
+#include "FSCrypt.h"
+#include "Inode.h"
+#include "Dir.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/ceph_ll_client.h"
@@ -926,10 +930,11 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 #else
                           int cmd,
 #endif
-                          void *arg, struct fuse_file_info *fi,
+                          void *_arg, struct fuse_file_info *fi,
 			  unsigned flags, const void *in_buf, size_t in_bufsz, size_t out_bufsz)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   if (flags & FUSE_IOCTL_COMPAT) {
     fuse_reply_err(req, ENOSYS);
@@ -949,6 +954,186 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
     }
     break;
+    case FS_IOC_GET_ENCRYPTION_POLICY_EX_RESTRICTED:
+    case FS_IOC_GET_ENCRYPTION_POLICY_EX: {
+      auto arg = (fscrypt_get_policy_ex_arg *)in_buf;
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << " FS_IOC_GET_ENCRYPTION_POLICY_EX buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+
+      struct fscrypt_get_policy_ex_arg out_arg;
+      if (out_bufsz < sizeof(out_arg.policy)) {
+        fuse_reply_err(req, ERANGE);
+        break;
+      }
+
+      Fh *fh = (Fh*)fi->fh;
+      Inode *in = fh->inode.get();
+
+      if (in->is_fscrypt_enabled()) {
+        in->fscrypt_ctx->convert_to(&out_arg.policy.v2);
+        out_arg.policy_size = sizeof(out_arg.policy);
+
+        fuse_reply_ioctl(req, 0, &out_arg, sizeof(out_arg));
+        break;
+      }
+
+      fuse_reply_err(req, ENODATA);
+    }
+    break;
+    case FS_IOC_ADD_ENCRYPTION_KEY64:
+    case FS_IOC_ADD_ENCRYPTION_KEY: {
+      if (!in_buf
+          || in_bufsz < sizeof(fscrypt_add_key_arg)) {
+        fuse_reply_err(req, EFAULT);
+        break;
+      }
+
+      auto arg = (fscrypt_add_key_arg *)in_buf;
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+
+      if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+        fuse_reply_err(req, ENOTSUP);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": key_spec.type=" << arg->key_spec.type << " key_spec buffer:\n" << fscrypt_hex_str(&arg->key_spec, sizeof(arg->key_spec)) << dendl;
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": raw_size=" << arg->raw_size << " key_id=" << arg->key_id << dendl;
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": raw:\n" << fscrypt_hex_str(arg->raw, arg->raw_size) << dendl;
+
+      if (arg->key_id == 0 &&
+          in_bufsz < sizeof(*arg) + arg->raw_size) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " too short, expected=" << sizeof(*arg) + arg->raw_size << dendl;
+        fuse_reply_err(req, ERANGE);
+        break;
+      }
+
+      const struct fuse_ctx *ctx = fuse_req_ctx(req);
+      ceph_fscrypt_key_identifier kid;
+      int r = cfuse->client->add_fscrypt_key((const char *)arg->raw, arg->raw_size, &kid, ctx->uid);
+      if (r < 0) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to create a new key: r=" << r << dendl;
+        fuse_reply_err(req, -r);
+        break;
+      }
+
+      memcpy(&arg->key_spec.u.identifier, &kid.raw, 16);
+      fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
+      break;
+    }
+    break;
+    case FS_IOC_REMOVE_ENCRYPTION_KEY: {
+      if (!in_buf
+          || in_bufsz < sizeof(fscrypt_remove_key_arg)) {
+        fuse_reply_err(req, EFAULT);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_REMOVE_ENCRYPTION_KEY ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+
+      auto arg = (fscrypt_remove_key_arg *)in_buf;
+      if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+        fuse_reply_err(req, ENOTSUP);
+        break;
+      }
+
+      ceph_fscrypt_key_identifier kid;
+      int r = kid.init(arg->key_spec);
+      if (r < 0) {
+        fuse_reply_err(req, -r);
+        break;
+      }
+
+      const struct fuse_ctx *ctx = fuse_req_ctx(req);
+      r = cfuse->client->remove_fscrypt_key(arg, ctx->uid);
+      if (r < 0) {
+        fuse_reply_err(req, -r);
+        break;
+      }
+
+      fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
+      break;
+    }
+    case FS_IOC_SET_ENCRYPTION_POLICY:
+    case FS_IOC_SET_ENCRYPTION_POLICY_RESTRICTED: {
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_SET_ENCRYPTION_POLICY arg=" << (void *)_arg << " in_buf=" << (void *)in_buf << dendl;
+      if (!in_buf) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
+        fuse_reply_err(req, EINVAL);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+
+      auto arg = (fscrypt_policy_arg *)in_buf;
+      if (in_bufsz < sizeof(arg->policy)) {
+        fuse_reply_err(req, ERANGE);
+        break;
+      }
+
+      if (arg->policy.v1.version == 0) {
+        fuse_reply_err(req, ENOTSUP);
+        break;
+      }
+
+      if (arg->policy.v1.version != 2) {
+        fuse_reply_err(req, EINVAL);
+        break;
+      }
+
+      auto& policy = arg->policy.v2;
+
+      Fh *fh = (Fh*)fi->fh;
+      Inode *in = fh->inode.get();
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": XXXX ioctl ino=" << in->ino << dendl;
+
+      int r = cfuse->client->ll_set_fscrypt_policy_v2(in, policy);
+      if (r < 0) {
+        fuse_reply_err(req, -r);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": set fscrypt policy: success" << dendl;
+
+      fuse_reply_ioctl(req, 0, nullptr, 0);
+      break;
+    }
+    break;
+    case FS_IOC_GET_ENCRYPTION_KEY_STATUS: {
+      if (!in_buf ||
+        in_bufsz != sizeof(fscrypt_get_key_status_arg)) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
+        fuse_reply_err(req, EINVAL);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+
+      auto arg = (fscrypt_get_key_status_arg *)in_buf;
+      if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+        fuse_reply_err(req, ENOTSUP);
+        break;
+      }
+
+      int r = cfuse->client->get_fscrypt_key_status(arg);
+
+      fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
+    }
+    break;
+    case FS_IOC_GETFLAGS: {
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GETFLAGS ioctl" << dendl;
+
+      int file_attr = 0;
+      if (out_bufsz < sizeof(file_attr)) {
+          fuse_reply_err(req, ERANGE);
+          break;
+      }
+
+      Fh *fh = (Fh*)fi->fh;
+      cfuse->client->get_inode_flags(fh->inode.get(), &file_attr);
+      fuse_reply_ioctl(req, 0, &file_attr, sizeof(file_attr));
+}
+break;
     default:
       fuse_reply_err(req, EINVAL);
   }
@@ -1289,8 +1474,13 @@ static void do_init(void *data, fuse_conn_info *conn)
   fuse_apply_conn_info_opts(cfuse->conn_opts, conn);
 #endif
 
+  generic_dout(0) << __FILE__ << ":" << __LINE__ << ": conn proto ver " << conn->proto_major << ":" << conn->proto_minor << dendl;
+
   if(conn->capable & FUSE_CAP_SPLICE_MOVE)
     conn->want |= FUSE_CAP_SPLICE_MOVE;
+
+  if(conn->capable & FUSE_CAP_IOCTL_DIR)
+    conn->want |= FUSE_CAP_IOCTL_DIR;
 
 #if !defined(__APPLE__)
   if (!client->fuse_default_permissions && client->ll_handle_umask()) {
