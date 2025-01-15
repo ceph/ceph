@@ -44,7 +44,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   capacity: any;
   healthData$: Observable<Object>;
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
-
   icons = Icons;
   flexHeight = true;
   simplebar = {
@@ -203,4 +202,5 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       })
     );
   }
+
 }
