@@ -3,5 +3,6 @@ tasks:
     timeout: 6h
     clients:
       client.0:
+        - fs/fscrypt_cli_setup.sh
         - fs/fscrypt.sh none iozone
         - fs/fscrypt.sh unlocked iozone
