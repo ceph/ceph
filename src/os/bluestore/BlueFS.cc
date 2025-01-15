@@ -161,6 +161,7 @@ private:
         std::string dir = d.first;
         for (auto &r : d.second->file_map) {
           f->open_object_section("file");
+          f->dump_int("ino", r.second->fnode.ino);
           f->dump_string("name", (dir + "/" + r.first).c_str());
           std::vector<size_t> sizes;
           sizes.resize(bluefs->bdev.size());
@@ -175,6 +176,10 @@ private:
 		f->dump_int(("dev-"+to_string(i)).c_str(), sizes[i]);
 	    }
           }
+          f->dump_int("size", r.second->fnode.size);
+          std::stringstream ss;
+          ss << r.second->fnode.mtime;
+          f->dump_string("mtime", ss.str());
           f->close_section();
         }
       }
