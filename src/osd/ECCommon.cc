@@ -12,16 +12,18 @@
  *
  */
 
+#include "ECCommon.h"
+
 #include <iostream>
 #include <sstream>
 
-#include "ECCommon.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "common/debug.h"
 #include "ECMsgTypes.h"
 #include "PGLog.h"
 

@@ -5,6 +5,9 @@
 
 #include <memory>
 #include <iostream>
+#include <map>
+#include <set>
+#include <vector>
 
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>

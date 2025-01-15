@@ -1,14 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <array>
-#include <openssl/evp.h>
-
 #include "crypto_onwire.h"
-
 #include "common/debug.h"
 #include "common/ceph_crypto.h"
+#include "include/buffer.h"
 #include "include/types.h"
+
+#include <openssl/evp.h>
+
+#include <array>
+#include <numeric> // for std::accumulate()
 
 #define dout_subsys ceph_subsys_ms
 

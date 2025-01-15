@@ -7,7 +7,9 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+
 #include <iosfwd>
+#include <list>
 #include <string>
 
 namespace ceph {

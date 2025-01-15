@@ -22,6 +22,7 @@
 #include "../CDentry.h"
 #include "../LogSegment.h"
 
+#include "include/encoding_list.h"
 #include "include/interval_set.h"
 #include "common/strescape.h"
 

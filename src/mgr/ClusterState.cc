@@ -11,11 +11,12 @@
  * Foundation.  See file COPYING.
  */
 
+#include "mgr/ClusterState.h"
+#include "common/JSONFormatter.h"
 #include "messages/MMgrDigest.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MPGStats.h"
 
-#include "mgr/ClusterState.h"
 #include <time.h>
 #include <boost/range/adaptor/reversed.hpp>
 

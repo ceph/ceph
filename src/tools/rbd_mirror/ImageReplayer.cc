@@ -29,6 +29,9 @@
 #include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 #include <map>
+#include <shared_mutex> // for std::shared_lock
+
+#include <boost/optional/optional_io.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror

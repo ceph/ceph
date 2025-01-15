@@ -7,6 +7,7 @@
 
 #include "liburing.h"
 #include <sys/epoll.h>
+#include <map>
 
 using std::list;
 using std::make_unique;

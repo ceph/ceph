@@ -14,6 +14,8 @@
 #include "librbd/Utils.h"
 #include <boost/optional.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 class Context;
 namespace ZTracer { struct Trace; }
 

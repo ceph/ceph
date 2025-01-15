@@ -12,6 +12,7 @@
 #include "common/armor.h"
 #include "common/utf8.h"
 #include "common/split.h"
+#include "include/timegm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
 #include "rgw_common.h"

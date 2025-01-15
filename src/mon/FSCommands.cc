@@ -12,13 +12,14 @@
  * 
  */
 
-
-#include "OSDMonitor.h"
-
 #include "FSCommands.h"
+#include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
 #include "mds/cephfs_features.h"
+#include "mds/FSMap.h"
+#include "osd/OSDMap.h"
+#include "common/strtol.h" // for strict_strtoll()
 
 using TOPNSPC::common::cmd_getval;
 

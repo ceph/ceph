@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_xml.h"
+#include "common/XMLFormatter.h"
+
 #include <gtest/gtest.h>
 #include <list>
 #include <stdexcept>

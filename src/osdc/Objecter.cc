@@ -12,10 +12,12 @@
  *
  */
 
-#include <algorithm>
-#include <cerrno>
-
 #include "Objecter.h"
+#include "Striper.h"
+
+#include <algorithm>
+#include <sstream>
+
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
 #include "Filer.h"

@@ -17,6 +17,7 @@
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/ceph_argparse.h"
+#include "common/JSONFormatter.h"
 #include "json_spirit/json_spirit.h"
 #include "gtest/gtest.h"
 #include "fmt/format.h"
