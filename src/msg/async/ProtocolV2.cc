@@ -559,20 +559,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                  << " src=" << entity_name_t(messenger->get_myname())
                  << " off=" << header2.data_off
                  << dendl;
-  ssize_t total_send_size = connection->outgoing_bl.length();
-  ssize_t rc = connection->_try_send(more);
-  if (rc < 0) {
-    ldout(cct, 1) << __func__ << " error sending " << m << ", "
-                  << cpp_strerror(rc) << dendl;
-  } else {
-    const auto sent_bytes = total_send_size - connection->outgoing_bl.length();
-    connection->logger->inc(l_msgr_send_bytes, sent_bytes);
-    if (session_stream_handlers.tx) {
-      connection->logger->inc(l_msgr_send_encrypted_bytes, sent_bytes);
-    }
-    ldout(cct, 10) << __func__ << " sending " << m
-                   << (rc ? " continuely." : " done.") << dendl;
-  }
 
 #if defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
@@ -582,7 +568,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 #endif
   m->put();
 
-  return rc;
+  return 0;
 }
 
 template <class F>
@@ -659,16 +645,37 @@ void ProtocolV2::write_event() {
     auto start = ceph::mono_clock::now();
     bool more;
     do {
-      if (connection->is_queued()) {
-	if (r = connection->_try_send(); r!= 0) {
+      const auto out_entry = _get_next_outgoing();
+      if (!out_entry.m) {
+	if (uint64_t left = ack_left) {
+          ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
+          << " messages" << dendl;
+          auto ack_frame = AckFrame::Encode(in_seq);
+          if (!append_frame(ack_frame)) {
+	    r = -EILSEQ;
+	    break;
+          }
+
+	  ack_left -= left;
+	} else if (!connection->is_queued())
+	  break;
+
+	/* there are no more outgoing messages in the queue: submit
+           all serialized packets to the socket */
+
+	connection->write_lock.unlock();
+	r = connection->_try_send();
+	connection->write_lock.lock();
+	if (r!= 0) {
 	  // either fails to send or not all queued buffer is sent
 	  break;
 	}
-      }
 
-      const auto out_entry = _get_next_outgoing();
-      if (!out_entry.m) {
-        break;
+	/* check the queue again; maybe another thread has added
+           something meanwhile; we must check again each time we
+           re-lock the write_lock because write_in_progress is still
+           true */
+        continue;
       }
 
       if (!connection->policy.lossy) {
@@ -706,24 +713,6 @@ void ProtocolV2::write_event() {
     } while (can_write);
     write_in_progress = false;
 
-    // if r > 0 mean data still lefted, so no need _try_send.
-    if (r == 0) {
-      uint64_t left = ack_left;
-      if (left) {
-        ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
-                       << " messages" << dendl;
-        auto ack_frame = AckFrame::Encode(in_seq);
-        if (append_frame(ack_frame)) {
-          ack_left -= left;
-          left = ack_left;
-          r = connection->_try_send(left);
-        } else {
-          r = -EILSEQ;
-        }
-      } else if (is_queued()) {
-        r = connection->_try_send();
-      }
-    }
     connection->write_lock.unlock();
 
     connection->logger->tinc(l_msgr_running_send_time,
