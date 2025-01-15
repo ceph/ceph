@@ -92,7 +92,6 @@ from .inventory import (
     ClientKeyringSpec,
     TunedProfileStore,
     NodeProxyCache,
-    CertKeyStore,
     OrchSecretNotFound,
 )
 from .upgrade import CephadmUpgrade
@@ -414,6 +413,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
+            'certificate_automated_rotation_enabled',
+            type='bool',
+            default=True, # TODO(redo): only for testing .. should be disabled by default
+            desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
+        ),
+        Option(
+            'certificate_duration_days',
+            type='int',
+            default=(3 * 365),
+            desc='Specifies the duration of self certificates generated and signed by cephadm root CA',
+            min=90,
+            max=(10 * 365)
+        ),
+        Option(
+            'renewal_threshold_days',
+            type='int',
+            default=30,
+            desc='Specifies the lead time in days to initiate certificate renewal before expiration.',
+            min=10,
+            max=90
+        ),
+        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -546,6 +567,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
+            self.certificate_duration_days = 0
+            self.renewal_threshold_days = 0
+            self.certificate_automated_rotation_enabled = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -596,10 +620,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self.cert_key_store = CertKeyStore(self)
-        self.cert_key_store.load()
-
-        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
+        self.cert_mgr = CertMgr(self,
+                                self.certificate_automated_rotation_enabled,
+                                self.certificate_duration_days,
+                                self.renewal_threshold_days,
+                                self.get_mgr_ip())
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -3269,11 +3294,24 @@ Then run the following:
 
     @handle_orch_error
     def cert_store_cert_ls(self) -> Dict[str, Any]:
-        return self.cert_key_store.cert_ls()
+        return self.cert_mgr.cert_ls()
+
+    @handle_orch_error
+    def cert_store_entity_ls(self) -> List[str]:
+        return self.cert_mgr.entity_ls()
+
+    @handle_orch_error
+    def cert_store_reload(self) -> str:
+        return self.cert_mgr.reload()
+
+    @handle_orch_error
+    def cert_store_cert_check(self) -> Dict[str, Any]:
+        self.cert_mgr.check_certificates()
+        return {}
 
     @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
-        return self.cert_key_store.key_ls()
+        return self.cert_mgr.key_ls()
 
     @handle_orch_error
     def cert_store_get_cert(
@@ -3283,7 +3321,7 @@ Then run the following:
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> str:
-        cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
+        cert = self.cert_mgr.get_cert(entity, service_name or '', hostname or '')
         if not cert:
             if no_exception_when_missing:
                 return ''
@@ -3298,12 +3336,60 @@ Then run the following:
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> str:
-        key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
+        key = self.cert_mgr.get_key(entity, service_name or '', hostname or '')
         if not key:
             if no_exception_when_missing:
                 return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return key
+
+    @handle_orch_error
+    def cert_store_set_pair(
+        self,
+        cert: str,
+        key: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> str:
+        entities = self.cert_mgr.entity_ls()
+        if entity in entities:
+            is_valid, is_close_to_expiration, days_to_expiration, error_info = self.cert_mgr.is_valid_certificate(cert, key)
+            if is_valid and not is_close_to_expiration:
+                self.cert_mgr.save_cert(f'{entity}_cert', cert, service_name, hostname, True)
+                self.cert_mgr.save_key(f'{entity}_key', key, service_name, hostname, True)
+                return "Certficate set correctly"
+            else:
+                if is_close_to_expiration:
+                    raise OrchestratorError(f"Certififcate is close to its expiration date ({days_to_expiration } remaining days).")
+                else:
+                    raise OrchestratorError(f"Invalid certificate: {error_info}")
+        else:
+            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch cert-store entity ls' to list valid entities.")
+
+    @handle_orch_error
+    def cert_store_set_cert(
+        self,
+        cert: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        self.cert_mgr.save_cert(entity, cert, service_name, hostname, True)
+        return ""
+
+    @handle_orch_error
+    def cert_store_set_key(
+        self,
+        key: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        self.cert_mgr.save_key(entity, key, service_name, hostname, True)
+        return ""
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
