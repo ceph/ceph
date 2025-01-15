@@ -47,6 +47,7 @@ ReplicatedRecoveryBackend::recover_object(
       logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
       recovery_waiter.obc = obc;
+      recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(head, soid, need);
     }, false).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
@@ -106,6 +107,10 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     }
     return seastar::make_ready_future<>();
   }).handle_exception_interruptible([this, soid](auto e) {
+    auto &recovery = get_recovering(soid);
+    if (recovery.obc) {
+      recovery.obc->drop_recovery_read();
+    }
     recovering.erase(soid);
     return seastar::make_exception_future<>(e);
   });
@@ -155,7 +160,7 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::push_delete(
+RecoveryBackend::push_delete(
   const hobject_t& soid,
   eversion_t need)
 {
@@ -191,7 +196,7 @@ ReplicatedRecoveryBackend::push_delete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_recovery_delete(
+RecoveryBackend::handle_recovery_delete(
   Ref<MOSDPGRecoveryDelete> m)
 {
   logger().debug("{}: {}", __func__, *m);
@@ -212,7 +217,7 @@ ReplicatedRecoveryBackend::handle_recovery_delete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::on_local_recover_persist(
+RecoveryBackend::on_local_recover_persist(
   const hobject_t& soid,
   const ObjectRecoveryInfo& _recovery_info,
   bool is_delete,
@@ -236,7 +241,7 @@ ReplicatedRecoveryBackend::on_local_recover_persist(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::local_recover_delete(
+RecoveryBackend::local_recover_delete(
   const hobject_t& soid,
   eversion_t need,
   epoch_t epoch_to_freeze)
@@ -251,7 +256,7 @@ ReplicatedRecoveryBackend::local_recover_delete(
           pg.remove_maybe_snapmapped_object(txn, lomt->os.oi.soid);
         }).then_interruptible(
 	  [this, &txn]() mutable {
-	  logger().debug("ReplicatedRecoveryBackend::local_recover_delete: do_transaction...");
+	  logger().debug("RecoveryBackend::local_recover_delete: do_transaction...");
 	  return shard_services.get_store().do_transaction(coll,
 							   std::move(txn));
 	});
@@ -282,7 +287,7 @@ ReplicatedRecoveryBackend::local_recover_delete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::recover_delete(
+RecoveryBackend::recover_delete(
   const hobject_t &soid, eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
@@ -298,7 +303,7 @@ ReplicatedRecoveryBackend::recover_delete(
 	for (const auto& shard : pg.get_acting_recovery_backfill()) {
 	  if (shard == pg.get_pg_whoami())
 	    continue;
-	  if (pg.get_shard_missing(shard)->is_missing(soid)) {
+	  if (pg.get_shard_missing(shard).is_missing(soid)) {
 	    logger().debug("recover_delete: soid {} needs to deleted from replca {}",
 			   soid, shard);
 	    object_missing = true;
@@ -575,7 +580,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     eversion_t ver,
     PushOp* push_op)
 {
-  logger().debug("{}, {}", __func__, oid);
+  logger().debug("{}, {} progress.first {}", __func__, oid, progress.first);
   if (!progress.first) {
     return seastar::make_ready_future<eversion_t>(ver);
   }
@@ -609,7 +614,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     }
     logger().debug("read_metadata_for_push_op: {}", push_op->attrset[OI_ATTR]);
     object_info_t oi;
-    oi.decode_no_oid(push_op->attrset[OI_ATTR]);
+    oi.decode(push_op->attrset[OI_ATTR]);
     new_progress.first = false;
     return oi.version;
   });
@@ -831,8 +836,8 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       [this, &pull_info, &recovery_waiter, &push_op](auto, auto obc) {
         pull_info.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
-                                  push_op.soid);
+        obc->obs.oi.decode(push_op.attrset.at(OI_ATTR));
+        assert(obc->obs.oi.soid == push_op.soid);
         auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
         if (ss_attr_iter != push_op.attrset.end()) {
           if (!obc->ssc) {
@@ -1190,7 +1195,7 @@ ReplicatedRecoveryBackend::prep_push_target(
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
     object_info_t oi;
-    oi.decode_no_oid(attrs.at(OI_ATTR));
+    oi.decode(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,
@@ -1319,7 +1324,7 @@ void ReplicatedRecoveryBackend::submit_push_complete(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_recovery_delete_reply(
+RecoveryBackend::handle_recovery_delete_reply(
   Ref<MOSDPGRecoveryDeleteReply> m)
 {
   auto& p = m->objects.front();
@@ -1349,12 +1354,6 @@ ReplicatedRecoveryBackend::handle_recovery_op(
   case MSG_OSD_PG_PUSH_REPLY:
     return handle_push_reply(
 	boost::static_pointer_cast<MOSDPGPushReply>(m));
-  case MSG_OSD_PG_RECOVERY_DELETE:
-    return handle_recovery_delete(
-	boost::static_pointer_cast<MOSDPGRecoveryDelete>(m));
-  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
-    return handle_recovery_delete_reply(
-	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
     // delegate to parent class for handling backend-agnostic recovery ops.
     return RecoveryBackend::handle_recovery_op(std::move(m), conn);

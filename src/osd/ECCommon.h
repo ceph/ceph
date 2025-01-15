@@ -21,6 +21,9 @@
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "msg/MessageRef.h"
 #if WITH_SEASTAR
 #include "ExtentCache.h"
 #include "crimson/osd/object_context.h"
@@ -28,18 +31,10 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_op_util.h"
 
-struct ECTransaction {
-  struct WritePlan {
-    bool invalidates_cache = false; // Yes, both are possible
-    std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write; // superset of to_read
-
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
-  };
-};
 
 typedef void* OpRequestRef;
 typedef crimson::osd::ObjectContextRef ObjectContextRef;
+#include "ECTransaction.h"
 #else
 #include "common/WorkQueue.h"
 #endif
@@ -49,7 +44,9 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 
 //forward declaration
 struct ECSubWrite;
+struct ECSubRead;
 struct PGLog;
+struct RecoveryMessages;
 
 // ECListener -- an interface decoupling the pipelines from
 // particular implementation of ECBackend (crimson vs cassical).
@@ -67,7 +64,6 @@ struct ECListener {
   virtual void cancel_pull(
     const hobject_t &soid) = 0;
 
-#ifndef WITH_SEASTAR
   // XXX
   virtual pg_shard_t primary_shard() const = 0;
   virtual bool pgb_is_primary() const = 0;
@@ -117,27 +113,25 @@ struct ECListener {
 
   virtual bool pg_is_repair() const = 0;
 
-     virtual ObjectContextRef get_obc(
-       const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
-
      virtual bool check_failsafe_full() = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
+#ifndef WITH_SEASTAR
      virtual bool pg_is_remote_backfilling() = 0;
      virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_local_num_bytes(int64_t num_bytes) = 0;
      virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
-     virtual void inc_osd_stat_repaired() = 0;
+#endif
+   virtual void inc_osd_stat_repaired() = 0;
 
    virtual void add_temp_obj(const hobject_t &oid) = 0;
    virtual void clear_temp_obj(const hobject_t &oid) = 0;
-     virtual epoch_t get_last_peering_reset_epoch() const = 0;
-#endif
 
-  // XXX
+     virtual epoch_t get_last_peering_reset_epoch() const = 0;
+
 #ifndef WITH_SEASTAR
+  // XXX
   virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) = 0;
 
@@ -173,6 +167,8 @@ struct ECListener {
   // XXX
   virtual void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
+  virtual void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) = 0;
 
   virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
@@ -231,6 +227,12 @@ struct ECCommon {
     ECSubWrite &op,
     const ZTracer::Trace &trace,
     ECListener& eclistener
+    ) = 0;
+
+  virtual void handle_sub_read_n_reply(
+    pg_shard_t from,
+    ECSubRead &op,
+    const ZTracer::Trace &trace
     ) = 0;
 
   virtual void objects_read_and_reconstruct(
@@ -426,6 +428,7 @@ struct ECCommon {
     const ECUtil::stripe_info_t& sinfo;
     // TODO: lay an interface down here
     ECListener* parent;
+    ECCommon& ec_backend;
 
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -435,11 +438,13 @@ struct ECCommon {
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
-                ECListener* parent)
+                ECListener* parent,
+		ECCommon& ec_backend)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
-        parent(parent) {
+        parent(parent),
+        ec_backend(ec_backend) {
     }
 
     /**
@@ -494,6 +499,13 @@ struct ECCommon {
 
     void schedule_recovery_work();
 
+    void handle_sub_read_n_reply(
+      pg_shard_t from,
+      ECSubRead &op,
+      const ZTracer::Trace &trace
+    ) {
+      ec_backend.handle_sub_read_n_reply(from, op, trace);
+    }
   };
 
   /**
@@ -728,7 +740,178 @@ struct ECCommon {
       const std::map<std::string, ceph::buffer::list, std::less<>>& attr,
       uint64_t size);
   };
+
+  /**
+   * Recovery
+   *
+   * Recovery uses the same underlying read mechanism as client reads
+   * with the slight difference that recovery reads may come from non
+   * acting shards.  Thus, check_recovery_sources may wind up calling
+   * cancel_pull for a read originating with RecoveryOp.
+   *
+   * The recovery process is expressed as a state machine:
+   * - IDLE: Nothing is currently in progress, reads will be started and
+   *         we will transition to READING
+   * - READING: We are awaiting a pending read op.  Once complete, we will
+   *            decode the buffers and proceed to WRITING
+   * - WRITING: We are awaiting a completed push.  Once complete, we will
+   *            either transition to COMPLETE or to IDLE to continue.
+   * - COMPLETE: complete
+   *
+   * We use the existing Push and PushReply messages and structures to
+   * handle actually shuffling the data over to the replicas.  recovery_info
+   * and recovery_progress are expressed in terms of the logical offset
+   * space except for data_included which is in terms of the chunked object
+   * space (to match the passed buffer).
+   *
+   * xattrs are requested on the first read and used to initialize the
+   * object_context if missing on completion of the first read.
+   *
+   * In order to batch up reads and writes, we batch Push, PushReply,
+   * Transaction, and reads in a RecoveryMessages object which is passed
+   * among the recovery methods.
+   */
+public:
+  struct RecoveryBackend {
+    CephContext* cct;
+    const coll_t &coll;
+    ceph::ErasureCodeInterfaceRef ec_impl;
+    const ECUtil::stripe_info_t& sinfo;
+    ReadPipeline& read_pipeline;
+    UnstableHashInfoRegistry& unstable_hashinfo_registry;
+    // TODO: lay an interface down here
+    ECListener* parent;
+
+    ECListener *get_parent() const { return parent; }
+    const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+    epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
+    const pg_info_t &get_info() { return get_parent()->get_info(); }
+    void add_temp_obj(const hobject_t &oid) { get_parent()->add_temp_obj(oid); }
+    void clear_temp_obj(const hobject_t &oid) { get_parent()->clear_temp_obj(oid); }
+
+    RecoveryBackend(CephContext* cct,
+		    const coll_t &coll,
+		    ceph::ErasureCodeInterfaceRef ec_impl,
+		    const ECUtil::stripe_info_t& sinfo,
+		    ReadPipeline& read_pipeline,
+		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
+		    ECListener* parent);
+  struct RecoveryOp {
+    hobject_t hoid;
+    eversion_t v;
+    std::set<pg_shard_t> missing_on;
+    std::set<shard_id_t> missing_on_shards;
+
+    ObjectRecoveryInfo recovery_info;
+    ObjectRecoveryProgress recovery_progress;
+
+    enum state_t { IDLE, READING, WRITING, COMPLETE } state;
+
+    static const char* tostr(state_t state) {
+      switch (state) {
+      case RecoveryOp::IDLE:
+	return "IDLE";
+      case RecoveryOp::READING:
+	return "READING";
+      case RecoveryOp::WRITING:
+	return "WRITING";
+      case RecoveryOp::COMPLETE:
+	return "COMPLETE";
+      default:
+	ceph_abort();
+	return "";
+      }
+    }
+
+    // must be filled if state == WRITING
+    std::map<int, ceph::buffer::list> returned_data;
+    std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
+    ECUtil::HashInfoRef hinfo;
+    ObjectContextRef obc;
+    std::set<pg_shard_t> waiting_on_pushes;
+
+    // valid in state READING
+    std::pair<uint64_t, uint64_t> extent_requested;
+
+    void dump(ceph::Formatter *f) const;
+
+    RecoveryOp() : state(IDLE) {}
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const RecoveryOp &rhs);
+  std::map<hobject_t, RecoveryOp> recovery_ops;
+
+  uint64_t get_recovery_chunk_size() const {
+    return round_up_to(cct->_conf->osd_recovery_max_chunk,
+			sinfo.get_stripe_width());
+  }
+
+  virtual ~RecoveryBackend() = default;
+  virtual void commit_txn_send_replies(
+    ceph::os::Transaction&& txn,
+    std::map<int, MOSDPGPushReply*> replies) = 0;
+  virtual void maybe_load_obc(
+    const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+    RecoveryOp &op) = 0;
+  void dispatch_recovery_messages(RecoveryMessages &m, int priority);
+
+  RecoveryBackend::RecoveryOp recover_object(
+    const hobject_t &hoid,
+    eversion_t v,
+    ObjectContextRef head,
+    ObjectContextRef obc);
+  void continue_recovery_op(
+    RecoveryBackend::RecoveryOp &op,
+    RecoveryMessages *m);
+  void handle_recovery_read_complete(
+    const hobject_t &hoid,
+    boost::tuple<uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > &to_read,
+    std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs,
+    RecoveryMessages *m);
+  void handle_recovery_push(
+    const PushOp &op,
+    RecoveryMessages *m,
+    bool is_repair);
+  void handle_recovery_push_reply(
+    const PushReplyOp &op,
+    pg_shard_t from,
+    RecoveryMessages *m);
+  friend struct RecoveryMessages;
+  int get_ec_data_chunk_count() const {
+    return ec_impl->get_data_chunk_count();
+  }
+  void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
+  };
 };
+
+struct RecoveryMessages {
+  std::map<hobject_t,
+      ECCommon::read_request_t> recovery_reads;
+  std::map<hobject_t, std::set<int>> want_to_read;
+
+  void recovery_read(
+    const hobject_t &hoid, uint64_t off, uint64_t len,
+    std::set<int> &&_want_to_read,
+    const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
+    bool attrs)
+  {
+    std::list<ECCommon::ec_align_t> to_read;
+    to_read.emplace_back(ECCommon::ec_align_t{off, len, 0});
+    ceph_assert(!recovery_reads.count(hoid));
+    want_to_read.insert(std::make_pair(hoid, std::move(_want_to_read)));
+    recovery_reads.insert(
+      std::make_pair(
+	hoid,
+	ECCommon::read_request_t(
+	  to_read,
+	  need,
+	  attrs)));
+  }
+
+  std::map<pg_shard_t, std::vector<PushOp> > pushes;
+  std::map<pg_shard_t, std::vector<PushReplyOp> > push_replies;
+  ceph::os::Transaction t;
+};
+
 
 std::ostream &operator<<(std::ostream &lhs,
 			 const ECCommon::RMWPipeline::pipeline_state_t &rhs);
@@ -747,6 +930,18 @@ template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_format
 template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
 
+// Error inject interfaces
+std::string ec_inject_read_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
+std::string ec_inject_write_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
+std::string ec_inject_clear_read_error(const ghobject_t& o, const int64_t type);
+std::string ec_inject_clear_write_error(const ghobject_t& o, const int64_t type);
+bool ec_inject_test_read_error0(const ghobject_t& o);
+bool ec_inject_test_read_error1(const ghobject_t& o);
+bool ec_inject_test_write_error0(const hobject_t& o,const osd_reqid_t& reqid);
+bool ec_inject_test_write_error1(const ghobject_t& o);
+bool ec_inject_test_write_error2(const hobject_t& o);
+bool ec_inject_test_write_error3(const hobject_t& o);
+
 template <class F, class G>
 void ECCommon::ReadPipeline::check_recovery_sources(
   const OSDMapRef& osdmap,
@@ -754,7 +949,7 @@ void ECCommon::ReadPipeline::check_recovery_sources(
   G&& on_schedule_recovery)
 {
   std::set<ceph_tid_t> tids_to_filter;
-  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator 
+  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator
        i = shard_to_read_map.begin();
        i != shard_to_read_map.end();
        ) {
@@ -844,15 +1039,3 @@ void ECCommon::ReadPipeline::filter_read_op(
     on_schedule_recovery(op);
   }
 }
-
-// Error inject interfaces
-std::string ec_inject_read_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
-std::string ec_inject_write_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
-std::string ec_inject_clear_read_error(const ghobject_t& o, const int64_t type);
-std::string ec_inject_clear_write_error(const ghobject_t& o, const int64_t type);
-bool ec_inject_test_read_error0(const ghobject_t& o);
-bool ec_inject_test_read_error1(const ghobject_t& o);
-bool ec_inject_test_write_error0(const hobject_t& o,const osd_reqid_t& reqid);
-bool ec_inject_test_write_error1(const ghobject_t& o);
-bool ec_inject_test_write_error2(const hobject_t& o);
-bool ec_inject_test_write_error3(const hobject_t& o);

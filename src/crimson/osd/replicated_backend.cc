@@ -21,9 +21,8 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      ReplicatedBackend::CollectionRef coll,
                                      crimson::osd::ShardServices& shard_services,
 				     DoutPrefixProvider &dpp)
-  : PGBackend{whoami.shard, coll, shard_services, dpp},
+  : PGBackend{whoami, coll, shard_services, dpp},
     pgid{pgid},
-    whoami{whoami},
     pg(pg)
 {}
 
@@ -76,7 +75,7 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
 ReplicatedBackend::rep_op_fut_t
 ReplicatedBackend::submit_transaction(
   const std::set<pg_shard_t> &pg_shards,
-  const hobject_t& hoid,
+  crimson::osd::ObjectContextRef &&obc,
   crimson::osd::ObjectContextRef &&new_clone,
   ceph::os::Transaction&& t,
   osd_op_params_t&& opp,
@@ -84,6 +83,7 @@ ReplicatedBackend::submit_transaction(
   std::vector<pg_log_entry_t>&& logv)
 {
   LOG_PREFIX(ReplicatedBackend::submit_transaction);
+  const hobject_t& hoid = obc->obs.oi.soid;
   DEBUGDPP("object {}", dpp, hoid);
   auto log_entries = std::move(logv);
   auto txn = std::move(t);
@@ -144,6 +144,7 @@ ReplicatedBackend::submit_transaction(
 
   pg.log_operation(
     std::move(log_entries),
+    std::nullopt,
     osd_op_p.pg_trim_to,
     osd_op_p.at_version,
     osd_op_p.pg_committed_to,

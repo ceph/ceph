@@ -30,12 +30,7 @@ public:
   interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) final;
-  interruptible_future<> recover_delete(
-    const hobject_t& soid,
-    eversion_t need) final;
-  interruptible_future<> push_delete(
-    const hobject_t& soid,
-    eversion_t need) final;
+
 protected:
   interruptible_future<> handle_pull(
     Ref<MOSDPGPull> m);
@@ -45,10 +40,6 @@ protected:
     Ref<MOSDPGPush> m);
   interruptible_future<> handle_push_reply(
     Ref<MOSDPGPushReply> m);
-  interruptible_future<> handle_recovery_delete(
-    Ref<MOSDPGRecoveryDelete> m);
-  interruptible_future<> handle_recovery_delete_reply(
-    Ref<MOSDPGRecoveryDeleteReply> m);
   interruptible_future<PushOp> prep_push_to_replica(
     const hobject_t& soid,
     eversion_t need,
@@ -111,15 +102,6 @@ protected:
   interruptible_future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
     const PushReplyOp &op);
-  interruptible_future<> on_local_recover_persist(
-    const hobject_t& soid,
-    const ObjectRecoveryInfo& _recovery_info,
-    bool is_delete,
-    epoch_t epoch_to_freeze);
-  interruptible_future<> local_recover_delete(
-    const hobject_t& soid,
-    eversion_t need,
-    epoch_t epoch_frozen);
   seastar::future<> on_stop() final {
     return seastar::now();
   }

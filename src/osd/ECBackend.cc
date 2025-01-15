@@ -56,12 +56,12 @@ static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
-static ostream& _prefix(std::ostream *_dout, ECBackend::RecoveryBackend *pgb) {
+static ostream& _prefix(std::ostream *_dout, ECBackend::ECRecoveryBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
-struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
-  list<ECBackend::RecoveryBackend::RecoveryOp> ops;
+struct ECBackend::ECRecoveryBackend::ECRecoveryHandle : public PGBackend::RecoveryHandle {
+  list<ECCommon::RecoveryBackend::RecoveryOp> ops;
 };
 
 static ostream &operator<<(ostream &lhs, const map<pg_shard_t, bufferlist> &rhs)
@@ -90,35 +90,6 @@ static ostream &operator<<(ostream &lhs, const map<int, bufferlist> &rhs)
   return lhs << "]";
 }
 
-ostream &operator<<(ostream &lhs, const ECBackend::RecoveryBackend::RecoveryOp &rhs)
-{
-  return lhs << "RecoveryOp("
-	     << "hoid=" << rhs.hoid
-	     << " v=" << rhs.v
-	     << " missing_on=" << rhs.missing_on
-	     << " missing_on_shards=" << rhs.missing_on_shards
-	     << " recovery_info=" << rhs.recovery_info
-	     << " recovery_progress=" << rhs.recovery_progress
-	     << " obc refcount=" << rhs.obc.use_count()
-	     << " state=" << ECBackend::RecoveryBackend::RecoveryOp::tostr(rhs.state)
-	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
-	     << " extent_requested=" << rhs.extent_requested
-	     << ")";
-}
-
-void ECBackend::RecoveryBackend::RecoveryOp::dump(Formatter *f) const
-{
-  f->dump_stream("hoid") << hoid;
-  f->dump_stream("v") << v;
-  f->dump_stream("missing_on") << missing_on;
-  f->dump_stream("missing_on_shards") << missing_on_shards;
-  f->dump_stream("recovery_info") << recovery_info;
-  f->dump_stream("recovery_progress") << recovery_progress;
-  f->dump_stream("state") << tostr(state);
-  f->dump_stream("waiting_on_pushes") << waiting_on_pushes;
-  f->dump_stream("extent_requested") << extent_requested;
-}
-
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   const coll_t &coll,
@@ -128,7 +99,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
-    read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
+    read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
     recovery_backend(cct, this->coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent(), this),
     ec_impl(ec_impl),
@@ -140,78 +111,15 @@ ECBackend::ECBackend(
 
 PGBackend::RecoveryHandle *ECBackend::open_recovery_op()
 {
-  return recovery_backend.open_recovery_op();
+  return static_cast<PGBackend::RecoveryHandle*>(
+    recovery_backend.open_recovery_op());
 }
 
-ECBackend::RecoveryBackend::RecoveryBackend(
-  CephContext* cct,
-  const coll_t &coll,
-  ceph::ErasureCodeInterfaceRef ec_impl,
-  const ECUtil::stripe_info_t& sinfo,
-  ReadPipeline& read_pipeline,
-  UnstableHashInfoRegistry& unstable_hashinfo_registry,
-  ECListener* parent,
-  ECBackend* ecbackend)
-  : cct(cct),
-    coll(coll),
-    ec_impl(std::move(ec_impl)),
-    sinfo(sinfo),
-    read_pipeline(read_pipeline),
-    unstable_hashinfo_registry(unstable_hashinfo_registry),
-    parent(parent),
-    ecbackend(ecbackend) {
-}
-
-PGBackend::RecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op()
+ECBackend::ECRecoveryBackend::ECRecoveryHandle*
+ECBackend::ECRecoveryBackend::open_recovery_op()
 {
   return new ECRecoveryHandle;
 }
-
-void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommon::read_result_t &res)
-{
-  dout(10) << __func__ << ": Read error " << hoid << " r="
-	   << res.r << " errors=" << res.errors << dendl;
-  dout(10) << __func__ << ": canceling recovery op for obj " << hoid
-	   << dendl;
-  ceph_assert(recovery_ops.count(hoid));
-  eversion_t v = recovery_ops[hoid].v;
-  recovery_ops.erase(hoid);
-
-  set<pg_shard_t> fl;
-  for (auto&& i : res.errors) {
-    fl.insert(i.first);
-  }
-  get_parent()->on_failed_pull(fl, hoid, v);
-}
-
-struct RecoveryMessages {
-  map<hobject_t,
-      ECCommon::read_request_t> recovery_reads;
-  map<hobject_t, set<int>> want_to_read;
-
-  void recovery_read(
-    const hobject_t &hoid, uint64_t off, uint64_t len,
-    set<int> &&_want_to_read,
-    const map<pg_shard_t, vector<pair<int, int>>> &need,
-    bool attrs)
-  {
-    list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(ECCommon::ec_align_t{off, len, 0});
-    ceph_assert(!recovery_reads.count(hoid));
-    want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
-    recovery_reads.insert(
-      make_pair(
-	hoid,
-	ECCommon::read_request_t(
-	  to_read,
-	  need,
-	  attrs)));
-  }
-
-  map<pg_shard_t, vector<PushOp> > pushes;
-  map<pg_shard_t, vector<PushReplyOp> > push_replies;
-  ObjectStore::Transaction t;
-};
 
 void ECBackend::handle_recovery_push(
   const PushOp &op,
@@ -247,180 +155,31 @@ void ECBackend::handle_recovery_push(
   }
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_push(
-  const PushOp &op,
-  RecoveryMessages *m,
-  bool is_repair)
+void ECBackend::ECRecoveryBackend::maybe_load_obc(
+  const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+  RecoveryOp &op)
 {
-  if (get_parent()->check_failsafe_full()) {
-    dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
-    ceph_abort();
-  }
-
-  bool oneshot = op.before_progress.first && op.after_progress.data_complete;
-  ghobject_t tobj;
-  if (oneshot) {
-    tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
-		      get_parent()->whoami_shard().shard);
-  } else {
-    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.soid,
-							     op.version),
-		      ghobject_t::NO_GEN,
-		      get_parent()->whoami_shard().shard);
-    if (op.before_progress.first) {
-      dout(10) << __func__ << ": Adding oid "
-	       << tobj.hobj << " in the temp collection" << dendl;
-      add_temp_obj(tobj.hobj);
+  if (!op.obc) {
+    // attrs only reference the origin bufferlist (decode from
+    // ECSubReadReply message) whose size is much greater than attrs
+    // in recovery. If obc cache it (get_obc maybe cache the attr),
+    // this causes the whole origin bufferlist would not be free
+    // until obc is evicted from obc cache. So rebuild the
+    // bufferlist before cache it.
+    for (map<string, bufferlist>::iterator it = op.xattrs.begin();
+         it != op.xattrs.end();
+         ++it) {
+      it->second.rebuild();
     }
+    // Need to remove ECUtil::get_hinfo_key() since it should not leak out
+    // of the backend (see bug #12983)
+    map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
+    sanitized_attrs.erase(ECUtil::get_hinfo_key());
+    op.obc = get_parent()->get_obc(op.hoid, sanitized_attrs);
+    ceph_assert(op.obc);
+    op.recovery_info.size = op.obc->obs.oi.size;
+    op.recovery_info.oi = op.obc->obs.oi;
   }
-
-  if (op.before_progress.first) {
-    m->t.remove(coll, tobj);
-    m->t.touch(coll, tobj);
-  }
-
-  if (!op.data_included.empty()) {
-    uint64_t start = op.data_included.range_start();
-    uint64_t end = op.data_included.range_end();
-    ceph_assert(op.data.length() == (end - start));
-
-    m->t.write(
-      coll,
-      tobj,
-      start,
-      op.data.length(),
-      op.data);
-  } else {
-    ceph_assert(op.data.length() == 0);
-  }
-
-  if (op.before_progress.first) {
-    ceph_assert(op.attrset.count(string("_")));
-    m->t.setattrs(
-      coll,
-      tobj,
-      op.attrset);
-  }
-
-  if (op.after_progress.data_complete && !oneshot) {
-    dout(10) << __func__ << ": Removing oid "
-	     << tobj.hobj << " from the temp collection" << dendl;
-    clear_temp_obj(tobj.hobj);
-    m->t.remove(coll, ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-    m->t.collection_move_rename(
-      coll, tobj,
-      coll, ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-  }
-  if (op.after_progress.data_complete) {
-    if ((get_parent()->pgb_is_primary())) {
-      ceph_assert(recovery_ops.count(op.soid));
-      ceph_assert(recovery_ops[op.soid].obc);
-      if (get_parent()->pg_is_repair() || is_repair)
-        get_parent()->inc_osd_stat_repaired();
-      get_parent()->on_local_recover(
-	op.soid,
-	op.recovery_info,
-	recovery_ops[op.soid].obc,
-	false,
-	&m->t);
-    } else {
-      // If primary told us this is a repair, bump osd_stat_t::num_objects_repaired
-      if (is_repair)
-        get_parent()->inc_osd_stat_repaired();
-      get_parent()->on_local_recover(
-	op.soid,
-	op.recovery_info,
-	ObjectContextRef(),
-	false,
-	&m->t);
-    }
-  }
-  m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
-  m->push_replies[get_parent()->primary_shard()].back().soid = op.soid;
-}
-
-void ECBackend::RecoveryBackend::handle_recovery_push_reply(
-  const PushReplyOp &op,
-  pg_shard_t from,
-  RecoveryMessages *m)
-{
-  if (!recovery_ops.count(op.soid))
-    return;
-  RecoveryOp &rop = recovery_ops[op.soid];
-  ceph_assert(rop.waiting_on_pushes.count(from));
-  rop.waiting_on_pushes.erase(from);
-  continue_recovery_op(rop, m);
-}
-
-void ECBackend::RecoveryBackend::handle_recovery_read_complete(
-  const hobject_t &hoid,
-  boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
-  std::optional<map<string, bufferlist, less<>> > attrs,
-  RecoveryMessages *m)
-{
-  dout(10) << __func__ << ": returned " << hoid << " "
-	   << "(" << to_read.get<0>()
-	   << ", " << to_read.get<1>()
-	   << ", " << to_read.get<2>()
-	   << ")"
-	   << dendl;
-  ceph_assert(recovery_ops.count(hoid));
-  RecoveryBackend::RecoveryOp &op = recovery_ops[hoid];
-  ceph_assert(op.returned_data.empty());
-  map<int, bufferlist*> target;
-  for (set<shard_id_t>::iterator i = op.missing_on_shards.begin();
-       i != op.missing_on_shards.end();
-       ++i) {
-    target[*i] = &(op.returned_data[*i]);
-  }
-  map<int, bufferlist> from;
-  for(map<pg_shard_t, bufferlist>::iterator i = to_read.get<2>().begin();
-      i != to_read.get<2>().end();
-      ++i) {
-    from[i->first.shard] = std::move(i->second);
-  }
-  dout(10) << __func__ << ": " << from << dendl;
-  int r;
-  r = ECUtil::decode(sinfo, ec_impl, from, target);
-  ceph_assert(r == 0);
-  if (attrs) {
-    op.xattrs.swap(*attrs);
-
-    if (!op.obc) {
-      // attrs only reference the origin bufferlist (decode from
-      // ECSubReadReply message) whose size is much greater than attrs
-      // in recovery. If obc cache it (get_obc maybe cache the attr),
-      // this causes the whole origin bufferlist would not be free
-      // until obc is evicted from obc cache. So rebuild the
-      // bufferlist before cache it.
-      for (map<string, bufferlist>::iterator it = op.xattrs.begin();
-           it != op.xattrs.end();
-           ++it) {
-        it->second.rebuild();
-      }
-      // Need to remove ECUtil::get_hinfo_key() since it should not leak out
-      // of the backend (see bug #12983)
-      map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
-      sanitized_attrs.erase(ECUtil::get_hinfo_key());
-      op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
-      ceph_assert(op.obc);
-      op.recovery_info.size = op.obc->obs.oi.size;
-      op.recovery_info.oi = op.obc->obs.oi;
-    }
-
-    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    if (op.obc->obs.oi.size > 0) {
-      ceph_assert(op.xattrs.count(ECUtil::get_hinfo_key()));
-      auto bp = op.xattrs[ECUtil::get_hinfo_key()].cbegin();
-      decode(hinfo, bp);
-    }
-    op.hinfo = unstable_hashinfo_registry.maybe_put_hash_info(hoid, std::move(hinfo));
-  }
-  ceph_assert(op.xattrs.size());
-  ceph_assert(op.obc);
-  continue_recovery_op(op, m);
 }
 
 struct SendPushReplies : public Context {
@@ -456,37 +215,6 @@ struct SendPushReplies : public Context {
   }
 };
 
-struct RecoveryReadCompleter : ECCommon::ReadCompleter {
-  RecoveryReadCompleter(ECBackend::RecoveryBackend& backend)
-    : backend(backend) {}
-
-  void finish_single_request(
-    const hobject_t &hoid,
-    ECCommon::read_result_t &res,
-    list<ECCommon::ec_align_t>,
-    set<int> wanted_to_read) override
-  {
-    if (!(res.r == 0 && res.errors.empty())) {
-      backend._failed_push(hoid, res);
-      return;
-    }
-    ceph_assert(res.returned.size() == 1);
-    backend.handle_recovery_read_complete(
-      hoid,
-      res.returned.back(),
-      res.attrs,
-      &rm);
-  }
-
-  void finish(int priority) && override
-  {
-    backend.dispatch_recovery_messages(rm, priority);
-  }
-
-  ECBackend::RecoveryBackend& backend;
-  RecoveryMessages rm;
-};
-
 void ECBackend::ECRecoveryBackend::commit_txn_send_replies(
   ceph::os::Transaction&& txn,
   std::map<int, MOSDPGPushReply*> replies)
@@ -500,238 +228,19 @@ void ECBackend::ECRecoveryBackend::commit_txn_send_replies(
   get_parent()->queue_transaction(std::move(txn));
 }
 
-void ECBackend::RecoveryBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
-{
-  for (map<pg_shard_t, vector<PushOp> >::iterator i = m.pushes.begin();
-       i != m.pushes.end();
-       m.pushes.erase(i++)) {
-    MOSDPGPush *msg = new MOSDPGPush();
-    msg->set_priority(priority);
-    msg->map_epoch = get_parent()->pgb_get_osdmap_epoch();
-    msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
-    msg->from = get_parent()->whoami_shard();
-    msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
-    msg->pushes.swap(i->second);
-    msg->compute_cost(cct);
-    msg->is_repair = get_parent()->pg_is_repair();
-    std::vector wrapped_msg {
-      std::make_pair(i->first.osd, static_cast<Message*>(msg))
-    };
-    get_parent()->send_message_osd_cluster(wrapped_msg, msg->map_epoch);
-  }
-  map<int, MOSDPGPushReply*> replies;
-  for (map<pg_shard_t, vector<PushReplyOp> >::iterator i =
-	 m.push_replies.begin();
-       i != m.push_replies.end();
-       m.push_replies.erase(i++)) {
-    MOSDPGPushReply *msg = new MOSDPGPushReply();
-    msg->set_priority(priority);
-    msg->map_epoch = get_parent()->pgb_get_osdmap_epoch();
-    msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
-    msg->from = get_parent()->whoami_shard();
-    msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
-    msg->replies.swap(i->second);
-    msg->compute_cost(cct);
-    replies.insert(make_pair(i->first.osd, msg));
-  }
-
-#if 1
-  if (!replies.empty()) {
-    commit_txn_send_replies(std::move(m.t), std::move(replies));
-  }
-#endif
-
-  if (m.recovery_reads.empty())
-    return;
-  read_pipeline.start_read_op(
-    priority,
-    m.want_to_read,
-    m.recovery_reads,
-    OpRequestRef(),
-    false,
-    true,
-    std::make_unique<RecoveryReadCompleter>(*this));
-}
-
-void ECBackend::RecoveryBackend::continue_recovery_op(
-  RecoveryBackend::RecoveryOp &op,
-  RecoveryMessages *m)
-{
-  dout(10) << __func__ << ": continuing " << op << dendl;
-  using RecoveryOp = RecoveryBackend::RecoveryOp;
-  while (1) {
-    switch (op.state) {
-    case RecoveryOp::IDLE: {
-      // start read
-      op.state = RecoveryOp::READING;
-      ceph_assert(!op.recovery_progress.data_complete);
-      set<int> want(op.missing_on_shards.begin(), op.missing_on_shards.end());
-      uint64_t from = op.recovery_progress.data_recovered_to;
-      uint64_t amount = get_recovery_chunk_size();
-
-      if (op.recovery_progress.first && op.obc) {
-        if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(op.hoid);
-	    r >= 0 || r == -ENOENT) {
-          op.hinfo = unstable_hashinfo_registry.get_hash_info(op.hoid, false, attrs, size);
-        } else {
-          derr << __func__ << ": can't stat-or-getattr on " << op.hoid << dendl;
-	}
-	if (!op.hinfo) {
-          derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
-               << dendl;
-          ceph_assert(recovery_ops.count(op.hoid));
-          eversion_t v = recovery_ops[op.hoid].v;
-          recovery_ops.erase(op.hoid);
-	  // TODO: not in crimson yet
-          get_parent()->on_failed_pull({get_parent()->whoami_shard()},
-                                       op.hoid, v);
-          return;
-        }
-	op.xattrs = op.obc->attr_cache;
-	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
-      }
-
-      map<pg_shard_t, vector<pair<int, int>>> to_read;
-      int r = read_pipeline.get_min_avail_to_read_shards(
-	op.hoid, want, true, false, &to_read);
-      if (r != 0) {
-	// we must have lost a recovery source
-	ceph_assert(!op.recovery_progress.first);
-	dout(10) << __func__ << ": canceling recovery op for obj " << op.hoid
-		 << dendl;
-	// in crimson
-	get_parent()->cancel_pull(op.hoid);
-	recovery_ops.erase(op.hoid);
-	return;
-      }
-      m->recovery_read(
-	op.hoid,
-	op.recovery_progress.data_recovered_to,
-	amount,
-	std::move(want),
-	to_read,
-	op.recovery_progress.first && !op.obc);
-      op.extent_requested = make_pair(
-	from,
-	amount);
-      dout(10) << __func__ << ": IDLE return " << op << dendl;
-      return;
-    }
-    case RecoveryOp::READING: {
-      // read completed, start write
-      ceph_assert(op.xattrs.size());
-      ceph_assert(op.returned_data.size());
-      op.state = RecoveryOp::WRITING;
-      ObjectRecoveryProgress after_progress = op.recovery_progress;
-      after_progress.data_recovered_to += op.extent_requested.second;
-      after_progress.first = false;
-      if (after_progress.data_recovered_to >= op.obc->obs.oi.size) {
-	after_progress.data_recovered_to =
-	  sinfo.logical_to_next_stripe_offset(
-	    op.obc->obs.oi.size);
-	after_progress.data_complete = true;
-      }
-      for (set<pg_shard_t>::iterator mi = op.missing_on.begin();
-	   mi != op.missing_on.end();
-	   ++mi) {
-	ceph_assert(op.returned_data.count(mi->shard));
-	m->pushes[*mi].push_back(PushOp());
-	PushOp &pop = m->pushes[*mi].back();
-	pop.soid = op.hoid;
-	pop.version = op.v;
-	pop.data = op.returned_data[mi->shard];
-	dout(10) << __func__ << ": before_progress=" << op.recovery_progress
-		 << ", after_progress=" << after_progress
-		 << ", pop.data.length()=" << pop.data.length()
-		 << ", size=" << op.obc->obs.oi.size << dendl;
-	ceph_assert(
-	  pop.data.length() ==
-	  sinfo.aligned_logical_offset_to_chunk_offset(
-	    after_progress.data_recovered_to -
-	    op.recovery_progress.data_recovered_to)
-	  );
-	if (pop.data.length())
-	  pop.data_included.insert(
-	    sinfo.aligned_logical_offset_to_chunk_offset(
-	      op.recovery_progress.data_recovered_to),
-	    pop.data.length()
-	    );
-	if (op.recovery_progress.first) {
-	  pop.attrset = op.xattrs;
-	}
-	pop.recovery_info = op.recovery_info;
-	pop.before_progress = op.recovery_progress;
-	pop.after_progress = after_progress;
-	if (*mi != get_parent()->primary_shard())
-	  // already in crimson -- junction point with PeeringState
-	  get_parent()->begin_peer_recover(
-	    *mi,
-	    op.hoid);
-      }
-      op.returned_data.clear();
-      op.waiting_on_pushes = op.missing_on;
-      op.recovery_progress = after_progress;
-      dout(10) << __func__ << ": READING return " << op << dendl;
-      return;
-    }
-    case RecoveryOp::WRITING: {
-      if (op.waiting_on_pushes.empty()) {
-	if (op.recovery_progress.data_complete) {
-	  op.state = RecoveryOp::COMPLETE;
-	  for (set<pg_shard_t>::iterator i = op.missing_on.begin();
-	       i != op.missing_on.end();
-	       ++i) {
-	    if (*i != get_parent()->primary_shard()) {
-	      dout(10) << __func__ << ": on_peer_recover on " << *i
-		       << ", obj " << op.hoid << dendl;
-	      get_parent()->on_peer_recover(
-		*i,
-		op.hoid,
-		op.recovery_info);
-	    }
-	  }
-	  object_stat_sum_t stat;
-	  stat.num_bytes_recovered = op.recovery_info.size;
-	  stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
-	  stat.num_objects_recovered = 1;
-	  // TODO: not in crimson yet
-	  if (get_parent()->pg_is_repair())
-	    stat.num_objects_repaired = 1;
-	  // pg_recovery.cc in crimson has it
-	  get_parent()->on_global_recover(op.hoid, stat, false);
-	  dout(10) << __func__ << ": WRITING return " << op << dendl;
-	  recovery_ops.erase(op.hoid);
-	  return;
-	} else {
-	  op.state = RecoveryOp::IDLE;
-	  dout(10) << __func__ << ": WRITING continue " << op << dendl;
-	  continue;
-	}
-      }
-      return;
-    }
-    // should never be called once complete
-    case RecoveryOp::COMPLETE:
-    default: {
-      ceph_abort();
-    };
-    }
-  }
-}
-
 void ECBackend::run_recovery_op(
   RecoveryHandle *_h,
   int priority)
 {
   ceph_assert(_h);
-  ECRecoveryHandle &h = static_cast<ECRecoveryHandle&>(*_h);
+  auto &h = static_cast<ECBackend::ECRecoveryBackend::ECRecoveryHandle&>(*_h);
   recovery_backend.run_recovery_op(h, priority);
   send_recovery_deletes(priority, h.deletes);
   delete _h;
 }
 
-void ECBackend::RecoveryBackend::run_recovery_op(
-  ECRecoveryHandle &h,
+void ECBackend::ECRecoveryBackend::run_recovery_op(
+  ECBackend::ECRecoveryBackend::ECRecoveryHandle &h,
   int priority)
 {
   RecoveryMessages m;
@@ -753,50 +262,8 @@ int ECBackend::recover_object(
   ObjectContextRef obc,
   RecoveryHandle *_h)
 {
-  return recovery_backend.recover_object(hoid, v, head, obc, _h);
-}
-
-int ECBackend::RecoveryBackend::recover_object(
-  const hobject_t &hoid,
-  eversion_t v,
-  ObjectContextRef head,
-  ObjectContextRef obc,
-  RecoveryHandle *_h)
-{
-  ECRecoveryHandle *h = static_cast<ECRecoveryHandle*>(_h);
-  h->ops.push_back(RecoveryOp());
-  h->ops.back().v = v;
-  h->ops.back().hoid = hoid;
-  h->ops.back().obc = obc;
-  h->ops.back().recovery_info.soid = hoid;
-  h->ops.back().recovery_info.version = v;
-  if (obc) {
-    h->ops.back().recovery_info.size = obc->obs.oi.size;
-    h->ops.back().recovery_info.oi = obc->obs.oi;
-  }
-  if (hoid.is_snap()) {
-    if (obc) {
-      ceph_assert(obc->ssc);
-      h->ops.back().recovery_info.ss = obc->ssc->snapset;
-    } else if (head) {
-      ceph_assert(head->ssc);
-      h->ops.back().recovery_info.ss = head->ssc->snapset;
-    } else {
-      ceph_abort_msg("neither obc nor head set for a snap object");
-    }
-  }
-  h->ops.back().recovery_progress.omap_complete = true;
-  for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_acting_recovery_backfill_shards().begin();
-       i != get_parent()->get_acting_recovery_backfill_shards().end();
-       ++i) {
-    dout(10) << "checking " << *i << dendl;
-    if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
-      h->ops.back().missing_on.insert(*i);
-      h->ops.back().missing_on_shards.insert(i->shard);
-    }
-  }
-  dout(10) << __func__ << ": built op " << h->ops.back() << dendl;
+  auto *h = static_cast<ECBackend::ECRecoveryBackend::ECRecoveryHandle*>(_h);
+  h->ops.push_back(recovery_backend.recover_object(hoid, v, head, obc));
   return 0;
 }
 
@@ -1163,6 +630,16 @@ error:
   }
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
+}
+
+void ECBackend::handle_sub_read_n_reply(
+  pg_shard_t from,
+  ECSubRead &op,
+  const ZTracer::Trace &trace)
+{
+  ECSubReadReply reply;
+  handle_sub_read(from, op, &reply, trace);
+  handle_sub_read_reply(from, reply, trace);
 }
 
 void ECBackend::handle_sub_write_reply(
