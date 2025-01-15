@@ -490,58 +490,55 @@ class interval_set {
 
   void insert(T start, T len, T *pstart=0, T *plen=0) {
     //cout << "insert " << start << "~" << len << endl;
-    ceph_assert(len > 0);
-    _size += len;
+    T new_len = len;
     auto p = find_adj_m(start);
-    if (p == m.end()) {
+    auto o = std::pair(start, len);
+    T end = start+len;
+
+    if(len == 0) {
+      if (p != m.end() && start >= p->first && start < p->first + p->second) {
+        o = *p;
+      }
+    } else if (p == m.end()) {
       m[start] = len;                  // new interval
-      if (pstart)
-	*pstart = start;
-      if (plen)
-	*plen = len;
     } else {
       if (p->first < start) {
-        
-        if (p->first + p->second != start) {
-          //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
-          ceph_abort();
-        }
-        
-        p->second += len;               // append to end
-        
+        T pend = p->first + p->second;
+        new_len = new_len - (std::min(pend, end) - start); // Remove the overlap
+        p->second = std::max(pend, end) - p->first; // Adjust existing
+
+        // Some usages of interval_set do not implement the + operator.
         auto n = p;
         ++n;
-	if (pstart)
-	  *pstart = p->first;
-        if (n != m.end() && 
-            start+len == n->first) {   // combine with next, too!
-          p->second += n->second;
-	  if (plen)
-	    *plen = p->second;
-          m.erase(n);
-        } else {
-	  if (plen)
-	    *plen = p->second;
-	}
-      } else {
-        if (start+len == p->first) {
-	  if (pstart)
-	    *pstart = start;
-	  if (plen)
-	    *plen = len + p->second;
-	  T psecond = p->second;
-          m.erase(p);
-          m[start] = len + psecond;  // append to front
-        } else {
-          ceph_assert(p->first > start+len);
-	  if (pstart)
-	    *pstart = start;
-	  if (plen)
-	    *plen = len;
-          m[start] = len;              // new interval
+        for (; n != m.end() && end >= n->first; n = m.erase(n)) {
+          // The follow is split out to avoid template issues.
+          // This adds the part of n which is not overlapping with the insert.
+          T a = n->second;
+          T b = end - n->first;
+          new_len = new_len - std::min(a, b);
+          p->second += n->second - std::min(a, b);
         }
+
+        o = *p;
+      } else {
+        T old_len = 0;
+        T new_end = end;
+        for (;p != m.end() && end >= p->first; p = m.erase(p)) {
+          T pend = p->first + p->second;
+          new_end = std::max(pend, end);
+          old_len = old_len + p->second;
+        }
+        m[start] = o.second = new_end - start;
+        new_len = o.second - old_len;
       }
     }
+
+    _size += new_len;
+
+    if (pstart)
+      *pstart = o.first;
+    if (plen)
+      *plen = o.second;
   }
 
   void swap(interval_set& other) {
@@ -558,8 +555,13 @@ class interval_set {
     erase(val, 1);
   }
 
-  void erase(T start, T len, 
-    std::function<bool(T, T)> claim = {}) {
+  /* This variant of erase allows the client to determine whether touching
+   * intervals should also be erased. This variant will assert that the
+   * intersection of the interval (start~len) is entirely contained by a single
+   * interval in *this.
+   */
+  void erase(T start, T len,
+    std::function<bool(T, T)> claim) {
     auto p = find_inc_m(start);
 
     _size -= len;
@@ -586,6 +588,43 @@ class interval_set {
       } else {
 	m[start + len] = after;
       }
+    }
+  }
+
+  /** This variant of erase allows for general erases (making it useful for
+   * functions like subtract). It can cope with any overlaps and will erase
+   * multiple. entries.
+   */
+  void erase(T start, T len) {
+    T begin = start;
+    T end = start + len;
+
+    auto p = find_inc_m(begin);
+
+    while ( p != m.end() && begin < end && end > p->first) {
+      T pend = p->first + p->second;
+
+      // Skip any gap.
+      if (begin < p->first) begin = p->first;
+      _size -= pend - begin;
+
+      // Truncate (delete later if empty)
+      p->second = begin - p->first;
+
+      // Handle splits
+      if (end < pend) {
+        _size += pend - end;
+        // For some maps, inserting here corrupts p, so we need
+        // to insert, then recover p, so that we can delete it if needed.
+        p = m.insert(p, std::pair(end, pend-end));
+        --p;
+      }
+
+      // Erase empty interval or move on.
+      if (!p->second) p = m.erase(p);
+      else ++p;
+
+      begin = pend;
     }
   }
 
@@ -672,31 +711,17 @@ class interval_set {
     ceph_assert(&a != this);
     ceph_assert(&b != this);
     clear();
-    
-    //cout << "union_of" << endl;
 
-    // a
-    m = a.m;
-    _size = a._size;
-
-    // - (a*b)
-    interval_set ab;
-    ab.intersection_of(a, b);
-    subtract(ab);
-
-    // + b
+    insert(a);
     insert(b);
-    return;
   }
+
   void union_of(const interval_set &b) {
-    interval_set a;
-    swap(a);    
-    union_of(a, b);
+    insert(b);
   }
   void union_insert(T off, T len) {
-    interval_set a;
-    a.insert(off, len);
-    union_of(a);
+    // insert supports overlapping entries. This function is redundant.
+    insert(off, len);
   }
 
   bool subset_of(const interval_set &big) const {
@@ -762,6 +787,20 @@ class interval_set {
    */
   Map detach() && {
     return std::move(m);
+  }
+
+  /*
+  * Round down interval starts and round up interval ends alignment the specified @alignment
+  */
+  void align(T alignment) {
+    interval_set tmp;
+    for (const auto& [start, len] : m) {
+      T aligned_start = (start / alignment) * alignment;
+      T aligned_len = ((start + len + alignment - 1) / alignment) * alignment - aligned_start;
+
+      tmp.insert(aligned_start, aligned_len);
+    }
+    swap(tmp);
   }
 
 private:
