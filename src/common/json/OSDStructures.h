@@ -69,12 +69,17 @@ struct OSDECProfileGetReply {
   int crush_num_failure_domains;
   int crush_osds_per_failure_domain;
   std::string crush_root;
-  bool jerasure_per_chunk_alignment;
+  std::string plugin;
   int k;
   int m;
-  std::string plugin;
-  std::string technique;
-  std::string w;
+  std::optional<int> l;
+  std::optional<int> w;
+  std::optional<int> c;
+  std::optional<uint64_t> packetsize;
+  std::optional<std::string> technique;
+  std::optional<std::string> layers;
+  std::optional<std::string> mapping;
+  std::optional<bool> jerasure_per_chunk_alignment;
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
@@ -83,6 +88,7 @@ struct OSDECProfileGetReply {
 struct OSDECProfileSetRequest {
   std::string name;
   std::vector<std::string> profile;
+  bool force;
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
