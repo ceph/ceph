@@ -72,7 +72,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   fd_directs.resize(WRITE_LIFE_MAX, -1);
   fd_buffereds.resize(WRITE_LIFE_MAX, -1);
 
-  bool use_ioring = cct->_conf.get_val<bool>("bdev_ioring");
+  use_ioring = cct->_conf.get_val<bool>("bdev_ioring");
   unsigned int iodepth = cct->_conf->bdev_aio_max_queue_depth;
 
   if (use_ioring && ioring_queue_t::supported()) {
@@ -541,6 +541,19 @@ void KernelDevice::_aio_stop()
   if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
+    IOContext wakeup_ctx(cct, nullptr, false);
+    wakeup_ctx.num_running++;
+    std::list<aio_t> batch;
+    aio_t aio_op(&wakeup_ctx, fd_directs[WRITE_LIFE_NOT_SET]);
+
+    // IO_CMD_NOOP is not implemented in the Linux kernel; using IO_CMD_PREAD with a 0-byte read as a substitute.
+    if (use_ioring && ioring_queue_t::supported())
+       aio_op.iocb.aio_lio_opcode = IO_CMD_NOOP;
+    else
+       aio_op.iocb.aio_lio_opcode = IO_CMD_PREAD;
+    batch.push_back(aio_op);
+    int retries = 0;
+    io_queue->submit_batch(batch.begin(), batch.end(), &wakeup_ctx, &retries);
     aio_thread.join();
     aio_stop = false;
     io_queue->shutdown();
