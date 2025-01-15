@@ -400,7 +400,8 @@ public:
     base_iertr::future<omap_values_paged_t> do_omap_get_values(
       Transaction& t,
       Onode& onode,
-      const std::optional<std::string>& start);
+      const std::optional<std::string>& start,
+      const omap_root_le_t& omap_root);
 
     base_iertr::future<fiemap_ret_t> _fiemap(
       Transaction &t,
@@ -414,7 +415,6 @@ public:
       internal_context_t &ctx,
       CollectionRef &col,
       std::vector<OnodeRef> &onodes,
-      std::vector<OnodeRef> &d_onodes,
       ceph::os::Transaction::iterator &i);
 
     tm_ret _remove_omaps(
@@ -433,11 +433,6 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
-    enum class omap_type_t : uint8_t {
-      XATTR = 0,
-      OMAP,
-      NUM_TYPES
-    };
     tm_ret _clone_omaps(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -458,7 +453,8 @@ public:
     tm_ret _omap_set_values(
       internal_context_t &ctx,
       OnodeRef &onode,
-      std::map<std::string, ceph::bufferlist> &&aset);
+      std::map<std::string, ceph::bufferlist> &&aset,
+      const omap_root_le_t &omap_root);
     tm_ret _omap_set_header(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -469,12 +465,14 @@ public:
     tm_ret _omap_rmkeys(
       internal_context_t &ctx,
       OnodeRef &onode,
-      omap_keys_t &&aset);
+      omap_keys_t &&aset,
+      const omap_root_le_t &_omap_root);
     tm_ret _omap_rmkeyrange(
       internal_context_t &ctx,
       OnodeRef &onode,
       std::string first,
-      std::string last);
+      std::string last,
+      const omap_root_le_t &_omap_root);
     tm_ret _truncate(
       internal_context_t &ctx,
       OnodeRef &onode, uint64_t size);
