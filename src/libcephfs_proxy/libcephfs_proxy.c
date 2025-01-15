@@ -867,3 +867,156 @@ __public UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 
 	return value_ptr(ans.userperm);
 }
+
+
+// Metadata Caching
+typedef struct metadata_cache_entry_t {
+    Inode *inode;
+    char name[PATH_MAX];
+    struct ceph_statx statx;
+    struct metadata_cache_entry_t *next;
+} metadata_cache_entry_t;
+
+static metadata_cache_entry_t *metadata_cache = NULL;
+static pthread_mutex_t cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
+__public int ceph_ll_lookup_new(struct ceph_mount_info *cmount, Inode *parent,
+                            const char *name, Inode **out,
+                            struct ceph_statx *stx, unsigned want,
+                            unsigned flags, const UserPerm *perms) {
+    pthread_mutex_lock(&cache_lock);
+
+	proxy_client_receive_messages(&cmount->link);
+
+    metadata_cache_entry_t *entry = find_in_cache(parent, name);
+    if (entry) {
+        memcpy(stx, &entry->statx, sizeof(*stx));
+        *out = entry->inode;
+		add_client_to_inode_map(cmount->link.sd, entry->inode);
+        pthread_mutex_unlock(&cache_lock);
+        return 0;
+    }
+    pthread_mutex_unlock(&cache_lock);
+
+    // Cache miss, fetch from daemon
+    CEPH_REQ(ceph_ll_lookup, req, 1, ans, 1);
+    req.userperm = ptr_value(perms);
+    req.parent = ptr_value(parent);
+    req.want = want;
+    req.flags = flags;
+    CEPH_STR_ADD(req, name, name);
+    CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
+
+    int err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LOOKUP, req, ans);
+    if (err < 0) return err;
+
+    pthread_mutex_lock(&cache_lock);
+    add_to_cache(parent, name, stx, value_ptr(ans.inode));
+	add_client_to_inode_map(cmount->link.sd, value_ptr(ans.inode));
+    pthread_mutex_unlock(&cache_lock);
+
+    *out = value_ptr(ans.inode);
+    return 0;
+}
+
+void invalidate_metadata_cache(Inode *inode, const char *name) 
+{
+    pthread_mutex_lock(&cache_lock);
+    remove_from_cache(inode, name);
+    pthread_mutex_unlock(&cache_lock);
+}
+
+metadata_cache_entry_t *find_in_cache(Inode *parent, const char *name) 
+{
+    for (metadata_cache_entry_t *entry = metadata_cache; entry; entry = entry->next) 
+    {
+        if (entry->inode == parent && strcmp(entry->name, name) == 0) 
+        {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+void add_to_cache(Inode *parent, const char *name, struct ceph_statx *stx, Inode *inode) 
+{
+    metadata_cache_entry_t *new_entry = malloc(sizeof(metadata_cache_entry_t));
+    if (!new_entry) 
+    {
+        proxy_log(LOG_ERR, ENOMEM, "Failed to allocate memory for cache entry");
+        return;
+    }
+
+    new_entry->inode = inode;
+    strncpy(new_entry->name, name, PATH_MAX - 1);
+    new_entry->name[PATH_MAX - 1] = '\0';  // Ensure null-termination
+    memcpy(&new_entry->statx, stx, sizeof(*stx));
+    new_entry->next = metadata_cache;
+    metadata_cache = new_entry;
+}
+
+void remove_from_cache(Inode *inode, const char *name) 
+{
+    metadata_cache_entry_t **prev = &metadata_cache;
+    for (metadata_cache_entry_t *entry = metadata_cache; entry; entry = entry->next) 
+    {
+        if (entry->inode == inode && strcmp(entry->name, name) == 0) 
+        {
+            *prev = entry->next;
+            free(entry);
+            return;
+        }
+        prev = &entry->next;
+    }
+}
+
+void remove_all_from_cache(Inode *inode) {
+    metadata_cache_entry_t *entry = metadata_cache;
+    metadata_cache_entry_t *prev = NULL;
+
+    while (entry != NULL) {
+        if (entry->inode == inode) {
+            if (prev == NULL) {
+                metadata_cache = entry->next;
+            } else {
+                prev->next = entry->next;
+            }
+            metadata_cache_entry_t *next_entry = entry->next;
+            free(entry);
+            entry = next_entry;
+        } else {
+            prev = entry;
+            entry = entry->next;
+        }
+    }
+}
+
+bool is_entry_valid(metadata_cache_entry_t *entry) 
+{
+    // Placeholder for additional validation logic based on version, generation, or other consistency checks
+    return entry != NULL;
+}
+
+typedef struct {
+    uint64_t inode;
+    int64_t offset;
+    int64_t length;
+    uint32_t client_id;
+} proxy_invalidation_msg_t;
+
+void proxy_client_receive_messages(proxy_client_t *client) {
+    proxy_invalidation_msg_t msg;
+    int32_t err;
+
+    while ((err = proxy_link_recv(client->sd, &msg, sizeof(msg))) > 0) {
+        pthread_mutex_lock(&cache_lock);
+		// Inode invalidation
+		remove_all_from_cache(msg.inode);
+
+        pthread_mutex_unlock(&cache_lock);
+    }
+
+    if (err < 0) {
+        proxy_log(LOG_ERR, errno, "Failed to receive invalidation message for client %d", client->id);
+    }
+}
