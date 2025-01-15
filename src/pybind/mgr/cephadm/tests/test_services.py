@@ -481,11 +481,11 @@ timeout = 1.0\n"""
                         "image": "",
                         "deploy_arguments": [],
                         "params": {
-                            "tcp_ports": [5500, 4420, 8009]
+                            "tcp_ports": [5500, 4420, 8009, 10008]
                         },
                         "meta": {
                             "service_name": "nvmeof.testpool",
-                            "ports": [5500, 4420, 8009],
+                            "ports": [5500, 4420, 8009, 10008],
                             "ip": None,
                             "deployed_by": [],
                             "rank": None,
