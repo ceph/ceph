@@ -308,6 +308,9 @@ options:
   desc: Scrub each PG no less often than this interval
   fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
+  services:
+  - osd
+  - mgr
   see_also:
   - osd_scrub_min_interval
   with_legacy: true
@@ -446,6 +449,9 @@ options:
   desc: Deep scrub each PG (i.e., verify data checksums) at least this often
   fmt_desc: The interval for "deep" scrubbing (fully reading all data).
   default: 7_day
+  services:
+  - osd
+  - mgr
   with_legacy: true
 - name: osd_deep_scrub_interval_cv
   type: float
