@@ -147,6 +147,7 @@ using rgw_owner = std::variant<rgw_user, rgw_account_id>;
 
 rgw_owner parse_owner(const std::string& str);
 std::string to_string(const rgw_owner& o);
+std::string to_id(const rgw_owner &o);
 
 std::ostream& operator<<(std::ostream& out, const rgw_owner& o);
 
