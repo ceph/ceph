@@ -39,6 +39,8 @@ import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
+import { GlobalRateLimit, RgwRateLimit } from '../models/rgw-rate-limit';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -78,6 +80,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   aclPermissions: AclPermissionsType[] = [aclPermission.FullControl];
   multisiteStatus$: Observable<any>;
   isDefaultZoneGroup$: Observable<boolean>;
+  globalBucketRateLimit: GlobalRateLimit['bucket_ratelimit'];
 
   get isVersioningEnabled(): boolean {
     return this.bucketForm.getValue('versioning');
@@ -165,7 +168,61 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]],
-      replication: [false]
+      replication: [false],
+      // bucket rate limit
+      bucket_rate_limit_enabled: [false],
+      bucket_rate_limit_max_readOps_unlimited: [true],
+      bucket_rate_limit_max_readOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_readOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      bucket_rate_limit_max_writeOps_unlimited: [true],
+      bucket_rate_limit_max_writeOps: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_writeOps_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      bucket_rate_limit_max_readBytes_unlimited: [true],
+      bucket_rate_limit_max_readBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_readBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ],
+      bucket_rate_limit_max_writeBytes_unlimited: [true],
+      bucket_rate_limit_max_writeBytes: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              bucket_rate_limit_enabled: true,
+              bucket_rate_limit_max_writeBytes_unlimited: false
+            },
+            [Validators.required]
+          )
+        ]
+      ]
     });
   }
 
@@ -204,6 +261,11 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       }
     });
 
+    // get the global rate Limit
+    this.rgwBucketService.getGlobalBucketRateLimit().subscribe((data: GlobalRateLimit) => {
+      this.globalBucketRateLimit = data.bucket_ratelimit;
+    });
+
     if (!this.editing) {
       promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');
     }
@@ -213,6 +275,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       if (params.hasOwnProperty('bid')) {
         const bid = decodeURIComponent(params.bid);
         promises['getBid'] = this.rgwBucketService.get(bid);
+        promises['getRateLimit'] = this.rgwBucketService.getBucketRateLimit(bid);
       }
 
       forkJoin(promises).subscribe((data: any) => {
@@ -296,6 +359,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
                 this.bucketForm.get('replication').setValue(false);
               }
             }
+            // map the bucket Rate Limit
+            if (data['getRateLimit']) {
+              this._setBucketRateLimit(data['getRateLimit'].bucket_ratelimit);
+            }
             this.filterAclPermissions();
           }
         }
@@ -365,6 +432,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               NotificationType.success,
               $localize`Updated Object Gateway bucket '${values.bid}'.`
             );
+            this.updateBucketRateLimit();
             this.goToListView();
           },
           () => {
@@ -398,12 +466,23 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               $localize`Created Object Gateway bucket '${values.bid}'`
             );
             this.goToListView();
+            this.updateBucketRateLimit();
           },
           () => {
             // Reset the 'Submit' button.
             this.bucketForm.setErrors({ cdSubmitButton: true });
           }
         );
+    }
+  }
+
+  updateBucketRateLimit() {
+    // Check if bucket ratelimit has been modified.
+    if (this._isBucketRateLimitDirty()) {
+      const bucketRateLimitArgs = this._getBucketRateLimitArgs();
+      this.rgwBucketService
+        .updateBucketRateLimit(this.bucketForm.getValue('bid'), bucketRateLimitArgs)
+        .subscribe();
     }
   }
 
@@ -600,5 +679,104 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       default:
         return 'private';
     }
+  }
+  /**
+   * Helper function to map the values for the bucket Rate Limit
+   */
+
+  private _setBucketRateLimit(data: RgwRateLimit) {
+    this.bucketForm.get('bucket_rate_limit_enabled').setValue(data.enabled);
+    this._setRateLimitProperty(
+      'bucket_rate_limit_max_readBytes',
+      'bucket_rate_limit_max_readBytes_unlimited',
+      data.max_read_bytes
+    );
+    this._setRateLimitProperty(
+      'bucket_rate_limit_max_writeBytes',
+      'bucket_rate_limit_max_writeBytes_unlimited',
+      data.max_write_bytes
+    );
+    this._setRateLimitProperty(
+      'bucket_rate_limit_max_readOps',
+      'bucket_rate_limit_max_readOps_unlimited',
+      data.max_read_ops
+    );
+    this._setRateLimitProperty(
+      'bucket_rate_limit_max_writeOps',
+      'bucket_rate_limit_max_writeOps_unlimited',
+      data.max_write_ops
+    );
+  }
+  /**
+   * Helper function to map the values for the Rate Limit when the bucket
+   * rate limit gets loaded for first time or edited.
+   */
+  private _setRateLimitProperty(
+    rateLimitKey: string,
+    unlimitedKey: string,
+    property: string | number
+  ) {
+    if (property === 0) {
+      this.bucketForm.get(unlimitedKey).setValue(true);
+      this.bucketForm.get(rateLimitKey).setValue('');
+    } else {
+      this.bucketForm.get(unlimitedKey).setValue(false);
+      this.bucketForm.get(rateLimitKey).setValue(property);
+    }
+  }
+  /**
+   * Check if the bucket rate limit has been modified.
+   * @return {Boolean} Returns TRUE if the bucket rate limit has been modified.
+   */
+  private _isBucketRateLimitDirty(): boolean {
+    return [
+      'bucket_rate_limit_enabled',
+      'bucket_rate_limit_max_readOps_unlimited',
+      'bucket_rate_limit_max_readOps',
+      'bucket_rate_limit_max_writeOps_unlimited',
+      'bucket_rate_limit_max_writeOps',
+      'bucket_rate_limit_max_readBytes_unlimited',
+      'bucket_rate_limit_max_readBytes',
+      'bucket_rate_limit_max_writeBytes_unlimited',
+      'bucket_rate_limit_max_writeBytes'
+    ].some((path) => {
+      return this.bucketForm.get(path).dirty;
+    });
+  }
+  /**
+   * Helper function to get the arguments for the API request when the bucket
+   * rate limit configuration has been modified.
+   */
+  private _getBucketRateLimitArgs(): RgwRateLimit {
+    const result: RgwRateLimit = {
+      enabled: this.bucketForm.getValue('bucket_rate_limit_enabled') + '',
+      max_read_ops: '0',
+      max_write_ops: '0',
+      max_read_bytes: '0',
+      max_write_bytes: '0'
+    };
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_readOps_unlimited')) {
+      result['max_read_ops'] =
+        new FormatterService().toIopm(this.bucketForm.getValue('bucket_rate_limit_max_readOps')) +
+        '';
+    }
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_writeOps_unlimited')) {
+      result['max_write_ops'] =
+        new FormatterService().toIopm(this.bucketForm.getValue('bucket_rate_limit_max_writeOps')) +
+        '';
+    }
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_readBytes_unlimited')) {
+      result['max_read_bytes'] =
+        new FormatterService().toBytes(
+          this.bucketForm.getValue('bucket_rate_limit_max_readBytes')
+        ) + '';
+    }
+    if (!this.bucketForm.getValue('bucket_rate_limit_max_writeBytes_unlimited')) {
+      result['max_write_bytes'] =
+        new FormatterService().toBytes(
+          this.bucketForm.getValue('bucket_rate_limit_max_writeBytes')
+        ) + '';
+    }
+    return result;
   }
 }

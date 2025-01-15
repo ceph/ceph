@@ -151,5 +151,58 @@
         </tbody>
       </table>
     </div>
+    <!-- User Rate Limit -->
+    <div *ngIf="user.user_ratelimit">
+      <legend i18n>User Rate Limit</legend>
+      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold w-25">Enabled</td>
+            <td class="w-75">{{ user.user_ratelimit.enabled | booleanText }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Maximum Read Ops</td>
+            <td *ngIf="!user.user_ratelimit.enabled">-</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_ops <= 0"
+                i18n>Unlimited</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_ops > 0">
+              {{ user.user_ratelimit.max_read_ops}} IOPM
+            </td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Maximum Write Ops</td>
+            <td *ngIf="!user.user_ratelimit.enabled">-</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_ops <= 0"
+                i18n>Unlimited</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_ops > 0">
+              {{ user.user_ratelimit.max_write_ops }} IOPM
+            </td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Maximum Read Bytes</td>
+            <td *ngIf="!user.user_ratelimit.enabled">-</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_bytes <= 0"
+                i18n>Unlimited</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_read_bytes > 0">
+              {{ user.user_ratelimit.max_read_bytes | dimlessBinaryPerMinute}}
+            </td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold">Maximum Write Bytes</td>
+            <td *ngIf="!user.user_ratelimit.enabled">-</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_bytes <= 0"
+                i18n>Unlimited</td>
+            <td *ngIf="user.user_ratelimit.enabled && user.user_ratelimit.max_write_bytes > 0">
+              {{ user.user_ratelimit.max_write_bytes | dimlessBinaryPerMinute}}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </ng-container>

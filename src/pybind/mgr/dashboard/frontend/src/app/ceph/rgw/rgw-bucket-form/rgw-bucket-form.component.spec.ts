@@ -18,6 +18,7 @@ import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
@@ -153,16 +154,19 @@ describe('RgwBucketFormComponent', () => {
         'mfa-delete': mfaDeleteChecked
       });
       fixture.detectChanges();
-
-      const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector('#mfa-token-serial');
-      const mfaTokenPin = fixture.debugElement.nativeElement.querySelector('#mfa-token-pin');
-      if (expectedVisibility) {
-        expect(mfaTokenSerial).toBeTruthy();
-        expect(mfaTokenPin).toBeTruthy();
-      } else {
-        expect(mfaTokenSerial).toBeFalsy();
-        expect(mfaTokenPin).toBeFalsy();
-      }
+      fixture.whenStable().then(() => {
+        const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector(
+          '#mfa-token-serial'
+        );
+        const mfaTokenPin = fixture.debugElement.nativeElement.querySelector('#mfa-token-pin');
+        if (expectedVisibility) {
+          expect(mfaTokenSerial).toBeTruthy();
+          expect(mfaTokenPin).toBeTruthy();
+        } else {
+          expect(mfaTokenSerial).toBeFalsy();
+          expect(mfaTokenPin).toBeFalsy();
+        }
+      });
     };
 
     it('inputs should be visible when required', () => {
@@ -313,6 +317,88 @@ describe('RgwBucketFormComponent', () => {
       formHelper.setValue('replication', true);
       fixture.detectChanges();
       formHelper.expectValid('replication');
+    });
+  });
+  describe('test case for _setRateLimitProperty', () => {
+    it('should call _setRateLimitProperty when value is equal to 0 ', () => {
+      const mockrateLimitKey = 'bucket_rate_limit_max_readBytes';
+      const mockunlimitedKey = 'bucket_rate_limit_max_readBytes_unlimited';
+      const mockproperty = 0;
+
+      component['_setRateLimitProperty'](mockrateLimitKey, mockunlimitedKey, mockproperty);
+      expect(component.bucketForm.getValue('bucket_rate_limit_max_readBytes_unlimited')).toEqual(
+        true
+      );
+      expect(component.bucketForm.getValue('bucket_rate_limit_max_readBytes')).toEqual('');
+    });
+    it('should call _setRateLimitProperty when value is not equal to 1 ', () => {
+      const mockrateLimitKey = 'bucket_rate_limit_max_readBytes';
+      const mockunlimitedKey = 'bucket_rate_limit_max_readBytes_unlimited';
+      const mockproperty = 102;
+
+      component['_setRateLimitProperty'](mockrateLimitKey, mockunlimitedKey, mockproperty);
+      expect(component.bucketForm.getValue('bucket_rate_limit_max_readBytes_unlimited')).toEqual(
+        false
+      );
+      expect(component.bucketForm.getValue('bucket_rate_limit_max_readBytes')).toEqual(102);
+    });
+  });
+  describe('test case for _getUserRateLimitArgs', () => {
+    it('should return expected result when all rate limits are specified', () => {
+      // Using patchValue to set form values
+      component.bucketForm.patchValue({
+        bucket_rate_limit_enabled: true,
+        bucket_id: 'user123',
+        bucket_rate_limit_max_readOps: '100 IOPM',
+        bucket_rate_limit_max_writeOps: '200',
+        bucket_rate_limit_max_readBytes: '10Mb',
+        bucket_rate_limit_max_writeBytes: '10Mb',
+        bucket_rate_limit_max_readOps_unlimited: false,
+        bucket_rate_limit_max_writeOps_unlimited: false,
+        bucket_rate_limit_max_readBytes_unlimited: false,
+        bucket_rate_limit_max_writeBytes_unlimited: false
+      });
+      jest.spyOn(FormatterService.prototype, 'toIopm');
+      jest.spyOn(FormatterService.prototype, 'toBytes').mockReturnValue(10485760); // 10MB in bytes
+
+      const result = component['_getBucketRateLimitArgs']();
+
+      expect(result).toEqual({
+        enabled: 'true',
+        max_read_ops: '100', // Formatted by FormatterService.toIopm
+        max_write_ops: '200',
+        max_read_bytes: '10485760', // Converted by FormatterService.toBytes
+        max_write_bytes: '10485760' // Converted by FormatterService.toBytes
+      });
+    });
+    it('should return default values for unlimited options', () => {
+      // Using patchValue to set unlimited flags
+      component.bucketForm.patchValue({
+        bucket_rate_limit_enabled: true,
+        bucket_id: 'user123',
+        bucket_rate_limit_max_readOps: 100,
+        bucket_rate_limit_max_writeOps: 200,
+        bucket_rate_limit_max_readBytes: '10MB',
+        bucket_rate_limit_max_writeBytes: '20MB',
+        bucket_rate_limit_max_readOps_unlimited: true, // Unlimited
+        bucket_rate_limit_max_writeOps_unlimited: true, // Unlimited
+        bucket_rate_limit_max_readBytes_unlimited: true, // Unlimited
+        bucket_rate_limit_max_writeBytes_unlimited: true // Unlimited
+      });
+
+      // Set return values for the spied methods (not used for unlimited cases)
+      jest.spyOn(FormatterService.prototype, 'toIopm').mockReturnValue(150);
+      jest.spyOn(FormatterService.prototype, 'toBytes').mockReturnValue(10485760); // 10MB in bytes
+
+      const result = component['_getBucketRateLimitArgs']();
+
+      expect(result).toEqual({
+        enabled: 'true',
+        max_read_ops: '0', // Default value when unlimited
+        max_write_ops: '0', // Default value when unlimited
+        max_read_bytes: '0', // Default value when unlimited
+        max_write_bytes: '0' // Default value when unlimited
+      });
     });
   });
 });
