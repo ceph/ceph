@@ -184,3 +184,8 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
   return ret;
 }
 
+uint64_t RGWBucketInfo::get_total_usage() const {
+  // Return the total usage bytes from stats
+  return stats.total_bytes; // Assuming stats is a struct with `total_bytes` field.
+}
+
