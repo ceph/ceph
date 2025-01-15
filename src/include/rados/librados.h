@@ -1581,6 +1581,22 @@ CEPH_RADOS_API int rados_read(rados_ioctx_t io, const char *oid, char *buf,
                               size_t len, uint64_t off);
 
 /**
+ * Retrieve the OSD ID of an object
+ *
+ * The io context determines the snapshot to read from, the OSD ID
+ * is set in `acting_primary`.
+ *
+ * @param io the context in which to perform the read
+ * @param oid the name of the object to read from
+ * @param acting_primary pointer to set the primary OSD ID
+ * @returns 0 on success, negative error code on
+ * failure
+ */
+CEPH_RADOS_API int rados_get_object_osd_position(rados_ioctx_t io,
+                                                 const char *oid,
+                                                 int *acting_primary);
+
+/**
  * Compute checksum from object data
  *
  * The io context determines the snapshot to checksum, if any was set
