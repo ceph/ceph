@@ -42,6 +42,7 @@ from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     NvmeofServiceSpec,
 )
+from ceph.deployment.drive_group import DeviceSelection
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
@@ -2867,12 +2868,44 @@ Then run the following:
         """
         return [self._apply(spec) for spec in specs]
 
+    def create_osd_default_spec(self, drive_group: DriveGroupSpec) -> None:
+        # Create the default osd and attach a valid spec to it.
+
+        drive_group.unmanaged = False
+
+        host_pattern_obj = drive_group.placement.host_pattern
+        host = str(host_pattern_obj.pattern)
+        device_list = [d.path for d in drive_group.data_devices.paths] if drive_group.data_devices else []
+        devices = [{"path": d} for d in device_list]
+
+        osd_default_spec = DriveGroupSpec(
+            service_id="default",
+            placement=PlacementSpec(host_pattern=host),
+            data_devices=DeviceSelection(paths=devices),
+            unmanaged=False,
+            objectstore="bluestore"
+        )
+
+        self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")
+        self.spec_store.save(osd_default_spec)
+        self.apply([osd_default_spec])
+
     @handle_orch_error
     def create_osds(self, drive_group: DriveGroupSpec) -> str:
         hosts: List[HostSpec] = self.inventory.all_specs()
         filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
         if not filtered_hosts:
             return "Invalid 'host:device' spec: host not found in cluster. Please check 'ceph orch host ls' for available hosts"
+
+        if not drive_group.service_id:
+            drive_group.service_id = "default"
+
+        if drive_group.service_id not in self.spec_store.all_specs:
+            self.log.info("osd.default does not exist. Creating it now.")
+            self.create_osd_default_spec(drive_group)
+        else:
+            self.log.info("osd.default already exists.")
+
         return self.osd_service.create_from_spec(drive_group)
 
     def _preview_osdspecs(self,
