@@ -1,5 +1,6 @@
 enum KmsProviders {
-  Vault = 'vault'
+  Vault = 'vault',
+  KMIP = 'KMIP'
 }
 
 enum AuthMethods {
@@ -29,7 +30,7 @@ interface RgwBucketEncryptionModel {
 }
 
 export const rgwBucketEncryptionModel: RgwBucketEncryptionModel = {
-  kmsProviders: [KmsProviders.Vault],
+  kmsProviders: [KmsProviders.Vault,KmsProviders.KMIP],
   authMethods: [AuthMethods.Token, AuthMethods.Agent],
   secretEngines: [SecretEngines.KV, SecretEngines.Transit],
   SSE_S3: sseS3.SSE_S3,

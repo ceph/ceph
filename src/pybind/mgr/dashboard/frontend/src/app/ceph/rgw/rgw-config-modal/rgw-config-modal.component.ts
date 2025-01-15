@@ -52,7 +52,7 @@ export class RgwConfigModalComponent implements OnInit {
     this.secretEngines = rgwBucketEncryptionModel.secretEngines;
     if (this.editing && this.selectedEncryptionConfigValues) {
       const patchValues = {
-        address: this.selectedEncryptionConfigValues['addr'],
+        addr: this.selectedEncryptionConfigValues['addr'],
         encryptionType:
           rgwBucketEncryptionModel[this.selectedEncryptionConfigValues['encryption_type']],
         kms_provider: this.selectedEncryptionConfigValues['backend'],
@@ -104,7 +104,7 @@ export class RgwConfigModalComponent implements OnInit {
 
   createForm() {
     this.configForm = this.formBuilder.group({
-      address: [
+      addr: [
         null,
         [
           Validators.required,
@@ -134,10 +134,15 @@ export class RgwConfigModalComponent implements OnInit {
       client_cert: [null, CdValidators.pemCert()],
       client_key: [null, CdValidators.sslPrivKey()],
       kmsEnabled: [{ value: false }],
-      s3Enabled: [{ value: false }]
+      s3Enabled: [{ value: false }],
+      kms_key_template: [null],
+      s3_key_template: [null],
+      username: [{value: '', disabled: true},Validators.required],
+      password: [{value: '', disabled: true},Validators.required]
     });
   }
 
+ 
   fileUpload(files: FileList, controlName: string) {
     const file: File = files[0];
     const reader = new FileReader();
@@ -149,7 +154,7 @@ export class RgwConfigModalComponent implements OnInit {
       control.updateValueAndValidity();
     });
   }
-
+ 
   onSubmit() {
     const values = this.configForm.getRawValue();
     this.rgwBucketService
@@ -160,15 +165,20 @@ export class RgwConfigModalComponent implements OnInit {
         values['secret_engine'],
         values['secret_path'],
         values['namespace'],
-        values['address'],
+        values['addr'],
         values['token'],
         values['owner'],
         values['ssl_cert'],
         values['client_cert'],
-        values['client_key']
+        values['client_key'],
+        values['kms_key_template'],
+        values['s3_key_template'],
+        values['username'],
+        values['password']
       )
       .subscribe({
         next: () => {
+          alert(1)
           this.notificationService.show(
             NotificationType.success,
             $localize`Updated RGW Encryption Configuration values`
@@ -183,5 +193,24 @@ export class RgwConfigModalComponent implements OnInit {
           this.table?.refreshBtn();
         }
       });
+  }
+
+  setKmsProvider(){
+    let value = this.configForm.get('kms_provider')?.value
+    this.configForm.get('kms_provider').setValue(value);
+    console.log(this.configForm.controls['kms_provider'].value)
+    if(value == 'vault'){
+        this.configForm.get('username')?.disable();
+        this.configForm.get('password')?.disable();
+        this.configForm.get('auth_method')?.enable();
+        this.configForm.get('secret_engine')?.enable();
+        this.configForm.get('token')?.enable();  
+      }else{
+        this.configForm.get('username')?.enable();
+        this.configForm.get('password')?.enable();
+        this.configForm.get('auth_method')?.disable();
+        this.configForm.get('secret_engine')?.disable();
+        this.configForm.get('token')?.disable();
+    }
   }
 }
