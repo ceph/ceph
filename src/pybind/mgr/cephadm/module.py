@@ -3289,6 +3289,10 @@ Then run the following:
         return self.cert_mgr.cert_ls()
 
     @handle_orch_error
+    def cert_store_entity_ls(self) -> Dict[str, Any]:
+        return self.cert_mgr.entity_ls()
+
+    @handle_orch_error
     def cert_store_reload(self) -> str:
         return self.cert_mgr.reload()
 
@@ -3330,6 +3334,47 @@ Then run the following:
                 return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return key
+
+    @handle_orch_error
+    def cert_store_set_pair(
+        self,
+        cert: str,
+        key: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> str:
+        entities = self.cert_mgr.entity_ls()
+        if entity in entities:
+            self.cert_mgr.save_cert(f'{entity}_cert', cert, service_name, hostname, True)
+            self.cert_mgr.save_key(f'{entity}_key', key, service_name, hostname, True)
+            return ""
+        else:
+            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch cert-store entity ls' to list valid entities.")
+
+    @handle_orch_error
+    def cert_store_set_cert(
+        self,
+        cert: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        self.cert_mgr.save_cert(entity, cert, service_name, hostname, True)
+        return ""
+
+    @handle_orch_error
+    def cert_store_set_key(
+        self,
+        key: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        self.cert_mgr.save_key(entity, key, service_name, hostname, True)
+        return ""
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:

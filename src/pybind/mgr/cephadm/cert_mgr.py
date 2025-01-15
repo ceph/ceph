@@ -159,6 +159,9 @@ class CertKeyStore():
             'cephadm_root_ca_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
         }
+
+        self.entities = [cert.removesuffix('_cert') for cert in self.known_certs if cert != 'cephadm_root_ca_cert']
+
         # Similar to certs but for priv keys. Entries in known_certs
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
@@ -234,6 +237,9 @@ class CertKeyStore():
             else:
                 ls[k] = bool(v)
         return ls
+
+    def entity_ls(self) -> List[str]:
+        return self.entities
 
     def cert_ls(self, show_details: bool = True) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
 
@@ -312,6 +318,7 @@ class CertKeyStore():
     def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
         ls: Dict[str, Any] = {}
         for k, v in self.known_keys.items():
+            # TODO: filterout the cephadm root key
             if k in self.host_key or k in self.service_name_key:
                 tmp: Dict[str, Any] = {key: True for key in v if v[key]}
                 ls[k] = tmp if tmp else False
