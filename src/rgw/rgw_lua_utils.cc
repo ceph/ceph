@@ -136,12 +136,21 @@ lua_State* newstate(int max_memory) {
 }
 
 // lua_state_guard ctor
-lua_state_guard::lua_state_guard(std::size_t  _max_memory, const DoutPrefixProvider* _dpp) :
-  max_memory(_max_memory),
-  dpp(_dpp),
-  state(newstate(_max_memory)) {
-  if (state &&  perfcounter) {
-    perfcounter->inc(l_rgw_lua_current_vms, 1);
+lua_state_guard::lua_state_guard(std::size_t _max_memory,
+                                 std::chrono::milliseconds _max_runtime,
+                                 const DoutPrefixProvider* _dpp)
+    : max_memory(_max_memory),
+      max_runtime(_max_runtime),
+      start_time(ceph::real_clock::now()),
+      dpp(_dpp),
+      state(newstate(_max_memory)) {
+  if (state) {
+    if (max_runtime > std::chrono::milliseconds(0)) {
+      set_runtime_hook();
+    }
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_lua_current_vms, 1);
+    }
   }
 }
 
@@ -175,6 +184,35 @@ lua_state_guard::~lua_state_guard() {
   if (perfcounter) {
     perfcounter->dec(l_rgw_lua_current_vms, 1);
   }
+}
+
+void lua_state_guard::runtime_hook(lua_State* L, lua_Debug* ar) {
+  auto now = ceph::real_clock::now();
+  lua_getfield(L, LUA_REGISTRYINDEX, "runtimeguard_max_runtime");
+  auto max_runtime =
+      *static_cast<std::chrono::milliseconds*>(lua_touserdata(L, -1));
+  lua_getfield(L, LUA_REGISTRYINDEX, "runtimeguard_start_time");
+  auto start_time =
+      *static_cast<ceph::real_clock::time_point*>(lua_touserdata(L, -1));
+  lua_pop(L, 2);
+  auto elapsed =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+
+  if (elapsed > max_runtime) {
+    luaL_error(L, "Lua runtime limit exceeded");
+  }
+}
+
+void lua_state_guard::set_runtime_hook() {
+  lua_pushlightuserdata(state,
+                        const_cast<std::chrono::milliseconds*>(&max_runtime));
+  lua_setfield(state, LUA_REGISTRYINDEX, "runtimeguard_max_runtime");
+  lua_pushlightuserdata(state,
+                        const_cast<ceph::real_clock::time_point*>(&start_time));
+  lua_setfield(state, LUA_REGISTRYINDEX, "runtimeguard_start_time");
+
+  // Check runtime after each line or every 1000 VM instructions
+  lua_sethook(state, runtime_hook, LUA_MASKLINE | LUA_MASKCOUNT, 1000);
 }
 
 } // namespace rgw::lua
