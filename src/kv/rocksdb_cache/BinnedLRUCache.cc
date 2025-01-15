@@ -131,7 +131,7 @@ bool BinnedLRUCacheShard::Unref(BinnedLRUHandle* e) {
 // Call deleter and free
 
 void BinnedLRUCacheShard::EraseUnRefEntries() {
-  ceph::autovector<BinnedLRUHandle*> last_reference_list;
+  BinnedLRUHandle* deleted = nullptr;
   {
     std::lock_guard<std::mutex> l(mutex_);
     while (lru_.next != &lru_) {
@@ -144,13 +144,13 @@ void BinnedLRUCacheShard::EraseUnRefEntries() {
       old->SetInCache(false);
       Unref(old);
       usage_ -= old->charge;
-      last_reference_list.push_back(old);
+      ceph_assert(!old->next);
+      old->next = deleted;
+      deleted = old;
     }
   }
 
-  for (auto entry : last_reference_list) {
-    entry->Free();
-  }
+  FreeDeleted(deleted);
 }
 
 void BinnedLRUCacheShard::ApplyToAllCacheEntries(
@@ -270,7 +270,7 @@ void BinnedLRUCacheShard::MaintainPoolSize() {
 }
 
 void BinnedLRUCacheShard::EvictFromLRU(size_t charge,
-                                 ceph::autovector<BinnedLRUHandle*>* deleted) {
+                                 BinnedLRUHandle*& deleted) {
   while (usage_ + charge > capacity_ && lru_.next != &lru_) {
     BinnedLRUHandle* old = lru_.next;
     ceph_assert(old->InCache());
@@ -280,23 +280,23 @@ void BinnedLRUCacheShard::EvictFromLRU(size_t charge,
     old->SetInCache(false);
     Unref(old);
     usage_ -= old->charge;
-    deleted->push_back(old);
+    ceph_assert(!old->next);
+    old->next = deleted;
+    deleted = old;
   }
 }
 
 void BinnedLRUCacheShard::SetCapacity(size_t capacity) {
-  ceph::autovector<BinnedLRUHandle*> last_reference_list;
+  BinnedLRUHandle* deleted = nullptr;
   {
     std::lock_guard<std::mutex> l(mutex_);
     capacity_ = capacity;
     high_pri_pool_capacity_ = capacity_ * high_pri_pool_ratio_;
-    EvictFromLRU(0, &last_reference_list);
+    EvictFromLRU(0, deleted);
   }
   // we free the entries here outside of mutex for
   // performance reasons
-  for (auto entry : last_reference_list) {
-    entry->Free();
-  }
+  FreeDeleted(deleted);
 }
 
 void BinnedLRUCacheShard::SetStrictCapacityLimit(bool strict_capacity_limit) {
@@ -379,7 +379,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
                              rocksdb::Cache::Handle** handle, rocksdb::Cache::Priority priority) {
   auto e = new BinnedLRUHandle();
   rocksdb::Status s;
-  ceph::autovector<BinnedLRUHandle*> last_reference_list;
+  BinnedLRUHandle* deleted = nullptr;
 
   e->value = value;
   e->deleter = deleter;
@@ -400,14 +400,16 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
     std::lock_guard<std::mutex> l(mutex_);
     // Free the space following strict LRU policy until enough space
     // is freed or the lru list is empty
-    EvictFromLRU(charge, &last_reference_list);
+    EvictFromLRU(charge, deleted);
 
     if (usage_ - lru_usage_ + charge > capacity_ &&
         (strict_capacity_limit_ || handle == nullptr)) {
       if (handle == nullptr) {
         // Don't insert the entry but still return ok, as if the entry inserted
         // into cache and get evicted immediately.
-        last_reference_list.push_back(e);
+        ceph_assert(!e->next);
+        e->next = deleted;
+        deleted = e;
       } else {
         delete e;
         *handle = nullptr;
@@ -426,7 +428,9 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
           // old is on LRU because it's in cache and its reference count
           // was just 1 (Unref returned 0)
           LRU_Remove(old);
-          last_reference_list.push_back(old);
+          ceph_assert(!old->next);
+          old->next = deleted;
+          deleted = old;
         }
       }
       if (handle == nullptr) {
@@ -440,9 +444,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
 
   // we free the entries here outside of mutex for
   // performance reasons
-  for (auto entry : last_reference_list) {
-    entry->Free();
-  }
+  FreeDeleted(deleted);
 
   return s;
 }
