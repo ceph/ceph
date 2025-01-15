@@ -189,6 +189,11 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   }
   encode_json("type", user_source_type, f);
   encode_json("mfa_ids", info.mfa_ids, f);
+  encode_json("account_id", info.account_id, f);
+  encode_json("path", info.path, f);
+  encode_json("create_date", info.create_date, f);
+  encode_json("tags", info.tags, f);
+  encode_json("group_ids", info.group_ids, f);
   if (stats) {
     encode_json("stats", *stats, f);
   }
