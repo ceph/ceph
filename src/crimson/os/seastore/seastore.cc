@@ -1942,6 +1942,22 @@ SeaStore::Shard::_do_transaction_step(
         DEBUGT("op SETALLOCHINT, oid={}, not implemented",
                *ctx.transaction, oid);
         // TODO
+	if (op->hint & CEPH_OSD_ALLOC_HINT_FLAG_LOG) {
+	  OnodeRef &onode = onodes[op->oid];
+	  const auto &log_root = onode->get_layout().log_root.get(
+	    onode->get_metadata_hint(device->get_block_size()));
+	  const auto &omap_root = onode->get_layout().omap_root.get(
+	    onode->get_metadata_hint(device->get_block_size()));
+	  ceph_assert(log_root.is_null() && omap_root.is_null());
+	  return BtreeOMapManager(*transaction_manager).initialize_omap(
+	    *ctx.transaction, onode->get_metadata_hint(device->get_block_size()),
+	    log_root.get_type()
+	  ).si_then([&onode, &ctx](auto new_root) {
+	    if (new_root.must_update()) {
+	      onode->update_log_root(*ctx.transaction, new_root);
+	    }
+	  });
+	}
         return tm_iertr::now();
       }
       case Transaction::OP_CLONE:
