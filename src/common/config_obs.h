@@ -15,6 +15,7 @@
 #ifndef CEPH_CONFIG_OBS_H
 #define CEPH_CONFIG_OBS_H
 
+#include <optional>
 #include <set>
 #include <string>
 
@@ -31,17 +32,26 @@ template<class ConfigProxy>
 class md_config_obs_impl {
 public:
   virtual ~md_config_obs_impl() {}
+
   /** @brief Get a table of strings specifying the configuration keys in which the object is interested.
    * This is called when the object is subscribed to configuration changes with add_observer().
    * The returned table should not be freed until the observer is removed with remove_observer().
    * Note that it is not possible to change the set of tracked keys without re-subscribing. */
-  virtual const char** get_tracked_conf_keys() const = 0;
+  virtual const char** get_tracked_conf_keys() const {
+    return nullptr;
+  }
+
+  /**
+   * a leaner version of get_tracked_conf_keys() that returns a single key.
+   * If returns a valid string - get_tracked_conf_keys() will not be called.
+   */
+  virtual constexpr std::optional<std::string> get_tracked_conf_key() const noexcept {
+    return std::nullopt;
+  }
+
   /// React to a configuration change.
   virtual void handle_conf_change(const ConfigProxy& conf,
 				  const std::set <std::string> &changed) = 0;
-  /// Unused for now
-  virtual void handle_subsys_change(const ConfigProxy& conf,
-				    const std::set<int>& changed) { }
 };
 }
 

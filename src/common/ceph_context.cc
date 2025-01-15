@@ -120,9 +120,8 @@ public:
     }
   }
 
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {"lockdep", NULL};
-    return KEYS;
+  std::optional<std::string> get_tracked_conf_key() const noexcept override {
+    return "lockdep"s;
   }
 
   void handle_conf_change(const ConfigProxy& conf,
@@ -164,12 +163,9 @@ public:
   }
 
   // md_config_obs_t
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {
-      "mempool_debug",
-      NULL
-    };
-    return KEYS;
+  std::optional<std::string>
+            get_tracked_conf_key() const noexcept override {
+    return "mempool_debug"s;
   }
 
   void handle_conf_change(const ConfigProxy& conf,
