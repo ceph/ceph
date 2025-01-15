@@ -544,7 +544,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'snapshot_clone_no_wait',
             type='bool',
             default=True,
-            desc='Reject subvolume clone request when cloner threads are busy')
+            desc='Reject subvolume clone request when cloner threads are busy'),
+        Option(
+            'disable_clone_progress_bars',
+            type='bool',
+            default=False,
+            desc='Disable progress bars which are printed for ongoing and pending clones')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -554,6 +559,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.snapshot_clone_delay = None
         self.periodic_async_work = False
         self.snapshot_clone_no_wait = None
+        self.disable_clone_progress_bars = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -590,6 +596,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.purge_queue.unset_wakeup_timeout()
                     elif opt['name'] == "snapshot_clone_no_wait":
                         self.vc.cloner.reconfigure_reject_clones(self.snapshot_clone_no_wait)
+                    elif opt['name'] == "disable_clone_progress_bars":
+                        self.vc.cloner.reconfigure_disable_clone_progress_bars(self.disable_clone_progress_bars)
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
