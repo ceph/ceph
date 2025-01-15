@@ -73,9 +73,14 @@ import {
   CodeSnippetModule,
   InputModule,
   CheckboxModule,
-  TreeviewModule
+  TreeviewModule,
+  SelectModule,
+  NumberModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
+import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
+import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
 
 @NgModule({
   imports: [
@@ -103,7 +108,9 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     IconModule,
     NgbProgressbar,
     InputModule,
-    CheckboxModule
+    CheckboxModule,
+    SelectModule,
+    NumberModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -154,7 +161,10 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RgwMultisiteSyncPolicyDetailsComponent,
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
-    RgwMultisiteTabsComponent
+    RgwMultisiteTabsComponent,
+    RgwUserAccountsComponent,
+    RgwUserAccountsFormComponent,
+    RgwUserAccountsDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -185,6 +195,23 @@ const routes: Routes = [
     ]
   },
   {
+    path: 'accounts',
+    data: { breadcrumbs: 'Accounts' },
+    children: [
+      { path: '', component: RgwUserAccountsComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:id`,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
     path: 'roles',
     data: {
       breadcrumbs: 'Roles',
@@ -193,6 +220,10 @@ const routes: Routes = [
         {
           name: 'Users',
           url: '/rgw/user'
+        },
+        {
+          name: 'Accounts',
+          url: '/rgw/accounts'
         },
         {
           name: 'Roles',
