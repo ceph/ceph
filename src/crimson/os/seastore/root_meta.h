@@ -3,22 +3,22 @@
 
 #pragma once
 
-#include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
-struct RootMetaBlock : LogicalCachedExtent {
+struct RootMetaBlock : LogicalChildNode {
   using meta_t = std::map<std::string, std::string>;
   using Ref = TCachedExtentRef<RootMetaBlock>;
   static constexpr size_t SIZE = 4096;
   static constexpr int MAX_META_LENGTH = 1024;
 
   explicit RootMetaBlock(ceph::bufferptr &&ptr)
-    : LogicalCachedExtent(std::move(ptr)) {}
+    : LogicalChildNode(std::move(ptr)) {}
   explicit RootMetaBlock(extent_len_t length)
-    : LogicalCachedExtent(length) {}
+    : LogicalChildNode(length) {}
   RootMetaBlock(const RootMetaBlock &rhs)
-    : LogicalCachedExtent(rhs) {}
+    : LogicalChildNode(rhs) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new RootMetaBlock(*this));

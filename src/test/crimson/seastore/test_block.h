@@ -6,6 +6,7 @@
 #include <random>
 
 #include "crimson/os/seastore/transaction_manager.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -43,7 +44,7 @@ inline std::ostream &operator<<(
 	     << ", checksum=0x" << rhs.checksum << std::dec << ")";
 }
 
-struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
+struct TestBlock : crimson::os::seastore::LogicalChildNode {
   constexpr static extent_len_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlock>;
 
@@ -52,11 +53,11 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   interval_set<extent_len_t> modified_region;
 
   explicit TestBlock(ceph::bufferptr &&ptr)
-    : LogicalCachedExtent(std::move(ptr)) {}
+    : LogicalChildNode(std::move(ptr)) {}
   explicit TestBlock(extent_len_t length)
-    : LogicalCachedExtent(length) {}
+    : LogicalChildNode(length) {}
   TestBlock(const TestBlock &other)
-    : LogicalCachedExtent(other), modified_region(other.modified_region) {}
+    : LogicalChildNode(other), modified_region(other.modified_region) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));

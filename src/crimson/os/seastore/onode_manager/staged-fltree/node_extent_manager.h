@@ -21,8 +21,7 @@
 
 namespace crimson::os::seastore::onode {
 
-using crimson::os::seastore::LogicalCachedExtent;
-class NodeExtent : public LogicalCachedExtent {
+class NodeExtent : public LogicalChildNode {
  public:
   virtual ~NodeExtent() = default;
   const node_header_t& get_header() const {
@@ -41,7 +40,7 @@ class NodeExtent : public LogicalCachedExtent {
 
  protected:
   template <typename... T>
-  NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
+  NodeExtent(T&&... t) : LogicalChildNode(std::forward<T>(t)...) {}
 
   NodeExtentMutable do_get_mutable() {
     return NodeExtentMutable(get_bptr().c_str(), get_length());

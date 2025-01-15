@@ -18,6 +18,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/linked_tree_node.h"
 
 namespace crimson::os::seastore::backref {
 class BtreeBackrefManager;
@@ -25,15 +26,6 @@ class BtreeBackrefManager;
 
 namespace crimson::os::seastore {
 
-template <
-  typename node_key_t,
-  typename node_val_t,
-  typename internal_node_t,
-  typename leaf_node_t,
-  typename pin_t,
-  size_t node_size,
-  bool leaf_has_children>
-class FixedKVBtree;
 class BackrefManager;
 class SegmentProvider;
 
@@ -1983,5 +1975,21 @@ private:
   }
 };
 using CacheRef = std::unique_ptr<Cache>;
+
+class CacheProxyImpl final : public CacheProxy {
+public:
+  CacheProxyImpl(Cache &cache) : cache(cache) {}
+  void account_absent_access(Transaction &t) final;
+  bool is_viewable_extent_data_stable(
+    Transaction &t, CachedExtent *extent) final;
+  bool is_viewable_extent_stable(
+    Transaction &t, CachedExtent *extent) final;
+protected:
+  get_child_iertr::future<CachedExtentRef> _get_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent) final;
+private:
+  Cache &cache;
+};
 
 }
