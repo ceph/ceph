@@ -196,9 +196,6 @@
   $ rbd bench --io-type write
   rbd: image name was not specified
   [22]
-  $ rbd mirror pool enable rbd
-  rbd: must specify 'image' or 'pool' mode.
-  [22]
   $ rbd mirror pool peer add rbd
   rbd: remote cluster was not specified
   [22]

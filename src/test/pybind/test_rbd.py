@@ -29,8 +29,9 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_FAST_DIFF,
                  RBD_FEATURE_OBJECT_MAP,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
-                 RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
-                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                 RBD_MIRROR_MODE_POOL, RBD_MIRROR_MODE_CONFIG,
+                 RBD_MIRROR_IMAGE_ENABLED, RBD_MIRROR_IMAGE_DISABLED,
+                 MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_OPERATION_FEATURE_CLONE_CHILD,
@@ -2394,20 +2395,22 @@ class TestMirroring(object):
 
     def test_mirror_remote_namespace(self):
         remote_namespace = "remote-ns"
-        # cannot set remote namespace for the default namespace
-        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
-                      ioctx, remote_namespace)
         eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        # set remote namespace for the default namespace
+        self.rbd.mirror_remote_namespace_set(ioctx, remote_namespace)
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
         self.rbd.namespace_create(ioctx, "ns1")
         ioctx.set_namespace("ns1")
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
         # cannot set remote namespace while mirroring enabled
         assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
                       ioctx, remote_namespace)
+        assert_raises(InvalidArgument, self.rbd.mirror_mode_set,
+                      ioctx, RBD_MIRROR_MODE_CONFIG)
         self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
-        # cannot set remote namespace to the default namespace
-        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
-                      ioctx, "")
+        # set remote namespace to the default namespace
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
         self.rbd.mirror_remote_namespace_set(ioctx, remote_namespace)
         eq(remote_namespace, self.rbd.mirror_remote_namespace_get(ioctx))
         ioctx.set_namespace("")
