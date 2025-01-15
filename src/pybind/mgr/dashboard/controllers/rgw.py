@@ -15,7 +15,7 @@ from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
-    RgwClient, RgwMultisite, RgwMultisiteAutomation
+    RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwTopicmanagement
 from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
@@ -1297,4 +1297,35 @@ class RgwZone(RESTController):
     def get_user_list(self, zoneName=None):
         multisite_instance = RgwMultisite()
         result = multisite_instance.get_user_list(zoneName)
+        return result
+
+
+@APIRouter('/rgw/topic', Scope.RGW)
+class RgwTopic(RESTController):
+
+    def create(self, daemon_name=None, owner=None,
+               topic_name: str = '', push_endpoint: Optional[str] = None,
+               OpaqueData: Optional[str] = None, persistent: Optional[bool] = None,
+               time_to_live: Optional[str] = None, max_retries: Optional[str] = None,
+               retry_sleep_duration: Optional[str] = None, Policy: Optional[str] = None):
+        rgw_topic_instance = RgwClient.instance(owner, daemon_name=daemon_name)
+        return rgw_topic_instance.create_topic(topic_name=topic_name, push_endpoint=push_endpoint,
+                                               OpaqueData=OpaqueData, persistent=persistent,
+                                               time_to_live=time_to_live, max_retries=max_retries,
+                                               retry_sleep_duration=retry_sleep_duration,
+                                               Policy=Policy)
+
+    def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
+        rgw_topic_instance = RgwTopicmanagement()
+        result = rgw_topic_instance.list_topics(uid, tenant)
+        return result
+
+    def get(self, topic_name: str, tenant: Optional[str] = None):
+        rgw_topic_instance = RgwTopicmanagement()
+        result = rgw_topic_instance.get_topic(topic_name, tenant)
+        return result
+
+    def delete(self, topic_name: str = '', tenant: Optional[str] = None):
+        rgw_topic_instance = RgwTopicmanagement()
+        result = rgw_topic_instance.delete_topic(topic_name=topic_name, tenant=tenant)
         return result
