@@ -334,6 +334,13 @@ class NvmeofThrasher(Thrasher, Greenlet):
     def stop(self):
         self.stopping.set()
 
+    def stop_and_join(self):
+        """
+        Stop the thrashing process and join the thread.
+        """
+        self.stop()
+        return self.join()
+
     def do_checks(self):
         """
         Run some checks to see if everything is running well during thrashing.
@@ -342,10 +349,11 @@ class NvmeofThrasher(Thrasher, Greenlet):
         for d in self.daemons:
             d.remote.sh(d.status_cmd, check_status=False)
         check_cmd = [
-            'ceph', 'orch', 'ls',
-            run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof',
+            'ceph', 'orch', 'ls', '--refresh',
+            run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh',
             run.Raw('&&'), 'ceph', 'health', 'detail',
             run.Raw('&&'), 'ceph', '-s',
+            run.Raw('&&'), 'ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0',
             run.Raw('&&'), 'sudo', 'nvme', 'list',
         ]
         for dev in self.devices:
@@ -390,7 +398,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 d_name
             ], check_status=False)
         elif chosen_method == "systemctl_stop":
-            daemon.stop()
+            # To bypass is_started logic of CephadmUnit
+            daemon.remote.sh(daemon.stop_cmd, check_status=False)
         elif chosen_method == "daemon_remove":
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "rm",
@@ -399,14 +408,24 @@ class NvmeofThrasher(Thrasher, Greenlet):
         return chosen_method
 
     def revive_daemon(self, daemon, killed_method):
+        name = '%s.%s' % (daemon.type_, daemon.id_)
         if killed_method == "ceph_daemon_stop":
-            name = '%s.%s' % (daemon.type_, daemon.id_)
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "restart",
                 name
             ])
+        # note: temporarily use 'daemon start' to restart
+        # daemons instead of 'systemctl start'
         elif killed_method == "systemctl_stop":
-            daemon.restart() 
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "start",
+                name
+            ])
+        else:
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "start",
+                name
+            ])
 
     def do_thrash(self):
         self.log('start thrashing')
