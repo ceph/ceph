@@ -7,9 +7,13 @@
     identifier="id"
     forceIdentifier="true"
     selectionType="single"
-    [hasDetails]="false"
+    [hasDetails]="true"
     (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadSMBCluster($event)"
   >
+    <cd-smb-cluster-tabs
+      *cdTableDetail
+      [selection]="expandedRow">
+    </cd-smb-cluster-tabs>
   </cd-table>
 </ng-container>
