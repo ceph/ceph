@@ -559,6 +559,11 @@ public:
   pg_shard_t get_primary() const {
     return peering_state.get_primary();
   }
+  void update_peer_last_complete_ondisk(
+    pg_shard_t fromosd,
+    eversion_t lcod) {
+    peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
+  }
 
   /// initialize created PG
   seastar::future<> init(
