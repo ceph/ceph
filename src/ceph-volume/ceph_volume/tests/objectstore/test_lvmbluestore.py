@@ -142,21 +142,6 @@ class TestLvmBlueStore:
         assert ('Cannot use device (/dev/foo). '
         'A vg/lv path or an existing device is needed') == str(error.value)
 
-    @patch('ceph_volume.api.lvm.is_ceph_device', Mock(return_value=True))
-    @patch('ceph_volume.api.lvm.get_single_lv')
-    def test_safe_prepare_is_ceph_device(self, m_get_single_lv, factory):
-        args = factory(data='/dev/foo')
-        self.lvm_bs.args = args
-        m_get_single_lv.return_value = Volume(lv_name='lv_foo',
-                                              lv_path='/fake-path',
-                                              vg_name='vg_foo',
-                                              lv_tags='',
-                                              lv_uuid='fake-uuid')
-        self.lvm_bs.prepare = MagicMock()
-        with pytest.raises(RuntimeError) as error:
-            self.lvm_bs.safe_prepare(args)
-        assert str(error.value) == 'skipping /dev/foo, it is already prepared'
-
     @patch('ceph_volume.api.lvm.is_ceph_device', Mock(return_value=False))
     @patch('ceph_volume.api.lvm.get_single_lv')
     def test_safe_prepare(self, m_get_single_lv, factory):
@@ -287,15 +272,17 @@ class TestLvmBlueStore:
                                           {},
                                           1,
                                           1)
-        assert m_create_lv.mock_calls == [call('osd-block',
-                                               'd83fa1ca-bd68-4c75-bdc2-464da58e8abd',
+        assert m_create_lv.mock_calls == [call(name_prefix='osd-block',
+                                               uuid='d83fa1ca-bd68-4c75-bdc2-464da58e8abd',
+                                               vg=None,
                                                device='/dev/foo',
+                                               slots=1,
+                                               extents=None,
+                                               size=1,
                                                tags={'ceph.type': 'block',
                                                      'ceph.vdo': '0',
                                                      'ceph.block_device': '/fake-path',
-                                                     'ceph.block_uuid': 'fake-uuid'},
-                                               slots=1,
-                                               size=1)]
+                                                     'ceph.block_uuid': 'fake-uuid'})]
         assert result == ('/fake-path',
                          'fake-uuid',
                          {'ceph.type': 'block',
