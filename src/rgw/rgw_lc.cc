@@ -2121,14 +2121,25 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 
 static inline bool allow_shard_rollover(CephContext* cct, time_t now, time_t shard_rollover_date)
 {
-  /* return true iff:
+  /* return true if:
    *    - non-debug scheduling is in effect, and
-   *    - the current shard has not rolled over in the last 24 hours
+   *    - the current shard has not rolled over since midnight
    */
-  if (((shard_rollover_date < now) &&
-       (now - shard_rollover_date > secs_in_a_day)) ||
-      (! shard_rollover_date /* no rollover date stored */) ||
+  if ((! shard_rollover_date /* no rollover date stored */) ||
       (cct->_conf->rgw_lc_debug_interval > 0 /* defaults to -1 == disabled */)) {
+    return true;
+  }
+
+  struct tm bdt;
+  time_t shard_rollover_begin_of_date;
+  localtime_r(&shard_rollover_date, &bdt);
+  bdt.tm_hour = 0;
+  bdt.tm_min = 0;
+  bdt.tm_sec = 0;
+  shard_rollover_begin_of_date = mktime(&bdt);
+
+  if ((shard_rollover_date < now) &&
+      (now - shard_rollover_begin_of_date > secs_in_a_day)) {
     return true;
   }
   return false;
