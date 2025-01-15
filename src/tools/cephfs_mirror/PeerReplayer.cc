@@ -1481,19 +1481,19 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       if ("." == nname || ".." == nname)
         continue;
       // create path for the newly found entry
-      npath = entry_diff_path(epath, nname);
-      nabs_path = entry_diff_path(dir_root, npath);
+      npath = entry_path(epath, nname);
 
-      r = ceph_statx(sd_info.cmount, nabs_path.c_str(), &cstx,
-                     CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
-                     CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                     AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+      r = ceph_statxat(m_local_mount, fh.c_fd, npath.c_str(), &cstx,
+                       CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
+                           CEPH_STATX_SIZE | CEPH_STATX_ATIME |
+                           CEPH_STATX_MTIME,
+                       AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
       if (r < 0) {
         // can't stat, so it's a deleted entry.
         if (DT_DIR == sd_entry.dir_entry.d_type) { // is a directory
           r = cleanup_remote_dir(dir_root, npath, fh);
           if (r < 0) {
-            derr << ": failed to remove directory=" << nabs_path << dendl;
+            derr << ": failed to remove directory=" << npath << dendl;
             break;
           }
         }
@@ -1506,17 +1506,18 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       } else {
         // stat success, update the existing entry
         struct ceph_statx tstx;
-        int rstat_r = ceph_statx(m_remote_mount, nabs_path.c_str(), &tstx,
-                                 CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
-                                 CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                                 AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+        int rstat_r = ceph_statxat(
+            m_remote_mount, fh.r_fd_dir_root, npath.c_str(), &tstx,
+            CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
+                CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
+            AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
         if (S_ISDIR(cstx.stx_mode)) { // is a directory
           //cleanup if it's a file in the remotefs
           if ((0 == rstat_r) && !S_ISDIR(tstx.stx_mode)) {
             r = ceph_unlinkat(m_remote_mount, fh.r_fd_dir_root, npath.c_str(), 0);
             if (r < 0) {
               derr << ": Error in directory sync. Failed to remove file="
-                   << nabs_path << dendl;
+                   << npath << dendl;
               break;
             }
           }
@@ -1541,7 +1542,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
               r = cleanup_remote_dir(dir_root, npath, fh);
               if (r < 0) {
                 derr << ": Error in file sync. Failed to remove remote directory="
-                     << nabs_path << dendl;
+                     << npath << dendl;
                 break;
               }
             }
