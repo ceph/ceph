@@ -1345,6 +1345,58 @@ class RgwMultisiteAutomation:
             logger.info("User %s not found yet, retrying in 5 seconds", username)
             time.sleep(5)
 
+class RgwRateLimit:
+    def get_global_rateLimit(self):
+        rate_limit_cmd = ['global', 'ratelimit', 'get']
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rate_limit_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to get rate limit: {err}',
+                                            http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_rateLimit(self, scope: str, name: str ):
+        rate_limit_cmd = ['ratelimit', 'get', '--ratelimit-scope', scope]
+        if scope=='user':
+            rate_limit_cmd.extend(['--uid', name])
+        if scope=='bucket':
+             rate_limit_cmd.extend(['--bucket', name])
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rate_limit_cmd)
+            if exit_code > 0:
+                raise DashboardException(f'Unable to get rate limit: {err}',
+                                            http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def set_rateLimit(self,scope:str,enabled,name, max_read_ops, max_write_ops,max_read_bytes,max_write_bytes):
+        rgw_rate_limit_cmd = ['ratelimit', 'set', '--ratelimit-scope', scope,  '--max-read-ops', max_read_ops,'--max-write-ops', max_write_ops,'--max-write-bytes',max_write_bytes, '--max-read-bytes',max_read_bytes]
+
+        rgw_rate_limit_enable_cmd= ['ratelimit', 'enable' if enabled=='true' else 'disable' , '--ratelimit-scope', scope]
+
+        if scope =='user':
+            rgw_rate_limit_cmd.extend(['--uid', name])
+            rgw_rate_limit_enable_cmd.extend([ '--uid', name])
+
+        if scope=='bucket':
+            rgw_rate_limit_cmd.extend(['--bucket', name,])
+            rgw_rate_limit_enable_cmd.extend(['--bucket', name])
+        try:
+            if enabled=='true':
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_rate_limit_cmd)
+                if exit_code > 0:
+                    raise DashboardException(f'Unable to set rate limit: {err}',
+                                    http_status_code=500, component='rgw')
+            exit_code1, _, err = mgr.send_rgwadmin_command(rgw_rate_limit_enable_cmd)
+            if exit_code1 > 0:
+                raise DashboardException(f'Unable to enable rate limit: {err}',
+                http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
 
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
