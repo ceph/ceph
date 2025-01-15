@@ -1,9 +1,8 @@
 #pragma once
 
+#include <boost/program_options.hpp>
 #include <optional>
 #include <string>
-
-#include <boost/program_options.hpp>
 
 #include "include/ceph_assert.h"
 #include "include/random.h"
@@ -19,6 +18,12 @@
  *    select() function to convert the input type to the return type as well as
  *    implement how to calculate a default value if no input is given.
  *
+ * class OptionalProgramOptionReader
+ *   Redefinition of ProgramOptionalReader that returns the result as a
+ *   std::optional of the return type. Shorthand for specifying the above
+ *   with a second return type of optional<return_type> for
+ *   all optional implementations
+ *
  * ProgramOptionSelector
  *    Implementation of the above ProgramOptionReader.
  *    This is constructed with a list of options and implements the select
@@ -28,6 +33,13 @@
  *    list when select_first is true and no value is found in the variables_map.
  *    This takes an random_number_generator so that randomness can be controlled
  *    and reproduced if desired.
+ *
+ * ProgramOptionGeneratedSelector
+ *   A class for selecting an option from a list of options, similar to above.
+ *   This implements a pure virtual method generate_selections() which should be
+ *   overriden so generation code can be added to generate the selection list at
+ *   runtime, whereas ProgramOptionSelector relies on the list existing at
+ *   compile time.
  *
  */
 
@@ -58,6 +70,14 @@ class ProgramOptionReader {
   std::optional<option_type> force_value;
 
   std::string option_name;
+};
+
+template <typename option_type>
+class OptionalProgramOptionReader
+    : public ProgramOptionReader<option_type, std::optional<option_type>> {
+ public:
+  using ProgramOptionReader<option_type,
+                            std::optional<option_type>>::ProgramOptionReader;
 };
 
 template <typename option_type,
@@ -94,6 +114,54 @@ class ProgramOptionSelector : public ProgramOptionReader<option_type> {
 
   std::optional<option_type> first_value;
 };
-}  // namespace io_sequence
+
+template <typename option_type>
+class ProgramOptionGeneratedSelector
+    : public OptionalProgramOptionReader<option_type> {
+ public:
+  ProgramOptionGeneratedSelector(ceph::util::random_number_generator<int>& rng,
+                                 po::variables_map& vm,
+                                 const std::string& option_name,
+                                 bool first_use)
+      : OptionalProgramOptionReader<option_type>(vm, option_name),
+        rng(rng),
+        first_use(first_use) {}
+
+  const std::optional<option_type> select() final {
+    if (this->force_value.has_value())
+      return *this->force_value;
+    else if (first_use)
+      return selectFirst();
+    else
+      return selectRandom();
+  }
+
+ protected:
+  virtual const std::vector<option_type> generate_selections() = 0;
+  virtual const std::optional<option_type> selectFirst() {
+    first_use = false;
+    std::vector<option_type> selection = generate_selections();
+    if (selection.size() > 0)
+      return selection[0];
+    else
+      return std::nullopt;
+  }
+
+  virtual const std::optional<option_type> selectRandom() {
+    std::vector<option_type> selection = generate_selections();
+    if (selection.size() > 0)
+      return selection[rng(selection.size() - 1)];
+    else
+      return std::nullopt;
+  }
+
+  bool is_first_use() { return first_use; }
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  bool first_use;
+};
 }  // namespace tester
+}  // namespace io_sequence
 }  // namespace ceph

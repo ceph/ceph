@@ -1,5 +1,7 @@
+#include <boost/asio/io_context.hpp>
 #include <boost/program_options.hpp>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "ProgramOptionReader.h"
@@ -7,15 +9,11 @@
 #include "common/io_exerciser/IoSequence.h"
 #include "common/io_exerciser/Model.h"
 #include "common/split.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/random.h"
 #include "librados/librados_asio.h"
-
-#include <boost/asio/io_context.hpp>
-#include <boost/program_options.hpp>
-
-#include <optional>
 
 /* Overview
  *
@@ -37,9 +35,21 @@
  * class SelectErasurePlugin
  *   Selects an plugin for a test
  *
+ * class SelectErasurePacketSize
+ *   Selects a packetsize to be used by jerasure
+ *
+ * class SelectErasureC
+ *   Potentially selects a C value to be used for the shec plugin
+ *
+ * class SelectErasureW
+ *   Potentially selects a W value to be used for the jerasure plugin
+ *
  * class SelectErasurePool
  *   Selects an EC pool (plugin,k and m) for a test. Also creates the
  *   pool as well.
+ *
+ * class SelectErasureProfile
+ *   Selects an EC profile for a test. Will create one if no name is specified
  *
  * class SelectSeqRange
  *   Selects a sequence or range of sequences for a test
@@ -69,9 +79,10 @@
 namespace po = boost::program_options;
 
 namespace ceph {
+class ErasureCodePlugin;
+
 namespace io_sequence {
 namespace tester {
-// Choices for min and max object size
 // Choices for min and max object size
 inline static constexpr size_t objectSizeSize = 10;
 inline static constexpr std::array<std::pair<int, int>, objectSizeSize>
@@ -113,41 +124,6 @@ using SelectNumThreads =
                           io_sequence::tester ::threadArraySize,
                           io_sequence::tester ::threadCountChoices>;
 
-// Choices for EC k+m profile
-inline constexpr int kmSize = 6;
-inline constexpr std::array<std::pair<int, int>, kmSize> kmChoices = {
-    {{2, 2},  // Default - reasonable coverage
-     {2, 1},
-     {2, 3},
-     {3, 2},
-     {4, 2},
-     {5, 1}}};
-
-using SelectErasureKM =
-    ProgramOptionSelector<std::pair<int, int>,
-                          io_sequence::tester ::kmSize,
-                          io_sequence::tester::kmChoices>;
-
-// Choices for EC chunk size
-inline static constexpr int chunkSizeSize = 3;
-inline static constexpr std::array<uint64_t, chunkSizeSize> chunkSizeChoices = {
-    {4 * 1024, 64 * 1024, 256 * 1024}};
-
-using SelectErasureChunkSize =
-    ProgramOptionSelector<uint64_t,
-                          io_sequence::tester ::chunkSizeSize,
-                          io_sequence::tester::chunkSizeChoices>;
-
-// Choices for plugin
-inline static constexpr int pluginListSize = 2;
-inline static constexpr std::array<std::string_view, pluginListSize>
-    pluginChoices = {{"jerasure", "isa"}};
-
-using SelectErasurePlugin =
-    ProgramOptionSelector<std::string_view,
-                          io_sequence::tester ::pluginListSize,
-                          io_sequence::tester ::pluginChoices>;
-
 class SelectSeqRange
     : public ProgramOptionReader<std::pair<ceph::io_exerciser ::Sequence,
                                            ceph::io_exerciser ::Sequence>> {
@@ -157,10 +133,239 @@ class SelectSeqRange
   select() override;
 };
 
+// Choices for plugin
+inline static constexpr int pluginListSize = 5;
+inline static constexpr std::array<std::string_view, pluginListSize>
+    pluginChoices = {{"jerasure", "isa", "clay", "shec", "lrc"}};
+
+using SelectErasurePlugin =
+    ProgramOptionSelector<std::string_view,
+                          io_sequence::tester ::pluginListSize,
+                          io_sequence::tester ::pluginChoices>;
+
+class SelectErasureKM
+    : public ProgramOptionGeneratedSelector<std::pair<int, int>> {
+ public:
+  SelectErasureKM(ceph::util::random_number_generator<int>& rng,
+                  po::variables_map& vm,
+                  std::string_view plugin,
+                  const std::optional<std::string>& technique,
+                  bool first_use);
+
+  const std::vector<std::pair<int, int>> generate_selections() override;
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  std::string_view plugin;
+  std::optional<std::string> technique;
+};
+
+namespace shec {
+class SelectErasureC : public ProgramOptionGeneratedSelector<uint64_t> {
+ public:
+  SelectErasureC(ceph::util::random_number_generator<int>& rng,
+                 po::variables_map& vm,
+                 std::string_view plugin,
+                 const std::optional<std::pair<int, int>>& km,
+                 bool first_use);
+
+  const std::vector<uint64_t> generate_selections() override;
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  std::string_view plugin;
+  std::optional<std::pair<int, int>> km;
+};
+}  // namespace shec
+
+namespace jerasure {
+class SelectErasureW : public ProgramOptionGeneratedSelector<uint64_t> {
+ public:
+  SelectErasureW(ceph::util::random_number_generator<int>& rng,
+                 po::variables_map& vm,
+                 std::string_view plugin,
+                 const std::optional<std::string_view>& technique,
+                 const std::optional<std::pair<int, int>>& km,
+                 const std::optional<uint64_t>& packetsize,
+                 bool first_use);
+
+  const std::vector<uint64_t> generate_selections() override;
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  std::string_view plugin;
+  std::optional<std::string_view> technique;
+  std::optional<std::pair<int, int>> km;
+  std::optional<uint64_t> packetsize;
+};
+
+class SelectErasurePacketSize
+    : public ProgramOptionGeneratedSelector<uint64_t> {
+ public:
+  SelectErasurePacketSize(ceph::util::random_number_generator<int>& rng,
+                          po::variables_map& vm,
+                          std::string_view plugin,
+                          const std::optional<std::string_view>& technique,
+                          const std::optional<std::pair<int, int>>& km,
+                          bool first_use);
+
+  const std::vector<uint64_t> generate_selections() override;
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  std::string_view plugin;
+  std::optional<std::string_view> technique;
+  std::optional<std::pair<int, int>> km;
+};
+}  // namespace jerasure
+
+namespace lrc {
+// Choices for lrc mappings and layers. The index selected for the mapping
+// matches what index will be chosen from the layers array.
+inline static constexpr int mappingLayerListSizes = 15;
+
+inline static std::array<std::string, mappingLayerListSizes> mappingChoices = {{
+    "_DD",
+    "_DDD",
+    "_DDDD",
+    "_DDDDD",
+    "_DDDDDD",
+    "_D_D",
+    "_D_DD",
+    "_D_DDD",
+    "_D_DDDD",
+    "_D_DDDDD",
+    "_D_D_",
+    "_D_D_D",
+    "_D_D_DD",
+    "_D_D_DDD",
+    "_D_D_DDDD",
+}};
+
+inline static std::array<std::string, mappingLayerListSizes> layerChoices = {{
+    "[[\"cDD\",\"\"]]",
+    "[[\"cDDD\",\"\"]]",
+    "[[\"cDDDD\",\"\"]]",
+    "[[\"cDDDDD\",\"\"]]",
+    "[[\"cDDDDDD\",\"\"]]",
+    "[[\"cDcD\",\"\"]]",
+    "[[\"cDcDD\",\"\"]]",
+    "[[\"cDcDDD\",\"\"]]",
+    "[[\"cDcDDDD\",\"\"]]",
+    "[[\"cDcDDDDD\",\"\"]]",
+    "[[\"cDcDc\",\"\"]]",
+    "[[\"cDcDcD\",\"\"]]",
+    "[[\"cDcDcDD\",\"\"]]",
+    "[[\"cDcDcDDD\",\"\"]]",
+    "[[\"cDcDcDDDD\",\"\"]]",
+}};
+
+using SelectMapping =
+    ProgramOptionSelector<std::string,
+                          io_sequence::tester::lrc::mappingLayerListSizes,
+                          io_sequence::tester::lrc::mappingChoices>;
+
+using SelectLayers =
+    ProgramOptionSelector<std::string,
+                          io_sequence::tester::lrc::mappingLayerListSizes,
+                          io_sequence::tester::lrc::layerChoices>;
+
+class SelectMappingAndLayers {
+ public:
+  SelectMappingAndLayers(ceph::util::random_number_generator<int>& rng,
+                         po::variables_map& vm,
+                         bool first_use);
+  const std::pair<std::string, std::string> select();
+
+ private:
+  uint64_t rng_seed;
+
+  ceph::util::random_number_generator<int> mapping_rng;
+  ceph::util::random_number_generator<int> layers_rng;
+
+  SelectMapping sma;
+  SelectLayers sly;
+};
+}  // namespace lrc
+
+class SelectErasureTechnique
+    : public ProgramOptionGeneratedSelector<std::string> {
+ public:
+  SelectErasureTechnique(ceph::util::random_number_generator<int>& rng,
+                         po::variables_map& vm,
+                         std::string_view plugin,
+                         bool first_use);
+
+  const std::vector<std::string> generate_selections() override;
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  std::string_view plugin;
+};
+
+class SelectErasureChunkSize : public ProgramOptionGeneratedSelector<uint64_t> {
+ public:
+  SelectErasureChunkSize(ceph::util::random_number_generator<int>& rng,
+                         po::variables_map& vm,
+                         ErasureCodeInterfaceRef ec_impl,
+                         bool first_use);
+  const std::vector<uint64_t> generate_selections() override;
+
+ private:
+  ceph::util::random_number_generator<int>& rng;
+
+  ErasureCodeInterfaceRef ec_impl;
+};
+
+struct Profile {
+  std::string name;
+  std::string_view plugin;
+  std::optional<std::string> technique;
+  std::optional<std::pair<int, int>> km;
+  std::optional<uint64_t> packet_size;
+  std::optional<int> c;
+  std::optional<int> w;
+  std::optional<std::string> mapping;
+  std::optional<std::string> layers;
+  std::optional<uint64_t> chunk_size;
+  std::optional<bool> jerasure_per_chunk_alignment;
+};
+
+class SelectErasureProfile : public ProgramOptionReader<Profile> {
+ public:
+  SelectErasureProfile(boost::intrusive_ptr<CephContext> cct,
+                       ceph::util::random_number_generator<int>& rng,
+                       po::variables_map& vm, librados::Rados& rados,
+                       bool dry_run, bool first_use);
+  const Profile select() override;
+  void create(const Profile& profile);
+  const Profile selectExistingProfile(const std::string& profile_name);
+
+ private:
+  boost::intrusive_ptr<CephContext> cct;
+  librados::Rados& rados;
+  bool dry_run;
+  ceph::util::random_number_generator<int>& rng;
+  po::variables_map& vm;
+
+  bool first_use;
+
+  SelectErasurePlugin spl;
+  lrc::SelectMappingAndLayers sml;
+
+  std::unique_ptr<ErasureCodePlugin> erasureCode;
+};
+
 class SelectErasurePool : public ProgramOptionReader<std::string> {
  public:
-  SelectErasurePool(ceph::util::random_number_generator<int>& rng,
-                    po::variables_map vm,
+  SelectErasurePool(boost::intrusive_ptr<CephContext> cct,
+                    ceph::util::random_number_generator<int>& rng,
+                    po::variables_map& vm,
                     librados::Rados& rados,
                     bool dry_run,
                     bool allow_pool_autoscaling,
@@ -169,35 +374,37 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
                     bool allow_pool_scrubbing,
                     bool test_recovery);
   const std::string select() override;
+  std::string create();
+  void configureServices(bool allow_pool_autoscaling,
+                         bool allow_pool_balancer,
+                         bool allow_pool_deep_scrubbing,
+                         bool allow_pool_scrubbing,
+                         bool test_recovery);
 
-  bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
-  bool get_allow_pool_balancer() { return allow_pool_balancer; }
-  bool get_allow_pool_deep_scrubbing() { return allow_pool_deep_scrubbing; }
-  bool get_allow_pool_scrubbing() { return allow_pool_scrubbing; }
-  int getChosenK() const { return k; }
-  int getChosenM() const { return m; }
+  inline bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
+  inline bool get_allow_pool_balancer() { return allow_pool_balancer; }
+  inline bool get_allow_pool_deep_scrubbing() {
+    return allow_pool_deep_scrubbing;
+  }
+  inline bool get_allow_pool_scrubbing() { return allow_pool_scrubbing; }
+
+  inline std::optional<Profile> getProfile() { return profile; }
 
  private:
-  void create_pool( librados::Rados& rados,
-                    const std::string& pool_name,
-                    const std::string& plugin,
-                    uint64_t chunk_size, int k,
-                    int m);
-
- protected:
   librados::Rados& rados;
   bool dry_run;
+
   bool allow_pool_autoscaling;
   bool allow_pool_balancer;
   bool allow_pool_deep_scrubbing;
   bool allow_pool_scrubbing;
   bool test_recovery;
-  int k;
-  int m;
 
-  SelectErasureKM skm;
-  SelectErasurePlugin spl;
-  SelectErasureChunkSize scs;
+  bool first_use;
+
+  SelectErasureProfile sep;
+
+  std::optional<Profile> profile;
 };
 
 class TestObject {
@@ -235,14 +442,17 @@ class TestObject {
   ceph::util::random_number_generator<int>& rng;
   bool verbose;
   std::optional<int> seqseed;
-  int poolK;
-  int poolM;
+  std::optional<std::pair<int, int>> poolKM;
+  std::optional<std::pair<std::string_view, std::string_view>>
+      poolMappingLayers;
   bool testrecovery;
 };
 
 class TestRunner {
  public:
-  TestRunner(po::variables_map& vm, librados::Rados& rados);
+  TestRunner(boost::intrusive_ptr<CephContext> cct,
+             po::variables_map& vm,
+             librados::Rados& rados);
   ~TestRunner();
 
   bool run_test();
