@@ -156,7 +156,7 @@ class MultiCluster(RESTController):
                 raise DashboardException(msg=f'The ceph cluster you are attempting to connect \
                                          to does not support the multi-cluster feature. \
                                          Please ensure that the cluster you are connecting \
-                                         to is upgraded to { hub_cluster_version } to enable the \
+                                         to is upgraded to {hub_cluster_version} to enable the \
                                          multi-cluster functionality.',
                                          code='invalid_version', component='multi-cluster')
             content = self._proxy('POST', url, 'api/auth', payload=payload,
