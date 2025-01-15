@@ -2815,6 +2815,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 
   if (shards) {
     layout.current_index.layout.normal.num_shards = *shards;
+    layout.current_index.layout.normal.min_num_shards = *shards;
   } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
     layout.current_index.layout.normal.num_shards =
       cct->_conf->rgw_override_bucket_index_max_shards;
