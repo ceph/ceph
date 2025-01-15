@@ -1,0 +1,15 @@
+<ng-container *ngIf="smbClusters$ | async as smbClusters">
+  <cd-table
+    #table
+    [data]="smbClusters"
+    columnMode="flex"
+    [columns]="columns"
+    identifier="id"
+    forceIdentifier="true"
+    selectionType="single"
+    [hasDetails]="false"
+    (setExpandedRow)="setExpandedRow($event)"
+    (fetchData)="loadSMBCluster($event)"
+  >
+  </cd-table>
+</ng-container>
