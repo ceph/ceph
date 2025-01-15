@@ -4690,7 +4690,9 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
+    //ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
+    if (g_conf()->mds_kill_after_journal_logs_flushed)
+      _exit(120);
 
     dn->pop_projected_linkage();
 
@@ -4709,7 +4711,9 @@ public:
 
     server->respond_to_request(mdr, 0);
 
-    ceph_assert(g_conf()->mds_kill_openc_at != 1);
+    //ceph_assert(g_conf()->mds_kill_openc_at != 1);
+    if (g_conf()->mds_kill_openc_at == 1)
+      _exit(120);
   }
 };
 
@@ -7047,7 +7051,9 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
+    //ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
+    if (g_conf()->mds_kill_after_journal_logs_flushed)
+      _exit(120);
 
     // link the inode
     dn->pop_projected_linkage();
@@ -7468,7 +7474,9 @@ void Server::handle_client_link(const MDRequestRef& mdr)
   }
 
   // go!
-  ceph_assert(g_conf()->mds_kill_link_at != 1);
+  //ceph_assert(g_conf()->mds_kill_link_at != 1);
+  if (g_conf()->mds_kill_link_at == 1)
+    _exit(120);
 
   // local or remote?
   if (targeti->is_auth()) 
@@ -7624,7 +7632,9 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   }
   dout(10) << " targeti auth has prepared nlink++/--" << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 2);
+  //ceph_assert(g_conf()->mds_kill_link_at != 2);
+  if (g_conf()->mds_kill_link_at == 2)
+    _exit(120);
 
   if (auto& desti_srnode = mdr->more()->desti_srnode) {
     delete desti_srnode;
@@ -7669,7 +7679,9 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
 	   << (inc ? "link ":"unlink ")
 	   << *dn << " to " << *targeti << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 3);
+  //ceph_assert(g_conf()->mds_kill_link_at != 3);
+  if (g_conf()->mds_kill_link_at == 3)
+    _exit(120);
 
   if (!mdr->more()->witnessed.empty())
     mdcache->logged_leader_update(mdr->reqid);
@@ -7739,7 +7751,9 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
 	   << " on " << mdr->peer_request->get_object_info()
 	   << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 4);
+  //ceph_assert(g_conf()->mds_kill_link_at != 4);
+  if (g_conf()->mds_kill_link_at == 4)
+    _exit(120);
 
   CInode *targeti = mdcache->get_inode(mdr->peer_request->get_object_info().ino);
   ceph_assert(targeti);
@@ -7753,7 +7767,9 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   mdr->auth_pin(targeti);
 
   //ceph_abort();  // test hack: make sure leader can handle a peer that fails to prepare...
-  ceph_assert(g_conf()->mds_kill_link_at != 5);
+  //ceph_assert(g_conf()->mds_kill_link_at != 5);
+  if (g_conf()->mds_kill_link_at == 5)
+    _exit(120);
 
   // journal it
   mdr->ls = mdlog->get_current_segment();
@@ -7840,7 +7856,9 @@ void Server::_logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool ad
   dout(10) << "_logged_peer_link " << *mdr
 	   << " " << *targeti << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 6);
+  //ceph_assert(g_conf()->mds_kill_link_at != 6);
+  if (g_conf()->mds_kill_link_at == 6)
+    _exit(120);
 
   // update the target
   mdr->apply();
@@ -7881,7 +7899,9 @@ void Server::_commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti)
 	   << " r=" << r
 	   << " " << *targeti << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 7);
+  //ceph_assert(g_conf()->mds_kill_link_at != 7);
+  if (g_conf()->mds_kill_link_at == 7)
+    _exit(120);
 
   if (r == 0) {
     // drop our pins, etc.
@@ -7901,7 +7921,9 @@ void Server::_committed_peer(const MDRequestRef& mdr)
 {
   dout(10) << "_committed_peer " << *mdr << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 8);
+  //ceph_assert(g_conf()->mds_kill_link_at != 8);
+  if (g_conf()->mds_kill_link_at == 8)
+    _exit(120);
 
   bool assert_exist = mdr->more()->peer_update_journaled;
   mdcache->finish_uncommitted_peer(mdr->reqid, assert_exist);
@@ -7933,7 +7955,9 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDReques
 	   << " ino " << rollback.ino
 	   << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 9);
+  //ceph_assert(g_conf()->mds_kill_link_at != 9);
+  if (g_conf()->mds_kill_link_at == 9)
+    _exit(120);
 
   mdcache->add_rollback(rollback.reqid, leader); // need to finish this update before resolve finishes
   ceph_assert(mdr || mds->is_resolve());
@@ -8006,7 +8030,9 @@ void Server::_link_rollback_finish(MutationRef& mut, const MDRequestRef& mdr,
 {
   dout(10) << "_link_rollback_finish" << dendl;
 
-  ceph_assert(g_conf()->mds_kill_link_at != 10);
+  //ceph_assert(g_conf()->mds_kill_link_at != 10);
+  if (g_conf()->mds_kill_link_at == 10)
+    _exit(120);
 
   mut->apply();
 
@@ -8028,7 +8054,9 @@ void Server::handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMD
 	   << " " << *m << dendl;
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
-  ceph_assert(g_conf()->mds_kill_link_at != 11);
+  //ceph_assert(g_conf()->mds_kill_link_at != 11);
+  if (g_conf()->mds_kill_link_at == 11)
+    _exit(120);
 
   // note peer
   mdr->more()->peers.insert(from);
@@ -9029,7 +9057,9 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     }
   }
 
-  ceph_assert(g_conf()->mds_kill_rename_at != 1);
+  //ceph_assert(g_conf()->mds_kill_rename_at != 1);
+  if (g_conf()->mds_kill_rename_at == 1)
+    _exit(120);
 
   // -- open all srcdn inode frags, if any --
   // we need these open so that auth can properly delegate from inode to dirfrags
@@ -9198,9 +9228,13 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
 
   // test hack: bail after peer does prepare, so we can verify it's _live_ rollback.
   if (!mdr->more()->peers.empty() && !srci->is_dir())
-    ceph_assert(g_conf()->mds_kill_rename_at != 3);
+    //ceph_assert(g_conf()->mds_kill_rename_at != 3);
+    if (g_conf()->mds_kill_rename_at == 3)
+      _exit(120);
   if (!mdr->more()->peers.empty() && srci->is_dir())
-    ceph_assert(g_conf()->mds_kill_rename_at != 4);
+    //ceph_assert(g_conf()->mds_kill_rename_at != 4);
+    if (g_conf()->mds_kill_rename_at == 4)
+      _exit(120);
 
   // -- declare now --
   mdr->set_mds_stamp(ceph_clock_now());
@@ -9250,9 +9284,13 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
 
   // test hack: test peer commit
   if (!mdr->more()->peers.empty() && !in->is_dir())
-    ceph_assert(g_conf()->mds_kill_rename_at != 5);
+    //ceph_assert(g_conf()->mds_kill_rename_at != 5);
+    if (g_conf()->mds_kill_rename_at == 5)
+      _exit(120);
   if (!mdr->more()->peers.empty() && in->is_dir())
-    ceph_assert(g_conf()->mds_kill_rename_at != 6);
+    //ceph_assert(g_conf()->mds_kill_rename_at != 6);
+    if (g_conf()->mds_kill_rename_at == 6)
+      _exit(120);
   
   // bump popularity
   mds->balancer->hit_dir(srcdn->get_dir(), META_POP_IWR);
@@ -9261,7 +9299,9 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
 
-  ceph_assert(g_conf()->mds_kill_rename_at != 7);
+  //ceph_assert(g_conf()->mds_kill_rename_at != 7);
+  if (g_conf()->mds_kill_rename_at == 7)
+    _exit(120);
 
   // reply
   respond_to_request(mdr, 0);
