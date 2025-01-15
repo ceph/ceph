@@ -12,6 +12,7 @@ from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
     RESTController, UIRouter
+from ..services.nvmeof_cli import NvmeofCLICommand
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ else:
     @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
     class NVMeoFGateway(RESTController):
         @EndpointDoc("Get information about the NVMeoF gateway")
+        @NvmeofCLICommand("nvmeof gw info")
         @map_model(model.GatewayInfo)
         @handle_nvmeof_error
         def list(self, gw_group: Optional[str] = None):
