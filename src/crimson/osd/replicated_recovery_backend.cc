@@ -962,10 +962,10 @@ ReplicatedRecoveryBackend::handle_pull_response(
   DEBUGDPP("submitting transaction", pg);
   co_await interruptor::make_interruptible(
     shard_services.get_store().do_transaction(coll, std::move(t)));
-  pg.get_recovery_handler()->_committed_pushed_object(
-    epoch_frozen, pg.get_info().last_complete);
 
   if (complete) {
+    pg.get_recovery_handler()->_committed_pushed_object(
+      epoch_frozen, pg.get_info().last_complete);
     get_recovering(push_op.soid).set_pulled();
   } else {
     auto reply = crimson::make_message<MOSDPGPull>();
