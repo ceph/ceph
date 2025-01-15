@@ -789,7 +789,10 @@ int execute(
     RGWOp* op,
     const std::string& script)
 {
-  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state, s);
+  std::chrono::milliseconds runtime_limit(
+      s->cct->_conf->rgw_lua_max_runtime_per_state);
+  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
+                         runtime_limit, s);
   auto L = lguard.get();
   if (!L) {
     ldpp_dout(s, 1) << "Failed to create state for Lua request context" << dendl;
