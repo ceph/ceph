@@ -417,7 +417,7 @@ TEST(ErasureCodeLrc, layers_init)
     EXPECT_EQ(0, lrc.layers_init(&cerr));
     EXPECT_EQ("5", lrc.layers.front().profile["k"]);
     EXPECT_EQ("2", lrc.layers.front().profile["m"]);
-    EXPECT_EQ("jerasure", lrc.layers.front().profile["plugin"]);
+    EXPECT_EQ("isa", lrc.layers.front().profile["plugin"]);
     EXPECT_EQ("reed_sol_van", lrc.layers.front().profile["technique"]);
   }
 }
