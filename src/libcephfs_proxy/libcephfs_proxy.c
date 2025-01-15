@@ -867,3 +867,120 @@ __public UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 
 	return value_ptr(ans.userperm);
 }
+
+
+// Metadata Caching
+typedef struct MetadataCacheEntry {
+    Inode *inode;
+    char name[PATH_MAX];
+    struct ceph_statx statx;
+    uint64_t version;  // Tracks the inode version
+    struct MetadataCacheEntry *next;
+} MetadataCacheEntry;
+
+static MetadataCacheEntry *metadata_cache = NULL;
+static pthread_mutex_t cache_lock = PTHREAD_MUTEX_INITIALIZER;
+
+// Function to fetch the current version of an inode from the daemon - just an idea
+static int fetch_inode_version(struct ceph_mount_info *cmount, Inode *inode, uint64_t *version) {
+    CEPH_REQ(get_version, req, 0, ans, 0);
+
+    req.inode = ptr_value(inode);
+    int err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_GET_VERSION, req, ans);
+    if (err >= 0) {
+        *version = ans.version;
+    }
+    return err;
+}
+
+__public int ceph_ll_lookup_new(struct ceph_mount_info *cmount, Inode *parent,
+                                const char *name, Inode **out,
+                                struct ceph_statx *stx, unsigned want,
+                                unsigned flags, const UserPerm *perms) {
+    pthread_mutex_lock(&cache_lock);
+
+    // Check if metadata is in cache
+    MetadataCacheEntry *entry = find_in_cache(parent, name);
+    if (entry) {
+        uint64_t current_version;
+        int err = fetch_inode_version(cmount, entry->inode, &current_version);
+        if (err >= 0 && entry->version == current_version) {
+            // Return cached data if valid
+            memcpy(stx, &entry->statx, sizeof(*stx));
+            *out = entry->inode;
+            pthread_mutex_unlock(&cache_lock);
+            return 0;
+        }
+        // Invalidate stale cache entry
+        remove_from_cache(parent, name);
+    }
+    pthread_mutex_unlock(&cache_lock);
+
+    // Cache miss or invalid cache, fetch from daemon
+    CEPH_REQ(ceph_ll_lookup, req, 1, ans, 1);
+    req.userperm = ptr_value(perms);
+    req.parent = ptr_value(parent);
+    req.want = want;
+    req.flags = flags;
+    CEPH_STR_ADD(req, name, name);
+    CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
+
+    int err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LOOKUP, req, ans);
+    if (err < 0) return err;
+
+    // Add result to cache
+    pthread_mutex_lock(&cache_lock);
+    add_to_cache(parent, name, stx, ans.version, value_ptr(ans.inode));
+    pthread_mutex_unlock(&cache_lock);
+
+    *out = value_ptr(ans.inode);
+    return 0;
+}
+
+void invalidate_metadata_cache(Inode *inode, const char *name) {
+    pthread_mutex_lock(&cache_lock);
+    remove_from_cache(inode, name);
+    pthread_mutex_unlock(&cache_lock);
+}
+
+MetadataCacheEntry *find_in_cache(Inode *parent, const char *name) {
+    for (MetadataCacheEntry *entry = metadata_cache; entry; entry = entry->next) {
+        if (entry->inode == parent && strcmp(entry->name, name) == 0) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+void add_to_cache(Inode *parent, const char *name, struct ceph_statx *stx, uint64_t version, Inode *inode) {
+    MetadataCacheEntry *new_entry = malloc(sizeof(MetadataCacheEntry));
+    if (!new_entry) {
+        proxy_log(LOG_ERR, ENOMEM, "Failed to allocate memory for cache entry");
+        return;
+    }
+
+    new_entry->inode = inode;
+    strncpy(new_entry->name, name, PATH_MAX - 1);
+    new_entry->name[PATH_MAX - 1] = '\0';
+    memcpy(&new_entry->statx, stx, sizeof(*stx));
+    new_entry->version = version;
+    new_entry->next = metadata_cache;
+    metadata_cache = new_entry;
+}
+
+void remove_from_cache(Inode *inode, const char *name) {
+    MetadataCacheEntry **prev = &metadata_cache;
+    for (MetadataCacheEntry *entry = metadata_cache; entry; entry = entry->next) {
+        if (entry->inode == inode && strcmp(entry->name, name) == 0) {
+            *prev = entry->next;
+            free(entry);
+            return;
+        }
+        prev = &entry->next;
+    }
+}
+
+bool is_entry_valid(MetadataCacheEntry *entry) {
+    // Additional validation logic can be added here based on version, generation, or other consistency checks
+    return entry != NULL;
+}
