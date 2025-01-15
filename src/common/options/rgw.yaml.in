@@ -3803,6 +3803,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_l1_write_open_flags
+  type: uint
+  level: advanced
+  desc: cache files write 'man 2 open' 'file status flags' modifiers
+  long_desc: For example, to configure synchronized I/O, fcntl-linux.h defines (converted from octal)
+    O_SYNC = 1052672
+    O_DSYNC = 4096
+    (0 for no modification of the flags)
+  default: 1052672
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_libaio_aio_threads
   type: int
   level: advanced
