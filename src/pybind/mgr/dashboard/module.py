@@ -29,6 +29,7 @@ from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
 
 from . import mgr
+from .controllers import nvmeof  # noqa # pylint: disable=unused-import
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
 from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
