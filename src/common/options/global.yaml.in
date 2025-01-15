@@ -6462,6 +6462,12 @@ options:
   level: advanced
   desc: Rate at which to sample bluestore transactions (per second)
   default: 0
+- name: bluestore_enable_zeroout_sync
+  type: bool
+  level: dev
+  desc: "Fill the disk space of deleted object with zero before return it to allocator"
+  default: false
+  with_legacy: true
 - name: debug_deliberately_leak_memory
   type: bool
   level: dev
