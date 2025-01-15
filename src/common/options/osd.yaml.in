@@ -287,11 +287,10 @@ options:
   desc: Allow scrubbing when system load divided by number of CPUs is below this value
   fmt_desc: The normalized maximum load. Ceph will not initiate periodic (regular)
     scrubs when the system load (as defined by ``getloadavg() / number of online CPUs``)
-    is higher than this number.
-    Default is ``0.5``.
-  default: 0.5
+    is higher than this number. The default is set high enough to allow periodic scrubbing
+    under most load conditions.
+  default: 10.0
   with_legacy: true
-# if load is low
 - name: osd_scrub_min_interval
   type: float
   level: advanced
@@ -301,7 +300,6 @@ options:
   see_also:
   - osd_scrub_max_interval
   with_legacy: true
-# regardless of load
 - name: osd_scrub_max_interval
   type: float
   level: advanced
