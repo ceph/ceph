@@ -415,10 +415,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'certificate_duration_days',
             type='int',
-            default=365,
-            desc='Specifies the duration of self certificates generated and signed by cephadm CA',
+            default=(3 * 365),
+            desc='Specifies the duration of self certificates generated and signed by cephadm root CA',
             min=90,
-            max=(3 * 365)
+            max=(10 * 365)
         ),
         Option(
             'renewal_threshold_days',
