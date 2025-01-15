@@ -240,6 +240,7 @@ struct rgw_sync_pipe_filter {
   bool is_subset_of(const rgw_sync_pipe_filter& f) const;
 
   bool has_tags() const;
+  bool has_prefix() const;
   bool check_tag(const std::string& s) const;
   bool check_tag(const std::string& k, const std::string& v) const;
   bool check_tags(const std::vector<std::string>& tags) const;
@@ -673,6 +674,29 @@ struct rgw_sync_policy_info {
 
   bool empty() const {
     return groups.empty();
+  }
+
+  bool is_directional() const {
+    for (auto& item : groups) {
+      auto& group = item.second;
+      if (!group.data_flow.directional.empty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool has_filter() const {
+    for (auto& item : groups) {
+      auto& group = item.second;
+      for (auto& p : group.pipes) {
+        auto& filter = p.params.source.filter;
+        if (filter.has_prefix() || filter.has_tags()) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   void get_potential_related_buckets(const rgw_bucket& bucket,
