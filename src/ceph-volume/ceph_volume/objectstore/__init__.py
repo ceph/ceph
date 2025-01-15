@@ -1,5 +1,6 @@
 from . import lvmbluestore
 from . import rawbluestore
+from . import baseobjectstore
 from typing import Any, Dict
 
 

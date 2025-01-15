@@ -262,7 +262,7 @@ class TestSingleReport(object):
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
 
         listing = lvm.listing.List([])
-        result = listing.single_report(0)
+        result = listing.single_report('0')
         assert result['0'][0]['name'] == 'lv1'
         assert result['0'][0]['lv_tags'] == tags
         assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
@@ -277,7 +277,7 @@ class TestSingleReport(object):
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
 
         listing = lvm.listing.List([])
-        result = listing.single_report(0)
+        result = listing.single_report('0')
         assert result['0'][0]['name'] == 'lv1'
         assert result['0'][0]['lv_tags'] == tags
         assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
@@ -298,7 +298,7 @@ class TestSingleReport(object):
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
 
         listing = lvm.listing.List([])
-        result = listing.single_report(0)
+        result = listing.single_report('0')
         assert result['0'][0]['name'] == 'lv1'
         assert result['0'][0]['lv_tags'] == tags1
         assert result['0'][0]['lv_path'] == '/dev/vg/lv1'
@@ -324,7 +324,7 @@ class TestSingleReport(object):
         monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs: lvs)
 
         listing = lvm.listing.List([])
-        result = listing.single_report(0)
+        result = listing.single_report('0')
         assert result['0'][0]['name'] == 'lv1'
         assert result['0'][0]['lv_tags'] == tags1
         assert result['0'][0]['lv_path'] == '/dev/vg/lv1'

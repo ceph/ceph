@@ -10,9 +10,10 @@ from . import listing
 from . import zap
 from . import batch
 from . import migrate
+from typing import List, Optional
 
 
-class LVM(object):
+class LVM:
 
     help = 'Use LVM and LVM-based technologies to deploy OSDs'
 
@@ -36,19 +37,21 @@ class LVM(object):
         'new-db': migrate.NewDB,
     }
 
-    def __init__(self, argv):
+    def __init__(self, argv: Optional[List[str]]) -> None:
         self.argv = argv
 
-    def print_help(self, sub_help):
+    def print_help(self, sub_help: str) -> str:
         return self._help.format(sub_help=sub_help)
 
-    def main(self):
+    def main(self) -> None:
         terminal.dispatch(self.mapper, self.argv)
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm',
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description=self.print_help(terminal.subhelp(self.mapper)),
         )
+        if self.argv is None:
+            self.argv = []
         parser.parse_args(self.argv)
         if len(self.argv) <= 1:
-            return parser.print_help()
+            parser.print_help()

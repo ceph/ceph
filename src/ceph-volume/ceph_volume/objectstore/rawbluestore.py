@@ -22,7 +22,7 @@ class RawBlueStore(BlueStore):
         super().__init__(args)
         self.method = 'raw'
         self.devices: List[str] = getattr(args, 'devices', [])
-        self.osd_id = getattr(self.args, 'osd_id', None)
+        self.osd_id = getattr(self.args, 'osd_id', '')
         self.osd_fsid = getattr(self.args, 'osd_fsid', '')
         self.block_device_path = getattr(self.args, 'data', '')
         self.db_device_path = getattr(self.args, 'block_db', '')
@@ -75,7 +75,7 @@ class RawBlueStore(BlueStore):
         except Exception:
             logger.exception('raw prepare was unable to complete')
             logger.info('will rollback OSD ID creation')
-            rollback_osd(self.args, self.osd_id)
+            rollback_osd(self.osd_id)
             raise
         dmcrypt_log = 'dmcrypt' if hasattr(args, 'dmcrypt') else 'clear'
         terminal.success("ceph-volume raw {} prepare "
@@ -164,7 +164,7 @@ class RawBlueStore(BlueStore):
         activated_any: bool = False
 
         for d in disk.lsblk_all(abspath=True):
-            device: str = d.get('NAME')
+            device: str = d.get('NAME', '')
             luks2 = encryption_utils.CephLuks2(device)
             if luks2.is_ceph_encrypted:
                 if luks2.is_tpm2_enrolled and self.osd_fsid == luks2.osd_fsid:
