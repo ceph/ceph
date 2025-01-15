@@ -10842,12 +10842,24 @@ paths:
           application/json:
             schema:
               properties:
-                account_id:
-                  type: integer
                 account_name:
                   type: integer
                 email:
                   type: string
+                max_access_keys:
+                  type: string
+                max_buckets:
+                  type: string
+                max_group:
+                  type: string
+                max_roles:
+                  type: string
+                max_users:
+                  type: string
+                tenant:
+                  type: string
+              required:
+              - account_name
               type: object
       responses:
         '201':
@@ -10952,6 +10964,20 @@ paths:
                   type: integer
                 email:
                   type: string
+                max_access_keys:
+                  type: string
+                max_buckets:
+                  type: string
+                max_group:
+                  type: string
+                max_roles:
+                  type: string
+                max_users:
+                  type: string
+                tenant:
+                  type: string
+              required:
+              - account_name
               type: object
       responses:
         '200':
@@ -10992,6 +11018,8 @@ paths:
           application/json:
             schema:
               properties:
+                enabled:
+                  type: string
                 max_objects:
                   type: string
                 max_size:
@@ -11003,6 +11031,7 @@ paths:
               - quota_type
               - max_size
               - max_objects
+              - enabled
               type: object
       responses:
         '200':
@@ -12546,6 +12575,11 @@ paths:
               properties:
                 access_key:
                   type: string
+                account_id:
+                  type: integer
+                account_root_user:
+                  default: false
+                  type: integer
                 daemon_name:
                   type: string
                 display_name:
@@ -12704,6 +12738,11 @@ paths:
           application/json:
             schema:
               properties:
+                account_id:
+                  type: integer
+                account_root_user:
+                  default: false
+                  type: integer
                 daemon_name:
                   type: string
                 display_name:
