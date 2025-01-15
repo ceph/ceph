@@ -31,3 +31,4 @@ overrides:
       - noscrub
       - nodeep-scrub
       - is down
+      - PG_BACKFILL_FULL
