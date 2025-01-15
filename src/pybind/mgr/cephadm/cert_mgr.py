@@ -497,7 +497,7 @@ class CertMgr:
 
     def check_certificates(self) -> List[str]:
         # services_to_reconfig = self.get_acme_ready_certificates()
-        services_to_reconfig = []
+        services_to_reconfig = set()
 
         def get_cert_and_key(cert_ref: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
             """Retrieve certificate and key, translating names as necessary."""
@@ -513,7 +513,7 @@ class CertMgr:
                 # TODO(redo): get srv name from the entity info
                 is_valid, is_close_to_expiration = self._validate_and_manage_certificate(cert_ref, cert, key, entity)
                 if (not is_valid or is_close_to_expiration) and not cert.user_made:
-                    services_to_reconfig.append(self.cert_key_store.cert_to_service[cert_ref])
+                    services_to_reconfig.add(self.cert_key_store.cert_to_service[cert_ref])
             elif cert:
                 # Edge case where cert is present but key is None
                 # this could only happen if somebody has put manually a bad key!
@@ -537,4 +537,4 @@ class CertMgr:
         logger.info(f'redo: services to reconfigure {services_to_reconfig}')
 
         # return the list of services that need reconfiguration
-        return services_to_reconfig
+        return list(services_to_reconfig)
