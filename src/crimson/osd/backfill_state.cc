@@ -427,7 +427,7 @@ BackfillState::PrimaryScanning::react(PrimaryScanned evt)
 }
 
 boost::statechart::result
-BackfillState::PrimaryScanning::react(CancelBackfill evt)
+BackfillState::PrimaryScanning::react(SuspendBackfill evt)
 {
   LOG_PREFIX(BackfillState::PrimaryScanning::react::SuspendBackfill);
   DEBUGDPP("suspended within PrimaryScanning", pg());
@@ -523,7 +523,7 @@ BackfillState::ReplicasScanning::react(ReplicaScanned evt)
 }
 
 boost::statechart::result
-BackfillState::ReplicasScanning::react(CancelBackfill evt)
+BackfillState::ReplicasScanning::react(SuspendBackfill evt)
 {
   LOG_PREFIX(BackfillState::ReplicasScanning::react::SuspendBackfill);
   DEBUGDPP("suspended within ReplicasScanning", pg());
@@ -576,7 +576,7 @@ BackfillState::Waiting::react(ObjectPushed evt)
 }
 
 boost::statechart::result
-BackfillState::Waiting::react(CancelBackfill evt)
+BackfillState::Waiting::react(SuspendBackfill evt)
 {
   LOG_PREFIX(BackfillState::Waiting::react::SuspendBackfill);
   DEBUGDPP("suspended within Waiting", pg());
