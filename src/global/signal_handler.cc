@@ -26,6 +26,7 @@
 #include "include/uuid.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
+#include "global/global_init.h"
 
 #include <poll.h>
 #include <signal.h>
@@ -79,6 +80,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 void sighup_handler(int signum)
 {
   g_ceph_context->reopen_logs();
+  global_print_banner();
 }
 
 static void reraise_fatal(int signum)
