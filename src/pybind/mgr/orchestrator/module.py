@@ -1363,7 +1363,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     @_cli_write_command('orch daemon add osd')
     def _daemon_add_osd(self,
                         svc_arg: Optional[str] = None,
-                        method: Optional[OSDMethod] = None) -> HandleCommandResult:
+                        method: Optional[OSDMethod] = None,
+                        service_name: Optional[str] = None) -> HandleCommandResult:
         """Create OSD daemon(s) on specified host and device(s) (e.g., ceph orch daemon add osd myhost:/dev/sdb)"""
         # Create one or more OSDs"""
 
@@ -1418,7 +1419,7 @@ Usage:
             msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-        completion = self.create_osds(drive_group)
+        completion = self.create_osds(drive_group, service_name=service_name)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
