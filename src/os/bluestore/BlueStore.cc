@@ -5876,8 +5876,6 @@ void BlueStore::_set_compression()
     _set_compression_alert(true, s.c_str());
   }
 
-  compressor = nullptr;
-
   if (cct->_conf->bluestore_compression_min_blob_size) {
     comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
   } else {
@@ -5899,19 +5897,27 @@ void BlueStore::_set_compression()
       comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
     }
   }
-
+  if (compressors.size() == 0) {
+    compressors.resize(Compressor::COMP_ALG_LAST);
+  }
   auto& alg_name = cct->_conf->bluestore_compression_algorithm;
+  CompressorRef c;
   if (!alg_name.empty()) {
-    compressor = Compressor::create(cct, alg_name);
-    if (!compressor) {
+    c = Compressor::create(cct, alg_name);
+    if (!c) {
       derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
            << dendl;
       _set_compression_alert(false, alg_name.c_str());
+      default_compressor_alg = Compressor::COMP_ALG_NONE;
+    } else {
+      default_compressor_alg = c->get_type();
+      ceph_assert(default_compressor_alg <= int(compressors.size()));
+      compressors[default_compressor_alg] = c;
     }
   }
  
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
-	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
+	   << " alg " << (c ? c->get_type_name() : "(none)")
 	   << " min_blob " << comp_min_blob_size
 	   << " max_blob " << comp_max_blob_size
 	   << dendl;
@@ -12803,9 +12809,12 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bluestore_compression_header_t chdr;
   decode(chdr, i);
   int alg = int(chdr.type);
-  CompressorRef cp = compressor;
-  if (!cp || (int)cp->get_type() != alg) {
-    cp = Compressor::create(cct, alg);
+  CompressorRef cp;
+  if (alg < int(compressors.size())) {
+    if (!compressors[alg]) {
+      compressors[alg] = Compressor::create(cct, alg);
+    }
+    cp = compressors[alg];
   }
 
   if (!cp.get()) {
@@ -12817,6 +12826,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
     _set_compression_alert(false, alg_name);
     r = -EIO;
   } else {
+    ceph_assert((int)cp->get_type() == alg);
     r = cp->decompress(i, chdr.length, *result, chdr.compressor_message);
     if (r < 0) {
       derr << __func__ << " decompression failed with exit code " << r << dendl;
@@ -16768,21 +16778,27 @@ int BlueStore::_do_alloc_write(
   if (wctx->compress) {
     c = select_option(
       "compression_algorithm",
-      compressor,
+      compressors[default_compressor_alg],
       [&]() {
         string val;
         if (coll->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
-          CompressorRef cp = compressor;
-          if (!cp || cp->get_type_name() != val) {
-            cp = Compressor::create(cct, val);
-	    if (!cp) {
-	      if (_set_compression_alert(false, val.c_str())) {
-	        derr << __func__ << " unable to initialize " << val.c_str()
-		     << " compressor" << dendl;
-	      }
-	    }
+          auto alg = Compressor::get_comp_alg_type(val);
+          CompressorRef cp;
+          if (alg.has_value() && *alg < compressors.size()) {
+            if (!compressors[*alg]) {
+              compressors[*alg] = Compressor::create(cct, val);
+            }
+            cp = compressors[*alg];
           }
-          return std::optional<CompressorRef>(cp);
+          if (!cp) {
+	    if (_set_compression_alert(false, val.c_str())) {
+	      derr << __func__ << " unable to initialize " << val.c_str()
+	           << " compressor" << dendl;
+	    }
+          } else {
+            ceph_assert(cp->get_type() == *alg);
+            return std::optional<CompressorRef>(cp);
+          }
         }
         return std::optional<CompressorRef>();
       }
