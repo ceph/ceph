@@ -3,9 +3,6 @@
 
 #include "testcase_cxx.h"
 
-#include <chrono>
-#include <thread>
-
 #include <errno.h>
 #include <fmt/format.h>
 #include "test_cxx.h"
