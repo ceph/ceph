@@ -26,10 +26,14 @@ namespace crimson::mgr
 {
 
 Client::Client(crimson::net::Messenger& msgr,
-                 WithStats& with_stats)
+	       WithStats& with_stats,
+	       set_perf_queries_cb_t cb_set,
+	       get_perf_report_cb_t cb_get)
   : msgr{msgr},
     with_stats{with_stats},
-    report_timer{[this] {report();}}
+    report_timer{[this] {report();}},
+    set_perf_queries_cb(cb_set),
+    get_perf_report_cb(cb_get)
 {}
 
 seastar::future<> Client::start()
@@ -152,6 +156,10 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
   } else {
     report_timer.cancel();
   }
+  if (!m->osd_perf_metric_queries.empty()) {
+    ceph_assert(set_perf_queries_cb);
+    return set_perf_queries_cb(m->osd_perf_metric_queries);
+  }
   return seastar::now();
 }
 
@@ -198,6 +206,13 @@ void Client::_send_report()
     report->service_name = service_name;
     local_conf().get_config_bl(last_config_bl_version, &report->config_bl,
 	                      &last_config_bl_version);
+    if (get_perf_report_cb) {
+      return get_perf_report_cb(
+      ).then([report=std::move(report), this](auto payload) mutable {
+	report->metric_report_message = MetricReportMessage(std::move(payload));
+	return conn->send(std::move(report));
+      });
+    }
     return conn->send(std::move(report));
   });
 }
