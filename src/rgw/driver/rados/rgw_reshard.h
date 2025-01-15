@@ -160,14 +160,12 @@ public:
     }
   }
 
-  // returns a preferred number of shards given a calculated number of
-  // shards based on max_dynamic_shards and the list of prime values
-  static uint32_t get_prime_shard_count(uint32_t suggested_shards,
-					uint32_t max_dynamic_shards,
-					uint32_t min_dynamic_shards);
+  // returns a preferred number of shards as a prime value
+  static uint32_t nearest_prime(uint32_t suggested_shards);
 
   static void calculate_preferred_shards(const DoutPrefixProvider* dpp,
 					 const uint32_t max_dynamic_shards,
+					 const uint32_t min_layout_shards,
 					 const uint64_t max_objs_per_shard,
 					 const bool is_multisite,
 					 const uint64_t num_objs,

@@ -81,16 +81,20 @@ void decode_json_obj(BucketHashType& t, JSONObj *obj)
 // bucket_index_normal_layout
 void encode(const bucket_index_normal_layout& l, bufferlist& bl, uint64_t f)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(l.num_shards, bl);
   encode(l.hash_type, bl);
+  encode(l.min_num_shards, bl);
   ENCODE_FINISH(bl);
 }
 void decode(bucket_index_normal_layout& l, bufferlist::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(l.num_shards, bl);
   decode(l.hash_type, bl);
+  if (struct_v >= 2) {
+    decode(l.min_num_shards, bl);
+  }
   DECODE_FINISH(bl);
 }
 void encode_json_impl(const char *name, const bucket_index_normal_layout& l, ceph::Formatter *f)
@@ -98,12 +102,16 @@ void encode_json_impl(const char *name, const bucket_index_normal_layout& l, cep
   f->open_object_section(name);
   encode_json("num_shards", l.num_shards, f);
   encode_json("hash_type", l.hash_type, f);
+  encode_json("min_num_shards", l.min_num_shards, f);
   f->close_section();
 }
 void decode_json_obj(bucket_index_normal_layout& l, JSONObj *obj)
 {
   JSONDecoder::decode_json("num_shards", l.num_shards, obj);
   JSONDecoder::decode_json("hash_type", l.hash_type, obj);
+
+  // if not set in json, set to default value of 1
+  JSONDecoder::decode_json("min_num_shards", l.min_num_shards, obj, 1);
 }
 
 // bucket_index_layout
