@@ -59,9 +59,19 @@
 </ng-template>
 
 <ng-template #dashboardButton>
-  <div class="mt-4 text-center">
+  <div class="mt-4 text-center"
+       *ngIf="!buttonToEnableModule; else enableButton">
     <button class="btn btn-primary"
             [routerLink]="'/dashboard'"
             i18n>Go To Dashboard</button>
+  </div>
+</ng-template>
+
+<ng-template #enableButton>
+  <div class="mt-4 text-center"
+       *ngIf="buttonToEnableModule && !(buttonName && buttonRoute)">
+    <button class="btn btn-primary"
+            (click)="enableModule()"
+            i18n>Enable {{ buttonToEnableModule | upperFirst }} module</button>
   </div>
 </ng-template>
