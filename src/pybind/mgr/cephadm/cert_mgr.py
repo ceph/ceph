@@ -452,7 +452,21 @@ class CertMgr:
                                     )
 
 
-    def is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
+    def is_valid_certificate(self, cert: str, key: str) -> Tuple[bool, bool, int, str]:
+        """
+        Checks if a certificate is valid and close to expiration.
+
+        Returns:
+            - is_valid: True if the certificate is valid.
+            - is_close_to_expiration: True if the certificate is close to expiration.
+            - days_to_expiration: Number of days until expiration.
+            - exception_info: Details of any exception encountered during validation.
+        """
+        cert_obj = Cert(cert, True)
+        key_obj = PrivKey(key, True)
+        return self._is_valid_certificate(cert_obj, key_obj)
+
+    def _is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
         """
         Checks if a certificate is valid and close to expiration.
 
@@ -472,7 +486,7 @@ class CertMgr:
     def _validate_and_manage_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> Tuple[bool, bool]:
         """Helper method to validate a cert/key pair and handle errors."""
 
-        is_valid, is_close_to_expiration, days_to_expiration, exception_info = self.is_valid_certificate(cert_obj, key_obj)
+        is_valid, is_close_to_expiration, days_to_expiration, exception_info = self._is_valid_certificate(cert_obj, key_obj)
 
         entity_info = f" ({entity})" if entity else ""
         cert_source = 'user-made' if cert_obj.user_made else 'self-signed'
