@@ -77,6 +77,12 @@ void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
     encode(_symlink, symlink_bl);
     op.setxattr("symlink", symlink_bl);
   }
+
+  if (remote_inode) {
+    bufferlist remote_inode_bl;
+    encode(remote_inode, remote_inode_bl);
+    op.setxattr("remote_inode", remote_inode_bl);
+  }
 }
 
 class CInodeIOContext : public MDSIOContextBase
@@ -921,14 +927,14 @@ void CInode::put_stickydirs()
 void CInode::first_get()
 {
   // pin my dentry?
-  if (parent) 
+  if (parent)
     parent->get(CDentry::PIN_INODEPIN);
 }
 
 void CInode::last_put() 
 {
   // unpin my dentry?
-  if (parent) 
+  if (parent)
     parent->put(CDentry::PIN_INODEPIN);
 }
 
@@ -977,6 +983,23 @@ CInode *CInode::get_parent_inode()
 bool CInode::is_ancestor_of(const CInode *other, std::unordered_map<CInode const*,bool>* visited) const
 {
   std::vector<CInode const*> my_visited = {};
+  dout(3) << "HRK is_ancestor_of this=" << *this << "  other=" << *other << dendl;
+  for (const auto& ri : other->get_inode()->referent_inodes) {
+    CInode *cur = mdcache->get_inode(ri);
+    if (!cur) {
+      dout(3) << "is_ancestor_of error: referent inode not loaded " << std::hex << ri << dendl;
+      ceph_abort("is_ancestor_of: referent inode not loaded");
+    }
+    const CDentry *pdn = cur->get_oldest_parent_dn();
+    if (!pdn) {
+      dout(3) << "is_ancestor_of error: referent inode parent is not set - ref_inode= " << *cur << dendl;
+      ceph_abort("is_ancestor_of: referent inode parent not set");
+    }
+    dout(3) << "HRK is_ancestor_of pdn=" << *pdn << "  refi=" << *cur << dendl;
+    if (this == pdn->get_dir()->get_inode())
+      return true;
+  }
+
   while (other) {
     if (visited && other->is_dir()) {
       if (auto it = visited->find(other); it != visited->end()) {
@@ -1404,8 +1427,12 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
     slink = symlink;
   }
 
+  inodeno_t remote_inode = 0;
+  if (is_referent())
+    remote_inode = get_remote_ino();
+
   ops_vec.emplace_back(op_prio, pool, get_inode()->layout,
-                       mdcache->mds->mdsmap->get_up_features(), slink);
+                       mdcache->mds->mdsmap->get_up_features(), slink, remote_inode);
 
   if (!state_test(STATE_DIRTYPOOL) || get_inode()->old_pools.empty() || ignore_old_pools) {
     dout(20) << __func__ << ": no dirtypool or no old pools or ignore_old_pools" << dendl;
@@ -1747,6 +1774,7 @@ void CInode::encode_lock_ilink(bufferlist& bl)
   encode(get_inode()->version, bl);
   encode(get_inode()->ctime, bl);
   encode(get_inode()->nlink, bl);
+  encode(get_inode()->referent_inodes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1760,6 +1788,7 @@ void CInode::decode_lock_ilink(bufferlist::const_iterator& p)
   decode(tm, p);
   if (_inode->ctime < tm) _inode->ctime = tm;
   decode(_inode->nlink, p);
+  decode(_inode->referent_inodes, p);
   DECODE_FINISH(p);
   reset_inode(std::move(_inode));
 }
@@ -3181,6 +3210,21 @@ snapid_t CInode::pick_old_inode(snapid_t snap) const
   }
   dout(10) << __func__ << " snap " << snap << " -> nothing" << dendl;
   return 0;
+}
+
+void CInode::get_related_realms(std::vector<SnapRealm*>& related_realms)
+{
+  const std::vector<uint64_t>& referent_inodes = get_inode()->referent_inodes;
+  dout(20) << __func__ << " referent inodes of inode " << *this << " are " << std::hex << referent_inodes << dendl;
+  for (const auto& ri : referent_inodes) {
+    CInode *cur = mdcache->get_inode(ri);
+    if (!cur) {
+      dout(3) << __func__ << " error: referent inode " << std::hex << ri << " of inode " << *this << " not loaded" << dendl;
+      ceph_abort("get_related_realms: referent inode not loaded");
+    }
+    SnapRealm *cur_realm = cur->find_snaprealm();
+    related_realms.push_back(cur_realm);
+  }
 }
 
 void CInode::open_snaprealm(bool nosplit)

@@ -293,6 +293,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS (1<<7) /* fs is forbidden to use standby
                                                             for another fs */
 #define CEPH_MDSMAP_BALANCE_AUTOMATE             (1<<8)  /* automate metadata balancing */
+#define CEPH_MDSMAP_GLOBAL_SNAPREALM             (1<<9)  /* use global snaprealm for hardlink snapshots */
 #define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
 			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 
@@ -446,7 +447,8 @@ enum {
 #define IS_CEPH_MDS_OP_NEWINODE(op) (op == CEPH_MDS_OP_CREATE     || \
 				     op == CEPH_MDS_OP_MKNOD      || \
 				     op == CEPH_MDS_OP_MKDIR      || \
-				     op == CEPH_MDS_OP_SYMLINK)
+				     op == CEPH_MDS_OP_SYMLINK)   || \
+				     op == CEPH_MDS_OP_LINK
 
 extern const char *ceph_mds_op_name(int op);
 

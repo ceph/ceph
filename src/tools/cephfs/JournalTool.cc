@@ -944,6 +944,12 @@ int JournalTool::recover_dentries(
                << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
           write_dentry = old_fnode_version < lump.fnode->version;
+	} else if (dentry_type == 'R' || dentry_type == 'r') {
+          dout(10) << "Existing hardlink referent full inode in slot to be (maybe) "
+               << "written by a remote inode from the journal dn '" << rb.dn.c_str()
+               << "' with lump fnode version " << lump.fnode->version
+               << "vs existing fnode version " << old_fnode_version << dendl;
+          write_dentry = old_fnode_version < lump.fnode->version;
         } else if (dentry_type == 'I' || dentry_type == 'i') {
           dout(10) << "Existing full inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
@@ -958,22 +964,46 @@ int JournalTool::recover_dentries(
       }
 
       if ((other_pool || write_dentry) && !dry_run) {
-        dout(4) << "writing L dentry " << key << " into frag "
-          << frag_oid.name << dendl;
+        dout(4) << "writing r|l (referent|just remote) dentry " << key
+	  << " into frag " << frag_oid.name << " rb.referent_ino "
+          << rb.referent_ino << " referent_inode " << rb.referent_inode
+	  << "rb.ino " << rb.ino << dendl;
 
-        // Compose: Dentry format is dnfirst, [I|L], ino, d_type, alternate_name
-        bufferlist dentry_bl;
-        encode(rb.dnfirst, dentry_bl);
-        encode('l', dentry_bl);
-        ENCODE_START(2, 1, dentry_bl);
-        encode(rb.ino, dentry_bl);
-        encode(rb.d_type, dentry_bl);
-        encode(rb.alternate_name, dentry_bl);
-        ENCODE_FINISH(dentry_bl);
+	if (rb.referent_ino !=0) {
+          dout(4) << "writing 'r' (referent remote) dentry " << key
+	    << " into frag " << frag_oid.name << dendl;
 
-        // Record for writing to RADOS
-        write_vals[key] = dentry_bl;
-        consumed_inos->insert(rb.ino);
+          // Compose: Dentry format is dnfirst, r, alternate_name, InodeStore
+          bufferlist dentry_bl;
+          encode(rb.dnfirst, dentry_bl);
+          encode('r', dentry_bl);
+          ENCODE_START(2, 1, dentry_bl);
+          encode(rb.alternate_name, dentry_bl);
+	  encode_remotebit_as_referent_inode(rb, &dentry_bl);
+          ENCODE_FINISH(dentry_bl);
+
+          // Record for writing to RADOS
+          write_vals[key] = dentry_bl;
+          consumed_inos->insert(rb.referent_ino);
+          consumed_inos->insert(rb.ino);
+	} else {
+          dout(4) << "writing l dentry " << key << " into frag "
+            << frag_oid.name << dendl;
+
+          // Compose: Dentry format is dnfirst, l, ino, d_type, alternate_name
+          bufferlist dentry_bl;
+          encode(rb.dnfirst, dentry_bl);
+          encode('l', dentry_bl);
+          ENCODE_START(2, 1, dentry_bl);
+          encode(rb.ino, dentry_bl);
+          encode(rb.d_type, dentry_bl);
+          encode(rb.alternate_name, dentry_bl);
+          ENCODE_FINISH(dentry_bl);
+
+          // Record for writing to RADOS
+          write_vals[key] = dentry_bl;
+          consumed_inos->insert(rb.ino);
+	}
       }
     }
 
@@ -1218,6 +1248,19 @@ void JournalTool::encode_fullbit_as_inode(
   new_inode.encode(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 }
 
+void JournalTool::encode_remotebit_as_referent_inode(
+  const EMetaBlob::remotebit &rb,
+  bufferlist *out_bl)
+{
+  ceph_assert(out_bl != NULL);
+
+  // Compose InodeStore
+  InodeStore new_inode;
+  new_inode.inode = rb.referent_inode;
+
+  // Serialize InodeStore
+  new_inode.encode(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+}
 /**
  * Given a list of inode numbers known to be in use by
  * inodes in the backing store, ensure that none of these

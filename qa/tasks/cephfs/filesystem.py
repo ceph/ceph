@@ -1523,6 +1523,25 @@ class FilesystemBase(MDSClusterBase):
         args = ["setxattr", obj_name, xattr_name, data]
         self.rados(args, pool=pool)
 
+    def read_remote_inode(self, ino_no, pool=None):
+        """
+        Read the remote_inode xattr from the data pool, return a dict in the
+        format given by inodeno_t::dump, which is something like:
+
+        ::
+
+            rados -p cephfs_data getxattr 100000001f8.00000000 remote_inode > out.bin
+            ceph-dencoder type inodeno_t import out.bin decode dump_json
+
+            {
+                 "val": 1099511627778
+            }
+
+        :param pool: name of pool to read backtrace from.  If omitted, FS must have only
+                     one data pool and that will be used.
+        """
+        return self._read_data_xattr(ino_no, "remote_inode", "inodeno_t", pool)
+
     def read_symlink(self, ino_no, pool=None):
         return self._read_data_xattr(ino_no, "symlink", "string_wrapper", pool)
 

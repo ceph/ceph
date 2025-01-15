@@ -681,10 +681,34 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 }
 
 // EMetaBlob::remotebit
-
-void EMetaBlob::remotebit::encode(bufferlist& bl) const
+//
+void EMetaBlob::remotebit::update_referent_inode(MDSRank *mds, CInode *in)
 {
-  ENCODE_START(3, 2, bl);
+  in->reset_inode(std::move(referent_inode));
+
+  /*
+   * In case there was anything malformed in the journal that we are
+   * replaying, do sanity checks on the inodes we're replaying and
+   * go damaged instead of letting any trash into a live cache
+   */
+  if (in->is_file()) {
+    // Files must have valid layouts with a pool set
+    if (in->get_inode()->layout.pool_id == -1 ||
+	!in->get_inode()->layout.is_valid()) {
+      dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
+              << ": " << in->get_inode()->layout << dendl;
+      CachedStackStringStream css;
+      *css << "Invalid layout for inode " << in->ino() << " in journal";
+      mds->clog->error() << css->strv();
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
+  }
+}
+
+void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(4, 2, bl);
   encode(dn, bl);
   encode(dnfirst, bl);
   encode(dnlast, bl);
@@ -693,12 +717,15 @@ void EMetaBlob::remotebit::encode(bufferlist& bl) const
   encode(d_type, bl);
   encode(dirty, bl);
   encode(alternate_name, bl);
+  encode(referent_ino, bl);
+  if (referent_ino)
+    encode(*referent_inode, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -708,6 +735,16 @@ void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
   decode(dirty, bl);
   if (struct_v >= 3)
     decode(alternate_name, bl);
+  if (struct_v >= 4) {
+    decode(referent_ino, bl);
+    if (referent_ino) {
+      auto _inode = CInode::allocate_inode();
+      decode(*_inode, bl);
+      referent_inode = std::move(_inode);
+    } else {
+      referent_inode = NULL;
+    }
+  }
   DECODE_FINISH(bl);
 }
 
@@ -741,14 +778,16 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
   f->dump_string("d_type", type_string);
   f->dump_string("dirty", dirty ? "true" : "false");
   f->dump_string("alternate_name", alternate_name);
+  f->dump_int("referentino", referent_ino);
 }
 
 void EMetaBlob::remotebit::
 generate_test_instances(std::list<EMetaBlob::remotebit*>& ls)
 {
-  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  auto _inode = CInode::allocate_inode();
+  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), 2, _inode, false);
   ls.push_back(remote);
-  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), 2, _inode, false);
   ls.push_back(remote);
 }
 
@@ -1415,10 +1454,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
     }
 
     // remote dentries
-    for (const auto& rb : lump.get_dremote()) {
+    for (auto& rb : lump.get_dremote()) {
+      dout(20) << "EMetaBlob.replay - Going over remotebit " << rb << dendl;
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
-	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
+	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.referent_ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
@@ -1435,13 +1475,43 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 	  dir->unlink_inode(dn, false);
 	}
         dn->set_alternate_name(mempool::mds_co::string(rb.alternate_name));
-	dir->link_remote_inode(dn, rb.ino, rb.d_type);
+	//rb.referent_ino can be 0
+        dir->link_remote_inode(dn, rb.ino, rb.d_type);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << rb.dnfirst << "," << rb.dnlast << "] had " << *dn << dendl;
 	dn->first = rb.dnfirst;
 	ceph_assert(dn->last == rb.dnlast);
       }
+
+      /* In multi-version inode, i.e., a file has hardlinks and the primary link is being deleted,
+       * the primary inode is added as remote in the journal. In this case, it will not have a
+       * referent inode. So rb.referent_ino=0.
+       */
+      CInode *ref_in = NULL;
+      if (rb.referent_ino != 0) {
+        ref_in = mds->mdcache->get_inode(rb.referent_ino, rb.dnlast);
+        if (!ref_in) {
+          ref_in = new CInode(mds->mdcache, dn->is_auth(), rb.dnfirst, rb.dnlast);
+          rb.update_referent_inode(mds, ref_in);
+	  ceph_assert(ref_in->_get_inode()->remote_ino == rb.ino);
+	  ceph_assert(ref_in->_get_inode()->ino == rb.referent_ino);
+	  mds->mdcache->add_inode(ref_in);
+          dout(10) << "HRK EMetaBlob.replay referent inode created for dn " << *dn << " inode " << *ref_in << "ref ino " << rb.referent_ino << dendl;
+        } else {
+	  ref_in->first = rb.dnfirst;
+          ref_in->set_remote_ino(rb.ino);
+	  // TODO: Cleanup up the referent inode if the referent linkage is incorrect
+        }
+
+        dout(10) << "HRK EMetaBlob.replay remote dentry found, link/set referent inode " << *dn << dendl;
+        dir->set_referent_inode(dn, ref_in);
+
+        //TODO: dirty referent inode parent in->mark_dirty_parent(logseg, fb.is_dirty_pool());
+        // for now mark dirty always
+        ref_in->mark_dirty_parent(logseg, true);
+      }
+
       if (lump.is_importing())
 	dn->mark_auth();
 
@@ -2438,7 +2508,7 @@ void ECommitted::generate_test_instances(std::list<ECommitted*>& ls)
 
 void link_rollback::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(reqid, bl);
   encode(ino, bl);
   encode(was_inc, bl);
@@ -2446,12 +2516,13 @@ void link_rollback::encode(bufferlist &bl) const
   encode(old_dir_mtime, bl);
   encode(old_dir_rctime, bl);
   encode(snapbl, bl);
+  encode(referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
 void link_rollback::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(reqid, bl);
   decode(ino, bl);
   decode(was_inc, bl);
@@ -2460,6 +2531,8 @@ void link_rollback::decode(bufferlist::const_iterator &bl)
   decode(old_dir_rctime, bl);
   if (struct_v >= 3)
     decode(snapbl, bl);
+  if (struct_v >= 4)
+    decode(referent_ino, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2471,6 +2544,7 @@ void link_rollback::dump(Formatter *f) const
   f->dump_stream("old_ctime") << old_ctime;
   f->dump_stream("old_dir_mtime") << old_dir_mtime;
   f->dump_stream("old_dir_rctime") << old_dir_rctime;
+  f->dump_stream("referent_ino") << referent_ino;
 }
 
 void link_rollback::generate_test_instances(std::list<link_rollback*>& ls)
@@ -2519,7 +2593,7 @@ void rmdir_rollback::generate_test_instances(std::list<rmdir_rollback*>& ls)
 
 void rename_rollback::drec::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(dirfrag, bl);
   encode(dirfrag_old_mtime, bl);
   encode(dirfrag_old_rctime, bl);
@@ -2528,12 +2602,13 @@ void rename_rollback::drec::encode(bufferlist &bl) const
   encode(dname, bl);
   encode(remote_d_type, bl);
   encode(old_ctime, bl);
+  encode(referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
 void rename_rollback::drec::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(dirfrag, bl);
   decode(dirfrag_old_mtime, bl);
   decode(dirfrag_old_rctime, bl);
@@ -2542,6 +2617,7 @@ void rename_rollback::drec::decode(bufferlist::const_iterator &bl)
   decode(dname, bl);
   decode(remote_d_type, bl);
   decode(old_ctime, bl);
+  decode(referent_ino, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2553,6 +2629,7 @@ void rename_rollback::drec::dump(Formatter *f) const
   f->dump_int("ino", ino);
   f->dump_int("remote ino", remote_ino);
   f->dump_string("dname", dname);
+  f->dump_int("referent_ino", referent_ino);
   uint32_t type = DTTOIF(remote_d_type) & S_IFMT; // convert to type entries
   string type_string;
   switch(type) {
