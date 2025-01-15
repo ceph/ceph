@@ -140,6 +140,8 @@ public:
 
   seastar::future<> set_superblock(OSDSuperblock superblock);
 
+  seastar::future<> set_pg_num_history(pool_pg_num_history_t pg_num_history);
+
   template <typename F>
   auto with_remote_shard_state(core_id_t core, F &&f) {
     return shard_services.invoke_on(
