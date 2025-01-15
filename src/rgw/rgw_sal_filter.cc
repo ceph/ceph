@@ -1068,6 +1068,13 @@ int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
+int FilterObject::set_cloud_expiry_days(const DoutPrefixProvider* dpp,
+               optional_yield y,
+                std::optional<uint64_t> modified_days)
+{
+  return next->set_cloud_expiry_days(dpp, y, modified_days);
+}
+
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 				rgw_obj* target_obj)
 {
