@@ -1,13 +1,13 @@
 
 # -*- coding: utf-8 -*-
-
+import copy
 import json
 import logging
 from typing import List
 
 from smb.enums import Intent
 from smb.proto import Simplified
-from smb.resources import Cluster, Share
+from smb.resources import Cluster, Share, UsersAndGroups, JoinAuth
 
 from dashboard.controllers._docs import EndpointDoc
 from dashboard.controllers._permissions import CreatePermission, DeletePermission
@@ -41,35 +41,6 @@ CLUSTER_SCHEMA = {
     }, "Placement configuration for the resource")
 }
 
-CLUSTER_SCHEMA_RESULTS = {
-    "results": ([{
-        "resource": ({
-            "resource_type": (str, "ceph.smb.cluster"),
-            "cluster_id": (str, "Unique identifier for the cluster"),
-            "auth_mode": (str, "Either 'active-directory' or 'user'"),
-            "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
-            "domain_settings": ({
-                "realm": (str, "Domain realm, e.g., 'DOMAIN1.SINK.TEST'"),
-                "join_sources": ([{
-                    "source_type": (str, "resource"),
-                    "ref": (str, "Reference identifier for the join auth resource")
-                }], "List of join auth sources for domain settings")
-            }, "Domain-specific settings for active-directory auth mode"),
-            "user_group_settings": ([{
-                "source_type": (str, "resource"),
-                "ref": (str, "Reference identifier for the user group resource")
-            }], "User group settings for user auth mode (optional)"),
-            "custom_dns": ([str], "List of custom DNS server addresses (optional)"),
-            "placement": ({
-                "count": (int, "Number of instances to place")
-            }, "Placement configuration for the resource (optional)"),
-        }, "Resource details"),
-        "state": (str, "State of the resource"),
-        "success": (bool, "Indicates whether the operation was successful")
-    }], "List of results with resource details"),
-    "success": (bool, "Overall success status of the operation")
-}
-
 LIST_CLUSTER_SCHEMA = [CLUSTER_SCHEMA]
 
 SHARE_SCHEMA = {
@@ -87,6 +58,58 @@ SHARE_SCHEMA = {
     }, "Configuration for the CephFS share")
 }
 
+JOIN_AUTH_SCHEMA = {
+    "resource_type": (str, "ceph.smb.join.auth"),
+    "auth_id": (str, "Unique identifier for the join auth resource"),
+    "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
+    "auth": ({
+        "username": (str, "Username for authentication"),
+        "password": (str, "Password for authentication")
+    }, "Authentication credentials"),
+    "linked_to_cluster": (str, "Optional string containing a cluster ID. \
+    If set, the resource is linked to the cluster and will be automatically removed \
+    when the cluster is removed")
+}
+
+LIST_JOIN_AUTH_SCHEMA = [JOIN_AUTH_SCHEMA]
+
+USERSGROUPS_SCHEMA = {
+    "resource_type": (str, "ceph.smb.usersgroups"),
+    "users_groups_id": (str, "A short string identifying the usersgroups resource"),
+    "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
+    "values": ({
+        "users": ([{
+            "name": (str, "The user name"),
+            "password": (str, "The password for the user")
+        }], "List of user objects, each containing a name and password"),
+        "groups": ([{
+            "name": (str, "The name of the group")
+        }], "List of group objects, each containing a name")
+    }, "Required object containing users and groups information"),
+    "linked_to_cluster": (str, "Optional string containing a cluster ID. \
+    If set, the resource is linked to the cluster and will be automatically removed \
+    when the cluster is removed")
+}
+
+LIST_USERSGROUPS_SCHEMA = [USERSGROUPS_SCHEMA]
+
+def add_results_to_schema(schema):
+
+    results_field = {
+        "results": ([{
+            "resource": (schema, "Resource"),
+            "state": (str, "The current state of the resource, e.g., 'created', 'updated', 'deleted'"),
+            "success": (bool, "Indicates if the operation was successful"),
+        }], "List of operation results"),
+        "success": (bool, "Indicates if the overall operation was successful")
+    }
+
+    return results_field
+
+
+CLUSTER_SCHEMA_RESULTS = add_results_to_schema(CLUSTER_SCHEMA)
+JOIN_AUTH_SCHEMA_RESULTS = add_results_to_schema(JOIN_AUTH_SCHEMA)
+USERSGROUPS_SCHEMA_RESULTS = add_results_to_schema(JOIN_AUTH_SCHEMA_RESULTS)
 
 @APIRouter('/smb/cluster', Scope.SMB)
 @APIDoc("SMB Cluster Management API", "SMB")
@@ -161,7 +184,7 @@ class SMBShare(RESTController):
             'smb',
             'show',
             [f'{self._resource}.{cluster_id}' if cluster_id else self._resource])
-        return res['resources'] if 'resources' in res else res
+        return res['resources'] if 'resources' in res else [res]
 
     @DeletePermission
     @EndpointDoc("Remove smb shares",
@@ -184,3 +207,80 @@ class SMBShare(RESTController):
         resource['share_id'] = share_id
         resource['intent'] = Intent.REMOVED
         return mgr.remote('smb', 'apply_resources', json.dumps(resource)).one().to_simplified()
+
+
+@APIRouter('/smb/joinauth', Scope.SMB)
+@APIDoc("SMB Join Auth API", "SMB")
+class SMBJoinAuth(RESTController):
+    _resource: str = 'ceph.smb.join.auth'
+
+    @ReadPermission
+    @EndpointDoc("List smb join authorization resources",
+                 responses={200: LIST_JOIN_AUTH_SCHEMA})
+    def list(self, join_auth: str = '') -> List[Share]:
+        """
+        List all smb join auth resources
+
+        :return: Returns list of join auth.
+        :rtype: List[Dict]
+        """
+        res = mgr.remote(
+            'smb',
+            'show',
+            [f'{self._resource}.{join_auth}' if join_auth else self._resource])
+        return res['resources'] if 'resources' in res else [res]
+
+    @CreatePermission
+    @EndpointDoc("Create smb join auth",
+                 parameters={
+                     'auth_id': (str, 'auth_id'),
+                     'username': (str, 'username'),\
+                     'password': (str, 'password')
+                 },
+                 responses={201: JOIN_AUTH_SCHEMA_RESULTS})
+    def create(self, join_auth: JoinAuth) -> Simplified:
+        """
+        Create smb join auth resource
+
+        :return: Returns join auth resource.
+        :rtype: Dict
+        """
+        return mgr.remote('smb', 'apply_resources', json.dumps(join_auth)).to_simplified()
+
+@APIRouter('/smb/usersgroups', Scope.SMB)
+@APIDoc("SMB Users Groups API", "SMB")
+class SMBUsersgroups(RESTController):
+    _resource: str = 'ceph.smb.usersgroups'
+
+    @ReadPermission
+    @EndpointDoc("List smb user resources",
+                 responses={200: LIST_USERSGROUPS_SCHEMA})
+    def list(self, users_groups: str = '') -> List[UsersAndGroups]:
+        """
+        List all smb usersgroups resources
+
+        :return: Returns list of usersgroups.
+        :rtype: List[Dict]
+        """
+        res = mgr.remote(
+            'smb',
+            'show',
+            [f'{self._resource}.{users_groups}' if users_groups else self._resource])
+        return res['resources'] if 'resources' in res else [res]
+
+    @CreatePermission
+    @EndpointDoc("Create smb usersgroups",
+                 parameters={
+                     'users_groups_id': (str, 'users_groups_id'),
+                     'username': (str, 'username'),\
+                     'password': (str, 'password')
+                 },
+                 responses={201: CLUSTER_SCHEMA_RESULTS})#TODO: change response result
+    def create(self, usersgroups: UsersAndGroups) -> Simplified:
+        """
+        Create smb usersgroups resource
+
+        :return: Returns usersgroups resource.
+        :rtype: Dict
+        """
+        return mgr.remote('smb', 'apply_resources', json.dumps(usersgroups)).to_simplified()

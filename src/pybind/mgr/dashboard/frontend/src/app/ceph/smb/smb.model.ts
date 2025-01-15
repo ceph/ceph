@@ -26,3 +26,36 @@ export interface AuthMode {
   user: 'User';
   activeDirectory: 'active-directory';
 }
+
+export interface SMBJoinAuth {
+  auth_id: string;
+  intent?: 'present' | 'removed';
+  auth: Auth;
+  linked_to_cluster?: string;
+}
+
+export interface SMBUsersgroups {
+  users_groups_id: string;
+  intent?: 'present' | 'removed';
+  values: Value;
+  linked_to_cluster?: string;
+}
+
+interface Auth {
+  username: string;
+  password: string;
+}
+
+interface User {
+  name: string;
+  password: string;
+}
+
+interface Group {
+  name: string;
+}
+
+interface Value {
+  users: User[];
+  groups: Group[];
+}

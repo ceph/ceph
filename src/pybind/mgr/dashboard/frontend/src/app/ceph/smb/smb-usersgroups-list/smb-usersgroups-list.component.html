@@ -1,0 +1,24 @@
+<cd-smb-tabs></cd-smb-tabs>
+<ng-container *ngIf="usersGroups$ | async as usersGroups">
+  <cd-table
+    #table
+    [data]="usersGroups"
+    columnMode="flex"
+    [columns]="columns"
+    identifier="id"
+    forceIdentifier="true"
+    selectionType="single"
+    [hasDetails]="false"
+    (setExpandedRow)="setExpandedRow($event)"
+    (fetchData)="loadUsersGroups($event)"
+  >
+      <div class="table-actions">
+        <cd-table-actions [permission]="permission"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="usersgroups-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
+  </ng-container>

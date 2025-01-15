@@ -1,0 +1,108 @@
+<div>
+  <form name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div i18n="form title"
+         class="form-header">
+      {{ action | titlecase }} {{ resource | upperFirst }}
+    </div>
+
+    <!-- Auth Id -->
+    <div class="form-item">
+       <cds-text-label
+         for="auth_id"
+         i18n
+         helperText="Unique join auth identifier"
+         i18n-helperText
+         cdRequiredField="Join Auth Name"
+         [invalid]="form.controls.auth_id.invalid && form.controls.auth_id.dirty"
+         [invalidText]="jaError"
+         >Join Auth Id
+         <input
+           cdsText
+           type="text"
+           placeholder="Id..."
+           i18n-placeholder
+           id="auth_id"
+           name="auth_id"
+           formControlName="auth_id"
+           [invalid]="form.controls.auth_id.invalid && form.controls.auth_id.dirty"
+         />
+       </cds-text-label>
+       <ng-template #jaError>
+         <span
+           class="invalid-feedback"
+           *ngIf="form.showError('auth_id', form, 'required')"
+           i18n
+           >This field is required.</span
+         >
+       </ng-template>
+    </div>
+
+    <!-- Username -->
+    <div class="form-item">
+        <cds-text-label
+            for="username"
+            i18n
+            cdRequiredField="Username"
+            [invalid]="form.controls.username.invalid && form.controls.username.dirty"
+            [invalidText]="usernameError"
+        >Username
+        <input
+            cdsText
+            type="text"
+            placeholder="Username..."
+            i18n-placeholder
+            id="username"
+            name="username"
+            formControlName="username"
+            [invalid]="form.controls.username.invalid && form.controls.username.dirty"
+        />
+        </cds-text-label>
+        <ng-template #usernameError>
+            <span
+                class="invalid-feedback"
+                *ngIf="form.showError('username', form, 'required')"
+                i18n
+            >This field is required.
+            </span>
+        </ng-template>
+    </div>
+
+    <!-- Password -->
+    <div class="form-item">
+        <cds-text-label
+            for="password"
+            i18n
+            cdRequiredField="Password"
+            [invalid]="form.controls.password.invalid && form.controls.password.dirty"
+            [invalidText]="passwordError"
+            >Password
+            <input
+                cdsText
+                type="password"
+                placeholder="Password..."
+                i18n-placeholder
+                id="password"
+                name="password"
+                formControlName="password"
+                [invalid]="form.controls.password.invalid && form.controls.password.dirty"
+            />
+        </cds-text-label>
+        <ng-template #passwordError>
+            <span
+                class="invalid-feedback"
+                *ngIf="form.showError('password', form, 'required')"
+                i18n
+            >This field is required.
+            </span>
+        </ng-template>
+    </div>
+    <cd-form-button-panel
+        (submitActionEvent)="submit()"
+        [form]="form"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"></cd-form-button-panel>
+    </form>
+</div>

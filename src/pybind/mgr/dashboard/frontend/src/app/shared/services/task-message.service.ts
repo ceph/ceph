@@ -479,6 +479,13 @@ export class TaskMessageService {
     'cephfs/snapshot/schedule/deactivate': this.newTaskMessage(
       this.commonOperations.deactivate,
       (metadata) => this.snapshotSchedule(metadata)
+    ),
+    // smb
+    'cephfs/smb/joinauth/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.smbJoinAuth(metadata)
+    ),
+    'cephfs/smb/usersgroups/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.smbUsersgroups(metadata)
     )
   };
 
@@ -537,6 +544,14 @@ export class TaskMessageService {
     return $localize`NFS '${metadata.cluster_id}\:${
       metadata.export_id ? metadata.export_id : metadata.path
     }'`;
+  }
+
+  smbJoinAuth(metadata: any) {
+    return $localize`SMB Join Auth '${metadata.authId}'`;
+  }
+
+  smbUsersgroups(metadata: any) {
+    return $localize`SMB User Groups '${metadata.authId}'`;
   }
 
   service(metadata: any) {
