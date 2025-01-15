@@ -216,6 +216,8 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
         peers.all_committed.set_value();
         peers.all_committed = {};
       }
+      pg.update_peer_last_complete_ondisk(
+	peer.shard, peer.last_complete_ondisk);
       return;
     }
   }
