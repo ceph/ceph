@@ -46,6 +46,12 @@ class TestCephadmCLI(MgrTestCase):
         self._orch_cmd('pause')
         self.wait_for_health('CEPHADM_PAUSED', 60)
         self._orch_cmd('resume')
+        # to make sure to refresh any potential stale daemon info from
+        # previous tests that may be causing a health warning. This has
+        # been specifically seen as a result of running after the
+        # test_daemon_restart test where the `ceph orch daemon restart osd.0`
+        # command could temporarily put the OSD in an unknown state
+        self._orch_cmd('ps', '--refresh')
         self.wait_for_health_clear(60)
 
     def test_daemon_restart(self):
