@@ -32,6 +32,7 @@ from . import mgr
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
 from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
+from .controllers import nvmeof  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.service import RgwServiceManager
