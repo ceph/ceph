@@ -3750,7 +3750,10 @@ public:
         return set_cr_error(retcode);
       }
 
-      status.state = BucketSyncState::Init;
+      // if the state is full, don't overwrite it as it was requested by radosgw-admin
+      if (status.state != BucketSyncState::Full) {
+        status.state = BucketSyncState::Init;
+      }
 
       if (info.oldest_gen == 0) {
 	if (check_compat) {
@@ -3801,7 +3804,7 @@ public:
 
         if (sync_env->sync_module->should_full_sync()) {
           status.state = BucketSyncState::Full;
-        } else {
+        } else if (status.state != BucketSyncState::Full) { // if not already set by radosgw-admin
           status.state = BucketSyncState::Incremental;
         }
       }
@@ -6195,7 +6198,8 @@ RGWBucketPipeSyncStatusManager::construct(
 }
 
 int RGWBucketPipeSyncStatusManager::init_sync_status(
-  const DoutPrefixProvider *dpp)
+  const DoutPrefixProvider *dpp,
+  BucketSyncState state)
 {
   // Just running one at a time saves us from buildup/teardown and in
   // practice we only do one zone at a time.
@@ -6210,7 +6214,7 @@ int RGWBucketPipeSyncStatusManager::init_sync_status(
                    full_status_oid(source.sc.source_zone,
 				   source.info.bucket,
 				   source.dest)},
-		  rgw_bucket_sync_status{}));
+		  rgw_bucket_sync_status{.state = state}));
     stacks.push_back(stack);
     auto r = cr_mgr.run(dpp, stacks);
     if (r < 0) {
