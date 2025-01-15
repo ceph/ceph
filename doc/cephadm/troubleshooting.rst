@@ -36,6 +36,35 @@ These commands disable all ``ceph orch ...`` CLI commands. All
 previously deployed daemon containers continue to run and will start just as
 they were before you ran these commands.
 
+In certain scenarios, commands may still execute even when the orchestrator is paused. 
+This behavior arises because these commands bypass the orchestrator's main working loop and are not queued for asynchronous execution. 
+Instead, they invoke low-level operations directly, allowing them to proceed regardless of the orchestrator's paused state.
+
+Example: removing a Daemon
+The 'ceph orch daemon rm' command is one such example. 
+When executed, it directly interacts with the underlying infrastructure to remove the specified daemon.
+Below are log excerpts illustrating this behavior:
+
+.. prompt:: bash #
+
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 139 : cephadm [INF] Paused
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 168 : cephadm [INF] Remove daemons osd.5
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 169 : cephadm [INF] Daemon details: osd.5, ceph-node-2
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 170 : cephadm [INF] Details: osd.5 in status None on ceph-node-2
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 171 : cephadm [INF] Removing daemon osd.5 from ceph-node-2 -- ports []
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 173 : cephadm [INF] Directly calling post_remove for daemon type: osd
+   mgr.ceph-node-0.pbyqcl (mgr.15129) 174 : cephadm [INF] Removing key for osd.5
+
+
+Other commands that directly interact with daemons or hosts and may execute when the orchestrator is paused include:
+
+.. prompt:: bash #
+
+   ceph orch daemon add
+   ceph orch host add <host>
+   ceph orch host rm <host>
+   ceph orch tuned-profile apply
+
 See :ref:`cephadm-spec-unmanaged` for more on disabling individual services.
 
 
