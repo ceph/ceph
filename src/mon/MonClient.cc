@@ -1249,6 +1249,7 @@ void MonClient::_send_command(MonCommand *r)
   }
 
   // normal CLI command
+  r->sent_name = active_con ? monmap.get_name(active_con->get_con()->get_peer_addr()) : "";
   ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd << dendl;
   auto m = ceph::make_message<MMonCommand>(monmap.fsid);
   m->set_tid(r->tid);
@@ -1286,6 +1287,25 @@ void MonClient::_resend_mon_commands()
       // starting with octopus, tell commands use their own connetion and need no
       // special resend when we finish hunting.
     } else {
+      if (!cct->_conf->mon_client_hunt_on_resend) {
+        // Ensure the target name of the resend mon command matches the rank
+        // of the current active connection.
+        ldout(cct, 20) << __func__ << " " << cmd->tid << " " << cmd->cmd
+                       << " last sent_name " << cmd->sent_name << dendl;
+        if (!monmap.contains(cmd->sent_name)) {
+          ldout(cct, 20) << __func__ << " " << cmd->tid << " " << cmd->cmd
+                        << " sent_name " << cmd->sent_name << " not in monmap using mon:" <<
+                        monmap.get_name(active_con->get_con()->get_peer_addr()) << dendl;
+        } else if (active_con && cmd->sent_name.length() &&
+                   cmd->sent_name != monmap.get_name(active_con->get_con()->get_peer_addr()) &&
+                   monmap.contains(cmd->sent_name)) {
+          ldout(cct, 20) << __func__ << " " << cmd->tid << " " << cmd->cmd
+                         << " wants mon " << cmd->sent_name
+                         << " current connection is " << monmap.get_name(active_con->get_con()->get_peer_addr())
+                         << ", reopening session" << dendl;
+          _reopen_session(monmap.get_rank(cmd->sent_name));
+        }
+      }
       _send_command(cmd); // might remove cmd from mon_commands
     }
   }
