@@ -8196,13 +8196,18 @@ next:
       return -ret;
     }
     RGWOLHInfo olh;
+    RGWOLHSnapInfo snap_info;
     rgw_obj obj(bucket->get_key(), object);
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_olh(dpp(), bucket->get_info(), obj, &olh, null_yield);
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_olh(dpp(), bucket->get_info(), obj, &olh, &snap_info, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("olh", olh, formatter.get());
+    {
+      Formatter::ObjectSection os(*formatter, "result");
+      encode_json("olh", olh, formatter.get());
+      encode_json("olh_snap_info", snap_info, formatter.get());
+    }
     formatter->flush(cout);
   }
 

@@ -93,6 +93,46 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& o
   }
 }
 
+struct rgw_olh_snap_entry {
+  rgw_obj_key key;
+  bool delete_marker = false;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    encode(delete_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START(1, bl);
+     decode(key, bl);
+     decode(delete_marker, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_olh_snap_entry)
+
+struct RGWOLHSnapInfo {
+  std::map<rgw_bucket_snap_id, rgw_olh_snap_entry> snap_map;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(snap_map, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START(1, bl);
+     decode(snap_map, bl);
+     DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWOLHSnapInfo)
+
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
@@ -1454,7 +1494,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs, optional_yield y);
   int follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target, optional_yield y);
-  int get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh, optional_yield y);
+  int get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh, RGWOLHSnapInfo *olh_snap_info, optional_yield y);
 
   void gen_rand_obj_instance_name(rgw_obj_key *target_key);
   void gen_rand_obj_instance_name(rgw_obj *target);

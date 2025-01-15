@@ -8878,7 +8878,7 @@ int RGWRados::bucket_index_clear_olh(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-static int decode_olh_info(const DoutPrefixProvider *dpp, CephContext* cct, const bufferlist& bl, RGWOLHInfo *olh)
+static int decode_olh_info(const DoutPrefixProvider *dpp, const bufferlist& bl, RGWOLHInfo *olh)
 {
   try {
     auto biter = bl.cbegin();
@@ -8886,6 +8886,18 @@ static int decode_olh_info(const DoutPrefixProvider *dpp, CephContext* cct, cons
     return 0;
   } catch (buffer::error& err) {
     ldpp_dout(dpp, 0) << "ERROR: failed to decode olh info" << dendl;
+    return -EIO;
+  }
+}
+
+static int decode_olh_snap_info(const DoutPrefixProvider *dpp, const bufferlist& bl, RGWOLHSnapInfo *snap_info)
+{
+  try {
+    auto biter = bl.cbegin();
+    decode(*snap_info, biter);
+    return 0;
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode olh snap info" << dendl;
     return -EIO;
   }
 }
@@ -8944,12 +8956,21 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   auto olh_info = state.attrset.find(RGW_ATTR_OLH_INFO);
   if (olh_info != state.attrset.end()) {
     RGWOLHInfo info;
-    int r = decode_olh_info(dpp, cct, olh_info->second, &info);
+    int r = decode_olh_info(dpp, olh_info->second, &info);
     if (r < 0) {
       return r;
     }
     info.target.key.get_index_key(&key);
     delete_marker = info.removed;
+  }
+
+  RGWOLHSnapInfo snap_info;
+  auto snap_info_iter = state.attrset.find(RGW_ATTR_OLH_SNAP_INFO);
+  if (snap_info_iter != state.attrset.end()) {
+    int r = decode_olh_snap_info(dpp, snap_info_iter->second, &snap_info);
+    if (r < 0) {
+      return r;
+    }
   }
 
   for (iter = log.begin(); iter != log.end(); ++iter) {
@@ -8975,6 +8996,10 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
           key = entry.key;
           snap_id = entry.snap_id;
           delete_marker = entry.delete_marker;
+
+          auto& snap_entry = snap_info.snap_map[snap_id];
+          snap_entry.key = key;
+          snap_entry.delete_marker = delete_marker;
         } else {
           ldpp_dout(dpp, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
               << " before current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
@@ -9011,6 +9036,10 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     bufferlist bl;
     encode(info, bl);
     op.setxattr(RGW_ATTR_OLH_INFO, bl);
+
+    bufferlist bl2;
+    encode(snap_info, bl2);
+    op.setxattr(RGW_ATTR_OLH_SNAP_INFO, bl2);
   }
 
   /* first remove object instances */
@@ -9359,7 +9388,8 @@ void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
   gen_rand_obj_instance_name(&target_obj->key);
 }
 
-int RGWRados::get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh, optional_yield y)
+int RGWRados::get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                      RGWOLHInfo *olh, RGWOLHSnapInfo *olh_snap_info, optional_yield y)
 {
   map<string, bufferlist> attrset;
 
@@ -9376,7 +9406,18 @@ int RGWRados::get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
     return -EINVAL;
   }
 
-  return decode_olh_info(dpp, cct, iter->second, olh);
+  r = decode_olh_info(dpp, iter->second, olh);
+  if (r < 0) {
+    return r;
+  }
+
+  iter = attrset.find(RGW_ATTR_OLH_SNAP_INFO);
+  if (iter == attrset.end()) {
+    *olh_snap_info = RGWOLHSnapInfo();
+    return 0;
+  }
+
+  return decode_olh_snap_info(dpp, iter->second, olh_snap_info);
 }
 
 void RGWRados::check_pending_olh_entries(const DoutPrefixProvider *dpp,
@@ -9484,7 +9525,7 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
   }
 
   RGWOLHInfo olh;
-  int ret = decode_olh_info(dpp, cct, iter->second, &olh);
+  int ret = decode_olh_info(dpp, iter->second, &olh);
   if (ret < 0) {
     return ret;
   }
@@ -11412,6 +11453,17 @@ void objexp_hint_entry::dump(Formatter *f) const
   utime_t ut(exp_time);
   encode_json("exp_time", ut, f);
   f->close_section();
+}
+
+void rgw_olh_snap_entry::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("delete_marker", delete_marker, f);
+}
+
+void RGWOLHSnapInfo::dump(Formatter *f) const
+{
+  encode_json("snap_map", snap_map, f);
 }
 
 void RGWOLHInfo::generate_test_instances(list<RGWOLHInfo*> &o)
