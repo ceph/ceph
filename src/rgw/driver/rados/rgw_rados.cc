@@ -3189,7 +3189,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (r < 0)
     return r;
 
-  rgw_obj obj = target->get_obj();
+  rgw_obj& obj = target->get_obj();
 
   auto& bucket_info = target->get_bucket_info();
   auto& snap_mgr = bucket_info.local.snap_mgr;
