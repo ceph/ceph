@@ -458,7 +458,11 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_obj_key &key) {
   return out << fmt::format("{}", key);
 #else
   if (key.instance.empty()) {
-    return out << fmt::format("{}", key.name);
+    if (key.snap_id == RGW_BUCKET_SNAP_NOSNAP) {
+      return out << fmt::format("{}", key.name);
+    } else {
+      return out << fmt::format("{}[null.{}]", key.name, key.snap_id);
+    }
   } else {
     return out << fmt::format("{}[{}]", key.name, key.instance);
   }
