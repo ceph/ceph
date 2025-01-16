@@ -8453,26 +8453,34 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     }
 
     ldout(cct,10) << "changing size to " << stx_size << dendl;
-    // client portion for fscrypt last block
+
+    //fscrypt last block
     //
-    // last block is only needed when truncating smaller
-    // and truncate size is non-zero.
+    //last block is only needed when truncating smaller
+    //when size is not aligned to FSCRYPT_BLOCK_SIZE
+    //and truncate size is non-zero.
     if (in->is_fscrypt_enabled() && stx_size < in->effective_size() &&
+        stx_size % FSCRYPT_BLOCK_SIZE != 0 &&
         (mask & CEPH_SETATTR_FSCRYPT_FILE) && stx_size != 0){
       // steps:
       // 1. read last block
-      int	offset;
-      offset = fscrypt_block_start(stx->stx_size);
 
+      //As we need to read the whole fscrypt block, derive
+      //offset from the new size.
+      int offset = fscrypt_block_start(stx->stx_size);
       bufferlist bl;
       bufferlist ebl;
       ceph_fscrypt_last_block_header header;
 
       int r;
-      C_SaferCond onfinish("Client::_read_sync flock");
+      std::unique_ptr<Context> io_finish = nullptr;
 
       uint64_t read_start;
       uint64_t read_len;
+
+      C_SaferCond *io_finish_cond = nullptr;
+      io_finish_cond = new C_SaferCond("Client::_read_async flock");
+      io_finish.reset(io_finish_cond);
 
       FSCryptFDataDencRef fscrypt_denc;
       fscrypt->prepare_data_read(in->fscrypt_ctx,
@@ -8481,36 +8489,46 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
                                  &read_start, &read_len,
                                  &fscrypt_denc);
 
-
-      FSCryptFDataDencRef denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
+      get_cap_ref(in, CEPH_CAP_FILE_CACHE);
       std::vector<ObjectCacher::ObjHole> holes;
+      auto target_len = std::min(read_len, stx->stx_size - offset);
       r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
-                                     read_start, read_len, &bl, 0, &holes, &onfinish);
+                                     read_start, target_len, &bl, 0, &holes, io_finish.get());
+
+      if (r == 0) {
+        client_lock.unlock();
+        r = io_finish_cond->wait();
+        client_lock.lock();
+      }
+      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+
+      header.ver = 1;
+      header.compat = 1;
+      header.change_attr = in->change_attr;
+      header.block_size = FSCRYPT_BLOCK_SIZE;
+
       if (bl.length() == 0) {
-	//this is a hole
-        header.data_len = (8 + 8 + 4);
+        //this is a hole
+	header.data_len = (8 + 8 + 4);
 	header.file_offset = 0;
       } else {
-        r = denc->decrypt_bl(offset, stx->stx_size, read_start, holes, &bl);
+        r = fscrypt_denc->decrypt_bl(offset, target_len, read_start, holes, &bl);
+
         if (r < 0) {
           ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
           return r;
         }
 
 	// 2. encrypt bl
-        if (denc)
-          r = denc->encrypt_bl(offset, bl.length(), bl, &ebl);
+        if (fscrypt_denc) {
+          r = fscrypt_denc->encrypt_bl(offset, bl.length(), bl, &ebl);
+	}
 
-        // 3. prepare lastblockbl
-        // TODO: support hole
-        header.ver = 1;
-        header.compat = 1;
-        header.change_attr = in->change_attr;
-        header.block_size = FSCRYPT_BLOCK_SIZE;
         header.data_len = (8 + 8 + 4 + ebl.length());
         header.file_offset = offset;
       }
 
+      // 3. prepare lastblockbl
       ENCODE_START(1, 1, lastblockbl);
       encode(header.change_attr, lastblockbl);
       encode(header.file_offset, lastblockbl);
@@ -11449,7 +11467,7 @@ void Client::C_Read_Async_Finisher::finish(int r)
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 			Context *onfinish)
 {
-  (ceph_mutex_is_locked_by_me(client_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
