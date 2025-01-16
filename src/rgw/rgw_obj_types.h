@@ -117,12 +117,20 @@ struct rgw_obj_key {
 
   // cppcheck-suppress noExplicitConstructor
   rgw_obj_key(const std::string& n) : name(n) {}
-  rgw_obj_key(const std::string& n, const std::string& i) : name(n), instance(i) {}
-  rgw_obj_key(const std::string& n, const std::string& i, const std::string& _ns) : name(n), instance(i), ns(_ns) {}
+  rgw_obj_key(const std::string& n, const std::string& i) : name(n) {
+    _init_instance(i);
+  }
+  rgw_obj_key(const std::string& n, const std::string& i, const std::string& _ns) : name(n), ns(_ns) {
+    _init_instance(i);
+  }
 
   rgw_obj_key(const rgw_obj_index_key& k) {
     parse_index_key(k.name, &name, &ns);
-    instance = k.instance;
+    _init_instance(k.instance);
+  }
+
+  void _init_instance(const std::string& i) {
+    _parse_instance(i, instance, snap_id);
   }
 
   static void parse_index_key(const std::string& key, std::string *name, std::string *ns) {
@@ -156,13 +164,13 @@ struct rgw_obj_key {
 
   void set(const std::string& n, const std::string& i) {
     name = n;
-    instance = i;
+    _init_instance(i);
     ns.clear();
   }
 
   void set(const std::string& n, const std::string& i, const std::string& _ns) {
     name = n;
-    instance = i;
+    _init_instance(i);
     ns = _ns;
   }
 
@@ -175,7 +183,7 @@ struct rgw_obj_key {
   }
 
   void set_instance(const std::string& i) {
-    instance = i;
+    _init_instance(i);
   }
 
   void set_snap_id(rgw_bucket_snap_id sid) {
@@ -296,10 +304,14 @@ struct rgw_obj_key {
     /* callers already output */
 
     if (field.empty()) {
+      instance.clear();
+      snap_id = RGW_BUCKET_SNAP_NOSNAP;
       return;
     } 
 
     if (field[0] != '#') {
+      instance = field;
+      snap_id = RGW_BUCKET_SNAP_NOSNAP;
       return;
     }
 
