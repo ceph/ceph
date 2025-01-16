@@ -86,6 +86,9 @@ transport_tcp_options = {{ transport_tcp_options }}
 {% if spec.tgt_cmd_extra_args %}
 tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% endif %}
+{% if iobuf_options %}
+iobuf_options = {{ iobuf_options }}
+{% endif %}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}
