@@ -4167,7 +4167,7 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
 
     if (r < 0) {
       // fall-thru. let rdlock_path_pin_ref() check again.
-    } else if (is_lookup) {
+    } else if (is_lookup && mdr->dn[0].size()) {
       CDentry* dn = mdr->dn[0].back();
       mdr->pin(dn);
       auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
@@ -4274,7 +4274,7 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
   mdr->tracei = ref;
-  if (is_lookup)
+  if (is_lookup && mdr->dn[0].size())
     mdr->tracedn = mdr->dn[0].back();
   respond_to_request(mdr, 0);
 }
