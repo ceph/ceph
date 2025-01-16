@@ -17,6 +17,7 @@
 #include "common/errno.h"
 #include <fcntl.h>
 #include "EventEpoll.h"
+#include "Timeout.h"
 
 #define dout_subsys ceph_subsys_ms
 
@@ -120,8 +121,7 @@ int EpollDriver::event_wait(std::vector<FiredFileEvent> &fired_events, struct ti
 {
   int retval, numevents = 0;
 
-  retval = epoll_wait(epfd, events, nevent,
-                      tvp ? (tvp->tv_sec*1000 + tvp->tv_usec/1000) : -1);
+  retval = epoll_wait(epfd, events, nevent, timeout_to_milliseconds(tvp));
   if (retval > 0) {
     numevents = retval;
     fired_events.resize(numevents);
