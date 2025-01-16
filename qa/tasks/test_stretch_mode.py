@@ -1,5 +1,5 @@
 import logging
-from stretch_mode_helper import setup_stretch_mode
+from stretch_mode_helper import setup_stretch_mode, check_connection_score
 from tasks.mgr.mgr_test_case import MgrTestCase
 
 log = logging.getLogger(__name__)
@@ -59,7 +59,8 @@ class TestStretchMode(MgrTestCase):
     def setUp(self):
         """
         Setup the cluster and
-        ensure we have a clean condition before the test.
+        ensure we have a clean condition before the test and
+        ensure that we are ready to enter stretch mode.
         """
         # Ensure we have at least 6 OSDs
         super(TestStretchMode, self).setUp()
@@ -102,6 +103,9 @@ class TestStretchMode(MgrTestCase):
             self.DC_OSDS,
             self.DC_MONS
         )
+
+        # Check the connection score
+        assert check_connection_score(self.mgr_cluster)
 
     def _setup_pool(
             self,
@@ -227,6 +231,9 @@ class TestStretchMode(MgrTestCase):
 
         # Remove the CRUSH rule if it is still present
         self._remove_crush_rule(self.STRETCH_CRUSH_RULE)
+
+        # Check the connection score
+        assert check_connection_score(self.mgr_cluster)
 
         super(TestStretchMode, self).tearDown()
 
