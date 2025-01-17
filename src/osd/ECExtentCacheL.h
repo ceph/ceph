@@ -93,8 +93,9 @@
    states.
  */
 
+namespace ECLegacy {
 /// If someone wants these types, but not ECExtentCacheL, move to another file
-struct bl_split_merge_l {
+struct bl_split_merge {
   ceph::buffer::list split(
     uint64_t offset,
     uint64_t length,
@@ -113,8 +114,8 @@ struct bl_split_merge_l {
   }
   uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
 };
-using extent_set_l = interval_set<uint64_t>;
-using extent_map_l = interval_map<uint64_t, ceph::buffer::list, bl_split_merge_l>;
+using extent_set = interval_set<uint64_t>;
+using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
 
 class ECExtentCacheL {
   struct object_extent_set;
@@ -425,11 +426,11 @@ public:
    *                     of to_write)
    * @return subset of to_read which isn't already present or pending
    */
-  extent_set_l reserve_extents_for_rmw(
+  extent_set reserve_extents_for_rmw(
     const hobject_t &oid,
     write_pin &pin,
-    const extent_set_l &to_write,
-    const extent_set_l &to_read);
+    const extent_set &to_write,
+    const extent_set &to_read);
 
   /**
    * Gets extents required for rmw not returned from
@@ -445,10 +446,10 @@ public:
    * @param to_get [in] extents to get (see above for restrictions)
    * @return map of buffers from to_get
    */
-  extent_map_l get_remaining_extents_for_rmw(
+  extent_map get_remaining_extents_for_rmw(
     const hobject_t &oid,
     write_pin &pin,
-    const extent_set_l &to_get);
+    const extent_set &to_get);
 
   /**
    * Updates the cache to reflect the rmw write
@@ -470,7 +471,7 @@ public:
   void present_rmw_update(
     const hobject_t &oid,
     write_pin &pin,
-    const extent_map_l &extents);
+    const extent_map &extents);
 
   /**
    * Release all buffers pinned by pin
@@ -484,4 +485,4 @@ public:
 };
 
 std::ostream &operator <<(std::ostream &lhs, const ECExtentCacheL &cache);
-
+} // namespace ECLegacy

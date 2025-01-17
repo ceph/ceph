@@ -20,6 +20,7 @@
 #include "os/Transaction.h"
 #include "PGTransaction.h"
 
+namespace ECLegacy {
 namespace ECTransactionL {
   struct WritePlan {
     bool invalidates_cache = false; // Yes, both are possible
@@ -189,4 +190,5 @@ namespace ECTransactionL {
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
     const ceph_release_t require_osd_release = ceph_release_t::unknown);
-};
+}
+}
