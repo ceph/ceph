@@ -3587,21 +3587,10 @@ TEST(LibCephFS, FsCrypt) {
   int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
   ASSERT_GT(fd, 0);
 
-  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.auth", "foo", 3, CEPH_XATTR_CREATE));
-  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.file", "foo", 3, CEPH_XATTR_CREATE));
-
-  char buf[64];
-  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.auth", buf, sizeof(buf)));
-  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.file", buf, sizeof(buf)));
-  ASSERT_EQ(0, ceph_close(cmount, fd));
-
-  ASSERT_EQ(0, ceph_unmount(cmount));
-  ASSERT_EQ(0, do_ceph_mount(cmount, NULL));
-
-  fd = ceph_open(cmount, test_xattr_file, O_RDWR, 0666);
-  ASSERT_GT(fd, 0);
-  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.auth", buf, sizeof(buf)));
-  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.fscrypt.file", buf, sizeof(buf)));
+  //should fail with not supported, as vxattr exists but is read only
+  ASSERT_EQ(-CEPHFS_EOPNOTSUPP, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.auth", "foo", 3, CEPH_XATTR_CREATE));
+  //should fail with EINVAL as vxattr is not exposed
+  ASSERT_EQ(-CEPHFS_EINVAL, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.file", "foo", 3, CEPH_XATTR_CREATE));
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
   ASSERT_EQ(0, ceph_unmount(cmount));
