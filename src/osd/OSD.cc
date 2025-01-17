@@ -6440,7 +6440,7 @@ void OSD::tick()
     const auto elapsed = now - last_trim_maps;
     if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
       > map_trim_min_interval) {
-      trim_maps(superblock.cluster_osdmap_trim_lower_bound);
+      trim_maps();
     }
   }
 
@@ -8079,12 +8079,20 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest)
+void OSD::trim_maps()
 {
   last_trim_maps = ceph::coarse_mono_clock::now();
-  epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
-  dout(20) <<  __func__ << ": min=" << min << " oldest_map="
-           << superblock.get_oldest_map() << dendl;
+
+  auto cluster_osdmap_tlb = superblock.cluster_osdmap_trim_lower_bound;
+  auto cache_key_lb = service.map_cache.cached_key_lower_bound();
+  epoch_t min = std::min(cluster_osdmap_tlb, cache_key_lb);
+  dout(5) <<  __func__ << ": min=" << min
+          << " oldest_map=" << superblock.get_oldest_map()
+          << " superblock.cluster_osdmap_trim_lower_bound="
+          << cluster_osdmap_tlb
+          << " service.map_cache.cached_key_lower_bound=" << cache_key_lb
+          << dendl;
+
   if (min <= superblock.get_oldest_map())
     return;
 
@@ -8398,7 +8406,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   track_pools_and_pg_num_changes(added_maps, t);
 
   if (!superblock.maps.empty()) {
-    trim_maps(m->cluster_osdmap_trim_lower_bound);
+    trim_maps();
     pg_num_history.prune(superblock.get_oldest_map());
   }
   superblock.insert_osdmap_epochs(first, last);
