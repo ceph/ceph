@@ -44,7 +44,7 @@ ceph telemetry preview-all
 # Run show commands
 ceph telemetry show
 ceph telemetry show-device
-ceph telemetry show
+ceph telemetry show-all
 
 # Opt out
 ceph telemetry off

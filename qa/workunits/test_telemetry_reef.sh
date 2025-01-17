@@ -1,8 +1,19 @@
 #!/bin/bash -ex
 
+# Set up ident details for cluster
+ceph config set mgr mgr/telemetry/channel_ident true
+ceph config set mgr mgr/telemetry/organization 'ceph-qa'
+ceph config set mgr mgr/telemetry/description 'upgrade test cluster'
+
+#Run preview commands
+ceph telemetry preview
+ceph telemetry preview-device
+ceph telemetry preview-all
+
 # Opt in to new collections right away to avoid "TELEMETRY_CHANGED"
 # warning (see https://tracker.ceph.com/issues/64458)
 ceph telemetry on --license sharing-1-0
+ceph telemetry enable channel perf
 
 # The last_opt_revision remains at 1 since last_opt_revision
 # was phased out for fresh installs of quincy.
@@ -44,9 +55,6 @@ ceph telemetry preview-all
 # Run show commands
 ceph telemetry show
 ceph telemetry show-device
-ceph telemetry show
-
-# Opt out
-ceph telemetry off
+ceph telemetry show-all
 
 echo OK
