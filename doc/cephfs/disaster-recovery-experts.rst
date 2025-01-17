@@ -66,22 +66,23 @@ store state.
 Journal truncation
 ------------------
 
-If the journal is corrupt or MDSs cannot replay it for any reason, you can
-truncate it like so:
+Use a command of the following form to truncate any journal that is corrupt or
+that an MDS cannot replay:
 
-::
+.. prompt:: bash #
 
-    cephfs-journal-tool [--rank=<fs_name>:{mds-rank|all}] journal reset --yes-i-really-really-mean-it
+   cephfs-journal-tool [--rank=<fs_name>:{mds-rank|all}] journal reset --yes-i-really-really-mean-it
 
-Specify the filesystem and the MDS rank using the ``--rank`` option when the file system has/had
-multiple active MDS.
+Specify the filesystem and the MDS rank using the ``--rank`` option when the
+file system has or had multiple active MDS.
 
 .. warning::
 
-    Resetting the journal *will* lose metadata unless you have extracted
-    it by other means such as ``recover_dentries``.  It is likely to leave
-    some orphaned objects in the data pool.  It may result in re-allocation
-    of already-written inodes, such that permissions rules could be violated.
+    Resetting the journal *will* cause metadata to be lost unless you have
+    extracted it by other means such as ``recover_dentries``. Resetting the
+    journal is likely to leave orphaned objects in the data pool.  Resetting
+    the journal may result in the re-allocation of already-written inodes,
+    which means that permissions rules could be violated.
 
 MDS table wipes
 ---------------
@@ -89,17 +90,20 @@ MDS table wipes
 After the journal has been reset, it may no longer be consistent with respect
 to the contents of the MDS tables (InoTable, SessionMap, SnapServer).
 
-To reset the SessionMap (erase all sessions), use:
+Use the following command to reset the SessionMap (this will erase all
+sessions):
 
-::
+.. prompt:: bash #
 
     cephfs-table-tool all reset session
 
-This command acts on the tables of all 'in' MDS ranks.  Replace 'all' with an MDS
-rank to operate on that rank only.
+This command acts on the tables of all MDS ranks that are ``in``. To operate
+only on a specified rank, replace ``all`` in the above command with an MDS
+rank.
 
-The session table is the table most likely to need resetting, but if you know you
-also need to reset the other tables then replace 'session' with 'snap' or 'inode'.
+Of all tables, the session table is the table most likely to require a reset.
+If you know that you need also to reset the other tables, then replace
+``session`` with ``snap`` or ``inode``.
 
 MDS map reset
 -------------
