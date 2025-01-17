@@ -213,14 +213,13 @@ class CertKeyStore():
             var = service_name if entity in self.service_name_cert else host
             self.known_certs[entity][var] = cert_obj
             j = {
-                    cert_key: Cert.to_json(self.known_certs[entity][cert_key])
-                    for cert_key in self.known_certs[entity]
+                cert_key: Cert.to_json(self.known_certs[entity][cert_key])
+                for cert_key in self.known_certs[entity]
             }
         else:
             self.known_certs[entity] = cert_obj
             j = Cert.to_json(cert_obj)
         self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
-
 
     def rm_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         """Remove a certificate for a specific entity, service, or host."""
@@ -496,7 +495,6 @@ class CertMgr:
                                     1,
                                     [detailed_err_msg]
                                     )
-
 
     def is_valid_certificate(self, cert: str, key: str) -> Tuple[bool, bool, int, str]:
         """

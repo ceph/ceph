@@ -110,7 +110,6 @@ class CephadmServe:
 
                     self._check_daemons()
 
-                    # self._check_certificates()
                     services_to_reconfig = self.mgr.cert_mgr.check_certificates()
                     for svc in services_to_reconfig:
                         self.mgr.service_action('reconfig', svc)
@@ -146,7 +145,7 @@ class CephadmServe:
             assert host is not None
             cert = self.mgr.cert_mgr.get_cert('grafana_cert', host=host)
             key = self.mgr.cert_mgr.get_key('grafana_key', host=host)
-            if (not cert or not cert.strip()) and (not key or not key.strip()):
+            if not cert or not key:
                 # certificate/key are empty... nothing to check
                 return
 
