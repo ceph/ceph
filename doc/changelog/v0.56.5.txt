@@ -1,0 +1,1972 @@
+commit df884bb7b59e5796c996ab806f5ec8b8322e292f
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Thu May 2 18:08:06 2013 -0700
+
+    v0.56.5
+
+commit b38cbabb2a38e4476de1135c33c25c673d62cd67
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Thu Apr 4 18:23:40 2013 +0200
+
+    ceph.spec.in: fix udev rules.d files handling
+    
+    Move 50-rbd.rules into the ceph base package since the related
+    ceph-rbdnamer binary is part of this package. Use correct install
+    pattern.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+
+commit d0678a062a1baf738ce96114114d99495be19478
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Apr 29 17:01:55 2013 -0700
+
+    debian: only start/stop upstart jobs if upstart is present
+    
+    This avoids errors on non-upstart distros (like wheezy).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 030bf8aaa15837f898e453161eeaf1d52fc5779d)
+    
+    Conflicts:
+    	debian/ceph-mds.postinst
+
+commit 209ce34a420cc5cdbe7219393f2f150ac28f612c
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 11 17:09:37 2013 -0700
+
+    debian: stop ceph-mds before uninstalling ceph-mds
+    
+    Fixes: #4384
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9eb0d91b867ab980135d7c6ff6347d69d0a8a794)
+
+commit 0c91becfa6cc5f05c5b2eaa89299dbf1aa202344
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Apr 25 15:53:51 2013 -0700
+
+    Makefile.am: Add -lpthread to fix build on newer ld in Raring Ringtail
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 98f532e8000af281fa03b24da9ad2fda81755270)
+    
+    Conflicts:
+    	src/Makefile.am
+
+commit 15e6544f0892e8472f436149d15fc30257496c0b
+Merge: fdc0534 418cff5
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 1 12:57:43 2013 -0700
+
+    Merge remote-tracking branch 'gh/bobtail-deploy' into bobtail-next
+
+commit fdc05346177a60f064fe351ca81c6078cd065179
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Apr 25 11:13:33 2013 -0700
+
+    init-ceph: use remote config when starting daemons on remote nodes (-a)
+    
+    If you use -a to start a remote daemon, assume the remote config is present
+    instead of pushing the local config.  This makes more sense and simplifies
+    things.
+    
+    Note that this means that -a in concert with -c foo means that foo must
+    also be present on the remote node in the same path.  That, however, is a
+    use case that I don't particularly care about right now.  :)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit cd7e52cc76878eed0f084f7b9a6cf7c792b716c6)
+
+commit 55c87e821b6acc1cd46056ca27c6e7f7030466e7
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Apr 24 12:20:17 2013 -0700
+
+    PG: call check_recovery_sources in remove_down_peer_info
+    
+    If we transition out of peering due to affected
+    prior set, we won't trigger start_peering_interval
+    and check_recovery_sources won't get called.  This
+    will leave an entry in missing_loc_sources without
+    a matching missing set.  We always want to
+    check_recovery_sources with remove_down_peer_info.
+    
+    Fixes: 4805
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 81a6165c13c533e9c1c6684ab7beac09d52ca6b5)
+
+commit a28c2f55bfc768a502fbc8ec35265e7f1a53e044
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Apr 25 14:08:57 2013 -0700
+
+    PG: clear want_acting when we leave Primary
+    
+    This is somewhat annoying actually.  Intuitively we want to
+    clear_primary_state when we leave primary, but when we restart
+    peering due to a change in prior set status, we can't afford
+    to forget most of our peering state.  want_acting, on the
+    other hand, should never persist across peering attempts.
+    In fact, in the future, want_acting should be pulled into
+    the Primary state structure.
+    
+    Fixes: #3904
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit a5cade1fe7338602fb2bbfa867433d825f337c87)
+
+commit 849ed5982d4547dd651313919fb090944f568214
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Apr 30 18:12:10 2013 -0700
+
+    mon: communicate the quorum_features properly when declaring victory.
+    
+    Fixes #4747.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fe68afe9d10bc5d49a05a8bafa644d57783447cf)
+
+commit ea9c76b8f457d44e63551d47b6dd30bd16a56468
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Apr 30 11:01:54 2013 -0700
+
+    elector: trigger a mon reset whenever we bump the epoch
+    
+    We need to call reset during every election cycle; luckily we
+    can call it more than once. bump_epoch is (by definition!) only called
+    once per cycle, and it's called at the beginning, so we put it there.
+    
+    Fixes #4858.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6ae9bbb5d03cb5695a4ebb7a3c20f729de1bd67a)
+    
+    Conflicts:
+    
+    	src/mon/Elector.cc
+
+commit 418cff585bf6fc292d260a464369d82f7cdb3b79
+Author: Alexandre Marangone <alexandre.marangone@inktank.com>
+Date:   Fri Apr 19 15:09:28 2013 -0700
+
+    Fix journal partition creation
+    
+    With OSD sharing data and journal, the previous code created the
+    journal partiton from the end of the device. A uint32_t is
+    used in sgdisk to get the last sector, with large HD, uint32_t
+    is too small.
+    The journal partition will be created backwards from the
+    a sector in the midlle of the disk leaving space before
+    and after it. The data partition will use whichever of
+    these spaces is greater. The remaining will not be used.
+    
+    This patch creates the journal partition from the start as a workaround.
+    
+    Signed-off-by: Alexandre Marangone <alexandre.marangone@inktank.com>
+    (cherry picked from commit 56619ab91732bd2eacbef388311954f4e0230a30)
+
+commit 1a6b87ea48c3bcd3904d888a2ad1e5774aa2de8e
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Apr 26 15:37:21 2013 -0700
+
+    ceph.spec.in: put ceph-disk-* et al in correct sbindir
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 86337936059d6b17c887e82f79167324eafa083c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Apr 26 15:29:12 2013 -0700
+
+    debian: fix ceph.install
+    
+    This got out of sync somewhere in cherry-picking all of these patches.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 0b42b1edb306a9763bcd02bd962bd284f6b7b3a3
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Thu Apr 4 15:54:31 2013 +0200
+
+    Makefile.am: install ceph-* python scripts to /usr/bin directly
+    
+    Install ceph-* scripts directly to $(prefix)$(sbindir) (which
+    normaly would be /usr/sbin) instead of moving it around after
+    installation in SPEC file or debian files.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 4d16f38f48e276497190c8bc03abc55c40e18eed)
+
+commit c71fb8d5b39667fc2c9f7e898ced53059d3f1eec
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Tue Apr 2 12:11:10 2013 -0700
+
+    ceph-disk:  CalledProcessError has no output keyword on 2.6
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+    (cherry picked from commit a793853850ee135de14b9237f7023cadcdb8575c)
+
+commit 1b86b1c7618b1ab93e25e1abf79bbe0a992c8526
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Apr 2 17:54:53 2013 +0200
+
+    ceph-disk: fix some (local) variable names
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit c4eb7e6ddd593cd45ab8343da01355be7382723e)
+
+commit ee452ebe6ff37087714c085dacd1ca2bcf66bd49
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Apr 2 17:36:37 2013 +0200
+
+    ceph-disk: fix naming of local variable in is_mounted()
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 3dd8b461219e64bb0f7a210dba5a9ab7c644f014)
+
+commit 0e47d312dcec2deb26a960e6097708d8742d85cb
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Apr 2 17:33:08 2013 +0200
+
+    ceph-disk: merge twice defined function is_mounted(dev)
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit eaf31bf9f90ba9709a57a6870dbafa21142dae2c)
+
+commit 7326ea6397160607d78914444f7f0598a6ba346f
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Apr 2 17:26:12 2013 +0200
+
+    ceph-disk: define exception type
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 4c6d6442a89adc5b56e99cb4d2ed572f2ad192c9)
+
+commit 14a348dc8ea9c012b6843825fd7beb5896a6d92e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Apr 2 17:17:38 2013 +0200
+
+    ceph-disk: fix Redefining name 'uuid' from outer scope
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 058eb923c5b7dab611901fdd1724ce2a7c180827)
+
+commit 9419dca69292146ea1fd216a1ad08b2e07bdc1a0
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Apr 2 17:14:23 2013 +0200
+
+    ceph-disk: add missing space after comma
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 0080d1df7c7950e051840a543fc4bdabe6cc53e5)
+
+commit 7406981aa5515a3be8af0b9a0abef83a40c432b2
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 29 17:30:28 2013 -0700
+
+    ceph-disk list: say 'unknown cluster $UUID' when cluster is unknown
+    
+    This makes it clearer that an old osd is in fact old.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e9b3f2e6e93426d631d4f8101fb431a523b0d88a)
+
+commit 0182973b66d449552d17248e27cd12c470137ea9
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 29 13:59:04 2013 -0700
+
+    ceph-disk: handle missing journal_uuid field gracefully
+    
+    Only lower if we know it's not None.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 562e1716bd4b5372716e502a5e4dd872d381bfb7)
+
+commit 24d729c591430349b033992f87141e596dcd6bff
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 28 20:49:24 2013 -0700
+
+    ceph-disk: implement 'list'
+    
+    This is based on Sandon's initial patch, but much-modified.
+    
+    Mounts ceph data volumes temporarily to see what is inside.  Attempts to
+    associated journals with osds.
+    
+    Resolves: #3120
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 6a65b9131c444041d16b880c6a7f332776063a78)
+
+commit bf3f8702c580c6b9647878837355688a2a4f954c
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 18:44:32 2013 -0700
+
+    ceph-disk: reimplement list_all_partitions
+    
+    Use /dev/disk/by-id to list disks and their partitions.  This is more
+    accurate and correct than the previous (as-yet unused) implementation.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d3e49047ff405573aa41f45864cf315be23f5c50)
+
+commit 9da81e4e798b8e5593f3a7eda6dfa8586307121f
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 18:43:59 2013 -0700
+
+    ceph-disk: reimplement is_partition
+    
+    Previously we were assuming any device that ended in a digit was a
+    partition, but this is not at all correct (e.g., /dev/sr0, /dev/rbd1).
+    Instead, look in /dev/disk/by-id and see if there is a symlink that ends in
+    -partNN that links to our device.
+    
+    There is probably still a better way...
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 20d594a889d62110ad03b761d8703f79f8eea6ad)
+
+commit 0c8efc0664f068a1952fe54b8034d005cf3f9ce8
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 12:45:29 2013 -0700
+
+    ceph-disk: conditionally remove mount path
+    
+    umount removes it on success; only remove it here if it is still there.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4362934a94c5a6f7521f06aa1255e111094e1d88)
+
+commit 153994cdcf9bc4a9719849d951bec5f4983340b5
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Mar 26 17:04:14 2013 -0700
+
+    ceph-disk: ignore udevadm settle return code
+    
+    If we time out, just continue and let the next step fail.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2ae297ccb812c00204ec0c4dc614821c506062b9)
+
+commit d714049d530dc9611cf5f2fcb9b272c355dbe9f1
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Mon Mar 25 17:45:32 2013 +0100
+
+    ceph-disk: rename some local variabels in list_*partitions
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit b7d7e6894c550a7afa8dfb5bfa2bc54b5d331178)
+
+commit ecb34b81b843adaf9455503eb3ecc69ea94652a3
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Mon Mar 25 16:24:00 2013 +0100
+
+    ceph-disk: fix naming of a local variable in find_cluster_by_uuid
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 0b5fcfffe6d2f69bd4318cc93ef73195d948b9c5)
+
+commit 63eb85072f6a61552725bd04dfb261e5cd52a60a
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Mon Mar 25 16:18:17 2013 +0100
+
+    ceph-disk: rename some constants to upper case variable names
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 8a999ded088e688fd3f4a7c27127b7c06f0b2f66)
+
+commit d26a03422a37f16d609de12f8973f3c32ffedae0
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Mon Mar 25 16:15:29 2013 +0100
+
+    ceph-disk: add some more docstrings
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 86e55f5448c4b5b46b74d2d89b01d1e64b1ea826)
+
+commit bd8bb984806a1dbc3514c3a2a8980a03cfb2bc23
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Mon Mar 25 14:36:41 2013 +0100
+
+    ceph-disk: print subprocess.CalledProcessError on error
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 543327b1f2a9efe8083bb196433c4bcf83883269)
+
+commit 970348fc46a7e100731ffdc63d20f343dcb1b787
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Mon Mar 25 13:55:56 2013 +0100
+
+    ceph-disk: fix indention
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 2d26bcc07162a5176cdbc1748b829e3f39653697)
+
+commit 0113e5335e1552294bbf075cfff85c204b164e95
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Tue Mar 26 11:31:16 2013 -0700
+
+    ceph-disk:  udevadm settle before partprobe
+    
+    After changing the partition table, allow the udev event to be
+    processed before calling partprobe.  This helps prevent partprobe
+    from getting a resource busy error on some platforms.
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+    (cherry picked from commit 9eda8e5d5abf0743a2ad484806cfb2018243515f)
+
+commit 02d48351f73330917185d8980f8ad123b99138b5
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 22 10:09:55 2013 -0700
+
+    ceph-disk: re-add python 2.7 dependency comment
+    
+    FIXME!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6d63752c8fde91cdab306d1ca689690b269fe977)
+
+commit e92baf5081a43ff3290eb934612a11fbed946469
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 14:36:58 2013 +0100
+
+    ceph-disk: cast output of subprocess.Popen() to str()
+    
+    Cast output of subprocess.Popen() to str() to be able to use
+    str.split() and str.splitlines() without warnings from pylint.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 87691dc46edfba11c370592dbb533772190be4b2)
+
+commit 1ffc89af1954643426708987a09291463bd7525b
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 14:02:28 2013 +0100
+
+    ceph-disk: fix adjust_symlink() replace 'journal' with 'target'
+    
+    Replace 'journal' variable with 'target' since journal doesn't
+    exist in this function.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 3575feb7d2e5f4e35c5df193a1f8c9f08f88fcf4)
+
+commit 690ab6b3e284e9beed74b3e77612e804464e467d
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 14:01:02 2013 +0100
+
+    ceph-disk: fix adjust_symlink() replace 'canonical' with 'path'
+    
+    Replace 'canonical' variable with 'path' since canonical doesn't
+    exist in this function.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit a27cb85b21610b4a9f8eb24f8f6cd04902349728)
+
+commit 329f279cd108c837e434ee3aae6c8ad502ba802f
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 13:56:23 2013 +0100
+
+    ceph-disk: there is no os.path.lstat use os.lstat
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 6d3247b5c02c39a66666a5833106dbc23044e436)
+
+commit ffe024b8b5024cdac256bacb9df433b69385cc0a
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 13:30:21 2013 +0100
+
+    ceph-disk: remove unused variable key from prepare_journal_dev()
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 97b4f8d66bef2328fa53f9e508eb38f8b8d49632)
+
+commit 9464284f3ac9737345c595847e165db48adc0a70
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 13:27:27 2013 +0100
+
+    ceph-disk: fix except to catch OSError
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 9daf6cfce2d57509d896eae28bb97146a682a306)
+
+commit 01152115f7bf4a307296c9126174ce09bb0ce22d
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 13:15:36 2013 +0100
+
+    ceph-disk: add missing space after >> operator
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 0ada43f79d2b1f9f84367e558c6d1a3e90e5c9b2)
+
+commit b9f86d96f5dd6ca18eb39882caf69e76369b5e0b
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 12:33:09 2013 +0100
+
+    fix: Redefining name 'uuid' from outer scope (line 14)
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit d3c60dc8cad1db1d5df1c740bc805aaf9ba606ba)
+
+commit 6fa6cd85b55935739e16b8ba537f7848dbb0218f
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 12:17:45 2013 +0100
+
+    ceph-disk: remove unused variables from list_partitions()
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 6a8120d4b0c4cfa851d473532eb2366534f8653d)
+
+commit 0b4e85fe23e8aa24e8aef8548df2b508bda24752
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 20 12:10:22 2013 +0100
+
+    ceph-disk: fix /dev/dm-[0-9] handling list_all_partitions()
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 3af7a1ac5bf24bf832d7180002281d6b5853e85a)
+
+commit 3ec61f85f6a8a8af8a2b921f94e77a77be77a1d7
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Mar 19 22:07:36 2013 +0100
+
+    ceph-disk: rename local variable shadowing builtin
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 9bcf5b64f45ab6c4bdedf820ed111319b2dbd778)
+
+commit bd1036dd83fa2ee4807047fb9c2b414ccc9375eb
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Mar 19 22:05:23 2013 +0100
+
+    ceph-disk: remove twice defined identical function unmount
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 4adf088107586be7b356d1e963570cdab232809e)
+
+commit 8dd8cbac6f88fcb9d2c6838b9f961c70cccb9288
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Mar 19 22:02:49 2013 +0100
+
+    ceph-disk: remove twice defined function mount
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit ea26ea0d81a23aa76076ad5441c3b1aadfba3b44)
+
+commit 0da87db1c0e4b44b69c19b718d89e7a621979009
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Mar 19 21:58:22 2013 +0100
+
+    ceph-disk: remove double defined function get_conf
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit c57daa3c6e03e8974e133d3a2d9bc3d6f06f4faf)
+
+commit 9c46dfb2512d3b55345faed1bebb9204ba07d030
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Tue Mar 19 21:51:54 2013 +0100
+
+    ceph-disk: rename local variable shadowing builtin
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 57dde5c8b18ff4ccd53a30bb94119c0ffceb52b7)
+
+commit b807d8ba0a0c23c7dab6893bc5297e07c0fd902f
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 18 14:55:24 2013 -0700
+
+    ceph-disk: install and package
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c2602d749023b24ac22d8cfce6e04889078f14d8)
+    
+    Conflicts:
+    
+    	debian/ceph.install
+
+commit 8901e02db05837b12d5e1d0ec6f14f909cc03315
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 15 16:50:05 2013 -0700
+
+    ceph-disk: simplify command dispatch
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f287c6f90af0dfdd41358846b069aa3c54b600b3)
+
+commit 3cbc0d0c92ad19d5022c94d9d1ac00aff4eb9b2d
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 15 16:40:32 2013 -0700
+
+    ceph-disk: consolidate exceptions
+    
+    Use a single exception type, and catch it at the top level.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a019753bd3897ee0f5d9c3563c653c5457d5e67d)
+
+commit b4176bafa2b0721664332a1bb8b73da54151f685
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 15 16:36:45 2013 -0700
+
+    ceph-disk: consolidate ceph-disk-* into a single binary
+    
+     ceph-disk prepare ...
+     ceph-disk activate ...
+     ceph-disk ...
+    
+    This let's us share code (we were already duplicating a bunch of stuff!)
+    and to add new commands easily.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 20e4ba5cebb7b4989d1745932f7a412c28504ee1)
+
+commit 455cb32543df8036a605dc7b6c194e58b10bc4ec
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 18 21:13:34 2013 -0700
+
+    ceph-disk-prepare: 'mkfs -t' instead of 'mkfs --type='
+    
+    Older mkfs (el6) doesn't like --type=.
+    
+    Fixes: #4495
+    Reported-by: Alexandre Maragone <alexandre.maragone@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d47759429a6e2fdd392265e90b67046302c97644)
+
+commit 19a2cf58504a3305ac9afe3d6642cf68e1b0f6c1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 14 21:05:07 2013 -0700
+
+    ceph-disk-activate: identify cluster .conf by fsid
+    
+    Determine what cluster the disk belongs to by checking the fsid defined
+    in /etc/ceph/*.conf.  Previously we hard-coded 'ceph'.
+    
+    Note that this has the nice side-effect that if we have a disk with a
+    bad/different fsid, we now fail to activate it.  Previously, we would
+    mount and start ceph-osd, but the daemon would fail to authenticate
+    because it was part of the wrong cluster.
+    
+    Fixes: #3253
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 80af5fb887f30792c342ac16da9ed95d7e89e491)
+
+commit 568485bea8ae9f0f36571de259c7254fa4227b15
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 14 16:18:26 2013 -0700
+
+    ceph-disk-activate: abort if target position is already mounted
+    
+    If the target position is already a mount point, fail to move our mount
+    over to it.  This usually indicates that a different osd.N from a
+    different cluster instances is in that position.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7370b5564606474f11b9ac5afb7cc60e0ac36ed1)
+
+commit a6ecf9288af248656bc712c1a4de910ff107a9a2
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 14 12:05:52 2013 -0700
+
+    Revert "ceph-disk-activate: rely on default/configured keyring path"
+    
+    This reverts commit 936b8f20af1d390976097c427b6e92da4b39b218.
+    
+    This is necessary because we mount the osd in a temporary location.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b6102c0945a0d68b7c5ff7f2254a1a994788ca0f)
+
+commit 7c1edc0c927a27c07b6f1611c2cf9c48f2dc95f6
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 14 12:04:44 2013 -0700
+
+    Revert "ceph-disk-activate: don't override default or configured osd journal path"
+    
+    This reverts commit 813e9fe2b4291a1c1922ef78f031daa9b78fe53b.
+    
+    We run --mkfs with the osd disk mounted in a temporary location, so it is
+    necessary to explicitly pass in these paths.
+    
+    If we want to support journals in a different location, we need to make
+    ceph-disk-prepare update the journal symlink accordingly.. not control it via
+    the config option.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3e628eee770508e750f64ea50179bbce52e7b8e0)
+
+commit 739b013cfa4b84d36750b80ce44579498e7ea4f4
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 11 21:15:11 2013 -0700
+
+    ceph-disk-activate: rely on default/configured keyring path
+    
+    No reason to override the default or configured value here.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 936b8f20af1d390976097c427b6e92da4b39b218)
+
+commit 897413f90c0e802c6824c0ee8d06bdae33979293
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 11 21:14:53 2013 -0700
+
+    ceph-disk-activate: don't override default or configured osd journal path
+    
+    There is no reason not to rely on the default or obey any configured
+    value here.
+    
+    Fixes: #4031
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 813e9fe2b4291a1c1922ef78f031daa9b78fe53b)
+
+commit 35eac085182e569b17c287c86e1415880909be22
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Mar 5 13:08:26 2013 -0800
+
+    ceph-disk-prepare: move in-use checks to the top, before zap
+    
+    Move the in-use checks to the very top, before we (say) zap!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 32407c994f309cd788bf13fe9af27e17a422309a)
+
+commit 5ad4120a4825d6615778a005cff990afccf30691
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 4 20:57:52 2013 -0800
+
+    ceph-disk-prepare: verify device is not in use by device-mapper
+    
+    Be nice and tell the user which devices/mappings are consuming the device,
+    too.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a6196de9e2f3ca9d67691f79d44e9a9f669443e9)
+
+commit e4a520029196cc76f1ec45695554ca6330bf14aa
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 4 16:38:57 2013 -0800
+
+    ceph-disk-prepare: verify device is not mounted before using
+    
+    Make sure the data and/or journal device(s) are not in use (mounted)
+    before using them.  Make room for additional "in-use" checks in the future.
+    
+    Closes: #3256
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3bd0ac0ab011c4cdf0121f0d9732938d085fb8bf)
+
+commit d05b439142a24d28f35c6a09a8ab7c9eed503cd5
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 4 16:29:57 2013 -0800
+
+    ceph-disk-prepare: clean up stupid check for a digit
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f03f62697f170d42b4b62c53d2860ff2f24a2d73)
+
+commit ea07b0e1047a4ac1b4dde88c795709190bd048be
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 4 16:08:15 2013 -0800
+
+    ceph-disk-prepare: use os.path.realpath()
+    
+    My janky symlink resolution is broken in various ways.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 59505546e52a175435881b431bd349d532ae627e)
+
+commit 8f7e3e7dbbb9cab869366927c1687c38c012a1ef
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Thu Feb 28 14:16:26 2013 +0100
+
+    ceph.spec.in: add new Requires from ceph-disk-prepare
+    
+    Added new Requires from ceph-disk-prepare: cryptsetup, gptfdisk,
+    parted and util-linux.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 5c3f5c5b69a9edc99138d4f1ddb016689303dc28)
+    
+    Conflicts:
+    
+    	ceph.spec.in
+
+commit 3441acf3749dbd99f1e00e5306e8180647085d2a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 27 13:31:12 2013 -0800
+
+    debian: require cryptsetup-bin
+    
+    This is needed for ceph-disk-prepare's dmcrypt support.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cfcaceac44d6b7b7c55e81d0bfb05f4893f3b1d0)
+    
+    Conflicts:
+    
+    	debian/control
+
+commit abdac6fddd25bc71f59c1097246cfa32b33b0f5f
+Author: Alexandre Marangone <alexandre.marangone@inktank.com>
+Date:   Mon Apr 15 15:57:00 2013 -0700
+
+    Fix: use absolute path with udev
+    
+    Avoids the following: udevd[61613]: failed to execute '/lib/udev/bash'
+    'bash -c 'while [ ! -e /dev/mapper/....
+    
+    Signed-off-by: Alexandre Marangone <alexandre.marangone@inktank.com>
+    (cherry picked from commit 785b25f53dc7f8035eeba2aae8a196e3b102d930)
+
+commit d1775daf68d9aa887116a357cbcaf7c44e091cce
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 16 20:55:03 2013 -0800
+
+    ceph-disk-prepare: -f for mkfs.xfs only
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fecc3c3abf1176f4c7938e161559ea2db59f1cff)
+
+commit 405e0ea1c692b1d62f948734e07c4f919b90d4e0
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 16 16:49:50 2013 -0800
+
+    debian: fix start of ceph-all
+    
+    Tolerate failure, and do ceph-all, not ceph-osd-all.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit aff0bb6fdc8ca358f7ac1e941bb9cfecbefb4bb6)
+
+commit 632be442261cabd56da0dc897b8a47a8e5493dce
+Author: Alexandre Marangone <alexandre.marangone@inktank.com>
+Date:   Fri Feb 15 12:24:01 2013 -0800
+
+    ceph-disk-prepare: always force mkfs.xfs
+    
+    Signed-off-by: Alexandre Marangone <alexandre.marangone@inktank.com>
+    (cherry picked from commit d950d83250db3a179c4b629fd32cd7bc8149997e)
+
+commit 28d1193836edee622763e308aad69c7bfe7a4971
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 13 18:22:45 2013 -0800
+
+    udev: trigger on dmcrypted osd partitions
+    
+    Automatically map encrypted journal partitions.
+    
+    For encrypted OSD partitions, map them, wait for the mapped device to
+    appear, and then ceph-disk-activate.
+    
+    This is much simpler than doing the work in ceph-disk-activate.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e090a92a20f4161f473d16bc966f7d6aacac75ee)
+
+commit 5c5021b43ab70a08d791020262f76879dc77effb
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 21:35:56 2013 -0800
+
+    ceph-disk-prepare: add initial support for dm-crypt
+    
+    Keep keys in /etc/ceph/dmcrypt-keys.
+    
+    Identify partition instances by the partition UUID.  Identify encrypted
+    partitions by a parallel set of type UUIDs.
+    
+    Signed-off-by: Alexandre Marangone <alexandre.maragone@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c6ac0ddf91915ba2aeae46d21367f017e18e82cd)
+
+commit d7084037d7a2395acfe8181f94963c1337c0f95b
+Author: Alexandre Marangone <alexandre.marangone@inktank.com>
+Date:   Fri Feb 15 12:22:33 2013 -0800
+
+    ceph-disk-activate: pull mount options from ceph.conf
+    
+    Signed-off-by: Alexandre Marangone <alexandre.marangone@inktank.com>
+    (cherry picked from commit e7040f55f01db3de7d5cebfc79de50c8b6ad5d45)
+
+commit 34fba357ca8b662c7b943d426ed37875c173003f
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 14 17:05:32 2013 -0800
+
+    ceph-disk-activate: use full paths for everything
+    
+    We are run from udev, which doesn't get a decent PATH.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b1c0fccba42dd184a2891ee873c0d6d8f8c79d14)
+
+commit caad18745cd8553a012d9e7f92e59d5b4450dcf2
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 14 17:04:55 2013 -0800
+
+    ceph-disk-prepare: do partprobe after setting final partition type
+    
+    This is necessary to kick udev into processing the updated partition and
+    running its rules.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 95835de9f80712eb26652ac6b66ba9c5eeb093d6)
+
+commit e1624e4626b4e67909f3bb83920c99ad323ed083
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 13 21:47:30 2013 -0800
+
+    debian: start/stop ceph-all event on install/uninstall
+    
+    This helps us avoid the confusing situation with upstart where an individual
+    daemon job is running (like ceph-osd id=2) but the container jobs ceph-osd-all
+    and ceph-all are not.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b7b9af5c0d531dcee7ce9b10043a29b0a1b31f47)
+
+commit 656305f65eb33d68b95f4d29f37b031cf6cf889a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 13 21:37:08 2013 -0800
+
+    ceph-disk-activate: catch daemon start errors
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 690ae05309db118fb3fe390a48df33355fd068a0)
+
+commit 8b771bf929c4a9ab3fd4eb6f40b9222a463fd1a4
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 13 17:30:19 2013 -0800
+
+    udev: trigger ceph-disk-activate directly from udev
+    
+    There is no need to depend on upstart for this.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5bd85ee5aa31bfd1f4f0e434f08c2a19414358ef)
+    
+    Conflicts:
+    
+    	ceph.spec.in
+
+commit ffb0613efaa9cf919992640322785eedf95ca25f
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 13 16:02:10 2013 -0800
+
+    ceph-disk-activate: auto detect init system
+    
+    Look for an option 'init' in ceph.conf.  Otherwise, check if we're ubuntu.
+    If so, use upstart.  Otherwise, use sysvinit.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d1904b2a848af3c02d2065ac2a42abe0e2699d0f)
+
+commit 74b562703c422890c67b2a88d7b18242f64949dc
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Feb 13 15:49:42 2013 -0800
+
+    ceph-disk-activate: specify full path for blkid, initctl, service
+    
+    /sbin apparently isn't in the path when udev runs us.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f06b45e66315310abb0720e021da377186455048)
+
+commit 9ea32e5f066bee75923212d8009fb37a365ef32e
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 19:18:23 2013 -0800
+
+    upstart: ceph-hotplug -> ceph-osd-activate
+    
+    This is a more meaningful name.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e011ad128e7f302cb6955d9a7171ac0ec8890ddf)
+
+commit 494533a55010a59a52f6dcbe64f76e677a7dfe8e
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 19:14:22 2013 -0800
+
+    upstart/ceph-hotplug: tell activate to start via upstart
+    
+    This will mark the OSD data dir as upstart-managed.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 792e45c63dd7a9622fddd6e15ee4c075f995ea56)
+
+commit 5e0892fd8cbc2571d94cffc0b64daaa4ec6c38f8
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 19:08:22 2013 -0800
+
+    ceph-disk-prepare: refactor to support DIR, DISK, or PARTITION for data or journal
+    
+    Lots of code reorganization collapsed into a single commit here.
+    
+    - detect whether the user gave us a directory, disk, or partition, and Do The
+    Right Thing
+    - allow them to force that the input was of type X, for the careful/paranoid.
+    - make --zap-disk an option -- no longer the default
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b2ff6e8c9d96dee2c063b126de7030a5c2ae0d02)
+
+commit aa428017e4aad9872a54cd87036ef2bb528aac7b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 20:33:16 2013 -0800
+
+    ceph-disk-activate: detect whether PATH is mount or dir
+    
+    remove in-the-way symlinks in /var/lib/ceph/osd
+    
+    This is simpler.  Just detect what the path is and Do The Right Thing.
+    
+    Closes #3341 (which wanted to make --mount the default)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 191d5f7535f8d96d493e1b35b43a421c67c168ea)
+
+commit e6d5aa053dbaaf07c94e35406c23f4ca009fe2da
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 20:32:47 2013 -0800
+
+    ceph-disk-activate: add --mark-init INITSYSTEM option
+    
+    Do not assume we will manage via upstart; let that be passed down via the
+    command line.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fd4a921085a861e4aa428376219bb39055731f2b)
+
+commit fa23919eae363291b4807afe3fadd34f94e9ddcb
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 14:44:26 2013 -0800
+
+    ceph-disk-activate: factor mounting out of activate
+    
+    The activate stuff is generic for any OSD, regardless of whether we want
+    to mount it or not.  Pull that part out.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 07655288281c9c6f691f87352dc26b7c11ae07e8)
+
+commit 181ebdee0addfe3d13c13342def94ecf9415d6d5
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 18:17:55 2013 -0800
+
+    debian: put ceph-mds upstart conf in ceph-mds package
+    
+    Fixes: #3157
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 23ad3a46a0099e263f43e0f0c1df1d21cfe58b3f)
+
+commit 919b0aedf7286e85e6ddc23f99f80f29e1d35db6
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 17:02:52 2013 -0800
+
+    debian: include /var/lib/ceph/bootstrap-mds in package
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e80675a0f333c04452d4822fd0eb3c6e92eda3df)
+
+commit f97f49b1e7ca8555c945b93fbc8241f5fa620dd8
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 12 16:26:14 2013 -0800
+
+    ceph-create-keys: create mds bootstrap key
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 809143f16c70483ba5bb429dea812d31b67f2b49)
+
+commit f43c339d67b78e6afc3737d26cea4bc05dcea900
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 26 14:45:43 2013 -0800
+
+    upstart/ceph-hotplug: drop -- in ceph-disk-activate args
+    
+    We would like to transition to
+    
+     ceph-disk-activate --mount DEV
+    
+    and away from a generic multi-definition PATH argument.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4698b6a1035dee8509ce2d4dab7b34a16b78f7cd)
+
+commit 39df4c81f2166b7e9ac89c591b268b60de4042e6
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 22:53:23 2013 -0800
+
+    init-ceph: iterate/locate local sysvinit-tagged directories
+    
+    Search /var/lib/ceph/$type/ceph-$id and start/stop those daemons if
+    present and tagged with the sysvinit file.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c8f528a4070dd3aa0b25c435c6234032aee39b21)
+
+commit 05efb7ab5b289472a1af05d6aa100a7385be304e
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 25 22:52:03 2013 -0800
+
+    init-ceph: consider sysvinit-tagged dirs as local
+    
+    If there is a 'sysvinit' file in the daemon directory in the default
+    location (/var/lib/ceph/$type/ceph-$id), consider it sysvinit-managed.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b8aa4769a62e0d88174678cbefd89d9ee2baceea)
+
+commit 8c4c53abf84d30ff4a605225a22575f56d946971
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 11 17:39:03 2013 -0800
+
+    ceph-disk-prepare: align mkfs, mount config options with mkcephfs
+    
+    'osd mkfs ...', not 'osd fs mkfs ...'.  Sigh.  Support both.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit af2372ca4a702da70275edd1b1357fcff51e6ae2)
+
+commit a8e7e9df61a7229d9e2b4b4dedc68b5c1bf15c38
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Apr 23 10:00:38 2013 -0700
+
+    init-ceph: fix (and simplify) pushing ceph.conf to remote unique name
+    
+    The old code would only do the push once per remote node (due to the
+    list in $pushed_to) but would reset $unique on each attempt.  This would
+    break if a remote host was processed twice.
+    
+    Fix by just skipping the $pushed_to optimization entirely.
+    
+    Fixes: #4794
+    Reported-by: Andreas Friedrich <andreas.friedrich@ts.fujitsu.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ccbc4dbc6edf09626459ca52a53a72682f541e86)
+
+commit 9374baccb8a71e1fe5ea2e614feac93e865dd027
+Merge: b6b4ebe aa37726
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Apr 23 12:04:45 2013 -0700
+
+    Merge pull request #238 from ceph/wip-bobtail-rbd-backports-req-order
+    
+    Reviewed-by: Sage Weil <sage.weil@inktank.com>
+
+commit aa37726b8d43d08b495d55dc2aef93854e9539c5
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Apr 23 09:18:30 2013 -0700
+
+    rbd: only set STRIPINGV2 feature when needed
+    
+    Only set the STRIPINGV2 feature if the striping parameters are non-default.
+    Specifically, fix the case where the passed-in size and count are == 0.
+    
+    Fixes: #4710
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5926ffa576e9477324ca00eaec731a224195e7db)
+    
+    Conflicts:
+    
+    	src/rbd.cc
+
+commit 0e2266dba912cde2c4a86ba7055c8bec3a5bc1a5
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Apr 10 14:16:56 2013 -0700
+
+    LibrbdWriteback:  complete writes strictly in order
+    
+    RADOS returns writes to the same object in the same order. The
+    ObjectCacher relies on this assumption to make sure previous writes
+    are complete and maintain consistency. Reads, however, may be
+    reordered with respect to each other. When writing to an rbd clone,
+    reads to the parent must be performed when the object does not exist
+    in the child yet. These reads may be reordered, resulting in the
+    original writes being reordered. This breaks the assmuptions of the
+    ObjectCacher, causing an assert to fail.
+    
+    To fix this, keep a per-object queue of outstanding writes to an
+    object in the LibrbdWriteback handler, and finish them in the order in
+    which they were sent.
+    
+    Fixes: #4531
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 06d05e5ed7e09fa873cc05021d16f21317a1f8ef)
+
+commit 7a11c2505a8b74babee90cca945c2a068a656ec1
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Apr 10 12:22:02 2013 -0700
+
+    LibrbdWriteback: removed unused and undefined method
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 909dfb7d183f54f7583a70c05550bec07856d4e4)
+
+commit 884438febaf12dc380d4a1a3c3c8d3cbefd32399
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Apr 10 12:06:36 2013 -0700
+
+    LibrbdWriteback: use a tid_t for tids
+    
+    An int could be much smaller, leading to overflow and bad behavior.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 9d19961539b2d50d0c9edee1e3d5ac6912a37f24)
+
+commit 124f81cc5fa5a3ac9e7777ad49dd42d864fd7f68
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Apr 10 12:03:04 2013 -0700
+
+    WritebackHandler: make read return nothing
+    
+    The tid returned by reads is ignored, and would make tracking writes
+    internally more difficult by using the same id-space as them. Make read
+    void and update all implementations.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 870f9cd421ca7b0094f9f89e13b1898a8302c494)
+
+commit 13ba07a0f3af479861c0e83e3e6441fef1bc8a99
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Apr 1 14:51:46 2013 -0700
+
+    ObjectCacher: deduplicate final part of flush_set()
+    
+    Both versions of flush_set() did the same thing. Move it into a
+    helper called from both.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f5b81d8d167d1aa7f82a5776bbb1f319063ab809)
+
+commit 7bc8df1f3e3b60b59672a082eba374729a6866b8
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Apr 10 11:35:46 2013 -0700
+
+    test_stress_watch: remove bogus asserts
+    
+    There's no reason to check the duration of a watch. The notify will
+    timeout after 30s on the OSD, but there's no guarantee the client will
+    see that in any bounded time. This test is really meant as a stress
+    test of the OSDs anyway, not of the clients, so just remove asserts
+    about operation duration.
+    
+    Fixes: #4591
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sam Just <sam.just@inktank.com>
+    (cherry picked from commit 4b656730ffff21132f358c2b9a63504dfbf0998d)
+
+commit 4a1c27c0e6e2e70be2b58e01872e321352c8e484
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Apr 1 11:09:52 2013 -0700
+
+    librados: don't use lockdep for AioCompletionImpl
+    
+    This is a quick workaround for the next branch. A more complete fix
+    will be done for the master branch. This does not affect correctness,
+    just what qa runs with lockdep enabled do.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage.weil@inktank.com>
+    (cherry picked from commit 267ce0d90b8f3afaaddfdc0556c9bafbf4628426)
+
+commit d36c5b5bd30a9d7e60403a09cedaea28bdc29e99
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 29 12:46:27 2013 -0700
+
+    librados: move snapc creation to caller for aio_operate
+    
+    The common case already has a snapshot context, so avoid duplicating
+    it (copying a potentially large vector) in IoCtxImpl::aio_operate().
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 4c4d5591bdb048cd9ffa25b529c6127356e7f9a7)
+
+commit 31a45e8e23ebf9815ce5a4e0c89ddbf384702aad
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Mar 21 16:04:10 2013 -0700
+
+    librbd: add an async flush
+    
+    At this point it's a simple wrapper around the ObjectCacher or
+    librados.
+    
+    This is needed for QEMU so that its main thread can continue while a
+    flush is occurring. Since this will be backported, don't update the
+    librbd version yet, just add a #define that QEMU and others can use to
+    detect the presence of aio_flush().
+    
+    Refs: #3737
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 302b93c478b3f4bc2c82bfb08329e3c98389dd97)
+
+commit f2e490cb5b1f322e637d787e788733ac4b2496f4
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 27 15:42:10 2013 -0700
+
+    librbd: use the same IoCtx for each request
+    
+    Before we were duplicating the IoCtx for each new request since they
+    could have a different snapshot context or read from a different
+    snapshot id. Since librados now supports setting these explicitly
+    for a given request, do that instead.
+    
+    Since librados tracks outstanding requests on a per-IoCtx basis, this
+    also fixes a bug that causes flush() without caching to ignore
+    all the outstanding requests, since they were to separate,
+    duplicate IoCtxs.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 860493e7ff0d87d02069b243fc1c8326ce0721f9)
+
+commit cbb37fb5470f22949a4dbb747f428943cce4aca7
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 27 15:37:27 2013 -0700
+
+    librbd: add an is_complete() method to AioCompletions
+    
+    Mainly this is useful for testing, like flushing and checking that
+    all pending writes are complete after the flush finishes.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 2ae32068dee22a0ca0698e230ead98f2eeeff3e6)
+
+commit f9bcffa2482220202e68d6bac70216d44ee5046b
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 27 15:32:29 2013 -0700
+
+    librados: add versions of a couple functions taking explicit snap args
+    
+    Usually the snapid to read from or the snapcontext to send with a write
+    are determined implicitly by the IoCtx the operations are done on.
+    
+    This makes it difficult to have multiple ops in flight to the same
+    IoCtx using different snapcontexts or reading from different snapshots,
+    particularly when more than one operation may be needed past the initial
+    scheduling.
+    
+    Add versions of aio_read, aio_sparse_read, and aio_operate
+    that don't depend on the snap id or snapcontext stored in the IoCtx,
+    but get them from the caller. Specifying this information for each
+    operation can be a more useful interface in general, but for now just
+    add it for the methods used by librbd.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f06debef6c293750539501ec4e6103e5ae078392)
+
+commit fb95b800a4cc431a8bd98692fffbfc150f6f8d67
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 27 14:48:31 2013 -0700
+
+    librados: add async flush interface
+    
+    Sometimes you don't want flush to block, and can't modify
+    already scheduled aio_writes. This will be useful for a
+    librbd async flush interface.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 7cc0940f89070dadab5b9102b1e78362f762f402)
+    
+    Conflicts:
+    
+    	src/include/rados/librados.h
+    	src/include/rados/librados.hpp
+
+commit 3a61d17b6729b73d0bf2df106f54dafb603af646
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Mar 28 10:34:37 2013 -0700
+
+    ObjectCacher: remove unneeded var from flush_set()
+    
+    The gather will only have subs if there is something to flush. Remove
+    the safe variable, which indicates the same thing, and convert the
+    conditionals that used it to an else branch. Movinig gather.activate()
+    inside the has_subs() check has no effect since activate() does
+    nothing when there are no subs.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 553aaac8a19e2359acf6d9d2e1bb4ef0bdba7801)
+
+commit ee7bf281005cce671e467ca9b9eff0ba7eb9899e
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 22 12:17:43 2013 -0700
+
+    ObjectCacher: remove NULL checks in flush_set()
+    
+    Callers will always pass a callback, so assert this and remove the
+    checks for it being NULL.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 41568b904de6d155e5ee87c68e9c31cbb69508e5)
+
+commit d86f9b1dd370563170ab875c6a7de511f05acbf7
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 22 12:13:36 2013 -0700
+
+    ObjectCacher: always complete flush_set() callback
+    
+    This removes the last remnants of
+    b5e9995f59d363ba00d9cac413d9b754ee44e370. If there's nothing to flush,
+    immediately call the callback instead of deleting it. Callers were
+    assuming they were responsible for completing the callback whenever
+    flush_set() returned true, and always called complete(0) in this
+    case. Simplify the interface and just do this in flush_set(), so that
+    it always calls the callback.
+    
+    Since C_GatherBuilder deletes its finisher if there are no subs,
+    only set its finisher when subs are present. This way we can still
+    call ->complete() for the callback.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 92db06c05dc2cad8ed31648cb08866781aee2855)
+    
+    Conflicts:
+    
+    	src/client/Client.cc
+
+commit 00dfb3f06fb6c2581a3f71126adcde0126e5e207
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Jan 29 14:22:15 2013 -0800
+
+    ObjectCacher: fix flush_set when no flushing is needed
+    
+    C_GatherBuilder takes ownership of the Context we pass it. Deleting it
+    in flush_set after constructing the C_GatherBuilder results in a
+    double delete.
+    
+    Fixes: #3946
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sam Lang <sam.lang@inktank.com>
+    (cherry picked from commit 3bc21143552b35698c9916c67494336de8964d2a)
+
+commit 0f2e5d36e4dcd073174715c310fa22a835ca1259
+Author: Sam Lang <sam.lang@inktank.com>
+Date:   Fri Jan 18 14:59:12 2013 -0600
+
+    objectcacher: Remove commit_set, use flush_set
+    
+    commit_set() and flush_set() are identical in functionality,
+    so use flush_set everywhere and remove commit_set from
+    the code.
+    
+    Also fixes a bug in flush_set where the finisher context was
+    getting freed twice if no objects needed to be flushed.
+    
+    Signed-off-by: Sam Lang <sam.lang@inktank.com>
+    (cherry picked from commit 72147fd3a1da8ecbcb31ddf6b66a158d71933909)
+
+commit 3b0c565dceb41dcaf53965321ef420641bcb699b
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 13 09:42:43 2013 -0700
+
+    librbd: make aio_writes to the cache always non-blocking by default
+    
+    When the ObjectCacher's writex blocks, it affects the thread requesting
+    the aio, which can cause starvation for other I/O when used by QEMU.
+    
+    Preserve the old behavior via a config option in case this has any
+    bad side-effects, like too much memory usage under heavy write loads.
+    
+    Fixes: #4091
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 03ac01fa6a94fa7a66ede057e9267e0a562c3cdb)
+
+commit e237dfc742bba76664861a8868c502946fe53548
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 13 09:37:21 2013 -0700
+
+    ObjectCacher: optionally make writex always non-blocking
+    
+    Add a callback argument to writex, and a finisher to run the
+    callbacks. Move the check for dirty+tx > max_dirty into a helper that
+    can be called from a wrapper around the callbacks from writex, or from
+    the current place in _wait_for_write().
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit c21250406eced8e5c467f492a2148c57978634f4)
+
+commit 7bc1596b90d2d5853659cb3ffbe9653b633345f4
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 27 17:30:42 2013 -0700
+
+    librbd: flush cache when set_snap() is called
+    
+    If there are writes pending, they should be sent while the image
+    is still writeable. If the image becomes read-only, flushing the
+    cache will just mark everything dirty again due to -EROFS.
+    
+    Fixes: #4525
+    Backport: bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 613b7085bb48cde1e464b7a97c00b8751e0e917f)
+
+commit 9facdcac7bb8ab92f1ab486eaabee681e6b6519d
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 15 17:28:13 2013 -0700
+
+    librbd: optionally wait for a flush before enabling writeback
+    
+    Older guests may not send flushes properly (i.e. never), so if this is
+    enabled, rbd_cache=true is safe for them transparently.
+    
+    Disable by default, since it will unnecessarily slow down newer guest
+    boot, and prevent writeback caching for things that don't need to send
+    flushes, like the command line tool.
+    
+    Refs: #3817
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1597b3e3a1d776b56e05c57d7c3de396f4f2b5b2)
+
+commit 1c44b66fb371a5864860c067bb5f59374f43005d
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 8 18:57:24 2013 -0800
+
+    librbd: invalidate cache when flattening
+    
+    The cache stores which objects don't exist. Flatten bypasses the cache
+    when doing its copyups, so when it is done the -ENOENT from the cache
+    is treated as zeroes instead of 'need to read from parent'.
+    
+    Clients that have the image open need to forgot about the cached
+    non-existent objects as well. Do this during ictx_refresh, while the
+    parent_lock is held exclusively so no new reads from the parent can
+    happen until the updated parent metadata is visible, so no new reads
+    from the parent will occur.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 46e8fc00b2dc8eb17d8777b6ef5ad1cfcc389cea)
+
+commit d9ca1b00a4dacb4715a69a276a644d645d0d5bc1
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 8 17:53:31 2013 -0800
+
+    ObjectCacher: add a method to clear -ENOENT caching
+    
+    Clear the exists and complete flags for any objects that have exists
+    set to false, and force any in-flight reads to retry if they get
+    -ENOENT instead of generating zeros.
+    
+    This is useful for getting the cache into a consistent state for rbd
+    after an image has been flattened, since many objects which previously
+    did not exist and went up to the parent to retrieve data may now exist
+    in the child.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f2a23dc0b092c5ac081893e8f28c6d4bcabd0c2e)
+
+commit 1e51be05b7909a676ae499ca84e4cce94bb50da4
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Mar 8 17:49:27 2013 -0800
+
+    ObjectCacher: keep track of outstanding reads on an object
+    
+    Reads always use C_ReadFinish as a callback (and they are the only
+    user of this callback). Keep an xlist of these for each object, so
+    they can remove themselves as they finish. To prevent racing requests
+    and with discard removing objects from the cache, clear the xlist in
+    the object destructor, so if the Object is still valid the set_item
+    will still be on the list.
+    
+    Make the ObjectCacher constructor take an Object* instead of the pool
+    and object id, which are derived from the Object* anyway.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f6f876fe51e40570596c25ac84ba3689f72776c2)
+
+commit f2bcf241257500f5784b216b7a377ddec4669531
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 25 16:09:26 2013 -0800
+
+    test_rbd: move flatten tests back into TestClone
+    
+    They need the same setup, and it's easy enough to run specific
+    subtests. Making them a separate subclass accidentally duplicated
+    tests from TestClone.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 9c693d7e8312026f6d8d9586381b026ada35d808)
+
+commit cd989681823a2b8521c789f5d4fea5525ac53911
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Feb 26 13:20:08 2013 -0800
+
+    librbd: fix rollback size
+    
+    The duplicate calls to get_image_size() and get_snap_size() replaced
+    by 5806226cf0743bb44eaf7bc815897c6846d43233 uncovered this. The first
+    call was using the currently set snap_id instead of the snapshot being
+    rolled back to.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit d6c126e2131fefab6df676f2b9d0addf78f7a488)
+
+commit 796066b7a8324b12a660d9b80b927e643db7529e
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 25 12:05:16 2013 -0800
+
+    Merge branch 'wip-4249' into wip-4249-master
+    
+    Make snap_rollback() only take a read lock on snap_lock, since
+    it does not modify snapshot-related fields.
+    Conflicts:
+    	src/librbd/internal.cc
+    (cherry picked from commit db5fc2270f91aae220fc3c97b0c62e92e263527b)
+
+commit 34e9030e50fe15a320cbfbc9854c86deb3a9c57c
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Feb 21 11:26:45 2013 -0800
+
+    librbd: make sure racing flattens don't crash
+    
+    The only way for a parent to disappear is a racing flatten completing,
+    or possibly in the future the image being forcibly removed. In either
+    case, continuing to flatten makes no sense, so stop early.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit a1ae8562877d1b902918e866a1699214090c40bd)
+
+commit 6e6636d50840e97022c8e4a1072f42fee15050a9
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Feb 21 11:17:18 2013 -0800
+
+    librbd: use rwlocks instead of mutexes for several fields
+    
+    Image metadata like snapshots, size, and parent is frequently read,
+    but rarely updated. During flatten, we were depending on the parent
+    lock to prevent the parent ImageCtx from disappearing out from under
+    us while we read from it. The copy-up path also needed the parent lock
+    to be able to read from the parent image, which lead to a deadlock.
+    
+    Convert parent_lock, snap_lock, and md_lock to RWLocks, and change
+    their use to read instead of exclusive locks where appropriate. The
+    main place exclusive locks are needed is in ictx_refresh, so this is
+    pretty simple. This fixes the deadlock, since parent_lock is only
+    needed for read access in both flatten and the copy-up operation.
+    
+    cache_lock and refresh_lock are only really used for exclusive access,
+    so leave them as regular mutexes.
+    
+    One downside to this is that there's no way to assert is_locked()
+    for RWLocks, so we'll have to be very careful about changing code
+    in the future.
+    
+    Fixes: #3665
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 995ff0e3eaa560b242da8c019a2e11e735e854f7)
+
+commit 9b292199ef63822462c67cb6cf1cca6a53cf9fd7
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Feb 21 11:15:41 2013 -0800
+
+    common: add lockers for RWLocks
+    
+    This makes them easier to use, especially instead of existing mutexes.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e0f8e5a80d6d22bd4dee79a4996ea7265d11b0c1)
+
+commit d8ac6cbf883fce0f39d661a879ff2462479d5494
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Feb 21 23:22:59 2013 -0800
+
+    objecter: initialize linger op snapid
+    
+    Since they are write ops now, it must be CEPH_NOSNAP or the OSD
+    returns EINVAL.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 15bb9ba9fbb4185708399ed6deee070d888ef6d2)
+
+commit 9ea4dac1db46c20cd83c5af5d29d9ce7a5768380
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 21 15:44:19 2013 -0800
+
+    objecter: separate out linger_read() and linger_mutate()
+    
+    A watch is a mutation, while a notify is a read.  The mutations need to
+    pass in a proper snap context to be fully correct.
+    
+    Also, make the WRITE flag implicit so the caller doesn't need to pass it
+    in.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6c08c7c1c6d354d090eb16df279d4b63ca7a355a)
+
+commit d9636faabfdb2c0a876f0afa092a2ab925cf8983
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 21 15:31:08 2013 -0800
+
+    osd: make watch OSDOp print sanely
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit de4fa95f03b99a55b5713911c364d7e2a4588679)
+
+commit 959bfe9097a2cfa48e2ab21f11bd32c1349807aa
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 21 13:28:47 2013 -0800
+
+    osdc/Objecter: unwatch is a mutation, not a read
+    
+    This was causing librados to unblock after the ACK on unwatch, which meant
+    that librbd users raced and tried to delete the image before the unwatch
+    change was committed..and got EBUSY.  See #3958.
+    
+    The watch operation has a similar problem.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fea77682a6cf9c7571573bc9791c03373d1d976d)
+    
+    Conflicts:
+    
+    	src/librados/IoCtxImpl.cc
+
+commit b6b4ebed559db8bf74da4f482201948b5abc9225
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 21 11:15:58 2013 -0800
+
+    osd: an interval can't go readwrite if its acting is empty
+    
+    Let's not forget that min_size can be zero.
+    
+    Fixes: #4159
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4277265d99647c9fe950ba627e5d86234cfd70a9)
+
+commit 055d746c3bca0d7067b71ed1ff6d1c1cce42b5ed
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 19 08:29:53 2013 -0800
+
+    mon: restrict pool size to 1..10
+    
+    See: #4159
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 30b8d653751acb4bc4be5ca611f154e19afe910a)
+
+commit c073bd25610ba556f3b30e6c583d1d74a10f09e2
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Apr 19 13:05:43 2013 -0700
+
+    init-ceph: do not stop start on first failure
+    
+    When starting we often loop over many daemon instances.  Currently we stop
+    on the first error and do not try to start other daemons.
+    
+    Instead, try them all, but return a failure if anything did not start.
+    
+    Fixes: #2545
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Gary Lowell <gary.lowell@inktank.com>
+    (cherry picked from commit d395aa521e8a4b295ed2b08dd7cfb7d9f995fcf7)
+    
+    Conflicts:
+    
+    	src/init-ceph.in
+
+commit daa6ed2bfe790f83f986f51d0917d6268d3e9d78
+Merge: 1d0bf61 9fe57e2
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Apr 11 13:00:27 2013 -0700
+
+    Merge pull request #210 from dalgaaf/wip-da-bobtail-pybind
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 9fe57e2bea89243a0080e667f90b7d4fb15ed883
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Apr 5 15:55:34 2013 +0200
+
+    rados.py: fix create_pool()
+    
+    Call rados_pool_create_with_all() only if auid and crush_rule
+    are set properly. In case only crush_rule is set call
+    rados_pool_create_with_crush_rule() on librados, not the other
+    way around.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 94a1f25e7230a700f06a2699c9c2b99ec1bf7144)
+
+commit 1d0bf61da98bec7318f44b95a49298e13b792b70
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Mon Apr 8 13:52:32 2013 -0700
+
+    mon: Use _daemon version of argparse functions
+    
+    Allow argparse functions to fail if no argument given by using
+    special versions that avoid the default CLI behavior of "cerr/exit"
+    
+    Fixes: #4678
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit be801f6c506d9fbfb6c06afe94663abdb0037be5)
+    
+    Conflicts:
+    	src/mon/Monitor.cc
+
+commit 3769250acf42a751ee8dfa95207a4ffafd25574a
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Mon Apr 8 13:49:22 2013 -0700
+
+    ceph_argparse: add _daemon versions of argparse calls
+    
+    mon needs to call argparse for a couple of -- options, and the
+    argparse_witharg routines were attempting to cerr/exit on missing
+    arguments.  This is appropriate for the CLI usage, but not the daemon
+    usage.  Add a 'cli' flag that can be set false for the daemon usage
+    (and cause the parsing routine to return false instead of exit).
+    
+    The daemon's parsing code due for a rewrite soon.
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit c76bbc2e6df16d283cac3613628a44937e38bed8)
+
+commit 1f3b4917cc5c4d796a96637912d2ae5ce2877861
+Author: Alexandre Oliva <oliva@gnu.org>
+Date:   Wed Feb 6 15:27:13 2013 -0200
+
+    silence logrotate some more
+    
+    I was getting email with logrotate error output from “which invoke-rc.d”
+    on systems without an invoke-rc.d.  This patch silences it.
+    
+    Silence stderr from which when running logrotate
+    
+    From: Alexandre Oliva <oliva@gnu.org>
+    
+    Signed-off-by: Alexandre Oliva <oliva@gnu.org>
+    (cherry picked from commit d02340d90c9d30d44c962bea7171db3fe3bfba8e)
+
+commit e6eace2334d04fc9292c96a843304d1748b5bbe7
+Merge: 8cb13a1 1507443
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Mar 29 12:14:22 2013 -0700
+
+    Merge remote-tracking branch 'upstream/bobtail-4556' into bobtail
+    
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit 8cb13a195c592fd2f17889e77d717c1864f97dca
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Feb 14 14:03:56 2013 -0800
+
+    OSD: always activate_map in advance_pgs, only send messages if up
+    
+    We should always handle_activate_map() after handle_advance_map() in
+    order to kick the pg into a valid peering state for processing requests
+    prior to dropping the lock.
+    
+    Additionally, we would prefer to avoid sending irrelevant messages
+    during boot, so only send if we are up according to the current service
+    osdmap.
+    
+    Fixes: #4572
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4dfcad44431855ba7d68a1ccb41dc3cb5db6bb50)
+
+commit d89ab0ea6fa8d0961cad82f6a81eccbd3bbd3f55
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Mar 28 14:09:17 2013 -0700
+
+    PG: update PGPool::name in PGPool::update
+    
+    Fixes: #4471
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f804892d725cfa25c242bdc577b12ee81dcc0dcc)
+
+commit 750626108616761512271d5a4f10dee82a54e460
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Mar 26 15:10:37 2013 -0700
+
+    ReplicatedPG: send entire stats on OP_BACKFILL_FINISH
+    
+    Otherwise, we update the stat.stat structure, but not the
+    stat.invalid_stats part.  This will result in a recently
+    split primary propogating the invalid stats but not the
+    invalid marker.  Sending the whole pg_stat_t structure
+    also mirrors MOSDSubOp.
+    
+    Fixes: #4557
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 76b296f01fd0d337c8fc9f79013883e62146f0c6)
+
+commit 1507443271fda933032ef0877aff1890d4fd5b63
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 13:19:03 2013 -0700
+
+    osd: disallow classes with flags==0
+    
+    They must be RD, WR, or something....
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 89c69016e1dddb9f3ca40fd699e4a995ef1e3eee)
+
+commit 6b6e0cef99e66b46ade35ab262f071982049bc22
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 12:59:41 2013 -0700
+
+    osd: EINVAL when rmw_flags is 0
+    
+    A broken client (e.g., v0.56) can send a request that ends up with an
+    rmw_flags of 0.  Treat this as invalid and return EINVAL.
+    
+    Fixes: #4556
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f2dda43c9ed4fda9cfa87362514985ee79e0ae15)
+
+commit 4bdd37495cedb1cf30a5311548492fe3f5db6e92
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 13:08:38 2013 -0700
+
+    osd: fix detection of non-existent class method
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 50b831e3641c21cd5b145271688189e199f432d1)
+
+commit f28800f8b65e90a3b96429f07197236e6c9bf1a2
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 27 13:12:38 2013 -0700
+
+    osd: tolerate rmw_flags==0
+    
+    We will let OSD return a proper error instead of asserting.
+    
+    This is effectively a backport of c313423cfda55a2231e000cd5ff20729310867f8.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 94321ccdff81d5d6cea1acdb54344c3d930a49eb
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Feb 21 17:39:19 2013 -0800
+
+    test_librbd_fsx: fix image closing
+    
+    Always close the image we opened in check_clone(), and check the
+    return code of the rbd_close() called before cloning.
+    
+    Refs: #3958
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 94ae72546507799667197fd941633bb1fd2520c2)
+
+commit 7fbc1ab69267e6be96665b0d4e277dc4a07f9220
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 13 17:05:42 2013 -0700
+
+    rbd: remove fiemap use from import
+    
+    On some kernels and filesystems fiemap can be racy and provide
+    incorrect data even after an fsync. Later we can use SEEK_HOLE and
+    SEEK_DATA, but for now just detect zero runs like we do with stdin.
+    
+    Basically this adapts import from stdin to work in the case of a file
+    or block device, and gets rid of other cruft in the import that used
+    fiemap.
+    
+    Fixes: #4388
+    Backport: bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 3091283895e8ffa3e4bda13399318a6e720d498f)
