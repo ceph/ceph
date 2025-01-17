@@ -1298,7 +1298,7 @@ private:
     paddr_t offset,
     node_key_t begin,
     node_key_t end,
-    typename std::optional<node_position_t<leaf_node_t>> parent_pos)
+    typename std::optional<node_position_t<internal_node_t>> parent_pos)
   {
     LOG_PREFIX(FixedKVBtree::get_leaf_node);
     SUBTRACET(
@@ -1596,8 +1596,8 @@ private:
       node_iter->get_val().maybe_relative_to(parent->get_paddr()),
       begin,
       end,
-      std::make_optional<node_position_t<leaf_node_t>>(
-        child_pos.template get_parent<leaf_node_t>(),
+      std::make_optional<node_position_t<internal_node_t>>(
+        child_pos.template get_parent<internal_node_t>(),
         child_pos.get_pos())
     ).si_then([on_found=std::move(on_found)](LeafNodeRef node) {
       return on_found(node);
@@ -2002,7 +2002,7 @@ private:
     paddr_t addr,
     node_key_t begin,
     node_key_t end,
-    typename std::optional<node_position_t<leaf_node_t>> parent_pos) {
+    typename std::optional<node_position_t<internal_node_t>> parent_pos) {
     assert(depth == 1);
     return get_leaf_node(c, addr, begin, end, std::move(parent_pos));
   }
@@ -2149,8 +2149,8 @@ private:
       donor_iter.get_val().maybe_relative_to(parent_pos.node->get_paddr()),
       begin,
       end,
-      std::make_optional<node_position_t<NodeType>>(
-        child_pos.template get_parent<NodeType>(),
+      std::make_optional<node_position_t<internal_node_t>>(
+        child_pos.template get_parent<internal_node_t>(),
         child_pos.get_pos())
     ).si_then([do_merge=std::move(do_merge)](typename NodeType::Ref donor) {
       return do_merge(donor);
