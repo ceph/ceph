@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 
 from ..api.doc import SchemaInput, SchemaType
 
@@ -113,6 +113,13 @@ class EndpointDoc:  # noqa: N802
             'response': self.resp
         }
         return func
+
+
+class Param(NamedTuple):
+    type: Union[Type, List[Type]]
+    description: str
+    optional: bool = False
+    default: Optional[Any] = None
 
 
 class APIDoc(object):
