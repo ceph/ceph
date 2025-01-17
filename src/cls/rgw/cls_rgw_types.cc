@@ -172,6 +172,7 @@ void rgw_bucket_pending_info::decode_json(JSONObj *obj) {
 void cls_rgw_obj_key::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("instance", instance, obj);
+  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, obj);
 }
 
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)

@@ -364,6 +364,12 @@ static void get_list_index_key(rgw_bucket_dir_entry& entry, string *index_key)
   index_key->append(ver_str);
   index_key->append(instance_delim);
   index_key->append(entry.key.instance);
+
+  if (entry.key.snap_id != RGW_BUCKET_NO_SNAP) {
+    string snap_delim("\0s", 2);
+    index_key->append(snap_delim);
+    index_key->append(std::to_string(entry.key.snap_id));
+  }
 }
 
 // Format an omap key for an object name that sorts after all versioned keys
@@ -384,6 +390,11 @@ static void _append_obj_versioned_data_key(string *index_key, const cls_rgw_obj_
     string dm("\0d", 2);
     index_key->append(dm);
   }
+  if (key.snap_id != RGW_BUCKET_NO_SNAP) {
+    string dm("\0s", 2);
+    index_key->append(dm);
+    index_key->append(std::to_string(key.snap_id));
+  }
 }
 
 static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *index_key, bool append_delete_marker_suffix = false)
@@ -395,7 +406,8 @@ static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *in
 
 static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
 {
-  if (key.instance.empty()) {
+  if (key.instance.empty() &&
+      key.snap_id == RGW_BUCKET_NO_SNAP) {
     *index_key = key.name;
   } else {
     encode_obj_versioned_data_key(key, index_key);
@@ -479,9 +491,10 @@ static std::string escape_str(const std::string& s)
 /*
  * list index key structure:
  *
- * <obj name>\0[v<ver>\0i<instance id>]
+ * <obj name>\0[v<ver>\0i<instance id>[\0s<snap-id>]]
  */
-static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver)
+static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver,
+                                 rgw_bucket_snap_id *snap_id)
 {
   size_t len = strlen(index_key.c_str());
 
@@ -518,6 +531,14 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
       string err;
       const char *s = val.c_str() + 1;
       *ver = strict_strtoll(s, 10, &err);
+      if (!err.empty()) {
+        CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+        return -EIO;
+      }
+    } else if (val[0] == 's') {
+      string err;
+      const char *s = val.c_str() + 1;
+      *snap_id = strict_strtoll(s, 10, &err);
       if (!err.empty()) {
         CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
         return -EIO;
@@ -661,7 +682,8 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
       cls_rgw_obj_key key;
       uint64_t ver;
-      int ret = decode_list_index_key(kiter->first, &key, &ver);
+      rgw_bucket_snap_id snap_id;
+      int ret = decode_list_index_key(kiter->first, &key, &ver, &snap_id);
       if (ret < 0) {
         CLS_LOG(0, "ERROR: %s: failed to decode list index key (%s)",
 		__func__, escape_str(kiter->first).c_str());

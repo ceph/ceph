@@ -28,10 +28,12 @@
 
 #include "common/dout.h"
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   std::string name;
   std::string instance;
+  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
 
   rgw_obj_index_key() {}
   rgw_obj_index_key(const std::string &_name) : name(_name) {}
@@ -73,20 +75,25 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   }
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(name, bl);
     encode(instance, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(name, bl);
     decode(instance, bl);
+    if (struct_v >= 2) {
+      decode(snap_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const {
-    f->dump_string("name", name);
-    f->dump_string("instance", instance);
+    encode_json("name", name, f);
+    encode_json("instance", instance, f);
+    encode_json("snap_id", (int64_t)snap_id, f);
   }
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_obj_index_key*>& ls) {
@@ -127,6 +134,7 @@ struct rgw_obj_key {
   rgw_obj_key(const rgw_obj_index_key& k) {
     parse_index_key(k.name, &name, &ns);
     _init_instance(k.instance);
+    snap_id = k.snap_id;
   }
 
   void _init_instance(const std::string& i) {
@@ -179,6 +187,7 @@ struct rgw_obj_key {
       return false;
     }
     instance = index_key.instance;
+    snap_id = index_key.snap_id;
     return true;
   }
 
@@ -218,6 +227,7 @@ struct rgw_obj_key {
   void get_index_key(rgw_obj_index_key* key) const {
     key->name = get_index_key_name();
     key->instance = instance;
+    key->snap_id = snap_id;
   }
 
   std::string get_loc() const {
