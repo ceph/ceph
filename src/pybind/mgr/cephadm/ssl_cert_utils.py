@@ -32,12 +32,12 @@ class SSLCerts:
             public_exponent=65537, key_size=4096, backend=default_backend())
         root_public_key = self.root_key.public_key()
         root_builder = x509.CertificateBuilder()
-        root_builder = root_builder.subject_name(x509.Name([
+        root_ca_name = x509.Name([
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Ceph"),
             x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
-        root_builder = root_builder.issuer_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
-        ]))
+        ])
+        root_builder = root_builder.subject_name(root_ca_name)
+        root_builder = root_builder.issuer_name(root_ca_name)
         root_builder = root_builder.not_valid_before(datetime.now())
         root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=self.root_certificate_duration_days))
         root_builder = root_builder.serial_number(x509.random_serial_number())
@@ -93,9 +93,12 @@ class SSLCerts:
         public_key = private_key.public_key()
 
         builder = x509.CertificateBuilder()
+        root_ca_name = x509.Name([
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Ceph"),
+            x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
+        ])
         builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
-        builder = builder.issuer_name(
-            x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'), ]))
+        builder = builder.issuer_name(root_ca_name)
         builder = builder.not_valid_before(datetime.now())
         builder = builder.not_valid_after(datetime.now() + timedelta(days=self.certificate_duration_days))
         builder = builder.serial_number(x509.random_serial_number())
