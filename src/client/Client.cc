@@ -15012,32 +15012,6 @@ int Client::_vxattrcb_fscrypt_auth_set(Inode *in, const void *val, size_t size,
   return _do_setattr(in, &stx, CEPH_SETATTR_FSCRYPT_AUTH, perms, nullptr, &aux);
 }
 
-bool Client::_vxattrcb_fscrypt_file_exists(Inode *in)
-{
-  return !in->fscrypt_file.empty();
-}
-
-size_t Client::_vxattrcb_fscrypt_file(Inode *in, char *val, size_t size)
-{
-  size_t count = in->fscrypt_file.size();
-
-  if (count <= size)
-    memcpy(val, in->fscrypt_file.data(), count);
-  return count;
-}
-
-int Client::_vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size,
-				       const UserPerm& perms)
-{
-  struct ceph_statx stx = { 0 };
-  std::vector<uint8_t>	aux;
-
-  aux.resize(size);
-  memcpy(aux.data(), val, size);
-
-  return _do_setattr(in, &stx, CEPH_SETATTR_FSCRYPT_FILE, perms, nullptr, &aux);
-}
-
 bool Client::_vxattrcb_quota_exists(Inode *in)
 {
   return in->quota.is_enabled() &&
@@ -15347,16 +15321,8 @@ const Client::VXattr Client::_common_vxattrs[] = {
     name: "ceph.fscrypt.auth",
     getxattr_cb: &Client::_vxattrcb_fscrypt_auth,
     setxattr_cb: &Client::_vxattrcb_fscrypt_auth_set,
-    readonly: false,
+    readonly: true,
     exists_cb: &Client::_vxattrcb_fscrypt_auth_exists,
-    flags: 0,
-  },
-  {
-    name: "ceph.fscrypt.file",
-    getxattr_cb: &Client::_vxattrcb_fscrypt_file,
-    setxattr_cb: &Client::_vxattrcb_fscrypt_file_set,
-    readonly: false,
-    exists_cb: &Client::_vxattrcb_fscrypt_file_exists,
     flags: 0,
   },
   { name: "" }     /* Required table terminator */
@@ -18136,16 +18102,20 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
 
   fsc.encode(env_bl);
 
-  int r = ll_setxattr(in, "ceph.fscrypt.auth", (void *)env_bl.c_str(), env_bl.length(), CEPH_XATTR_CREATE, perms);
+  struct ceph_statx stx = { 0 };
+  std::vector<uint8_t>	aux;
+  aux.resize(env_bl.length());
+  memcpy(aux.data(), env_bl.c_str(), env_bl.length());
+
+  std::scoped_lock lock(client_lock);
+
+  int r  = _do_setattr(in, &stx, CEPH_SETATTR_FSCRYPT_AUTH, perms, nullptr, &aux);
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "(): failed to set fscrypt_auth attr: r=" << r << dendl;
     return r;
   }
 
-  uint64_t fsize = 0;
-  r = ll_setxattr(in, "ceph.fscrypt.file", (void *)&fsize, sizeof(fsize), CEPH_XATTR_CREATE, perms);
+  r = _do_setattr(in, &stx, CEPH_SETATTR_SIZE, perms, nullptr);
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "(): failed to set fscrypt_file attr: r=" << r << dendl;
     return r;
   }
 
