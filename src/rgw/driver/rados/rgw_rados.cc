@@ -3191,13 +3191,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   rgw_obj& obj = target->get_obj();
 
-  auto& bucket_info = target->get_bucket_info();
-  auto& snap_mgr = bucket_info.local.snap_mgr;
-
-  if (snap_mgr.is_enabled()) {
-    obj.key.set_snap_id(snap_mgr.get_cur_snap_id());
-  }
-
   if (obj.get_oid().empty()) {
     ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
     return -EIO;
@@ -3497,8 +3490,14 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
+  auto& obj = target->get_obj();
+  auto& snap_mgr = bucket_info.local.snap_mgr;
+  if (snap_mgr.is_enabled()) {
+    obj.key.set_snap_id(snap_mgr.get_cur_snap_id());
+  }
+
   RGWRados::Bucket bop(target->get_store(), bucket_info);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
   index_op.set_zones_trace(meta.zones_trace);
   
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
@@ -6337,6 +6336,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 	store->gen_rand_obj_instance_name(&marker);
       }
 
+      marker.key.snap_id = target->get_bucket_info().local.snap_mgr.get_cur_snap_id();
+
       result.version_id = marker.key.instance;
       if (result.version_id.empty()) {
         result.version_id = "null";
@@ -6347,6 +6348,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 
       meta.owner = to_string(params.obj_owner.id);
       meta.owner_display_name = params.obj_owner.display_name;
+      meta.snap_id = marker.key.snap_id;
 
       if (real_clock::is_zero(params.mtime)) {
         meta.mtime = real_clock::now();
