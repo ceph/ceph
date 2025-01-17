@@ -342,7 +342,16 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
     int ret = string2bool(val, disableWAL);
     if (ret != 0)
       return ret;
-  } else {
+  } else if (key == "rocksdb.statistics.enable") {
+        if (val == "true") {
+            cct->_conf->rocksdb_perf = true;
+            dout(10) << "RocksDB statistics enabled via key: " << key << dendl;
+        } else {
+            cct->_conf->rocksdb_perf = false;
+            dout(10) << "RocksDB statistics disabled via key: " << key << dendl;
+        }
+  }
+  else {
     //unrecognize config options.
     return -EINVAL;
   }
@@ -488,10 +497,24 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     }
   }
 
-  if (cct->_conf->rocksdb_perf)  {
-    dbstats = rocksdb::CreateDBStatistics();
-    opt.statistics = dbstats;
-  }
+    // Parse each key-value pair in kv_options
+    for (const auto& [key, val] : kv_options) {
+        if (key == "rocksdb.statistics.enable"){
+          if (tryInterpret(key, val, opt) != 0) {
+            dout(1) << "Failed to interpret RocksDB option: " << key << dendl;
+            return -EINVAL;
+          }
+      }
+    }
+
+    // Initialize dbstats if rocksdb_perf is enabled
+    if (cct->_conf->rocksdb_perf)  {
+        dbstats = rocksdb::CreateDBStatistics();
+        opt.statistics = dbstats;
+        dout(10) << "RocksDB statistics initialized." << dendl;
+    } else {
+        dout(10) << "RocksDB statistics not enabled." << dendl;
+    }
 
   opt.create_if_missing = create_if_missing;
   if (kv_options.count("separate_wal_dir")) {
@@ -1257,6 +1280,7 @@ int RocksDBStore::do_open(ostream &out,
       "rocksdb_write_pre_and_post_time", "total time spent on writing a record, excluding write process");
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
+  register_stats_hook();
 
   if (compact_on_mount) {
     derr << "Compacting rocksdb store..." << dendl;
@@ -1279,6 +1303,7 @@ int RocksDBStore::_test_init(const string& dir)
 
 RocksDBStore::~RocksDBStore()
 {
+  unregister_stats_hook();
   close();
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
@@ -1300,6 +1325,7 @@ void RocksDBStore::close()
     compact_queue_lock.unlock();
   }
 
+  unregister_stats_hook();
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;

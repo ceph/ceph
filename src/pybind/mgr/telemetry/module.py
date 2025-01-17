@@ -65,6 +65,7 @@ class Collection(str, enum.Enum):
     crash_base = 'crash_base'
     ident_base = 'ident_base'
     perf_perf = 'perf_perf'
+    perf_rocksdb_metrics = 'perf_rocksdb_metrics'
     basic_mds_metadata = 'basic_mds_metadata'
     basic_pool_usage = 'basic_pool_usage'
     basic_usage_by_class = 'basic_usage_by_class'
@@ -101,6 +102,12 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.perf_perf,
         "description": "Information about performance counters of the cluster",
+        "channel": "perf",
+        "nag": True
+    },
+    {
+        "name": Collection.perf_rocksdb_metrics,
+        "description": "RocksDB metrics for OSD and MON (cache usage, data read/write operations, latency, etc.)",
         "channel": "perf",
         "nag": True
     },
@@ -620,6 +627,49 @@ class Module(MgrModule):
             self.log.debug('Anonymized daemon mapping for telemetry mempool (anonymized: real): {}'.format(anonymized_daemons))
 
         return result
+    
+    def get_rocksdb_metrics(self) -> Dict[str, dict]:
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(str)))
+        
+        anonymized_daemons = {}
+        osd_map = self.get('osd_map')
+
+        # Get all osds
+        daemons = []
+        for osd in osd_map['osds']:
+            daemons.append('osd'+'.'+str(osd['osd']))
+
+        # Get all mons
+        mon_map = self.get('mon_map')
+        for mon in mon_map['mons']:
+            daemons.append('mon'+'.'+mon['name'])
+
+        # For each osd and mon id call dump_rocksdb_stats for telemetry
+        for daemon in daemons:
+            daemon_type, daemon_id = daemon.split('.', 1)
+            cmd_dict = {
+                'prefix': 'dump_rocksdb_stats',
+                'level' : 'telemetry',
+                'format': 'json'
+            }
+            r, outb, outs = self.tell_command(daemon_type, daemon_id, cmd_dict)
+            if r != 0:
+                self.log.error("Invalid command dictionary: {}".format(cmd_dict))
+                continue
+            else:
+                try:
+                    dump = json.loads(outb)
+
+                    # Anonymize mon
+                    if daemon_type != 'osd':
+                        anonymized_daemons[daemon] = self.anonymize_entity_name(daemon)
+                        daemon = anonymized_daemons[daemon]
+                    result[daemon_type][daemon] = dump
+
+                except (json.decoder.JSONDecodeError, KeyError) as e:
+                    self.log.exception("Error caught on {}.{}: {}".format(daemon_type, daemon_id, e))
+                    continue
+        return result
 
     def get_osd_histograms(self, mode: str = 'separated') -> List[Dict[str, dict]]:
         # Initialize result dict
@@ -764,7 +814,6 @@ class Module(MgrModule):
 
         # Update result
         result['version'] = version
-
         return result
 
     def gather_crashinfo(self) -> List[Dict[str, str]]:
@@ -1331,6 +1380,8 @@ class Module(MgrModule):
                 report['mempool'] = self.get_mempool('separated')
                 report['heap_stats'] = self.get_heap_stats()
                 report['rocksdb_stats'] = self.get_rocksdb_stats()
+            if self.is_enabled_collection(Collection.perf_rocksdb_metrics):
+                report['rocksdb_metrics'] = self.get_rocksdb_metrics()
 
         # NOTE: We do not include the 'device' channel in this report; it is
         # sent to a different endpoint.
