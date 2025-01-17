@@ -72,7 +72,7 @@ function TEST_bluestore() {
 
     truncate $dir/0/block -s 4294967296 # 4GB
     ceph-bluestore-tool --path $dir/0 bluefs-bdev-expand || return 1
-    truncate $dir/1/block -s 4311744512 # 4GB + 16MB
+    truncate $dir/1/block -s 11811160064 # 11GB to get bdev label at 10737418240
     ceph-bluestore-tool --path $dir/1 bluefs-bdev-expand || return 1
     truncate $dir/2/block -s 4295099392 # 4GB + 129KB
     ceph-bluestore-tool --path $dir/2 bluefs-bdev-expand || return 1
