@@ -228,6 +228,7 @@ int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
     }
     auto& entry = sources.emplace_back();
     entry.pipe = pipe;
+    entry.pipe.dest.bucket = info.bucket; // so it contains the bucket key (+bucket id)
 
     // fetch remote markers
     boost::asio::spawn(ioctx, [&] (boost::asio::yield_context yield) {
