@@ -5494,14 +5494,18 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
     decode(expected_crc, p);
   }
   catch (ceph::buffer::error& e) {
-    derr << __func__ << " unable to decode label at offset " << p.get_off()
-	 << ": " << e.what()
-	 << dendl;
+    // We can still get here in non-erroneous scenarios,
+    // hence do not log that as an error
+    dout(0) << __func__ << " " << path.c_str() << ", "
+      << "unable to decode label: " << e.what()
+      << dendl;
     return -ENOENT;
   }
   if (crc != expected_crc) {
-    derr << __func__ << " bad crc on label, expected " << expected_crc
-	 << " != actual " << crc << dendl;
+    // We can still get here in non-erroneousscenarios,
+    // hence do not log that as an error
+    dout(0) << __func__ << " bad crc on label, expected " << expected_crc
+	    << " != actual " << crc << dendl;
     return -EIO;
   }
   dout(10) << __func__ << " got " << *label << dendl;
