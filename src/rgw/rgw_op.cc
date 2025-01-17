@@ -917,15 +917,20 @@ void handle_replication_status_header(
   auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
   if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
     if (s->object->is_sync_completed(dpp, obj_mtime)) {
-        s->object->set_atomic();
-        rgw::sal::Attrs setattrs, rmattrs;
-        bufferlist bl;
-        bl.append("COMPLETED");
-        setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl);
-	int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, s->yield, 0);
-	if (ret == 0) {
-	  ldpp_dout(dpp, 20) << *s->object << " has amz-replication-status header set to COMPLETED" << dendl;
-	}
+      s->object->set_atomic();
+      rgw::sal::Attrs setattrs, rmattrs;
+      bufferlist bl;
+      bl.append("COMPLETED");
+      setattrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = bl;
+      int ret = s->object->set_obj_attrs(dpp, &setattrs, &rmattrs, s->yield, 0);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to set object replication status to COMPLETED ret=" << ret << dendl;
+        return;
+      }
+
+      ldpp_dout(dpp, 20) << *s->object << " has amz-replication-status header set to COMPLETED" << dendl;
+
+      attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl); // update the attrs so that the status is reflected in the response
     }
   }
 }
