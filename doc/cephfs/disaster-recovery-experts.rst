@@ -28,11 +28,6 @@ running the following command:
 
    cephfs-journal-tool journal export backup.bin
 
-If the journal is badly corrupted, this command might not work. If the journal
-is badly corrupted, make a RADOS-level copy
-(http://tracker.ceph.com/issues/9902).
-
-
 Dentry recovery from journal
 ----------------------------
 
