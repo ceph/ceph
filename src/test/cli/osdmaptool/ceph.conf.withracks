@@ -1,0 +1,1480 @@
+
+[global]
+  auth supported = cephx
+  ms bind ipv6 = true
+
+[mon]
+  mon data = /var/ceph/mon
+  mon clock drift allowed = 0.1
+
+  osd pool default size = 3
+  osd pool default crush rule = 0
+
+  ; don't mark down osds out automatically; wait for an admin!
+  mon osd down out interval = 0
+
+[mon.alpha]
+  host = peon5752
+  mon addr = [2607:f298:4:2243::5752]:6789
+
+[mon.beta]
+  host = peon5753
+  mon addr = [2607:f298:4:2243::5753]:6789
+
+[mon.charlie]
+  host = peon5754
+  mon addr = [2607:f298:4:2243::5754]:6789
+
+[client]
+  rgw socket path = /var/run/ceph/radosgw.$name
+  rgw cache enabled = true
+  rgw dns name = objects.dreamhost.com
+  rgw swift url = https://objects.dreamhost.com
+
+[client.radosgw.peon5751]
+  host = peon5751
+  log file = /var/log/ceph/$name.log
+  debug rgw = 40
+  debug ms = 1
+
+
+[osd]
+  keyring = /mnt/osd.$id/keyring
+  osd data = /mnt/osd.$id
+  osd journal = /dev/disk/by-label/osd.$id.journal
+  osd mkfs type = btrfs
+  osd mount options btrfs = rw,noatime
+  devs = /dev/disk/by-label/osd.$id.data
+; temp sage
+  debug osd = 20
+  debug ms = 1
+  debug filestore = 20
+
+[osd.1]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.2]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.3]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.4]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.5]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.6]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.7]
+  host = cephstore5522
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5522]
+  public addr = [2607:f298:4:2243::5522]
+
+[osd.8]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.9]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.10]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.11]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.12]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.13]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.14]
+  host = cephstore5523
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5523]
+  public addr = [2607:f298:4:2243::5523]
+
+[osd.15]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.16]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.17]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.18]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.19]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.20]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.21]
+  host = cephstore5524
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5524]
+  public addr = [2607:f298:4:2243::5524]
+
+[osd.22]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.23]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.24]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.25]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.26]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.27]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.28]
+  host = cephstore5525
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5525]
+  public addr = [2607:f298:4:2243::5525]
+
+[osd.29]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.30]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.31]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.32]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.33]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.34]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.35]
+  host = cephstore5526
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5526]
+  public addr = [2607:f298:4:2243::5526]
+
+[osd.36]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.37]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.38]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.39]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.40]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.41]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.42]
+  host = cephstore5527
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5527]
+  public addr = [2607:f298:4:2243::5527]
+
+[osd.43]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.44]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.45]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.46]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.47]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.48]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.49]
+  host = cephstore5529
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5529]
+  public addr = [2607:f298:4:2243::5529]
+
+[osd.50]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.51]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.52]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.53]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.54]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.55]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.56]
+  host = cephstore5530
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::5530]
+  public addr = [2607:f298:4:2243::5530]
+
+[osd.57]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.58]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.59]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.60]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.61]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.62]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.63]
+  host = cephstore6230
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6230]
+  public addr = [2607:f298:4:2243::6230]
+
+[osd.64]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.65]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.66]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.67]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.68]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.69]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.70]
+  host = cephstore6231
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6231]
+  public addr = [2607:f298:4:2243::6231]
+
+[osd.71]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.72]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.73]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.74]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.75]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.76]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.77]
+  host = cephstore6232
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6232]
+  public addr = [2607:f298:4:2243::6232]
+
+[osd.78]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.79]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.80]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.81]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.82]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.83]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.84]
+  host = cephstore6233
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6233]
+  public addr = [2607:f298:4:2243::6233]
+
+[osd.85]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.86]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.87]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.88]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.89]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.90]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.91]
+  host = cephstore6234
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6234]
+  public addr = [2607:f298:4:2243::6234]
+
+[osd.92]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.93]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.94]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.95]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.96]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.97]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.98]
+  host = cephstore6235
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6235]
+  public addr = [2607:f298:4:2243::6235]
+
+[osd.99]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.100]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.101]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.102]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.103]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.104]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.105]
+  host = cephstore6236
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6236]
+  public addr = [2607:f298:4:2243::6236]
+
+[osd.106]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.107]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.108]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.109]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.110]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.111]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.112]
+  host = cephstore6237
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6237]
+  public addr = [2607:f298:4:2243::6237]
+
+[osd.113]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.114]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.115]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.116]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.117]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.118]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.119]
+  host = cephstore6238
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6238]
+  public addr = [2607:f298:4:2243::6238]
+
+[osd.120]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.121]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.122]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.123]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.124]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.125]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.126]
+  host = cephstore6239
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6239]
+  public addr = [2607:f298:4:2243::6239]
+
+[osd.127]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.128]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.129]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.130]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.131]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.132]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.133]
+  host = cephstore6240
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6240]
+  public addr = [2607:f298:4:2243::6240]
+
+[osd.134]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.135]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.136]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.137]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.138]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.139]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.140]
+  host = cephstore6241
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6241]
+  public addr = [2607:f298:4:2243::6241]
+
+[osd.141]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.142]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.143]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.144]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.145]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.146]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.147]
+  host = cephstore6242
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6242]
+  public addr = [2607:f298:4:2243::6242]
+
+[osd.148]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.149]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.150]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.151]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.152]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.153]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.154]
+  host = cephstore6243
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6243]
+  public addr = [2607:f298:4:2243::6243]
+
+[osd.155]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.156]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.157]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.158]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.159]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.160]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.161]
+  host = cephstore6244
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6244]
+  public addr = [2607:f298:4:2243::6244]
+
+[osd.162]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.163]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.164]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.165]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.166]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.167]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.168]
+  host = cephstore6245
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6245]
+  public addr = [2607:f298:4:2243::6245]
+
+[osd.169]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.170]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.171]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.172]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.173]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.174]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.175]
+  host = cephstore6246
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6246]
+  public addr = [2607:f298:4:2243::6246]
+
+[osd.176]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.177]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.178]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.179]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.180]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.181]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.182]
+  host = cephstore6336
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6336]
+  public addr = [2607:f298:4:2243::6336]
+
+[osd.183]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.184]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.185]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.186]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.187]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.188]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.189]
+  host = cephstore6337
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6337]
+  public addr = [2607:f298:4:2243::6337]
+
+[osd.190]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.191]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.192]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.193]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.194]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.195]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.196]
+  host = cephstore6338
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6338]
+  public addr = [2607:f298:4:2243::6338]
+
+[osd.197]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.198]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.199]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.200]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.201]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.202]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.203]
+  host = cephstore6339
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6339]
+  public addr = [2607:f298:4:2243::6339]
+
+[osd.204]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.205]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.206]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.207]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.208]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.209]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.210]
+  host = cephstore6340
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6340]
+  public addr = [2607:f298:4:2243::6340]
+
+[osd.211]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.212]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.213]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.214]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.215]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.216]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.217]
+  host = cephstore6341
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6341]
+  public addr = [2607:f298:4:2243::6341]
+
+[osd.218]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.219]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.220]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.221]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.222]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.223]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.224]
+  host = cephstore6342
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6342]
+  public addr = [2607:f298:4:2243::6342]
+
+[osd.225]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.226]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.227]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.228]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.229]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.230]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.231]
+  host = cephstore6343
+  rack = irv-n1
+  cluster addr = [2607:f298:4:3243::6343]
+  public addr = [2607:f298:4:2243::6343]
+
+[osd.232]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
+[osd.233]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
+[osd.234]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
+[osd.235]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
+[osd.236]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
+[osd.237]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
+[osd.238]
+  host = cephstore6345
+  rack = irv-n2
+  cluster addr = [2607:f298:4:3243::6345]
+  public addr = [2607:f298:4:2243::6345]
+
