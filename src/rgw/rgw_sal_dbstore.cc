@@ -242,7 +242,7 @@ namespace rgw::sal {
   {
     int ret;
 
-    ret = store->getDB()->update_bucket(dpp, "info", info, exclusive, nullptr, nullptr, &_mtime, &info.objv_tracker);
+    ret = store->getDB()->update_bucket(dpp, "info", info, exclusive, nullptr, &attrs, &_mtime, &info.objv_tracker);
 
     return ret;
 
