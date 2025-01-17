@@ -63,6 +63,7 @@ import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-pol
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
+import { RgwStorageClassListComponent } from './rgw-storage-class-list/rgw-storage-class-list.component';
 import {
   ButtonModule,
   GridModule,
@@ -75,12 +76,14 @@ import {
   CheckboxModule,
   TreeviewModule,
   SelectModule,
-  NumberModule
+  NumberModule,
+  TabsModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
 import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
+import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
 
 @NgModule({
   imports: [
@@ -110,7 +113,8 @@ import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw
     InputModule,
     CheckboxModule,
     SelectModule,
-    NumberModule
+    NumberModule,
+    TabsModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -119,7 +123,8 @@ import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent
+    RgwUserDetailsComponent,
+    RgwStorageClassListComponent
   ],
   declarations: [
     RgwDaemonListComponent,
@@ -164,7 +169,9 @@ import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw
     RgwMultisiteTabsComponent,
     RgwUserAccountsComponent,
     RgwUserAccountsFormComponent,
-    RgwUserAccountsDetailsComponent
+    RgwUserAccountsDetailsComponent,
+    RgwStorageClassListComponent,
+    RgwStorageClassDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -314,6 +321,11 @@ const routes: Routes = [
         ]
       }
     ]
+  },
+  {
+    path: 'tiering',
+    data: { breadcrumbs: 'Tiering' },
+    children: [{ path: '', component: RgwStorageClassListComponent }]
   },
   {
     path: 'nfs',
