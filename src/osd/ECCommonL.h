@@ -53,6 +53,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 struct ECSubWrite;
 struct PGLog;
 
+namespace ECLegacy {
 
 struct ECCommonL {
 
@@ -580,12 +581,6 @@ std::ostream &operator<<(std::ostream &lhs,
 std::ostream &operator<<(std::ostream &lhs,
 			 const ECCommonL::RMWPipeline::Op &rhs);
 
-template <> struct fmt::formatter<ECCommonL::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommonL::read_request_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommonL::read_result_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommonL::ReadOp> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommonL::RMWPipeline::Op> : fmt::ostream_formatter {};
-
 template <class F, class G>
 void ECCommonL::ReadPipeline::check_recovery_sources(
   const OSDMapRef& osdmap,
@@ -593,7 +588,7 @@ void ECCommonL::ReadPipeline::check_recovery_sources(
   G&& on_schedule_recovery)
 {
   std::set<ceph_tid_t> tids_to_filter;
-  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator 
+  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator
        i = shard_to_read_map.begin();
        i != shard_to_read_map.end();
        ) {
@@ -683,3 +678,10 @@ void ECCommonL::ReadPipeline::filter_read_op(
     on_schedule_recovery(op);
   }
 }
+}// namespace ECLegacy
+
+template <> struct fmt::formatter<ECLegacy::ECCommonL::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::read_request_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::read_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::ReadOp> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::RMWPipeline::Op> : fmt::ostream_formatter {};

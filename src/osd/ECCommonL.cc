@@ -53,16 +53,17 @@ using ceph::bufferptr;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
+namespace ECLegacy {
 static ostream& _prefix(std::ostream *_dout, ECCommonL::RMWPipeline *rmw_pipeline) {
-  return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout);
+  return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout) << "ECCommonL ";
 }
 static ostream& _prefix(std::ostream *_dout, ECCommonL::ReadPipeline *read_pipeline) {
-  return read_pipeline->get_parent()->gen_dbg_prefix(*_dout);
+  return read_pipeline->get_parent()->gen_dbg_prefix(*_dout) << "ECCommonL ";
 }
 static ostream& _prefix(std::ostream *_dout,
 			ECCommonL::UnstableHashInfoRegistry *unstable_hash_info_registry) {
   // TODO: backref to ECListener?
-  return *_dout;
+  return *_dout << "ECCommonL ";
 }
 static ostream& _prefix(std::ostream *_dout, struct ClientReadCompleter *read_completer);
 
@@ -596,7 +597,7 @@ out:
   ECCommonL::ClientAsyncReadStatus *status;
 };
 static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer) {
-  return _prefix(_dout, &read_completer->read_pipeline);
+  return _prefix(_dout, &read_completer->read_pipeline) << "ECCommonL";
 }
 
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
@@ -1100,4 +1101,5 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
     }
   }
   return ref;
+}
 }

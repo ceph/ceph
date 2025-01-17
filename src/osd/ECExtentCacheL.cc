@@ -18,6 +18,7 @@ using std::ostream;
 
 using ceph::bufferlist;
 
+namespace ECLegacy {
 void ECExtentCacheL::extent::_link_pin_state(pin_state &pin_state)
 {
   ceph_assert(parent_extent_set);
@@ -242,4 +243,5 @@ ostream &ECExtentCacheL::print(ostream &out) const
 ostream &operator<<(ostream &lhs, const ECExtentCacheL &cache)
 {
   return cache.print(lhs);
+}
 }

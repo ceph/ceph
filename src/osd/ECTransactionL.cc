@@ -34,6 +34,7 @@ using ceph::decode;
 using ceph::encode;
 using ceph::ErasureCodeInterfaceRef;
 
+namespace ECLegacy {
 static void encode_and_write(
   pg_t pgid,
   const hobject_t &oid,
@@ -61,9 +62,9 @@ static void encode_and_write(
   written.insert(offset, bl.length(), bl);
 
   ldpp_dout(dpp, 20) << __func__ << ": " << oid
-		     << " new_size "
-		     << offset + bl.length()
-		     << dendl;
+                     << " new_size "
+                     << offset + bl.length()
+                     << dendl;
 
   if (offset >= before_size) {
     ceph_assert(offset == before_size);
@@ -370,7 +371,7 @@ void ECTransactionL::generate_transactions(
       if (op.alloc_hint) {
 	/* logical_to_next_chunk_offset() scales down both aligned and
 	   * unaligned offsets
-	   
+
 	   * we don't bother to roll this back at this time for two reasons:
 	   * 1) it's advisory
 	   * 2) we don't track the old value */
@@ -378,7 +379,7 @@ void ECTransactionL::generate_transactions(
 	  op.alloc_hint->expected_object_size);
 	uint64_t write_size = sinfo.logical_to_next_chunk_offset(
 	  op.alloc_hint->expected_write_size);
-	
+
 	for (auto &&st : *transactions) {
 	  st.second.set_alloc_hint(
 	    coll_t(spg_t(pgid, st.first)),
@@ -451,7 +452,7 @@ void ECTransactionL::generate_transactions(
 	      restore_from,
 	      restore_len,
 	      restore_from);
-	    
+
 	  }
 	} else {
 	  ldpp_dout(dpp, 20) << "generate_transactions: not saving extents"
@@ -655,4 +656,5 @@ void ECTransactionL::generate_transactions(
 	}
       }
     });
+}
 }
