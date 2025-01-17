@@ -13,6 +13,12 @@ v19.2.0 Squid
    68215 <https://tracker.ceph.com/issues/68215>`_ before attempting an upgrade
    to 19.2.0.
 
+   Some users have encountered a Ceph Manager balancer module issue when upgrading 
+   to Ceph 19.2.0 that requires one to disable the balancer in order for expected 
+   cluster operations. A fix has been implemented in 19.2.1, please read 
+   `Tracker Issue 68657 <https://tracker.ceph.com/issues/68657>`_ before attempting 
+   an upgrade.
+
 Highlights
 ~~~~~~~~~~
 
