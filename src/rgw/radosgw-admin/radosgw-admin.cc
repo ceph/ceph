@@ -2543,8 +2543,8 @@ static void sync_status(Formatter *formatter)
 
 struct indented {
   int w; // indent width
-  std::string_view header;
-  indented(int w, std::string_view header = "") : w(w), header(header) {}
+  std::string header;
+  indented(int w, std::string header = "") : w(w), header(header) {}
 };
 std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
@@ -2552,10 +2552,10 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
 
 struct bucket_source_sync_info {
   const RGWZone& _source;
-  std::string_view error;
+  std::string error;
   std::map<int,std::string> shards_behind;
   int total_shards;
-  std::string_view status;
+  std::string status;
   rgw_bucket bucket_source;
 
   bucket_source_sync_info(const RGWZone& source): _source(source) {}
@@ -3075,14 +3075,12 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
       }
       if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
         bucket_source_sync_info source_sync_info(z->second);
-	auto ret = bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
+        bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
 				  c->second,
 				  info, pipe,
 				  source_sync_info);
 
-        if (ret == 0) {
-          bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
-        }
+        bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
       }
     }
   }
