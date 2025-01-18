@@ -17,6 +17,7 @@ overrides:
       - OSD_UPGRADE_FINISHED
       - do not have an application enabled
       - is down
+      - TELEMETRY_CHANGED
 tasks:
 - install:
     branch: squid
