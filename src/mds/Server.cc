@@ -7552,22 +7552,24 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
 
   // create referent inode. Don't re-create on retry
   CInode *newi = nullptr;
-  if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
-    newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), pi.inode->mode, nullptr, true);
-  else
-    newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
-  ceph_assert(newi);
+  if (mds->mdsmap->allow_referent_inodes()) {
+    if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
+      newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), pi.inode->mode, nullptr, true);
+    else
+      newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
+    ceph_assert(newi);
 
-  auto _inode = newi->_get_inode();
-  _inode->version = dnpv;
-  _inode->update_backtrace();
+    auto _inode = newi->_get_inode();
+    _inode->version = dnpv;
+    _inode->update_backtrace();
 
-  pi.inode->add_referent_ino(newi->ino());
-  dout(20) << "_link_local " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << newi->ino() << dendl;
+    pi.inode->add_referent_ino(newi->ino());
+    dout(20) << "_link_local " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << newi->ino() << dendl;
 
-  //TODO layout, rstat accounting for referent inode ?
+    //TODO layout, rstat accounting for referent inode ?
 
-  // TODO - snapshot related inode updates - snaprealm on referent inode
+    // TODO - snapshot related inode updates - snaprealm on referent inode
+  }
 
   bool adjust_realm = false;
   if (mds->mdsmap->use_global_snaprealm() && !target_realm->get_subvolume_ino()
@@ -7583,17 +7585,18 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);      // new dn
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
-  dout(10) << " HRK _link_local calling metablob add_remote_dentry with referent_ino= " << newi->ino() << dendl;
-  le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), newi->ino(), newi);  // new remote
+  dout(20) << "_link_local calling metablob add_remote_dentry with referent_ino= " << (newi ? newi->ino() : inodeno_t(0)) << dendl;
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), newi ? newi->ino() : inodeno_t(0), newi);  // new remote
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, targeti);
 
-  // journal allocated referent inode.
-  journal_allocated_inos(mdr, &le->metablob);
-  // do this after predirty_*, to avoid funky extra dnl arg
-  //dn->push_projected_linkage(targeti->ino(), targeti->d_type());
-
-  // referent inode
-  dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
+  if (newi) {
+    // journal allocated referent inode and push the linkage with referent inode
+    journal_allocated_inos(mdr, &le->metablob);
+    dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
+  } else {
+    // do this after predirty_*, to avoid funky extra dnl arg
+    dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+  }
 
   journal_and_reply(mdr, targeti, dn, le,
 		    new C_MDS_link_local_finish(this, mdr, dn, targeti, newi, dnpv, tipv, adjust_realm));
@@ -7608,21 +7611,24 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
   CDentry::linkage_t *dnl = dn->pop_projected_linkage();
   if (!dnl->get_inode())
     dn->link_remote(dnl, targeti);
-
   dn->mark_dirty(dnpv, mdr->ls);
 
-  // dirty secondary inode
-  referenti->mark_dirty(mdr->ls);
-  referenti->mark_dirty_parent(mdr->ls, true);
+  if (referenti) {
+    // dirty referent inode
+    referenti->mark_dirty(mdr->ls);
+    referenti->mark_dirty_parent(mdr->ls, true);
+  }
 
   // target inode
   mdr->apply();
 
-  auto target_inode = targeti->_get_inode();
-  dout(20) << "_link_local_finish referent_inodes - " << std::hex << target_inode->get_referent_inodes() << dendl;
+  if (referenti) {
+    auto target_inode = targeti->_get_inode();
+    dout(20) << "_link_local_finish referent_inodes - " << std::hex << target_inode->get_referent_inodes() << dendl;
+  }
 
   MDRequestRef null_ref;
-  mdcache->send_dentry_link(dn, null_ref, false);
+  mdcache->send_dentry_link(dn, null_ref, referenti ? false: true);
 
   if (adjust_realm) {
     int op = CEPH_SNAP_OP_SPLIT;
@@ -7668,7 +7674,7 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
   // create referent inode. Don't re-create on retry
-  if (inc) {
+  if (mds->mdsmap->allow_referent_inodes() && inc) {
     if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
       newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), targeti->inode->mode, nullptr, true);
     else
@@ -7696,20 +7702,24 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     auto req = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->op_stamp = mdr->get_op_stamp();
-    if (inc)
-      req->referent_ino = newi->ino();
-    else {
-      if (dnl->is_referent()) {
-        CInode *ref_in = dnl->get_referent_inode();
-	req->referent_ino = ref_in->ino();
+    if (mds->mdsmap->allow_referent_inodes()) {
+      if (inc)
+        req->referent_ino = newi->ino();
+      else {
+        if (dnl->is_referent()) {
+          CInode *ref_in = dnl->get_referent_inode();
+	  req->referent_ino = ref_in->ino();
+        }
       }
+      // referent inode related
+      vector<CDentry*>& desttrace = mdr->dn[0];
+      req->destdnpath = filepath(desttrace.front()->get_dir()->ino());
+      for (auto dn : desttrace)
+        req->destdnpath.push_dentry(dn->get_name());
+      dout(20) << __func__ << " desttrace " << desttrace << " destdnpath " << req->destdnpath << dendl;
+    } else {
+      req->referent_ino = inodeno_t(0);
     }
-    // referent inode related
-    vector<CDentry*>& desttrace = mdr->dn[0];
-    req->destdnpath = filepath(desttrace.front()->get_dir()->ino());
-    for (auto dn : desttrace)
-      req->destdnpath.push_dentry(dn->get_name());
-    dout(20) << __func__ << " desttrace " << desttrace << " destdnpath " << req->destdnpath << dendl;
 
     if (auto& desti_srnode = mdr->more()->desti_srnode)
       encode(*desti_srnode, req->desti_snapbl);
@@ -7750,12 +7760,17 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     _inode->update_backtrace();
 
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
-    dout(10) << " HRK _link_remote calling metablob add_remote_dentry with referent_ino= " << newi->ino() << dendl;
-    le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), newi->ino(), newi); // new remote
 
-    // journal allocated referent inode.
-    journal_allocated_inos(mdr, &le->metablob);
-    dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
+    if (newi) {
+      dout(20) << "_link_remote calling metablob add_remote_dentry with referent_ino= " << newi->ino() << dendl;
+      le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), newi->ino(), newi); // new remote
+      // journal allocated referent inode.
+      journal_allocated_inos(mdr, &le->metablob);
+      dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
+    } else {
+      le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), inodeno_t(0), newi); // new remote
+      dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+    }
   } else {
     if (dnl->is_referent()) {
       ceph_assert(straydn);
@@ -7818,12 +7833,12 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
       dn->link_remote(dnl, targeti);
     dn->mark_dirty(dpv, mdr->ls);
 
-    ceph_assert(referenti);
-    // dirty referent inode
-    referenti->mark_dirty(mdr->ls);
-    referenti->mark_dirty_parent(mdr->ls, true);
+    if (referenti) {
+      // dirty referent inode
+      referenti->mark_dirty(mdr->ls);
+      referenti->mark_dirty_parent(mdr->ls, true);
+    }
   } else {
-    //TODO snaprealm code handling required for referent inode ? mostly no.
     // unlink main dentry
     if (dn->get_linkage()->is_referent())
       ignore_rmdir_witness = false;
@@ -7917,21 +7932,23 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
 
   mdr->auth_pin(targeti);
 
-  // discover destdn
-  filepath destpath(mdr->peer_request->destdnpath);
-  dout(10) << __func__ << " dest " << destpath << dendl;
-  vector<CDentry*> trace;
-  CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
-  int r = mdcache->path_traverse(mdr, cf, destpath,
-				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED | MDS_TRAVERSE_WANT_DENTRY,
-				 &trace);
-  if (r > 0) return;
-  if (r == -CEPHFS_ESTALE) {
-    mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
-			    mdr->peer_to_mds, true);
-    return;
+  if (mds->mdsmap->allow_referent_inodes()) {
+    // discover destdn
+    filepath destpath(mdr->peer_request->destdnpath);
+    dout(10) << __func__ << " dest " << destpath << dendl;
+    vector<CDentry*> trace;
+    CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
+    int r = mdcache->path_traverse(mdr, cf, destpath,
+                                   MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED | MDS_TRAVERSE_WANT_DENTRY,
+				   &trace);
+    if (r > 0) return;
+    if (r == -CEPHFS_ESTALE) {
+      mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
+			      mdr->peer_to_mds, true);
+      return;
+    }
+    ceph_assert(r == 0);  // we shouldn't get an error here!
   }
-  ceph_assert(r == 0);  // we shouldn't get an error here!
 
   //ceph_abort();  // test hack: make sure leader can handle a peer that fails to prepare...
   ceph_assert(g_conf()->mds_kill_link_at != 5);
@@ -7959,10 +7976,12 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
     inc = false;
     pi.inode->nlink--;
 
-    // Remove referent inode from primary inode (targeti)
-    ceph_assert(referent_ino);
-    pi.inode->remove_referent_ino(referent_ino);
-    dout(20) << "handle_peer_link_prep " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino removed " << referent_ino << dendl;
+    if (mds->mdsmap->allow_referent_inodes()) {
+      // Remove referent inode from primary inode (targeti)
+      ceph_assert(referent_ino);
+      pi.inode->remove_referent_ino(referent_ino);
+      dout(20) << "handle_peer_link_prep " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino removed " << referent_ino << dendl;
+    }
 
     if (targeti->is_projected_snaprealm_global()) {
       ceph_assert(mdr->peer_request->desti_snapbl.length());
@@ -8044,9 +8063,11 @@ void Server::_logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool ad
   // ack
   if (!mdr->aborted) {
     auto reply = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, MMDSPeerRequest::OP_LINKPREPACK);
-    dout(10) << __func__ << " send targeti with link_prep_ack " << *targeti << dendl;
-    mdcache->encode_replica_inode(targeti, mdr->peer_to_mds, reply->targeti_bl,
-		                  mds->mdsmap->get_up_features());
+    if (mds->mdsmap->allow_referent_inodes()) {
+      dout(10) << __func__ << " send targeti with link_prep_ack " << *targeti << dendl;
+      mdcache->encode_replica_inode(targeti, mdr->peer_to_mds, reply->targeti_bl,
+                                    mds->mdsmap->get_up_features());
+    }
     mds->send_message_mds(reply, mdr->peer_to_mds);
   } else {
     dout(10) << " abort flag set, finishing" << dendl;
@@ -8071,24 +8092,26 @@ void Server::_commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti, 
   ceph_assert(g_conf()->mds_kill_link_at != 7);
 
   if (r == 0) {
-    // All good, set referent inode before apply
-    if (link_inc) {
-      ceph_assert(referent_ino);
-      auto pi = targeti->project_inode(mdr);
-      pi.inode->version = targeti->pre_dirty();
-      pi.inode->add_referent_ino(referent_ino);
-      dout(20) << "_commit_peer_link " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
+    if (mds->mdsmap->allow_referent_inodes()) {
+      // All good, set referent inode before apply
+      if (link_inc) {
+        ceph_assert(referent_ino);
+        auto pi = targeti->project_inode(mdr);
+        pi.inode->version = targeti->pre_dirty();
+        pi.inode->add_referent_ino(referent_ino);
+        dout(20) << "_commit_peer_link " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
+      }
+
+      // It's expected to update the fnode when inode data is modified, so asserts are in place
+      // to validate the fnode's version >= inode's version. In this case, there is nothing update,
+      // just cheat it.
+      CDir *parent = targeti->get_projected_parent_dn()->get_dir();
+      auto pf = parent->project_fnode(mdr);
+      pf->version = parent->pre_dirty();
+
+      //apply the referent inode list change
+      mdr->apply();
     }
-
-    // It's expected to update the fnode when inode data is modified, so asserts are in place
-    // to validate the fnode's version >= inode's version. In this case, there is nothing update,
-    // just cheat it.
-    CDir *parent = targeti->get_projected_parent_dn()->get_dir();
-    auto pf = parent->project_fnode(mdr);
-    pf->version = parent->pre_dirty();
-
-    //apply the referent inode list change
-    mdr->apply();
 
     // drop our pins, etc.
     mdr->cleanup();
@@ -8175,8 +8198,10 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDReques
     //dout(10) << "do_link_rollback " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino removed " << rollback.referent_ino << dendl;
   } else {
     pi.inode->nlink++;
-    pi.inode->add_referent_ino(rollback.referent_ino);
-    dout(10) << "do_link_rollback " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << rollback.referent_ino << dendl;
+    if (rollback.referent_ino) {
+      pi.inode->add_referent_ino(rollback.referent_ino);
+      dout(10) << "do_link_rollback " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << rollback.referent_ino << dendl;
+    }
   }
 
   map<client_t,ref_t<MClientSnap>> splits;
@@ -8244,14 +8269,16 @@ void Server::handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMD
   // note peer
   mdr->more()->peers.insert(from);
 
-  // update the targeti
-  CInode *targeti = nullptr;
-  auto p = m->targeti_bl.cbegin();
-  MDSContext::vec finished;
-  mdcache->decode_replica_inode(targeti, p, nullptr, finished);
-  if (!finished.empty())
-    mds->queue_waiters(finished);
-  dout(10) << "handle_peer_link_prep_ack referent-inodes " << std::hex << targeti->get_projected_inode()->referent_inodes << dendl;
+  if (mds->mdsmap->allow_referent_inodes()) {
+    // update the targeti
+    CInode *targeti = nullptr;
+    auto p = m->targeti_bl.cbegin();
+    MDSContext::vec finished;
+    mdcache->decode_replica_inode(targeti, p, nullptr, finished);
+    if (!finished.empty())
+      mds->queue_waiters(finished);
+    dout(10) << "handle_peer_link_prep_ack referent-inodes " << std::hex << targeti->get_projected_inode()->referent_inodes << dendl;
+  }
 
   // witnessed!
   ceph_assert(mdr->more()->witnessed.count(from) == 0);
@@ -8483,7 +8510,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
     ceph_assert(dnl->is_primary() || dnl->is_referent());
     if (dnl->is_primary())
       straydn->push_projected_linkage(in);
-    else {
+    else if (dnl->is_referent()) {
       straydn->push_projected_linkage(ref_in);
     }
   }
@@ -8595,14 +8622,14 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
   if (straydn) {
     // if there is newly created snaprealm, need to split old snaprealm's
     // inodes_with_caps. So pop snaprealm before linkage changes.
-    if (dn->get_linkage()->is_primary())
+    if (dn->get_linkage()->is_primary()) {
       strayin = dn->get_linkage()->get_inode();
-    else {
+      hadrealm = strayin->snaprealm ? true : false;
+      strayin->early_pop_projected_snaprealm();
+    } else {
       strayin = dn->get_linkage()->get_referent_inode();
       ignore_rmdir_witness = false;
     }
-    hadrealm = strayin->snaprealm ? true : false;
-    strayin->early_pop_projected_snaprealm();
   }
 
   // unlink main dentry
@@ -9547,7 +9574,7 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
 
   // On a linkmerge, the rename witness should not be ignored.
   // It should be notified to reflect the changes of the referent inodes list.
-  if (linkmerge)
+  if (linkmerge && destdnl->is_referent())
     ignore_rename_witness = false;
   mdcache->send_dentry_link(destdn, mdr, ignore_rename_witness, linkmerge);
 
@@ -10113,7 +10140,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
   }
   // make stray inode first track the straydn
   if (straydn && straydn->is_auth()) {
-    if (linkmerge) {
+    if (linkmerge && destdnl->is_referent()) {
       CInode *oldrefi = destdnl->get_referent_inode();
       ceph_assert(oldrefi->first <= straydn->first);
       oldrefi->first = straydn->first;
@@ -10278,9 +10305,11 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
         mdr->clear_ambiguous_auth();
       }
 
-      if (destdn->is_auth()) {
+      if (srcdn_was_referent && destdn->is_auth()) {
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
 	src_refin->pop_and_dirty_projected_inode(mdr->ls, mdr);
+      } else if (!srcdn_was_referent){
+	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
       }
       // in
       if (in->is_auth()) {
@@ -10661,7 +10690,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
     ceph_assert(srcdnl->is_remote() || srcdnl->is_referent());
     rollback.orig_src.remote_ino = srcdnl->get_remote_ino();
     rollback.orig_src.remote_d_type = srcdnl->get_remote_d_type();
-    rollback.orig_src.referent_ino = srcdnl->get_referent_inode()->ino();
+    rollback.orig_src.referent_ino = srcdnl->get_referent_ino();
   }
   
   rollback.orig_dest.dirfrag = destdn->get_dir()->dirfrag();
@@ -10673,7 +10702,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   else if (destdnl->is_remote() || destdnl->is_referent()) {
     rollback.orig_dest.remote_ino = destdnl->get_remote_ino();
     rollback.orig_dest.remote_d_type = destdnl->get_remote_d_type();
-    rollback.orig_dest.referent_ino = destdnl->get_referent_inode()->ino();
+    rollback.orig_dest.referent_ino = destdnl->get_referent_ino();
   }
   
   if (straydn) {
@@ -11065,7 +11094,8 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
       ceph_assert(destdn && straydn);
   } else if (rollback.orig_dest.remote_ino) {
     target = mdcache->get_inode(rollback.orig_dest.remote_ino);
-    target_referent_in = mdcache->get_inode(rollback.orig_dest.referent_ino);
+    if (rollback.orig_dest.referent_ino)
+      target_referent_in = mdcache->get_inode(rollback.orig_dest.referent_ino);
   }
 
   // can't use is_auth() in the resolve stage
@@ -11090,9 +11120,13 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
       ceph_assert(in);
       srcdn->push_projected_linkage(in);
     } else {
-      if (rollback.orig_src.referent_ino)
+      if (rollback.orig_src.referent_ino) {
 	ceph_assert(referent_in);
-      srcdn->push_projected_linkage(referent_in, rollback.orig_src.remote_ino, rollback.orig_src.referent_ino);
+        srcdn->push_projected_linkage(referent_in, rollback.orig_src.remote_ino, rollback.orig_src.referent_ino);
+      } else {
+        srcdn->push_projected_linkage(rollback.orig_src.remote_ino,
+                                      rollback.orig_src.remote_d_type);
+      }
     }
   }
 
@@ -11156,9 +11190,13 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     if (rollback.orig_dest.ino && target) {
       destdn->push_projected_linkage(target);
     } else if (rollback.orig_dest.remote_ino) {
-      if (rollback.orig_dest.referent_ino)
+      if (rollback.orig_dest.referent_ino) {
 	ceph_assert(target_referent_in);
-      destdn->push_projected_linkage(target_referent_in, rollback.orig_dest.remote_ino, rollback.orig_dest.referent_ino);
+        destdn->push_projected_linkage(target_referent_in, rollback.orig_dest.remote_ino, rollback.orig_dest.referent_ino);
+      } else {
+        destdn->push_projected_linkage(rollback.orig_dest.remote_ino,
+                                       rollback.orig_dest.remote_d_type);
+      }
     } else {
       // the dentry will be trimmed soon, it's ok to have wrong linkage
       if (rollback.orig_dest.ino)
