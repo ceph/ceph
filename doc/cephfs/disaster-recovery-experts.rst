@@ -21,43 +21,46 @@ Advanced: Metadata repair tools
 Journal export
 --------------
 
-Before attempting dangerous operations, make a copy of the journal like so:
+Before attempting any dangerous operation, make a copy of the journal by
+running the following command:
 
-::
+.. prompt:: bash #
 
-    cephfs-journal-tool journal export backup.bin
+   cephfs-journal-tool journal export backup.bin
 
-Note that this command may not always work if the journal is badly corrupted,
-in which case a RADOS-level copy should be made (http://tracker.ceph.com/issues/9902).
+If the journal is badly corrupted, this command might not work. If the journal
+is badly corrupted, make a RADOS-level copy
+(http://tracker.ceph.com/issues/9902).
 
 
 Dentry recovery from journal
 ----------------------------
 
 If a journal is damaged or for any reason an MDS is incapable of replaying it,
-attempt to recover what file metadata we can like so:
+attempt to recover file metadata by running the following command:
 
-::
+.. prompt:: bash #
 
-    cephfs-journal-tool event recover_dentries summary
+   cephfs-journal-tool event recover_dentries summary
 
-This command by default acts on MDS rank 0, pass --rank=<n> to operate on other ranks.
+By default, this command acts on MDS rank ``0``. Pass the option ``--rank=<n>``
+to the ``cephfs-journal-tool`` command to operate on other ranks.
 
-This command will write any inodes/dentries recoverable from the journal
-into the backing store, if these inodes/dentries are higher-versioned
-than the previous contents of the backing store.  If any regions of the journal
-are missing/damaged, they will be skipped.
+This command writes all inodes and dentries recoverable from the journal into
+the backing store, but only if these inodes and dentries are higher-versioned
+than the existing contents of the backing store. Any regions of the journal
+that are missing or damaged will be skipped.
 
-Note that in addition to writing out dentries and inodes, this command will update
-the InoTables of each 'in' MDS rank, to indicate that any written inodes' numbers
-are now in use.  In simple cases, this will result in an entirely valid backing
+In addition to writing out dentries and inodes, this command updates the
+InoTables of each ``in`` MDS rank, to indicate that any written inodes' numbers
+are now in use. In simple cases, this will result in an entirely valid backing
 store state.
 
 .. warning::
 
-    The resulting state of the backing store is not guaranteed to be self-consistent,
-    and an online MDS scrub will be required afterwards.  The journal contents
-    will not be modified by this command, you should truncate the journal
+    The resulting state of the backing store is not guaranteed to be
+    self-consistent, and an online MDS scrub will be required afterwards. The
+    journal contents will not be modified by this command. Truncate the journal
     separately after recovering what you can.
 
 Journal truncation
