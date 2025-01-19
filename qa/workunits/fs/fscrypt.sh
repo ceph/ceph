@@ -28,11 +28,10 @@ fi
 # Initialize global fscrypt config
 sudo $FSCRYPT_CLI setup --force --verbose --all-users
 
-# can't think of better way of getting ceph mount name... leaving it hardcoded, temporary
-MOUNT_POINT=/home/ubuntu/cephtest/mnt.0
+MOUNT_POINT=$(pwd)
 # Verify that the mount point exists
 if [ ! -d "$MOUNT_POINT" ]; then
-    echo "Error: Mount point '$MOUNT_POINT' does not exist."
+    echo "Error: Current working directory '$MOUNT_POINT' is not a valid directory."
     exit 1
 fi
 
