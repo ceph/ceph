@@ -1,0 +1,7 @@
+meta:
+  - desc: "Without EPEL"
+overrides:
+  cephmetrics:
+    group_vars:
+      all:
+        use_epel: false

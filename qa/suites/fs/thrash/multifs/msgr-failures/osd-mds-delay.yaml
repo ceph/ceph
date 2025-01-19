@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        ms inject socket failures: 2500
+        ms inject delay type: client mds
+        ms inject delay probability: .005
+        ms inject delay max: 1
+        mon client directed command retry: 5
+      mds:
+        ms inject socket failures: 2500
+        ms inject delay type: client mds osd
+        ms inject delay probability: .005
+        ms inject delay max: 1
+        mon client directed command retry: 5
+    log-ignorelist:
+      - \(OSD_SLOW_PING_TIME
