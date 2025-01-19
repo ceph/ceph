@@ -40,7 +40,6 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
-#include "messages/MMonQuorum.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -2402,21 +2401,6 @@ void Monitor::collect_metadata(Metadata *m)
   (*m)["created_at"] = created_at;
 }
 
-void Monitor::check_quorum_subs()
-{
-  dout(10) << __func__ << dendl;
-  const string quorum_type = "quorum_change";
-  with_session_map([this, &quorum_type]
-    (const MonSessionMap& session_map) {
-      auto subs = session_map.subs.find(quorum_type);
-      if (subs != session_map.subs.end()) {
-        for (auto sub : *subs->second) {
-          send_quorum_changed(sub);
-        }
-      }
-    });
-}
-
 void Monitor::finish_election()
 {
   apply_quorum_to_compatset_features();
@@ -2435,7 +2419,7 @@ void Monitor::finish_election()
     authmon()->_set_mon_num_rank(monmap->size(), rank);
   }
 
-  check_quorum_subs();
+  check_quorum_subs_and_send_updates();
 
   // am i named and located properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
@@ -5375,7 +5359,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
        ++p) {
     dout(20) << __func__ << " " << p->first << " start " << p->second.start
              << " flags " << p->second.flags << dendl;
-    if (p->first == "monmap" || p->first == "config" || p->first == "quorum_change") {
+    if (p->first == "monmap" || p->first == "config") {
       // these require no caps
     } else if (!s->is_capable("mon", MON_CAP_R)) {
       dout(5) << __func__ << " " << op->get_req()->get_source_inst()
@@ -5443,8 +5427,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     }
     else if (p->first == "NVMeofGw") {
         nvmegwmon()->check_sub(s->sub_map[p->first]);
-    } else if (p->first == "quorum_change") {
-      send_quorum_changed(s->sub_map[p->first]);
     }
   }
 
@@ -5545,38 +5527,29 @@ bool Monitor::ms_handle_refused(Connection *con)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
-  dout(10) << __func__ << " sending latest monmap to "
+  dout(10) << __func__ << " sending latest monmap and quorum to "
     << con->get_peer_entity_name().get_type_name()
     << " type:" << con->get_peer_type()
     << " id:" << con->get_peer_id()
+    << " quorum: " << get_quorum()
     << dendl;
   monmap->encode(bl, con->get_features());
-  con->send_message(new MMonMap(bl));
+  con->send_message(new MMonMap(bl, con_self->get_peer_addrs(), get_epoch(), get_quorum()));
 }
 
-void Monitor::send_quorum_changed(Subscription *sub)
+void Monitor::check_quorum_subs_and_send_updates()
 {
-  auto conn = sub->session->con.get();
-  if (!conn) {
-    dout(10) << __func__ << " no connection for sub " << sub << dendl;
-    return;
-  }
-
-  if (sub->next <= get_epoch() && get_quorum().size()) {
-    dout(20) << __func__ << " sending quorum: " << get_quorum() << " to " << sub->session->name
-      <<  " from mon." << name << " mon addr " << con_self->get_peer_addrs() << dendl;
-    conn->send_message(new MMonQuorum(con_self->get_peer_addrs(), get_epoch(), get_quorum()));
-
-    if (sub->onetime) {
-      with_session_map([sub](MonSessionMap& session_map) {
-        session_map.remove_sub(sub);
-      });
-    } else {
-      dout(20) << __func__ << " rescheduling quorum check for " << sub->session->name
-        << " sub->next (was)" << sub->next << " get_epoch() " << get_epoch() << dendl;
-      sub->next = get_epoch() + 1;
-    }
-  }
+  dout(10) << __func__ << dendl;
+  const string quorum_type = "monmap";
+  with_session_map([this, &quorum_type]
+    (const MonSessionMap& session_map) {
+      auto subs = session_map.subs.find(quorum_type);
+      if (subs != session_map.subs.end()) {
+        for (auto sub : *subs->second) {
+          send_latest_monmap(sub->session->con.get());
+        }
+      }
+    });
 }
 
 void Monitor::handle_mon_get_map(MonOpRequestRef op)

@@ -31,7 +31,6 @@
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
-#include "messages/MMonQuorum.h"
 #include "messages/MConfig.h"
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
@@ -300,7 +299,6 @@ bool MonClient::ms_dispatch(Message *m)
   // we only care about these message types
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
-  case CEPH_MSG_MON_QUORUM:
   case CEPH_MSG_AUTH_REPLY:
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
   case CEPH_MSG_MON_GET_VERSION_REPLY:
@@ -329,7 +327,7 @@ bool MonClient::ms_dispatch(Message *m)
 	return true;
       }
     } else if (!active_con ||
-        (active_con->get_con() != m->get_connection() && m->get_type() != CEPH_MSG_MON_QUORUM)) {
+        (active_con->get_con() != m->get_connection() && m->get_type() != CEPH_MSG_MON_MAP)) {
       // ignore any messages outside our session(s) unless it's a quorum message
       ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
       m->put();
@@ -345,9 +343,6 @@ bool MonClient::ms_dispatch(Message *m)
     } else {
       m->put();
     }
-    break;
-  case CEPH_MSG_MON_QUORUM:
-    handle_mon_quorum(static_cast<MMonQuorum*>(m));
     break;
   case CEPH_MSG_AUTH_REPLY:
     handle_auth(static_cast<MAuthReply*>(m));
@@ -421,7 +416,8 @@ void MonClient::handle_monmap(MMonMap *m)
   ldout(cct, 10) << " got monmap " << monmap.epoch
 		 << " from mon." << old_name
 		 << " (according to old e" << monmap.get_epoch() << ")"
- 		 << dendl;
+                 << " quorum is " << m->quorum
+                 << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
   *_dout << dendl;
@@ -451,6 +447,8 @@ void MonClient::handle_monmap(MMonMap *m)
 
   cct->set_mon_addrs(monmap);
 
+  // set quorum
+  quorum.add_quorum(m->peer_addrs, m->epoch, m->quorum);
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
   want_monmap = false;
@@ -458,15 +456,6 @@ void MonClient::handle_monmap(MMonMap *m)
   if (authenticate_err == 1) {
     _finish_auth(0);
   }
-}
-
-void MonClient::handle_mon_quorum(MMonQuorum *m)
-{
-  ldout(cct, 20) << __func__ << " quorum " << m->quorum << " from "
-     << m->peer_addrs << ", e:" << m->epoch
-     << dendl;
-  quorum.add_quorum(m->peer_addrs, m->epoch, m->quorum);
-  sub.got("quorum_change", 0);
 }
 
 void MonClient::handle_config(MConfig *m)
@@ -593,7 +582,6 @@ int MonClient::authenticate(double timeout)
   }
   sub.want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
   sub.want("config", 0, 0);
-  sub.want("quorum_change", 0, 0);
   if (!_opened())
     _reopen_session();
   auto until = ceph::mono_clock::now();
@@ -835,20 +823,21 @@ void MonClient::_add_conns()
   // collect the next batch of candidates who are listed right next to the ones
   // already tried and are in the quorum.
   ldout(cct, 20) << __func__ << " quorum agreed:" << quorum.agreed_quorum
-     << " tried:" << tried << "quorums:" << quorum.quorums << dendl;
+     << " tried:" << tried << " quorums:" << quorum.quorums << dendl;
   auto get_next_batch = [this]() -> std::vector<unsigned> {
     std::multimap<uint16_t, unsigned> ranks_by_priority;
     boost::copy(
       monmap.mon_info | boost::adaptors::filtered(
         [this](auto& info) {
           auto rank = monmap.get_rank(info.first);
-          return tried.count(rank) == 0 && quorum.in_quorum(rank);
+          return tried.count(rank) == 0 && (!quorum.empty() || quorum.in_quorum(rank));
         }) | boost::adaptors::transformed(
           [this](auto& info) {
             auto rank = monmap.get_rank(info.first);
             return std::make_pair(info.second.priority, rank);
           }), std::inserter(ranks_by_priority, end(ranks_by_priority)));
     if (ranks_by_priority.empty()) {
+      ldout(cct, 10) << __func__ << " no more monitors to try" << dendl;
       return {};
     }
     // only choose the monitors with lowest priority
@@ -1022,8 +1011,11 @@ void MonClient::tick()
 	_renew_subs();
       }
     }
-    if (!quorum.in_quorum(monmap.get_rank(cur_con->get_peer_addr()))) {
-      ldout(cct, 0) << "mon out of quorum, reopening session" << dendl;
+    auto cur_rank = monmap.get_rank(cur_con->get_peer_addr());
+    if (!quorum.in_quorum(cur_rank)) {
+      ldout(cct, 0) << "mon out of quorum, reopening session."
+                    << " cur_rank: " << cur_rank
+                    << " agreed_quorum: " << quorum.agreed_quorum << dendl;
       return _reopen_session();
     }
 
@@ -1568,22 +1560,21 @@ int MonClient::handle_auth_done(
 	  auth_meta, global_id, bl,
 	  session_key, connection_secret);
 	if (r) {
-    ldout(cct, 10) << __func__ << " " << i.first << " failed r=" << r << dendl;
+          ldout(cct, 10) << __func__ << " " << i.first << " failed r=" << r << dendl;
 	  pending_cons.erase(i.first);
 	  if (!pending_cons.empty()) {
 	    return r;
 	  }
 	} else {
 	  active_con.reset(new MonConnection(std::move(i.second)));
-    aux_list.splice(pending_cons);
+          aux_list.splice(pending_cons);
 	  pending_cons.clear();
 	  ceph_assert(active_con->have_session());
-          
-    ldout(cct, 10) << __func__ << " hunting success, active mon."
-       << monmap.get_name(active_con->get_con()->get_peer_addr())
-       << " addr " << active_con->get_con()->get_peer_addr() 
-       << " aux_list size: " << aux_list.size()
-       << dendl;
+          ldout(cct, 10) << __func__ << " hunting success, active mon."
+                << monmap.get_name(active_con->get_con()->get_peer_addr())
+                << " addr " << active_con->get_con()->get_peer_addr() 
+                << " aux_list size: " << aux_list.size()
+                << dendl;
 	}
 
 	_finish_hunting(r);
@@ -1795,7 +1786,7 @@ void MonConnection::start(epoch_t epoch,
 
     MonSub pending_sub;
     ldout(cct, 20) << __func__ << " subscribe to quorum change mon." << con->get_peer_addr() << dendl;
-    pending_sub.want("quorum_change", 0, 0);
+    pending_sub.want("monmap", 0, 0);
     auto m = ceph::make_message<MMonSubscribe>();
     m->what = pending_sub.get_subs();
     m->hostname = ceph_get_short_hostname();

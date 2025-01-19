@@ -549,7 +549,7 @@ void Elector::ping_check(int peer)
   if (!acked_ping.is_zero() && acked_ping < now - timeout_adjusted) {
     dout(20) << __func__ << " peer " << peer << " didn't acked ping for "
       << ping_timeout << " seconds" << dendl;
-    mon->check_quorum_subs();
+    mon->check_quorum_subs_and_send_updates();
     peer_tracker.report_dead_connection(peer, now - acked_ping);
     acked_ping = now;
     begin_dead_ping(peer);
@@ -625,7 +625,7 @@ void Elector::handle_ping(MonOpRequestRef op)
     {
       dout(30) << "recieved PING from "
         << prank << ", sending PING_REPLY back!" << dendl;
-      peer_acked_ping[peer] = m->stamp;
+      peer_acked_ping[prank] = m->stamp;
       MMonPing *reply = new MMonPing(MMonPing::PING_REPLY, m->stamp, peer_tracker.get_encoded_bl());
       m->get_connection()->send_message(reply);
     }
@@ -646,7 +646,7 @@ void Elector::handle_ping(MonOpRequestRef op)
       dout(30) << "recieved good PING_REPLY!" << dendl;
       peer_tracker.report_live_connection(prank, m->stamp - previous_acked);
       peer_acked_ping[prank] = m->stamp;
-    } else{
+    } else {
       dout(20) << "m->stamp <= previous_acked .. we don't report_live_connection" << dendl;
       peer_acked_ping[prank] = ceph_clock_now();
     }

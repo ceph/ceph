@@ -752,8 +752,7 @@ public:
     std::forward<Func>(func)(session_map);
   }
   void send_latest_monmap(Connection *con);
-  void send_quorum_changed(Subscription *sub);
-  void check_quorum_subs();
+  void check_quorum_subs_and_send_updates();
 
   // messages
   void handle_get_version(MonOpRequestRef op);
