@@ -90,7 +90,7 @@ void test_MNVMeofGwMap() {
   dout(0) << "before encode empty msg: " << *msg1 << " epoch " << msg1->get_gwmap_epoch() << dendl;
   msg1->encode_payload(CEPH_FEATURES_ALL);
   dout(0) << "after encode empty msg: " << *msg1 << dendl;
-  msg1->decode_payload();
+  msg1->decode_payload(CEPH_FEATURES_ALL);
   int epoch = msg1->get_gwmap_epoch();
   dout(0) << "after decode empty msg: " << *msg1 << " epoch " << epoch <<  dendl;
 
@@ -113,7 +113,7 @@ void test_MNVMeofGwMap() {
   dout(0) << "before encode msg: " << *msg << dendl;
   msg->encode_payload(CEPH_FEATURES_ALL);
   dout(0) << "after encode msg: " << *msg << dendl;
-  msg->decode_payload();
+  msg->decode_payload(CEPH_FEATURES_ALL);
   dout(0) << "after decode msg: " << *msg << dendl;
 
   //dout(0)   << "\n == Test GW Delete ==" << dendl;
@@ -155,7 +155,7 @@ void test_MNVMeofGwBeacon() {
       osd_epoch,
       gwmap_epoch);
   msg->encode_payload(0);
-  msg->decode_payload();
+  msg->decode_payload(0);
   dout(0) << "decode msg: " << *msg << dendl;
   ceph_assert(msg->get_gw_id() == gw_id);
   ceph_assert(msg->get_gw_pool() == gw_pool);
