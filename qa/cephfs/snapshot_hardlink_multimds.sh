@@ -335,7 +335,7 @@ setup_test_bed
 validate_link
 validate_unlink
 validate_unlink_link_merge
-#validate_rename
+validate_rename
 
 echo "--------------------------------------------------------------------------------------------------"
-echo ""
+echo "SUCCESS"
