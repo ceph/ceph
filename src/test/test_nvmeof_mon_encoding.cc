@@ -102,7 +102,7 @@ void test_MNVMeofGwMap() {
 
   auto msg = make_message<MNVMeofGwMap>(pending_map);
   msg->encode_payload(0);
-  msg->decode_payload();
+  msg->decode_payload(0);
   dout(0) << "decode msg: " << *msg << dendl;
 
   dout(0)   << "\n == Test GW Delete ==" << dendl;
@@ -144,7 +144,7 @@ void test_MNVMeofGwBeacon() {
       osd_epoch,
       gwmap_epoch);
   msg->encode_payload(0);
-  msg->decode_payload();
+  msg->decode_payload(0);
   dout(0) << "decode msg: " << *msg << dendl;
   ceph_assert(msg->get_gw_id() == gw_id);
   ceph_assert(msg->get_gw_pool() == gw_pool);
