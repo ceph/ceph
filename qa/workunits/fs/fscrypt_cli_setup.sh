@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo "Custom fscrypt CLI setup begin"
-
+WORK_DIR=$(pwd)
 set -xe
 
 # Check and print kernel encryption support
@@ -26,11 +26,11 @@ elif command -v yum &>/dev/null; then
 fi
 
 # Check if /tmp/fscrypt exists
-if [ -d "/tmp/fscrypt" ]; then
-    echo "/tmp/fscrypt exists. Cleaning up..."
+if [ -d "$WORK_DIR/fscrypt" ]; then
+    echo "$WORK_DIR/fscrypt exists. Cleaning up..."
 
     # Navigate to the folder
-    cd /tmp/fscrypt || { echo "Failed to navigate to /tmp/fscrypt"; exit 1; }
+    cd "$WORK_DIR/fscrypt" || { echo "Failed to navigate to $WORK_DIR/fscrypt"; exit 1; }
 
     # Uninstall the existing installation
     if [ -f "Makefile" ]; then
@@ -44,11 +44,11 @@ if [ -d "/tmp/fscrypt" ]; then
     cd || { echo "Failed to navigate back to home directory"; exit 1; }
 
     # Delete the directory
-    echo "Deleting /tmp/fscrypt..."
-    rm -rf /tmp/fscrypt
-    echo "/tmp/fscrypt cleanup complete."
+    echo "Deleting $WORK_DIR/fscrypt..."
+    rm -rf "$WORK_DIR/fscrypt"
+    echo "$WORK_DIR/fscrypt cleanup complete."
 else
-    echo "/tmp/fscrypt does not exist. No action needed."
+    echo "$WORK_DIR/fscrypt does not exist. No action needed."
 fi
 
 # Install required dependencies for building fscrypt
@@ -59,8 +59,8 @@ elif command -v yum &>/dev/null; then
 fi
 
 # Clone the custom fscrypt repository, build, and install
-git clone https://github.com/salieri11/fscrypt.git -b wip-ceph-fuse /tmp/fscrypt
-cd /tmp/fscrypt
+git clone https://github.com/salieri11/fscrypt.git -b wip-ceph-fuse "$WORK_DIR/fscrypt"
+cd "$WORK_DIR/fscrypt"
 make
 sudo make install PREFIX=/usr/local
 
