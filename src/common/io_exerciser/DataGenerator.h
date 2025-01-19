@@ -63,7 +63,7 @@ class SeededRandomGenerator : public DataGenerator {
  public:
   SeededRandomGenerator(const ObjectModel& model) : DataGenerator(model) {}
 
-  virtual bufferptr generate_block(uint64_t offset);
+  virtual bufferptr_rw generate_block(uint64_t offset);
   bufferlist generate_data(uint64_t length, uint64_t offset) override;
   virtual bufferptr generate_wrong_block(uint64_t offset);
   bufferlist generate_wrong_data(uint64_t offset,
@@ -76,7 +76,7 @@ class HeaderedSeededRandomGenerator : public SeededRandomGenerator {
       const ObjectModel& model,
       std::optional<uint64_t> unique_run_id = std::nullopt);
 
-  bufferptr generate_block(uint64_t offset) override;
+  bufferptr_rw generate_block(uint64_t offset) override;
   bufferptr generate_wrong_block(uint64_t offset) override;
   bool validate(bufferlist& bufferlist, uint64_t offset,
                 uint64_t length) override;
