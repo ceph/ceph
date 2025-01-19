@@ -176,7 +176,7 @@ public:
   void respond_to_request(const MDRequestRef& mdr, int r = 0);
   void get_related_realms(CInode *in, std::vector<SnapRealm*>& related_realms);
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      const MDRequestRef& mdr, bool early_reply=false);
+		      const MDRequestRef& mdr);
 
   void handle_peer_request(const cref_t<MMDSPeerRequest> &m);
   void handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m);
