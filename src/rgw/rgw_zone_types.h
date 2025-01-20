@@ -565,7 +565,7 @@ struct RGWZoneGroupPlacementTier {
     encode(retain_head_object, bl);
     encode(allow_read_through, bl);
     encode(read_through_restore_days, bl);
-    if (tier_type == "cloud-s3") {
+    if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
       encode(t.s3, bl);
     }
     ENCODE_FINISH(bl);
@@ -580,7 +580,7 @@ struct RGWZoneGroupPlacementTier {
       decode(allow_read_through, bl);
       decode(read_through_restore_days, bl);
     }
-    if (tier_type == "cloud-s3") {
+    if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
       decode(t.s3, bl);
     }
     DECODE_FINISH(bl);

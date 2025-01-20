@@ -1370,7 +1370,7 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
     }
   }
 
-  if (tier_type == "cloud-s3") {
+  if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
     r = t.s3.update_params(config);
   }
 
@@ -1389,7 +1389,7 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
     read_through_restore_days = DEFAULT_READ_THROUGH_RESTORE_DAYS;
   }
 
-  if (tier_type == "cloud-s3") {
+  if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
     t.s3.clear_params(config);
   }
 

@@ -962,7 +962,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
   RGWObjManifest m;
   try { 
     decode(m, attr_iter->second);
-    if (m.get_tier_type() != "cloud-s3") {
+    if (m.get_tier_type() != "cloud-s3" && m.get_tier_type() != "cloud-s3-glacier") {
       ldpp_dout(dpp, 20) << "not a cloud tier object " <<  s->object->get_key().name << dendl;
       if (restore_op) {
         op_ret = -ERR_INVALID_OBJECT_STATE;
@@ -976,7 +976,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
     m.get_tier_config(&tier_config);
     if (sync_cloudtiered) {
       bufferlist t, t_tier;
-      t.append("cloud-s3");
+      t.append(tier_config.tier_placement.tier_type);
       attrs[RGW_ATTR_CLOUD_TIER_TYPE] = t;
       encode(tier_config, t_tier);
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
@@ -4382,7 +4382,7 @@ void RGWPutObj::execute(optional_yield y)
       RGWObjManifest m;
       try{
         decode(m, bl);
-        if (m.get_tier_type() == "cloud-s3") {
+        if (m.get_tier_type() == "cloud-s3" || m.get_tier_type() == "cloud-s3-glacier") {
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "This object was transitioned to cloud-s3";
           ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
@@ -5832,7 +5832,7 @@ void RGWCopyObj::execute(optional_yield y)
       RGWObjManifest m;
       try{
         decode(m, bl);
-        if (m.get_tier_type() == "cloud-s3") {
+        if (m.get_tier_type() == "cloud-s3" || m.get_tier_type() == "cloud-s3-glacier") {
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "This object was transitioned to cloud-s3";
           ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "

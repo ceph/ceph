@@ -5349,7 +5349,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     // set tier-config only for temp restored objects, as
     // permanent copies will be treated as regular objects
     {
-      t.append("cloud-s3");
+      t.append(tier_config.tier_placement.tier_type);
       encode(tier_config, t_tier);
       attrs[RGW_ATTR_CLOUD_TIER_TYPE] = t;
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;

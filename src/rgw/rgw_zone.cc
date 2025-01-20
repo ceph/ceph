@@ -863,7 +863,7 @@ void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("allow_read_through", allow_read_through, obj);
   JSONDecoder::decode_json("read_through_restore_days", read_through_restore_days, obj);
 
-  if (tier_type == "cloud-s3") {
+  if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
     JSONDecoder::decode_json("s3", t.s3, obj);
   }
 }
@@ -902,7 +902,7 @@ void RGWZoneGroupPlacementTier::dump(Formatter *f) const
   encode_json("allow_read_through", allow_read_through, f);
   encode_json("read_through_restore_days", read_through_restore_days, f);
 
-  if (tier_type == "cloud-s3") {
+  if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
     encode_json("s3", t.s3, f);
   }
 }

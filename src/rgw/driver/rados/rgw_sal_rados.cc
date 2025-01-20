@@ -3067,7 +3067,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   tier_config.tier_placement = rtier->get_rt();
   tier_config.is_multipart_upload = is_multipart_upload;
 
-  pmanifest->set_tier_type("cloud-s3");
+  pmanifest->set_tier_type(tier_config.tier_placement.tier_type);
   pmanifest->set_tier_config(tier_config);
 
   /* check if its necessary */

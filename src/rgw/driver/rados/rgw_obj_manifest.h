@@ -472,15 +472,15 @@ public:
   }
 
   inline void set_tier_type(std::string value) {
-      /* Only "cloud-s3" tier-type is supported for now */
-      if (value == "cloud-s3") {
+      /* Only "cloud-s3" & "cloud-s3-glacier" tier-type is supported for now */
+      if (value == "cloud-s3" || value == "cloud-s3-glacier") {
         tier_type = value;
       }
   }
 
   inline void set_tier_config(RGWObjTier t) {
-      /* Set only if tier_type set to "cloud-s3" */
-      if (tier_type != "cloud-s3")
+      /* Set only if tier_type set to "cloud-s3" or "cloud-s3-glacier" */
+      if (tier_type != "cloud-s3" && tier_type != "cloud-s3-glacier")
         return;
 
       tier_config.name = t.name;
@@ -489,7 +489,7 @@ public:
   }
 
   inline const void get_tier_config(RGWObjTier* t) {
-      if (tier_type != "cloud-s3")
+      if (tier_type != "cloud-s3" && tier_type != "cloud-s3-glacier")
         return;
 
       t->name = tier_config.name;
