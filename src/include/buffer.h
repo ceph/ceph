@@ -305,6 +305,7 @@ struct error_code;
     unsigned wasted() const;
 
     int cmp(const ptr& o) const;
+    bool is_zero_fast() const;
     bool is_zero() const;
 
     // modifiers
