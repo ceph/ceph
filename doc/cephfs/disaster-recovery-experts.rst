@@ -74,7 +74,7 @@ that an MDS cannot replay:
    cephfs-journal-tool [--rank=<fs_name>:{mds-rank|all}] journal reset --yes-i-really-really-mean-it
 
 Specify the filesystem and the MDS rank using the ``--rank`` option when the
-file system has or had multiple active MDS.
+file system has or had multiple active MDS daemons.
 
 .. warning::
 
@@ -111,7 +111,7 @@ MDS map reset
 Once the in-RADOS state of the file system (i.e. contents of the metadata pool)
 is somewhat recovered, it may be necessary to update the MDS map to reflect
 the contents of the metadata pool.  Use the following command to reset the MDS
-map to a single MDS:
+map to a single MDS daemon:
 
 ::
 
@@ -120,11 +120,12 @@ map to a single MDS:
 Once this is run, any in-RADOS state for MDS ranks other than 0 will be ignored:
 as a result it is possible for this to result in data loss.
 
-One might wonder what the difference is between 'fs reset' and 'fs remove; fs new'.  The
-key distinction is that doing a remove/new will leave rank 0 in 'creating' state, such
-that it would overwrite any existing root inode on disk and orphan any existing files.  In
-contrast, the 'reset' command will leave rank 0 in 'active' state such that the next MDS
-daemon to claim the rank will go ahead and use the existing in-RADOS metadata.
+One might wonder what the difference is between 'fs reset' and 'fs remove; fs
+new'.  The key distinction is that doing a remove/new will leave rank 0 in
+'creating' state, such that it would overwrite any existing root inode on disk
+and orphan any existing files.  In contrast, the 'reset' command will leave
+rank 0 in 'active' state such that the next MDS daemon to claim the rank will
+go ahead and use the existing in-RADOS metadata.
 
 Recovery from missing metadata objects
 --------------------------------------
