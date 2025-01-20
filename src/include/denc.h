@@ -822,7 +822,7 @@ struct denc_traits<ceph::buffer::ptr> {
 };
 
 
-#define CEPH_FEATURE_DEZEROIZE_BL CEPH_FEATURE_SERVER_SQUID
+#define CEPH_FEATURE_DEZEROIZE_BL CEPH_FEATURE_SERVER_TENTACLE
 
 class bufferlist_layout_t {
   using offset_size_t = std::pair<unsigned, unsigned>;
