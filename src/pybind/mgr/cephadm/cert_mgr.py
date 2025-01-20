@@ -165,6 +165,9 @@ class CertKeyStore():
             'oauth2_proxy_cert': Cert(),     # signle cert
             'cephadm_root_ca_cert': Cert(),  # signel cert
         }
+
+        self.entities = [cert.removesuffix('_cert') for cert in self.known_certs if cert != 'cephadm_root_ca_cert']
+
         # Similar to certs but for priv keys. Entries in known_certs
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
@@ -265,6 +268,9 @@ class CertKeyStore():
                 ls[k] = bool(v)
         return ls
 
+    def entity_ls(self) -> List[str]:
+        return self.entities
+
     def cert_ls(self, show_details: bool = True) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
 
         def get_cert_info(cert: Cert) -> Dict:
@@ -359,6 +365,7 @@ class CertKeyStore():
     def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
         ls: Dict[str, Any] = {}
         for k, v in self.known_keys.items():
+            # TODO: filterout the cephadm root key
             if k in self.host_key or k in self.service_name_key:
                 tmp: Dict[str, Any] = {key: True for key in v if v[key]}
                 ls[k] = tmp if tmp else False
@@ -491,7 +498,21 @@ class CertMgr:
                                     )
 
 
-    def is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
+    def is_valid_certificate(self, cert: str, key: str) -> Tuple[bool, bool, int, str]:
+        """
+        Checks if a certificate is valid and close to expiration.
+
+        Returns:
+            - is_valid: True if the certificate is valid.
+            - is_close_to_expiration: True if the certificate is close to expiration.
+            - days_to_expiration: Number of days until expiration.
+            - exception_info: Details of any exception encountered during validation.
+        """
+        cert_obj = Cert(cert, True)
+        key_obj = PrivKey(key, True)
+        return self._is_valid_certificate(cert_obj, key_obj)
+
+    def _is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
         """
         Checks if a certificate is valid and close to expiration.
 
@@ -511,7 +532,7 @@ class CertMgr:
     def _validate_and_manage_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> Tuple[bool, bool]:
         """Helper method to validate a cert/key pair and handle errors."""
 
-        is_valid, is_close_to_expiration, days_to_expiration, exception_info = self.is_valid_certificate(cert_obj, key_obj)
+        is_valid, is_close_to_expiration, days_to_expiration, exception_info = self._is_valid_certificate(cert_obj, key_obj)
 
         entity_info = f" ({entity})" if entity else ""
         cert_source = 'user-made' if cert_obj.user_made else 'self-signed'

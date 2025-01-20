@@ -22,7 +22,7 @@ from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 from ceph.utils import datetime_now
 
-from mgr_util import to_pretty_timedelta, format_bytes
+from mgr_util import to_pretty_timedelta, format_bytes, parse_combined_pem_file
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
 
@@ -1171,6 +1171,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(cert_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
+    @_cli_read_command('orch cert-store entity ls')
+    def _cert_store_entity_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_entity_ls()
+        entity_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(entity_ls, format, many=False, cls=None))
+        else:
+            result_str = f'{entity_ls}'
+            return HandleCommandResult(stdout=result_str)
+
     @_cli_read_command('orch cert-store cert check')
     def _cert_store_cert_check(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_cert_check()
@@ -1226,6 +1236,82 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         )
         key = raise_if_exception(completion)
         return HandleCommandResult(stdout=key)
+
+    @_cli_write_command('orch cert-store cert-key set')
+    def _cert_store_cert_key_set(
+        self,
+        entity: str,
+        _end_positional_: int = 0,
+        cert: Optional[str] = None,
+        key: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+        if inbuf:
+            cert_content, key_content = parse_combined_pem_file(inbuf)
+            if not cert_content or not key_content:
+                raise OrchestratorError('Expected a combined PEM file with certificate and key pairs')
+        else:
+            cert_content, key_content = cert, key
+            if not cert_content or not key_content:
+                raise OrchestratorError('This command requires passing cert/key pair by either using --cert/--key parameters or a combined PEM file using "-i" option.')
+
+        completion = self.cert_store_set_pair(
+            cert_content,
+            key_content,
+            entity,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch cert-store set cert')
+    def _cert_store_set_cert(
+        self,
+        entity: str,
+        _end_positional_: int = 0,
+        cert: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+        cert_content = cert or inbuf
+        if not cert_content:
+            raise OrchestratorError('This command requires passing a certificate using --cert parameter or "-i <filepath>" option')
+
+        completion = self.cert_store_set_cert(
+            cert_content,
+            entity,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch cert-store set cert-key')
+    def _cert_store_set_key(
+        self,
+        entity: str,
+        _end_positional_: int = 0,
+        key: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+        key_content = key or inbuf
+        if not key_content:
+            raise OrchestratorError('This command requires passing a key using --key parameter or "-i <filepath>" option')
+
+        completion = self.cert_store_set_key(
+            key_content,
+            entity,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
 
     def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
 
