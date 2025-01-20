@@ -265,6 +265,38 @@ class CertKeyStore():
                 ls[k] = bool(v)
         return ls
 
+    def cert_ls(self, show_details: bool = True) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
+
+        def get_cert_info(cert: Cert) -> Dict:
+            try:
+                org, cn = get_cert_issuer_info(cert.cert)
+                days_to_expiration = verify_cacrt_content(cert.cert)
+                return {
+                    'user_made': cert.user_made,
+                    'org': org,
+                    'cn': cn,
+                    'days_to_expiration': days_to_expiration,
+                }
+            except ServerConfigException as e:
+                return {
+                    'user_made': cert.user_made,
+                    'invalid_certificate': f'{e}'
+                }
+
+        ls: Dict[str, Any] = {}
+        for k, v in self.known_certs.items():
+            if k in self.service_name_cert or k in self.host_cert:
+                # For service-name or host-specific certificates
+                tmp: Dict[str, Any] = {
+                    key: get_cert_info(v[key]) for key in v if v[key]
+                }
+                ls[k] = tmp if tmp else False
+            else:
+                # For standalone certificates
+                ls[k] = get_cert_info(v) if bool(v) else False
+
+        return ls
+
     def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[PrivKey]:
         self._validate_key_entity(entity, host)
 
