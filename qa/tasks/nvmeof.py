@@ -356,12 +356,14 @@ class NvmeofThrasher(Thrasher, Greenlet):
             run.Raw('&&'), 'ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0',
             run.Raw('&&'), 'sudo', 'nvme', 'list',
         ]
+        self.checker_host.run(args=check_cmd).wait()
+
         for dev in self.devices:
-            check_cmd += [
-                run.Raw('&&'), 'sudo', 'nvme', 'list-subsys', dev,
+            device_check_cmd = [
+                'sudo', 'nvme', 'list-subsys', dev,
                 run.Raw('|'), 'grep', 'live optimized'
-            ] 
-        self.checker_host.run(args=check_cmd).wait()        
+            ]
+            self.checker_host.run(args=device_check_cmd)    
 
     def switch_task(self):
         """
