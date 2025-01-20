@@ -1534,11 +1534,14 @@ static ceph::spinlock debug_lock;
 
   void buffer::list::prepend_zero(unsigned len)
   {
-    auto bp = ptr_node::create(len);
-    bp->zero(false);
     _len += len;
-    _num += 1;
-    _buffers.push_front(*bp.release());
+    while (len > 0) {
+      const auto round_size = std::min(len, always_zeroed_bptr.length());
+      auto bptr = ptr_node::create(always_zeroed_bptr, 0, round_size);
+      _buffers.push_front(*bptr.release());
+      _num += 1;
+      len -= round_size;
+    }
   }
   
   void buffer::list::append_zero(unsigned len)
