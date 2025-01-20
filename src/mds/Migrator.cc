@@ -1823,15 +1823,11 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     }
 
     if (dn->get_linkage()->is_referent()) {
-      inodeno_t ino = dn->get_linkage()->get_remote_ino();
-      unsigned char d_type = dn->get_linkage()->get_remote_d_type();
-      auto& alternate_name = dn->alternate_name;
-      // referent
-      CDentry::encode_referent(ino, d_type, alternate_name, exportbl);
-      // referent
-      // -- inode
+      // referent inode
+      exportbl.append("r", 1);    // inode dentry
       ENCODE_START(2, 1, exportbl);
       encode_export_inode(ref_in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+      encode(dn->alternate_name, exportbl);
       ENCODE_FINISH(exportbl);
       continue;
     }
@@ -3350,9 +3346,15 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   // link before state  -- or not!  -sage
   if (in->get_remote_ino()) {
+    dout(20) << __func__ << " linking decoded referent_inode="  << *in << " remote_inode=" << in->get_remote_ino() << dendl;
     if (dn->get_linkage()->get_referent_inode() != in) {
       ceph_assert(!dn->get_linkage()->get_referent_inode());
+      dout(20) << __func__ << " null dentry_linkage, linking decode referent_inode, linkage referent_inode=" << dn->get_linkage()->get_referent_inode() << dendl;
       dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->ino(), in->d_type());
+    } else {
+      dout(20) << __func__ << " non-null dentry_linkage, validating decoded referent_inode against existing" << dendl;
+      ceph_assert(dn->get_linkage()->get_remote_ino() == in->get_remote_ino());
+      ceph_assert(dn->get_linkage()->get_referent_ino() == in->ino());
     }
   } else if (dn->get_linkage()->get_inode() != in) {
     ceph_assert(!dn->get_linkage()->get_inode());
@@ -3605,27 +3607,19 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
                             peer_exports, updated_scatterlocks);
       }
     }
-    else if (icode == 'r') {
+    else if (icode == 'R' || icode == 'r') {
       // remote link with referent inode
-      inodeno_t ino;
-      unsigned char d_type;
-      mempool::mds_co::string alternate_name;
-
-      CDentry::decode_referent(icode, ino, d_type, alternate_name, blp);
-      if (dn->get_linkage()->is_referent()) {
-	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
-        ceph_assert(dn->get_alternate_name() == alternate_name);
-	ceph_assert(dn->get_linkage()->get_referent_inode()->get_remote_ino() == ino);
-      } else {
-	// remote could be set and not the referent.
-        dn->get_linkage()->set_remote(0, 0);
-        dn->get_linkage()->referent_inode = 0;
-        ceph_assert(le);
+      ceph_assert(le);
+      if (icode == 'r') {
         DECODE_START(2, blp);
         decode_import_inode(dn, blp, oldauth, ls,
                             peer_exports, updated_scatterlocks);
         ceph_assert(!dn->is_projected());
+        decode(dn->alternate_name, blp);
         DECODE_FINISH(blp);
+      } else {
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
       }
     }
     
