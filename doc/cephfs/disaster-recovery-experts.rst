@@ -103,31 +103,31 @@ If you know that you need also to reset the other tables, then replace
 MDS map reset
 -------------
 
-Once the in-RADOS state of the file system (i.e. contents of the metadata pool)
-is somewhat recovered, it may be necessary to update the MDS map to reflect
-the contents of the metadata pool.  Use the following command to reset the MDS
-map to a single MDS daemon:
+When the in-RADOS state of the file system (that is, the contents of the
+metadata pool) has been somewhat recovered, it may be necessary to update the
+MDS map to reflect the new state of the metadata pool. Use the following
+command to reset the MDS map to a single MDS:
 
-::
+.. prompt:: bash #
 
-    ceph fs reset <fs name> --yes-i-really-mean-it
+   ceph fs reset <fs name> --yes-i-really-mean-it
 
-Once this is run, any in-RADOS state for MDS ranks other than 0 will be ignored:
-as a result it is possible for this to result in data loss.
+After this command has been run, any in-RADOS state for MDS ranks other than
+``0`` will be ignored. This means that running this command can result in data
+loss.
 
-One might wonder what the difference is between 'fs reset' and 'fs remove; fs
-new'.  The key distinction is that doing a remove/new will leave rank 0 in
-'creating' state, such that it would overwrite any existing root inode on disk
-and orphan any existing files.  In contrast, the 'reset' command will leave
-rank 0 in 'active' state such that the next MDS daemon to claim the rank will
-go ahead and use the existing in-RADOS metadata.
+There is a difference between the effects of the ``fs reset`` command and the
+``fs remove`` command. The ``fs reset`` command leaves rank ``0`` in the
+``active`` state so that the next MDS daemon to claim the rank uses the
+existing in-RADOS metadata. The ``fs remove`` command leaves rank ``0`` in the
+``creating`` state, which means that existing root inodes on disk will be
+overwritten. Running the ``fs remove`` command will orphan any existing files.
 
 Recovery from missing metadata objects
 --------------------------------------
 
-Depending on what objects are missing or corrupt, you may need to
-run various commands to regenerate default versions of the
-objects.
+Depending on which objects are missing or corrupt, you may need to run
+additional commands to regenerate default versions of the objects.
 
 ::
 
@@ -143,12 +143,13 @@ objects.
     cephfs-data-scan init
 
 Finally, you can regenerate metadata objects for missing files
-and directories based on the contents of a data pool.  This is
-a three-phase process.  First, scanning *all* objects to calculate
-size and mtime metadata for inodes.  Second, scanning the first
-object from every file to collect this metadata and inject it into
-the metadata pool. Third, checking inode linkages and fixing found
-errors.
+and directories based on the contents of a data pool. This is
+a three-phase process: 
+
+#. Scanning *all* objects to calculate size and mtime metadata for inodes.  
+#. Scanning the first object from every file to collect this metadata and
+   inject it into the metadata pool. 
+#. Checking inode linkages and fixing found errors.
 
 ::
 
@@ -156,15 +157,16 @@ errors.
     cephfs-data-scan scan_inodes [<data pool>]
     cephfs-data-scan scan_links
 
-'scan_extents' and 'scan_inodes' commands may take a *very long* time
-if there are many files or very large files in the data pool.
+``scan_extents`` and ``scan_inodes`` commands may take a *very long* time if
+the data pool contains many files or very large files.
 
-To accelerate the process, run multiple instances of the tool.
+To accelerate the process of running ``scan_extents`` or ``scan_inodes``, run
+multiple instances of the tool:
 
 Decide on a number of workers, and pass each worker a number within
-the range 0-(worker_m - 1).
+the range ``0-(worker_m - 1)`` (that is, 'zero to "worker_m" minus 1').
 
-The example below shows how to run 4 workers simultaneously:
+The example below shows how to run four workers simultaneously:
 
 ::
 
@@ -187,20 +189,23 @@ The example below shows how to run 4 workers simultaneously:
     cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4
 
 It is **important** to ensure that all workers have completed the
-scan_extents phase before any workers enter the scan_inodes phase.
+``scan_extents`` phase before any worker enters the ``scan_inodes phase``.
 
-After completing the metadata recovery, you may want to run cleanup
-operation to delete ancillary data generated during recovery.
+After completing the metadata recovery process, you may want to run a cleanup
+operation to delete ancillary data generated during recovery. Use a command of the following form to run a cleanup operation:
 
-::
+.. prompt:: bash #
 
-    cephfs-data-scan cleanup [<data pool>]
+   cephfs-data-scan cleanup [<data pool>]
 
-Note, the data pool parameters for 'scan_extents', 'scan_inodes' and
-'cleanup' commands are optional, and usually the tool will be able to
-detect the pools automatically. Still you may override this. The
-'scan_extents' command needs all data pools to be specified, while
-'scan_inodes' and 'cleanup' commands need only the main data pool.
+.. note::
+
+   The data pool parameters for ``scan_extents``, ``scan_inodes`` and
+   ``cleanup`` commands are optional, and usually the tool will be able to
+   detect the pools automatically. Still, you may override this. The
+   ``scan_extents`` command requires that all data pools be specified, but the
+   ``scan_inodes`` and ``cleanup`` commands require only that you specify the
+   main data pool.
 
 
 Using an alternate metadata pool for recovery
