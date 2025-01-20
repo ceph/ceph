@@ -4,7 +4,7 @@ import logging
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from orchestrator import OrchestratorError
-from mgr_util import verify_tls, get_cert_issuer_info, ServerConfigException
+from mgr_util import verify_tls, get_cert_issuer_info, ServerConfigException, verify_cacrt_content
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -29,10 +29,13 @@ class Cert():
         return NotImplemented
 
     def to_json(self) -> Dict[str, Union[str, bool]]:
-        return {
-            'cert': self.cert,
-            'user_made': self.user_made
-        }
+        if (self):
+            return {
+                'cert': self.cert,
+                'user_made': self.user_made
+            }
+        else:
+            return {}
 
     @classmethod
     def from_json(cls, data: Dict[str, Union[str, bool]]) -> 'Cert':
@@ -71,10 +74,13 @@ class PrivKey():
         return NotImplemented
 
     def to_json(self) -> Dict[str, Union[str, bool]]:
-        return {
-            'key': self.key,
-            'user_made': self.user_made
-        }
+        if bool(self):
+            return {
+                'key': self.key,
+                'user_made': self.user_made
+            }
+        else:
+            return {}
 
     @classmethod
     def from_json(cls, data: Dict[str, str]) -> 'PrivKey':
@@ -148,24 +154,24 @@ class CertKeyStore():
         }
 
         self.known_certs = {
-            'rgw_frontend_ssl_cert': {},  # service-name -> cert
-            'iscsi_ssl_cert': {},  # service-name -> cert
-            'ingress_ssl_cert': {},  # service-name -> cert
-            'nvmeof_server_cert': {},  # service-name -> cert
-            'nvmeof_client_cert': {},  # service-name -> cert
-            'nvmeof_root_ca_cert': {},  # service-name -> cert
-            'mgmt_gw_cert': Cert(),  # cert
-            'oauth2_proxy_cert': Cert(),  # cert
-            'cephadm_root_ca_cert': Cert(),  # cert
-            'grafana_cert': {},  # host -> cert
+            'rgw_frontend_ssl_cert': {},     # service-name -> cert
+            'iscsi_ssl_cert': {},            # service-name -> cert
+            'ingress_ssl_cert': {},          # service-name -> cert
+            'nvmeof_server_cert': {},        # service-name -> cert
+            'nvmeof_client_cert': {},        # service-name -> cert
+            'nvmeof_root_ca_cert': {},       # service-name -> cert
+            'grafana_cert': {},              # hostname -> cert
+            'mgmt_gw_cert': Cert(),          # single cert
+            'oauth2_proxy_cert': Cert(),     # signle cert
+            'cephadm_root_ca_cert': Cert(),  # signel cert
         }
         # Similar to certs but for priv keys. Entries in known_certs
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
         self.known_keys = {
-            'mgmt_gw_key': PrivKey(),  # cert
-            'oauth2_proxy_key': PrivKey(),  # cert
-            'cephadm_root_ca_key': PrivKey(),  # cert
+            'mgmt_gw_key': {},  # key
+            'oauth2_proxy_key': {},  # key
+            'cephadm_root_ca_key': PrivKey(),  # key
             'grafana_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
             'ingress_ssl_key': {},  # service-name -> key
@@ -178,42 +184,66 @@ class CertKeyStore():
         """Translate a certificate reference name to its corresponding key reference name."""
         return cert_ref.replace("_cert", "_key")
 
-    def get_cert(self, entity: str, service_name: str = '', host: str = '') -> str:
+    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[Cert]:
         self._validate_cert_entity(entity, service_name, host)
 
         cert = Cert()
         if entity in self.service_name_cert or entity in self.host_cert:
             var = service_name if entity in self.service_name_cert else host
             if var not in self.known_certs[entity]:
-                return ''
+                return None
             cert = self.known_certs[entity][var]
         else:
             cert = self.known_certs[entity]
         if not cert or not isinstance(cert, Cert):
-            return ''
-        return cert.cert
+            return None
+        return cert
 
-    def save_cert(self, entity: str, cert: str, service_name: str = '', host: str = '', user_made: bool = False) -> None:
+    def save_cert(self, entity: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self._validate_cert_entity(entity, service_name, host)
 
         cert_obj = Cert(cert, user_made)
 
         j: Union[str, Dict[Any, Any], None] = None
         if entity in self.service_name_cert or entity in self.host_cert:
+            # Determine whether it's a service-name or host
             var = service_name if entity in self.service_name_cert else host
-            j = {}
             self.known_certs[entity][var] = cert_obj
-            for service_name in self.known_certs[entity].keys():
-                j[var] = Cert.to_json(self.known_certs[entity][var])
+            j = {
+                    cert_key: Cert.to_json(self.known_certs[entity][cert_key])
+                    for cert_key in self.known_certs[entity]
+            }
         else:
             self.known_certs[entity] = cert_obj
             j = Cert.to_json(cert_obj)
         self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
 
-    def rm_cert(self, entity: str, service_name: str = '', host: str = '') -> None:
-        self.save_cert(entity, cert='', service_name=service_name, host=host)
 
-    def _validate_cert_entity(self, entity: str, service_name: str = '', host: str = '') -> None:
+    def rm_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
+        """Remove a certificate for a specific entity, service, or host."""
+        self._validate_cert_entity(entity, service_name, host)
+
+        j: Union[str, Dict[Any, Any], None] = None
+        if entity in self.service_name_cert or entity in self.host_cert:
+            # Determine whether it's a service-name or host
+            var = service_name if entity in self.service_name_cert else host
+            if var and var in self.known_certs.get(entity, {}):
+                # Remove the specific certificate from the mapping and Update JSON after deletion
+                if var in self.known_certs[entity]:
+                    del self.known_certs[entity][var]
+                    j = {
+                        cert_key: Cert.to_json(self.known_certs[entity][cert_key])
+                        for cert_key in self.known_certs[entity]
+                    }
+                    self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
+        else:
+            # Remove the entire certificate (for non-mapping entities)
+            empty_cert = Cert()
+            self.known_certs[entity] = empty_cert
+            j = Cert.to_json(empty_cert)
+            self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
+
+    def _validate_cert_entity(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         if entity not in self.known_certs.keys():
             raise OrchestratorError(f'Attempted to access cert for unknown entity {entity}')
 
@@ -235,22 +265,22 @@ class CertKeyStore():
                 ls[k] = bool(v)
         return ls
 
-    def get_key(self, entity: str, service_name: str = '', host: str = '') -> str:
+    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[PrivKey]:
         self._validate_key_entity(entity, host)
 
         key = PrivKey()
         if entity in self.host_key or entity in self.service_name_key:
             var = service_name if entity in self.service_name_key else host
             if var not in self.known_keys[entity]:
-                return ''
+                return None
             key = self.known_keys[entity][var]
         else:
             key = self.known_keys[entity]
         if not key or not isinstance(key, PrivKey):
-            return ''
-        return key.key
+            return None
+        return key
 
-    def save_key(self, entity: str, key: str, service_name: str = '', host: str = '', user_made: bool = False) -> None:
+    def save_key(self, entity: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self._validate_key_entity(entity, host)
 
         pkey = PrivKey(key, user_made)
@@ -267,10 +297,27 @@ class CertKeyStore():
             j = PrivKey.to_json(pkey)
         self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
 
-    def rm_key(self, entity: str, service_name: str = '', host: str = '') -> None:
-        self.save_key(entity, key='', service_name=service_name, host=host)
+    def rm_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
+        self._validate_key_entity(entity, host)
 
-    def _validate_key_entity(self, entity: str, host: str = '') -> None:
+        j: Union[str, Dict[Any, Any], None] = None
+        if entity in self.host_key or entity in self.service_name_key:
+            var = service_name if entity in self.service_name_key else host
+            # Remove the specific key from the mapping and Update JSON after deletion
+            if var in self.known_keys[entity]:
+                del self.known_keys[entity][var]
+                j = {
+                    pkey: PrivKey.to_json(self.known_keys[entity][pkey])
+                    for pkey in self.known_keys[entity]
+                }
+                self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
+        else:
+            empty_key = PrivKey()
+            self.known_keys[entity] = empty_key
+            j = PrivKey.to_json(empty_key)
+            self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
+
+    def _validate_key_entity(self, entity: str, host: Optional[str] = None) -> None:
         if entity not in self.known_keys.keys():
             raise OrchestratorError(f'Attempted to access priv key for unknown entity {entity}')
 
@@ -337,13 +384,21 @@ class CertMgr:
             return getattr(self.cert_key_store, name)
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
+    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
+        cert_obj = self.cert_key_store.get_cert(entity, service_name, host)
+        return cert_obj.cert if cert_obj else None
+
+    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
+        key_obj = self.cert_key_store.get_key(entity, service_name, host)
+        return key_obj.key if key_obj else None
+
     def _initialize_root_ca(self, ip: str) -> None:
         self.ssl_certs: SSLCerts = SSLCerts(self.certificate_duration_days)
         old_cert = self.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
         old_key = self.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
         if old_key and old_cert:
             try:
-                self.ssl_certs.load_root_credentials(old_cert, old_key)
+                self.ssl_certs.load_root_credentials(old_cert.cert, old_key.key)
             except SSLConfigException as e:
                 raise SSLConfigException("Cannot load cephadm root CA certificates.") from e
         else:
@@ -369,7 +424,6 @@ class CertMgr:
                                           is_expired: bool = False,
                                           is_close_to_expiration: bool = False,
                                           error_info: str = '') -> None:
-
         short_err_msg = ''
         detailed_err_msg = ''
         if not is_valid:
@@ -469,7 +523,7 @@ class CertMgr:
         return service_name, host
 
     def check_certificates(self) -> List[str]:
-        # services_to_reconfig = self.get_acme_ready_certificates()
+
         services_to_reconfig = set()
 
         def get_cert_and_key(cert_ref: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
@@ -483,7 +537,6 @@ class CertMgr:
         def process_certificate(cert_ref: str, cert: Optional[Cert], key: Optional[PrivKey], entity: str = '') -> None:
             nonlocal services_to_reconfig
             if cert and key:
-                # TODO(redo): get srv name from the entity info
                 is_valid, is_close_to_expiration = self._validate_and_manage_certificate(cert_ref, cert, key, entity)
                 if (not is_valid or is_close_to_expiration) and not cert.user_made:
                     services_to_reconfig.add(self.cert_key_store.cert_to_service[cert_ref])

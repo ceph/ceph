@@ -1905,9 +1905,9 @@ class TestCephadm(object):
         assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') == rgw_frontend_rgw_foo_host2_cert
         assert cephadm_module.cert_mgr.get_cert('nvmeof_server_cert', service_name='nvmeof.foo') == nvmeof_server_cert
         assert cephadm_module.cert_mgr.get_cert('nvmeof_client_cert', service_name='nvmeof.foo') == nvmeof_client_cert
-        assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host1') == ''
-        assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') == ''
-        assert cephadm_module.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name='nvmeof.foo') == ''
+        assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host1') is None
+        assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') is None
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name='nvmeof.foo') is None
 
         with pytest.raises(OrchestratorError, match='Attempted to access cert for unknown entity'):
             cephadm_module.cert_mgr.get_cert('unknown_entity')
@@ -1926,7 +1926,7 @@ class TestCephadm(object):
 
         assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1') == grafana_host1_key
         assert cephadm_module.cert_mgr.get_key('nvmeof_server_key', service_name='nvmeof.foo') == nvmeof_server_key
-        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') == ''
+        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') is None
         assert cephadm_module.cert_mgr.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
 
         with pytest.raises(OrchestratorError, match='Attempted to access priv key for unknown entity'):
