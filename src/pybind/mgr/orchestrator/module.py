@@ -1151,7 +1151,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             if isinstance(v, dict):
                 result_str += f'{indent}{k}\n'
                 result_str += self._process_cert_store_json(v, level + 1)
-            elif level != 0:
+            elif v:
                 result_str += f'{indent}{k}: {v}\n'
         return result_str
 

@@ -12,10 +12,8 @@ from cephadm.inventory import (
     HostCacheStatus,
     ClientKeyringSpec,
 )
-from cephadm.cert_mgr import (Cert,
-                              PrivKey,
-                              CERT_STORE_CERT_PREFIX,
-                              CERT_STORE_KEY_PREFIX)
+from cephadm.credential_types import (Cert, PrivKey, CredentialException)
+from cephadm.credential_store import CERT_STORE_STORAGE_PREFIX
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.utils import SpecialHostLabels
 
@@ -51,6 +49,9 @@ TODOs:
     I general, everything should be testes in Teuthology as well. Reasons for
     also testing this here is the development roundtrip time.
 """
+
+CERT_STORE_CERT_PREFIX = f'{CERT_STORE_STORAGE_PREFIX}cert.'
+CERT_STORE_KEY_PREFIX = f'{CERT_STORE_STORAGE_PREFIX}key.'
 
 
 def assert_rm_daemon(cephadm: CephadmOrchestrator, prefix, host):
@@ -1735,7 +1736,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_mgr._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_credentials_store()
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
@@ -1763,7 +1764,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_cert_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_mgr._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_credentials_store()
 
         expected_ls = {
             'rgw_frontend_ssl_cert': False,
@@ -1771,7 +1772,7 @@ class TestCephadm(object):
             'ingress_ssl_cert': False,
             'mgmt_gw_cert': False,
             'oauth2_proxy_cert': False,
-            'cephadm_root_ca_cert': False,
+            'cephadm_root_ca_cert': True,
             'grafana_cert': False,
             'nvmeof_client_cert': False,
             'nvmeof_server_cert': False,
@@ -1799,7 +1800,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_save_key(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_mgr._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_credentials_store()
 
         grafana_host1_key = 'fake-grafana-host1-key'
         grafana_host2_key = 'fake-grafana-host2-key'
@@ -1824,13 +1825,13 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_cert_store_key_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_mgr._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_credentials_store()
 
         expected_ls = {
             'grafana_key': False,
             'mgmt_gw_key': False,
             'oauth2_proxy_key': False,
-            'cephadm_root_ca_key': False,
+            'cephadm_root_ca_key': True,
             'iscsi_ssl_key': False,
             'ingress_ssl_key': False,
             'nvmeof_client_key': False,
@@ -1852,7 +1853,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
     def test_cert_store_load(self, _get_store_prefix, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_mgr._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_credentials_store()
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         grafana_host1_key = 'fake-grafana-host1-cert'
@@ -1883,17 +1884,17 @@ class TestCephadm(object):
 
         _get_store_prefix.side_effect = _fake_prefix_store
         cephadm_module.cert_mgr.load()
-        assert cephadm_module.cert_mgr.known_certs['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
-        assert cephadm_module.cert_mgr.known_certs['nvmeof_server_cert']['nvmeof.foo'] == Cert(nvmeof_server_cert, True)
-        assert cephadm_module.cert_mgr.known_certs['nvmeof_client_cert']['nvmeof.foo'] == Cert(nvmeof_client_cert, True)
-        assert cephadm_module.cert_mgr.known_certs['nvmeof_root_ca_cert']['nvmeof.foo'] == Cert(nvmeof_root_ca_cert, True)
-        assert cephadm_module.cert_mgr.known_keys['grafana_key']['host1'] == PrivKey(grafana_host1_key)
-        assert cephadm_module.cert_mgr.known_keys['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
-        assert cephadm_module.cert_mgr.known_keys['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
-        assert cephadm_module.cert_mgr.known_keys['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
+        assert cephadm_module.cert_mgr.cert_store.known_entities['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
+        assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_server_cert']['nvmeof.foo'] == Cert(nvmeof_server_cert, True)
+        assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_client_cert']['nvmeof.foo'] == Cert(nvmeof_client_cert, True)
+        assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_root_ca_cert']['nvmeof.foo'] == Cert(nvmeof_root_ca_cert, True)
+        assert cephadm_module.cert_mgr.key_store.known_entities['grafana_key']['host1'] == PrivKey(grafana_host1_key)
+        assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
+        assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
+        assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
 
     def test_cert_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
-        cephadm_module.cert_mgr._init_known_cert_key_dicts()
+        cephadm_module.cert_mgr._init_credentials_store()
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
@@ -1909,11 +1910,11 @@ class TestCephadm(object):
         assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') is None
         assert cephadm_module.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name='nvmeof.foo') is None
 
-        with pytest.raises(OrchestratorError, match='Attempted to access cert for unknown entity'):
+        with pytest.raises(CredentialException, match='Attempted to access cert for unknown entity'):
             cephadm_module.cert_mgr.get_cert('unknown_entity')
-        with pytest.raises(OrchestratorError, match='Need host to access cert for entity'):
+        with pytest.raises(CredentialException, match='Need host to access cert for entity'):
             cephadm_module.cert_mgr.get_cert('grafana_cert')
-        with pytest.raises(OrchestratorError, match='Need service name to access cert for entity'):
+        with pytest.raises(CredentialException, match='Need service name to access cert for entity'):
             cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', host='foo')
 
         grafana_host1_key = 'fake-grafana-host1-cert'
@@ -1929,9 +1930,9 @@ class TestCephadm(object):
         assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') is None
         assert cephadm_module.cert_mgr.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
 
-        with pytest.raises(OrchestratorError, match='Attempted to access priv key for unknown entity'):
+        with pytest.raises(CredentialException, match='Attempted to access privkey for unknown entity'):
             cephadm_module.cert_mgr.get_key('unknown_entity')
-        with pytest.raises(OrchestratorError, match='Need host to access priv key for entity'):
+        with pytest.raises(CredentialException, match='Need host to access privkey for entity'):
             cephadm_module.cert_mgr.get_key('grafana_key')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))

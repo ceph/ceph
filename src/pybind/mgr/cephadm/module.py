@@ -3349,21 +3349,22 @@ Then run the following:
         cert: str,
         key: str,
         entity: str,
-        service_name: Optional[str] = None,
-        hostname: Optional[str] = None,
+        service_name: str = '',
+        hostname: str = '',
     ) -> str:
+        target = service_name or hostname
         entities = self.cert_mgr.entity_ls()
         if entity in entities:
-            is_valid, is_close_to_expiration, days_to_expiration, error_info = self.cert_mgr.is_valid_certificate(cert, key)
-            if is_valid and not is_close_to_expiration:
+            cert_info = self.cert_mgr.is_valid_certificate(entity, target, cert, key)
+            if cert_info.is_valid and not cert_info.is_close_to_expiration:
                 self.cert_mgr.save_cert(f'{entity}_cert', cert, service_name, hostname, True)
                 self.cert_mgr.save_key(f'{entity}_key', key, service_name, hostname, True)
                 return "Certficate set correctly"
             else:
-                if is_close_to_expiration:
-                    raise OrchestratorError(f"Certififcate is close to its expiration date ({days_to_expiration } remaining days).")
+                if cert_info.is_close_to_expiration:
+                    raise OrchestratorError(f"Certififcate is close to its expiration date ({cert_info.days_to_expiration } remaining days).")
                 else:
-                    raise OrchestratorError(f"Invalid certificate: {error_info}")
+                    raise OrchestratorError(f"Invalid certificate: {cert_info.error_info}")
         else:
             raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch certmgr entity ls' to list valid entities.")
 

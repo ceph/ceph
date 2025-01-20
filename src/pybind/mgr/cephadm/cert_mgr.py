@@ -1,114 +1,49 @@
-import json
-from typing import TYPE_CHECKING, Tuple, Union, List, Any, Dict, Optional
+from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any
 import logging
+import copy
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
-from orchestrator import OrchestratorError
-from mgr_util import verify_tls, get_cert_issuer_info, ServerConfigException, verify_cacrt_content
+from mgr_util import verify_tls, ServerConfigException, get_cert_issuer_info, verify_cacrt_content
+from cephadm.credential_types import Cert, PrivKey
+from cephadm.credential_store import CredentialStore
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
-CERT_STORE_CERT_PREFIX = 'cert_store.cert.'
-CERT_STORE_KEY_PREFIX = 'cert_store.key.'
-
 logger = logging.getLogger(__name__)
 
 
-class Cert():
-    def __init__(self, cert: str = '', user_made: bool = False) -> None:
-        self.cert = cert
-        self.user_made = user_made
-
-    def __bool__(self) -> bool:
-        return bool(self.cert)
-
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Cert):
-            return self.cert == other.cert and self.user_made == other.user_made
-        return NotImplemented
-
-    def to_json(self) -> Dict[str, Union[str, bool]]:
-        if (self):
-            return {
-                'cert': self.cert,
-                'user_made': self.user_made
-            }
-        else:
-            return {}
-
-    @classmethod
-    def from_json(cls, data: Dict[str, Union[str, bool]]) -> 'Cert':
-        if 'cert' not in data:
-            return cls()
-        cert = data['cert']
-        if not isinstance(cert, str):
-            raise OrchestratorError('Tried to make Cert object with non-string cert')
-        if any(k not in ['cert', 'user_made'] for k in data.keys()):
-            raise OrchestratorError(f'Got unknown field for Cert object. Fields: {data.keys()}')
-        user_made: Union[str, bool] = data.get('user_made', False)
-        if not isinstance(user_made, bool):
-            if isinstance(user_made, str):
-                if user_made.lower() == 'true':
-                    user_made = True
-                elif user_made.lower() == 'false':
-                    user_made = False
-            try:
-                user_made = bool(user_made)
-            except Exception:
-                raise OrchestratorError(f'Expected user_made field in Cert object to be bool but got {type(user_made)}')
-        return cls(cert=cert, user_made=user_made)
+class CertInfo:
+    """
+      - is_valid: True if the certificate is valid.
+      - is_close_to_expiration: True if the certificate is close to expiration.
+      - days_to_expiration: Number of days until expiration.
+      - error_info: Details of any exception encountered during validation.
+    """
+    def __init__(self, entity: str,
+                 target: str,
+                 is_valid: bool = False,
+                 is_close_to_expiration: bool = False,
+                 days_to_expiration: int = 0,
+                 error_info: str = ''):
+        self.entity = entity
+        self.target = target
+        self.is_valid = is_valid
+        self.is_close_to_expiration = is_close_to_expiration
+        self.days_to_expiration = days_to_expiration
+        self.error_info = error_info
 
 
-class PrivKey():
-    def __init__(self, key: str = '', user_made: bool = False) -> None:
-        self.key = key
-        self.user_made = user_made
+class CertMgr:
 
-    def __bool__(self) -> bool:
-        return bool(self.key)
+    CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
+    CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
 
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, PrivKey):
-            return self.key == other.key and self.user_made == other.user_made
-        return NotImplemented
-
-    def to_json(self) -> Dict[str, Union[str, bool]]:
-        if bool(self):
-            return {
-                'key': self.key,
-                'user_made': self.user_made
-            }
-        else:
-            return {}
-
-    @classmethod
-    def from_json(cls, data: Dict[str, str]) -> 'PrivKey':
-        if 'key' not in data:
-            return cls()
-        key = data['key']
-        if not isinstance(key, str):
-            raise OrchestratorError('Tried to make PrivKey object with non-string key')
-        if any(k not in ['key', 'user_made'] for k in data.keys()):
-            raise OrchestratorError(f'Got unknown field for PrivKey object. Fields: {data.keys()}')
-        user_made: Union[str, bool] = data.get('user_made', False)
-        if not isinstance(user_made, bool):
-            if isinstance(user_made, str):
-                if user_made.lower() == 'true':
-                    user_made = True
-                elif user_made.lower() == 'false':
-                    user_made = False
-            try:
-                user_made = bool(user_made)
-            except Exception:
-                raise OrchestratorError(f'Expected user_made field in PrivKey object to be bool but got {type(user_made)}')
-        return cls(key=key, user_made=user_made)
-
-
-class CertKeyStore():
+    ####################################################
+    #  cephadm certmgr known Certificates section
     service_name_cert = [
-        'rgw_frontend_ssl_cert',
         'iscsi_ssl_cert',
+        'rgw_frontend_ssl_cert',
         'ingress_ssl_cert',
         'nvmeof_server_cert',
         'nvmeof_client_cert',
@@ -119,10 +54,14 @@ class CertKeyStore():
         'grafana_cert',
     ]
 
-    host_key = [
-        'grafana_key',
+    general_cert = [
+        'mgmt_gw_cert',
+        'oauth2_proxy_cert',
+        CEPHADM_ROOT_CA_CERT,
     ]
 
+    ####################################################
+    #  cephadm certmgr known Keys section
     service_name_key = [
         'iscsi_ssl_key',
         'ingress_ssl_key',
@@ -131,146 +70,76 @@ class CertKeyStore():
         'nvmeof_encryption_key',
     ]
 
-    known_certs: Dict[str, Any] = {}
-    known_keys: Dict[str, Any] = {}
+    host_key = [
+        'grafana_key',
+    ]
 
-    def __init__(self, mgr: 'CephadmOrchestrator') -> None:
-        self.mgr: CephadmOrchestrator = mgr
-        self._init_known_cert_key_dicts()
+    general_key = [
+        'mgmt_gw_key',
+        'oauth2_proxy_key',
+        CEPHADM_ROOT_CA_KEY,
+    ]
 
-    def _init_known_cert_key_dicts(self) -> None:
-        # In an effort to try and track all the certs we manage in cephadm
-        # we're being explicit here and listing them out.
-        self.cert_to_service = {
-            'rgw_frontend_ssl_cert': 'rgw',
-            'iscsi_ssl_cert': 'iscsi',
-            'ingress_ssl_cert': 'ingress',
-            'nvmeof_server_cert': 'nvmeof',
-            'nvmeof_client_cert': 'nvmeof',
-            'nvmeof_root_ca_cert': 'nvmeof',
-            'mgmt_gw_cert': 'mgmt-gateway',
-            'oauth2_proxy_cert': 'oauth2-proxy',
-            'grafana_cert': 'grafana',
-        }
+    # Entries in known_certs that don't have a key here are probably
+    # certs in PEM format so there is no need to store a separate key
+    known_certs = service_name_cert + host_cert + general_cert
+    known_keys = service_name_key + host_key + general_key
 
-        self.known_certs = {
-            'rgw_frontend_ssl_cert': {},     # service-name -> cert
-            'iscsi_ssl_cert': {},            # service-name -> cert
-            'ingress_ssl_cert': {},          # service-name -> cert
-            'nvmeof_server_cert': {},        # service-name -> cert
-            'nvmeof_client_cert': {},        # service-name -> cert
-            'nvmeof_root_ca_cert': {},       # service-name -> cert
-            'grafana_cert': {},              # hostname -> cert
-            'mgmt_gw_cert': Cert(),          # single cert
-            'oauth2_proxy_cert': Cert(),     # signle cert
-            'cephadm_root_ca_cert': Cert(),  # signel cert
-        }
+    # In an effort to try and track all the certs we manage in cephadm
+    # we're being explicit here and listing them out.
+    cert_to_service = {
+        'rgw_frontend_ssl_cert': 'rgw',
+        'iscsi_ssl_cert': 'iscsi',
+        'ingress_ssl_cert': 'ingress',
+        'nvmeof_server_cert': 'nvmeof',
+        'nvmeof_client_cert': 'nvmeof',
+        'nvmeof_root_ca_cert': 'nvmeof',
+        'mgmt_gw_cert': 'mgmt-gateway',
+        'oauth2_proxy_cert': 'oauth2-proxy',
+        'grafana_cert': 'grafana',
+    }
 
-        self.entities = [cert.removesuffix('_cert') for cert in self.known_certs if cert != 'cephadm_root_ca_cert']
+    def __init__(self,
+                 mgr: "CephadmOrchestrator",
+                 certificate_automated_rotation_enabled: bool,
+                 certificate_duration_days: int,
+                 renewal_threshold_days: int,
+                 mgr_ip: str) -> None:
+        self.mgr = mgr
+        self.mgr_ip = mgr_ip
+        self.certificate_automated_rotation_enabled = certificate_automated_rotation_enabled
+        self.certificate_duration_days = certificate_duration_days
+        self.renewal_threshold_days = renewal_threshold_days
+        self._init_credentials_store()
+        self._initialize_root_ca(mgr_ip)
 
-        # Similar to certs but for priv keys. Entries in known_certs
-        # that don't have a key here are probably certs in PEM format
-        # so there is no need to store a separate key
-        self.known_keys = {
-            'mgmt_gw_key': {},  # key
-            'oauth2_proxy_key': {},  # key
-            'cephadm_root_ca_key': PrivKey(),  # key
-            'grafana_key': {},  # host -> key
-            'iscsi_ssl_key': {},  # service-name -> key
-            'ingress_ssl_key': {},  # service-name -> key
-            'nvmeof_server_key': {},  # service-name -> key
-            'nvmeof_client_key': {},  # service-name -> key
-            'nvmeof_encryption_key': {},  # service-name -> key
-        }
+    def _init_credentials_store(self) -> None:
+        self.cert_store = CredentialStore(self.mgr, Cert, self.known_certs, self.service_name_cert, self.host_cert, self.general_cert)
+        self.cert_store.load()
+        self.key_store = CredentialStore(self.mgr, PrivKey, self.known_keys, self.service_name_key, self.host_key, self.general_key)
+        self.key_store.load()
 
-    def get_key_name_from_cert(self, cert_ref: str) -> str:
-        """Translate a certificate reference name to its corresponding key reference name."""
-        return cert_ref.replace("_cert", "_key")
+    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
+        cert_obj = cast(Cert, self.cert_store.get_credential(entity, service_name, host))
+        return cert_obj.cert if cert_obj else None
 
-    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[Cert]:
-        self._validate_cert_entity(entity, service_name, host)
-
-        cert = Cert()
-        if entity in self.service_name_cert or entity in self.host_cert:
-            var = service_name if entity in self.service_name_cert else host
-            if var not in self.known_certs[entity]:
-                return None
-            cert = self.known_certs[entity][var]
-        else:
-            cert = self.known_certs[entity]
-        if not cert or not isinstance(cert, Cert):
-            return None
-        return cert
+    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
+        key_obj = cast(PrivKey, self.key_store.get_credential(entity, service_name, host))
+        return key_obj.key if key_obj else None
 
     def save_cert(self, entity: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
-        self._validate_cert_entity(entity, service_name, host)
+        self.cert_store.save_credential(entity, cert, service_name, host, user_made)
 
-        cert_obj = Cert(cert, user_made)
-
-        j: Union[str, Dict[Any, Any], None] = None
-        if entity in self.service_name_cert or entity in self.host_cert:
-            # Determine whether it's a service-name or host
-            var = service_name if entity in self.service_name_cert else host
-            self.known_certs[entity][var] = cert_obj
-            j = {
-                cert_key: Cert.to_json(self.known_certs[entity][cert_key])
-                for cert_key in self.known_certs[entity]
-            }
-        else:
-            self.known_certs[entity] = cert_obj
-            j = Cert.to_json(cert_obj)
-        self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
+    def save_key(self, entity: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
+        self.key_store.save_credential(entity, key, service_name, host, user_made)
 
     def rm_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        """Remove a certificate for a specific entity, service, or host."""
-        self._validate_cert_entity(entity, service_name, host)
+        self.cert_store.rm_credential(entity, service_name, host)
 
-        j: Union[str, Dict[Any, Any], None] = None
-        if entity in self.service_name_cert or entity in self.host_cert:
-            # Determine whether it's a service-name or host
-            var = service_name if entity in self.service_name_cert else host
-            if var and var in self.known_certs.get(entity, {}):
-                # Remove the specific certificate from the mapping and Update JSON after deletion
-                if var in self.known_certs[entity]:
-                    del self.known_certs[entity][var]
-                    j = {
-                        cert_key: Cert.to_json(self.known_certs[entity][cert_key])
-                        for cert_key in self.known_certs[entity]
-                    }
-                    self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
-        else:
-            # Remove the entire certificate (for non-mapping entities)
-            empty_cert = Cert()
-            self.known_certs[entity] = empty_cert
-            j = Cert.to_json(empty_cert)
-            self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
+    def rm_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
+        self.key_store.rm_credential(entity, service_name, host)
 
-    def _validate_cert_entity(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        if entity not in self.known_certs.keys():
-            raise OrchestratorError(f'Attempted to access cert for unknown entity {entity}')
-
-        if entity in self.host_cert and not host:
-            raise OrchestratorError(f'Need host to access cert for entity {entity}')
-
-        if entity in self.service_name_cert and not service_name:
-            raise OrchestratorError(f'Need service name to access cert for entity {entity}')
-
-    def get_services_certificates(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict[str, Any] = {}
-        for k, v in self.known_certs.items():
-            if k == 'cephadm_root_ca_cert':
-                continue
-            if k in self.service_name_cert or k in self.host_cert:
-                tmp: Dict[str, Any] = {key: True for key in v if v[key]}
-                ls[k] = tmp if tmp else False
-            else:
-                ls[k] = bool(v)
-        return ls
-
-    def entity_ls(self) -> List[str]:
-        return self.entities
-
-    def cert_ls(self, show_details: bool = True) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
+    def cert_ls(self) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
 
         def get_cert_info(cert: Cert) -> Dict:
             try:
@@ -288,152 +157,36 @@ class CertKeyStore():
                     'invalid_certificate': f'{e}'
                 }
 
-        ls: Dict[str, Any] = {}
-        for k, v in self.known_certs.items():
-            if k in self.service_name_cert or k in self.host_cert:
-                # For service-name or host-specific certificates
-                tmp: Dict[str, Any] = {
-                    key: get_cert_info(v[key]) for key in v if v[key]
-                }
+        ls: Dict = copy.deepcopy(self.cert_store.credential_ls())
+        for k, v in ls.items():
+            if isinstance(v, dict):
+                tmp: Dict[str, Any] = {key: get_cert_info(v[key]) for key in v if isinstance(v[key], Cert)}
                 ls[k] = tmp if tmp else False
-            else:
-                # For standalone certificates
+            elif isinstance(v, Cert):
                 ls[k] = get_cert_info(v) if bool(v) else False
 
         return ls
 
-    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[PrivKey]:
-        self._validate_key_entity(entity, host)
-
-        key = PrivKey()
-        if entity in self.host_key or entity in self.service_name_key:
-            var = service_name if entity in self.service_name_key else host
-            if var not in self.known_keys[entity]:
-                return None
-            key = self.known_keys[entity][var]
-        else:
-            key = self.known_keys[entity]
-        if not key or not isinstance(key, PrivKey):
-            return None
-        return key
-
-    def save_key(self, entity: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
-        self._validate_key_entity(entity, host)
-
-        pkey = PrivKey(key, user_made)
-
-        j: Union[str, Dict[Any, Any], None] = None
-        if entity in self.host_key or entity in self.service_name_key:
-            var = service_name if entity in self.service_name_key else host
-            j = {}
-            self.known_keys[entity][var] = pkey
-            for k in self.known_keys[entity]:
-                j[k] = PrivKey.to_json(self.known_keys[entity][k])
-        else:
-            self.known_keys[entity] = pkey
-            j = PrivKey.to_json(pkey)
-        self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
-
-    def rm_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        self._validate_key_entity(entity, host)
-
-        j: Union[str, Dict[Any, Any], None] = None
-        if entity in self.host_key or entity in self.service_name_key:
-            var = service_name if entity in self.service_name_key else host
-            # Remove the specific key from the mapping and Update JSON after deletion
-            if var in self.known_keys[entity]:
-                del self.known_keys[entity][var]
-                j = {
-                    pkey: PrivKey.to_json(self.known_keys[entity][pkey])
-                    for pkey in self.known_keys[entity]
-                }
-                self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
-        else:
-            empty_key = PrivKey()
-            self.known_keys[entity] = empty_key
-            j = PrivKey.to_json(empty_key)
-            self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
-
-    def _validate_key_entity(self, entity: str, host: Optional[str] = None) -> None:
-        if entity not in self.known_keys.keys():
-            raise OrchestratorError(f'Attempted to access priv key for unknown entity {entity}')
-
-        if entity in self.host_key and not host:
-            raise OrchestratorError(f'Need host to access priv key for entity {entity}')
-
     def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict[str, Any] = {}
-        for k, v in self.known_keys.items():
-            # TODO: filterout the cephadm root key
-            if k in self.host_key or k in self.service_name_key:
+        ls: Dict = copy.deepcopy(self.key_store.credential_ls())
+        if self.CEPHADM_ROOT_CA_KEY in ls:
+            del ls[self.CEPHADM_ROOT_CA_KEY]
+        for k, v in ls.items():
+            if isinstance(v, dict):
                 tmp: Dict[str, Any] = {key: True for key in v if v[key]}
                 ls[k] = tmp if tmp else False
-            else:
+            elif isinstance(v, PrivKey):
                 ls[k] = bool(v)
         return ls
 
     def load(self) -> None:
-        for k, v in self.mgr.get_store_prefix(CERT_STORE_CERT_PREFIX).items():
-            entity = k[len(CERT_STORE_CERT_PREFIX):]
-            self.known_certs[entity] = json.loads(v)
-            if entity in self.service_name_cert or entity in self.host_cert:
-                for k in self.known_certs[entity]:
-                    cert_obj = Cert.from_json(self.known_certs[entity][k])
-                    self.known_certs[entity][k] = cert_obj
-            else:
-                cert_obj = Cert.from_json(self.known_certs[entity])
-                self.known_certs[entity] = cert_obj
-
-        for k, v in self.mgr.get_store_prefix(CERT_STORE_KEY_PREFIX).items():
-            entity = k[len(CERT_STORE_KEY_PREFIX):]
-            self.known_keys[entity] = json.loads(v)
-            if entity in self.host_key or entity in self.service_name_key:
-                for k in self.known_keys[entity]:
-                    priv_key_obj = PrivKey.from_json(self.known_keys[entity][k])
-                    self.known_keys[entity][k] = priv_key_obj
-            else:
-                priv_key_obj = PrivKey.from_json(self.known_keys[entity])
-                self.known_keys[entity] = priv_key_obj
-
-
-class CertMgr:
-
-    CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
-    CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
-
-    def __init__(self,
-                 mgr: "CephadmOrchestrator",
-                 certificate_automated_rotation_enabled: bool,
-                 certificate_duration_days: int,
-                 renewal_threshold_days: int,
-                 mgr_ip: str) -> None:
-        self.mgr = mgr
-        self.mgr_ip = mgr_ip
-        self.certificate_automated_rotation_enabled = certificate_automated_rotation_enabled
-        self.certificate_duration_days = certificate_duration_days
-        self.renewal_threshold_days = renewal_threshold_days
-        self.cert_key_store = CertKeyStore(mgr)
-        self.cert_key_store.load()
-        self._initialize_root_ca(mgr_ip)
-
-    # Delegate the method calls to `cert_key_store` if `name` matches one of its methods
-    def __getattr__(self, name: str) -> Any:
-        if hasattr(self.cert_key_store, name):
-            return getattr(self.cert_key_store, name)
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-    def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
-        cert_obj = self.cert_key_store.get_cert(entity, service_name, host)
-        return cert_obj.cert if cert_obj else None
-
-    def get_key(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
-        key_obj = self.cert_key_store.get_key(entity, service_name, host)
-        return key_obj.key if key_obj else None
+        self.cert_store.load()
+        self.key_store.load()
 
     def _initialize_root_ca(self, ip: str) -> None:
         self.ssl_certs: SSLCerts = SSLCerts(self.certificate_duration_days)
-        old_cert = self.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
-        old_key = self.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
+        old_cert = cast(Cert, self.cert_store.get_credential(self.CEPHADM_ROOT_CA_CERT))
+        old_key = cast(PrivKey, self.key_store.get_credential(self.CEPHADM_ROOT_CA_KEY))
         if old_key and old_cert:
             try:
                 self.ssl_certs.load_root_credentials(old_cert.cert, old_key.key)
@@ -441,11 +194,12 @@ class CertMgr:
                 raise SSLConfigException("Cannot load cephadm root CA certificates.") from e
         else:
             self.ssl_certs.generate_root_cert(addr=ip)
-            self.cert_key_store.save_cert(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
-            self.cert_key_store.save_key(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
+            self.cert_store.save_credential(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
+            self.key_store.save_credential(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
 
     def reload(self) -> str:
-        self.cert_key_store.load()
+        self.cert_store.load()
+        self.key_store.load()
         self._initialize_root_ca(self.mgr_ip)
         return "OK"
 
@@ -460,32 +214,28 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
-    def _raise_certificate_health_warning(self,
-                                          cert_obj: Cert,
-                                          cert_info: str,
-                                          is_valid: bool = False,
-                                          is_expired: bool = False,
-                                          is_close_to_expiration: bool = False,
-                                          error_info: str = '') -> None:
+    def _raise_certificate_health_warning(self, cert_info: CertInfo, cert_obj: Cert) -> None:
+        target = f'{cert_info.target}' if cert_info.target else ''
+        cert_details = f'service: {cert_info.entity}{target}, remaining days: {cert_info.days_to_expiration}'
         short_err_msg = ''
         detailed_err_msg = ''
-        if not is_valid:
-            short_err_msg = f'Invalid certificate for {cert_info}: {error_info}'
+        if not cert_info.is_valid:
+            short_err_msg = f'Invalid certificate for {cert_details}: {cert_info.error_info}'
             detailed_err_msg = (
-                f'Detected invalid certificate for {cert_info}. '
+                f'Detected invalid certificate for {cert_details}. '
                 'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
                 'Reconfigure affected daemons as needed.'
             )
-        elif is_close_to_expiration:
-            short_err_msg = f'Certificate for {cert_info} is close to expiration.'
+        elif cert_info.is_close_to_expiration:
+            short_err_msg = f'Certificate for {cert_details} is close to expiration.'
             detailed_err_msg = (
-                f'The certificate for {cert_info} is close to expiration. '
+                f'The certificate for {cert_details} is close to expiration. '
                 'Please replace it with a valid certificate and reconfigure the affected service(s) or daemon(s) as necessary.'
             )
-        elif is_expired:
-            short_err_msg = f'Certificate for {cert_info}: has expired'
+        else:
+            short_err_msg = f'Certificate for {cert_details}: has expired'
             detailed_err_msg = (
-                f'Detected an expired certificate for {cert_info}. '
+                f'Detected an expired certificate for {cert_details}. '
                 'Please use appropriate commands to set a valid key and certificate or reset them to an empty string for cephadm to generate self-signed certificates. '
                 'Reconfigure affected daemons as needed.'
             )
@@ -496,7 +246,7 @@ class CertMgr:
                                     [detailed_err_msg]
                                     )
 
-    def is_valid_certificate(self, cert: str, key: str) -> Tuple[bool, bool, int, str]:
+    def is_valid_certificate(self, entity: str, target: str, cert: str, key: str) -> CertInfo:
         """
         Checks if a certificate is valid and close to expiration.
 
@@ -508,113 +258,108 @@ class CertMgr:
         """
         cert_obj = Cert(cert, True)
         key_obj = PrivKey(key, True)
-        return self._is_valid_certificate(cert_obj, key_obj)
+        return self._is_valid_certificate(entity, target, cert_obj, key_obj)
 
-    def _is_valid_certificate(self, cert: Cert, key: PrivKey) -> Tuple[bool, bool, int, str]:
+    def _is_valid_certificate(self, entity: str, target: str, cert: Cert, key: PrivKey) -> CertInfo:
         """
         Checks if a certificate is valid and close to expiration.
 
-        Returns:
-            - is_valid: True if the certificate is valid.
-            - is_close_to_expiration: True if the certificate is close to expiration.
-            - days_to_expiration: Number of days until expiration.
-            - exception_info: Details of any exception encountered during validation.
+        Returns: CertInfo
         """
         try:
             days_to_expiration = verify_tls(cert.cert, key.key)
             is_close_to_expiration = days_to_expiration < self.renewal_threshold_days
-            return True, is_close_to_expiration, days_to_expiration, ""
+            return CertInfo(entity, target, True, is_close_to_expiration, days_to_expiration, "")
         except ServerConfigException as e:
-            return False, False, 0, str(e)
+            return CertInfo(entity, target, False, False, 0, str(e))
 
-    def _validate_and_manage_certificate(self, cert_ref: str, cert_obj: Cert, key_obj: PrivKey, entity: str = '') -> Tuple[bool, bool]:
+    def _validate_and_manage_certificate(self, cert_entity: str, cert_obj: Cert, key_obj: PrivKey, target: str = '') -> CertInfo:
         """Helper method to validate a cert/key pair and handle errors."""
 
-        is_valid, is_close_to_expiration, days_to_expiration, exception_info = self._is_valid_certificate(cert_obj, key_obj)
-
-        entity_info = f" ({entity})" if entity else ""
+        cert_info = self._is_valid_certificate(cert_entity, target, cert_obj, key_obj)
         cert_source = 'user-made' if cert_obj.user_made else 'self-signed'
-        cert_info = f'service: {cert_ref}{entity_info}, remaining days: {days_to_expiration}'
 
-        if is_close_to_expiration:
+        if cert_info.is_close_to_expiration:
             logger.warning(f'Detected a {cert_source} certificate close to its expiration, {cert_info}')
             if self.certificate_automated_rotation_enabled:
-                self._renew_certificate(cert_ref, cert_info, cert_obj)
+                self._renew_certificate(cert_info, cert_obj)
             else:
-                self._raise_certificate_health_warning(cert_obj, cert_info, is_close_to_expiration=is_close_to_expiration)
-        elif not is_valid:
+                self._raise_certificate_health_warning(cert_info, cert_obj)
+        elif not cert_info.is_valid:
             logger.warning(f'Detected a {cert_source} invalid certificate, {cert_info}')
             if cert_obj.user_made:
                 # TODO(redo): should we proceed in this case once ACME is setup?
-                self._raise_certificate_health_warning(cert_obj, cert_info, is_valid=is_valid, error_info=exception_info)
+                self._raise_certificate_health_warning(cert_info, cert_obj)
             else:
                 # self-signed invalid certificate.. shouldn't happen but let's try to renew it
-                service_name, host = self.get_service_or_host(cert_ref, entity)
-                logger.info(f'Removing invalid certificate for {cert_ref} to trigger regeneration (service: {service_name}, host: {host}).')
-                self.cert_key_store.rm_cert(cert_ref, service_name, host)
+                service_name, host = self.get_cert_target(cert_entity, target)
+                logger.info(f'Removing invalid certificate for {cert_entity} to trigger regeneration (service: {service_name}, host: {host}).')
+                self.cert_store.rm_credential(cert_entity, service_name, host)
         else:
-            logger.info(f'Certificate for "{cert_ref}{entity_info}" is still valid for {days_to_expiration} days.')
+            target_info = f" ({target})" if target else ""
+            logger.info(f'Certificate for "{cert_entity}{target_info}" is still valid for {cert_info.days_to_expiration} days.')
             self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
 
-        return is_valid, is_close_to_expiration
+        return cert_info
 
-    def _renew_certificate(self, cert_ref: str, cert_info: str, cert_obj: Cert) -> None:
+    def _renew_certificate(self, cert_info: CertInfo, cert_obj: Cert) -> None:
         """Renew a self-signed or user-made certificate."""
         if cert_obj.user_made:
             # By now we just trigger a health warning since we don't have ACME support yet
-            self._raise_certificate_health_warning(cert_obj, cert_info, is_close_to_expiration=True)
+            self._raise_certificate_health_warning(cert_info, cert_obj)
         else:
             try:
-                logger.info(f'Renewing self-signed certificate for {cert_ref}')
+                logger.info(f'Renewing self-signed certificate for {cert_info.entity}')
                 new_cert, new_key = self.ssl_certs.renew_cert(cert_obj.cert, self.certificate_duration_days)
-                self.cert_key_store.save_cert(cert_ref, new_cert)
-                self.cert_key_store.save_key(cert_ref, new_key)
+                self.cert_store.save_credential(cert_info.entity, new_cert)
+                self.key_store.save_credential(cert_info.entity, new_key)
             except SSLConfigException as e:
-                logger.error(f'Error while trying to renew self-signed certificate for {cert_ref}: {e}')
+                logger.error(f'Error while trying to renew self-signed certificate for {cert_info.entity}: {e}')
 
-    def get_service_or_host(self, cert_ref: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
-        """Determine the service name or host based on the cert_ref."""
-        service_name = entity if cert_ref in self.cert_key_store.service_name_cert else None
-        host = entity if cert_ref in self.cert_key_store.host_cert else None
+    def get_cert_target(self, cert_entity: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
+        """Determine the service name or host based on the cert_entity."""
+        service_name = entity if cert_entity in self.service_name_cert else None
+        host = entity if cert_entity in self.host_cert else None
         return service_name, host
 
     def check_certificates(self) -> List[str]:
 
         services_to_reconfig = set()
 
-        def get_cert_and_key(cert_ref: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
+        def get_cert_and_key(cert_entity: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
             """Retrieve certificate and key, translating names as necessary."""
-            service_name, host = self.get_service_or_host(cert_ref, entity) if entity else (None, None)
-            cert = self.cert_key_store.get_cert(cert_ref, service_name=service_name, host=host)
-            key_ref = self.cert_key_store.get_key_name_from_cert(cert_ref)
-            key = self.cert_key_store.get_key(key_ref, service_name=service_name, host=host)
+            service_name, host = self.get_cert_target(cert_entity, entity) if entity else (None, None)
+            cert = cast(Cert, self.cert_store.get_credential(cert_entity, service_name=service_name, host=host))
+            key_entity = cert_entity.replace("_cert", "_key")
+            key = cast(PrivKey, self.key_store.get_credential(key_entity, service_name=service_name, host=host))
             return cert, key, entity
 
-        def process_certificate(cert_ref: str, cert: Optional[Cert], key: Optional[PrivKey], entity: str = '') -> None:
+        def process_certificate(cert_entity: str, cert_obj: Optional[Cert], key_obj: Optional[PrivKey], target: str = '') -> None:
             nonlocal services_to_reconfig
-            if cert and key:
-                is_valid, is_close_to_expiration = self._validate_and_manage_certificate(cert_ref, cert, key, entity)
-                if (not is_valid or is_close_to_expiration) and not cert.user_made:
-                    services_to_reconfig.add(self.cert_key_store.cert_to_service[cert_ref])
-            elif cert:
+            if cert_obj and key_obj:
+                cert_state = self._validate_and_manage_certificate(cert_entity, cert_obj, key_obj, target)
+                if (not cert_state.is_valid or cert_state.is_close_to_expiration) and not cert_obj.user_made:
+                    services_to_reconfig.add(self.cert_to_service[cert_entity])
+            elif cert_obj:
                 # Edge case where cert is present but key is None
                 # this could only happen if somebody has put manually a bad key!
-                logger.warning(f"Key is missing for certificate '{cert_ref}'. Attempting renewal.")
-                self._renew_certificate(cert_ref, cert_ref, cert)
+                logger.warning(f"Key is missing for certificate '{cert_entity}'. Attempting renewal.")
+                cert_info = CertInfo(cert_entity, target)
+                self._renew_certificate(cert_info, cert_obj)
 
-        for cert_ref, cert_entries in self.cert_key_store.get_services_certificates().items():
+        for cert_entity, cert_entries in self.cert_store.credential_ls().items():
             if not cert_entries:
                 continue
 
             if isinstance(cert_entries, dict):
                 # Process only valid instances
-                for entity in [entry for entry, exists in cert_entries.items() if exists]:
-                    cert, key, entity = get_cert_and_key(cert_ref, entity)
-                    process_certificate(cert_ref, cert, key, entity)
+                for target in [entry for entry, exists in cert_entries.items() if exists]:
+                    cert, key, target = get_cert_and_key(cert_entity, target)
+                    process_certificate(cert_entity, cert, key, target)
             else:
                 # Global cert case
-                cert, key, _ = get_cert_and_key(cert_ref)
-                process_certificate(cert_ref, cert, key)
+                cert, key, _ = get_cert_and_key(cert_entity)
+                process_certificate(cert_entity, cert, key)
 
         logger.info(f'redo: services to reconfigure {services_to_reconfig}')
 
