@@ -88,3 +88,11 @@ class OAuth2ProxyService(CephadmService):
         }
 
         return daemon_config, []
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before mgmt-gateway daemon is removed.
+        """
+        # delete cert/key entires for this mgmt-gateway daemon
+        self.mgr.cert_mgr.rm_cert('oauth2_proxy_cert')
+        self.mgr.cert_mgr.rm_key('oauth2_proxy_key')
