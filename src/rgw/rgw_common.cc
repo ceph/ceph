@@ -137,6 +137,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
+    { ERR_RESTORE_ALREADY_IN_PROGRESS, {409, "RestoreAlreadyInProgress"}},
     { ECANCELED, {409, "ConcurrentModification"}},
 });
 

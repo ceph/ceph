@@ -254,6 +254,72 @@ static const struct generic_attr generic_attrs[] = {
 
 /* Read object or just head from remote endpoint.
  */
+int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx, bool head,
+                         std::map<std::string, std::string>& headers,
+                         real_time* pset_mtime, std::string& etag,
+                         uint64_t& accounted_size, rgw::sal::Attrs& attrs,
+                         std::optional<uint64_t> days, void* cb) {
+  RGWRESTConn::get_obj_params req_params;
+  std::string target_obj_name;
+  int ret = 0;
+  rgw_lc_obj_properties obj_properties(tier_ctx.o.meta.mtime, tier_ctx.o.meta.etag,
+        tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
+        tier_ctx.target_storage_class);
+
+  rgw_bucket dest_bucket;
+  dest_bucket.name = tier_ctx.target_bucket_name;
+  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
+                    tier_ctx.obj->get_name();
+  if (!tier_ctx.o.is_current()) {
+    target_obj_name += get_key_instance(tier_ctx.obj->get_key());
+  }
+
+
+  /* just for testing */
+  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
+
+  ret = cloud_tier_restore(tier_ctx.dpp, tier_ctx.conn, dest_obj, days);
+
+  ldpp_dout(tier_ctx.dpp, 0) << "XXXXXXXXXX cloud_tier_restore restore for dest object=" << dest_obj << "returned ret = " << ret << dendl;
+
+  if (ret < 0 ) { 
+    return ret;
+  }
+
+  // now check HEAD 
+//  if (! ret == 200)
+//  check the restore status via headers - x-amz-restore
+  // check the head_object if restore is success or not.
+  /* init input connection */
+  /* Fetch Head object */
+  bool restore_in_progress = false;
+  do {
+
+  ret = rgw_cloud_tier_get_object(tier_ctx, true, headers, nullptr, etag, accounted_size, attrs, nullptr);
+
+  ldpp_dout(tier_ctx.dpp, 0) << "XXXXXXXXXX cloud_tier_head restore for dest object=" << dest_obj << "returned ret = " << ret << dendl;
+
+  if (ret < 0) {
+    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to fetch HEAD from cloud for obj=" << tier_ctx.obj << " , ret = " << ret << dendl;
+    return ret;
+  }
+
+  restore_in_progress = is_restore_in_progress(tier_ctx.dpp, headers);
+
+  } while(restore_in_progress);
+
+  // now do the actual GET
+  ret = rgw_cloud_tier_get_object(tier_ctx, false, headers, pset_mtime, etag, accounted_size, attrs, cb);
+
+  ldpp_dout(tier_ctx.dpp, 0) << "XXXXXXXXXX cloud_tier_get restore for dest object=" << dest_obj << "returned ret = " << ret << dendl;
+
+  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): fetching object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << " , ret:" << ret << dendl;
+
+  return ret;
+}
+
+/* Read object or just head from remote endpoint.
+ */
 int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
                          std::map<std::string, std::string>& headers,
                          real_time* pset_mtime, std::string& etag,
@@ -358,6 +424,32 @@ static bool is_already_tiered(const DoutPrefixProvider *dpp,
     return 1;
   }
   return 0;
+}
+
+bool is_restore_in_progress(const DoutPrefixProvider *dpp,
+                            std::map<std::string, std::string>& headers) {
+  map<string, string> attrs = headers;
+
+  for (const auto& a : attrs) {
+    ldpp_dout(dpp, 20) << "GetCrf attr[" << a.first << "] = " << a.second <<dendl;
+  }
+  string s = attrs["X_AMZ_RESTORE"];
+
+  if (s.empty())
+    s = attrs["x_amz_restore"];
+
+  ldpp_dout(dpp, 0) << "is_already_tiered attrs[X_AMZ_RESTORE] = " << s <<dendl;
+
+  if (!s.empty()){
+    const char *r_str = "ongoing-request=\"true\"";
+    // XXX: check if there is better way to extract
+    char *found = strstr((char*)s.c_str(), r_str);
+
+    if (found) {
+    	return true;
+    }
+  }
+  return false;;
 }
 
 /* Read object locally & also initialize dest rest obj based on read attrs */
@@ -905,6 +997,90 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
   }
 
   return 0;
+}
+
+int cloud_tier_restore(const DoutPrefixProvider *dpp,
+      RGWRESTConn& dest_conn, const rgw_obj& dest_obj, std::optional<uint64_t> days) {
+  rgw_http_param_pair params[] = {{"restore", nullptr}, {nullptr, nullptr}};
+  // XXX: include versionId=VersionId in the params above
+
+  stringstream ss;
+  XMLFormatter formatter;
+  int ret;
+  std::string tier_v = "Expedited";
+
+  bufferlist bl, out_bl;
+  string resource = obj_to_aws_path(dest_obj);
+
+  struct RestoreRequest {
+	  std::optional<uint64_t> days;
+	  std::optional<std::string> tier;
+
+    explicit RestoreRequest(std::optional<uint64_t> _days, std::optional<std::string> _tier) : days(_days), tier(_tier) {}
+
+    void dump_xml(Formatter *f) const {
+      encode_xml("Days", days, f);
+      if (tier) {
+	f->open_object_section("GlacierJobParameters");
+	encode_xml("Tier", tier, f);
+	f->close_section();
+      };
+    }
+  } req_enc(days, tier_v);
+  struct RestoreResult {
+    std::string code;
+
+    void decode_xml(XMLObj *obj) {
+      RGWXMLDecoder::decode_xml("Code", code, obj);
+    }
+  } result;
+
+  req_enc.days = days;
+  req_enc.tier = tier_v;
+  encode_xml("RestoreRequest", req_enc, &formatter);
+
+  formatter.flush(ss);
+  bl.append(ss.str());
+
+  ret = dest_conn.send_resource(dpp, "POST", resource, params, nullptr,
+      out_bl, &bl, nullptr, null_yield);
+
+    ldpp_dout(dpp, 0) << "XXXXXXXXXX return status of  restore dest object=" << dest_obj << ", ret = " << ret << dendl;
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "XXXXXXXXXX ERROR: failed to restore dest object=" << dest_obj << ", ret = " << ret << dendl;
+  }
+  if (out_bl.length() > 0) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize xml parser for parsing restore request response from server" << dendl;
+      return -EIO;
+    }
+
+    if (!parser.parse(out_bl.c_str(), out_bl.length(), 1)) {
+      string str(out_bl.c_str(), out_bl.length());
+      ldpp_dout(dpp, 5) << "ERROR: failed to parse xml restore: " << str << dendl;
+      return -EIO;
+    }
+
+    try {
+      RGWXMLDecoder::decode_xml("Error", result, &parser, true);
+    } catch (RGWXMLDecoder::err& err) {
+      string str(out_bl.c_str(), out_bl.length());
+      ldpp_dout(dpp, 5) << "ERROR: unexpected xml: " << str << dendl;
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 0) << "ERROR: Restore request received result : " << result.code << dendl;
+    if (result.code != "RestoreAlreadyInProgress") {
+      return -EIO;
+    } else { // treat as success
+      return 0;
+    }
+
+      ldpp_dout(dpp, 0) << "XXXXXXXXX ERROR: restore req failed with error: " << result.code << dendl;
+  }
+
+  return ret;
 }
 
 static int cloud_tier_abort_multipart(const DoutPrefixProvider *dpp,

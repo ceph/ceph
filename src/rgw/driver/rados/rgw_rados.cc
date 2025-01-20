@@ -5270,9 +5270,17 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   real_time set_mtime;
   std::map<std::string, std::string> headers;
   ldpp_dout(dpp, 20) << "Fetching from cloud, object:" << dest_obj << dendl;
-  ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
+  if (tier_config.tier_placement.tier_type == "cloud-s3-glacier") {
+  ldpp_dout(dpp, 0) << "XXXXX Calling restore_object,  object:" << dest_obj << dendl;
+    ret = rgw_cloud_tier_restore_object(tier_ctx, false,  headers,
+                                &set_mtime, etag, accounted_size,
+                                attrs, days, &cb);
+  } else {
+  ldpp_dout(dpp, 0) << "XXXXX get restore_object,  object:" << dest_obj << dendl;
+    ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
                                 &set_mtime, etag, accounted_size,
                                 attrs, &cb);
+  }
 
   if (ret < 0) { 
     ldpp_dout(dpp, 20) << "Fetching from cloud failed, object:" << dest_obj << dendl;
