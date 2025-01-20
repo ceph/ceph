@@ -4872,7 +4872,8 @@ out:
   if (debug) {
     ostringstream ostr;
     Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-    cct->get_perfcounters_collection()->dump_formatted(f, false, false);
+    cct->get_perfcounters_collection()->dump_formatted(
+	f, false, select_labeled_t::unlabeled);
     ostr << "ceph-objectstore-tool ";
     f->flush(ostr);
     delete f;

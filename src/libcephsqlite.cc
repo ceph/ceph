@@ -809,8 +809,8 @@ static void f_perf(sqlite3_context* ctx, int argc, sqlite3_value** argv)
   auto&& appd = getdata(vfs);
   JSONFormatter f(false);
   f.open_object_section("ceph_perf");
-  appd.logger->dump_formatted(&f, false, false);
-  appd.striper_logger->dump_formatted(&f, false, false);
+  appd.logger->dump_formatted(&f, false, select_labeled_t::unlabeled);
+  appd.striper_logger->dump_formatted(&f, false, select_labeled_t::unlabeled);
   f.close_section();
   {
     CachedStackStringStream css;

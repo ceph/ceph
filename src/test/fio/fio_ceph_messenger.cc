@@ -132,7 +132,8 @@ static void put_ceph_context(void)
     Formatter* f;
 
     f = Formatter::create("json-pretty");
-    g_ceph_context->get_perfcounters_collection()->dump_formatted(f, false, false);
+    g_ceph_context->get_perfcounters_collection()->dump_formatted(
+	f, false, select_labeled_t::unlabeled);
     ostr << ">>>>>>>>>>>>> PERFCOUNTERS BEGIN <<<<<<<<<<<<" << std::endl;
     f->flush(ostr);
     ostr << ">>>>>>>>>>>>>  PERFCOUNTERS END  <<<<<<<<<<<<" << std::endl;
