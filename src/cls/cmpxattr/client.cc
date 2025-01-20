@@ -72,6 +72,7 @@ namespace cls::cmpxattr {
     "URGENT_MSG_INVALID"
   };
 
+  //---------------------------------------------------------------------------
   const char* get_urgent_msg_names(int msg) {
     if (msg <= URGENT_MSG_INVALID && msg >= URGENT_MSG_NONE) {
       return s_urgent_msg_names[msg];
@@ -80,4 +81,25 @@ namespace cls::cmpxattr {
       return s_urgent_msg_names[URGENT_MSG_INVALID];
     }
   }
+
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const dedup_epoch_t &d)
+  {
+    out << "EPOCH::Time={" << d.time.tv.tv_sec <<":"<< d.time.tv.tv_nsec << "}::";
+    if (d.dedup_type == DEDUP_TYPE_NONE) {
+      out << "DEDUP_TYPE_NONE";
+    }
+    else if (d.dedup_type == DEDUP_TYPE_DRY_RUN) {
+      out << "DEDUP_TYPE_DRY_RUN";
+    }
+    else if (d.dedup_type == DEDUP_TYPE_FULL) {
+      out << "DEDUP_TYPE_FULL";
+    }
+    else {
+      ceph_abort("unexpected dedup_type");
+    }
+    out << "::serial=" << d.serial;
+    return out;
+  }
+
 } // namespace cls::cmpxattr

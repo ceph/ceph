@@ -75,6 +75,10 @@ namespace rgw::dedup {
       this->small_multipart_obj += other.small_multipart_obj;
       this->valid_sha256 += other.valid_sha256;
       this->invalid_sha256 += other.invalid_sha256;
+      this->default_storage_class_objs += other.default_storage_class_objs;
+      this->default_storage_class_objs_bytes += other.default_storage_class_objs_bytes;
+      this->non_default_storage_class_objs += other.non_default_storage_class_objs;
+      this->non_default_storage_class_objs_bytes += other.non_default_storage_class_objs_bytes;
       this->ingress_failed_get_object += other.ingress_failed_get_object;
       this->ingress_failed_get_obj_attrs += other.ingress_failed_get_obj_attrs;
       this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
@@ -96,6 +100,12 @@ namespace rgw::dedup {
 
     uint64_t valid_sha256 = 0;
     uint64_t invalid_sha256 = 0;
+
+    uint64_t default_storage_class_objs = 0;
+    uint64_t default_storage_class_objs_bytes = 0;
+
+    uint64_t non_default_storage_class_objs = 0;
+    uint64_t non_default_storage_class_objs_bytes = 0;
 
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
@@ -125,6 +135,11 @@ namespace rgw::dedup {
     encode(w.valid_sha256, bl);
     encode(w.invalid_sha256, bl);
 
+    encode(w.default_storage_class_objs, bl);
+    encode(w.default_storage_class_objs_bytes, bl);
+    encode(w.non_default_storage_class_objs, bl);
+    encode(w.non_default_storage_class_objs_bytes, bl);
+
     encode(w.ingress_failed_get_object, bl);
     encode(w.ingress_failed_get_obj_attrs, bl);
 
@@ -151,6 +166,10 @@ namespace rgw::dedup {
     decode(w.small_multipart_obj, bl);
     decode(w.valid_sha256, bl);
     decode(w.invalid_sha256, bl);
+    decode(w.default_storage_class_objs, bl);
+    decode(w.default_storage_class_objs_bytes, bl);
+    decode(w.non_default_storage_class_objs, bl);
+    decode(w.non_default_storage_class_objs_bytes, bl);
     decode(w.ingress_failed_get_object, bl);
     decode(w.ingress_failed_get_obj_attrs, bl);
     decode(w.ingress_skip_too_small_bytes, bl);

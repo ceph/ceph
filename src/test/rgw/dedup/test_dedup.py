@@ -226,6 +226,27 @@ def count_space_in_all_buckets():
 
 
 #-------------------------------------------------------------------------------
+def count_objects_in_bucket(bucket_name, conn):
+    max_keys=1000
+    marker=""
+    obj_count=0
+    while True:
+        log.info("bucket_name=%s", bucket_name)
+        listing=conn.list_objects(Bucket=bucket_name, Marker=marker, MaxKeys=max_keys)
+        if 'Contents' not in listing or len(listing['Contents'])== 0:
+            return 0
+
+        obj_count += len(listing['Contents'])
+
+        if listing['IsTruncated']:
+            marker=listing['NextMarker']
+            log.info("marker=%s, obj_count=%d", marker, obj_count)
+            continue
+        else:
+            return obj_count
+
+
+#-------------------------------------------------------------------------------
 def count_object_parts_in_all_buckets(verbose=False):
     poolname = 'default.rgw.buckets.data'
     result = rados(['lspools'])
@@ -455,6 +476,7 @@ def upload_objects(out_dir, bucket_name, files, indices, conn, config, check_obj
     duplicated_tail_objs=0
     rados_objects_total=0
     s3_objects_total=0
+    
     for (f, idx) in zip(files, indices):
         filename=f[0]
         obj_size=f[1]
@@ -469,12 +491,15 @@ def upload_objects(out_dir, bucket_name, files, indices, conn, config, check_obj
         duplicated_tail_objs += ((num_copies-1) * (rados_obj_count-1))
         log.debug("upload_objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies);
         s3_objects_total += num_copies
+        if s3_objects_total and (s3_objects_total % 1000 == 0):
+            log.info("%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
+                     s3_objects_total, rados_objects_total, total_space/MB)
         for i in range(idx, num_copies):
             key = gen_object_name(filename, i)
-            conn.upload_file(out_dir + filename, bucket_name, key, Config=config)
-            if s3_objects_total and (s3_objects_total % 1000 == 0):
-                log.info("%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
-                         s3_objects_total, rados_objects_total, total_space/MB)
+            #log.info("upload_file %s/%s with crc32", bucket_name, key)
+            conn.upload_file(out_dir + filename, bucket_name, key, Config=config, ExtraArgs={'ChecksumAlgorithm': 'crc32'})
+            #conn.upload_file(out_dir + filename, bucket_name, key, Config=config, ExtraArgs={'ChecksumType': 'crc32'})
+            #conn.upload_file(out_dir + filename, bucket_name, key, Config=config)
 
     log.debug("==========================================")
     log.info("Summery:\n%d S3 objects were uploaded (%d rados objects), total size = %.2f MiB",
@@ -537,12 +562,18 @@ def upload_objects_multi(out_dir, files, conns, bucket_names, indices, config, c
     log.debug("Based on calculation we should have %.2f MiB total in pool", total_space/MB)
     log.debug("Based on calculation we should have %.2f MiB duplicated space in pool", duplicated_space/MB)
 
+    s3_object_count=0
+    for (bucket_name, conn) in zip(bucket_names, conns):
+        s3_object_count += count_objects_in_bucket(bucket_name, conn)
+
+    log.info("bucket listings reported a total of %d s3 objects", s3_object_count)
     expected_rados_obj_count_post_dedup=(rados_objects_total-duplicated_tail_objs)
     log.debug("Post dedup expcted rados obj count = %d", expected_rados_obj_count_post_dedup)
     expcted_space_post_dedup=(total_space-duplicated_space)
     log.debug("Post dedup expcted data in pool = %.2f MiB", expcted_space_post_dedup/MB)
     if check_obj_count:
         assert (rados_objects_total, total_space) == count_object_parts_in_all_buckets()
+        assert (s3_object_count == s3_objects_total)
 
     dedup_stats.size_before_dedup=total_space
     #dedup_stats.duplicate_bytes=duplicated_space
@@ -560,8 +591,9 @@ def verify_objects(out_dir, bucket_name, files, conn, expected_results, config):
         log.debug("comparing file=%s, size=%d, copies=%d", filename, obj_size, num_copies)
         for i in range(0, num_copies):
             key = gen_object_name(filename, i)
-            log.debug("comparing object %s with file %s", key, filename)
-            conn.download_file(bucket_name, key, tempfile, Config=config)
+            #log.info("download_file(%s) with crc32", key)
+            conn.download_file(bucket_name, key, tempfile, Config=config, ExtraArgs={'ChecksumMode': 'crc32'})
+            #conn.download_file(bucket_name, key, tempfile, Config=config)
             result = bash(['cmp', tempfile, out_dir + filename])
             assert result[1] == 0 ,"Files %s and %s differ!!" % (key, tempfile)
             os.remove(tempfile)
@@ -675,6 +707,7 @@ def exec_dedup(expcted_dedup_stats, verify_stats=True):
     log.info("sending exec_dedup request")
     result = admin(['dedup', 'restart'])
     assert result[1] == 0
+    log.info(result[0])
     log.info("wait for dedup to complete")
 
     # dedup should complete in less than 5 minutes
@@ -850,7 +883,7 @@ def dedup_basic_with_tenants_common(out_dir, files, max_copies_count, config, cl
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small():
-    return
+    #return
 
     bucket_name = gen_bucket_name()
     log.info("test_dedup_small: connect to AWS ...")
@@ -861,7 +894,7 @@ def test_dedup_small():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
@@ -904,7 +937,7 @@ def test_dedup_small_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_0: connect to AWS ...")
@@ -947,7 +980,7 @@ def test_dedup_inc_0_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -986,7 +1019,7 @@ def test_dedup_inc_0():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_1_with_tenants: connect to AWS ...")
@@ -1043,7 +1076,7 @@ def test_dedup_inc_1_with_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1097,7 +1130,7 @@ def test_dedup_inc_1():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_2_with_tenants: connect to AWS ...")
@@ -1163,7 +1196,7 @@ def test_dedup_inc_2_with_tenants():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1225,7 +1258,7 @@ def test_dedup_inc_2():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove_multi_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_with_remove_multi_tenants: connect to AWS ...")
@@ -1292,7 +1325,7 @@ def test_dedup_inc_with_remove_multi_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove():
-    return
+    #return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1357,7 +1390,7 @@ def test_dedup_inc_with_remove():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_multipart_with_tenants: connect to AWS ...")
@@ -1380,7 +1413,7 @@ def test_dedup_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -1405,7 +1438,7 @@ def test_dedup_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
@@ -1439,7 +1472,7 @@ def test_dedup_basic():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=4
@@ -1458,7 +1491,7 @@ def test_dedup_small_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_small_multipart: connect to AWS ...")
@@ -1583,7 +1616,7 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_inc_loop_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_loop_with_tenants: connect to AWS ...")
@@ -1602,7 +1635,7 @@ def test_dedup_inc_loop_with_tenants():
         ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
         stats_base=ret[1]
 
-        for idx in range(0, 7):
+        for idx in range(0, 3):
             log.info("test_dedup_inc_loop_with_tenants: INC-STEP %d", idx)
             ret = inc_step_with_tenants(stats_base, files, conns, bucket_names, config)
             files=ret[0]

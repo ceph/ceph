@@ -6,6 +6,9 @@
 #include <string>
 
 struct named_time_lock_t;
+namespace cls::cmpxattr {
+  struct dedup_epoch_t;
+}
 namespace rgw::dedup {
 #define DEDUP_POOL_NAME       "rgw_dedup_pool"
 #define MD5_SHARD_PREFIX      "MD5.SHRD.TKN."
@@ -17,13 +20,13 @@ namespace rgw::dedup {
 #define TOKEN_STATE_PENDING   0x00
 #define TOKEN_STATE_TIMED_OUT 0xDD
 #define TOKEN_STATE_COMPLETED 0xFF
-
   public:
     cluster(const DoutPrefixProvider   *_dpp);
 
-    int          init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx);
+    int          init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx,
+		      ::cls::cmpxattr::dedup_epoch_t*, bool init_epoch);
     bool         was_initialized() { return d_was_initialized; }
-    utime_t      get_epoch() { return d_epoch; }
+    utime_t      get_epoch_time() { return d_epoch_time; }
     work_shard_t get_next_work_shard_token(librados::IoCtx *p_ioctx,
 					   int *p_urgent_msg /* IN-OUT PARAM */);
     md5_shard_t  get_next_md5_shard_token(librados::IoCtx *p_ioctx,
@@ -34,7 +37,8 @@ namespace rgw::dedup {
     static bool  got_start_scan_req(librados::IoCtx *p_ioctx);
     static int   collect_all_shard_stats(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp);
     static int   dedup_control(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp, int urgent_msg);
-    static int   dedup_restart_scan(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp);
+    static int   dedup_restart_scan(rgw::sal::RadosStore *store, bool dry_run, const DoutPrefixProvider *dpp);
+
     //---------------------------------------------------------------------------
     int mark_work_shard_token_completed(librados::IoCtx *p_ioctx,
 					work_shard_t work_shard,
@@ -119,20 +123,8 @@ namespace rgw::dedup {
 
     int  get_urgent_msg_state(librados::IoCtx *p_ioctx,
 			      int *urgent_msg /* OUT-PARAM */);
-
   private:
-    static int get_epoch(rgw::sal::RadosStore *store,
-			 const DoutPrefixProvider *dpp,
-			 utime_t *p_epoch, /* OUT */
-			 const char* caller);
-    static int collect_shard_stats(librados::IoCtx *p_ioctx,
-				   const DoutPrefixProvider *dpp,
-				   unsigned shards_count,
-				   const char *prefix,
-				   bufferlist bl_arr[],
-				   named_time_lock_t *ntl_arr);
     void reset();
-    void assign_cluster_id();
     bool all_shard_tokens_completed(librados::IoCtx *p_ioctx,
 				    unsigned shards_count,
 				    const char *prefix,
@@ -140,7 +132,6 @@ namespace rgw::dedup {
 				    uint8_t completed_arr[],
 				    uint32_t *ttl,
 				    uint64_t *p_total_ingressed);
-    int set_epoch(rgw::sal::RadosStore *store);
     int cleanup_prev_run(librados::IoCtx *p_ioctx);
     int get_next_shard_token(librados::IoCtx *p_ioctx,
 			     unsigned start_shard,
@@ -161,7 +152,7 @@ namespace rgw::dedup {
     bool                      d_was_initialized = false;
     md5_shard_t               d_curr_md5_shard = 0;
     work_shard_t              d_curr_worker_shard = 0;
-    utime_t                   d_epoch;
+    utime_t                   d_epoch_time;
     uint64_t                  d_total_ingressed_obj = 0;
     uint8_t                   d_completed_workers[MAX_WORK_SHARD];
     uint8_t                   d_completed_md5[MAX_WORK_SHARD];

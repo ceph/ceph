@@ -150,6 +150,16 @@ namespace rgw::dedup {
     if (s.small_multipart_obj) {
       out << "Small Multipart obj count      = " << s.small_multipart_obj << "\n";
     }
+#if 1
+    if(s.non_default_storage_class_objs) {
+      out << "non_default_storage_class_objs = " << s.non_default_storage_class_objs << "\n";
+      out << "non_default_storage_class_objs_bytes = " << s.non_default_storage_class_objs_bytes << "\n";
+    }
+    else {
+      ceph_assert(s.default_storage_class_objs == s.ingress_obj);
+      ceph_assert(s.default_storage_class_objs_bytes == s.ingress_obj_bytes);
+    }
+#endif
     if(s.ingress_failed_get_object) {
       out << "Ingress failed get_object()    = "
 	  << s.ingress_failed_get_object << "\n";

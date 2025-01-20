@@ -11,6 +11,9 @@
 #include <iostream>
 #include <ostream>
 using namespace std;
+namespace cls::cmpxattr {
+  struct dedup_epoch_t;
+}
 namespace rgw::dedup {
   class disk_block_array_t;
   struct disk_record_t;
@@ -39,11 +42,11 @@ namespace rgw::dedup {
     };
 
     void run();
-    int  setup();
+    int  setup(::cls::cmpxattr::dedup_epoch_t*);
     bool all_shards_completed(dedup_step_t step, uint32_t *ttl,
 			      uint64_t *p_total_ingressed);
     void all_shards_barrier(dedup_step_t step, const char *stepname);
-    void handle_pause_req();
+    void handle_pause_req(const char* caller);
     bool should_stop() {
       return (unlikely(d_shutdown_req || d_remote_abort_req));
     }
@@ -155,7 +158,7 @@ namespace rgw::dedup {
     bool d_local_pause_req  = false;
     bool d_remote_paused    = false;
     bool d_remote_pause_req = false;
-    bool d_dry_run          = false;
+    int  d_dedup_type       = 0; //DEDUP_TYPE_NONE;
     int  d_execute_interval;
 
     std::thread d_runner;

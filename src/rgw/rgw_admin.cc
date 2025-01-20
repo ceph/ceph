@@ -751,6 +751,7 @@ enum class OPT {
   DEDUP_STATS,
   DEDUP_ABORT,
   DEDUP_RESTART,
+  DEDUP_RESTART_DRY,
   DEDUP_PAUSE,
   DEDUP_RESUME,
   GC_LIST,
@@ -997,6 +998,7 @@ static SimpleCmd::Commands all_cmds = {
   { "ratelimit disable", OPT::RATELIMIT_DISABLE },
   { "dedup stats", OPT::DEDUP_STATS },
   { "dedup abort", OPT::DEDUP_ABORT },
+  { "dedup restart dry", OPT::DEDUP_RESTART_DRY },
   { "dedup restart", OPT::DEDUP_RESTART },
   { "dedup pause", OPT::DEDUP_PAUSE },
   { "dedup resume", OPT::DEDUP_RESUME },
@@ -4324,10 +4326,11 @@ int main(int argc, const char **argv)
 			 OPT::OLH_GET,
 			 OPT::OLH_READLOG,
 			 OPT::DEDUP_STATS,
-			 OPT::DEDUP_ABORT,      // TBD - not READ-ONLY
+			 OPT::DEDUP_ABORT,     // TBD - not READ-ONLY
+			 OPT::DEDUP_RESTART_DRY,
 			 OPT::DEDUP_RESTART,   // TBD - not READ-ONLY
-			 OPT::DEDUP_PAUSE,     // TBD - not READ-ONLY
-			 OPT::DEDUP_RESUME,    // TBD - not READ-ONLY
+			 OPT::DEDUP_PAUSE,
+			 OPT::DEDUP_RESUME,
 			 OPT::GC_LIST,
 			 OPT::LC_LIST,
 			 OPT::ORPHANS_LIST_JOBS,
@@ -8838,14 +8841,14 @@ next:
 				       cls::cmpxattr::URGENT_MSG_ABORT);
   }
 
-  if (opt_cmd == OPT::DEDUP_RESTART) {
+  if (opt_cmd == OPT::DEDUP_RESTART_DRY || opt_cmd == OPT::DEDUP_RESTART) {
     std::cerr << "OPT::DEDUP_RESTART" << std::endl;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
       cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
       ceph_abort("Bad Rados driver");
     }
-    rgw::dedup::cluster::dedup_restart_scan(store, dpp());
+    rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
   }
 
   if (opt_cmd == OPT::DEDUP_PAUSE) {

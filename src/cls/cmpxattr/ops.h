@@ -22,7 +22,7 @@
 #include "common/ceph_time.h"
 
 namespace cls::cmpxattr {
-
+  constexpr const char* RGW_DEDUP_ATTR_EPOCH = "rgw.dedup.attr.epoch";
   struct cmp_vals_set_vals_op {
     Mode mode;
     Op comparison;
@@ -66,17 +66,16 @@ namespace cls::cmpxattr {
       return this->flags;
     }
 
-    inline void set_lock()              {this->flags |= LOCK_UPDATE_OP_SET_LOCK; }
-    inline bool is_set_lock() const     { return ((flags & LOCK_UPDATE_OP_SET_LOCK) != 0); }
-
-    inline void set_epoch()              {this->flags |= LOCK_UPDATE_OP_SET_EPOCH; }
-    inline bool is_set_epoch() const     { return ((flags & LOCK_UPDATE_OP_SET_EPOCH) != 0); }
-
+    inline bool is_set_lock() const {
+      return ((flags & LOCK_UPDATE_OP_SET_LOCK) != 0);
+    }
+    inline bool is_set_epoch() const {
+      return ((flags & LOCK_UPDATE_OP_SET_EPOCH) != 0);
+    }
     inline bool is_mark_completed() const {
       return ((flags & LOCK_UPDATE_OP_MARK_COMPLETED) != 0);
     }
 
-    inline void set_urgent_msg()      {this->flags |= LOCK_UPDATE_OP_URGENT_MSG; }
     inline bool is_urgent_msg() const {
       return ((flags & LOCK_UPDATE_OP_URGENT_MSG) != 0);
     }
@@ -95,6 +94,37 @@ namespace cls::cmpxattr {
   {
     DECODE_START(1, bl);
     decode(o.flags, bl);
+    DECODE_FINISH(bl);
+  }
+
+  //===========================================================================
+  enum dedup_req_type_t {
+    DEDUP_TYPE_NONE    = 0,
+    DEDUP_TYPE_DRY_RUN = 1,
+    DEDUP_TYPE_FULL    = 2
+  };
+  struct dedup_epoch_t {
+    uint32_t serial;
+    int dedup_type;
+    utime_t time;
+  };
+  std::ostream& operator<<(std::ostream &out, const dedup_epoch_t &d);
+
+  inline void encode(const dedup_epoch_t& o, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode(o.serial, bl);
+    encode(o.dedup_type, bl);
+    encode(o.time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  inline void decode(dedup_epoch_t& o, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    decode(o.serial, bl);
+    decode(o.dedup_type, bl);
+    decode(o.time, bl);
     DECODE_FINISH(bl);
   }
 

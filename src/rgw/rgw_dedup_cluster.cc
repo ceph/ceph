@@ -32,6 +32,21 @@ namespace rgw::dedup {
 
   const uint64_t URGENT_MSG_ID_VAL = 0x00FFFFFFFFFFFFFFULL;
 
+  static int get_epoch(rgw::sal::RadosStore *store,
+		       const DoutPrefixProvider *dpp,
+		       dedup_epoch_t *p_epoch, /* OUT */
+		       const char *caller);
+  static int set_epoch(rgw::sal::RadosStore *store,
+		       const std::string &cluster_id,
+		       const DoutPrefixProvider *dpp);
+  static int collect_shard_stats(librados::IoCtx *p_ioctx,
+				 const DoutPrefixProvider *dpp,
+				 utime_t epoch_time,
+				 unsigned shards_count,
+				 const char *prefix,
+				 bufferlist bl_arr[],
+				 named_time_lock_t *ntl_arr);
+
   //---------------------------------------------------------------------------
   static int set_cluster_id(char buff[], unsigned buff_size, uint64_t id)
   {
@@ -58,7 +73,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void cluster::assign_cluster_id()
+  static void assign_cluster_id(std::string & cluster_id,
+				const DoutPrefixProvider *dpp)
   {
     // choose a 14 Bytes Random ID (so strings won't use dynamic allocation)
     // Seed with a real random value, if available
@@ -72,9 +88,9 @@ namespace rgw::dedup {
     }
     char buff[15];
     int n = set_cluster_id(buff, sizeof(buff), rand_high);
-    d_cluster_id.insert(0, buff, n);
+    cluster_id.insert(0, buff, n);
 
-    ldpp_dout(dpp, 1) << __func__ << "::" << d_cluster_id << "::" << dendl;
+    ldpp_dout(dpp, 1) << __func__ << "::" << cluster_id << "::" << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -124,7 +140,7 @@ namespace rgw::dedup {
     d_was_initialized = false;
     // use current time as seed for random generator
     std::srand(std::time(nullptr));
-    assign_cluster_id();
+    assign_cluster_id(d_cluster_id, dpp);
   }
 
   //---------------------------------------------------------------------------
@@ -146,13 +162,26 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int cluster::init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx)
+  int cluster::init(rgw::sal::RadosStore *store,
+		    librados::IoCtx *p_ioctx,
+		    dedup_epoch_t *p_epoch,
+		    bool init_epoch)
   {
+    int ret;
     reset();
-    if (set_epoch(store) != 0) {
-      return -1;
+    if (init_epoch) {
+      ret = set_epoch(store, d_cluster_id, dpp);
+      if (ret != 0) {
+	ldpp_dout(dpp, 1) << "failed set_epoch()! ret=" << ret
+			  << "::" << cpp_strerror(ret) << dendl;
+	return ret;
+      }
     }
-
+    ret = get_epoch(store, dpp, p_epoch, __func__);
+    if (ret != 0) {
+      return ret;
+    }
+    d_epoch_time = p_epoch->time;
     cleanup_prev_run(p_ioctx);
     create_shard_tokens(p_ioctx, MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
     create_shard_tokens(p_ioctx, MAX_MD5_SHARD, MD5_SHARD_PREFIX);
@@ -192,9 +221,9 @@ namespace rgw::dedup {
 	  continue;
 	}
 	utime_t mtime(tspec);
-	if (d_epoch < mtime) {
+	if (d_epoch_time < mtime) {
 	  ldpp_dout(dpp, 10) << __func__ << "::skipping new obj! "
-			     << "::EPOCH={" << d_epoch.tv.tv_sec << ":" << d_epoch.tv.tv_nsec << "} "
+			     << "::EPOCH={" << d_epoch_time.tv.tv_sec << ":" << d_epoch_time.tv.tv_nsec << "} "
 			     << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
 	  skipped_count++;
 	  continue;
@@ -219,10 +248,10 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int cluster::get_epoch(rgw::sal::RadosStore *store,
-			 const DoutPrefixProvider *dpp,
-			 utime_t *p_epoch, /* OUT */
-			 const char *caller)
+  static int get_epoch(rgw::sal::RadosStore *store,
+		       const DoutPrefixProvider *dpp,
+		       dedup_epoch_t *p_epoch, /* OUT */
+		       const char *caller)
   {
     auto& pool = store->svc()->zone->get_zone_params().log_pool;
     librados::IoCtx ioctx;
@@ -235,7 +264,7 @@ namespace rgw::dedup {
 
     std::string oid(DEDUP_EPOCH_TOKEN);
     bufferlist bl;
-    ret = ioctx.getxattr(oid, "epoch", bl);
+    ret = ioctx.getxattr(oid, RGW_DEDUP_ATTR_EPOCH, bl);
     if (ret > 0) {
       try {
 	auto p = bl.cbegin();
@@ -244,9 +273,7 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 0) << __func__ << "::failed epoch decode!" << dendl;
       }
       if (caller) {
-	ldpp_dout(dpp, 1) << __func__ << "::" << caller
-			  << "::EPOCH={" << p_epoch->tv.tv_sec
-			  << ":" << p_epoch->tv.tv_nsec << "}" << dendl;
+	ldpp_dout(dpp, 1) << __func__ << "::" << caller<< "::" << *p_epoch << dendl;
       }
       return 0;
     }
@@ -254,12 +281,14 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::" << (caller ? caller : "")
 			<< "::failed ioctx.getxattr() with: "
 			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
-      return -1;
+      return ret;
     }
   }
 
   //---------------------------------------------------------------------------
-  int cluster::set_epoch(rgw::sal::RadosStore *store)
+  static int set_epoch(rgw::sal::RadosStore *store,
+		       const std::string &cluster_id,
+		       const DoutPrefixProvider *dpp)
   {
     std::string oid(DEDUP_EPOCH_TOKEN);
     auto sysobj = store->svc()->sysobj;
@@ -277,16 +306,19 @@ namespace rgw::dedup {
       // try and take ownership
     }
     else{
-      ldpp_dout(dpp, 0) << "ERROR: failed to write log obj " << oid << " with: "
-			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "::ERROR: failed to write log obj " << oid
+			<<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
       return ret;
     }
 
+    // TBD: CMP-SWAP with null CMP
     librados::ObjectWriteOperation op;
     utime_t max_lock_duration(EPOCH_MAX_LOCK_DURATION_SEC, 0);
-    operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK |
-			       operation_flags_t::LOCK_UPDATE_OP_SET_EPOCH);
-    lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl,
+    operation_flags_t epoch_flag;
+    epoch_flag = operation_flags_t::LOCK_UPDATE_OP_SET_EPOCH;
+    ldpp_dout(dpp, 0) << __func__ << "::LOCK_UPDATE_OP_SET_EPOCH" << dendl;
+    operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK | epoch_flag);
+    lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl,
 		0, 0, URGENT_MSG_NONE);
     librados::IoCtx ioctx;
     ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), pool, ioctx);
@@ -299,17 +331,17 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 10) << __func__ << "::send Cluster Lock CLS" << dendl;
     ret = ioctx.operate(oid, &op);
     if (ret == 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::Epoch object was reset" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::Epoch object was written" << dendl;
     }
     else if (ret == -EBUSY) {
       ldpp_dout(dpp, 1) << __func__ << "::Accept existing Epoch object" << dendl;
       ret = 0;
     }
     else {
-      ldpp_dout(dpp, 0) << __func__ << "::failed ioctx.operate() ret="
-			<< ret << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "::failed ioctx.operate() with: "
+			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
     }
-    return get_epoch(store, dpp, &d_epoch, __func__);
+    return ret;
   }
 
   //---------------------------------------------------------------------------
@@ -326,7 +358,7 @@ namespace rgw::dedup {
       bool exclusive = true;
       int ret = p_ioctx->create(oid, exclusive);
       if (ret >= 0) {
-	ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << " was created!" << dendl;
+	ldpp_dout(dpp, 5) << __func__ << "::oid=" << oid << " was created!" << dendl;
       }
       else if (ret == -EEXIST) {
 	ldpp_dout(dpp, 10) << "failed ioctx.create(" << oid << ") -EEXIST!" << dendl;
@@ -650,12 +682,13 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int cluster::collect_shard_stats(librados::IoCtx *p_ioctx,
-				   const DoutPrefixProvider *dpp,
-				   unsigned shards_count,
-				   const char *prefix,
-				   bufferlist bl_arr[],
-				   named_time_lock_t *ntl_arr)
+  static int collect_shard_stats(librados::IoCtx *p_ioctx,
+				 const DoutPrefixProvider *dpp,
+				 utime_t epoch_time,
+				 unsigned shards_count,
+				 const char *prefix,
+				 bufferlist bl_arr[],
+				 named_time_lock_t *ntl_arr)
   {
     unsigned count = 0;
     char buff[16];
@@ -665,6 +698,20 @@ namespace rgw::dedup {
       std::string oid(buff, prefix_len + n);
       ldpp_dout(dpp, 10) << __func__ << "::checking object: " << oid << dendl;
 
+      uint64_t size;
+      struct timespec tspec;
+      if (p_ioctx->stat2(oid, &size, &tspec) != 0) {
+	ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
+	continue;
+      }
+      utime_t mtime(tspec);
+      if (epoch_time > mtime) {
+	ldpp_dout(dpp, 10) << __func__ << "::skipping old obj! "
+			   << "::EPOCH={" << epoch_time.tv.tv_sec << ":" << epoch_time.tv.tv_nsec << "} "
+			   << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
+	continue;
+      }
+
       bufferlist bl;
       int ret = p_ioctx->getxattr(oid, "cluster_lock", bl);
       if (ret > 0) {
@@ -672,6 +719,11 @@ namespace rgw::dedup {
 	try {
 	  auto p = bl.cbegin();
 	  decode(ntl, p);
+	  if (ntl.urgent_msg != URGENT_MSG_NONE) {
+	    // TBD: should we abort opertions??
+	    ldpp_dout(dpp, 0) << __func__ << "::shard=" << shard
+			      << " urgent message=" << ntl.urgent_msg << dendl;
+	  }
 	  ntl_arr[shard] = ntl;
 	}
 	catch (const buffer::error&) {
@@ -797,6 +849,11 @@ namespace rgw::dedup {
     uint64_t s3_bytes_before    = wrk_stats_sum.ingress_obj_bytes;
     uint64_t s3_dedup_bytes     = md5_stats_sum.duplicated_blocks_bytes;
     uint64_t s3_bytes_after     = s3_bytes_before - s3_dedup_bytes;
+    // skipped objects should be accounted for
+    // TBD: double check the logic!
+    uint64_t skipped_bytes = (wrk_stats_sum.ingress_skip_too_small_bytes +
+			      wrk_stats_sum.non_default_storage_class_objs_bytes);
+    s3_bytes_after -= skipped_bytes;
     if (rados_bytes_before > s3_bytes_after && s3_bytes_after) {
       double dedup_ratio = (double)rados_bytes_before/s3_bytes_after;
       std::cout << "rados_bytes_before = " << rados_bytes_before << "\n";
@@ -810,8 +867,7 @@ namespace rgw::dedup {
   int cluster::collect_all_shard_stats(rgw::sal::RadosStore *store,
 				       const DoutPrefixProvider *dpp)
   {
-    utime_t epoch;
-    ldpp_dout(dpp, 10) << __func__ << "::epoch=" << epoch << dendl;
+    dedup_epoch_t epoch;
     if (get_epoch(store, dpp, &epoch, nullptr) != 0) {
       return -1;
     }
@@ -830,7 +886,7 @@ namespace rgw::dedup {
       bool show_time = true;
       bufferlist bl_arr[MAX_WORK_SHARD];
       named_time_lock_t ntl_arr[MAX_WORK_SHARD];
-      int cnt = collect_shard_stats(p_ioctx, dpp, MAX_WORK_SHARD, WORKER_SHARD_PREFIX, bl_arr, ntl_arr);
+      int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_WORK_SHARD, WORKER_SHARD_PREFIX, bl_arr, ntl_arr);
       if (cnt != MAX_WORK_SHARD) {
 	std::cerr << ">>>Partial work shard stats recived " << cnt << " / "
 		  << (int)MAX_WORK_SHARD << "\n" << std::endl;
@@ -854,7 +910,7 @@ namespace rgw::dedup {
 	collect_single_shard_stats(dpp, owner_map, ntl_arr, shard, &show_time, "WORKER");
       }
       std::cout << "Aggreagted work-shard stats counters:\n" << wrk_stats_sum << std::endl;
-      md5_start_time = show_time_func(epoch, show_time, owner_map);
+      md5_start_time = show_time_func(epoch.time, show_time, owner_map);
     }
 
     if (completed_work_shards_count == MAX_WORK_SHARD) {
@@ -863,7 +919,7 @@ namespace rgw::dedup {
       md5_stats_t md5_stats_sum;
       bufferlist bl_arr[MAX_WORK_SHARD];
       named_time_lock_t ntl_arr[MAX_WORK_SHARD];
-      int cnt = collect_shard_stats(p_ioctx, dpp, MAX_MD5_SHARD, MD5_SHARD_PREFIX, bl_arr, ntl_arr);
+      int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_MD5_SHARD, MD5_SHARD_PREFIX, bl_arr, ntl_arr);
       if (cnt != MAX_MD5_SHARD) {
 	std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
 		  << (int)MAX_MD5_SHARD << "\n" << std::endl;
@@ -975,35 +1031,58 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
+				  bool dry_run,
 				  const DoutPrefixProvider *dpp)
   {
+    dedup_epoch_t old_epoch;
+    // store the previous epoch for cmp-swap
+    int ret = get_epoch(store, dpp, &old_epoch, __func__);
+    if (ret != 0) {
+      return ret;
+    }
+
     // first abort all dedup work!
     dedup_control(store, dpp, URGENT_MSG_ABORT);
-
     // wait 6 second for all workers to process the abort request
     std::this_thread::sleep_for(std::chrono::seconds(6));
-
-    std::string oid(DEDUP_EPOCH_TOKEN);
     auto& pool = store->svc()->zone->get_zone_params().log_pool;
     librados::IoCtx ioctx;
-    int ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), pool, ioctx);
+    ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), pool, ioctx);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:"
-			<< pool.to_str() << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::failed rgw_init_ioctx" << dendl;
       return -EIO;
     }
 
-    ldpp_dout(dpp, 1) << __func__ << "::Remove Epoch Object::" << oid << dendl;
-    return ioctx.remove(oid);
+    ldpp_dout(dpp, 1) << __func__ << (dry_run ?"::DRY RUN":"::FULL DEDUP") << dendl;
+    int dedup_type = (dry_run ? DEDUP_TYPE_DRY_RUN : DEDUP_TYPE_FULL);
+    dedup_epoch_t new_epoch = { old_epoch.serial + 1, dedup_type, ceph_clock_now()};
+    bufferlist old_epoch_bl, new_epoch_bl;
+    encode(old_epoch, old_epoch_bl);
+    encode(new_epoch, new_epoch_bl);
+    ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, old_epoch_bl}};
+    std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
+    librados::ObjectWriteOperation op;
+    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
+    ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
+    std::string oid(DEDUP_EPOCH_TOKEN);
+    ret = ioctx.operate(oid, &op);
+    if (ret == 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::Epoch object was reset" << dendl;
+    }
+    else {
+      ldpp_dout(dpp, 0) << __func__ << "::Failed to reset EPOCH object with: "
+			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+    }
+    return ret;
   }
 
   //---------------------------------------------------------------------------
   bool cluster::can_start_new_scan(rgw::sal::RadosStore *store,
-				   const utime_t &epoch,
+				   const utime_t &epoch_time,
 				   const DoutPrefixProvider *dpp)
   {
-    utime_t new_epoch;
-    ldpp_dout(dpp, 10) << __func__ << "::epoch=" << epoch << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::epoch=" << epoch_time << dendl;
+    dedup_epoch_t new_epoch;
     if (get_epoch(store, dpp, &new_epoch, nullptr) != 0) {
       ldpp_dout(dpp, 1) << __func__ << "::No Epoch Object::"
 			<< "::scan can be restarted!\n\n\n" << dendl;
@@ -1011,29 +1090,30 @@ namespace rgw::dedup {
       return true;
     }
 
-    if (new_epoch <= epoch) {
-      if (new_epoch == epoch) {
+    if (new_epoch.time <= epoch_time) {
+      if (new_epoch.time == epoch_time) {
 	ldpp_dout(dpp, 10) << __func__ << "::Epoch hasn't change - > Do not restart scan!!" << dendl;
       }
       else {
 	ldpp_dout(dpp, 1) << __func__ << "::Do not restart scan!\n    epoch="
-			  << epoch << "\nnew_epoch=" << new_epoch << dendl;
+			  << epoch_time << "\nnew_epoch="<< new_epoch.time << dendl;
       }
       return false;
     }
     // allow members to join within a 30 sec limit
     utime_t limit = {30, 0};
     utime_t now = ceph_clock_now();
-    ldpp_dout(dpp, 1) << __func__ << "\n::new_epoch=" << new_epoch << "\n::now      =" << now << dendl;
-    if ((now > new_epoch) && ((now - new_epoch) < limit)) {
+    ldpp_dout(dpp, 1) << __func__ << "\n::new_epoch=" << new_epoch.time
+		      << "\n::now      =" << now << dendl;
+    if ((now > new_epoch.time) && ((now - new_epoch.time) < limit)) {
       ldpp_dout(dpp, 1) << __func__ << "::Epoch is less than 30 seconds old!"
 			<< " Restart scan\n\n\n" << dendl;
       return true;
     }
-    ldpp_dout(dpp, 1) << "\n::new_epoch - now = " << (new_epoch - now)
+    ldpp_dout(dpp, 1) << "\n::new_epoch - now = " << (new_epoch.time - now)
 		      << "\n::limit           = " << limit << dendl;
 
-    if (new_epoch > now) {
+    if (new_epoch.time > now) {
       ldpp_dout(dpp, 1) << ":new_epoch > now = TRUE " << dendl;
     }
     return false;

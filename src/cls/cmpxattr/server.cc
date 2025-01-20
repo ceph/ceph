@@ -327,17 +327,22 @@ static int lock_update(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   }
 
   if (op.op_flags.is_set_epoch()) {
-    utime_t epoch = ceph_clock_now();
-    bufferlist time_bl;
-    encode(epoch, time_bl);
-    int ret = cls_cxx_setxattr(hctx, "epoch", &time_bl);
+    dedup_epoch_t epoch;
+    ceph::bufferlist bl;
+    epoch.serial = 0;
+    epoch.time = ceph_clock_now();
+    epoch.dedup_type = DEDUP_TYPE_NONE;
+
+    bufferlist epoch_bl;
+    encode(epoch, epoch_bl);
+    int ret = cls_cxx_setxattr(hctx, RGW_DEDUP_ATTR_EPOCH, &epoch_bl);
     if (ret != 0) {
       CLS_LOG(4, "%s::failed to set xattr epoch ret=%d (%s)",
 	      __func__, ret, cpp_strerror(ret).c_str());
       return ret;
     }
     CLS_LOG(20, "%s::successfully set epoch xattr - {%d:%d}",
-	    __func__, epoch.tv.tv_sec, epoch.tv.tv_nsec);
+	    __func__, epoch.time.tv.tv_sec, epoch.time.tv.tv_nsec);
   }
 
   return 0;
