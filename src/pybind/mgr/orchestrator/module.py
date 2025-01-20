@@ -1155,13 +1155,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 result_str += f'{indent}{k}: {v}\n'
         return result_str
 
-    @_cli_read_command('orch cert-store reload')
+    @_cli_read_command('orch certmgr reload')
     def _cert_store_reload(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_reload()
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
-    @_cli_read_command('orch cert-store cert ls')
+    @_cli_read_command('orch certmgr cert ls')
     def _cert_store_cert_ls(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_cert_ls()
         cert_ls = raise_if_exception(completion)
@@ -1171,7 +1171,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(cert_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
-    @_cli_read_command('orch cert-store entity ls')
+    @_cli_read_command('orch certmgr entity ls')
     def _cert_store_entity_ls(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_entity_ls()
         entity_ls = raise_if_exception(completion)
@@ -1181,7 +1181,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = f'{entity_ls}'
             return HandleCommandResult(stdout=result_str)
 
-    @_cli_read_command('orch cert-store cert check')
+    @_cli_read_command('orch certmgr cert check')
     def _cert_store_cert_check(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_cert_check()
         cert_ls = raise_if_exception(completion)
@@ -1191,7 +1191,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(cert_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
-    @_cli_read_command('orch cert-store key ls')
+    @_cli_read_command('orch certmgr key ls')
     def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
         completion = self.cert_store_key_ls()
         key_ls = raise_if_exception(completion)
@@ -1201,7 +1201,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(key_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
-    @_cli_read_command('orch cert-store get cert')
+    @_cli_read_command('orch certmgr cert get')
     def _cert_store_get_cert(
         self,
         entity: str,
@@ -1219,7 +1219,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         cert = raise_if_exception(completion)
         return HandleCommandResult(stdout=cert)
 
-    @_cli_read_command('orch cert-store get key')
+    @_cli_read_command('orch certmgr key get')
     def _cert_store_get_key(
         self,
         entity: str,
@@ -1237,7 +1237,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         key = raise_if_exception(completion)
         return HandleCommandResult(stdout=key)
 
-    @_cli_write_command('orch cert-store cert-key set')
+    @_cli_write_command('orch certmgr cert-key set')
     def _cert_store_cert_key_set(
         self,
         entity: str,
@@ -1267,7 +1267,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
-    @_cli_write_command('orch cert-store set cert')
+    @_cli_write_command('orch certmgr set cert')
     def _cert_store_set_cert(
         self,
         entity: str,
@@ -1290,7 +1290,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
-    @_cli_write_command('orch cert-store set cert-key')
+    @_cli_write_command('orch certmgr set cert-key')
     def _cert_store_set_key(
         self,
         entity: str,

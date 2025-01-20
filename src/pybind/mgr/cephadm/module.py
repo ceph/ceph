@@ -3366,7 +3366,7 @@ Then run the following:
                 else:
                     raise OrchestratorError(f"Invalid certificate: {cert_info.error_info}")
         else:
-            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch cert-store entity ls' to list valid entities.")
+            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch certmgr entity ls' to list valid entities.")
 
     @handle_orch_error
     def cert_store_set_cert(
