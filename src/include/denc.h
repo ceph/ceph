@@ -848,7 +848,7 @@ bufferlist_layout_t::dezeroize(const ceph::buffer::list& v)
   bufferlist_layout_t layout;
   unsigned off = 0;
   for (const auto& node : v.buffers()) {
-    if (node.is_zero()) {
+    if (node.is_zero_fast()) {
       layout.zero_regions_in_orig_bl.emplace_back(off, node.length());
     } else {
       new_v.append(node);

@@ -645,10 +645,14 @@ static ceph::spinlock debug_lock;
     return 0;
   }
 
+  bool buffer::ptr::is_zero_fast() const
+  {
+    return dynamic_cast<const buffer::raw_zeros*>(_raw) != nullptr;
+  }
+
   bool buffer::ptr::is_zero() const
   {
-    // XXX: this can be optimized to recognize always_zeroed_bptr
-    return mem_is_zero(c_str(), _len);
+    return is_zero_fast() || mem_is_zero(c_str(), _len);
   }
 
   unsigned buffer::ptr_rw::append(char c)
