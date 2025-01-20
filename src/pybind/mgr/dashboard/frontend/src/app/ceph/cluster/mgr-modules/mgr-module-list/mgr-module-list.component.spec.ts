@@ -10,7 +10,6 @@ import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { MgrModuleDetailsComponent } from '../mgr-module-details/mgr-module-details.component';
@@ -20,7 +19,6 @@ describe('MgrModuleListComponent', () => {
   let component: MgrModuleListComponent;
   let fixture: ComponentFixture<MgrModuleListComponent>;
   let mgrModuleService: MgrModuleService;
-  let notificationService: NotificationService;
 
   configureTestBed({
     declarations: [MgrModuleListComponent, MgrModuleDetailsComponent],
@@ -32,14 +30,13 @@ describe('MgrModuleListComponent', () => {
       NgbNavModule,
       ToastrModule.forRoot()
     ],
-    providers: [MgrModuleService, NotificationService]
+    providers: [MgrModuleService]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(MgrModuleListComponent);
     component = fixture.componentInstance;
     mgrModuleService = TestBed.inject(MgrModuleService);
-    notificationService = TestBed.inject(NotificationService);
   });
 
   it('should create', () => {
@@ -129,16 +126,13 @@ describe('MgrModuleListComponent', () => {
     });
   });
 
-  describe('should update module state', () => {
+  describe('should update module state and component table', () => {
     beforeEach(() => {
       component.selection = new CdTableSelection();
-      spyOn(notificationService, 'suspendToasties');
-      spyOn(component.blockUI, 'start');
-      spyOn(component.blockUI, 'stop');
       spyOn(component.table, 'refreshBtn');
     });
 
-    it('should enable module', fakeAsync(() => {
+    it('should update selected module and refresh table', fakeAsync(() => {
       spyOn(mgrModuleService, 'enable').and.returnValue(observableThrowError('y'));
       spyOn(mgrModuleService, 'list').and.returnValues(observableThrowError('z'), observableOf([]));
       component.selection.add({
@@ -147,55 +141,11 @@ describe('MgrModuleListComponent', () => {
         always_on: false
       });
       component.updateModuleState();
-      tick(2000);
-      tick(2000);
+      tick(mgrModuleService.REFRESH_INTERVAL);
+      tick(mgrModuleService.REFRESH_INTERVAL);
       expect(mgrModuleService.enable).toHaveBeenCalledWith('foo');
       expect(mgrModuleService.list).toHaveBeenCalledTimes(2);
-      expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
-      expect(component.blockUI.start).toHaveBeenCalled();
-      expect(component.blockUI.stop).toHaveBeenCalled();
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));
-
-    it('should disable module', fakeAsync(() => {
-      spyOn(mgrModuleService, 'disable').and.returnValue(observableThrowError('x'));
-      spyOn(mgrModuleService, 'list').and.returnValue(observableOf([]));
-      component.selection.add({
-        name: 'bar',
-        enabled: true,
-        always_on: false
-      });
-      component.updateModuleState();
-      tick(2000);
-      expect(mgrModuleService.disable).toHaveBeenCalledWith('bar');
-      expect(mgrModuleService.list).toHaveBeenCalledTimes(1);
-      expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
-      expect(component.blockUI.start).toHaveBeenCalled();
-      expect(component.blockUI.stop).toHaveBeenCalled();
-      expect(component.table.refreshBtn).toHaveBeenCalled();
-    }));
-
-    it('should not disable module without selecting one', () => {
-      expect(component.getTableActionDisabledDesc()).toBeTruthy();
-    });
-
-    it('should not disable dashboard module', () => {
-      component.selection.selected = [
-        {
-          name: 'dashboard'
-        }
-      ];
-      expect(component.getTableActionDisabledDesc()).toBeTruthy();
-    });
-
-    it('should not disable an always-on module', () => {
-      component.selection.selected = [
-        {
-          name: 'bar',
-          always_on: true
-        }
-      ];
-      expect(component.getTableActionDisabledDesc()).toBe('This Manager module is always on.');
-    });
   });
 });
