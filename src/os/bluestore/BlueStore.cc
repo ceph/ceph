@@ -6684,10 +6684,8 @@ int BlueStore::_read_bdev_label(
     decode(expected_crc, p);
   }
   catch (ceph::buffer::error& e) {
-    derr << __func__ << " unable to decode label " << path.c_str()
-         << " at offset " << p.get_off()
-	 << ": " << e.what()
-	 << dendl;
+    derr << __func__ << " " << path.c_str() << " data at " << std::hex << disk_position
+      << std::dec << ", " << "unable to decode label " << dendl;
     return -ENOENT;
   }
   if (crc != expected_crc) {
