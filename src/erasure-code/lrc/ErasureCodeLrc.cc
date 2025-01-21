@@ -14,7 +14,6 @@
  *  version 2.1 of the License, or (at your option) any later version.
  *
  */
-
 #include <cerrno>
 #include <algorithm>
 
@@ -232,7 +231,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
     if (layer.profile.find("m") == layer.profile.end())
       layer.profile["m"] = stringify(layer.coding.size());
     if (layer.profile.find("plugin") == layer.profile.end())
-      layer.profile["plugin"] = "jerasure";
+      layer.profile["plugin"] = "isa";
     if (layer.profile.find("technique") == layer.profile.end())
       layer.profile["technique"] = "reed_sol_van";
     int err = registry.factory(layer.profile["plugin"],
