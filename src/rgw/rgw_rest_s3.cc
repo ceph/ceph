@@ -3980,6 +3980,18 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
   if (ret < 0)
     return ret;
 
+  auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+  if(tag_str) {
+    ret = obj_tags.set_from_string(tag_str);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG) {
+        ret = -EINVAL; // s3 returns only -EINVAL for PUT requests
+      }
+      return ret;
+    }
+  }
+
   //handle object lock
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
