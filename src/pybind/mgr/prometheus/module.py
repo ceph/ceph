@@ -9,7 +9,7 @@ import threading
 import time
 import enum
 from collections import namedtuple
-import tempfile
+from tempfile import NamedTemporaryFile
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
@@ -592,6 +592,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             default=True,
             desc='Do not include perf-counters in the metrics output',
             long_desc='Gathering perf-counters from a single Prometheus exporter can degrade ceph-mgr performance, especially in large clusters. Instead, Ceph-exporter daemons are now used by default for perf-counter gathering. This should only be disabled when no ceph-exporters are deployed.',
+            runtime=True
+        ),
+        Option(
+            name='metrics_tls_enabled',
+            type='bool',
+            default=False,
+            desc='Enable TLS for the metrics endpoint',
             runtime=True
         )
     ]
@@ -1749,22 +1756,13 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_file_sd_config()
 
     def configure(self, server_addr: str, server_port: int) -> None:
-        # TODO(redo): this new check is hacky, we should provide an explit cmd
-        # from cephadm to get/check the security status
-
-        # if cephadm is configured with security then TLS must be used
-        cmd = {'prefix': 'orch prometheus get-credentials'}
-        ret, out, _ = self.mon_command(cmd)
-        if ret == 0 and out is not None:
-            access_info = json.loads(out)
-            if access_info:
-                try:
-                    self.setup_tls_using_cephadm(server_addr, server_port)
-                    return
-                except Exception as e:
-                    self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                       'Falling back to default configuration')
-
+        if self.get_module_option('metrics_tls_enabled'):
+            try:
+                self.setup_tls_config(server_addr, server_port)
+                return
+            except Exception as e:
+                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
+                                    'Falling back to default configuration')
         # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)
 
@@ -1781,8 +1779,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
                      port=server_port, path='/'))
 
-    def setup_tls_using_cephadm(self, server_addr: str, server_port: int) -> None:
-        from mgr_util import verify_tls_files
+    def setup_tls_config(self, server_addr: str, server_port: int) -> None:
         cmd = {'prefix': 'orch certmgr generate-certificates',
                'module_name': 'prometheus',
                'format': 'json'}
@@ -1795,23 +1792,20 @@ class Module(MgrModule, OrchestratorClientMixin):
             return
 
         cert_key = json.loads(out)
-        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file = NamedTemporaryFile()
         self.cert_file.write(cert_key['cert'].encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
-        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file = NamedTemporaryFile()
         self.key_file.write(cert_key['key'].encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
-
-        verify_tls_files(self.cert_file.name, self.key_file.name)
-        cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
             'server.socket_port': server_port,
             'engine.autoreload.on': False,
             'server.ssl_module': 'builtin',
-            'server.ssl_certificate': cert_file_path,
-            'server.ssl_private_key': key_file_path,
+            'server.ssl_certificate': self.cert_file.name,
+            'server.ssl_private_key': self.key_file.name,
         })
         # Publish the URI that others may use to access the service we're about to start serving
         self.set_uri(build_url(scheme='https', host=self.get_server_addr(),
