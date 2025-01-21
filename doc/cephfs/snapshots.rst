@@ -2,12 +2,13 @@
 CephFS Snapshots
 ================
 
-CephFS snapshots create an immutable view of the file system at the point
-in time they are taken. CephFS support snapshots which is managed in a 
-special hidden subdirectory named ``.snap`` .Snapshots are created using
-``mkdir`` inside this directory.
+CephFS snapshots create an immutable view of the file system at the point in
+time they are taken. CephFS snapshots are managed in a special hidden
+subdirectory named ``.snap``. Snapshots are created using ``mkdir`` inside the
+``.snap`` directory.
 
-Snapshots can be exposed with a different name by changing the following client configurations.
+Snapshots can be exposed with different names by changing the following client
+configurations:
 
 - ``snapdirname`` which is a mount option for kernel clients
 - ``client_snapdir`` which is a mount option for ceph-fuse.
@@ -15,19 +16,20 @@ Snapshots can be exposed with a different name by changing the following client 
 Snapshot Creation
 ==================
 
-CephFS snapshot feature is enabled by default on new file systems. To enable 
-it on existing file systems, use the command below.
+The CephFS snapshot feature is enabled by default on new file systems. To
+enable the CephFS snapshot feature on existing file systems, use the command
+below.
 
 .. code-block:: bash
     
     $ ceph fs set <fs_name> allow_new_snaps true
 
-When snapshots are enabled, all directories in CephFS will have a special ``.snap``
-directory. (You may configure a different name with the client snapdir setting if 
-you wish.)
-To create a CephFS snapshot, create a subdirectory under ``.snap`` with a name of 
-your choice. 
-For example, to create a snapshot on directory ``/file1/``, invoke ``mkdir /file1/.snap/snapshot-name``
+When snapshots are enabled, all directories in CephFS will have a special
+``.snap`` directory. (You may configure a different name with the client's
+``snapdir`` setting if you wish.) To create a CephFS snapshot, create a
+subdirectory under ``.snap`` with a name of your choice.  For example, to
+create a snapshot on directory ``/file1/``, run the command ``mkdir
+/file1/.snap/snapshot-name``:
 
 .. code-block:: bash
 
@@ -35,10 +37,10 @@ For example, to create a snapshot on directory ``/file1/``, invoke ``mkdir /file
     $ cd .snap
     $ mkdir my_snapshot
 
-Using snapshot to recover data
+Using Snapshots to Recover Data
 ===============================
 
-Snapshots can also be used to recover some deleted files.
+Snapshots can also be used to recover deleted files:
 
 - ``create a file1 and create snapshot snap1``
 
@@ -75,9 +77,9 @@ Snapshots can also be used to recover some deleted files.
 Snapshot Deletion
 ==================
 
-Snapshots are deleted by invoking ``rmdir`` on the ``.snap`` directory they are
-rooted in. (Attempts to delete a directory which roots the snapshots will fail; 
-you must delete the snapshots first.)
+Snapshots are deleted by running ``rmdir`` on the ``.snap`` directory that they
+are rooted in. (Attempts to delete a directory that roots the snapshots will
+fail. You must delete the snapshots first.)
 
 .. code-block:: bash
 
