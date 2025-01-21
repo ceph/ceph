@@ -8,6 +8,7 @@
 #include "rgw_xml.h"
 #include "rgw_sal.h"
 #include "rgw_op.h"
+#include "rgw_auth_s3.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -481,13 +482,18 @@ int log_record(rgw::sal::Driver* driver,
     bucket_name = full_bucket_name(s->bucket);
   }
 
+  using namespace rgw::auth::s3;
+  string aws_version("-");
+  string auth_type("-");
+  rgw::auth::s3::get_aws_version_and_auth_type(s, aws_version, auth_type);
+
   switch (conf.logging_type) {
     case LoggingType::Standard:
-      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} \"{}\" {} {} {} {} {} {} {} {} {}",
         dash_if_empty(bucket_owner),
         dash_if_empty(bucket_name),
         t,
-        "-", // no requester IP
+        s->info.env->get("REMOTE_ADDR", "-"),
         dash_if_empty(user_or_account),
         dash_if_empty(s->req_id),
         op_name,
@@ -502,15 +508,15 @@ int log_record(rgw::sal::Driver* driver,
         dash_if_zero(size),
         "-", // no total time when logging record
         std::chrono::duration_cast<std::chrono::milliseconds>(s->time_elapsed()),
-        "-", // TODO: referer
-        "-", // TODO: user agent
+        s->info.env->get("HTTP_REFERER", "-"),
+        s->info.env->get("HTTP_USER_AGENT", "-"),
         dash_if_empty_or_null(obj, obj->get_instance()),
         s->info.x_meta_map.contains("x-amz-id-2") ? s->info.x_meta_map.at("x-amz-id-2") : "-",
-        "-", // TODO: Signature Version (SigV2 or SigV4)
-        "-", // TODO: SSL cipher. e.g. "ECDHE-RSA-AES128-GCM-SHA256"
-        "-", // TODO: Auth type. e.g. "AuthHeader"
+        aws_version,
+        s->info.env->get("SSL_CIPHER", "-"),
+        auth_type,
         dash_if_empty(fqdn),
-        "-", // TODO: TLS version. e.g. "TLSv1.2" or "TLSv1.3"
+        s->info.env->get("TLS_VERSION", "-"),
         "-", // no access point ARN
         (s->has_acl_header) ? "Yes" : "-");
       break;

@@ -746,6 +746,8 @@ get_v2_signature(CephContext*,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
 
 std::string get_canonical_method(const DoutPrefixProvider *dpp, RGWOpType op_type, const req_info& info);
+
+void get_aws_version_and_auth_type(const req_state* s, string& aws_version, string& auth_type);
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
