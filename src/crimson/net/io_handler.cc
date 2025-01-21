@@ -167,12 +167,12 @@ seastar::future<> IOHandler::send(MessageURef _msg)
   MessageFRef msg = seastar::make_foreign(std::move(_msg));
   auto cc_seq = io_crosscore.prepare_submit();
   auto source_core = seastar::this_shard_id();
+  logger().debug("{} send {} send() to core {} -- {}",
+                 conn, cc_seq, get_shard_id(), *msg);
   // sid may be changed on-the-fly during the submission
   if (source_core == get_shard_id()) {
     return do_send(cc_seq, source_core, std::move(msg));
   } else {
-    logger().trace("{} send() {} is directed to core {} -- {}",
-                   conn, cc_seq, get_shard_id(), *msg);
     return seastar::smp::submit_to(
         get_shard_id(),
         [this, cc_seq, source_core, msg=std::move(msg)]() mutable {
@@ -190,8 +190,8 @@ seastar::future<> IOHandler::send_recheck_shard(
   if (seastar::this_shard_id() == get_shard_id()) {
     return do_send(cc_seq, source_core, std::move(msg));
   } else {
-    logger().debug("{} send_recheck_shard() {} "
-                   "is redirected from core {} to {} -- {}",
+    logger().debug("{} send {} send_recheck_shard() "
+                   "redirected from core {} to {} -- {}",
                    conn, cc_seq, source_core, get_shard_id(), *msg);
     return seastar::smp::submit_to(
         get_shard_id(),
@@ -208,7 +208,7 @@ seastar::future<> IOHandler::do_send(
 {
   assert(seastar::this_shard_id() == get_shard_id());
   if (io_crosscore.proceed_or_wait(cc_seq, source_core)) {
-    logger().trace("{} do_send() got {} from core {}: send message -- {}",
+    logger().debug("{} got {} do_send() from core {} -- {}",
                    conn, cc_seq, source_core, *msg);
     if (get_io_state() != io_state_t::drop) {
       out_pending_msgs.push_back(std::move(msg));
@@ -216,7 +216,7 @@ seastar::future<> IOHandler::do_send(
     }
     return seastar::now();
   } else {
-    logger().debug("{} do_send() got {} from core {}, wait at {} -- {}",
+    logger().debug("{} got {} do_send() from core {}, wait at {} -- {}",
                    conn, cc_seq, source_core,
                    io_crosscore.get_in_seq(source_core),
                    *msg);
@@ -232,12 +232,12 @@ seastar::future<> IOHandler::send_keepalive()
   // may be invoked from any core
   auto cc_seq = io_crosscore.prepare_submit();
   auto source_core = seastar::this_shard_id();
+  logger().debug("{} send {} send_keepalive() to core {}",
+                 conn, cc_seq, get_shard_id());
   // sid may be changed on-the-fly during the submission
   if (source_core == get_shard_id()) {
     return do_send_keepalive(cc_seq, source_core);
   } else {
-    logger().trace("{} send_keepalive() {} is directed to core {}",
-                   conn, cc_seq, get_shard_id());
     return seastar::smp::submit_to(
         get_shard_id(),
         [this, cc_seq, source_core] {
@@ -254,8 +254,8 @@ seastar::future<> IOHandler::send_keepalive_recheck_shard(
   if (seastar::this_shard_id() == get_shard_id()) {
     return do_send_keepalive(cc_seq, source_core);
   } else {
-    logger().debug("{} send_keepalive_recheck_shard() {} "
-                   "is redirected from core {} to {}",
+    logger().debug("{} send {} send_keepalive_recheck_shard() "
+                   "redirected from core {} to {}",
                    conn, cc_seq, source_core, get_shard_id());
     return seastar::smp::submit_to(
         get_shard_id(),
@@ -271,7 +271,7 @@ seastar::future<> IOHandler::do_send_keepalive(
 {
   assert(seastar::this_shard_id() == get_shard_id());
   if (io_crosscore.proceed_or_wait(cc_seq, source_core)) {
-    logger().trace("{} do_send_keeplive() got {} from core {}: need_keepalive={}",
+    logger().debug("{} got {} do_send_keeplive() from core {}: need_keepalive={}",
                    conn, cc_seq, source_core, need_keepalive);
     if (!need_keepalive) {
       need_keepalive = true;
@@ -279,7 +279,7 @@ seastar::future<> IOHandler::do_send_keepalive(
     }
     return seastar::now();
   } else {
-    logger().debug("{} do_send_keepalive() got {} from core {}, wait at {}",
+    logger().debug("{} got {} do_send_keepalive() from core {}, wait at {}",
                    conn, cc_seq, source_core,
                    io_crosscore.get_in_seq(source_core));
     return io_crosscore.wait(cc_seq, source_core
@@ -797,6 +797,7 @@ seastar::future<> IOHandler::set_accepted_sid(
   assert(maybe_prv_shard_states == nullptr);
   shard_states.reset();
   shard_states = shard_states_t::create(sid, io_state_t::none);
+  logger().debug("{} send {} set_accepted_sid() to core {}", conn, cc_seq, sid);
   return seastar::smp::submit_to(sid,
       [this, cc_seq, conn_fref=std::move(conn_fref)]() mutable {
     // must be the first to proceed
