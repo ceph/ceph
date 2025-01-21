@@ -49,7 +49,7 @@ namespace crimson::net {
 IOHandler::IOHandler(ChainedDispatchers &dispatchers,
                      SocketConnection &conn)
   : shard_states(shard_states_t::create(
-        seastar::this_shard_id(), io_state_t::none)),
+        seastar::this_shard_id(), io_state_t::delay)),
     dispatchers(dispatchers),
     conn(conn),
     conn_ref(conn.get_local_shared_foreign_from_this())
@@ -292,7 +292,6 @@ seastar::future<> IOHandler::do_send_keepalive(
 void IOHandler::mark_down()
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  ceph_assert_always(get_io_state() != io_state_t::none);
   need_dispatch_reset = false;
   if (get_io_state() == io_state_t::drop) {
     return;
@@ -355,8 +354,7 @@ void IOHandler::do_set_io_state(
                  fa ? "present" : "N/A", set_notify_out,
                  io_stat_printer{*this});
   ceph_assert_always(!(
-    (new_state == io_state_t::none && prv_state != io_state_t::none) ||
-    (new_state == io_state_t::open && prv_state == io_state_t::open)
+    new_state == io_state_t::open && prv_state == io_state_t::open
   ));
 
   if (prv_state == io_state_t::drop) {
@@ -791,12 +789,12 @@ seastar::future<> IOHandler::set_accepted_sid(
     ConnectionFRef conn_fref)
 {
   assert(seastar::this_shard_id() == get_shard_id());
-  assert(get_io_state() == io_state_t::none);
+  assert(get_io_state() == io_state_t::delay);
   ceph_assert_always(conn_ref);
   conn_ref.reset();
   assert(maybe_prv_shard_states == nullptr);
   shard_states.reset();
-  shard_states = shard_states_t::create(sid, io_state_t::none);
+  shard_states = shard_states_t::create(sid, io_state_t::delay);
   logger().debug("{} send {} set_accepted_sid() to core {}", conn, cc_seq, sid);
   return seastar::smp::submit_to(sid,
       [this, cc_seq, conn_fref=std::move(conn_fref)]() mutable {
@@ -805,7 +803,7 @@ seastar::future<> IOHandler::set_accepted_sid(
 
     logger().debug("{} set accepted sid", conn);
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-    ceph_assert_always(get_io_state() == io_state_t::none);
+    ceph_assert_always(get_io_state() == io_state_t::delay);
     assert(maybe_prv_shard_states == nullptr);
     ceph_assert_always(!conn_ref);
     conn_ref = make_local_shared_foreign(std::move(conn_fref));

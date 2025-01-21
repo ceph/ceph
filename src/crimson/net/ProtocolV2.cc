@@ -1624,7 +1624,7 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   assert(is_socket_valid);
-  trigger_state(state_t::ACCEPTING, io_state_t::none);
+  trigger_state(state_t::ACCEPTING, io_state_t::delay);
   gate.dispatch_in_background("execute_accepting", conn, [this] {
     return seastar::futurize_invoke([this] {
 #ifdef UNIT_TESTS_BUILT
@@ -2190,7 +2190,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
 void ProtocolV2::execute_server_wait()
 {
   ceph_assert_always(is_socket_valid);
-  trigger_state(state_t::SERVER_WAIT, io_state_t::none);
+  trigger_state(state_t::SERVER_WAIT, io_state_t::delay);
   gated_execute("execute_server_wait", conn, [this] {
     return frame_assembler->read_exactly(1
     ).then([this](auto bptr) {
