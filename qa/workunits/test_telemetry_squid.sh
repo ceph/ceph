@@ -1,8 +1,19 @@
 #!/bin/bash -ex
 
+# Set up ident details for cluster
+ceph config set mgr mgr/telemetry/channel_ident true
+ceph config set mgr mgr/telemetry/organization 'ceph-qa'
+ceph config set mgr mgr/telemetry/description 'upgrade test cluster'
+
+#Run preview commands
+ceph telemetry preview
+ceph telemetry preview-device
+ceph telemetry preview-all
+
 # Opt in to new collections right away to avoid "TELEMETRY_CHANGED"
 # warning (see https://tracker.ceph.com/issues/64458)
 ceph telemetry on --license sharing-1-0
+ceph telemetry enable channel perf
 
 # The last_opt_revision remains at 1 since last_opt_revision
 # was phased out for fresh installs of quincy.
@@ -19,8 +30,8 @@ ceph -s
 REPORTED_COLLECTIONS=$(ceph telemetry collection ls)
 NUM_REPORTED_COLLECTIONS=$(echo "$REPORTED_COLLECTIONS" | awk '/^NAME/ {flag=1; next} flag' | wc -l)
 KNOWN_COLLECTIONS=("basic_base" "basic_mds_metadata" "basic_pool_flags" "basic_pool_options_bluestore"
-	           "basic_pool_usage" "basic_rook_v01" "basic_usage_by_class" "crash_base" "device_base"
-		   "ident_base" "perf_memory_metrics" "perf_perf")
+                   "basic_pool_usage" "basic_rook_v01" "basic_usage_by_class" "crash_base"
+                   "device_base" "ident_base" "perf_memory_metrics" "perf_perf")
 
 if ! [[ $NUM_REPORTED_COLLECTIONS == "${#KNOWN_COLLECTIONS[@]}" ]];
 then
@@ -45,8 +56,5 @@ ceph telemetry preview-all
 ceph telemetry show
 ceph telemetry show-device
 ceph telemetry show-all
-
-# Opt out
-ceph telemetry off
 
 echo OK
