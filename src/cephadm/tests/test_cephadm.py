@@ -659,6 +659,22 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
                 ),
                 'expected': None,
             },
+            # ceph image in store have been pulled (new image) since daemon started
+            {
+                'container_info': _container_info(
+                    '7487e763ce4a103a60292a33269bb39d0abfaf688c7793a78251ce6489a9c52d',
+                    'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                    '1b58ca4f6dfd7553d99b923e6b7e8fd0ab4f8ca4db802b81c68de9b6c362ee7a',
+                    '2025-01-17 11:00:44.361121326 -0500 EST',
+                    '',
+                ),
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:d6d1f4ab7148145467d9b632efc89d75710196434cba00aec5571b01e15b8a99|1e6f059b33d7|main|2025-01-21 16:54:41 +0000 UTC
+<none>@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29|1b58ca4f6dfd|<none>|2025-01-16 22:53:46 +0000 UTC
+                    '''
+                ),
+                'expected': '<none>@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',  # YIKES!
+            },
         ],
     )
     @mock.patch('os.listdir', return_value=[])
