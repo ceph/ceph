@@ -31,3 +31,4 @@ overrides:
       - noscrub
       - nodeep-scrub
       - is down
+      - osds down
