@@ -9,7 +9,7 @@ import threading
 import time
 import enum
 from collections import namedtuple
-import tempfile
+from tempfile import NamedTemporaryFile
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
@@ -1767,14 +1767,11 @@ class Module(MgrModule, OrchestratorClientMixin):
             try:
                 security_config = json.loads(out)
                 if security_config.get('security_enabled', False):
-                    self.setup_tls_using_cephadm(server_addr, server_port)
+                    self.setup_tls_config(server_addr, server_port)
                     return
             except Exception as e:
                 self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
                                    'Falling back to default configuration')
-
-        # In any error fallback to plain http mode
-        self.setup_default_config(server_addr, server_port)
 
     def setup_default_config(self, server_addr: str, server_port: int) -> None:
         cherrypy.config.update({
@@ -1789,7 +1786,10 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
                      port=server_port, path='/'))
 
-    def setup_tls_using_cephadm(self, server_addr: str, server_port: int) -> None:
+    def setup_tls_config(self, server_addr: str, server_port: int) -> None:
+        # Temporarily disabling the verify function due to issues.
+        # Please check verify_tls_files below to more information.
+        # from mgr_util import verify_tls_files
         cmd = {'prefix': 'orch certmgr generate-certificates',
                'module_name': 'prometheus',
                'format': 'json'}
@@ -1802,13 +1802,17 @@ class Module(MgrModule, OrchestratorClientMixin):
             return
 
         cert_key = json.loads(out)
-        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file = NamedTemporaryFile()
         self.cert_file.write(cert_key['cert'].encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
-        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file = NamedTemporaryFile()
         self.key_file.write(cert_key['key'].encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
+        # Temporarily disabling the verify function due to issues:
+        # See https://github.com/pyca/bcrypt/issues/694 for details.
+        # Re-enable once the issue is resolved.
+        # verify_tls_files(self.cert_file.name, self.key_file.name)
         cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
 
         cherrypy.config.update({
