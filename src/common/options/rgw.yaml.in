@@ -4260,3 +4260,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lua_max_runtime_per_state
+  type: uint
+  level: advanced
+  desc: Maximum runtime for each Lua state in milliseconds
+  long_desc: Sets the maximum runtime for each Lua state in milliseconds.
+    If exceeded, the script will be terminated. Defaults to 1000 milliseconds (1 second).
+    If set to zero, there is no limit.
+  default: 1000
+  services:
+  - rgw
+  with_legacy: true

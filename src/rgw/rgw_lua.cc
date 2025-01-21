@@ -56,7 +56,8 @@ std::string to_string(context ctx)
 
 bool verify(const std::string& script, std::string& err_msg) 
 {
-  lua_state_guard lguard(0, nullptr); // no memory limit, sice we don't execute the script
+  // no memory and runtime limit, since we don't execute the script
+  lua_state_guard lguard(0, 0, nullptr);
   auto L = lguard.get();
   try {
     open_standard_libs(L);

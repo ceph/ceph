@@ -1613,6 +1613,50 @@ TEST(TestRGWLua, MemoryLimit)
   ASSERT_NE(rc, 0);
 }
 
+TEST(TestRGWLua, LuaRuntimeLimit)
+{
+  std::string script = "print(\"hello world\")";
+  
+  DEFINE_REQ_STATE;
+
+  // runtime should be sufficient
+  s.cct->_conf->rgw_lua_max_runtime_per_state = 1000; // 1 second runtime limit
+  int rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+
+  // no runtime limit
+  s.cct->_conf->rgw_lua_max_runtime_per_state = 0;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  
+  // script should exceed the runtime limit
+  script = R"(
+    local t = 0
+    for i = 1, 1e8 do
+      t = t + i
+    end
+  )";
+ 
+  s.cct->_conf->rgw_lua_max_runtime_per_state = 10; // 10 milliseconds runtime limit
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+
+  s.cct->_conf->rgw_lua_max_runtime_per_state = 0; // no runtime limit
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+
+  // script should exceed the runtime limit
+    script = R"(
+    for i = 1, 10 do
+      os.execute("sleep 1")
+    end
+  )";
+ 
+  s.cct->_conf->rgw_lua_max_runtime_per_state = 5000; // 5 seconds runtime limit
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+}
+
 TEST(TestRGWLua, DifferentContextUser)
 {
   const std::string script = R"(

@@ -21,9 +21,10 @@ The request context script can also access fields in the request and modify cert
 The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_. 
 All Lua language features can be used in all contexts.
 An execution of a script in a context can use up to 500K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
-To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero or a negative number.
+To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero.
+By default, the execution of a Lua script is limited to a maximum runtime of 1000 milliseconds. This limit can be changed using the ``rgw_lua_max_runtime_per_state`` configuration parameter. If a Lua script exceeds this runtime, it will be terminated. To disable the runtime limit, use zero.
 
-By default, all Lua standard libraries are available in the script, however, in order to allow for other Lua modules to be used in the script, we support adding packages to an allowlist:
+By default, all Lua standard libraries are available in the script, however, in order to allow for additional Lua modules to be used in the script, we support adding packages to an allowlist:
 
   - Adding a Lua package to the allowlist, or removing a packge from it does not install or remove it. For the changes to take affect a "reload" command should be called.
   - In addition all packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart.
