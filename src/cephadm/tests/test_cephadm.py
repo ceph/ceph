@@ -643,6 +643,22 @@ class TestCephAdm(object):
                 ),
                 'expected': 'quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508',
             },
+            # ceph images in local store do not match running instance
+            {
+                'container_info': _container_info(
+                    'a1bb549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                    'quay.io/customceph/ceph:foobar',
+                    'b2cc6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
+                    '2024-04-19 11:54:23.97146228 +0000 UTC',
+                    '',
+                ),
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2024-05-08 12:09:33 +0000 UTC
+quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|pacific|2022-03-23 16:29:19 +0000 UTC
+                    '''
+                ),
+                'expected': None,
+            },
         ],
     )
     @mock.patch('os.listdir', return_value=[])
