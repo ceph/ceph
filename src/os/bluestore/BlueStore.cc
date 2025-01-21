@@ -8875,6 +8875,15 @@ int BlueStore::expand_devices(ostream& out)
           << " : size label updated to " << size
           << std::endl;
       }
+      if (bdev_label_multi) {
+        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+        for (uint64_t loc : bdev_label_positions) {
+          if ((loc >= size0) && (loc + lsize <= size)) {
+            bdev_label_valid_locations.push_back(loc);
+          }
+        }
+        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
+      }
     }
     _close_db_and_around();
 
@@ -8889,15 +8898,6 @@ int BlueStore::expand_devices(ostream& out)
     if (fm && fm->is_null_manager()) {
       // we grow the allocation range, must reflect it in the allocation file
       alloc->init_add_free(size0, size - size0);
-      if (bdev_label_multi) {
-        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-        for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
-            bdev_label_valid_locations.push_back(loc);
-          }
-        }
-        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
-      }
       need_to_destage_allocation_file = true;
     }
     umount();
