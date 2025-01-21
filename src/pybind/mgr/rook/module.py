@@ -5,6 +5,7 @@ import threading
 import functools
 import os
 import json
+import base64
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
@@ -81,6 +82,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             type='str',
             default='local',
             desc='storage class name for LSO-discovered PVs',
+        ),
+        Option(
+            'prometheus_tls_secret_name',
+            type='str',
+            default='rook-ceph-prometheus-server-tls',
+            desc='name of tls secret in k8s for prometheus',
+        ),
+        Option(
+            'dashboard_tls_secret_name',
+            type='str',
+            default='rook-ceph-dashboard-server-tls',
+            desc='name of tls secret in k8s for dashboard',
         ),
     ]
 
@@ -639,3 +652,27 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict[Any, Any]:
         return {}
+
+    @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        api_response = None
+        cert, key = "", ""
+        supported_moduels = ['dashboard', 'prometheus']
+        if module_name not in supported_moduels:
+            raise orchestrator.OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
+
+        secret_name = self.get_module_option(f'{module_name}_tls_secret_name')
+        try:
+            api_response = self._k8s_CoreV1_api.read_namespaced_secret(secret_name, self._rook_env.namespace)
+        except ApiException as e:
+            raise orchestrator.OrchestratorError(f'Unable to get certificates for {module_name}, error: {e}')
+
+        if api_response is None:
+            raise orchestrator.OrchestratorError(f'Unable to get certificates for {module_name}')
+        else:
+            cert = base64.b64decode(api_response.data.get('tls.crt','')).decode('utf-8')
+            key = base64.b64decode(api_response.data.get('tls.key', '')).decode('utf-8')
+            if cert == "" or key == "":
+                raise orchestrator.OrchestratorError(f'Unable to parse certificates for {module_name} module')
+
+        return {'cert': cert, 'key': key}
