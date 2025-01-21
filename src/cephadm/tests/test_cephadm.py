@@ -606,46 +606,61 @@ class TestCephAdm(object):
         result = dict_get_join({'a': 1}, 'a')
         assert result == 1
 
+    @pytest.mark.parametrize(
+        'params',
+        [
+            # make sure the right image is selected when container is found
+            {
+                'container_info': _container_info(
+                    '935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                    'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
+                    '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
+                    '2022-04-19 13:45:20.97146228 +0000 UTC',
+                    '',
+                ),
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
+        quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
+        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+                ),
+                'expected': 'quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e',
+            },
+            # make sure first valid image is used when no container_info is found
+            {
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
+        quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
+        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+                ),
+                'expected': 'quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185',
+            },
+            # make sure images without digest are discarded (no container_info is found)
+            {
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@|||
+        quay.io/ceph/ceph@|||
+        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+                ),
+                'expected': 'quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508',
+            },
+        ],
+    )
     @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.logger')
-    def test_infer_local_ceph_image(self, _logger, _listdir):
+    def test_infer_local_ceph_image(self, _logger, _listdir, params):
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeez'
         ctx.container_engine = mock_podman()
 
-        # make sure the right image is selected when container is found
-        cinfo = _container_info('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
-                                 'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
-                                 '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
-                                 '2022-04-19 13:45:20.97146228 +0000 UTC',
-                                 '')
-        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
-        quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
-        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
+        cinfo = params.get('container_info', None)
+        out = params.get('images_output', '')
+        expected = params.get('expected', None)
         with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
             with mock.patch('cephadm.get_container_info', return_value=cinfo):
-                image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
-                assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e'
-
-        # make sure first valid image is used when no container_info is found
-        out = '''quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|main|2022-03-23 16:29:19 +0000 UTC
-        quay.ceph.io/ceph-ci/ceph@sha256:b50b130fcda2a19f8507ddde3435bb4722266956e1858ac395c838bc1dcf1c0e|514e6a882f6e|pacific|2022-03-23 15:58:34 +0000 UTC
-        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
-        with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
-            with mock.patch('cephadm.get_container_info', return_value=None):
-                image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
-                assert image == 'quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185'
-
-        # make sure images without digest are discarded (no container_info is found)
-        out = '''quay.ceph.io/ceph-ci/ceph@|||
-        quay.io/ceph/ceph@|||
-        quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508|666bbfa87e8d|v15.2.5|2020-09-16 14:15:15 +0000 UTC'''
-        with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
-            with mock.patch('cephadm.get_container_info', return_value=None):
-                image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
-                assert image == 'quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508'
-
-
+                image = _cephadm.infer_local_ceph_image(
+                    ctx, ctx.container_engine
+                )
+                assert image == expected
 
     @pytest.mark.parametrize('daemon_filter, by_name, daemon_list, container_stats, output',
         [
