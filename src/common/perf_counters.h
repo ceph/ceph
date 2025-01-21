@@ -85,30 +85,30 @@ public:
     PRIO_DEBUGONLY = 0,
   };
   void add_u64(int key, const char *name,
-	       const char *description=NULL, const char *nick = NULL,
+	       const char *description=nullptr, const char *nick = nullptr,
 	       int prio=0, int unit=UNIT_NONE);
   void add_u64_counter(int key, const char *name,
-		       const char *description=NULL,
-		       const char *nick = NULL,
+		       const char *description=nullptr,
+		       const char *nick = nullptr,
 		       int prio=0, int unit=UNIT_NONE);
   void add_u64_avg(int key, const char *name,
-		   const char *description=NULL,
-		   const char *nick = NULL,
+		   const char *description=nullptr,
+		   const char *nick = nullptr,
 		   int prio=0, int unit=UNIT_NONE);
   void add_time(int key, const char *name,
-		const char *description=NULL,
-		const char *nick = NULL,
+		const char *description=nullptr,
+		const char *nick = nullptr,
 		int prio=0);
   void add_time_avg(int key, const char *name,
-		    const char *description=NULL,
-		    const char *nick = NULL,
+		    const char *description=nullptr,
+		    const char *nick = nullptr,
 		    int prio=0);
   void add_u64_counter_histogram(
     int key, const char* name,
     PerfHistogramCommon::axis_config_d x_axis_config,
     PerfHistogramCommon::axis_config_d y_axis_config,
-    const char *description=NULL,
-    const char* nick = NULL,
+    const char *description=nullptr,
+    const char* nick = nullptr,
     int prio=0, int unit=UNIT_NONE);
 
   void set_prio_default(int prio_)
@@ -160,9 +160,9 @@ public:
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d {
     perf_counter_data_any_d()
-      : name(NULL),
-        description(NULL),
-        nick(NULL),
+      : name(nullptr),
+        description(nullptr),
+        nick(nullptr),
 	 type(PERFCOUNTER_NONE),
 	 unit(UNIT_NONE)
     {}
