@@ -461,6 +461,79 @@ class TestCephAdm(object):
         _cephadm.command_deploy_from(ctx)
         _deploy_daemon.assert_called()
 
+    def test_rgw_exit_timeout(self, funkypatch):
+        """
+        test that rgw exit timeout secs is set properly
+        """
+        funkypatch.patch('cephadm.logger')
+        funkypatch.patch('cephadm.FileLock')
+        _deploy_daemon = funkypatch.patch('cephadm.deploy_daemon')
+        funkypatch.patch('cephadm.make_var_run')
+        funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+        funkypatch.patch('os.mkdir')
+        _migrate_sysctl = funkypatch.patch('cephadm.migrate_sysctl_dir')
+        funkypatch.patch(
+            'cephadm.check_unit',
+            dest=lambda *args, **kwargs: (None, 'running', None),
+        )
+        funkypatch.patch(
+            'cephadm.get_unit_name',
+            dest=lambda *args, **kwargs: 'mon-unit-name',
+        )
+        funkypatch.patch(
+            'cephadm.extract_uid_gid', dest=lambda *args, **kwargs: (0, 0)
+        )
+        _get_container = funkypatch.patch('cephadm.get_container')
+        funkypatch.patch(
+            'cephadm.apply_deploy_config_to_ctx', dest=lambda d, c: None
+        )
+        _fetch_configs = funkypatch.patch(
+            'cephadmlib.context_getters.fetch_configs'
+        )
+        funkypatch.patch(
+            'cephadm.read_configuration_source', dest=lambda c: {}
+        )
+        funkypatch.patch('cephadm.fetch_custom_config_files')
+
+        ctx = _cephadm.CephadmContext()
+        ctx.name = 'rgw.foo.test.abcdef'
+        ctx.fsid = 'b66e5288-d8ea-11ef-b953-525400f9646d'
+        ctx.reconfig = False
+        ctx.container_engine = mock_docker()
+        ctx.allow_ptrace = True
+        ctx.config_json = '-'
+        ctx.osd_fsid = '0'
+        ctx.tcp_ports = '3300 6789'
+        _fetch_configs.return_value = {
+            'rgw_exit_timeout_secs': 200
+        }
+
+        _get_container.return_value = _cephadm.CephContainer.for_daemon(
+            ctx,
+            ident=_cephadm.DaemonIdentity(
+                fsid='b66e5288-d8ea-11ef-b953-525400f9646d',
+                daemon_type='rgw',
+                daemon_id='foo.test.abcdef',
+            ),
+            entrypoint='',
+            args=[],
+            container_args=[],
+            volume_mounts={},
+            bind_mounts=[],
+            envs=[],
+            privileged=False,
+            ptrace=False,
+            host_network=True,
+        )
+
+        def _exit_timeout_secs_checker(ctx, ident, container, uid, gid, **kwargs):
+            argval = ' '.join(container.args)
+            assert '--stop-timeout=200' in argval
+
+        _deploy_daemon.side_effect = _exit_timeout_secs_checker
+        _cephadm.command_deploy_from(ctx)
+        _deploy_daemon.assert_called()
+
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.fetch_custom_config_files')
     def test_write_custom_conf_files(self, _get_config, _logger, cephadm_fs):

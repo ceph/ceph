@@ -118,6 +118,7 @@ def test_spec_octopus(spec_json):
         j_c.pop('objectstore', None)
         j_c.pop('filter_logic', None)
         j_c.pop('anonymous_access', None)
+        j_c.pop('rgw_exit_timeout_secs', None)
         return j_c
 
     assert spec_json == convert_to_old_style_json(spec.to_json())

@@ -1236,6 +1236,7 @@ class RGWSpec(ServiceSpec):
                  generate_cert: bool = False,
                  disable_multisite_sync_traffic: Optional[bool] = None,
                  wildcard_enabled: Optional[bool] = False,
+                 rgw_exit_timeout_secs: int = 120,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1293,6 +1294,8 @@ class RGWSpec(ServiceSpec):
         self.wildcard_enabled = wildcard_enabled
         #: Attributes for <zone-name>.rgw.buckets.data pool created in rgw realm bootstrap command
         self.data_pool_attributes = data_pool_attributes
+        #: How long the RGW will wait to try and complete client requests when told to shut down
+        self.rgw_exit_timeout_secs = rgw_exit_timeout_secs
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
