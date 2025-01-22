@@ -354,6 +354,7 @@ public:
   void link_child(BaseChildNode<T, node_key_t>* child, btreenode_pos_t pos) {
     auto &me = down_cast();
     assert(pos < me.get_size());
+    assert(pos < children.capacity());
     assert(child);
     ceph_assert(!me.is_pending());
     assert(child->valid() && !child->pending());
@@ -372,6 +373,15 @@ public:
     if (size == 0) {
       size = me.get_size();
     }
+    if (me.get_size() == children.capacity()) {
+      // Omap/onode trees don't have fixed max number of entries
+      // in a single node, so we need to be able to adjust the
+      // pointer vector size when necessary.
+      // TODO: the factor of the resizing should be a configuration
+      // item.
+      children.resize(me.get_size() * 2);
+    }
+    assert(me.get_size() < children.capacity());
     auto raw_children = children.data();
     std::memmove(
       &raw_children[offset + 1],
@@ -390,11 +400,9 @@ public:
 
 protected:
   ParentNode(btreenode_pos_t capacity)
-    : children(capacity, nullptr),
-      capacity(capacity) {}
+    : children(capacity, nullptr) {}
   ParentNode(const ParentNode &rhs)
-    : children(rhs.capacity, nullptr),
-      capacity(rhs.capacity) {}
+    : children(rhs.children.capacity(), nullptr) {}
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
     ceph_assert(down_cast().is_stable());
     ceph_assert(dest->is_pending());
@@ -445,6 +453,10 @@ protected:
       &raw_children[offset],
       &raw_children[offset + 1],
       (me.get_size() - offset - 1) * sizeof(BaseChildNode<T, node_key_t>*));
+    if (me.get_size() < (children.capacity() / 3 /*should be parameterized*/)) {
+      children.resize(children.capacity() / 2 /*should be parameterized*/);
+      children.shrink_to_fit();
+    }
   }
 
   void on_rewrite(Transaction &t, T &foreign_extent) {
@@ -922,7 +934,6 @@ private:
 
   std::vector<BaseChildNode<T, node_key_t>*> children;
   std::set<TCachedExtentRef<T>, Comparator> copy_sources;
-  btreenode_pos_t capacity = 0;
 
   // copy dests points from a stable node back to its pending nodes
   // having copy sources at the same tree level, it serves as a two-level index:
