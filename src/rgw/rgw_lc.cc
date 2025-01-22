@@ -2462,7 +2462,7 @@ void RGWLC::start_processor()
   for (int ix = 0; ix < maxw; ++ix) {
     auto worker  =
       std::make_unique<RGWLC::LCWorker>(this /* dpp */, cct, this, ix);
-    worker->create((string{"lifecycle_thr_"} + to_string(ix)).c_str());
+    worker->create((string{"rgw_lc_"} + to_string(ix)).c_str());
     workers.emplace_back(std::move(worker));
   }
 }
