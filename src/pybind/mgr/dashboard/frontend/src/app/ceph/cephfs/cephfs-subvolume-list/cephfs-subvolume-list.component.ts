@@ -34,6 +34,7 @@ import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group
 import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
 import { HealthService } from '~/app/shared/api/health.service';
 import _ from 'lodash';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
 
@@ -251,6 +252,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     this.errorMessage = '';
     this.selectedName = this.selection.first().name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       actionDescription: 'Remove',
       itemNames: [this.selectedName],
       itemDescription: 'Subvolume',

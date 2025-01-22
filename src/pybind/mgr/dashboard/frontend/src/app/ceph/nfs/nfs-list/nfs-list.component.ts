@@ -22,6 +22,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-nfs-list',
@@ -184,6 +185,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const export_id = this.selection.first().export_id;
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`NFS export`,
       itemNames: [`${cluster_id}:${export_id}`],
       submitActionObservable: () =>

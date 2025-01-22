@@ -27,17 +27,39 @@
           </ng-template>
           <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
           <div class="form-group">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     name="confirmation"
-                     id="confirmation"
-                     formControlName="confirmation"
-                     autofocus>
-              <label class="custom-control-label"
-                     for="confirmation"
-                     i18n>Yes, I am sure.</label>
-            </div>
+            <ng-container *ngIf="impact == impactEnum.medium; else highImpactDeletion">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       name="confirmation"
+                       id="confirmation"
+                       formControlName="confirmation"
+                       autofocus>
+                <label class="custom-control-label"
+                       for="confirmation"
+                       i18n>Yes, I am sure.</label>
+              </div>
+            </ng-container>
+            <ng-template #highImpactDeletion>
+              <label i18n
+                     for="name">Resource Name</label>
+              <div class="cd-col-form-input">
+                <input class="form-control"
+                       type="text"
+                       placeholder="Enter resource name to delete"
+                       id="resource_name"
+                       name="resource_name"
+                       formControlName="confirmInput">
+                <span *ngIf="deletionForm.showError('confirmInput', formDir, 'required')"
+                      class="invalid-feedback">
+                  <ng-container i18n>This field is required.</ng-container>
+                </span>
+                <span *ngIf="deletionForm.showError('confirmInput', formDir, 'matchResource')"
+                      class="invalid-feedback">
+                  <ng-container i18n>Enter the correct resource name.</ng-container>
+                </span>
+              </div>
+            </ng-template>
           </div>
         </div>
       </div>

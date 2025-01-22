@@ -38,6 +38,7 @@ import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-rbd-snapshot-list',
@@ -326,6 +327,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   deleteSnapshotModal() {
     const snapshotName = this.selection.selected[0].name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`RBD snapshot`,
       itemNames: [snapshotName],
       submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)

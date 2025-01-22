@@ -35,6 +35,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { HostFormComponent } from './host-form/host-form.component';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = 'hosts';
 
@@ -447,6 +448,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   deleteAction() {
     const hostname = this.selection.first().hostname;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'Host',
       itemNames: [hostname],
       actionDescription: 'remove',

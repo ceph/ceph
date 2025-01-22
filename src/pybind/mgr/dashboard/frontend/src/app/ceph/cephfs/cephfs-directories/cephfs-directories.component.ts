@@ -17,6 +17,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -232,9 +233,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           name: this.actionLabels.DELETE,
           icon: Icons.destroy,
           permission: 'delete',
-          click: () => this.deleteSnapshotModal(),
-          canBePrimary: (selection) => selection.hasSelection,
-          disable: (selection) => !selection.hasSelection
+          click: () => this.deleteSnapshotModal()
         }
       ]
     };
@@ -696,6 +695,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   deleteSnapshotModal() {
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`CephFs Snapshot`,
       itemNames: this.snapshot.selection.selected.map((snapshot: CephfsSnapshot) => snapshot.name),
       submitAction: () => this.deleteSnapshot()

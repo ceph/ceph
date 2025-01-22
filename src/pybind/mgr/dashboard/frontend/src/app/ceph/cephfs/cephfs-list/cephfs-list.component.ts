@@ -26,6 +26,7 @@ import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-moun
 import { map, switchMap } from 'rxjs/operators';
 import { HealthService } from '~/app/shared/api/health.service';
 import { CephfsAuthModalComponent } from '~/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = 'cephfs';
 
@@ -172,6 +173,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   removeVolumeModal() {
     const volName = this.selection.first().mdsmap['fs_name'];
     this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'File System',
       itemNames: [volName],
       actionDescription: 'remove',
