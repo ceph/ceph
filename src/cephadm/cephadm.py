@@ -69,6 +69,10 @@ from cephadmlib.context_getters import (
     get_parm,
     read_configuration_source,
 )
+from cephadmlib.coredumps import (
+    set_coredump_overrides,
+    remove_coredump_overrides,
+)
 from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
@@ -3256,6 +3260,17 @@ def command_unit(ctx: CephadmContext) -> int:
 ##################################
 
 
+def command_set_coredump_overrides(ctx: CephadmContext) -> None:
+    if not ctx.cleanup:
+        set_coredump_overrides(ctx, ctx.fsid, ctx.coredump_max_size)
+        systemd_unit.update_base_ceph_unit_file(ctx, ctx.fsid)
+    else:
+        remove_coredump_overrides(ctx, ctx.fsid)
+        systemd_unit.update_base_ceph_unit_file(ctx, ctx.fsid)
+
+##################################
+
+
 @infer_fsid
 def command_logs(ctx: CephadmContext) -> None:
     ident = identify(ctx)
@@ -5087,6 +5102,30 @@ def _get_parser():
         default='-',
         nargs='?',
         help='Configuration input source file',
+    )
+
+    parser_set_coredump_overrides = subparsers_orch.add_parser(
+        'set-coredump-overrides',
+        help='override coredumpctl max coredump process and external size'
+    )
+    parser_set_coredump_overrides.set_defaults(func=command_set_coredump_overrides)
+    parser_set_coredump_overrides.add_argument(
+        '--fsid',
+        required=True,
+        help='cluster fsid'
+    )
+    parser_set_coredump_overrides.add_argument(
+        '--coredump-max-size',
+        required=False,
+        default='32G',
+        help='custom max coredump size to set. Should be string including unit (e.g. 32G)'
+    )
+    parser_set_coredump_overrides.add_argument(
+        '--cleanup',
+        required=False,
+        default=False,
+        action='store_true',
+        help='Remove max coredump size drop-in and LimitCORE=infinity from unit file'
     )
 
     parser_check_host = subparsers.add_parser(

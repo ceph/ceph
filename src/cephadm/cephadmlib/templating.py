@@ -29,6 +29,7 @@ class Templates(str, enum.Enum):
     cephadm_logrotate_config = 'cephadm.logrotate.config.j2'
     sidecar_run = 'sidecar.run.j2'
     init_ctr_run = 'init_containers.run.j2'
+    coredumpctl_overrides = 'coredumpctl_overrides.j2'
 
     def __str__(self) -> str:
         return self.value
