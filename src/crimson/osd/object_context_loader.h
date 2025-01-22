@@ -219,6 +219,12 @@ public:
     return ret;
   }
 
+  Manager get_obc_manager(ObjectContextRef obc) {
+    Manager ret = get_obc_manager(obc->obs.oi.soid, false);
+    ret.set_state_obc(ret.target_state, obc);
+    return ret;
+  }
+
   Manager get_obc_manager(
     Orderer &orderer, const hobject_t &oid, bool resolve_clone = true) {
     Manager ret = get_obc_manager(oid, resolve_clone);
