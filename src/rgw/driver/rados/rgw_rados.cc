@@ -9708,7 +9708,7 @@ int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucke
   return ret;
 }
 
-bool RGWRados::process_expire_objects(const DoutPrefixProvider *dpp, optional_yield y)
+bool RGWRados::process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y)
 {
   return obj_expirer->inspect_all_shards(dpp, utime_t(), ceph_clock_now(), y);
 }

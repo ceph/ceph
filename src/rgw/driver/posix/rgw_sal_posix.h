@@ -401,6 +401,8 @@ public:
   virtual void finalize(void) override;
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
 
+  virtual bool process_expired_objects(const DoutPrefixProvider *dpp,
+                                       optional_yield y) override;
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
 				 rgw::sal::Object* src_obj, struct req_state* s,
 				 rgw::notify::EventType event_type, optional_yield y,

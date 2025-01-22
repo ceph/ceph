@@ -1887,6 +1887,12 @@ std::unique_ptr<Lifecycle> RadosStore::get_lifecycle(void)
   return std::make_unique<RadosLifecycle>(this);
 }
 
+bool RadosStore::process_expired_objects(const DoutPrefixProvider *dpp,
+	       				 optional_yield y)
+{
+  return getRados()->process_expired_objects(dpp, y);
+}
+
 std::unique_ptr<Notification> RadosStore::get_notification(
   rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name)
 {

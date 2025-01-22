@@ -2010,6 +2010,11 @@ void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
   return next->register_admin_apis(mgr);
 }
 
+bool POSIXDriver::process_expired_objects(const DoutPrefixProvider *dpp,
+	       				                          optional_yield y) {
+  return next->process_expired_objects(dpp, y);
+}
+
 std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,
 			      rgw::sal::Object* src_obj, struct req_state* s,
 			      rgw::notify::EventType event_type, optional_yield y,

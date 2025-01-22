@@ -2322,6 +2322,12 @@ std::unique_ptr<Lifecycle> DaosStore::get_lifecycle(void) {
   return 0;
 }
 
+bool DaosStore::process_expired_objects(const DoutPrefixProvider *dpp,
+	       				optional_yield y) {
+  DAOS_NOT_IMPLEMENTED_LOG(nullptr);
+  return 0;
+}
+
 std::unique_ptr<Notification> DaosStore::get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
     rgw::notify::EventType event_type, const std::string* object_name) {
