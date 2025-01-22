@@ -981,14 +981,16 @@ ReplicatedRecoveryBackend::handle_pull_response(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::_handle_push(
-  pg_shard_t from,
-  PushOp &push_op,
-  PushReplyOp *response,
-  ceph::os::Transaction *t)
+ReplicatedRecoveryBackend::handle_push(
+  Ref<MOSDPGPush> m)
 {
-  LOG_PREFIX(ReplicatedRecoveryBackend::_handle_push);
-  DEBUGDPP("{}", pg);
+  LOG_PREFIX(ReplicatedRecoveryBackend::handle_push);
+  DEBUGDPP("{}", pg, *m);
+
+  PushReplyOp response;
+  ceph::os::Transaction t;
+
+  PushOp& push_op = m->pushes[0]; // TODO: only one push per message for now
 
   bool first = push_op.before_progress.first;
   interval_set<uint64_t> data_zeros;
@@ -1003,7 +1005,7 @@ ReplicatedRecoveryBackend::_handle_push(
   bool complete = (push_op.after_progress.data_complete &&
 		   push_op.after_progress.omap_complete);
   bool clear_omap = !push_op.before_progress.omap_complete;
-  response->soid = push_op.recovery_info.soid;
+  response.soid = push_op.recovery_info.soid;
 
   co_await submit_push_data(
     push_op.recovery_info, first, complete, clear_omap,
@@ -1012,27 +1014,13 @@ ReplicatedRecoveryBackend::_handle_push(
     std::move(push_op.data),
     std::move(push_op.omap_header),
     push_op.attrset,
-    std::move(push_op.omap_entries), t);
+    std::move(push_op.omap_entries), &t);
 
   if (complete) {
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.recovery_info.soid, push_op.recovery_info,
-      false, *t);
+      false, t);
   }
-}
-
-RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_push(
-  Ref<MOSDPGPush> m)
-{
-  LOG_PREFIX(ReplicatedRecoveryBackend::handle_push);
-  DEBUGDPP("{}", pg, *m);
-
-  PushReplyOp response;
-  ceph::os::Transaction t;
-
-  PushOp& push_op = m->pushes[0]; // TODO: only one push per message for now
-  co_await _handle_push(m->from, push_op, &response, &t);
 
   epoch_t epoch_frozen = pg.get_osdmap_epoch();
   DEBUGDPP("submitting transaction", pg);
