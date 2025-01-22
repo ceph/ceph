@@ -1,0 +1,400 @@
+<div cdsCol
+     [columnNumbers]="{md: 4}">
+  <ng-container *cdFormLoading="loading">
+    <form name="rbdForm"
+          #formDir="ngForm"
+          [formGroup]="rbdForm"
+          novalidate>
+
+      <div i18n="form title"
+           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}
+        <cd-help-text>
+          <div *ngIf="action === 'Copy'">{{copyMessage}}
+          </div>
+        </cd-help-text>
+      </div>
+
+      <!-- Parent -->
+      <div class="form-item"
+           *ngIf="rbdForm.getValue('parent')">
+        <cds-text-label for="parent"
+                        i18n>{{ action | titlecase }} from
+          <input cdsText
+                 type="text"
+                 id="parent"
+                 name="parent"
+                 formControlName="parent"
+                 autofocus>
+        </cds-text-label>
+      </div>
+
+      <!-- Name -->
+      <div class="form-item">
+        <cds-text-label [invalid]="!rbdForm.controls['name'].valid && (rbdForm.controls['name'].dirty)"
+                        [invalidText]="nameError"
+                        for="name"
+                        i18n
+                        cdRequiredField="Name">Name
+          <input cdsText
+                 type="text"
+                 placeholder="Name..."
+                 id="name"
+                 name="name"
+                 formControlName="name"
+                 [invalid]="!rbdForm.controls['name'].valid && (rbdForm.controls['name'].dirty)"
+                 autofocus>
+        </cds-text-label>
+        <ng-template #nameError>
+          <span *ngIf="rbdForm.showError('name', formDir, 'required')">
+            <ng-container i18n>This field is required.</ng-container>
+          </span>
+          <span *ngIf="rbdForm.showError('name', formDir, 'pattern')">
+            <ng-container i18n>'/' and '@' are not allowed.</ng-container>
+          </span>
+        </ng-template>
+      </div>
+
+      <!-- Pool -->
+      <div class="form-item"
+           (change)="onPoolChange($event.target.value)">
+        <cds-text-label for="pool"
+                        i18n
+                        *ngIf="mode === 'editing' || !poolPermission.read">Pool
+          <input cdsText
+                 type="text"
+                 placeholder="Pool name..."
+                 id="pool"
+                 name="pool"
+                 formControlName="pool">
+        </cds-text-label>
+        <cds-select label="Pool"
+                    for="pool"
+                    name="pool"
+                    id="pool"
+                    formControlName="pool"
+                    cdRequiredField="Pool"
+                    [invalid]="!rbdForm.controls['pool'].valid && (rbdForm.controls['pool'].dirty)"
+                    [invalidText]="poolError"
+                    *ngIf="mode !== 'editing' && poolPermission.read">
+          <option *ngIf="pools === null"
+                  [ngValue]="null"
+                  i18n>Loading...</option>
+          <option *ngIf="pools !== null && pools.length === 0"
+                  [ngValue]="null"
+                  i18n>-- No block pools available --</option>
+          <option *ngIf="pools !== null && pools.length > 0"
+                  [ngValue]="null"
+                  i18n>-- Select a pool --</option>
+          <option *ngFor="let pool of pools"
+                  [value]="pool.pool_name">{{ pool.pool_name }}</option>
+        </cds-select>
+        <ng-template #poolError>
+          <span *ngIf="rbdForm.showError('pool', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Mirroring -->
+      <div class="form-item">
+        <cds-checkbox id="mirroring"
+                      name="mirroring"
+                      formControlName="mirroring"
+                      (checkedChange)="setMirrorMode()"
+                      i18n>Mirroring
+          <cd-help-text>Allow data to be asynchronously mirrored between two Ceph clusters</cd-help-text>
+
+        </cds-checkbox>
+        <cd-alert-panel *ngIf="showMirrorDisableMessage"
+                        spacingClass="mt-2"
+                        [showTitle]="false"
+                        type="info">Mirroring can not be disabled on <b>&nbsp;Pool&nbsp;</b> mirror mode.
+                                    You need to change the mirror mode to enable this option.
+        </cd-alert-panel>
+        <cd-alert-panel *ngIf="currentPoolMirrorMode === 'disabled'"
+                        type="info"
+                        [showTitle]="false"
+                        spacingClass="mt-2"
+                        actionName="Set mode"
+                        (action)="onAlertAction($event)">
+            You need to set&nbsp;<b>mirror mode</b>&nbsp;in the selected pool to enable mirroring.
+        </cd-alert-panel>
+      </div>
+
+      <!-- Mirroring Modes -->
+      <div *ngIf="mirroring && currentPoolMirrorMode !== 'disabled'"
+           class="form-item">
+        <cds-radio-group formControlName="mirroringMode"
+                         name="mirroringMode">
+          <cds-radio *ngFor="let option of mirroringOptions"
+                     [value]="option.value"
+                     [id]="option.value"
+                     (change)="setExclusiveLock()"
+                     [disabled]="shouldDisable(option.value)">
+            {{ option.value | titlecase }}
+            <cd-helper> {{ option.text}} </cd-helper>
+          </cds-radio>
+        </cds-radio-group>
+        <cd-alert-panel *ngIf="currentPoolMirrorMode === 'pool' && mode !== 'editing'"
+                        type="info"
+                        [showTitle]="false"
+                        spacingClass="mt-2"
+                        actionName="Set mode"
+                        (action)="onAlertAction($event)"
+                        i18n>
+          You need to set mode as&nbsp;<b>Image</b>&nbsp;in the selected pool to enable snapshot mirroring.
+        </cd-alert-panel>
+      </div>
+
+      <!-- Snapshot Schedule Interval -->
+      <div class="form-item"
+           *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+        <cds-text-label for="schedule"
+                        helperText="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror"
+                        cdRequiredField="Schedule Interval"
+                        [invalid]="!rbdForm.controls['schedule'].valid && (rbdForm.controls['schedule'].dirty)"
+                        [invalidText]="scheduleError"
+                        i18n>Schedule Interval
+          <input cdsText
+                 type="text"
+                 placeholder="e.g., 12h or 1d or 10m"
+                 id="schedule"
+                 name="schedule"
+                 formControlName="schedule"
+                 [disabled]="(peerConfigured === false) ? true : null"
+                 [invalid]="!rbdForm.controls['schedule'].valid && (rbdForm.controls['schedule'].dirty)">
+        </cds-text-label>
+        <ng-template #scheduleError>
+          <span *ngIf="rbdForm.showError('schedule', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Use a dedicated pool -->
+      <div class="form-item"
+           *ngIf="allDataPools.length > 1 || mode === 'editing'">
+        <cds-checkbox id="useDataPool"
+                      name="useDataPool"
+                      formControlName="useDataPool"
+                      (change)="onUseDataPoolChange()"
+                      i18n>
+                      Use a dedicated data pool
+
+          <cd-help-text>Use a dedicated pool to store the image data. If not selected,
+            the image data will be stored in the same pool as the image metadata.
+          </cd-help-text>
+
+          <cd-helper *ngIf="allDataPools.length <= 1 && mode !== 'editing'">
+            <span>You need more than one pool with the rbd application label use to use a dedicated data pool.</span>
+          </cd-helper>
+        </cds-checkbox>
+      </div>
+
+      <!-- Data pools -->
+      <div class="form-item"
+           *ngIf="rbdForm.getValue('useDataPool')">
+        <cds-select label="Data pool"
+                    helperText="Dedicated pool that stores the object-data of the RBD"
+                    for="dataPool"
+                    name="dataPool"
+                    id="dataPool"
+                    [invalid]="!rbdForm.controls['dataPool'].valid && (rbdForm.controls['dataPool'].dirty)"
+                    [invalidText]="dataPoolError"
+                    formControlName="dataPool"
+                    cdRequiredField="Data pool"
+                    *ngIf="mode !== 'editing' && poolPermission.read">
+          <option *ngIf="dataPools === null"
+                  [ngValue]="null"
+                  i18n>Loading...</option>
+          <option *ngIf="dataPools !== null && dataPools.length === 0"
+                  [ngValue]="null"
+                  i18n>-- No data pools available --</option>
+          <option *ngIf="dataPools !== null && dataPools.length > 0"
+                  [ngValue]="null"
+                  i18n>-- Select a data pool --</option>
+          <option *ngFor="let dataPool of dataPools"
+                  [value]="dataPool.pool_name">{{ dataPool.pool_name }}</option>
+        </cds-select>
+        <ng-template #dataPoolError>
+          <span *ngIf="rbdForm.showError('dataPool', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <!-- Namespace -->
+      <!-- Skeleton-->
+      <div class="form-item"
+           *ngIf="mode !== 'editing' && rbdForm.getValue('pool') && namespaces === null">
+        <cds-select label="Namespace"
+                    for="namespace"
+                    name="namespace"
+                    id="namespace"
+                    [skeleton]="true"
+                    formControlName="namespace">
+          <option [ngValue]="null"
+                  i18n>Loading...</option>
+        </cds-select>
+      </div>
+
+      <div class="form-item">
+        <cds-select label="Namespace"
+                    helperText="Namespace allows you to logically group RBD images within your Ceph Cluster.Choosing a namespace makes it easier to locate and manage related RBD images efficiently"
+                    for="namespace"
+                    name="namespace"
+                    id="namespace"
+                    formControlName="namespace"
+                    *ngIf="(mode === 'editing' && rbdForm.getValue('namespace')) || mode !== 'editing' && (namespaces && namespaces.length > 0 || !poolPermission.read)">
+          <option *ngIf="namespaces === null"
+                  [ngValue]="null"
+                  i18n>Loading...</option>
+          <option *ngIf="namespaces !== null && namespaces.length === 0"
+                  [ngValue]="null"
+                  i18n>-- No namespaces available --</option>
+          <option *ngIf="namespaces !== null && namespaces.length > 0"
+                  [ngValue]="null"
+                  i18n>-- Select a namespace --</option>
+          <option *ngFor="let namespace of namespaces"
+                  [value]="namespace">{{ namespace }}</option>
+        </cds-select>
+      </div>
+
+      <!-- Size -->
+      <div class="form-item">
+        <cds-text-label for="size"
+                        i18n
+                        [invalid]="!rbdForm.controls['size'].valid && (rbdForm.controls['size'].dirty)"
+                        [invalidText]="sizeError"
+                        cdRequiredField="Size">Size
+          <input cdsText
+                 type="text"
+                 placeholder="e.g., 10GiB"
+                 id="size"
+                 name="size"
+                 formControlName="size"
+                 defaultUnit="GiB"
+                 [invalid]="!rbdForm.controls['size'].valid && (rbdForm.controls['size'].dirty)"
+                 cdDimlessBinary>
+        </cds-text-label>
+        <ng-template #sizeError>
+          <span class="invalid-feedback"
+                *ngIf="rbdForm.showError('size', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="rbdForm.showError('size', formDir, 'invalidSizeObject')"
+                i18n>You have to increase the size.</span>
+          <span *ngIf="rbdForm.showError('size', formDir, 'pattern')"
+                class="invalid-feedback"
+                i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+        </ng-template>
+      </div>
+
+      <!-- Advanced Section -->
+      <cd-form-advanced-fieldset>
+        <!-- Features -->
+        <div class="form-item"
+             formGroupName="features">
+          <fieldset>
+            <label class="cds--label"
+                   for="features"
+                   i18n>Features</label>
+            <ng-container *ngFor="let feature of featuresList">
+              <cds-checkbox [id]="feature.key"
+                            [name]="feature.key"
+                            [formControlName]="feature.key"
+                            class="spacing-03">
+                {{ feature.key | titlecase}}
+                <cd-help-text *ngIf="feature.helperText">
+                  {{ feature.helperText}}
+                </cd-help-text>
+                <cd-alert-panel type="warning"
+                                spacingClass="mt-2"
+                                [showTitle]="false"
+                                *ngIf="feature.helperHtml && rbdForm.getValue(feature.key) === false">
+                {{ feature.helperHtml }}
+                </cd-alert-panel>
+              </cds-checkbox>
+            </ng-container>
+          </fieldset>
+        </div>
+
+        <legend class="cd-header"
+                i18n>Striping</legend>
+        <!-- Object Size -->
+        <div class="form-item">
+          <cds-select i18n
+                      for="obj_size"
+                      label="Object size"
+                      helperText="Objects in the Ceph Storage Cluster have a maximum configurable size (e.g., 2MB, 4MB, etc.). The object size should be large enough to accommodate many stripe units, and should be a multiple of the stripe unit."
+                      id="obj_size"
+                      name="obj_size"
+                      formControlName="obj_size">
+            <option *ngFor="let objectSize of objectSizes"
+                    [value]="objectSize">{{ objectSize }}</option>
+          </cds-select>
+        </div>
+
+        <!-- stripingUnit -->
+        <div class="form-item">
+          <cds-select i18n
+                      for="stripingUnit"
+                      label="Stripe unit"
+                      helperText="Stripes have a configurable unit size (e.g., 64kb). The Ceph Client divides the data it will write to objects into equally sized stripe units, except for the last stripe unit. A stripe width, should be a fraction of the Object Size so that an object may contain many stripe units"
+                      id="stripingUnit"
+                      name="stripingUnit"
+                      formControlName="stripingUnit"
+                      cdRequiredField="Striping Unit"
+                      [invalid]="!rbdForm.controls['stripingUnit'].valid && (rbdForm.controls['stripingUnit'].dirty)"
+                      [invalidText]="stripingUnitError">
+            <option [ngValue]="null">-- Select stripe unit --</option>
+            <option *ngFor="let objectSize of objectSizes"
+                    [value]="objectSize">{{ objectSize }}</option>
+          </cds-select>
+          <ng-template #stripingUnitError>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('stripingUnit', formDir, 'required')"
+                  i18n>This field is required because stripe count is defined!</span>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')"
+                  i18n>Stripe unit is greater than object size.</span>
+          </ng-template>
+        </div>
+
+        <!-- Stripe Count -->
+        <div class="form-item">
+          <cds-number i18n
+                      for="stripingCount"
+                      label="Stripe count"
+                      helperText="The Ceph Client writes a sequence of stripe units over a series of objects determined by the stripe count. The series of objects is called an object set. After the Ceph Client writes to the last object in the object set, it returns to the first object in the object set."
+                      id="stripingCount"
+                      name="stripingCount"
+                      formControlName="stripingCount"
+                      cdRequiredField="Striping Count"
+                      [min]="1"
+                      [invalid]="!rbdForm.controls['stripingCount'].valid && (rbdForm.controls['stripingCount'].dirty)"
+                      [invalidText]="stripingCountError"
+                      [required]="true"></cds-number>
+          <ng-template #stripingCountError>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('stripingCount', formDir, 'required')"
+                  i18n>This field is required because stripe unit is defined!</span>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('stripingCount', formDir, 'min')"
+                  i18n>Stripe count must be greater than 0.</span>
+          </ng-template>
+        </div>
+
+        <cd-rbd-configuration-form [form]="rbdForm"
+                                   [initializeData]="initializeConfigData"
+                                   (changes)="getDirtyConfigurationValues = $event"></cd-rbd-configuration-form>
+      </cd-form-advanced-fieldset>
+
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="formDir"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                            wrappingClass="text-right"></cd-form-button-panel>
+
+    </form>
+  </ng-container>
+</div>
