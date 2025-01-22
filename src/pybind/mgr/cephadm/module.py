@@ -415,7 +415,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'certificate_automated_rotation_enabled',
             type='bool',
-            default=True, # TODO(redo): only for testing .. should be disabled by default
+            default=True,  # TODO(redo): only for testing .. should be disabled by default
             desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
         ),
         Option(
