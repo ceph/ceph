@@ -197,6 +197,11 @@ class CertMgr:
             self.cert_store.save_tlsobject(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
             self.key_store.save_tlsobject(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
 
+    def reload(self) -> str:
+        self.cert_store.load()
+        self.key_store.load()
+        self._initialize_root_ca(self.mgr_ip)
+        return "OK"
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()

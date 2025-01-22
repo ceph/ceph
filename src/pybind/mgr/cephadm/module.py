@@ -3294,7 +3294,20 @@ Then run the following:
 
     @handle_orch_error
     def cert_store_cert_ls(self) -> Dict[str, Any]:
-        return self.cert_key_store.cert_ls()
+        return self.cert_mgr.cert_ls()
+
+    @handle_orch_error
+    def cert_store_entity_ls(self) -> List[str]:
+        return self.cert_mgr.entity_ls()
+
+    @handle_orch_error
+    def cert_store_reload(self) -> str:
+        return self.cert_mgr.reload()
+
+    @handle_orch_error
+    def cert_store_cert_check(self) -> Dict[str, Any]:
+        self.cert_mgr.check_certificates()
+        return {}
 
     @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
@@ -3329,6 +3342,55 @@ Then run the following:
                 return ''
             raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return key
+
+    @handle_orch_error
+    def cert_store_set_pair(
+        self,
+        cert: str,
+        key: str,
+        entity: str,
+        service_name: str = '',
+        hostname: str = '',
+    ) -> str:
+        target = service_name or hostname
+        entities = self.cert_mgr.entity_ls()
+        if entity in entities:
+            cert_info = self.cert_mgr.is_valid_certificate(entity, target, cert, key)
+            if cert_info.is_valid and not cert_info.is_close_to_expiration:
+                self.cert_mgr.save_cert(f'{entity}_cert', cert, service_name, hostname, True)
+                self.cert_mgr.save_key(f'{entity}_key', key, service_name, hostname, True)
+                return "Certficate set correctly"
+            else:
+                if cert_info.is_close_to_expiration:
+                    raise OrchestratorError(f"Certififcate is close to its expiration date ({cert_info.days_to_expiration } remaining days).")
+                else:
+                    raise OrchestratorError(f"Invalid certificate: {cert_info.error_info}")
+        else:
+            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch cert-store entity ls' to list valid entities.")
+
+    @handle_orch_error
+    def cert_store_set_cert(
+        self,
+        cert: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        self.cert_mgr.save_cert(entity, cert, service_name, hostname, True)
+        return ""
+
+    @handle_orch_error
+    def cert_store_set_key(
+        self,
+        key: str,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        no_exception_when_missing: bool = False
+    ) -> str:
+        self.cert_mgr.save_key(entity, key, service_name, hostname, True)
+        return ""
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
