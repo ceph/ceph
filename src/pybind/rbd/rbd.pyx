@@ -3085,6 +3085,58 @@ cdef class Group(object):
         finally:
             free(snap_id)
 
+    def aio_mirror_group_create_snapshot(self, flags, oncomplete):
+        """
+        Asynchronously create mirror group snapshot.
+
+        Raises :class:`InvalidArgument` if the group is not in mirror
+        snapshot mode.
+
+        oncomplete will be called with the created snap ID as
+        well as the completion:
+
+        oncomplete(completion, snap_id)
+
+        :param flags: create snapshot flags
+        :type flags: int
+        :param oncomplete: what to do when group snapshot creation is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        :raises: :class:`InvalidArgument`
+        """
+        cdef:
+            size_t max_snap_id_size = RBD_MAX_SNAP_ID_SIZE
+            uint32_t _flags = flags
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef:
+                Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            if return_value == 0:
+                snap_id = decode_cstr(<char *>_completion_v.buf)
+            else:
+                snap_id = None
+            return oncomplete(_completion_v, snap_id)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(NULL, max_snap_id_size)
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_group_create_snapshot(
+                  self._ioctx, self._name, _flags, <char *>completion.buf,
+                  &max_snap_id_size, completion.rbd_comp)
+            if ret < 0:
+                raise make_ex(
+                    ret,
+                    'error creating mirror snapshot for group %s' % self.name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
+
     def mirror_group_get_info(self):
         """
         Get mirror info of the group.

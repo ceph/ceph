@@ -527,6 +527,28 @@ struct C_MirrorGroupGetInfo : public Context {
   }
 };
 
+struct C_MirrorGroupCreateSnapshot : public Context {
+  char *mirror_group_snap_id;
+  Context *on_finish;
+
+  std::string cpp_mirror_group_snap_id;
+
+  C_MirrorGroupCreateSnapshot(char *mirror_group_snap_id,
+                              Context *on_finish)
+    : mirror_group_snap_id(mirror_group_snap_id), on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    strcpy(mirror_group_snap_id, cpp_mirror_group_snap_id.c_str());
+    on_finish->complete(0);
+  }
+};
+
 struct C_MirrorImageGetGlobalStatus : public Context {
   rbd_mirror_image_global_status_t *mirror_image_global_status;
   Context *on_finish;
@@ -1740,6 +1762,18 @@ namespace librbd {
                                         uint32_t flags, std::string *snap_id) {
     return librbd::api::Mirror<>::group_snapshot_create(group_ioctx, group_name,
                                                         flags, snap_id);
+  }
+
+  int RBD::aio_mirror_group_create_snapshot(IoCtx& group_ioctx,
+                                            const char *group_name,
+                                            uint32_t flags,
+                                            std::string *snap_id,
+                                            RBD::AioGroupCompletion *c) {
+    librbd::api::Mirror<>::group_snapshot_create(
+      group_ioctx, group_name, flags, snap_id,
+      new C_AioGroupCompletion(group_ioctx, c));
+
+    return 0;
   }
 
   int RBD::mirror_group_get_info(IoCtx& group_ioctx, const char *group_name,
@@ -8221,6 +8255,32 @@ extern "C" int rbd_mirror_group_create_snapshot(rados_ioctx_t group_p,
 
   strcpy(snap_id, cpp_snap_id.c_str());
 
+  return 0;
+}
+
+extern "C" int rbd_aio_mirror_group_create_snapshot(
+    rados_ioctx_t group_p, const char *group_name, uint32_t flags,
+    char *snap_id, size_t *max_snap_id_len, rbd_completion_t c) {
+  if (*max_snap_id_len < RBD_MAX_IMAGE_ID_LENGTH + 1) {
+    *max_snap_id_len = RBD_MAX_IMAGE_ID_LENGTH + 1;
+    return -ERANGE;
+  }
+
+  *max_snap_id_len = RBD_MAX_IMAGE_ID_LENGTH + 1;
+
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  librbd::RBD::AioGroupCompletion *comp = (librbd::RBD::AioGroupCompletion *)c;
+
+  auto ctx = new C_MirrorGroupCreateSnapshot(
+   snap_id, new C_AioGroupCompletion(group_ioctx, comp));
+
+  librbd::api::Mirror<>::group_snapshot_create(group_ioctx,
+                                               group_name,
+                                               flags,
+                                               &ctx->cpp_mirror_group_snap_id,
+                                               ctx);
   return 0;
 }
 
