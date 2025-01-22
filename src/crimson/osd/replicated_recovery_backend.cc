@@ -1005,22 +1005,20 @@ ReplicatedRecoveryBackend::_handle_push(
   bool clear_omap = !push_op.before_progress.omap_complete;
   response->soid = push_op.recovery_info.soid;
 
-  return submit_push_data(push_op.recovery_info, first, complete, clear_omap,
-                          std::move(data_zeros),
-                          std::move(push_op.data_included),
-                          std::move(push_op.data),
-                          std::move(push_op.omap_header),
-                          push_op.attrset, 
-                          std::move(push_op.omap_entries), t)
-  .then_interruptible(
-    [this, complete, &push_op, t] {
-    if (complete) {
-      return pg.get_recovery_handler()->on_local_recover(
-        push_op.recovery_info.soid, push_op.recovery_info,
-        false, *t);
-    }
-    return RecoveryBackend::interruptor::now();
-  });
+  co_await submit_push_data(
+    push_op.recovery_info, first, complete, clear_omap,
+    std::move(data_zeros),
+    std::move(push_op.data_included),
+    std::move(push_op.data),
+    std::move(push_op.omap_header),
+    push_op.attrset,
+    std::move(push_op.omap_entries), t);
+
+  if (complete) {
+    co_await pg.get_recovery_handler()->on_local_recover(
+      push_op.recovery_info.soid, push_op.recovery_info,
+      false, *t);
+  }
 }
 
 RecoveryBackend::interruptible_future<>
