@@ -638,11 +638,12 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
   DBOpParams params = {};
   obj_version bucket_version;
   RGWBucketInfo orig_info;
+  map<std::string, bufferlist> attrs;
 
   /* Check if the bucket already exists and return the old info, caller will have a use for it */
   orig_info.bucket.name = info.bucket.name;
   params.op.bucket.info.bucket.name = info.bucket.name;
-  ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr,
+  ret = get_bucket_info(dpp, string("name"), "", orig_info, &attrs, nullptr,
       &bucket_version);
 
   if (ret) {
@@ -668,9 +669,14 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
     pobjv = &info.objv_tracker;
   }
 
+  if (!pattrs) {
+    pattrs = &attrs;
+  }
+
   InitializeParams(dpp, &params);
 
   params.op.bucket.info.bucket.name = info.bucket.name;
+  params.op.bucket.bucket_attrs = *pattrs;
 
   if (powner) {
     params.op.bucket.owner = to_string(*powner);
@@ -689,7 +695,6 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
 
   if (query_str == "attrs") {
     params.op.query_str = "attrs";
-    params.op.bucket.bucket_attrs = *pattrs;
   } else if (query_str == "owner") {
     /* Update only owner i.e, chown. 
      * Update creation_time too */
