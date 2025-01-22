@@ -27,6 +27,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { PlacementPipe } from './placement.pipe';
 import { ServiceFormComponent } from './service-form/service-form.component';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = 'services';
 
@@ -238,6 +239,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   deleteAction() {
     const service = this.selection.first();
     this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`Service`,
       itemNames: [service.service_name],
       actionDescription: 'delete',

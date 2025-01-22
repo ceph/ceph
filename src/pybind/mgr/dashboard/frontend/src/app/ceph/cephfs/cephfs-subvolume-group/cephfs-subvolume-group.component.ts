@@ -20,6 +20,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-cephfs-subvolume-group',
@@ -178,6 +179,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   removeSubVolumeModal() {
     const name = this.selection.first().name;
     this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'subvolume group',
       itemNames: [name],
       actionDescription: 'remove',

@@ -27,17 +27,39 @@
           </ng-template>
           <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
           <div class="form-group">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     name="confirmation"
-                     id="confirmation"
-                     formControlName="confirmation"
-                     autofocus>
-              <label class="custom-control-label"
-                     for="confirmation"
-                     i18n>Yes, I am sure.</label>
-            </div>
+            <ng-container *ngIf="impact == impactEnum.normal; else highImpactDeletion">
+              <cds-checkbox id="confirmation"
+                            name="confirmation"
+                            formControlName="confirmation"
+                            autofocus
+                            [required]="true"
+                            modal-primary-focus
+                            i18n>Yes, I am sure.</cds-checkbox>
+            </ng-container>
+            <ng-template #highImpactDeletion>
+              <cds-text-label label="Resource Name"
+                              for="resource_name"
+                              cdRequiredField="Resource Name"
+                              [invalid]="!deletionForm.controls.confirmInput.valid && deletionForm.controls.confirmInput.dirty"
+                              [invalidText]="ResourceError"
+                              i18n>Resource Name
+                <input cdsText
+                       type="text"
+                       placeholder="Enter resource name to delete"
+                       id="resource_name"
+                       formControlName="confirmInput"/>
+              </cds-text-label>
+              <ng-template #ResourceError>
+                <span *ngIf="deletionForm.showError('confirmInput', formDir, 'required')"
+                      class="invalid-feedback">
+                  <ng-container i18n>This field is required.</ng-container>
+                </span>
+                <span *ngIf="deletionForm.showError('confirmInput', formDir, 'matchResource')"
+                      class="invalid-feedback">
+                  <ng-container i18n>Enter the correct resource name.</ng-container>
+                </span>
+              </ng-template>
+            </ng-template>
           </div>
         </div>
       </div>

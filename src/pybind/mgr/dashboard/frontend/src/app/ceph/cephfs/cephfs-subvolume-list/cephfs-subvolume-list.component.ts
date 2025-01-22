@@ -36,6 +36,7 @@ import { HealthService } from '~/app/shared/api/health.service';
 import _ from 'lodash';
 
 const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -252,6 +253,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     this.selectedName = this.selection.first().name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       actionDescription: 'Remove',
+      impact: DeletionImpact.high,
       itemNames: [this.selectedName],
       itemDescription: 'Subvolume',
       childFormGroup: this.removeForm,

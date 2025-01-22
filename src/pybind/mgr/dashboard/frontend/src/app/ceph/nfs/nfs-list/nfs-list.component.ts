@@ -25,6 +25,12 @@ import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
+
+export enum RgwExportType {
+  BUCKET = 'bucket',
+  USER = 'user'
+}
 
 @Component({
   selector: 'cd-nfs-list',
@@ -191,6 +197,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const export_id = this.selection.first().export_id;
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`NFS export`,
       itemNames: [`${cluster_id}:${export_id}`],
       submitActionObservable: () =>
