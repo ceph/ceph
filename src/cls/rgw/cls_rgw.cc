@@ -351,12 +351,12 @@ static void decreasing_str(uint64_t num, string *str)
  * regular objects only map to the first index anyway
  */
 
-static void get_list_index_key(rgw_bucket_dir_entry& entry, string *index_key)
+static void get_list_index_key(rgw_bucket_dir_entry& entry, uint64_t epoch, string *index_key)
 {
   *index_key = entry.key.name;
 
   string ver_str;
-  decreasing_str(entry.versioned_epoch, &ver_str);
+  decreasing_str(epoch, &ver_str);
   string instance_delim("\0i", 2);
   string ver_delim("\0v", 2);
 
@@ -378,6 +378,10 @@ static std::string cls_rgw_after_versions(const std::string& key)
 {
   // assert: ! key.empty()
   return key + '\1'; // suffix "\1" sorts after suffixes like "\0v123\0iabc"
+}
+
+static void get_list_index_key(rgw_bucket_dir_entry& entry, string *index_key) {
+  return get_list_index_key(entry, entry.versioned_epoch, index_key);
 }
 
 static void _append_obj_versioned_data_key(string *index_key, const cls_rgw_obj_key& key, bool append_delete_marker_suffix = false)
@@ -1554,6 +1558,11 @@ public:
     instance_entry.versioned_epoch = epoch;
   }
 
+  void set_snap_skip(rgw_bucket_snap_id snap_id, const string& next_index_key) {
+    instance_entry.snap_skip.snap_id = snap_id;
+    instance_entry.snap_skip.index_key = next_index_key;
+  }
+
   int unlink_list_entry(rgw_bucket_dir_header& header) {
     string list_idx, list_sub_ver;
     /* this instance has a previous list entry, remove that entry */
@@ -1663,6 +1672,61 @@ public:
       *next_key = next_entry.key;
       *next_snap_id = next_entry.meta.snap_id;
     }
+
+    return 0;
+  }
+
+  int find_next_dir_entry(uint64_t epoch, rgw_bucket_dir_entry *next_entry, string *next_idx, bool *found) {
+    string list_idx;
+
+    get_list_index_key(instance_entry, epoch, &list_idx);
+
+    map<string, bufferlist> keys;
+    bool more;
+    string filter;
+
+    do {
+      int ret = cls_cxx_map_get_vals(hctx, list_idx, filter, 2, &keys, &more);
+      if (ret < 0) {
+        return ret;
+      }
+
+      if (keys.empty()) {
+        *found = false;
+        return 0;
+      }
+
+      for (auto& entry : keys) {
+        auto& idx_name = entry.first;
+
+        if (!bi_is_plain_entry(idx_name)) {
+          /* we crossed namespace */
+          *found = false;
+          return 0;
+        }
+
+        try {
+          auto iter = entry.second.cbegin();
+          decode(*next_entry, iter);
+        } catch (ceph::buffer::error& err) {
+          CLS_LOG(0, "ERROR; failed to decode entry: %s", entry.first.c_str());
+          return -EIO;
+        }
+
+        if (next_entry->flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) {
+          continue;
+        }
+
+        *found = true;
+        *next_idx = idx_name;
+        return 0;
+      }
+
+      list_idx = keys.rbegin()->first;
+
+    } while (more); /* shouldn't really happen */
+
+    *found = false;
 
     return 0;
   }
@@ -2028,6 +2092,25 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
     return ret;
+  }
+
+  if (op.meta.snap_id != RGW_BUCKET_NO_SNAP) {
+    rgw_bucket_dir_entry next_entry;
+    std::string next_idx;
+    bool found;
+    ret = obj.find_next_dir_entry(olh.get_epoch(), &next_entry, &next_idx, &found);
+    if (ret < 0) {
+      return ret;
+    }
+    if (found) {
+      CLS_LOG(20, "next dir entry found idx=%s", escape_str(next_idx).c_str());
+      if (next_entry.meta.snap_id == RGW_BUCKET_NO_SNAP ||
+          next_entry.meta.snap_id < op.meta.snap_id) {
+        obj.set_snap_skip(next_entry.meta.snap_id, next_idx);
+      } else {
+        obj.set_snap_skip(next_entry.snap_skip.snap_id, next_entry.snap_skip.index_key);
+      }
+    }
   }
 
   /* write the instance and list entries */
