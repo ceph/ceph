@@ -16,6 +16,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-peer-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = '/block/mirroring';
 @Component({
@@ -147,6 +148,7 @@ export class PoolListComponent implements OnInit, OnDestroy {
     const peerUUID = this.getPeerUUID();
 
     this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`mirror peer`,
       itemNames: [`${poolName} (${peerUUID})`],
       submitActionObservable: () =>

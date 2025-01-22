@@ -41,6 +41,7 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Osd } from '~/app/shared/models/osd.model';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = 'osd';
 
@@ -581,7 +582,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     childFormGroupTemplate?: TemplateRef<any>
   ): void {
     check(this.getSelectedOsdIds()).subscribe((result) => {
+      const osdIds = this.getSelectedOsdIds();
       this.cdsModalService.show(CriticalConfirmationModalComponent, {
+        impact: DeletionImpact.high,
+        itemNames: osdIds,
         actionDescription: actionDescription,
         itemDescription: itemDescription,
         bodyTemplate: this.criticalConfirmationTpl,
@@ -592,7 +596,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           missingStats: result.missing_stats,
           storedPgs: result.stored_pgs,
           actionDescription: templateItemDescription,
-          osdIds: this.getSelectedOsdIds()
+          osdIds
         },
         childFormGroup: childFormGroup,
         childFormGroupTemplate: childFormGroupTemplate,

@@ -32,6 +32,7 @@ import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-mo
 import { RBDImageFormat, RbdModel } from './rbd-model';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RBDActionHelpers } from '../rbd-contants';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 const BASE_URL = 'block/rbd';
 
 @Component({
@@ -426,8 +427,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
     this.cdsModalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'RBD',
-      itemNames: [imageSpec],
+      itemNames: [imageSpec.imageName],
       bodyTemplate: this.deleteTpl,
       bodyContext: {
         hasSnapshots: this.hasSnapshots(),

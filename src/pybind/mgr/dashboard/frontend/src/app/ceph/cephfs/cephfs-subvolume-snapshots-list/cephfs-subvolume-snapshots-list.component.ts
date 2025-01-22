@@ -27,6 +27,7 @@ import { Validators } from '@angular/forms';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
@@ -228,7 +229,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     const subVolumeGroupName = this.activeGroupName;
     const fsName = this.fsName;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      actionDescription: this.actionLabels.REMOVE,
+      impact: DeletionImpact.high,
+      actionDescription: 'remove',
       itemNames: [snapshotName],
       itemDescription: 'Snapshot',
       submitAction: () =>
