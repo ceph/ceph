@@ -25,6 +25,7 @@ from ceph.utils import datetime_now
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
+from cephadm.inventory import CoredumpctlOverrides
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.autotune import MemoryAutotuner
@@ -320,6 +321,14 @@ class CephadmServe:
             ):
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
+
+            coredumpctl_overrides = CoredumpctlOverrides(
+                max_coredump_size=self.mgr.coredump_max_size
+            )
+            if self.mgr.cache.host_needs_coredumpctl_overrides(host, coredumpctl_overrides):
+                self.mgr.set_host_coredump_overrides(host, coredumpctl_overrides)
+            elif self.mgr.cache.host_needs_coredumpctl_overrides_removal(host):
+                self.mgr.rm_host_coredump_overrides(host)
 
         refresh(self.mgr.cache.get_hosts())
 
