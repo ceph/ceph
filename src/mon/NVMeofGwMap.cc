@@ -83,6 +83,14 @@ int NVMeofGwMap::cfg_add_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
 {
   std::set<NvmeAnaGrpId> allocated;
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+    auto gw_epoch_it = gw_epoch.find(group_key);
+    if (gw_epoch_it == gw_epoch.end()) {
+      gw_epoch[group_key] = epoch;
+      dout(10) << "Allocated first gw_epoch : group_key "
+          << group_key << " epoch " << gw_epoch[group_key] << dendl;
+    }
+  }
   for (auto& itr: created_gws[group_key]) {
     allocated.insert(itr.second.ana_grp_id);
     if (itr.first == gw_id) {
@@ -190,8 +198,10 @@ int  NVMeofGwMap::do_erase_gw_id(const NvmeGwId &gw_id,
     fsm_timers.erase(group_key);
 
   created_gws[group_key].erase(gw_id);
-  if (created_gws[group_key].size() == 0)
+  if (created_gws[group_key].size() == 0) {
     created_gws.erase(group_key);
+    gw_epoch.erase(group_key);
+  }
   return 0;
 }
 
@@ -219,6 +229,23 @@ int NVMeofGwMap::do_delete_gw(
   }
 
   return -EINVAL;
+}
+
+void  NVMeofGwMap::gw_performed_startup(const NvmeGwId &gw_id,
+      const NvmeGroupKey& group_key, bool &propose_pending)
+{
+  dout(4) << "GW  performed the full startup " << gw_id << dendl;
+  propose_pending = true;
+  increment_gw_epoch( group_key);
+}
+
+void NVMeofGwMap::increment_gw_epoch(const NvmeGroupKey& group_key)
+{
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+    gw_epoch[group_key] ++;
+    dout(4) << "incremented epoch of " << group_key
+         << " " << gw_epoch[group_key] << dendl;
+  }
 }
 
 int NVMeofGwMap::get_num_namespaces(const NvmeGwId &gw_id,
@@ -273,7 +300,10 @@ int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
     gw_id, group_key, state_itr.second,state_itr.first, propose_pending);
     }
     propose_pending = true; // map should reflect that gw becames Created
-    if (propose_pending) validate_gw_map(group_key);
+    if (propose_pending) {
+      validate_gw_map(group_key);
+      increment_gw_epoch(group_key);
+    }
   } else {
     dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map "
          << gw_id << dendl;
@@ -299,7 +329,10 @@ int NVMeofGwMap::process_gw_map_gw_down(
       state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
     }
     propose_pending = true; // map should reflect that gw becames Unavailable
-    if (propose_pending) validate_gw_map(group_key);
+    if (propose_pending) {
+      validate_gw_map(group_key);
+      increment_gw_epoch(group_key);
+    }
   } else {
     dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map "
 	     << gw_id << dendl;
@@ -338,7 +371,10 @@ void NVMeofGwMap::process_gw_map_ka(
 	state_itr.first, last_osd_epoch, propose_pending);
     }
   }
-  if (propose_pending) validate_gw_map(group_key);
+  if (propose_pending) {
+    validate_gw_map(group_key);
+    increment_gw_epoch(group_key);
+  }
 }
 
 void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
@@ -387,6 +423,7 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
     }
     if (propose) {
       validate_gw_map(group_key);
+      increment_gw_epoch(group_key);
     }
   }
 }
@@ -751,7 +788,10 @@ void NVMeofGwMap::fsm_handle_gw_delete(
 	    << "for GW " << gw_id  << dendl;
   }
   }
-  if (map_modified) validate_gw_map(group_key);
+  if (map_modified) {
+    validate_gw_map(group_key);
+    increment_gw_epoch(group_key);
+  }
 }
 
 void NVMeofGwMap::fsm_handle_to_expired(
@@ -817,7 +857,10 @@ void NVMeofGwMap::fsm_handle_to_expired(
     //another Trigger for GW down (failover)
     process_gw_map_gw_down(gw_id, group_key, map_modified);
   }
-  if (map_modified) validate_gw_map(group_key);
+  if (map_modified) {
+    validate_gw_map(group_key);
+    increment_gw_epoch(group_key);
+  }
 }
 
 struct CMonRequestProposal : public Context {
