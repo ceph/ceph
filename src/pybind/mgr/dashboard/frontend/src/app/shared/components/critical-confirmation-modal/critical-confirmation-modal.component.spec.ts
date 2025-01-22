@@ -11,6 +11,7 @@ import { LoadingPanelComponent } from '../loading-panel/loading-panel.component'
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
 import { CheckboxModule, ModalService, PlaceholderService } from 'carbon-components-angular';
 import { ModalCdsService } from '../../services/modal-cds.service';
+import { DeletionImpact } from '../../enum/critical-confirmation-modal-impact.enum';
 
 @NgModule({})
 export class MockModule {}
@@ -143,8 +144,8 @@ describe('CriticalConfirmationModalComponent', () => {
   });
 
   describe('component functions', () => {
-    const changeValue = (value: boolean) => {
-      const ctrl = component.deletionForm.get('confirmation');
+    const changeValue = (formControl: string, value: any) => {
+      const ctrl = component.deletionForm.get(formControl);
       ctrl.setValue(value);
       ctrl.markAsDirty();
       ctrl.updateValueAndValidity();
@@ -167,15 +168,54 @@ describe('CriticalConfirmationModalComponent', () => {
 
       beforeEach(() => {
         component.deletionForm.reset();
+        const ctrl = component.deletionForm.get('impact');
+        ctrl.setValue(DeletionImpact.normal);
+        ctrl.markAsDirty();
+        ctrl.updateValueAndValidity();
+        component.deletionForm.get('confirmation').updateValueAndValidity();
       });
 
       it('should test empty values', () => {
-        component.deletionForm.reset();
         testValidation(true, 'required', true);
-        component.deletionForm.reset();
-        changeValue(true);
-        changeValue(false);
+        changeValue('confirmation', true);
+        changeValue('confirmation', false);
         testValidation(true, 'required', true);
+      });
+    });
+
+    describe('validate confirmInput', () => {
+      const testValidation = (submitted: boolean, error: string, expected: boolean) => {
+        expect(
+          component.deletionForm.showError('confirmInput', <NgForm>{ submitted: submitted }, error)
+        ).toBe(expected);
+      };
+
+      beforeEach(() => {
+        component.deletionForm.reset();
+        const ctrl = component.deletionForm.get('impact');
+        ctrl.setValue(DeletionImpact.high);
+        ctrl.markAsDirty();
+        ctrl.updateValueAndValidity();
+        component.deletionForm.get('confirmInput').updateValueAndValidity();
+      });
+
+      it('should test empty values', () => {
+        testValidation(true, 'required', true);
+        changeValue('confirmInput', 'dummytext');
+        changeValue('confirmInput', '');
+        testValidation(true, 'required', true);
+      });
+
+      it('should give error, if entered resource name is wrong', () => {
+        component.itemNames = ['resource1'];
+        changeValue('confirmInput', 'dummytext');
+        testValidation(true, 'matchResource', true);
+      });
+
+      it('should give error, if entered resource name is correct', () => {
+        component.itemNames = ['resource1'];
+        changeValue('confirmInput', 'resource1');
+        testValidation(true, 'matchResource', false);
       });
     });
 

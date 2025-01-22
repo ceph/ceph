@@ -30,6 +30,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Pool } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = 'pool';
 
@@ -224,6 +225,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   deletePoolModal() {
     const name = this.selection.first().pool_name;
     this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'Pool',
       itemNames: [name],
       submitActionObservable: () =>

@@ -8,6 +8,7 @@ import { CriticalConfirmationModalComponent } from '~/app/shared/components/crit
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -124,8 +125,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
       icon: Icons.destroy,
       click: () => this.deleteAction(),
       disable: () => !this.selection.hasSelection,
-      name: this.actionLabels.DELETE,
-      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+      name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
     this.setTableRefreshTimeout();
@@ -149,6 +149,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
 
   deleteAction() {
     this.modalService.show(CriticalConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: this.selection.hasSingleSelection ? $localize`user` : $localize`users`,
       itemNames: this.selection.selected.map((user: any) => user['uid']),
       submitActionObservable: (): Observable<any> => {
