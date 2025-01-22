@@ -1029,34 +1029,35 @@ ReplicatedRecoveryBackend::handle_push(
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_push);
   DEBUGDPP("{}", pg, *m);
-  return seastar::do_with(PushReplyOp(), [FNAME, this, m](auto& response) {
-    PushOp& push_op = m->pushes[0]; // TODO: only one push per message for now
-    return seastar::do_with(ceph::os::Transaction(),
-      [FNAME, this, m, &push_op, &response](auto& t) {
-      return _handle_push(m->from, push_op, &response, &t).then_interruptible(
-	[FNAME, this, &t] {
-	epoch_t epoch_frozen = pg.get_osdmap_epoch();
-	DEBUGDPP("submitting transaction", pg);
-	return interruptor::make_interruptible(
-	    shard_services.get_store().do_transaction(coll, std::move(t))).then_interruptible(
-	  [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
-	  //TODO: this should be grouped with pg.on_local_recover somehow.
-	  pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
-	});
-      });
-    }).then_interruptible([this, m, &response]() mutable {
-      auto reply = crimson::make_message<MOSDPGPushReply>();
-      reply->from = pg.get_pg_whoami();
-      reply->set_priority(m->get_priority());
-      reply->pgid = pg.get_info().pgid;
-      reply->map_epoch = m->map_epoch;
-      reply->min_epoch = m->min_epoch;
-      std::vector<PushReplyOp> replies = { std::move(response) };
-      reply->replies.swap(replies);
-      return shard_services.send_to_osd(m->from.osd,
-	  std::move(reply), pg.get_osdmap_epoch());
-    });
-  });
+
+  PushReplyOp response;
+  ceph::os::Transaction t;
+
+  PushOp& push_op = m->pushes[0]; // TODO: only one push per message for now
+  co_await _handle_push(m->from, push_op, &response, &t);
+
+  epoch_t epoch_frozen = pg.get_osdmap_epoch();
+  DEBUGDPP("submitting transaction", pg);
+
+  co_await interruptor::make_interruptible(
+    shard_services.get_store().do_transaction(coll, std::move(t)));
+
+  //TODO: this should be grouped with pg.on_local_recover somehow.
+  pg.get_recovery_handler()->_committed_pushed_object(
+    epoch_frozen, pg.get_info().last_complete);
+
+  auto reply = crimson::make_message<MOSDPGPushReply>();
+  reply->from = pg.get_pg_whoami();
+  reply->set_priority(m->get_priority());
+  reply->pgid = pg.get_info().pgid;
+  reply->map_epoch = m->map_epoch;
+  reply->min_epoch = m->min_epoch;
+  std::vector<PushReplyOp> replies = { std::move(response) };
+  reply->replies.swap(replies);
+  co_await interruptor::make_interruptible(
+    shard_services.send_to_osd(
+      m->from.osd,
+      std::move(reply), pg.get_osdmap_epoch()));
 }
 
 RecoveryBackend::interruptible_future<std::optional<PushOp>>
