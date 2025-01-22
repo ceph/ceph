@@ -372,13 +372,13 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
 
     cephadm_module.migration.migrate_6_7()
 
-    assert cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo')
-    assert cephadm_module.cert_key_store.get_cert('iscsi_ssl_cert', service_name='iscsi.foo')
-    assert cephadm_module.cert_key_store.get_key('iscsi_ssl_key', service_name='iscsi.foo')
-    assert cephadm_module.cert_key_store.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
-    assert cephadm_module.cert_key_store.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
+    assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo')
+    assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo')
+    assert cephadm_module.cert_mgr.get_key('iscsi_ssl_key', service_name='iscsi.foo')
+    assert cephadm_module.cert_mgr.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
+    assert cephadm_module.cert_mgr.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
 
-    assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host1')
-    assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host2')
-    assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1')
-    assert cephadm_module.cert_key_store.get_key('grafana_key', host='host2')
+    assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host1')
+    assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host2')
+    assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1')
+    assert cephadm_module.cert_mgr.get_key('grafana_key', host='host2')
