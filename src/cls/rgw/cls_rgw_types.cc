@@ -204,6 +204,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
   encode_json("appendable", appendable, f);
+  encode_json("snap_id", (int64_t)snap_id, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -222,6 +223,7 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
   JSONDecoder::decode_json("appendable", appendable, obj);
+  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
@@ -267,6 +269,17 @@ void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& 
 }
 
 
+void rgw_bucket_snap_skip_entry::dump(Formatter *f) const
+{
+  encode_json("snap_id", (int64_t)snap_id, f);
+  encode_json("index_key", index_key , f);
+}
+
+void rgw_bucket_snap_skip_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, obj);
+  JSONDecoder::decode_json("index_key", index_key, obj);
+}
+
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
   encode_json("name", key.name, f);
@@ -279,6 +292,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   encode_json("flags", (int)flags , f);
   encode_json("pending_map", pending_map, f);
   encode_json("versioned_epoch", versioned_epoch , f);
+  encode_json("snap_skip", snap_skip , f);
 }
 
 void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
@@ -294,6 +308,7 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
   flags = (uint16_t)val;
   JSONDecoder::decode_json("pending_map", pending_map, obj);
   JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
+  JSONDecoder::decode_json("snap_skip", snap_skip, obj);
 }
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
