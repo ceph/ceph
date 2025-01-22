@@ -163,6 +163,10 @@ public:
       return *this;
     }
 
+    void lock_excl_sync() {
+      target_state.lock_excl_sync();
+    }
+
     ObjectContextRef &get_obc() {
       ceph_assert(!target_state.is_empty());
       ceph_assert(target_state.obc->is_loaded());
