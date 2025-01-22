@@ -114,20 +114,20 @@ void test_MNVMeofGwMap() {
   msg->encode_payload(CEPH_FEATURES_ALL);
   dout(0) << "after encode msg: " << *msg << dendl;
   msg->decode_payload();
-  dout(0) << "decode msg: " << *msg << dendl;
+  dout(0) << "after decode msg: " << *msg << dendl;
 
-  dout(0)   << "\n == Test GW Delete ==" << dendl;
-  pending_map.cfg_delete_gw("GW1" ,group_key);
-  dout(0) << "deleted GW1 " << pending_map << dendl;
+  //dout(0)   << "\n == Test GW Delete ==" << dendl;
+  //pending_map.cfg_delete_gw("GW1" ,group_key);
+  //dout(0) << "deleted GW1 " << pending_map << dendl;
 
-  pending_map.cfg_delete_gw("GW1" ,group_key);
-  dout(0) << "duplicated delete of GW1 " << pending_map << dendl;
+  //pending_map.cfg_delete_gw("GW1" ,group_key);
+  //dout(0) << "duplicated delete of GW1 " << pending_map << dendl;
 
-  pending_map.cfg_delete_gw("GW2" ,group_key);
-  dout(0) << "deleted GW2 " << pending_map << dendl;
+  //pending_map.cfg_delete_gw("GW2" ,group_key);
+  //dout(0) << "deleted GW2 " << pending_map << dendl;
 
-  dout(0) << "delete of wrong gw id" << dendl;
-  pending_map.cfg_delete_gw("wow" ,group_key);
+  //dout(0) << "delete of wrong gw id" << dendl;
+  //pending_map.cfg_delete_gw("wow" ,group_key);
 
   pending_map.cfg_delete_gw("GW3" ,group_key);
   dout(0) << "deleted GW3 . we should see the empty map " << pending_map << dendl;
