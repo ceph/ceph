@@ -79,8 +79,7 @@ protected:
   interruptible_future<bool> _handle_pull_response(
     pg_shard_t from,
     PushOp& push_op,
-    PullOp* response,
-    ceph::os::Transaction* t);
+    PullOp* response);
   void recalc_subsets(
     ObjectRecoveryInfo& recovery_info,
     crimson::osd::SnapSetContextRef ssc);

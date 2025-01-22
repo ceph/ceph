@@ -819,13 +819,13 @@ RecoveryBackend::interruptible_future<bool>
 ReplicatedRecoveryBackend::_handle_pull_response(
   pg_shard_t from,
   PushOp& push_op,
-  PullOp* response,
-  ceph::os::Transaction* t)
+  PullOp* response)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_pull);
   DEBUGDPP("{} {} data.size() is {} data_included: {}",
 	   pg, push_op.recovery_info, push_op.after_progress,
 	   push_op.data.length(), push_op.data_included);
+  ceph::os::Transaction t;
 
   const hobject_t &hoid = push_op.soid;
   auto& recovery_waiter = get_recovering(hoid);
@@ -897,7 +897,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 			    first, complete, clear_omap,
                             std::move(data_zeros), std::move(usable_intervals),
                             std::move(data), std::move(push_op.omap_header),
-                            push_op.attrset, std::move(push_op.omap_entries), t);
+                            push_op.attrset, std::move(push_op.omap_entries), &t);
 
   const auto bytes_recovered = data.length();
   pull_info.stat.num_keys_recovered += push_op.omap_entries.size();
@@ -907,15 +907,21 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     pull_info.stat.num_objects_recovered++;
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.soid, get_recovering(push_op.soid).pull_info->recovery_info,
-      false, *t
+      false, t
     );
-    co_return true;
+    DEBUGDPP("submitting transaction, complete", pg);
+    co_await interruptor::make_interruptible(
+      shard_services.get_store().do_transaction(coll, std::move(t)));
   } else {
     response->soid = push_op.soid;
     response->recovery_info = pull_info.recovery_info;
     response->recovery_progress = pull_info.recovery_progress;
-    co_return false;
+    DEBUGDPP("submitting transaction, incomplete", pg);
+    co_await interruptor::make_interruptible(
+      shard_services.get_store().do_transaction(coll, std::move(t)));
   }
+
+  co_return complete;
 }
 
 void ReplicatedRecoveryBackend::recalc_subsets(
@@ -951,17 +957,12 @@ ReplicatedRecoveryBackend::handle_pull_response(
 
   DEBUGDPP("{}", pg, *m);
   PullOp response;
-  ceph::os::Transaction t;
 
   pg_shard_t from = m->from;
 
-  const bool complete = co_await _handle_pull_response(
-    from, push_op, &response, &t);
-
   epoch_t epoch_frozen = pg.get_osdmap_epoch();
-  DEBUGDPP("submitting transaction", pg);
-  co_await interruptor::make_interruptible(
-    shard_services.get_store().do_transaction(coll, std::move(t)));
+  const bool complete = co_await _handle_pull_response(
+    from, push_op, &response);
 
   if (complete) {
     pg.get_recovery_handler()->_committed_pushed_object(
