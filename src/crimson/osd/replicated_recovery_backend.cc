@@ -1030,10 +1030,6 @@ ReplicatedRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_push);
-  if (pg.can_discard_replica_op(*m)) {
-    DEBUGDPP("discarding {}", pg, *m);
-    return seastar::now();
-  }
   if (pg.is_primary()) {
     return handle_pull_response(m);
   }
