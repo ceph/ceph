@@ -1030,10 +1030,6 @@ ReplicatedRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_push);
-  if (pg.is_primary()) {
-    return handle_pull_response(m);
-  }
-
   DEBUGDPP("{}", pg, *m);
   return seastar::do_with(PushReplyOp(), [FNAME, this, m](auto& response) {
     PushOp& push_op = m->pushes[0]; // TODO: only one push per message for now
@@ -1349,7 +1345,12 @@ ReplicatedRecoveryBackend::handle_recovery_op(
   case MSG_OSD_PG_PULL:
     return handle_pull(boost::static_pointer_cast<MOSDPGPull>(m));
   case MSG_OSD_PG_PUSH:
-    return handle_push(boost::static_pointer_cast<MOSDPGPush>(m));
+    if (pg.is_primary()) {
+      return handle_pull_response(
+	boost::static_pointer_cast<MOSDPGPush>(m));
+    } else {
+      return handle_push(boost::static_pointer_cast<MOSDPGPush>(m));
+    }
   case MSG_OSD_PG_PUSH_REPLY:
     return handle_push_reply(
 	boost::static_pointer_cast<MOSDPGPushReply>(m));
