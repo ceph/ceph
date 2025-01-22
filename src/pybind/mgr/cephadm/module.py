@@ -3302,7 +3302,7 @@ Then run the following:
 
     @handle_orch_error
     def cert_store_reload(self) -> str:
-        return self.cert_mgr.reload()
+        return self.cert_mgr.load()
 
     @handle_orch_error
     def cert_store_cert_check(self) -> Dict[str, Any]:

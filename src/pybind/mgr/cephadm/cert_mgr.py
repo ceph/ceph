@@ -119,6 +119,35 @@ class CertMgr:
         self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.service_name_key, self.host_key, self.general_key)
         self.key_store.load()
 
+    def load(self) -> None:
+        self.cert_store.load()
+        self.key_store.load()
+
+    def _initialize_root_ca(self, ip: str) -> None:
+        self.ssl_certs: SSLCerts = SSLCerts(self.certificate_duration_days)
+        old_cert = cast(Cert, self.cert_store.get_tlsobject(self.CEPHADM_ROOT_CA_CERT))
+        old_key = cast(PrivKey, self.key_store.get_tlsobject(self.CEPHADM_ROOT_CA_KEY))
+        if old_key and old_cert:
+            try:
+                self.ssl_certs.load_root_credentials(old_cert.cert, old_key.key)
+            except SSLConfigException as e:
+                raise SSLConfigException("Cannot load cephadm root CA certificates.") from e
+        else:
+            self.ssl_certs.generate_root_cert(addr=ip)
+            self.cert_store.save_tlsobject(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
+            self.key_store.save_tlsobject(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
+
+    def get_root_ca(self) -> str:
+        return self.ssl_certs.get_root_cert()
+
+    def generate_cert(
+        self,
+        host_fqdn: Union[str, List[str]],
+        node_ip: Union[str, List[str]],
+        custom_san_list: Optional[List[str]] = None,
+    ) -> Tuple[str, str]:
+        return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
+
     def get_cert(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
         cert_obj = cast(Cert, self.cert_store.get_tlsobject(entity, service_name, host))
         return cert_obj.cert if cert_obj else None
@@ -157,7 +186,7 @@ class CertMgr:
                     'invalid_certificate': f'{e}'
                 }
 
-        ls: Dict = copy.deepcopy(self.cert_store.tlsobject_ls())
+        ls: Dict = copy.deepcopy(self.cert_store.list_tlsobjects())
         for k, v in ls.items():
             if isinstance(v, dict):
                 tmp: Dict[str, Any] = {key: get_cert_info(v[key]) for key in v if isinstance(v[key], Cert)}
@@ -168,7 +197,7 @@ class CertMgr:
         return ls
 
     def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict = copy.deepcopy(self.key_store.tlsobject_ls())
+        ls: Dict = copy.deepcopy(self.key_store.list_tlsobjects())
         if self.CEPHADM_ROOT_CA_KEY in ls:
             del ls[self.CEPHADM_ROOT_CA_KEY]
         for k, v in ls.items():
@@ -178,41 +207,6 @@ class CertMgr:
             elif isinstance(v, PrivKey):
                 ls[k] = bool(v)
         return ls
-
-    def load(self) -> None:
-        self.cert_store.load()
-        self.key_store.load()
-
-    def _initialize_root_ca(self, ip: str) -> None:
-        self.ssl_certs: SSLCerts = SSLCerts(self.certificate_duration_days)
-        old_cert = cast(Cert, self.cert_store.get_tlsobject(self.CEPHADM_ROOT_CA_CERT))
-        old_key = cast(PrivKey, self.key_store.get_tlsobject(self.CEPHADM_ROOT_CA_KEY))
-        if old_key and old_cert:
-            try:
-                self.ssl_certs.load_root_credentials(old_cert.cert, old_key.key)
-            except SSLConfigException as e:
-                raise SSLConfigException("Cannot load cephadm root CA certificates.") from e
-        else:
-            self.ssl_certs.generate_root_cert(addr=ip)
-            self.cert_store.save_tlsobject(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
-            self.key_store.save_tlsobject(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
-
-    def reload(self) -> str:
-        self.cert_store.load()
-        self.key_store.load()
-        self._initialize_root_ca(self.mgr_ip)
-        return "OK"
-
-    def get_root_ca(self) -> str:
-        return self.ssl_certs.get_root_cert()
-
-    def generate_cert(
-        self,
-        host_fqdn: Union[str, List[str]],
-        node_ip: Union[str, List[str]],
-        custom_san_list: Optional[List[str]] = None,
-    ) -> Tuple[str, str]:
-        return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
     def _raise_certificate_health_warning(self, cert_info: CertInfo, cert_obj: Cert) -> None:
         target = f'{cert_info.target}' if cert_info.target else ''
@@ -292,7 +286,7 @@ class CertMgr:
                 self._raise_certificate_health_warning(cert_info, cert_obj)
             else:
                 # self-signed invalid certificate.. shouldn't happen but let's try to renew it
-                service_name, host = self.get_cert_target(cert_entity, target)
+                service_name, host = self._get_cert_target(cert_entity, target)
                 logger.info(f'Removing invalid certificate for {cert_entity} to trigger regeneration (service: {service_name}, host: {host}).')
                 self.cert_store.rm_tlsobject(cert_entity, service_name, host)
         else:
@@ -316,7 +310,7 @@ class CertMgr:
             except SSLConfigException as e:
                 logger.error(f'Error while trying to renew self-signed certificate for {cert_info.entity}: {e}')
 
-    def get_cert_target(self, cert_entity: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
+    def _get_cert_target(self, cert_entity: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
         """Determine the service name or host based on the cert_entity."""
         service_name = entity if cert_entity in self.service_name_cert else None
         host = entity if cert_entity in self.host_cert else None
@@ -328,7 +322,7 @@ class CertMgr:
 
         def get_cert_and_key(cert_entity: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
             """Retrieve certificate and key, translating names as necessary."""
-            service_name, host = self.get_cert_target(cert_entity, entity) if entity else (None, None)
+            service_name, host = self._get_cert_target(cert_entity, entity) if entity else (None, None)
             cert = cast(Cert, self.cert_store.get_tlsobject(cert_entity, service_name=service_name, host=host))
             key_entity = cert_entity.replace("_cert", "_key")
             key = cast(PrivKey, self.key_store.get_tlsobject(key_entity, service_name=service_name, host=host))
@@ -347,7 +341,7 @@ class CertMgr:
                 cert_info = CertInfo(cert_entity, target)
                 self._renew_certificate(cert_info, cert_obj)
 
-        for cert_entity, cert_entries in self.cert_store.tlsobject_ls().items():
+        for cert_entity, cert_entries in self.cert_store.list_tlsobjects().items():
             if not cert_entries:
                 continue
 

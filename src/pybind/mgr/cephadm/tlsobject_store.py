@@ -101,7 +101,7 @@ class TLSObjectStore():
         if entity in self.per_service_name_tlsobjects and not service_name:
             raise TLSObjectException(f'Need service name to access {cred_type} for entity {entity}')
 
-    def tlsobject_ls(self) -> Dict[str, Union[Type[TLSObjectProtocol], Dict[str, Type[TLSObjectProtocol]]]]:
+    def list_tlsobjects(self) -> Dict[str, Union[Type[TLSObjectProtocol], Dict[str, Type[TLSObjectProtocol]]]]:
         return self.known_entities
 
     def load(self) -> None:

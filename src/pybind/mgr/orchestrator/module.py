@@ -1267,7 +1267,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
-    @_cli_write_command('orch certmgr set cert')
+    @_cli_write_command('orch certmgr cert set')
     def _cert_store_set_cert(
         self,
         entity: str,
@@ -1290,7 +1290,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
-    @_cli_write_command('orch certmgr set cert-key')
+    @_cli_write_command('orch certmgr key set')
     def _cert_store_set_key(
         self,
         entity: str,
