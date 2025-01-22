@@ -905,6 +905,9 @@ ReplicatedRecoveryBackend::_handle_pull_response(
 
   if (complete) {
     pull_info.stat.num_objects_recovered++;
+    auto manager = pg.obc_loader.get_obc_manager(
+      recovery_waiter.obc);
+    manager.lock_excl_sync(); /* cannot already be locked */
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.soid, get_recovering(push_op.soid).pull_info->recovery_info,
       false, t
