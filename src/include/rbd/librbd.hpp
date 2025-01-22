@@ -586,6 +586,9 @@ public:
   int mirror_group_resync(IoCtx& io_ctx, const char *group_name);
   int mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
                                    uint32_t flags, std::string *snap_id);
+  int aio_mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
+                                       uint32_t flags, std::string *snap_id,
+                                       RBD::AioGroupCompletion *c);
   int mirror_group_get_info(IoCtx& io_ctx, const char *group_name,
                             mirror_group_info_t *mirror_group_info,
                             size_t info_size);
