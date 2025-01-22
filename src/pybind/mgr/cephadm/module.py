@@ -92,7 +92,6 @@ from .inventory import (
     ClientKeyringSpec,
     TunedProfileStore,
     NodeProxyCache,
-    CertKeyStore,
     OrchSecretNotFound,
 )
 from .upgrade import CephadmUpgrade
@@ -3273,7 +3272,7 @@ Then run the following:
 
     @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
-        return self.cert_key_store.key_ls()
+        return self.cert_mgr.key_ls()
 
     @handle_orch_error
     def cert_store_get_cert(
@@ -3283,7 +3282,7 @@ Then run the following:
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> str:
-        cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
+        cert = self.cert_mgr.get_cert(entity, service_name or '', hostname or '')
         if not cert:
             if no_exception_when_missing:
                 return ''
@@ -3298,7 +3297,7 @@ Then run the following:
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> str:
-        key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
+        key = self.cert_mgr.get_key(entity, service_name or '', hostname or '')
         if not key:
             if no_exception_when_missing:
                 return ''
