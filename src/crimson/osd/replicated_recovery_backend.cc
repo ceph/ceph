@@ -1028,9 +1028,11 @@ ReplicatedRecoveryBackend::handle_push(
   co_await interruptor::make_interruptible(
     shard_services.get_store().do_transaction(coll, std::move(t)));
 
-  //TODO: this should be grouped with pg.on_local_recover somehow.
-  pg.get_recovery_handler()->_committed_pushed_object(
-    epoch_frozen, pg.get_info().last_complete);
+  if (complete) {
+    //TODO: this should be grouped with pg.on_local_recover somehow.
+    pg.get_recovery_handler()->_committed_pushed_object(
+      epoch_frozen, pg.get_info().last_complete);
+  }
 
   auto reply = crimson::make_message<MOSDPGPushReply>();
   reply->from = pg.get_pg_whoami();
