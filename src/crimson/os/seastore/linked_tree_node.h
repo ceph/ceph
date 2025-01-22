@@ -98,7 +98,6 @@ public:
 // It serves the responsibility to be a child of the RootBlock.
 // Logically, it is a secialized version of ChildNode.
 template <typename ParentT, typename T>
-requires std::is_same_v<RootBlock, ParentT>
 class RootChildNode {
 public:
 protected:
