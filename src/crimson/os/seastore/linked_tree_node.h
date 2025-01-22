@@ -357,6 +357,7 @@ public:
   void link_child(BaseChildNode<T, node_key_t>* child, btreenode_pos_t pos) {
     auto &me = down_cast();
     assert(pos < me.get_size());
+    assert(pos < children.capacity());
     assert(child);
     ceph_assert(!me.is_pending());
     assert(child->valid() && !child->pending());
@@ -375,6 +376,8 @@ public:
     if (size == 0) {
       size = me.get_size();
     }
+    maybe_expand_children(size + 1);
+    assert(size < children.capacity());
     auto raw_children = children.data();
     std::memmove(
       &raw_children[offset + 1],
@@ -393,11 +396,9 @@ public:
 
 protected:
   ParentNode(btreenode_pos_t capacity)
-    : children(capacity, nullptr),
-      capacity(capacity) {}
+    : children(capacity, nullptr) {}
   ParentNode(const ParentNode &rhs)
-    : children(rhs.capacity, nullptr),
-      capacity(rhs.capacity) {}
+    : children(rhs.children.capacity(), nullptr) {}
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
     ceph_assert(down_cast().is_stable());
     ceph_assert(dest->is_pending());
@@ -448,6 +449,7 @@ protected:
       &raw_children[offset],
       &raw_children[offset + 1],
       (me.get_size() - offset - 1) * sizeof(BaseChildNode<T, node_key_t>*));
+    maybe_shink_children();
   }
 
   void on_rewrite(Transaction &t, T &foreign_extent) {
@@ -552,8 +554,10 @@ protected:
     auto &me = down_cast();
     assert(!left.my_tracker);
     assert(!right.my_tracker);
+    btreenode_pos_t pivot = me.get_node_split_pivot();
+    left.maybe_expand_children(pivot);
+    right.maybe_expand_children(me.get_size() - pivot);
     if (me.is_pending()) {
-      btreenode_pos_t pivot = me.get_node_split_pivot();
       move_child_ptrs(left, me, 0, 0, pivot);
       move_child_ptrs(right, me, 0, pivot, me.get_size());
       my_tracker = nullptr;
@@ -584,6 +588,7 @@ protected:
     auto &me = down_cast();
     ceph_assert(!my_tracker);
 
+    maybe_expand_children(left.get_size() + right.get_size());
     if (left.is_pending()) {
       move_child_ptrs(me, left, 0, 0, left.get_size());
       left.my_tracker = nullptr;
@@ -631,6 +636,9 @@ protected:
     if (total % 2 && prefer_left) {
       pivot_idx++;
     }
+
+    replacement_left.maybe_expand_children(pivot_idx);
+    replacement_right.maybe_expand_children(r_size + l_size - pivot_idx);
 
     assert(!replacement_left.my_tracker);
     assert(!replacement_right.my_tracker);
@@ -922,10 +930,29 @@ private:
   const T& down_cast() const {
     return *static_cast<const T*>(this);
   }
+  void maybe_expand_children(size_t size) {
+    if constexpr (T::CHILD_VEC_UNIT) {
+      if (size > children.capacity()) {
+	children.resize(p2roundup(size, (size_t)T::CHILD_VEC_UNIT));
+      }
+    } else {
+      // children.capacity() is static and assigned upon construction
+      assert(size <= children.capacity());
+    }
+  }
+  void maybe_shink_children() {
+    if constexpr (T::CHILD_VEC_UNIT) {
+      auto &me = down_cast();
+      if (children.capacity() > T::CHILD_VEC_UNIT &&
+	  me.get_size() < (children.capacity() / 3 /*should be parameterized*/)) {
+	children.resize(p2roundup(me.get_size(), T::CHILD_VEC_UNIT));
+	children.shrink_to_fit();
+      }
+    }
+  }
 
   std::vector<BaseChildNode<T, node_key_t>*> children;
   std::set<TCachedExtentRef<T>, Comparator> copy_sources;
-  btreenode_pos_t capacity = 0;
 
   // copy dests points from a stable node back to its pending nodes
   // having copy sources at the same tree level, it serves as a two-level index:

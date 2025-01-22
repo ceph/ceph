@@ -91,6 +91,7 @@ class BackrefInternalNode
     "INTERNAL_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
   using key_type = paddr_t;
+  static constexpr uint32_t CHILD_VEC_UNIT = 0;
   template <typename... T>
   BackrefInternalNode(T&&... t) :
     FixedKVInternalNode(std::forward<T>(t)...) {}
