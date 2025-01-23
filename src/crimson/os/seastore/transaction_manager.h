@@ -568,7 +568,7 @@ public:
 	  ceph_assert(full_extent_integrity_check
 	      ? (ext && ext->is_fully_loaded())
 	      : true);
-	  std::optional<ceph::bufferptr> original_bptr;
+	  std::optional<ceph::bufferptr_rw> original_bptr;
 	  // TODO: preserve the bufferspace if partially loaded
 	  if (ext && ext->is_fully_loaded()) {
 	    ceph_assert(!ext->is_mutable());

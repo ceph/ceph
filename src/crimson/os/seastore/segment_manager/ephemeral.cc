@@ -260,7 +260,7 @@ SegmentManager::release_ertr::future<> EphemeralSegmentManager::release(
 SegmentManager::read_ertr::future<> EphemeralSegmentManager::read(
   paddr_t addr,
   size_t len,
-  ceph::bufferptr &out)
+  ceph::bufferptr_rw &out)
 {
   auto& seg_addr = addr.as_seg_paddr();
   if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {

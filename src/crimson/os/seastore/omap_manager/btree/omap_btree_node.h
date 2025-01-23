@@ -48,7 +48,7 @@ struct OMapNode : LogicalCachedExtent {
       need_merge(n_merge) {}
   };
 
-  explicit OMapNode(ceph::bufferptr &&ptr) : LogicalCachedExtent(std::move(ptr)) {}
+  explicit OMapNode(ceph::bufferptr_rw &&ptr) : LogicalCachedExtent(std::move(ptr)) {}
   explicit OMapNode(extent_len_t length) : LogicalCachedExtent(length) {}
   OMapNode(const OMapNode &other)
   : LogicalCachedExtent(other) {}

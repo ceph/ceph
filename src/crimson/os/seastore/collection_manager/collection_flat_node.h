@@ -94,7 +94,7 @@ struct CollectionNode
   : LogicalCachedExtent {
   using CollectionNodeRef = TCachedExtentRef<CollectionNode>;
 
-  explicit CollectionNode(ceph::bufferptr &&ptr)
+  explicit CollectionNode(ceph::bufferptr_rw &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
   explicit CollectionNode(extent_len_t length)
     : LogicalCachedExtent(length) {}
