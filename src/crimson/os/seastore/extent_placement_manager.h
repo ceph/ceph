@@ -327,7 +327,7 @@ public:
 
   struct alloc_result_t {
     paddr_t paddr;
-    bufferptr bp;
+    bufferptr_rw bp;
     rewrite_gen_t gen;
   };
   std::optional<alloc_result_t> alloc_new_non_data_extent(
@@ -505,7 +505,7 @@ public:
   read_ertr::future<> read(
     paddr_t addr,
     size_t len,
-    ceph::bufferptr &out
+    ceph::bufferptr_rw &out
   ) {
     assert(devices_by_id[addr.get_device_id()] != nullptr);
     return devices_by_id[addr.get_device_id()]->read(addr, len, out);

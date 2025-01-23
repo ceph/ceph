@@ -66,7 +66,7 @@ struct RootBlock : CachedExtent {
   /// dumps root as delta
   ceph::bufferlist get_delta() final {
     ceph::bufferlist bl;
-    ceph::buffer::ptr bptr(sizeof(root_t));
+    ceph::buffer::ptr_rw bptr(sizeof(root_t));
     *reinterpret_cast<root_t*>(bptr.c_str()) = root;
     bl.append(bptr);
     return bl;

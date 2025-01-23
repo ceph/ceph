@@ -1080,12 +1080,13 @@ RandomBlockOolWriter::do_write(
       for (auto &b : w.mergeable_bps) {
 	len += b.length();
       }
-      w.bp = ceph::bufferptr(ceph::buffer::create_page_aligned(len));
+      auto bp = ceph::bufferptr_rw(ceph::buffer::create_page_aligned(len));
       extent_len_t cursor = 0;
       for (auto &b : w.mergeable_bps) {
-	w.bp.copy_in(cursor, b.length(), b.c_str());
+	bp.copy_in(cursor, b.length(), b.c_str());
 	cursor += b.length();
       }
+      w.bp = std::move(bp);
       w.mergeable_bps.clear();
     }
   }

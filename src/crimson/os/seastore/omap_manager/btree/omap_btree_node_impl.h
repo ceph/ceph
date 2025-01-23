@@ -32,7 +32,7 @@ struct OMapInnerNode
   using OMapInnerNodeRef = TCachedExtentRef<OMapInnerNode>;
   using internal_iterator_t = const_iterator;
 
-  explicit OMapInnerNode(ceph::bufferptr &&ptr)
+  explicit OMapInnerNode(ceph::bufferptr_rw &&ptr)
     : OMapNode(std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
   }
@@ -161,7 +161,7 @@ struct OMapLeafNode
   using OMapLeafNodeRef = TCachedExtentRef<OMapLeafNode>;
   using internal_iterator_t = const_iterator;
 
-  explicit OMapLeafNode(ceph::bufferptr &&ptr)
+  explicit OMapLeafNode(ceph::bufferptr_rw &&ptr)
     : OMapNode(std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str(), this->get_bptr().length());
   }

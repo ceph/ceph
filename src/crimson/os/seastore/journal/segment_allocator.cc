@@ -107,7 +107,7 @@ SegmentAllocator::do_open(bool is_mkfs)
     auto header_length = get_block_size();
     bufferlist bl;
     encode(header, bl);
-    bufferptr bp(ceph::buffer::create_page_aligned(header_length));
+    bufferptr_rw bp(ceph::buffer::create_page_aligned(header_length));
     bp.zero();
     auto iter = bl.cbegin();
     iter.copy(bl.length(), bp.c_str());
@@ -255,7 +255,7 @@ SegmentAllocator::close_segment()
        tail,
        written_to);
 
-  bufferptr bp(ceph::buffer::create_page_aligned(get_block_size()));
+  bufferptr_rw bp(ceph::buffer::create_page_aligned(get_block_size()));
   bp.zero();
   auto iter = bl.cbegin();
   iter.copy(bl.length(), bp.c_str());

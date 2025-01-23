@@ -1165,7 +1165,7 @@ CachedExtentRef Cache::duplicate_for_write(
     // deepcopy the buffer of exist clean extent beacuse it shares
     // buffer with original clean extent.
     auto bp = i->get_bptr();
-    auto nbp = ceph::bufferptr(bp.c_str(), bp.length());
+    auto nbp = ceph::bufferptr_rw(bp.c_str(), bp.length());
     i->set_bptr(std::move(nbp));
 
     t.add_mutated_extent(i);

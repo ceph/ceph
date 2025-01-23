@@ -1657,7 +1657,7 @@ seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osi
 
     for (int i = 0; i < count / bsize; ++i) {
       ceph::os::Transaction t;
-      ceph::buffer::ptr bp(bsize);
+      ceph::buffer::ptr_rw bp(bsize);
       std::generate_n(bp.c_str(), bp.length(), [&dis, &gen]() {
           return static_cast<char>(dis(gen));
       });

@@ -30,7 +30,7 @@ using read_ertr = crimson::errorator<
 class SegmentStateTracker {
   using segment_state_t = Segment::segment_state_t;
 
-  bufferptr bptr;
+  bufferptr_rw bptr;
 
   using L = absl::container_internal::Layout<uint8_t>;
   const L layout;
@@ -147,7 +147,7 @@ public:
   read_ertr::future<> read(
     paddr_t addr,
     size_t len,
-    ceph::bufferptr &out) final;
+    ceph::bufferptr_rw &out) final;
 
   device_type_t get_device_type() const final {
     return superblock.config.spec.dtype;

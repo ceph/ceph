@@ -41,7 +41,7 @@ class SeastoreSuper final: public Super {
 
 class SeastoreNodeExtent final: public NodeExtent {
  public:
-  explicit SeastoreNodeExtent(ceph::bufferptr &&ptr)
+  explicit SeastoreNodeExtent(ceph::bufferptr_rw &&ptr)
     : NodeExtent(std::move(ptr)) {}
   explicit SeastoreNodeExtent(extent_len_t length)
     : NodeExtent(length) {}

@@ -137,7 +137,7 @@ static read_ertr::future<> do_read(
   seastar::file &device,
   uint64_t offset,
   size_t len,
-  bufferptr &bptr)
+  bufferptr_rw &bptr)
 {
   LOG_PREFIX(block_do_read);
   TRACE("{} poffset=0x{:x}~0x{:x} ...", device_id_printer_t{device_id}, offset, len);
@@ -290,7 +290,7 @@ write_superblock(
   assert(ceph::encoded_sizeof<block_sm_superblock_t>(sb) <
 	 sb.block_size);
   return seastar::do_with(
-    bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
+    bufferptr_rw(ceph::buffer::create_page_aligned(sb.block_size)),
     [=, &device](auto &bp)
   {
     bufferlist bl;
@@ -309,7 +309,7 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
   LOG_PREFIX(block_read_superblock);
   DEBUG("reading superblock ...");
   return seastar::do_with(
-    bufferptr(ceph::buffer::create_page_aligned(sd.block_size)),
+    bufferptr_rw(ceph::buffer::create_page_aligned(sd.block_size)),
     [=, &device](auto &bp)
   {
     return do_read(
@@ -632,7 +632,7 @@ SegmentManager::release_ertr::future<> BlockSegmentManager::release(
 SegmentManager::read_ertr::future<> BlockSegmentManager::read(
   paddr_t addr,
   size_t len,
-  ceph::bufferptr &out)
+  ceph::bufferptr_rw &out)
 {
   LOG_PREFIX(BlockSegmentManager::read);
   auto& seg_addr = addr.as_seg_paddr();

@@ -49,7 +49,7 @@ struct OMapNode : LogicalChildNode {
       need_merge(n_merge) {}
   };
 
-  explicit OMapNode(ceph::bufferptr &&ptr) : LogicalChildNode(std::move(ptr)) {}
+  explicit OMapNode(ceph::bufferptr_rw &&ptr) : LogicalChildNode(std::move(ptr)) {}
   explicit OMapNode(extent_len_t length) : LogicalChildNode(length) {}
   OMapNode(const OMapNode &other)
   : LogicalChildNode(other) {}
