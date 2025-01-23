@@ -187,9 +187,26 @@ Documentation
 
 Responsibilities
 ^^^^^^^^^^^^^^^^
-* update docs for new capabilities
-* solicit and respond to user feedback
-* ...
+* Update the documentation to describe new capabilities.
+* Solicit user feedback and respond to it.
+* Maintain communications channels so that members of the upstream community
+  have confidence that their documentation concerns are recognized and
+  addressed.
+* Correct the structure of sentences as needed.
+* Ensure that the .rst files and the .md files that constitute the
+  documentation are properly formatted and that Sphinx renders them as
+  intended.
+* Ensure that correct information is backported from the ``main`` branch to the
+  documentation release branches.
+* Communicate with component leads and other authorities to ensure the
+  technical accuracy of the documentation. Alter the documentation as necessary
+  when inaccuracies are discovered.
+* Report persistent Jenkins-check failures to the #sepia channel.
+* Enhance the ability of the community to contribute to documentation.
+* Facilitate timely PR reviews.
+* Facilitate the ceph.io blog site.
+* Documentation kaizen: restructure and refactor documentation. Modernize
+  obsolete content. Reflect the evolving Ceph landscape.
 
 Current Lead: Zac Dover
 
