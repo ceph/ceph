@@ -1677,8 +1677,6 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
           ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
         }
         in->symlink_plain = slname;
-      } else {
-        in->symlink_plain = in->symlink;
       }
     }
   }
@@ -7466,8 +7464,6 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
       }
       inode->symlink_plain = slname;
-    } else {
-      inode->symlink_plain = inode->symlink;
     }
   }
 
@@ -8149,14 +8145,25 @@ int Client::_readlink(Inode *in, char *buf, size_t size)
     r = size;
 
   auto fscrypt_denc = fscrypt->get_fname_denc(in->fscrypt_ctx, &in->fscrypt_key_validator, true);
-  if (fscrypt_denc && in->symlink_plain.empty()) {
-    string dname;
-    int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &dname);
-    if (ret < 0) {
-      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+
+  //There are three states a symlink could be in
+  // 1. Encrypted symlink not yet decrypted into memory
+  // 2. Encrypted symlink decrypted into memory
+  // 3. Regular symlink
+  if (fscrypt_denc) {
+    if (in->symlink_plain.empty()) {
+      string dname;
+      int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &dname);
+      if (ret < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+      }
+      memcpy(buf, dname.c_str(), dname.size());
+      r = dname.size();
+    } else {
+      // already buffered, copy plaintext to buf
+      memcpy(buf, in->symlink_plain.c_str(), in->symlink_plain.length());
+      r = in->symlink_plain.length();
     }
-    memcpy(buf, dname.c_str(), dname.size());
-    r = dname.size();
   } else {
     memcpy(buf, in->symlink.c_str(), r);
   }
