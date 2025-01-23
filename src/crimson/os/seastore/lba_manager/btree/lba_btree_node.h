@@ -173,7 +173,7 @@ struct LBALeafNode
   using key_type = laddr_t;
   using parent_node_t = ParentNode<LBALeafNode, laddr_t>;
   using child_t = LogicalChildNode;
-  LBALeafNode(ceph::bufferptr &&ptr)
+  LBALeafNode(ceph::bufferptr_rw &&ptr)
     : parent_type_t(std::move(ptr)),
       parent_node_t(LEAF_NODE_CAPACITY) {}
   explicit LBALeafNode(extent_len_t length)

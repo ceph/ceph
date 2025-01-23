@@ -152,7 +152,7 @@ write_ertr::future<> NVMeBlockDevice::write(
 
 read_ertr::future<> NVMeBlockDevice::read(
   uint64_t offset,
-  bufferptr &bptr) {
+  bufferptr_rw &bptr) {
   logger().debug(
       "block: read offset {} len {}",
       offset,
@@ -381,7 +381,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::initialize_nvme_features() {
 }
 
 write_ertr::future<> NVMeBlockDevice::nvme_write(
-  uint64_t offset, size_t len, void *buffer_ptr) {
+  uint64_t offset, size_t len, const void *buffer_ptr) {
   return seastar::do_with(
     nvme_io_command_t(),
     [this, offset, len, buffer_ptr] (auto &cmd) {
