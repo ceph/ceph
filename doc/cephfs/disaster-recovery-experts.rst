@@ -229,126 +229,130 @@ recovery since the existing metadata pool would not be modified.
    contents of the data pool while this is the case. After recovery is
    complete, archive or delete the damaged metadata pool.
 
-To begin, the existing file system should be taken down to prevent further
-modification of the data pool. Unmount all clients and then use the following
-command to mark the file system failed:
+#. To begin, the existing file system should be taken down to prevent further
+   modification of the data pool. Unmount all clients and then use the
+   following command to mark the file system failed:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   ceph fs fail <fs_name>
+      ceph fs fail <fs_name>
 
-.. note::
+   .. note::
 
-   ``<fs_name>`` here and below refers to the original, damaged file system.
+      ``<fs_name>`` here and below refers to the original, damaged file system.
 
-Next, create a recovery file system in which we will populate a new metadata pool
-that is backed by the original data pool:
+#. Next, create a recovery file system in which we will populate a new metadata
+   pool that is backed by the original data pool:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   ceph osd pool create cephfs_recovery_meta
-   ceph fs new cephfs_recovery cephfs_recovery_meta <data_pool> --recover --allow-dangerous-metadata-overlay
+      ceph osd pool create cephfs_recovery_meta
+      ceph fs new cephfs_recovery cephfs_recovery_meta <data_pool> --recover --allow-dangerous-metadata-overlay
 
-.. note::
+   .. note::
 
-   You may rename the recovery metadata pool and file system at a future time.
-   The ``--recover`` flag prevents any MDS daemon from joining the new file
-   system.
+      You may rename the recovery metadata pool and file system at a future time.
+      The ``--recover`` flag prevents any MDS daemon from joining the new file
+      system.
 
-Next, we will create the intial metadata for the fs:
+#. Next, we will create the intial metadata for the fs:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephfs-table-tool cephfs_recovery:0 reset session
+      cephfs-table-tool cephfs_recovery:0 reset session
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephfs-table-tool cephfs_recovery:0 reset snap
+      cephfs-table-tool cephfs_recovery:0 reset snap
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   cephfs-table-tool cephfs_recovery:0 reset inode
+      cephfs-table-tool cephfs_recovery:0 reset inode
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force --yes-i-really-really-mean-it
+      cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force --yes-i-really-really-mean-it
 
-Now perform the recovery of the metadata pool from the data pool:
+#. Now perform the recovery of the metadata pool from the data pool:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephfs-data-scan init --force-init --filesystem cephfs_recovery --alternate-pool cephfs_recovery_meta
+      cephfs-data-scan init --force-init --filesystem cephfs_recovery --alternate-pool cephfs_recovery_meta
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   cephfs-data-scan scan_extents --alternate-pool cephfs_recovery_meta --filesystem <fs_name>
+      cephfs-data-scan scan_extents --alternate-pool cephfs_recovery_meta --filesystem <fs_name>
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   cephfs-data-scan scan_inodes --alternate-pool cephfs_recovery_meta --filesystem <fs_name> --force-corrupt
+      cephfs-data-scan scan_inodes --alternate-pool cephfs_recovery_meta --filesystem <fs_name> --force-corrupt
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephfs-data-scan scan_links --filesystem cephfs_recovery
+      cephfs-data-scan scan_links --filesystem cephfs_recovery
 
-.. note::
+   .. note::
 
-   Each of the scan procedures above scans through the entire data pool. This
-   may take a long time. See the previous section on how to distribute this
-   task among workers.
+      Each of the scan procedures above scans through the entire data pool.
+      This may take a long time. See the previous section on how to distribute
+      this task among workers.
 
-If the damaged file system contains dirty journal data, it may be recovered next
-with a command of the following form:
+   If the damaged file system contains dirty journal data, it may be recovered
+   next with a command of the following form:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries list --alternate-pool cephfs_recovery_meta
+      cephfs-journal-tool --rank=<fs_name>:0 event recover_dentries list --alternate-pool cephfs_recovery_meta
 
-After recovery, some recovered directories will have incorrect statistics.
-Ensure that the parameters ``mds_verify_scatter`` and ``mds_debug_scatterstat``
-are set to false (the default) to prevent the MDS from checking the statistics:
+#. After recovery, some recovered directories will have incorrect statistics.
+   Ensure that the parameters ``mds_verify_scatter`` and
+   ``mds_debug_scatterstat`` are set to false (the default) to prevent the MDS
+   from checking the statistics:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   ceph config rm mds mds_verify_scatter
+      ceph config rm mds mds_verify_scatter
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   ceph config rm mds mds_debug_scatterstat
+      ceph config rm mds mds_debug_scatterstat
 
-.. note::
+   .. note::
 
-   Verify that the config has not been set globally or with a local ``ceph.conf`` file.
+      Verify that the config has not been set globally or with a local
+      ``ceph.conf`` file.
 
-Now, allow an MDS daemon to join the recovery file system:
+#. Now, allow an MDS daemon to join the recovery file system:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   ceph fs set cephfs_recovery joinable true
+      ceph fs set cephfs_recovery joinable true
 
-Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair recursive statistics.
-Ensure that you have an MDS daemon running and issue the following command:
+#. Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair recursive
+   statistics.  Ensure that you have an MDS daemon running and issue the
+   following command:
 
-.. prompt:: bash #
+   .. prompt:: bash #
 
-   ceph tell mds.cephfs_recovery:0 scrub start / recursive,repair,force
+      ceph tell mds.cephfs_recovery:0 scrub start / recursive,repair,force
 
-.. note::
+   .. note::
 
-   The `Symbolic link recovery <https://tracker.ceph.com/issues/46166>`_ is
-   supported starting in the Quincy release.
+      The `Symbolic link recovery <https://tracker.ceph.com/issues/46166>`_ is
+      supported starting in the Quincy release.
 
-   Symbolic links were recovered as empty regular files before.
+      Symbolic links were recovered as empty regular files before.
 
-It is recommended that you migrate any data from the recovery file system as
-soon as possible. Do not restore the old file system while the recovery file
-system is operational.
+   It is recommended that you migrate any data from the recovery file system as
+   soon as possible. Do not restore the old file system while the recovery file
+   system is operational.
 
-.. note::
+   .. note::
 
-    If the data pool is also corrupt, some files may not be restored because
-    the backtrace information associated with them is lost. If any data objects
-    are missing (due to issues like lost Placement Groups on the data pool),
-    the recovered files will contain holes in place of the missing data.
+       If the data pool is also corrupt, some files may not be restored because
+       the backtrace information associated with them is lost. If any data
+       objects are missing (due to issues like lost Placement Groups on the
+       data pool), the recovered files will contain holes in place of the
+       missing data.
 
 .. _Symbolic link recovery: https://tracker.ceph.com/issues/46166
