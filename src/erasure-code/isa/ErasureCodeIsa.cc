@@ -114,6 +114,108 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
   return isa_decode(erasures, data, coding, blocksize);
 }
 
+int ErasureCodeIsa::encode_chunks(const shard_id_map<bufferptr> &in,
+                                       shard_id_map<bufferptr> &out)
+{
+  char *chunks[k + m]; //TODO don't use variable length arrays
+  memset(chunks, 0, sizeof(char*) * (k + m));
+  uint64_t size = 0;
+
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = ptr.c_str();
+  }
+
+  char *zeros = nullptr;
+
+  for (shard_id_t i; i < k + m; ++i) {
+    if (in.contains(i) || out.contains(i)) continue;
+
+    if (zeros == nullptr) {
+      zeros = (char*)malloc(size);
+      memset(zeros, 0, size);
+    }
+
+    chunks[static_cast<int>(i)] = zeros;
+  }
+
+  isa_encode(&chunks[0], &chunks[k], size);
+
+  if (zeros != nullptr) free(zeros);
+
+  return 0;
+}
+
+int ErasureCodeIsa::decode_chunks(const shard_id_set &want_to_read,
+                                  shard_id_map<bufferptr> &in,
+				  shard_id_map<bufferptr> &out)
+{
+  unsigned int size = 0;
+  shard_id_set erasures_set;
+  shard_id_set to_free;
+  erasures_set.insert_range(shard_id_t(0), k + m);
+  int erasures[k + m + 1];
+  int erasures_count = 0;
+  char *data[k];
+  char *coding[m];
+  memset(data, 0, sizeof(char*) * k);
+  memset(coding, 0, sizeof(char*) * m);
+
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+    }
+    erasures_set.erase(shard);
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+    }
+  }
+
+  for (int i = 0; i < k + m; i++) {
+    char **buf = i < k ? &data[i] : &coding[i - k];
+    if (*buf == nullptr) {
+      *buf = (char *)malloc(size);
+      to_free.insert(shard_id_t(i));
+    }
+  }
+
+  for (auto && shard : erasures_set) {
+    erasures[erasures_count++] = static_cast<int>(shard);
+  }
+
+
+  erasures[erasures_count] = -1;
+  ceph_assert(erasures_count > 0);
+  int r = isa_decode(erasures, data, coding, size);
+  for (auto & shard : to_free) {
+    int i = static_cast<int>(shard);
+    char **buf = i < k ? &data[i] : &coding[i - k];
+    free(*buf);
+    *buf = nullptr;
+  }
+  return r;
+}
+
 // -----------------------------------------------------------------------------
 
 void

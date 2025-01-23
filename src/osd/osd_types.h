@@ -147,6 +147,8 @@ typedef interval_set<
   snapid_t,
   mempool::osdmap::flat_map> snap_interval_set_t;
 
+using shard_id_set = bitset_set<128, shard_id_t>;
+WRITE_CLASS_DENC(shard_id_set)
 
 /**
  * osd request identifier
