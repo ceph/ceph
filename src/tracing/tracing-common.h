@@ -98,5 +98,15 @@
     ctf_integer(uint64_t, field, (val) == NULL ? 0 : (uint64_t)(*val)) \
     ctf_integer(uint8_t, field##_isnull, (val) == NULL)
 
+// Use this for USDT conditional probes
+#define CEPH_UST_SEMAPHORE(provider, name)                        \
+  __extension__ unsigned short provider##_##name##_semaphore      \
+      __attribute__((unused)) __attribute__((section(".probes"))) \
+      __attribute__((visibility("hidden")));
+
+// Conditional tracepoint check for LTTng and USDT. Requires CEPH_UST_SEMAPHORE
+#define CEPH_TRACEPOINT_ENABLED(provider, name) \
+  (tracepoint_enabled(provider, name) ||        \
+   __builtin_expect(provider##_##name##_semaphore, 0))
 
 #endif /* TRACING_COMMON_H */
