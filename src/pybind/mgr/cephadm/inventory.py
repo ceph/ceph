@@ -522,6 +522,13 @@ class SpecStore():
         else:
             self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as having been configured')
 
+    def get_specs_by_type(self, service_type: str) -> Mapping[str, ServiceSpec]:
+        return {
+            service_name: spec
+            for service_name, spec in self._specs.items()
+            if service_type == spec.service_type
+        }
+
 
 class ClientKeyringSpec(object):
     """
