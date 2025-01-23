@@ -493,7 +493,83 @@ class interval_set {
     insert(val, 1);
   }
 
+  /** This insert method adds an interval into the interval map, with some
+   * caveats and restrictions. Inserts must be new interval or append to
+   * an existing interval. Adding an unsupported interval will result in an
+   * assert firing.
+   *
+   * NOTE: Unless you need the asserts/policing provided by this function,
+   *       you are likely better off with union_insert().
+   *
+   * @param start - the offset at the start of the interval
+   * @param len - the length of the interval being added.
+   * @param pstart (optional) returns the start of the resulting interval
+   * @param plen (optional) returns the length of the resulting interval.
+   */
   void insert(T start, T len, T *pstart=0, T *plen=0) {
+    //cout << "insert " << start << "~" << len << endl;
+    ceph_assert(len > 0);
+    _size += len;
+    auto p = find_adj_m(start);
+    if (p == m.end()) {
+      m[start] = len;                  // new interval
+      if (pstart)
+	*pstart = start;
+      if (plen)
+	*plen = len;
+    } else {
+      if (p->first < start) {
+
+        if (p->first + p->second != start) {
+          //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
+          ceph_abort();
+        }
+
+        p->second += len;               // append to end
+
+        auto n = p;
+        ++n;
+	if (pstart)
+	  *pstart = p->first;
+        if (n != m.end() &&
+            start+len == n->first) {   // combine with next, too!
+          p->second += n->second;
+	  if (plen)
+	    *plen = p->second;
+          m.erase(n);
+        } else {
+	  if (plen)
+	    *plen = p->second;
+	}
+      } else {
+        if (start+len == p->first) {
+	  if (pstart)
+	    *pstart = start;
+	  if (plen)
+	    *plen = len + p->second;
+	  T psecond = p->second;
+          m.erase(p);
+          m[start] = len + psecond;  // append to front
+        } else {
+          ceph_assert(p->first > start+len);
+	  if (pstart)
+	    *pstart = start;
+	  if (plen)
+	    *plen = len;
+          m[start] = len;              // new interval
+        }
+      }
+    }
+  }
+
+  /** This insert method adds an interval into the interval map, without any
+   * restrictions. The interval can prepend/append/span any number of existing
+   * intervals.
+   *
+   * @param start - the offset at the start of the interval
+   * @param len - the length of the interval being added.
+   */
+  void union_insert(T start, T len) {
     //cout << "insert " << start << "~" << len << endl;
     T new_len = len;
     auto p = find_adj_m(start);
@@ -539,17 +615,12 @@ class interval_set {
     }
 
     _size += new_len;
-
-    if (pstart)
-      *pstart = o.first;
-    if (plen)
-      *plen = o.second;
   }
 
   void swap(interval_set& other) {
     m.swap(other.m);
     std::swap(_size, other._size);
-  }    
+  }
   
   void erase(const iterator &i) {
     _size -= i.get_len();
@@ -744,22 +815,21 @@ class interval_set {
     swap(a);
     intersection_of(a, b);
   }
-
+  /** Clear the current interval set, then populate with a union of a and b.
+   */
   void union_of(const interval_set &a, const interval_set &b) {
     ceph_assert(&a != this);
     ceph_assert(&b != this);
     clear();
-
-    insert(a);
-    insert(b);
+    union_of(a);
+    union_of(b);
   }
 
-  void union_of(const interval_set &b) {
-    insert(b);
-  }
-  void union_insert(T off, T len) {
-    // insert supports overlapping entries. This function is redundant.
-    insert(off, len);
+  /** Union the current contents of the interval set with a */
+  void union_of(const interval_set &a) {
+    for (const auto& [start, len] : a.m) {
+      union_insert(start, len);
+    }
   }
 
   bool subset_of(const interval_set &big) const {
@@ -836,7 +906,7 @@ class interval_set {
       T aligned_start = (start / alignment) * alignment;
       T aligned_len = ((start + len + alignment - 1) / alignment) * alignment - aligned_start;
 
-      tmp.insert(aligned_start, aligned_len);
+      tmp.union_insert(aligned_start, aligned_len);
     }
     swap(tmp);
   }
