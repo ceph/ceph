@@ -2381,7 +2381,9 @@ Usage:
             'is_paused': status.is_paused,
         }
         out = json.dumps(r, indent=4)
-        return HandleCommandResult(stdout=out)
+        if r.get('in_progress'):
+            return HandleCommandResult(stdout=out)
+        return HandleCommandResult(stdout="There are no upgrades in progress currently.")
 
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
