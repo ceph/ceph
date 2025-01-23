@@ -88,12 +88,19 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
                     std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
                             const std::map<int, ceph::buffer::list> &chunks,
                             std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
@@ -179,5 +186,6 @@ public:
   int parse(ceph::ErasureCodeProfile &profile,
             std::ostream *ss) override;
 };
+static_assert(!std::is_abstract<ErasureCodeIsaDefault>());
 
 #endif

@@ -74,20 +74,42 @@ public:
 
   size_t get_minimum_granularity() override;
 
+  using ErasureCode::minimum_to_decode;
   int minimum_to_decode(const std::set<int> &want_to_read,
 			const std::set<int> &available,
 			std::map<int, std::vector<std::pair<int, int>>> *minimum) override;
 
+  using ErasureCode::decode;
   int decode(const std::set<int> &want_to_read,
              const std::map<int, ceph::bufferlist> &chunks,
              std::map<int, ceph::bufferlist> *decoded, int chunk_size) override;
 
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
 	            std::map<int, ceph::bufferlist> *encoded) override;
 
+  // Stub for new encode chunks interface. Can be deleted once new EC is
+  // supported for all plugins.
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                          shard_id_map<bufferptr> &out) override
+  {
+    ceph_abort_msg("Not implemented for this plugin");
+  }
+
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::bufferlist> &chunks,
 		    std::map<int, ceph::bufferlist> *decoded) override;
+
+
+  // Stub for new encode chunks interface. Can be deleted once new EC is
+  // supported for all plugins.
+  virtual int decode_chunks(const shard_id_set &want_to_read,
+                          shard_id_map<bufferptr> &in,
+                          shard_id_map<bufferptr> &out)
+  {
+    ceph_abort_msg("Not implemented for this plugin");
+  }
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 

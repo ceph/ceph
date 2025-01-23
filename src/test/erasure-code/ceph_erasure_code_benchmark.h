@@ -50,9 +50,9 @@ class ErasureCodeBench {
 public:
   int setup(int argc, char** argv);
   int run();
-  int decode_erasures(const std::map<int, ceph::buffer::list> &all_chunks,
-		      const std::map<int, ceph::buffer::list> &chunks,
-		      unsigned i,
+  int decode_erasures(const shard_id_map<ceph::buffer::list> &all_chunks,
+		      const shard_id_map<ceph::buffer::list> &chunks,
+		      shard_id_t shard,
 		      unsigned want_erasures,
 		      ErasureCodeInterfaceRef erasure_code);
   int decode();

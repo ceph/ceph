@@ -114,7 +114,7 @@ int do_test_plugin_exists(const std::vector<const char*> &args) {
   std::lock_guard l{instance.lock};
   int r = instance.load(
     args[0], g_conf().get_val<std::string>("erasure_code_dir"), &plugin, &ss);
-  std::cerr << ss.str() << endl;
+  std::cerr << ss.str() << std::endl;
   return r;
 }
 
@@ -271,8 +271,8 @@ int do_decode(const std::vector<const char*> &args) {
       return 1;
     }
     auto chunk = static_cast<ssize_t>(chunk_mapping.size()) > shard ?
-      chunk_mapping[shard] : shard;
-    want_to_read.insert(chunk);
+      chunk_mapping[shard] : shard_id_t(shard);
+    want_to_read.insert(static_cast<int>(chunk));
   }
 
   r = ECUtil::decode(*sinfo, ec_impl, want_to_read, encoded_data, &decoded_data);
