@@ -498,7 +498,7 @@ class interval_set {
     T new_len = len;
     auto p = find_adj_m(start);
     auto o = std::pair(start, len);
-    T end = start+len;
+    T end = start + len;
 
     if(len == 0) {
       if (p != m.end() && start >= p->first && start < p->first + p->second) {
@@ -828,7 +828,7 @@ class interval_set {
   }
 
   /*
-  * Round down interval starts and round up interval ends alignment the specified @alignment
+  * Round down interval starts and round up interval ends to specified alignment.
   */
   void align(T alignment) {
     interval_set tmp;
