@@ -131,6 +131,8 @@ Responsibilities
  * Manage a `component team`_ in Ceph
  * Ensure PRs are reviewed and merged
  * Ensure severe bug fixes are backported
+ * Maintain roadmap for the component
+ * Update slides and present about component
  * Run standups
  * Bug triage, scrubs
  * etc.
@@ -138,6 +140,71 @@ Responsibilities
 Team leads are selected by the executive council, generally based on
 the recommendation by team members and outgoing lead.  Periodic
 rotation of lead responsibility among team members is encouraged.
+
+Current Component Leads
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Name
+     - Component
+     - Description
+   * - Adam King
+     - Cephadm
+     - Ceph's native orchestrator (install, upgrade...)
+   * - Venky Shankar
+     - CephFS
+     - Shared filesystem
+   * - Matan Breizman
+     - Crimson
+     - Next generation implementation of the OSD
+   * - Yingxin Cheng
+     - Seastore
+     - Next generation storage underlying the OSD
+   * - Afreen Misbah
+     - Dashboard
+     - Ceph's user interface for management and monitoring
+   * - Radoslaw Zarzynski
+     - RADOS
+     - Ceph's low level storage foundation
+   * - Ilya Dryomov
+     - RBD
+     - Block storage for containers and VMs
+   * - Adam Emerson, Eric Ivancich
+     - RGW
+     - S3/Swift compatible object storage
+
+
+General Leads
+=============
+
+These are general areas rather than specific subsystems within Ceph.
+Each is unique.
+
+Documentation
+-------------
+
+Responsibilities
+^^^^^^^^^^^^^^^^
+* update docs for new capabilities
+* solicit and respond to user feedback
+* ...
+
+Current Lead: Zac Dover
+
+Performance
+-----------
+
+Responsibilities
+^^^^^^^^^^^^^^^^
+* Monitor performance-related PRs
+* Analyze the performance of new changes and releases
+* Facilitate discussion around performance topics in the Performance Weekly meetings
+* ...
+
+Current Lead: Mark Nelson
+
 
 The Ceph Foundation
 -------------------
