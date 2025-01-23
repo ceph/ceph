@@ -84,75 +84,48 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     bufferlist in;
     in.push_back(in_ptr);
     int want_to_encode[] = { 0, 1, 2, 3 };
-    map<int, bufferlist> encoded;
-    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+    shard_id_map< bufferlist> encoded(jerasure.get_chunk_count());
+    EXPECT_EQ(0, jerasure.encode(shard_id_set(want_to_encode, want_to_encode+4),
 				 in,
 				 &encoded));
     EXPECT_EQ(4u, encoded.size());
-    unsigned length =  encoded[0].length();
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str() + length,
+    unsigned length =  encoded[shard_id_t(0)].length();
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str() + length,
 			in.length() - length));
 
 
     // all chunks are available
     {
       int want_to_decode[] = { 0, 1 };
-      map<int, bufferlist> decoded;
-      EXPECT_EQ(0, jerasure._decode(set<int>(want_to_decode, want_to_decode+2),
+      shard_id_map< bufferlist> decoded(jerasure.get_chunk_count());
+      EXPECT_EQ(0, jerasure._decode(shard_id_set(want_to_decode, want_to_decode+2),
 				    encoded,
 				    &decoded));
       EXPECT_EQ(2u, decoded.size()); 
-      EXPECT_EQ(length, decoded[0].length());
-      EXPECT_EQ(0, memcmp(decoded[0].c_str(), in.c_str(), length));
-      EXPECT_EQ(0, memcmp(decoded[1].c_str(), in.c_str() + length,
+      EXPECT_EQ(length, decoded[shard_id_t(0)].length());
+      EXPECT_EQ(0, memcmp(decoded[shard_id_t(0)].c_str(), in.c_str(), length));
+      EXPECT_EQ(0, memcmp(decoded[shard_id_t(1)].c_str(), in.c_str() + length,
 			  in.length() - length));
     }
 
     // two chunks are missing 
     {
-      map<int, bufferlist> degraded = encoded;
-      degraded.erase(0);
-      degraded.erase(1);
+      shard_id_map< bufferlist> degraded = encoded;
+      degraded.erase(shard_id_t(0));
+      degraded.erase(shard_id_t(1));
       EXPECT_EQ(2u, degraded.size());
       int want_to_decode[] = { 0, 1 };
-      map<int, bufferlist> decoded;
-      EXPECT_EQ(0, jerasure._decode(set<int>(want_to_decode, want_to_decode+2),
+      shard_id_map< bufferlist> decoded(jerasure.get_chunk_count());
+      EXPECT_EQ(0, jerasure._decode(shard_id_set(want_to_decode, want_to_decode+2),
 				    degraded,
 				    &decoded));
       // always decode all, regardless of want_to_decode
       EXPECT_EQ(4u, decoded.size()); 
-      EXPECT_EQ(length, decoded[0].length());
-      EXPECT_EQ(0, memcmp(decoded[0].c_str(), in.c_str(), length));
-      EXPECT_EQ(0, memcmp(decoded[1].c_str(), in.c_str() + length,
+      EXPECT_EQ(length, decoded[shard_id_t(0)].length());
+      EXPECT_EQ(0, memcmp(decoded[shard_id_t(0)].c_str(), in.c_str(), length));
+      EXPECT_EQ(0, memcmp(decoded[shard_id_t(1)].c_str(), in.c_str() + length,
 			  in.length() - length));
-    }
-
-    // partial decode with the exact-sized decode_concat()
-    {
-      map<int, bufferlist> partial_decode = encoded;
-      // we have everything but want only the first chunk
-      set<int> partial_want_to_read = { 0 };
-      EXPECT_EQ(1u, partial_want_to_read.size());
-      bufferlist out;
-      EXPECT_EQ(0, jerasure.decode_concat(partial_want_to_read,
-					  partial_decode,
-					  &out));
-      EXPECT_EQ(out.length(), partial_decode[0].length());
-    }
-
-    // partial degraded decode with the exact-sized decode_concat()
-    {
-      map<int, bufferlist> partial_decode = encoded;
-      // we have everything but what we really want
-      partial_decode.erase(0);
-      set<int> partial_want_to_read = { 0 };
-      EXPECT_EQ(1u, partial_want_to_read.size());
-      bufferlist out;
-      EXPECT_EQ(0, jerasure.decode_concat(partial_want_to_read,
-					  partial_decode,
-					  &out));
-      EXPECT_EQ(out.length(), encoded[0].length());
     }
   }
 }
@@ -171,9 +144,9 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
   // If trying to read nothing, the minimum is empty.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
     EXPECT_EQ(0, jerasure._minimum_to_decode(want_to_read,
 					     available_chunks,
@@ -184,11 +157,11 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
   // There is no way to read a chunk if none are available.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(0);
+    want_to_read.insert(shard_id_t(0));
 
     EXPECT_EQ(-EIO, jerasure._minimum_to_decode(want_to_read,
 						available_chunks,
@@ -198,12 +171,12 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
   // Reading a subset of the available chunks is always possible.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(0);
-    available_chunks.insert(0);
+    want_to_read.insert(shard_id_t(0));
+    available_chunks.insert(shard_id_t(0));
 
     EXPECT_EQ(0, jerasure._minimum_to_decode(want_to_read,
 					     available_chunks,
@@ -215,13 +188,13 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
   // chunks available.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(0);
-    want_to_read.insert(1);
-    available_chunks.insert(0);
+    want_to_read.insert(shard_id_t(0));
+    want_to_read.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(0));
 
     EXPECT_EQ(-EIO, jerasure._minimum_to_decode(want_to_read,
 						available_chunks,
@@ -237,21 +210,21 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
   // of CPU and memory.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(1);
-    want_to_read.insert(3);
-    available_chunks.insert(0);
-    available_chunks.insert(2);
-    available_chunks.insert(3);
+    want_to_read.insert(shard_id_t(1));
+    want_to_read.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(0));
+    available_chunks.insert(shard_id_t(2));
+    available_chunks.insert(shard_id_t(3));
 
     EXPECT_EQ(0, jerasure._minimum_to_decode(want_to_read,
 					     available_chunks,
 					     &minimum));
     EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(0u, minimum.count(3));
+    EXPECT_EQ(0u, minimum.count(shard_id_t(3)));
   }
 }
 
@@ -271,16 +244,16 @@ TEST(ErasureCodeTest, encode)
     // it is not properly aligned, it is padded with zeros.
     //
     bufferlist in;
-    map<int,bufferlist> encoded;
+    shard_id_map<bufferlist> encoded(jerasure.get_chunk_count());
     int want_to_encode[] = { 0, 1, 2, 3 };
     int trail_length = 1;
     in.append(string(aligned_object_size + trail_length, 'X'));
-    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+    EXPECT_EQ(0, jerasure.encode(shard_id_set(want_to_encode, want_to_encode+4),
 				 in,
 				 &encoded));
     EXPECT_EQ(4u, encoded.size());
-    char *last_chunk = encoded[1].c_str();
-    int length =encoded[1].length();
+    char *last_chunk = encoded[shard_id_t(1)].c_str();
+    int length =encoded[shard_id_t(1)].length();
     EXPECT_EQ('X', last_chunk[0]);
     EXPECT_EQ('\0', last_chunk[length - trail_length]);
   }
@@ -295,9 +268,9 @@ TEST(ErasureCodeTest, encode)
     // valgrind (there is no leak).
     //
     bufferlist in;
-    map<int,bufferlist> encoded;
-    set<int> want_to_encode;
-    want_to_encode.insert(0);
+    shard_id_map<bufferlist> encoded(jerasure.get_chunk_count());
+    shard_id_set want_to_encode;
+    want_to_encode.insert(shard_id_t(0));
     int trail_length = 1;
     in.append(string(aligned_object_size + trail_length, 'X'));
     EXPECT_EQ(0, jerasure.encode(want_to_encode, in, &encoded));

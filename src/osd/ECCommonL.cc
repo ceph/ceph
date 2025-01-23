@@ -296,7 +296,9 @@ int ECCommonL::ReadPipeline::get_min_avail_to_read_shards(
   get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
 
   map<int, vector<pair<int, int>>> need;
+IGNORE_DEPRECATED
   int r = ec_impl->minimum_to_decode(want, have, &need);
+END_IGNORE_DEPRECATED
   if (r < 0)
     return r;
 
@@ -330,8 +332,8 @@ void ECCommonL::ReadPipeline::get_min_want_to_read_shards(
   const auto distance =
     std::min(right_chunk_index - left_chunk_index, (uint64_t)sinfo.get_k());
   for(uint64_t i = 0; i < distance; i++) {
-    auto raw_shard = (left_chunk_index + i) % sinfo.get_k();
-    want_to_read->insert(sinfo.get_shard(raw_shard));
+    raw_shard_id_t raw_shard((left_chunk_index + i) % sinfo.get_k());
+    want_to_read->insert(static_cast<int>(sinfo.get_shard(raw_shard)));
   }
 }
 
@@ -365,7 +367,9 @@ int ECCommonL::ReadPipeline::get_remaining_shards(
   get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
 
   map<int, vector<pair<int, int>>> need;
+IGNORE_DEPRECATED
   int r = ec_impl->minimum_to_decode(want, have, &need);
+END_IGNORE_DEPRECATED
   if (r < 0) {
     dout(0) << __func__ << " not enough shards left to try for " << hoid
 	    << " read result was " << result << dendl;
@@ -498,8 +502,8 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
 void ECCommonL::ReadPipeline::get_want_to_read_shards(
   std::set<int> *want_to_read) const
 {
-  for (int i = 0; i < (int)sinfo.get_k(); ++i) {
-    want_to_read->insert(sinfo.get_shard(i));
+  for (raw_shard_id_t i; i < (int)sinfo.get_k(); ++i) {
+    want_to_read->insert(static_cast<int>(sinfo.get_shard(i)));
   }
 }
 
@@ -562,7 +566,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
       uint64_t chunk_size = read_pipeline.sinfo.get_chunk_size();
       uint64_t trim_offset = 0;
       for (auto shard : wanted_to_read) {
-	if (read_pipeline.sinfo.get_raw_shard(shard) * chunk_size <
+	if (static_cast<int>(read_pipeline.sinfo.get_raw_shard(shard_id_t(shard))) * chunk_size <
 	    aligned_offset_in_stripe) {
 	  trim_offset += chunk_size;
 	} else {

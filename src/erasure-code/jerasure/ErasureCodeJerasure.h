@@ -64,12 +64,19 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
-		    std::map<int, ceph::buffer::list> *encoded) override;
+        std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
   void encode_delta(const ceph::bufferptr &old_data,
                     const ceph::bufferptr &new_data,
