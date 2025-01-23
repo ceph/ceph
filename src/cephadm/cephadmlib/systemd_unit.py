@@ -147,7 +147,11 @@ def _install_extended_systemd_services(
             _write_drop_in(difh, ctx, identity, enable_init_containers, sids)
 
 
-def _get_unit_file(ctx: CephadmContext, fsid: str) -> str:
+def _get_unit_file(
+    ctx: CephadmContext,
+    fsid: str,
+    limit_core_infinity: Optional[bool] = False,
+) -> str:
     has_docker_engine = isinstance(ctx.container_engine, Docker)
     has_podman_engine = isinstance(ctx.container_engine, Podman)
     has_podman_split_version = (
@@ -160,6 +164,7 @@ def _get_unit_file(ctx: CephadmContext, fsid: str) -> str:
         has_docker_engine=has_docker_engine,
         has_podman_engine=has_podman_engine,
         has_podman_split_version=has_podman_split_version,
+        limit_core_infinity=limit_core_infinity,
     )
 
 
@@ -216,9 +221,12 @@ def update_files(
     *,
     init_container_ids: Optional[List[DaemonSubIdentity]] = None,
     sidecar_ids: Optional[List[DaemonSubIdentity]] = None,
+    limit_core_infinity: Optional[bool] = False,
 ) -> None:
     _install_base_units(ctx, ident.fsid)
-    unit = _get_unit_file(ctx, ident.fsid)
+    unit = _get_unit_file(
+        ctx, ident.fsid, limit_core_infinity=limit_core_infinity
+    )
     pathinfo = PathInfo(ctx.unit_dir, ident, sidecar_ids=sidecar_ids)
     with write_new(pathinfo.default_unit_file, perms=None) as f:
         f.write(unit)
@@ -230,6 +238,7 @@ def update_files(
 def update_base_ceph_unit_file(
     ctx: CephadmContext,
     fsid: str,
+    limit_core_infinity: Optional[bool] = False,
 ) -> None:
     # We aren't doing this for a specific daemon so we don't really
     # need a daemon identity. This just creates a placeholder mon daemon
@@ -237,7 +246,7 @@ def update_base_ceph_unit_file(
     # DaemonIdentity to be passed in
     ident = DaemonIdentity(fsid=fsid, daemon_type='mon', daemon_id='fake')
     unit = _get_unit_file(
-        ctx, ident.fsid
+        ctx, ident.fsid, limit_core_infinity=limit_core_infinity
     )
     pathinfo = PathInfo(ctx.unit_dir, ident)
     with write_new(pathinfo.default_unit_file, perms=None) as f:

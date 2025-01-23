@@ -1398,6 +1398,8 @@ class CephadmServe:
                     daemon_params['reconfig'] = True
                 if self.mgr.allow_ptrace:
                     daemon_params['allow_ptrace'] = True
+                if self.mgr.set_coredump_overrides:
+                    daemon_params['limit_core_infinity'] = True
 
                 daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
                 init_containers = self._setup_init_containers(daemon_spec, daemon_params)
