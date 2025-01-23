@@ -494,6 +494,21 @@ class CephadmUpgrade:
         self.mgr.event.set()
         return 'Stopped upgrade to %s' % target_image
 
+    def update_service(self, service_type: str, service_image: str, image: str) -> List[str]:
+        out = []
+        self.mgr.set_module_option(f"container_image_{service_image}", image)
+        # Redeploy all the service daemons of provided service type
+        for service_name, spec in self.mgr.spec_store.get_specs_by_type(service_type).items():
+            out.append(f'Processing "{service_name}" service\n')
+            try:
+                res = self.mgr.perform_service_action('redeploy', service_name)
+            except Exception as exp:
+                self.mgr.log.exception(f"Failed to redeploy service {service_name}")
+                out.append(f'{exp}\n')
+            else:
+                out.extend(res)
+        return out
+
     def continue_upgrade(self) -> bool:
         """
         Returns false, if nothing was done.
