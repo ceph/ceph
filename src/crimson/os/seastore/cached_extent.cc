@@ -269,7 +269,7 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
   return ret;
 }
 
-ceph::bufferptr BufferSpace::to_full_ptr(extent_len_t length)
+ceph::bufferptr_rw BufferSpace::to_full_ptr(extent_len_t length)
 {
   assert(length > 0);
   assert(buffer_map.size() == 1);

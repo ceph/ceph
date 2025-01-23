@@ -181,8 +181,8 @@ CircularJournalSpace::read_header()
 {
   LOG_PREFIX(CircularJournalSpace::read_header);
   assert(device);
-  auto bptr = bufferptr(ceph::buffer::create_page_aligned(
-			device->get_block_size()));
+  auto bptr = bufferptr_rw(ceph::buffer::create_page_aligned(
+		           device->get_block_size()));
   DEBUG("reading {}", device->get_shard_journal_start());
   return device->read(device->get_shard_journal_start(), bptr
   ).safe_then([bptr, FNAME, this]() mutable
@@ -231,7 +231,7 @@ CircularJournalSpace::write_header()
   assert(device);
   auto iter = bl.begin();
   assert(bl.length() < get_block_size());
-  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(get_block_size()));
+  auto bp = bufferptr_rw(ceph::buffer::create_page_aligned(get_block_size()));
   iter.copy(bl.length(), bp.c_str());
   return device->write(device->get_shard_journal_start(), std::move(bp)
   ).handle_error(

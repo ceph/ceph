@@ -215,7 +215,7 @@ class CircularJournalSpace : public JournalAllocator {
 
   read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr) {
+    bufferptr_rw &bptr) {
     assert(device);
     return device->read(offset, bptr);
   }

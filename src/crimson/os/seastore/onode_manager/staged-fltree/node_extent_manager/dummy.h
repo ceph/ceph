@@ -37,7 +37,7 @@ class DummySuper final: public Super {
 
 class DummyNodeExtent final: public NodeExtent {
  public:
-  DummyNodeExtent(ceph::bufferptr &&ptr) : NodeExtent(std::move(ptr)) {
+  DummyNodeExtent(ceph::bufferptr_rw &&ptr) : NodeExtent(std::move(ptr)) {
     state = extent_state_t::INITIAL_WRITE_PENDING;
   }
   DummyNodeExtent(const DummyNodeExtent& other) = delete;
@@ -46,7 +46,7 @@ class DummyNodeExtent final: public NodeExtent {
   void retire() {
     assert(state == extent_state_t::INITIAL_WRITE_PENDING);
     state = extent_state_t::INVALID;
-    bufferptr empty_bptr;
+    bufferptr_rw empty_bptr;
     get_bptr().swap(empty_bptr);
   }
 
@@ -152,7 +152,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
     auto addr = laddr_t::from_byte_offset(
       reinterpret_cast<laddr_t::Unsigned>(r->get_data()));
-    auto bp = ceph::bufferptr(std::move(r));
+    auto bp = ceph::bufferptr_rw(std::move(r));
     auto extent = Ref<DummyNodeExtent>(new DummyNodeExtent(std::move(bp)));
     extent->set_laddr(addr);
     assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());

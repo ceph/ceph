@@ -113,7 +113,7 @@ public:
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
     crimson::ct_error::erange>;
-  virtual read_ertr::future<> read(paddr_t addr, bufferptr &buffer) = 0;
+  virtual read_ertr::future<> read(paddr_t addr, bufferptr_rw &buffer) = 0;
 
   using write_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
