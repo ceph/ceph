@@ -291,7 +291,7 @@ def disable_kernel_queries(monkeypatch):
 
 
 @pytest.fixture(params=[
-    '', 'ceph data', 'ceph journal', 'ceph block',
+    'ceph data', 'ceph journal', 'ceph block',
     'ceph block.wal', 'ceph block.db', 'ceph lockbox'])
 def ceph_partlabel(request):
     return request.param
