@@ -78,26 +78,45 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  [[deprecated]]
   int _minimum_to_decode(const std::set<int> &want_to_read,
 			 const std::set<int> &available_chunks,
 			 std::set<int> *minimum);
 
+  int _minimum_to_decode(const shard_id_set &want_to_read,
+			 const shard_id_set &available_chunks,
+			 shard_id_set *minimum);
+
+  [[deprecated]]
   int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
 				  const std::map<int, int> &available,
 				  std::set<int> *minimum) override;
 
+  int minimum_to_decode_with_cost(const shard_id_set &want_to_read,
+				  const shard_id_map<int> &available,
+				  shard_id_set *minimum) override;
+
+  [[deprecated]]
   int encode(const std::set<int> &want_to_encode,
 		     const ceph::buffer::list &in,
 		     std::map<int, ceph::buffer::list> *encoded) override;
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
 			    std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
+  [[deprecated]]
   int _decode(const std::set<int> &want_to_read,
 	      const std::map<int, ceph::buffer::list> &chunks,
 	      std::map<int, ceph::buffer::list> *decoded) override;
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
   virtual void shec_encode(char **data,
@@ -161,5 +180,6 @@ public:
 private:
   int parse(const ceph::ErasureCodeProfile &profile) override;
 };
+static_assert(!std::is_abstract<ErasureCodeShecReedSolomonVandermonde>());
 
 #endif

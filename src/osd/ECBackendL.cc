@@ -1128,12 +1128,11 @@ void ECBackendL::handle_sub_read(
 	  dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
 	  bufferhash h(-1);
 	  h << bl;
-          int s = static_cast<int>(shard);
-	  if (h.digest() != hinfo->get_chunk_hash(s)) {
+	  if (h.digest() != hinfo->get_chunk_hash(shard)) {
 	    get_parent()->clog_error() << "Bad hash for " << i->first << " digest 0x"
-				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(s) << dec;
+				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec;
 	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
-		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(s) << dec << dendl;
+		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
 	    r = -EIO;
 	    goto error;
 	  }
@@ -1805,11 +1804,11 @@ int ECBackendL::be_deep_scrub(
 	return 0;
       }
 
-      int s = static_cast<int>(get_parent()->whoami_shard().shard);
-      if (hinfo->get_chunk_hash(s) != pos.data_hash.digest()) {
+      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+          pos.data_hash.digest()) {
 	dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
 		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"
-		<< hinfo->get_chunk_hash(s)
+		<< hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
 		<< std::dec << dendl;
 	o.ec_hash_mismatch = true;
 	return 0;
@@ -1821,7 +1820,7 @@ int ECBackendL::be_deep_scrub(
        * we match our chunk hash and our recollection of the hash for
        * chunk 0 matches that of our peers, there is likely no corruption.
        */
-      o.digest = hinfo->get_chunk_hash(0);
+      o.digest = hinfo->get_chunk_hash(shard_id_t(0));
       o.digest_present = true;
     } else {
       /* Hack! We must be using partial overwrites, and partial overwrites
