@@ -51,11 +51,7 @@ class interval_map {
   }
   std::pair<cmapiter, cmapiter> get_range(K off, K len) const {
     // fst is first iterator with end after off (may be end)
-    auto fst = m.upper_bound(off);
-    if (fst != m.begin())
-      --fst;
-    if (fst != m.end() && off >= (fst->first + fst->second.first))
-      ++fst;
+    auto fst = get_range_fst(off);
 
     // lst is first iterator with start after off + len (may be end)
     auto lst = m.lower_bound(off + len);
@@ -258,7 +254,7 @@ public:
     constexpr bool contains(K _off, K _len) const {
       K off = get_off();
       K len = get_len();
-      return off <= _off && off + len >= _off + _len;
+      return off <= _off && _off + _len <= off + len;
     }
   };
   const_iterator begin() const {
