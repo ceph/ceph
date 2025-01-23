@@ -3491,9 +3491,11 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   auto& obj = target->get_obj();
-  auto& snap_mgr = bucket_info.local.snap_mgr;
-  if (snap_mgr.is_enabled()) {
-    obj.key.set_snap_id(snap_mgr.get_cur_snap_id());
+  if (obj.key.ns.empty()) {
+    auto& snap_mgr = bucket_info.local.snap_mgr;
+    if (snap_mgr.is_enabled()) {
+      obj.key.set_snap_id(snap_mgr.get_cur_snap_id());
+    }
   }
 
   RGWRados::Bucket bop(target->get_store(), bucket_info);
