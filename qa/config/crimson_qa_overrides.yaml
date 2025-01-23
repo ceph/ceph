@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - \(POOL_APP_NOT_ENABLED\)
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: crimson
+      mon:
+        osd pool default crimson: true
+      osd:
+        crimson osd obc lru size: 10
+        debug ms: 20
+    flavor: crimson
+  workunit:
+    env:
+      CRIMSON_COMPAT: '1'
