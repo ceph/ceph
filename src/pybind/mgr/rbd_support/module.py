@@ -85,6 +85,9 @@ class Module(MgrModule):
                default=10),
         Option(name=TrashPurgeScheduleHandler.MODULE_OPTION_NAME),
         Option(name=MirrorGroupSnapshotScheduleHandler.MODULE_OPTION_NAME),
+        Option(name=MirrorGroupSnapshotScheduleHandler.MODULE_OPTION_NAME_MAX_CONCURRENT_GROUP_SNAP_CREATE,
+               type='int',
+               default=10),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
