@@ -270,10 +270,14 @@ bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
     auto& match = grant.match;
     if (match.is_match_all()) {
       return true;
-    } else if (pool_name != nullptr &&
-               !match.pool_namespace.pool_name.empty() &&
-               match.pool_namespace.pool_name == *pool_name) {
-      return true;
+    } else if (pool_name != nullptr) {
+      if (!match.pool_namespace.pool_name.empty()) {
+        if (match.pool_namespace.pool_name == *pool_name) {
+          return true;
+        }
+      } else if (match.pool_tag.is_match_all()) {
+        return true;
+      }
     }
   }
   return false;
