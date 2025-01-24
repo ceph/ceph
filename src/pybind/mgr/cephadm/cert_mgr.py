@@ -343,6 +343,7 @@ class CertMgr:
                 logger.warning(f"Key is missing for certificate '{cert_entity}'. Attempting renewal.")
                 cert_info = CertInfo(cert_entity, target)
                 self._renew_certificate(cert_info, cert_obj)
+                services_to_reconfig.add(self.cert_to_service[cert_entity])
 
         for cert_entity, cert_entries in self.cert_store.list_tlsobjects().items():
             if not cert_entries:
