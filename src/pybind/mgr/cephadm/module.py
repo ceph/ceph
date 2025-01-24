@@ -21,7 +21,7 @@ from cephadm.cert_mgr import CertMgr
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, \
-    Awaitable, Iterator
+    Awaitable, Iterator, Union
 
 import datetime
 import os
@@ -3297,7 +3297,7 @@ Then run the following:
         return self.cert_mgr.cert_ls()
 
     @handle_orch_error
-    def cert_store_entity_ls(self) -> List[str]:
+    def cert_store_entity_ls(self) -> list[Union[str, Tuple[str, str]]]:
         return self.cert_mgr.entity_ls()
 
     @handle_orch_error

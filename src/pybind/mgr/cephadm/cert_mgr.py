@@ -3,7 +3,7 @@ import logging
 import copy
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
-from mgr_util import verify_tls, ServerConfigException, get_cert_issuer_info, verify_cacrt_content
+from mgr_util import verify_tls, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
 from cephadm.tlsobject_types import Cert, PrivKey
 from cephadm.tlsobject_store import TLSObjectStore, TLSObjectScope
@@ -40,54 +40,50 @@ class CertMgr:
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
 
+    # In an effort to try and track all the certs we manage in cephadm
+    # we're being explicit here and listing them out.
+
     ####################################################
     #  cephadm certmgr known Certificates section
-    service_name_cert = [
-        'iscsi_ssl_cert',
-        'rgw_frontend_ssl_cert',
-        'ingress_ssl_cert',
-        'nvmeof_server_cert',
-        'nvmeof_client_cert',
-        'nvmeof_root_ca_cert',
-    ]
-
-    host_cert = [
-        'grafana_cert',
-    ]
-
-    general_cert = [
-        'mgmt_gw_cert',
-        'oauth2_proxy_cert',
-        CEPHADM_ROOT_CA_CERT,
-    ]
+    known_certs = {
+        TLSObjectScope.SERVICE: [
+            'iscsi_ssl_cert',
+            'rgw_frontend_ssl_cert',
+            'ingress_ssl_cert',
+            'nvmeof_server_cert',
+            'nvmeof_client_cert',
+            'nvmeof_root_ca_cert',
+        ],
+        TLSObjectScope.HOST: [
+            'grafana_cert',
+        ],
+        TLSObjectScope.GLOBAL: [
+            'mgmt_gw_cert',
+            'oauth2_proxy_cert',
+            CEPHADM_ROOT_CA_CERT,
+        ],
+    }
 
     ####################################################
     #  cephadm certmgr known Keys section
-    service_name_key = [
-        'iscsi_ssl_key',
-        'ingress_ssl_key',
-        'nvmeof_server_key',
-        'nvmeof_client_key',
-        'nvmeof_encryption_key',
-    ]
+    known_keys = {
+        TLSObjectScope.SERVICE: [
+            'iscsi_ssl_key',
+            'ingress_ssl_key',
+            'nvmeof_server_key',
+            'nvmeof_client_key',
+            'nvmeof_encryption_key',
+        ],
+        TLSObjectScope.HOST: [
+            'grafana_key',
+        ],
+        TLSObjectScope.GLOBAL: [
+            'mgmt_gw_key',
+            'oauth2_proxy_key',
+            CEPHADM_ROOT_CA_KEY,
+        ],
+    }
 
-    host_key = [
-        'grafana_key',
-    ]
-
-    general_key = [
-        'mgmt_gw_key',
-        'oauth2_proxy_key',
-        CEPHADM_ROOT_CA_KEY,
-    ]
-
-    # Entries in known_certs that don't have a key here are probably
-    # certs in PEM format so there is no need to store a separate key
-    known_certs = service_name_cert + host_cert + general_cert
-    known_keys = service_name_key + host_key + general_key
-
-    # In an effort to try and track all the certs we manage in cephadm
-    # we're being explicit here and listing them out.
     cert_to_service = {
         'rgw_frontend_ssl_cert': 'rgw',
         'iscsi_ssl_cert': 'iscsi',
@@ -115,9 +111,9 @@ class CertMgr:
         self._initialize_root_ca(mgr_ip)
 
     def _init_tlsobject_store(self) -> None:
-        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs, self.service_name_cert, self.host_cert, self.general_cert)
+        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs)
         self.cert_store.load()
-        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.service_name_key, self.host_key, self.general_key)
+        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys)
         self.key_store.load()
 
     def load(self) -> None:
@@ -170,7 +166,7 @@ class CertMgr:
         self.key_store.rm_tlsobject(entity, service_name, host)
 
     def cert_ls(self) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
-        ls: Dict = copy.deepcopy(self.cert_store.list_tlsobjects())
+        ls: Dict = copy.deepcopy(self.cert_store.get_tlsobjects())
         for k, v in ls.items():
             if isinstance(v, dict):
                 tmp: Dict[str, Any] = {key: get_certificate_info(cast(Cert, v[key]).cert) for key in v if isinstance(v[key], Cert)}
@@ -180,11 +176,11 @@ class CertMgr:
         return ls
 
     def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict = copy.deepcopy(self.key_store.list_tlsobjects())
+        ls: Dict = copy.deepcopy(self.key_store.get_tlsobjects())
         if self.CEPHADM_ROOT_CA_KEY in ls:
             del ls[self.CEPHADM_ROOT_CA_KEY]
         for k, v in ls.items():
-            if isinstance(v, dict):
+            if isinstance(v, dict) and v:
                 tmp: Dict[str, Any] = {key: get_private_key_info(cast(PrivKey, v[key]).key) for key in v if v[key]}
                 ls[k] = tmp if tmp else {}
             elif isinstance(v, PrivKey):
@@ -203,11 +199,11 @@ class CertMgr:
     def determine_scope(self, entity: str) -> str:
         for cert, service in self.cert_to_service.items():
             if service == entity:
-                if cert in self.service_name_cert:
+                if cert in self.known_certs[TLSObjectScope.SERVICE]:
                     return TLSObjectScope.SERVICE.value
-                elif cert in self.host_cert:
+                elif cert in self.known_certs[TLSObjectScope.HOST]:
                     return TLSObjectScope.HOST.value
-                elif cert in self.general_cert:
+                elif cert in self.known_certs[TLSObjectScope.GLOBAL]:
                     return TLSObjectScope.GLOBAL.value
         return TLSObjectScope.UNKNOWN.value
 
@@ -289,7 +285,7 @@ class CertMgr:
                 self._raise_certificate_health_warning(cert_info, cert_obj)
             else:
                 # self-signed invalid certificate.. shouldn't happen but let's try to renew it
-                service_name, host = self._get_cert_target(cert_entity, target)
+                service_name, host = self.cert_store.determine_tlsobject_target(cert_entity, target)
                 logger.info(f'Removing invalid certificate for {cert_entity} to trigger regeneration (service: {service_name}, host: {host}).')
                 self.cert_store.rm_tlsobject(cert_entity, service_name, host)
         else:
@@ -315,23 +311,22 @@ class CertMgr:
 
     def _get_cert_target(self, cert_entity: str, entity: str) -> Tuple[Optional[str], Optional[str]]:
         """Determine the service name or host based on the cert_entity."""
-        service_name = entity if cert_entity in self.service_name_cert else None
-        host = entity if cert_entity in self.host_cert else None
+        service_name = entity if cert_entity in self.known_certs[TLSObjectScope.SERVICE] else None
+        host = entity if cert_entity in self.known_certs[TLSObjectScope.HOST] else None
         return service_name, host
 
     def check_certificates(self) -> List[str]:
 
         services_to_reconfig = set()
 
-        def get_cert_and_key(cert_entity: str, entity: str = '') -> Tuple[Optional[Cert], Optional[PrivKey], str]:
-            """Retrieve certificate and key, translating names as necessary."""
-            service_name, host = self._get_cert_target(cert_entity, entity) if entity else (None, None)
-            cert = cast(Cert, self.cert_store.get_tlsobject(cert_entity, service_name=service_name, host=host))
+        def get_key(cert_entity: str, target: Optional[str]) -> Optional[PrivKey]:
+            """Retrieve key translating names as necessary."""
+            service_name, host = self.cert_store.determine_tlsobject_target(cert_entity, target)
             key_entity = cert_entity.replace("_cert", "_key")
             key = cast(PrivKey, self.key_store.get_tlsobject(key_entity, service_name=service_name, host=host))
-            return cert, key, entity
+            return key
 
-        def process_certificate(cert_entity: str, cert_obj: Optional[Cert], key_obj: Optional[PrivKey], target: str = '') -> None:
+        def process_certificate(cert_entity: str, cert_obj: Cert, key_obj: Optional[PrivKey], target: str = '') -> None:
             nonlocal services_to_reconfig
             if cert_obj and key_obj:
                 cert_state = self._validate_and_manage_certificate(cert_entity, cert_obj, key_obj, target)
@@ -345,21 +340,13 @@ class CertMgr:
                 self._renew_certificate(cert_info, cert_obj)
                 services_to_reconfig.add(self.cert_to_service[cert_entity])
 
-        for cert_entity, cert_entries in self.cert_store.list_tlsobjects().items():
-            if not cert_entries:
-                continue
+        for cert_name, cert_obj, target in self.cert_store.list_tlsobjects():
+            process_certificate(cert_name,
+                                cast(Cert, cert_obj),
+                                get_key(cert_name, target),
+                                target or '')
 
-            if isinstance(cert_entries, dict):
-                # Process only valid instances
-                for target in [entry for entry, exists in cert_entries.items() if exists]:
-                    cert, key, target = get_cert_and_key(cert_entity, target)
-                    process_certificate(cert_entity, cert, key, target)
-            else:
-                # Global cert case
-                cert, key, _ = get_cert_and_key(cert_entity)
-                process_certificate(cert_entity, cert, key)
-
-        logger.info(f'redo: services to reconfigure {services_to_reconfig}')
+        logger.info(f'certmgr: services to reconfigure {services_to_reconfig}')
 
         # return the list of services that need reconfiguration
         return list(services_to_reconfig)

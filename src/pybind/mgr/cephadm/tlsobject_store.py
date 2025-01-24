@@ -27,18 +27,22 @@ class TLSObjectStore():
 
     def __init__(self, mgr: 'CephadmOrchestrator',
                  tlsobject_class: Type[TLSObjectProtocol],
-                 known_entities: List[str],
-                 per_service_name_tlsobjects: List[str],
-                 per_host_tlsobjects: List[str],
-                 general_cred: List[str],
-                 ) -> None:
+                 known_entities: Dict[TLSObjectScope, List[str]]) -> None:
         self.mgr: CephadmOrchestrator = mgr
         self.tlsobject_class = tlsobject_class
-        self.known_entities: Dict[str, Any] = {key: {} for key in known_entities}
-        self.per_service_name_tlsobjects = per_service_name_tlsobjects
-        self.per_host_tlsobjects = per_host_tlsobjects
-        self.general_cred = general_cred
+        all_known_entities = [item for sublist in known_entities.values() for item in sublist]
+        self.known_entities: Dict[str, Any] = {key: {} for key in all_known_entities}
+        self.per_service_name_tlsobjects = known_entities[TLSObjectScope.SERVICE]
+        self.per_host_tlsobjects = known_entities[TLSObjectScope.HOST]
         self.store_prefix = f'{TLSOBJECT_STORE_PREFIX}{tlsobject_class.STORAGE_PREFIX}.'
+
+    def determine_tlsobject_target(self, entity: str, target: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+        if entity in self.per_service_name_tlsobjects:
+            return (target, None)
+        elif entity in self.per_host_tlsobjects:
+            return (None, target)
+        else:
+            return (None, None)
 
     def get_tlsobject_scope_and_target(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Tuple[TLSObjectScope, Optional[Any]]:
         if entity in self.per_service_name_tlsobjects:
@@ -102,7 +106,28 @@ class TLSObjectStore():
         if entity in self.per_service_name_tlsobjects and not service_name:
             raise TLSObjectException(f'Need service name to access {cred_type} for entity {entity}')
 
-    def list_tlsobjects(self) -> Dict[str, Union[Type[TLSObjectProtocol], Dict[str, Type[TLSObjectProtocol]]]]:
+    def list_tlsobjects(self) -> List[Tuple[str, Type[TLSObjectProtocol], Optional[str]]]:
+        """
+        Returns a shallow list of all known TLS objects, including their targets.
+
+        Returns:
+            List of tuples: (entity, tlsobject, target)
+            - entity: The TLS object entity name.
+            - tlsobject: The TLS object itself.
+            - target: The associated target (service_name, host, or None for global).
+        """
+        tlsobjects = []
+        for known_entity, value in self.known_entities.items():
+            if isinstance(value, dict):  # Handle per-service or per-host TLS objects
+                for target, tlsobject in value.items():
+                    if tlsobject:
+                        tlsobjects.append((known_entity, tlsobject, target))
+            elif tlsobjects:  # Handle global TLS objects
+                tlsobjects.append((known_entity, value, None))
+
+        return tlsobjects
+
+    def get_tlsobjects(self) -> Dict[str, Union[Type[TLSObjectProtocol], Dict[str, Type[TLSObjectProtocol]]]]:
         return self.known_entities
 
     def load(self) -> None:
