@@ -4271,3 +4271,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lua_enable
+  type: bool
+  level: advanced
+  desc: Enable lua scripting.
+  default: true
+  services:
+  - rgw
+  flags:
+  - startup
+  see_also:
+  with_legacy: true
