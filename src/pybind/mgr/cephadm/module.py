@@ -3302,7 +3302,8 @@ Then run the following:
 
     @handle_orch_error
     def cert_store_reload(self) -> str:
-        return self.cert_mgr.load()
+        self.cert_mgr.load()
+        return "OK"
 
     @handle_orch_error
     def cert_store_cert_check(self) -> Dict[str, Any]:
@@ -3357,9 +3358,15 @@ Then run the following:
         if entity in entities:
             cert_info = self.cert_mgr.is_valid_certificate(entity, target, cert, key)
             if cert_info.is_valid and not cert_info.is_close_to_expiration:
-                self.cert_mgr.save_cert(f'{entity}_cert', cert, service_name, hostname, True)
-                self.cert_mgr.save_key(f'{entity}_key', key, service_name, hostname, True)
-                return "Certficate set correctly"
+                cert_names = self.cert_mgr.list_entity_known_certificates(entity)
+                if len(cert_names) == 1:
+                    cert_name = cert_names[0]
+                    key_name = cert_name.replace('_cert', '_key')
+                    self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, True)
+                    self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+                    return "Certficate set correctly"
+                else:
+                    raise OrchestratorError(f"Entity '{entity}' has many certificates, plz specify which one from the list: {cert_names}")
             else:
                 if cert_info.is_close_to_expiration:
                     raise OrchestratorError(f"Certififcate is close to its expiration date ({cert_info.days_to_expiration } remaining days).")

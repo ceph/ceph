@@ -18,20 +18,28 @@ def parse_extensions(cert: Certificate) -> Dict:
     """Parse extensions into a readable format."""
     parsed_extensions = {}
     for ext in cert.extensions:
-        if ext.oid == ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
-            san = ext.value
-            parsed_extensions["subjectAltName"] = {
-                "DNSNames": san.get_values_for_type(x509.DNSName),
-                "IPAddresses": [str(ip) for ip in san.get_values_for_type(x509.IPAddress)],
-            }
-        elif ext.oid == ExtensionOID.BASIC_CONSTRAINTS:
-            basic_constraints = ext.value
-            parsed_extensions["basicConstraints"] = {
-                "ca": basic_constraints.ca,
-                "path_length": basic_constraints.path_length,
-            }
-        else:
-            parsed_extensions[ext.oid.dotted_string] = {"value": str(ext.value)}
+        try:
+            if ext.oid == ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+                san = ext.value
+                parsed_extensions["subjectAltName"] = {
+                    "DNSNames": san.get_values_for_type(x509.DNSName),
+                    "IPAddresses": [str(ip) for ip in san.get_values_for_type(x509.IPAddress)],
+                }
+            elif ext.oid == ExtensionOID.BASIC_CONSTRAINTS:
+                basic_constraints = ext.value
+                parsed_extensions["basicConstraints"] = {
+                    "ca": basic_constraints.ca,
+                    "path_length": basic_constraints.path_length,
+                }
+            elif ext.oid == ExtensionOID.SUBJECT_KEY_IDENTIFIER:
+                parsed_extensions["subjectKeyIdentifier"] = {"present": True}
+            elif ext.oid == ExtensionOID.AUTHORITY_KEY_IDENTIFIER:
+                parsed_extensions["authorityKeyIdentifier"] = {"present": True}
+            else:
+                parsed_extensions[ext.oid.dotted_string] = {"value": "present"}
+        except Exception as e:
+            parsed_extensions[ext.oid.dotted_string] = {"error": str(e)}
+
     return parsed_extensions
 
 def get_certificate_info(cert_data: str) -> Dict:

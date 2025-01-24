@@ -20,6 +20,7 @@ class TLSObjectScope(Enum):
     HOST = "host"
     SERVICE = "service"
     GLOBAL = "global"
+    UNKNOWN = "unknown"
 
 
 class TLSObjectStore():

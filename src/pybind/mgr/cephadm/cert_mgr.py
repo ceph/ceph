@@ -6,7 +6,7 @@ from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, ServerConfigException, get_cert_issuer_info, verify_cacrt_content
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
 from cephadm.tlsobject_types import Cert, PrivKey
-from cephadm.tlsobject_store import TLSObjectStore
+from cephadm.tlsobject_store import TLSObjectStore, TLSObjectScope
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -190,6 +190,26 @@ class CertMgr:
             elif isinstance(v, PrivKey):
                 ls[k] = get_private_key_info(cast(PrivKey, v).key)
         return ls
+
+    def list_entity_known_certificates(self, entity: str) -> List[str]:
+        return [cert_name for cert_name, service in self.cert_to_service.items() if service == entity]
+
+    def entity_ls(self, get_scope: bool = False) -> List[Union[str, Tuple[str, str]]]:
+        if get_scope:
+            return [(entity, self.determine_scope(entity)) for entity in set(self.cert_to_service.values())]
+        else:
+            return list(self.cert_to_service.values())
+
+    def determine_scope(self, entity: str) -> str:
+        for cert, service in self.cert_to_service.items():
+            if service == entity:
+                if cert in self.service_name_cert:
+                    return TLSObjectScope.SERVICE.value
+                elif cert in self.host_cert:
+                    return TLSObjectScope.HOST.value
+                elif cert in self.general_cert:
+                    return TLSObjectScope.GLOBAL.value
+        return TLSObjectScope.UNKNOWN.value
 
     def _raise_certificate_health_warning(self, cert_info: CertInfo, cert_obj: Cert) -> None:
         target = f'{cert_info.target}' if cert_info.target else ''
