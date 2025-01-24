@@ -35,6 +35,11 @@ if(WITH_CEPH_DEBUG_MUTEX)
     ${PROJECT_SOURCE_DIR}/src/common/condition_variable_debug.cc
     ${PROJECT_SOURCE_DIR}/src/common/shared_mutex_debug.cc)
 endif()
+if(WITH_EVENTTRACE)
+  list(APPEND crimson_alien_common_srcs
+    ${PROJECT_SOURCE_DIR}/src/common/TracepointProvider.cc
+    ${PROJECT_SOURCE_DIR}/src/common/EventTrace.cc)
+endif()
 add_library(crimson-alien-common STATIC
   ${crimson_alien_common_srcs})
 
