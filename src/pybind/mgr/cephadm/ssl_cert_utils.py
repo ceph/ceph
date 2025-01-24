@@ -1,10 +1,11 @@
 
-from typing import Any, Tuple, IO, List, Union, Optional
+from typing import Any, Tuple, IO, List, Union, Optional, Dict
 import ipaddress
 
 from datetime import datetime, timedelta
 from cryptography import x509
-from cryptography.x509.oid import NameOID
+from cryptography.x509 import Certificate
+from cryptography.x509.oid import NameOID, ExtensionOID
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
@@ -12,6 +13,89 @@ from cryptography.hazmat.backends import default_backend
 
 class SSLConfigException(Exception):
     pass
+
+def parse_extensions(cert: Certificate) -> Dict:
+    """Parse extensions into a readable format."""
+    parsed_extensions = {}
+    for ext in cert.extensions:
+        if ext.oid == ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+            san = ext.value
+            parsed_extensions["subjectAltName"] = {
+                "DNSNames": san.get_values_for_type(x509.DNSName),
+                "IPAddresses": [str(ip) for ip in san.get_values_for_type(x509.IPAddress)],
+            }
+        elif ext.oid == ExtensionOID.BASIC_CONSTRAINTS:
+            basic_constraints = ext.value
+            parsed_extensions["basicConstraints"] = {
+                "ca": basic_constraints.ca,
+                "path_length": basic_constraints.path_length,
+            }
+        else:
+            parsed_extensions[ext.oid.dotted_string] = {"value": str(ext.value)}
+    return parsed_extensions
+
+def get_certificate_info(cert_data: str) -> Dict:
+    """Return detailed information about a certificate as a dictionary."""
+
+    def get_oid_name(oid: Any) -> str:
+        """Return a human-readable name for an OID."""
+        oid_mapping = {
+            NameOID.COMMON_NAME: "commonName",
+            NameOID.COUNTRY_NAME: "countryName",
+            NameOID.LOCALITY_NAME: "localityName",
+            NameOID.STATE_OR_PROVINCE_NAME: "stateOrProvinceName",
+            NameOID.ORGANIZATION_NAME: "organizationName",
+            NameOID.ORGANIZATIONAL_UNIT_NAME: "organizationalUnitName",
+        }
+        return oid_mapping.get(oid, oid.dotted_string)
+
+    cert = x509.load_pem_x509_certificate(cert_data.encode('utf-8'), default_backend())
+    remaining_days = (cert.not_valid_after - datetime.utcnow()).days
+    info = {
+        'subject': {get_oid_name(attr.oid): attr.value for attr in cert.subject},
+        'issuer': {get_oid_name(attr.oid): attr.value for attr in cert.issuer},
+        'validity': {
+            'not_before': cert.not_valid_before.isoformat(),
+            'not_after': cert.not_valid_after.isoformat(),
+            'remaining_days': remaining_days,
+        },
+        'extensions': parse_extensions(cert),
+        'public_key': {},
+    }
+
+    public_key = cert.public_key()
+    if isinstance(public_key, rsa.RSAPublicKey):
+        info['public_key'] = {
+            'key_type': 'RSA',
+            'key_size': public_key.key_size,
+        }
+    else:
+        info['public_key'] = {
+            'key_type': 'Unknown',
+        }
+
+    return info
+
+
+def get_private_key_info(private_data: str) -> Dict:
+    """Return detailed information about a private key as a dictionary."""
+
+    private_key = serialization.load_pem_private_key(
+        private_data.encode('utf-8'),
+        password=None,
+        backend=default_backend())
+
+    info = {}
+    if isinstance(private_key, rsa.RSAPrivateKey):
+        info = {
+            'key_type': 'RSA',
+            'key_size': private_key.key_size,
+        }
+    else:
+        info = {
+            'key_type': 'Unknown',
+        }
+    return info
 
 
 class SSLCerts:

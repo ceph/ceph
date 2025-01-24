@@ -1148,7 +1148,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         result_str = ''
         indent = '  ' * level
         for k, v in d.items():
-            if isinstance(v, dict):
+            if isinstance(v, dict) and v:
                 result_str += f'{indent}{k}\n'
                 result_str += self._process_cert_store_json(v, level + 1)
             elif v:

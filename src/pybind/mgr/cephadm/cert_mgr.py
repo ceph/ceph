@@ -4,6 +4,7 @@ import copy
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, ServerConfigException, get_cert_issuer_info, verify_cacrt_content
+from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
 from cephadm.tlsobject_types import Cert, PrivKey
 from cephadm.tlsobject_store import TLSObjectStore
 
@@ -169,31 +170,13 @@ class CertMgr:
         self.key_store.rm_tlsobject(entity, service_name, host)
 
     def cert_ls(self) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
-
-        def get_cert_info(cert: Cert) -> Dict:
-            try:
-                org, cn = get_cert_issuer_info(cert.cert)
-                days_to_expiration = verify_cacrt_content(cert.cert)
-                return {
-                    'user_made': cert.user_made,
-                    'org': org,
-                    'cn': cn,
-                    'days_to_expiration': days_to_expiration,
-                }
-            except ServerConfigException as e:
-                return {
-                    'user_made': cert.user_made,
-                    'invalid_certificate': f'{e}'
-                }
-
         ls: Dict = copy.deepcopy(self.cert_store.list_tlsobjects())
         for k, v in ls.items():
             if isinstance(v, dict):
-                tmp: Dict[str, Any] = {key: get_cert_info(v[key]) for key in v if isinstance(v[key], Cert)}
-                ls[k] = tmp if tmp else False
+                tmp: Dict[str, Any] = {key: get_certificate_info(cast(Cert, v[key]).cert) for key in v if isinstance(v[key], Cert)}
+                ls[k] = tmp if tmp else {}
             elif isinstance(v, Cert):
-                ls[k] = get_cert_info(v) if bool(v) else False
-
+                ls[k] = get_certificate_info(cast(Cert, v).cert) if bool(v) else False
         return ls
 
     def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
@@ -202,10 +185,10 @@ class CertMgr:
             del ls[self.CEPHADM_ROOT_CA_KEY]
         for k, v in ls.items():
             if isinstance(v, dict):
-                tmp: Dict[str, Any] = {key: True for key in v if v[key]}
-                ls[k] = tmp if tmp else False
+                tmp: Dict[str, Any] = {key: get_private_key_info(cast(PrivKey, v[key]).key) for key in v if v[key]}
+                ls[k] = tmp if tmp else {}
             elif isinstance(v, PrivKey):
-                ls[k] = bool(v)
+                ls[k] = get_private_key_info(cast(PrivKey, v).key)
         return ls
 
     def _raise_certificate_health_warning(self, cert_info: CertInfo, cert_obj: Cert) -> None:
