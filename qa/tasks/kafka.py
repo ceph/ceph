@@ -4,6 +4,7 @@ Deploy and configure Kafka for Teuthology
 import contextlib
 import logging
 import time
+import os
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -33,6 +34,13 @@ def install_kafka(ctx, config):
     assert isinstance(config, dict)
     log.info('Installing Kafka...')
 
+    # programmatically find a nearby mirror so as not to hammer archive.apache.org
+    apache_mirror_cmd="curl 'https://www.apache.org/dyn/closer.cgi' 2>/dev/null | " \
+        "grep -o '<strong>[^<]*</strong>' | sed 's/<[^>]*>//g' | head -n 1"
+    log.info("determining apache mirror by running: " + apache_mirror_cmd)
+    apache_mirror_url_front = os.popen(apache_mirror_cmd).read().rstrip() # note: includes trailing slash (/)
+    log.info("chosen apache mirror is " + apache_mirror_url_front)
+
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         test_dir=teuthology.get_testdir(ctx)
@@ -40,7 +48,8 @@ def install_kafka(ctx, config):
 
         kafka_file =  kafka_prefix + current_version + '.tgz'
 
-        link1 = 'https://archive.apache.org/dist/kafka/' + current_version + '/' + kafka_file
+        link1 = '{apache_mirror_url_front}/kafka/'.format(apache_mirror_url_front=apache_mirror_url_front) + \
+            current_version + '/' + kafka_file
         ctx.cluster.only(client).run(
             args=['cd', '{tdir}'.format(tdir=test_dir), run.Raw('&&'), 'wget', link1],
         )
