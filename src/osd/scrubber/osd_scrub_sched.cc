@@ -141,10 +141,10 @@ void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
 {
   ceph_assert(f != nullptr);
   const auto query_time = ceph_clock_now();
-  f->open_array_section("scrubs");
+  Formatter::ArraySection all_scrubs_section{*f, "scrubs"};
   for_each_job(
       [&f, query_time](const Scrub::SchedEntry& e) {
-	f->open_object_section("scrub");
+        Formatter::ObjectSection job_section{*f, "scrub"sv};
 	f->dump_stream("pgid") << e.pgid;
 	f->dump_stream("sched_time") << e.schedule.not_before;
 	f->dump_stream("orig_sched_time") << e.schedule.scheduled_at;
@@ -160,11 +160,8 @@ void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
         f->dump_bool("eligible", e.schedule.not_before <= query_time);
         f->dump_bool("overdue", e.schedule.deadline < query_time);
         f->dump_stream("last_issue") << fmt::format("{}", e.last_issue);
-
-	f->close_section();
       },
       std::numeric_limits<int>::max());
-  f->close_section();
 }
 
 // ////////////////////////////////////////////////////////////////////////// //

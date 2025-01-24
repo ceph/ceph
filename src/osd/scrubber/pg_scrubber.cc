@@ -726,11 +726,10 @@ void asok_response_section(
     scrub_level_t scrub_level,
     utime_t stamp = utime_t{})
 {
-  f->open_object_section("result");
+  Formatter::ObjectSection asok_resp_section{*f, "result"sv};
   f->dump_bool("deep", (scrub_level == scrub_level_t::deep));
   f->dump_bool("must", !is_periodic);
   f->dump_stream("stamp") << stamp;
-  f->close_section();
 }
 }  // namespace
 
@@ -2355,7 +2354,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 void PgScrubber::dump_scrubber(
     ceph::Formatter* f) const
 {
-  f->open_object_section("scrubber");
+  Formatter::ObjectSection scrubber_section{*f, "scrubber"sv};
 
   if (m_active_target) {
     f->dump_bool("active", true);
@@ -2382,8 +2381,6 @@ void PgScrubber::dump_scrubber(
     // The 'test_sequence' is an ever-increasing number used by tests.
     f->dump_int("test_sequence", m_sessions_counter);
   }
-
-  f->close_section();
 }
 
 
@@ -2407,11 +2404,10 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   f->dump_int("deep_errors", m_deep_errors);
   f->dump_int("fixed", m_fixed_count);
   {
-    f->open_array_section("waiting_on_whom");
+    Formatter::ArraySection waiting_on_whom{*f, "waiting_on_whom"sv};
     for (const auto& p : m_maps_status.get_awaited()) {
       f->dump_stream("shard") << p;
     }
-    f->close_section();
   }
   if (m_scrub_job->blocked) {
     f->dump_string("schedule", "blocked");
@@ -2537,7 +2533,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 {
   dout(15) << __func__ << dendl;
 
-  f->open_object_section("scrub");
+  Formatter::ObjectSection scrub_section{*f, "scrub"sv};
   f->dump_stream("scrubber.epoch_start") << m_interval_start;
   f->dump_bool("scrubber.active", m_active);
   f->dump_stream("scrubber.start") << m_start;
@@ -2546,16 +2542,13 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
   f->dump_stream("scrubber.subset_last_update") << m_subset_last_update;
   f->dump_bool("scrubber.deep", m_is_deep);
   {
-    f->open_array_section("scrubber.waiting_on_whom");
+    Formatter::ArraySection waiting_on_whom{*f, "waiting_on_whom"sv};
     for (const auto& p : m_maps_status.get_awaited()) {
       f->dump_stream("shard") << p;
     }
-    f->close_section();
   }
 
   f->dump_string("comment", "DEPRECATED - may be removed in the next release");
-
-  f->close_section();
 }
 
 PgScrubber::~PgScrubber()
