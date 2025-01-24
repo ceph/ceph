@@ -325,13 +325,6 @@ struct error_code;
 #endif
       _len = l;
     }
-
-#ifdef HAVE_SEASTAR
-    /// create a temporary_buffer, copying the ptr as its deleter
-    operator seastar::temporary_buffer<char>() &;
-    /// convert to temporary_buffer, stealing the ptr as its deleter
-    operator seastar::temporary_buffer<char>() &&;
-#endif // HAVE_SEASTAR
   };
 
   class CEPH_BUFFER_API ptr_rw : public ptr {
@@ -400,6 +393,12 @@ struct error_code;
     void zero(unsigned o, unsigned l, bool crc_reset = true);
     unsigned append_zeros(unsigned l);
 
+#ifdef HAVE_SEASTAR
+    /// create a temporary_buffer, copying the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &;
+    /// convert to temporary_buffer, stealing the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &&;
+#endif // HAVE_SEASTAR
   };
 
 
