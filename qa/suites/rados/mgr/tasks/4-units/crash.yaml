@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(RECENT_CRASH\)
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_crash
