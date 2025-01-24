@@ -391,6 +391,7 @@
             }
         },
         "HeadBucketOutput":{
+            "type":"structure",
             "members":{
                 "ObjectCount":{
                     "shape":"ObjectCount",
