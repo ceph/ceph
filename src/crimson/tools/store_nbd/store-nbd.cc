@@ -70,7 +70,7 @@ struct request_context_t {
   uint32_t len = 0;
 
   unsigned err = 0;
-  std::optional<bufferptr> in_buffer;
+  std::optional<bufferptr_rw> in_buffer;
   std::optional<bufferlist> out_buffer;
 
   using ref = std::unique_ptr<request_context_t>;
@@ -144,12 +144,12 @@ struct request_context_t {
     return out.write(std::move(buffer)).then([this, &out] {
       if (out_buffer) {
         return seastar::do_for_each(
-          out_buffer->mut_buffers(),
-          [&out](bufferptr &ptr) {
+          out_buffer->buffers(),
+          [&out](const bufferptr &ptr) {
 	    logger().debug("write_reply writing {}", ptr.length());
             return out.write(
 	      seastar::temporary_buffer<char>(
-		ptr.c_str(),
+		const_cast<char*>(ptr.c_str()),
 		ptr.length(),
 		seastar::make_deleter([ptr](){}))
 	    );
