@@ -1,5 +1,7 @@
 >=20.0.0
 
+* RGW: Lua scripts will not run against health checks.
+
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
   instead of those not including it).  All timestamps remain to be in UTC but
