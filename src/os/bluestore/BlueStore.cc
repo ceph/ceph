@@ -18718,7 +18718,7 @@ mono_clock::duration BlueStore::BlueStoreThrottle::log_state_latency(
   if (txc.tracing &&
       state >= l_bluestore_state_prepare_lat &&
       state <= l_bluestore_state_done_lat) {
-    OID_ELAPSED("", lat.to_nsec() / 1000.0, txc.get_state_latency_name(state));
+    OID_ELAPSED("", lat.count() / 1000.0, txc.get_state_latency_name(state));
     tracepoint(
       bluestore,
       transaction_state_duration,
