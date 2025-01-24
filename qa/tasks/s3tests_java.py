@@ -284,6 +284,7 @@ class S3tests_java(Task):
             args = ['cd',
                     '{tdir}/s3-tests-java'.format(tdir=testdir),
                     run.Raw('&&'),
+                    run.Raw('JAVA_HOME=$(alternatives --list | grep jre_1.8.0 | head -n 1 | awk \'{print $3}\')'),
                     '/opt/gradle/gradle/bin/gradle', 'clean', 'test',
                     '--rerun-tasks', '--no-build-cache',
                     ]
