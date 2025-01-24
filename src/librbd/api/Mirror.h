@@ -175,6 +175,10 @@ struct Mirror {
                              size_t max,
                              std::map<std::string,
                              mirror_group_info_t> *entries);
+  static void group_get_info(librados::IoCtx& io_ctx,
+                             const std::string &group_name,
+                             mirror_group_info_t *mirror_group_info,
+                             Context *on_finish);
   static int group_get_info(librados::IoCtx& io_ctx,
                             const std::string &group_name,
                             mirror_group_info_t *mirror_group_info);
