@@ -1526,6 +1526,16 @@ CEPH_RBD_API int rbd_group_spec_list_cleanup(rbd_group_spec_t *groups,
                                              size_t group_spec_size,
                                              size_t num_groups);
 
+CEPH_RBD_API int rbd_aio_create_group_completion(void *cb_arg,
+                                                 rbd_callback_t complete_cb,
+                                                 rbd_completion_t *c);
+CEPH_RBD_API int rbd_aio_is_complete_group_completion(rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_wait_for_complete_group_completion(
+    rbd_completion_t c);
+CEPH_RBD_API ssize_t rbd_aio_get_return_value_group_completion(
+    rbd_completion_t c);
+CEPH_RBD_API void rbd_aio_release_group_completion(rbd_completion_t c);
+
 /**
  * Register an image metadata change watcher.
  *
@@ -1675,6 +1685,10 @@ CEPH_RBD_API int rbd_mirror_group_get_global_status(
     rbd_mirror_group_global_status_t *mirror_group_status, size_t status_size);
 CEPH_RBD_API void rbd_mirror_group_global_status_cleanup(
     rbd_mirror_group_global_status_t *mirror_group_status);
+CEPH_RBD_API int rbd_aio_mirror_group_get_info(
+    rados_ioctx_t p, const char *name,
+    rbd_mirror_group_info_t *mirror_group_info, size_t info_size,
+    rbd_completion_t c);
 
 CEPH_RBD_API int rbd_namespace_create(rados_ioctx_t io,
                                       const char *namespace_name);
