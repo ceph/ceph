@@ -491,6 +491,10 @@ cdef extern from "rbd/librbd.h" nogil:
                                   size_t info_size)
     void rbd_mirror_group_get_info_cleanup(
         rbd_mirror_group_info_t *mirror_gp_info)
+    int rbd_aio_mirror_group_get_info(rados_ioctx_t gp_ioctx,
+                                      const char *gp_name,
+                                      rbd_mirror_group_info_t *mirror_gp_info,
+                                      size_t info_size, rbd_completion_t c)
     int rbd_mirror_group_info_list(rados_ioctx_t gp_ioctx,
                                    rbd_mirror_image_mode_t *mode_filter,
                                    const char *start_id, size_t max,
@@ -732,6 +736,15 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
                           char *keys, size_t *key_len, char *values,
                           size_t *vals_len)
+
+    int rbd_aio_create_group_completion(void *cb_arg,
+                                        rbd_callback_t complete_cb,
+                                        rbd_completion_t *c)
+    int rbd_aio_is_complete_group_completion(rbd_completion_t c)
+    int rbd_aio_wait_for_complete_group_completion(rbd_completion_t c)
+    ssize_t rbd_aio_get_return_value_group_completion(rbd_completion_t c)
+    void rbd_aio_release_group_completion(rbd_completion_t c)
+
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)

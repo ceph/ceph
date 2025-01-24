@@ -481,8 +481,12 @@ cdef class Completion(object):
 
         :returns: True if the operation is completed
         """
-        with nogil:
-            ret = rbd_aio_is_complete(self.rbd_comp)
+        if self.image:
+            with nogil:
+                ret = rbd_aio_is_complete(self.rbd_comp)
+        else:
+            with nogil:
+                ret = rbd_aio_is_complete_group_completion(self.rbd_comp)
         return ret == 1
 
     def wait_for_complete_and_cb(self):
@@ -495,8 +499,12 @@ cdef class Completion(object):
         any exceptions in the callbacks are handled, as an exception internal
         to this module may have occurred.
         """
-        with nogil:
-            rbd_aio_wait_for_complete(self.rbd_comp)
+        if self.image:
+            with nogil:
+                rbd_aio_wait_for_complete(self.rbd_comp)
+        else:
+            with nogil:
+                rbd_aio_wait_for_complete_group_completion(self.rbd_comp)
 
         if self.exc_info:
             raise self.exc_info[0], self.exc_info[1], self.exc_info[2]
@@ -509,8 +517,12 @@ cdef class Completion(object):
 
         :returns: int - return value of the operation
         """
-        with nogil:
-            ret = rbd_aio_get_return_value(self.rbd_comp)
+        if self.image:
+            with nogil:
+                ret = rbd_aio_get_return_value(self.rbd_comp)
+        else:
+            with nogil:
+                ret = rbd_aio_get_return_value_group_completion(self.rbd_comp)
         return ret
 
     def __dealloc__(self):
@@ -522,9 +534,14 @@ cdef class Completion(object):
         ref.Py_XDECREF(self.buf)
         self.buf = NULL
         if self.rbd_comp != NULL:
-            with nogil:
-                rbd_aio_release(self.rbd_comp)
-                self.rbd_comp = NULL
+            if self.image:
+                with nogil:
+                    rbd_aio_release(self.rbd_comp)
+                    self.rbd_comp = NULL
+            else:
+                with nogil:
+                    rbd_aio_release_group_completion(self.rbd_comp)
+                    self.rbd_comp = NULL
 
     cdef void _complete(self):
         try:
@@ -2795,6 +2812,31 @@ cdef class Group(object):
         finally:
             free(id)
 
+    def __get_completion(self, oncomplete):
+        """
+        Constructs a completion to use with asynchronous operations
+
+        :param oncomplete: callback for the completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        completion_obj = Completion(None, oncomplete)
+        cdef:
+            PyObject* p_completion_obj= <PyObject*>completion_obj
+            rbd_completion_t completion
+
+        with nogil:
+            ret = rbd_aio_create_group_completion(p_completion_obj,
+                                                  __aio_complete_cb,
+                                                  &completion)
+        if ret < 0:
+            raise make_ex(ret, "error getting a completion")
+
+        completion_obj.rbd_comp = completion
+        return completion_obj
+
     def add_image(self, image_ioctx, image_name, flags=0):
         """
         Add an image to a group.
@@ -3073,6 +3115,59 @@ cdef class Group(object):
             }
         rbd_mirror_group_get_info_cleanup(&c_info)
         return info
+
+    def aio_mirror_group_get_info(self, oncomplete):
+        """
+         Asynchronously get mirror info of the group.
+
+        oncomplete will be called with the returned info as
+        well as the completion:
+
+        oncomplete(completion, info)
+
+        :param oncomplete: what to do when get info is complete
+        :type oncomplete: completion
+        :returns: :class:`Completion` - the completion object
+        """
+        cdef:
+            Completion completion
+
+        def oncomplete_(completion_v):
+            cdef:
+                Completion _completion_v = completion_v
+                rbd_mirror_group_info_t *c_info
+            return_value = _completion_v.get_return_value()
+            if return_value == 0:
+                c_info = <rbd_mirror_group_info_t *>_completion_v.buf
+                info = {
+                    'global_id'  : decode_cstr(c_info[0].global_id),
+                    'image_mode' : int(c_info[0].mirror_image_mode),
+                    'state'      : int(c_info[0].state),
+                    'primary'    : c_info[0].primary,
+                }
+                rbd_mirror_group_get_info_cleanup(c_info)
+            else:
+                info = None
+            return oncomplete(_completion_v, info)
+
+        completion = self.__get_completion(oncomplete_)
+        completion.buf = PyBytes_FromStringAndSize(
+            NULL, sizeof(rbd_mirror_group_info_t))
+        try:
+            completion.__persist()
+            with nogil:
+                ret = rbd_aio_mirror_group_get_info(
+                    self._ioctx, self._name,
+                    <rbd_mirror_group_info_t *>completion.buf,
+                    sizeof(rbd_mirror_group_info_t), completion.rbd_comp)
+            if ret != 0:
+                raise make_ex(
+                    ret, 'error getting mirror info of group %s' % self._name)
+        except:
+            completion.__unpersist()
+            raise
+
+        return completion
 
 def requires_not_closed(f):
     def wrapper(self, *args, **kwargs):
