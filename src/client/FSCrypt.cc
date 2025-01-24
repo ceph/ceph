@@ -737,6 +737,10 @@ int FSCryptFNameDenc::get_encrypted_name_length(const int& plain_size) const
 
 int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name)
 {
+  if (plain == "." || plain == ".." ) {
+    *encrypted = plain;
+    return plain.length();
+  }
   auto plain_size = plain.size();
   auto filename_padded_size = get_encrypted_name_length(plain_size);
 
