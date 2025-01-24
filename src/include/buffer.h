@@ -1059,7 +1059,6 @@ struct error_code;
     }
 
     const buffers_t& buffers() const { return _buffers; }
-    buffers_t& mut_buffers() { return _buffers; }
     void swap(list& other) noexcept;
     unsigned length() const {
 #if 0
