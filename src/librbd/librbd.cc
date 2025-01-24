@@ -183,6 +183,32 @@ struct C_AioCompletion : public Context {
   }
 };
 
+struct C_AioGroupCompletion : public Context {
+  librados::IoCtx m_ioctx;
+  librbd::RBD::AioGroupCompletion *m_aio_comp;
+
+  C_AioGroupCompletion(librados::IoCtx& ioctx,
+                       librbd::RBD::AioGroupCompletion* aio_comp)
+    : m_ioctx(ioctx), m_aio_comp(aio_comp) {
+    m_aio_comp->init(m_ioctx);
+    m_aio_comp->get();
+  }
+
+  virtual ~C_AioGroupCompletion() {
+    m_aio_comp->put();
+  }
+
+  void finish(int r) override {
+    auto cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
+    ldout(cct, 20) << "C_AioGroupCompletion::finish: r=" << r << dendl;
+    if (r < 0) {
+      m_aio_comp->fail(r);
+    } else {
+      m_aio_comp->complete();
+    }
+  }
+};
+
 struct C_OpenComplete : public C_AioCompletion {
   librbd::ImageCtx *ictx;
   void **ictxp;
@@ -476,6 +502,28 @@ struct C_MirrorImageGetInfo : public Context {
     }
 
     mirror_image_info_cpp_to_c(cpp_mirror_image_info, mirror_image_info);
+    on_finish->complete(0);
+  }
+};
+
+struct C_MirrorGroupGetInfo : public Context {
+  rbd_mirror_group_info_t *mirror_group_info;
+  Context *on_finish;
+
+  librbd::mirror_group_info_t cpp_mirror_group_info;
+
+  C_MirrorGroupGetInfo(rbd_mirror_group_info_t *mirror_group_info,
+                       Context *on_finish)
+    : mirror_group_info(mirror_group_info), on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0) {
+      on_finish->complete(r);
+      return;
+    }
+
+    mirror_group_info_cpp_to_c(cpp_mirror_group_info, mirror_group_info);
     on_finish->complete(0);
   }
 };
@@ -1706,6 +1754,21 @@ namespace librbd {
                                                  mirror_group_info);
   }
 
+  int RBD::aio_mirror_group_get_info(IoCtx& group_ioctx,
+                                     const char* group_name,
+				     mirror_group_info_t *mirror_group_info,
+				     size_t info_size,
+				     RBD::AioGroupCompletion *c) {
+    if (sizeof(mirror_image_info_t) != info_size) {
+      return -ERANGE;
+    }
+
+    librbd::api::Mirror<>::group_get_info(
+       group_ioctx, group_name, mirror_group_info,
+       new C_AioGroupCompletion(group_ioctx, c));
+    return 0;
+  }
+
   int RBD::mirror_group_get_status(IoCtx& group_ioctx, const char *group_name,
                                    mirror_group_global_status_t *status,
                                    size_t status_size) {
@@ -1792,6 +1855,77 @@ namespace librbd {
     librbd::io::AioCompletion *c = (librbd::io::AioCompletion *)pc;
     c->release();
     delete this;
+  }
+
+  RBD::AioGroupCompletion::AioGroupCompletion(void *cb_arg,
+                                              callback_t complete_cb)
+  {
+    m_complete_arg = cb_arg;
+    m_complete_cb = complete_cb;
+  }
+
+  ssize_t RBD::AioGroupCompletion::get_return_value()
+  {
+    ssize_t r = m_rval;
+    return r;
+  }
+
+  void RBD::AioGroupCompletion::init(IoCtx& ioctx)
+  {
+      m_ioctx = ioctx;
+      m_asio_engine = std::make_shared<AsioEngine>(m_ioctx);
+  }
+
+  void RBD::AioGroupCompletion::release()
+  {
+    bool previous_released = m_released.exchange(true);
+    ceph_assert(!previous_released);
+    put();
+  }
+
+  int RBD::AioGroupCompletion::wait_for_complete() {
+    {
+      std::unique_lock<std::mutex> locker(m_lock);
+      while (m_state != AIO_STATE_COMPLETE) {
+        m_cond.wait(locker);
+      }
+    }
+    return 0;
+  }
+
+  void RBD::AioGroupCompletion::fail(int r)
+  {
+    auto cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
+    lderr(cct) << cpp_strerror(r) << dendl;
+    m_rval = r;
+    complete();
+  }
+
+  void RBD::AioGroupCompletion::complete()
+  {
+    get();
+
+    boost::asio::dispatch(
+      m_asio_engine->get_api_strand(),
+      [this]() {
+        m_complete_cb(this, m_complete_arg);
+        notify_complete();
+        put();
+      });
+  }
+
+  bool RBD::AioGroupCompletion::is_complete()
+  {
+    bool done = (m_state != AIO_STATE_PENDING);
+    return done;
+  }
+
+  void RBD::AioGroupCompletion::notify_complete()
+  {
+    m_state = AIO_STATE_COMPLETE;
+
+    std::unique_lock<std::mutex> locker(m_lock);
+    m_cond.notify_all();
   }
 
   /*
@@ -7366,6 +7500,41 @@ extern "C" void rbd_aio_release(rbd_completion_t c)
   comp->release();
 }
 
+extern "C" int rbd_aio_create_group_completion(void *cb_arg,
+                                               rbd_callback_t complete_cb,
+                                               rbd_completion_t *c)
+{
+  librbd::RBD::AioGroupCompletion *rbd_comp =
+    new librbd::RBD::AioGroupCompletion(cb_arg, complete_cb);
+  *c = (rbd_completion_t) rbd_comp;
+  return 0;
+}
+
+extern "C" int rbd_aio_is_complete_group_completion(rbd_completion_t c)
+{
+  librbd::RBD::AioGroupCompletion *comp = (librbd::RBD::AioGroupCompletion *)c;
+  return comp->is_complete();
+}
+
+extern "C" int rbd_aio_wait_for_complete_group_completion(rbd_completion_t c)
+{
+  librbd::RBD::AioGroupCompletion *comp = (librbd::RBD::AioGroupCompletion *)c;
+  return comp->wait_for_complete();
+}
+
+extern "C" ssize_t rbd_aio_get_return_value_group_completion(
+    rbd_completion_t c)
+{
+  librbd::RBD::AioGroupCompletion *comp = (librbd::RBD::AioGroupCompletion *)c;
+  return comp->get_return_value();
+}
+
+extern "C" void rbd_aio_release_group_completion(rbd_completion_t c)
+{
+  librbd::RBD::AioGroupCompletion *comp = (librbd::RBD::AioGroupCompletion *)c;
+  comp->release();
+}
+
 extern "C" int rbd_group_create(rados_ioctx_t p, const char *name)
 {
   librados::IoCtx io_ctx;
@@ -8080,6 +8249,27 @@ extern "C" int rbd_mirror_group_get_info(
 extern "C" void rbd_mirror_group_get_info_cleanup(
     rbd_mirror_group_info_t *mirror_group_info) {
   free(mirror_group_info->global_id);
+}
+
+extern "C" int rbd_aio_mirror_group_get_info(rados_ioctx_t group_p,
+                                             const char *group_name,
+                                             rbd_mirror_group_info_t *info,
+                                             size_t info_size,
+                                             rbd_completion_t c) {
+  if (sizeof(rbd_mirror_group_info_t) != info_size) {
+    return -ERANGE;
+  }
+
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  librbd::RBD::AioGroupCompletion *comp = (librbd::RBD::AioGroupCompletion *)c;
+
+  auto ctx = new C_MirrorGroupGetInfo(
+    info, new C_AioGroupCompletion(group_ioctx, comp));
+  librbd::api::Mirror<>::group_get_info(
+    group_ioctx, group_name, &ctx->cpp_mirror_group_info, ctx);
+  return 0;
 }
 
 extern "C" int rbd_mirror_group_get_global_status(
