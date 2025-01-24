@@ -15753,7 +15753,7 @@ void BlueStore::_txc_exec(TransContext* txc, ThreadPool::TPHandle* handle)
 }
 
 inline bool BlueStore::_debug_maybe_idemreform() {
-  if (debug_idemreform_chance == 0) {
+  if (debug_idemreform_chance == 0 || mounted == false || db_was_opened_read_only == true) {
     return false;
   }
   return debug_idemreform_chance * (float)RAND_MAX <= rand();
@@ -15763,13 +15763,14 @@ void BlueStore::_debug_idemreform_write(
   CollectionRef& c,
   OnodeRef& o,
   uint64_t offset,
-  ceph::buffer::list& bl)
+  const ceph::buffer::list& bl)
 {
   WriteContext wctx;
   _choose_write_options(c, o, 0, &wctx);
   wctx.buffered = rand() % 2;
   TransContext* txc = _txc_create(c.get(), c->osr.get(), nullptr);
-  BlueStore::_write(txc, c, o, offset, bl.length(), bl, 0);
+  ceph::buffer::list copy_bl = bl;
+  BlueStore::_write(txc, c, o, offset, bl.length(), copy_bl, 0);
   _txc_exec(txc, nullptr);
 }
 

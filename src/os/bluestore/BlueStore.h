@@ -3634,7 +3634,7 @@ private:
     CollectionRef& c,
     OnodeRef& o,
     uint64_t offset,
-    bufferlist& bl);
+    const bufferlist& bl);
   bool _debug_maybe_idemreform();
 
 private:
