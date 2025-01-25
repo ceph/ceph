@@ -216,11 +216,11 @@ Using an alternate metadata pool for recovery
    This procedure has not been extensively tested. It should be undertaken only
    with great care.
 
-If an existing file system is damaged and inoperative, then it is possible to
-create a fresh metadata pool and to attempt the reconstruction the of the
-damaged and inoperative file system's metadata into the new pool, while leaving
-the old metadata in place. This could be used to make a safer attempt at
-recovery since the existing metadata pool would not be modified.
+If an existing CephFS file system is damaged and inoperative, then it is
+possible to create a fresh metadata pool and to attempt the reconstruction the
+of the damaged and inoperative file system's metadata into the new pool, while
+leaving the old metadata in place. This could be used to make a safer attempt
+at recovery since the existing metadata pool would not be modified.
 
 .. caution::
 
@@ -229,9 +229,9 @@ recovery since the existing metadata pool would not be modified.
    contents of the data pool while this is the case. After recovery is
    complete, archive or delete the damaged metadata pool.
 
-#. To begin, the existing file system should be taken down to prevent further
-   modification of the data pool. Unmount all clients and then use the
-   following command to mark the file system failed:
+#. Take down the existing file system in order to prevent any further
+   modification of the data pool. Unmount all clients. When all clients have
+   been unmounted, use the following command to mark the file system failed:
 
    .. prompt:: bash #
 
@@ -241,8 +241,11 @@ recovery since the existing metadata pool would not be modified.
 
       ``<fs_name>`` here and below refers to the original, damaged file system.
 
-#. Next, create a recovery file system in which we will populate a new metadata
-   pool that is backed by the original data pool:
+#. Create a recovery file system. This recovery file system will be used to
+   recover the data in the damaged pool. First, the filesystem will have a data
+   pool deployed for it. Then you will attacha new metadata pool to the new
+   data pool. Then you will set the new metadata pool to be backed by the old
+   data pool. 
 
    .. prompt:: bash #
 
@@ -255,7 +258,7 @@ recovery since the existing metadata pool would not be modified.
       The ``--recover`` flag prevents any MDS daemon from joining the new file
       system.
 
-#. Next, we will create the intial metadata for the fs:
+#. Create the intial metadata for the file system:
 
    .. prompt:: bash #
 
@@ -273,7 +276,7 @@ recovery since the existing metadata pool would not be modified.
 
       cephfs-journal-tool --rank cephfs_recovery:0 journal reset --force --yes-i-really-really-mean-it
 
-#. Now perform the recovery of the metadata pool from the data pool:
+#. Use the following commands to rebuild the metadata pool from the data pool:
 
    .. prompt:: bash #
 
@@ -322,15 +325,14 @@ recovery since the existing metadata pool would not be modified.
       Verify that the config has not been set globally or with a local
       ``ceph.conf`` file.
 
-#. Now, allow an MDS daemon to join the recovery file system:
+#. Allow an MDS daemon to join the recovery file system:
 
    .. prompt:: bash #
 
       ceph fs set cephfs_recovery joinable true
 
-#. Finally, run a forward :doc:`scrub </cephfs/scrub>` to repair recursive
-   statistics.  Ensure that you have an MDS daemon running and issue the
-   following command:
+#. Run a forward :doc:`scrub </cephfs/scrub>` to repair recursive statistics.
+   Ensure that you have an MDS daemon running and issue the following command:
 
    .. prompt:: bash #
 
@@ -351,7 +353,7 @@ recovery since the existing metadata pool would not be modified.
 
        If the data pool is also corrupt, some files may not be restored because
        the backtrace information associated with them is lost. If any data
-       objects are missing (due to issues like lost Placement Groups on the
+       objects are missing (due to issues like lost placement groups on the
        data pool), the recovered files will contain holes in place of the
        missing data.
 
