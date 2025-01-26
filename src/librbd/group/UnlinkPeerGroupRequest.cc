@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/ceph_assert.h"
+#include "include/Context.h"
 #include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -28,27 +29,49 @@ using util::create_context_callback;
 
 template <typename I>
 void UnlinkPeerGroupRequest<I>::send() {
-  CephContext *cct = (CephContext *)m_group_io_ctx.cct();
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
+  list_group_snaps();
+}
+
+template <typename I>
+void UnlinkPeerGroupRequest<I>::list_group_snaps() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<
+    UnlinkPeerGroupRequest<I>,
+    &UnlinkPeerGroupRequest<I>::handle_list_group_snaps>(
+      this);
+
+  m_group_snaps.clear();
+  auto req = group::ListSnapshotsRequest<I>::create(
+    m_group_io_ctx, m_group_id, true, true, &m_group_snaps, ctx);
+
+  req->send();
+}
+
+template <typename I>
+void UnlinkPeerGroupRequest<I>::handle_list_group_snaps(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to list group snapshots of group ID '"
+                 << m_group_id << "': " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
   unlink_peer();
 }
 
 template <typename I>
 void UnlinkPeerGroupRequest<I>::unlink_peer() {
-  CephContext *cct = (CephContext *)m_group_io_ctx.cct();
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
-  std::vector<cls::rbd::GroupSnapshot> snaps;
-  C_SaferCond cond;
-  auto req = group::ListSnapshotsRequest<>::create(m_group_io_ctx, m_group_id,
-                                                   true, true, &snaps, &cond);
-  req->send();
-  cond.wait();
   uint64_t count = 0;
-  auto unlink_snap = snaps.end();
-  auto unlink_unsynced_snap = snaps.end();
+  auto unlink_snap = m_group_snaps.end();
+  auto unlink_unsynced_snap = m_group_snaps.end();
   bool unlink_unsynced = false;
-  for (auto it = snaps.begin(); it != snaps.end(); it++) {
+  for (auto it = m_group_snaps.begin(); it != m_group_snaps.end(); it++) {
     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &it->snapshot_namespace);
     if (ns != nullptr) {
@@ -71,10 +94,10 @@ void UnlinkPeerGroupRequest<I>::unlink_peer() {
       // we always have a previous completly synced group snap on primary.
       if (ns->mirror_peer_uuids.empty()) {
         auto next_snap = std::next(it);
-        if (next_snap != snaps.end() &&
+        if (next_snap != m_group_snaps.end() &&
             next_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
           next_snap = std::next(next_snap);
-          if (next_snap != snaps.end() &&
+          if (next_snap != m_group_snaps.end() &&
               next_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
             unlink_snap = it;
             break;
@@ -88,9 +111,9 @@ void UnlinkPeerGroupRequest<I>::unlink_peer() {
     }
   }
 
-  if (unlink_snap != snaps.end()) {
+  if (unlink_snap != m_group_snaps.end()) {
     remove_group_snapshot(*unlink_snap);
-  } else if (unlink_unsynced && unlink_unsynced_snap != snaps.end()) {
+  } else if (unlink_unsynced && unlink_unsynced_snap != m_group_snaps.end()) {
     remove_group_snapshot(*unlink_unsynced_snap);
   } else {
     finish(0);
@@ -99,9 +122,15 @@ void UnlinkPeerGroupRequest<I>::unlink_peer() {
 
 template <typename I>
 void UnlinkPeerGroupRequest<I>::remove_group_snapshot(
-                              cls::rbd::GroupSnapshot group_snap) {
-  CephContext *cct = (CephContext *)m_group_io_ctx.cct();
-  ldout(cct, 10) << "group snap id: " << group_snap.id << dendl;
+    cls::rbd::GroupSnapshot group_snap) {
+  ldout(m_cct, 10) << "group snap id: " << group_snap.id << dendl;
+
+  m_remove_gp_snap_id = group_snap.id;
+
+  auto ctx = librbd::util::create_context_callback<
+    UnlinkPeerGroupRequest<I>,
+    &UnlinkPeerGroupRequest<I>::handle_remove_group_snapshot>(this);
+  auto gather_ctx = new C_Gather(m_cct, ctx);
 
   for (auto &snap : group_snap.snaps) {
     if (snap.snap_id == CEPH_NOSNAP) {
@@ -119,26 +148,38 @@ void UnlinkPeerGroupRequest<I>::remove_group_snapshot(
     if (!ictx) {
       continue;
     }
-    ldout(cct, 10) << "removing individual snapshot: "
-                   << snap.snap_id << ", from image id:" << snap.image_id << dendl;
-    remove_image_snapshot(ictx, snap.snap_id);
+    ldout(m_cct, 10) << "removing individual snapshot: "
+                     << snap.snap_id << ", from image id:" << snap.image_id
+                     << dendl;
+    remove_image_snapshot(ictx, snap.snap_id, gather_ctx);
   }
 
-  int r = cls_client::group_snap_remove(&m_group_io_ctx,
-      librbd::util::group_header_name(m_group_id), group_snap.id);
+  gather_ctx->activate();
+}
+
+template <typename I>
+void UnlinkPeerGroupRequest<I>::handle_remove_group_snapshot(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
   if (r < 0) {
-    lderr(cct) << "failed to remove group snapshot metadata: "
-               << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to remove group snapshot metadata: "
+                 << cpp_strerror(r) << dendl;
   }
 
-  unlink_peer();
+  r = cls_client::group_snap_remove(&m_group_io_ctx,
+    librbd::util::group_header_name(m_group_id), m_remove_gp_snap_id);
+  if (r < 0) {
+    lderr(m_cct) << "failed to remove group snapshot metadata: "
+                 << cpp_strerror(r) << dendl;
+  }
+
+  list_group_snaps();
 }
 
 template <typename I>
 void UnlinkPeerGroupRequest<I>::remove_image_snapshot(
-    ImageCtx *image_ctx, uint64_t snap_id) {
-  CephContext *cct = (CephContext *)m_group_io_ctx.cct();
-  ldout(cct, 10) << snap_id << dendl;
+    ImageCtx *image_ctx, uint64_t snap_id, C_Gather *gather_ctx) {
+  ldout(m_cct, 10) << snap_id << dendl;
 
   image_ctx->image_lock.lock_shared();
   int r = -ENOENT;
@@ -154,7 +195,7 @@ void UnlinkPeerGroupRequest<I>::remove_image_snapshot(
   }
 
   if (r == -ENOENT) {
-    ldout(cct, 10) << "missing snapshot: snap_id=" << snap_id << dendl;
+    ldout(m_cct, 10) << "missing snapshot: snap_id=" << snap_id << dendl;
     image_ctx->image_lock.unlock_shared();
     return;
   }
@@ -162,18 +203,18 @@ void UnlinkPeerGroupRequest<I>::remove_image_snapshot(
   auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
     &snap_namespace);
   if (mirror_ns == nullptr) {
-    lderr(cct) << "not mirror snapshot (snap_id=" << snap_id << ")" << dendl;
+    lderr(m_cct) << "not mirror snapshot (snap_id=" << snap_id << ")" << dendl;
     image_ctx->image_lock.unlock_shared();
     return;
   }
   image_ctx->image_lock.unlock_shared();
-  image_ctx->operations->snap_remove(snap_namespace, snap_name.c_str());
+  image_ctx->operations->snap_remove(snap_namespace, snap_name.c_str(),
+                                     gather_ctx->new_sub());
 }
 
 template <typename I>
 void UnlinkPeerGroupRequest<I>::finish(int r) {
-  CephContext *cct = (CephContext *)m_group_io_ctx.cct();
-  ldout(cct, 10) << "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
 }

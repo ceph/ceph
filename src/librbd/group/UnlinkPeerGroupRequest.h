@@ -37,6 +37,7 @@ public:
                        Context *on_finish)
     : m_group_io_ctx(group_io_ctx), m_group_id(group_id),
       m_image_ctxs(image_ctxs), m_on_finish(on_finish) {
+    m_cct = (CephContext *)group_io_ctx.cct();
   }
 
   void send();
@@ -47,9 +48,21 @@ private:
   std::vector<ImageCtx *> *m_image_ctxs;
   Context *m_on_finish;
 
+  CephContext *m_cct;
+
+  std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
+  std::string m_remove_gp_snap_id;
+
+  void list_group_snaps();
+  void handle_list_group_snaps(int r);
+
   void unlink_peer();
+
   void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
-  void remove_image_snapshot(ImageCtx *image_ctx, uint64_t snap_id);
+  void remove_image_snapshot(ImageCtx *image_ctx, uint64_t snap_id,
+                             C_Gather *gather_ctx);
+  void handle_remove_group_snapshot(int r);
+
   void finish(int r);
 };
 
