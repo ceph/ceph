@@ -71,8 +71,7 @@ case ${fscrypt_type} in
         ;;
     "locked")
         # Encrypt and lock the directory
-        printf "password\npassword\n" | sudo $FSCRYPT_CLI encrypt "$test_dir" --verbose --source=custom_passphrase  --name="test_secret"
-        sudo $FSCRYPT_CLI lock "$test_dir" --verbose
+        printf "password\npassword\n" | sudo $FSCRYPT_CLI encrypt --skip-unlock "$test_dir" --verbose --source=custom_passphrase  --name="test_secret"
         pushd "$test_dir"
         "${mydir}/../suites/${test_case}.sh"
         popd
