@@ -1457,6 +1457,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
     for (auto& rb : lump.get_dremote()) {
       dout(20) << "EMetaBlob.replay - Going over remotebit " << rb << dendl;
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
+      bool ref_in_found_in_mem = false;
       if (!dn) {
 	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.referent_ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
 	dn->set_version(rb.dnv);
@@ -1499,13 +1500,28 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 	  mds->mdcache->add_inode(ref_in);
           dout(10) << "HRK EMetaBlob.replay referent inode created for dn " << *dn << " inode " << *ref_in << "ref ino " << rb.referent_ino << dendl;
         } else {
+          ref_in_found_in_mem = true;
 	  ref_in->first = rb.dnfirst;
           ref_in->set_remote_ino(rb.ino);
 	  // TODO: Cleanup up the referent inode if the referent linkage is incorrect
+	  CInode *old_refin = dn->get_linkage()->get_referent_inode();
+	  if (old_refin != ref_in) {
+	    if (old_refin) {
+              dout(1) << "EMetaBlob.replay FIXME had dentry linked to wrong referent inode " << *dn
+		      << " " << *old_refin << " should be " << ref_in->ino() << dendl;
+	    } else {
+              dout(1) << "EMetaBlob.replay FIXME had dentry linked to wrong referent inode " << *dn
+		      << " null"  << " should be " << ref_in->ino() << dendl;
+	    }
+	  }
         }
 
         dout(10) << "HRK EMetaBlob.replay remote dentry found, link/set referent inode " << *dn << dendl;
-        dir->set_referent_inode(dn, ref_in);
+        //remote linkage is non-null hence using set_referent_inode instead of link_referent_inode
+	if (!ref_in_found_in_mem)
+          dir->set_referent_inode(dn, ref_in);
+	else // only remote was set during dentry linakge, set referent here
+          dir->set_referent_inode(dn, ref_in, false);
 
         //TODO: dirty referent inode parent in->mark_dirty_parent(logseg, fb.is_dirty_pool());
         // for now mark dirty always
