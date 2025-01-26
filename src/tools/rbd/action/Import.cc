@@ -847,7 +847,11 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   bool from_stdin = !strcmp(path, "-");
   if (from_stdin) {
     fd = STDIN_FILENO;
-    size = 1ULL << order;
+    if (estimated_size == 0) {
+      size = 1ULL << order;
+    } else {
+      size = estimated_size;
+    }
   } else {
     if ((fd = open(path, O_RDONLY|O_BINARY)) < 0) {
       r = -errno;
