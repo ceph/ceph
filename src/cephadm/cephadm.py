@@ -93,7 +93,7 @@ from cephadmlib.container_engines import (
 )
 from cephadmlib.data_utils import (
     dict_get_join,
-    get_legacy_config_fsid,
+    get_legacy_daemon_fsid,
     is_fsid,
     normalize_image_digest,
     try_convert_datetime,
@@ -736,27 +736,6 @@ def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -
         return daemon['systemd_unit']
     except KeyError:
         raise Error('Failed to get unit name for {}'.format(daemon))
-
-
-def get_legacy_daemon_fsid(ctx, cluster,
-                           daemon_type, daemon_id, legacy_dir=None):
-    # type: (CephadmContext, str, str, Union[int, str], Optional[str]) -> Optional[str]
-    fsid = None
-    if daemon_type == 'osd':
-        try:
-            fsid_file = os.path.join(ctx.data_dir,
-                                     daemon_type,
-                                     'ceph-%s' % daemon_id,
-                                     'ceph_fsid')
-            if legacy_dir is not None:
-                fsid_file = os.path.abspath(legacy_dir + fsid_file)
-            with open(fsid_file, 'r') as f:
-                fsid = f.read().strip()
-        except IOError:
-            pass
-    if not fsid:
-        fsid = get_legacy_config_fsid(cluster, legacy_dir=legacy_dir)
-    return fsid
 
 
 def create_daemon_dirs(
