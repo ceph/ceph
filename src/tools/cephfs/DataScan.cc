@@ -1073,10 +1073,18 @@ int DataScan::scan_links()
     dirfrag_t dirfrag() const {
       return dirfrag_t(dirino, frag);
     }
+    void print(std::ostream& os) const {
+      os << "link_info_t(diri=" << dirino << "." << frag << " name=" << name << " v=" << version << " l=" << nlink << ")";
+    }
+    bool operator==(const link_info_t& o) const {
+      return dirino == o.dirino
+             && frag == o.frag
+             && name == o.name;
+    }
   };
   map<inodeno_t, list<link_info_t> > dup_primaries;
   map<inodeno_t, link_info_t> bad_nlink_inos;
-  map<inodeno_t, link_info_t> injected_inos;
+  multimap<inodeno_t, link_info_t> injected_inos;
 
   map<dirfrag_t, set<string> > to_remove;
 
@@ -1207,7 +1215,7 @@ int DataScan::scan_links()
 			     make_move_iterator(end(srnode.snaps)));
 	      }
 	      if (dnfirst == CEPH_NOSNAP) {
-                injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+                injected_inos.insert({ino, link_info_t(dir_ino, frag_id, dname, inode.inode)});
                 dout(20) << "adding " << ino << " for future processing to fix dnfirst" << dendl;
               }
 	    }
@@ -1275,6 +1283,7 @@ int DataScan::scan_links()
 
     link_info_t newest;
     for (auto& q : p.second) {
+      dout(10) << " primary: " << q << dendl;
       if (q.version > newest.version) {
 	newest = q;
       } else if (q.version == newest.version &&
@@ -1283,6 +1292,7 @@ int DataScan::scan_links()
 	newest = q;
       }
     }
+    dout(10) << "newest is: " << newest << dendl;
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
@@ -1298,6 +1308,17 @@ int DataScan::scan_links()
       to_remove[q.dirfrag()].insert(key);
       derr << "Remove duplicated ino 0x" << p.first << " from "
 	   << q.dirfrag() << "/" << q.name << dendl;
+      {
+        /* we've removed the injected linkage: don't fix it later */
+        auto range = injected_inos.equal_range(p.first);
+        for (auto it = range.first; it != range.second; ) {
+          if (it->second == q) {
+            it = injected_inos.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      }
     }
 
     int nlink = 0;
@@ -1312,6 +1333,8 @@ int DataScan::scan_links()
 	   << " has " << newest.nlink << dendl;
       bad_nlink_inos[p.first] = newest;
       bad_nlink_inos[p.first].nlink = nlink;
+    } else {
+      bad_nlink_inos.erase(p.first);
     }
   }
   dup_primaries.clear();
