@@ -493,13 +493,13 @@ class interval_set {
     insert(val, 1);
   }
 
-  /** This insert method adds an interval into the interval map, with some
-   * caveats and restrictions. Inserts must be new interval or append to
-   * an existing interval. Adding an unsupported interval will result in an
-   * assert firing.
+  /** This insert function adds an interval into the interval map, for cases
+   * where intervals are required to never overlap. Inserts must be a new
+   * interval or append to an existing interval. Adding an interval which
+   * intersects with an existing interval will result in an assert firing.
    *
-   * NOTE: Unless you need the asserts/policing provided by this function,
-   *       you are likely better off with union_insert().
+   * NOTE: Unless you need the policing provided by this function, you are
+   *       probably better off with union_insert().
    *
    * @param start - the offset at the start of the interval
    * @param len - the length of the interval being added.
@@ -573,13 +573,10 @@ class interval_set {
     //cout << "insert " << start << "~" << len << endl;
     T new_len = len;
     auto p = find_adj_m(start);
-    auto o = std::pair(start, len);
     T end = start + len;
 
     if(len == 0) {
-      if (p != m.end() && start >= p->first && start < p->first + p->second) {
-        o = *p;
-      }
+      //No-op
     } else if (p == m.end()) {
       m[start] = len;                  // new interval
     } else {
@@ -599,8 +596,6 @@ class interval_set {
           new_len = new_len - std::min(a, b);
           p->second += n->second - std::min(a, b);
         }
-
-        o = *p;
       } else {
         T old_len = 0;
         T new_end = end;
@@ -609,8 +604,8 @@ class interval_set {
           new_end = std::max(pend, end);
           old_len = old_len + p->second;
         }
-        m[start] = o.second = new_end - start;
-        new_len = o.second - old_len;
+        m[start] = new_end - start;
+        new_len = new_end - start - old_len;
       }
     }
 
