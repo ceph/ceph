@@ -1068,6 +1068,14 @@ int DataScan::scan_links()
     dirfrag_t dirfrag() const {
       return dirfrag_t(dirino, frag);
     }
+    void print(std::ostream& os) const {
+      os << "link_info_t(diri=" << dirino << "." << frag << " name=" << name << " v=" << version << " l=" << nlink << ")";
+    }
+    bool operator==(const link_info_t& o) const {
+      return dirino == o.dirino
+             && frag == o.frag
+             && name == o.name;
+    }
   };
   map<inodeno_t, list<link_info_t> > dup_primaries;
   map<inodeno_t, link_info_t> bad_nlink_inos;
@@ -1270,6 +1278,7 @@ int DataScan::scan_links()
 
     link_info_t newest;
     for (auto& q : p.second) {
+      dout(10) << " primary: " << p.second << dendl;
       if (q.version > newest.version) {
 	newest = q;
       } else if (q.version == newest.version &&
@@ -1278,6 +1287,7 @@ int DataScan::scan_links()
 	newest = q;
       }
     }
+    dout(10) << "newest is: " << newest << dendl;
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
@@ -1293,6 +1303,13 @@ int DataScan::scan_links()
       to_remove[q.dirfrag()].insert(key);
       derr << "Remove duplicated ino 0x" << p.first << " from "
 	   << q.dirfrag() << "/" << q.name << dendl;
+      {
+        /* we've removed the injected linkage: don't fix it later */
+        auto it = injected_inos.find(p.first);
+        if (it != injected_inos.end() && it->second == q) {
+          injected_inos.erase(it);
+        }
+      }
     }
 
     int nlink = 0;
@@ -1307,6 +1324,8 @@ int DataScan::scan_links()
 	   << " has " << newest.nlink << dendl;
       bad_nlink_inos[p.first] = newest;
       bad_nlink_inos[p.first].nlink = nlink;
+    } else {
+      bad_nlink_inos.erase(p.first);
     }
   }
   dup_primaries.clear();
