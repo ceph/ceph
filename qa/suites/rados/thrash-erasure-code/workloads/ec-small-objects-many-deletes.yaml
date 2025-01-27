@@ -1,0 +1,14 @@
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 400000
+    max_seconds: 600
+    max_in_flight: 8
+    objects: 20
+    size: 16384
+    ec_pool: true
+    op_weights:
+      write: 0
+      read: 0
+      append: 10
+      delete: 20
