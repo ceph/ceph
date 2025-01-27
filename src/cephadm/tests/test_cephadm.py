@@ -979,9 +979,9 @@ class TestCephAdm(object):
                 r'Cannot infer an fsid',
             ),
         ])
-    @mock.patch('cephadm.call')
-    @mock.patch('cephadm.logger')
-    def test_infer_fsid(self, _logger, _call, fsid, ceph_conf, list_daemons, result, err, cephadm_fs):
+    def test_infer_fsid(self, fsid, ceph_conf, list_daemons, result, err, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadm.logger')
+        funkypatch.patch('cephadm.call')
         # build the context
         ctx = _cephadm.CephadmContext()
         ctx.fsid = fsid
@@ -997,6 +997,9 @@ class TestCephAdm(object):
             ctx.config = f.path
 
         # test
+        funkypatch.patch(
+            'cephadmlib.listing.daemons_summary'
+        ).return_value = list_daemons
         with mock.patch('cephadm.list_daemons', return_value=list_daemons):
             if err:
                 with pytest.raises(_cephadm.Error, match=err):
