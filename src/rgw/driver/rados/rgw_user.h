@@ -305,6 +305,10 @@ struct RGWUserAdminOpState {
     max_buckets_specified = true;
   }
 
+  rgw::sal::Attrs get_attrs();
+
+  void set_attrs(rgw::sal::Attrs& attrs);
+
   void set_gen_access() {
     gen_access = true;
     key_op = true;
