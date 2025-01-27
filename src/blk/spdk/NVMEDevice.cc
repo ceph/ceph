@@ -936,7 +936,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert(is_valid_io(off, len));
 
   Task t(this, IOCommand::READ_COMMAND, off, len, 1);
-  bufferptr p = buffer::create_small_page_aligned(len);
+  bufferptr_rw p = buffer::create_small_page_aligned(len);
   char *buf = p.c_str();
 
   // for sync read, need to control IOContext in itself
@@ -957,7 +957,7 @@ int NVMEDevice::aio_read(
 {
   dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
   ceph_assert(is_valid_io(off, len));
-  bufferptr p = buffer::create_small_page_aligned(len);
+  bufferptr_rw p = buffer::create_small_page_aligned(len);
   pbl->append(p);
   char* buf = p.c_str();
 
