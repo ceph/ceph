@@ -8945,8 +8945,13 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
   CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
     CInode *ref_in = dnl->get_referent_inode();
-    dout(7) << "get_dentry_inode linking in remote in " << *in << "referent " << *ref_in << dendl;
-    dn->link_remote(dnl, in, ref_in);
+    if (ref_in) {
+      dout(7) << "get_dentry_inode linking in referent remote in " << *in << "referent " << *ref_in << dendl;
+      dn->link_remote(dnl, in, ref_in);
+    } else {
+      dout(7) << "get_dentry_inode linking in remote in " << *in << dendl;
+      dn->link_remote(dnl, in);
+    }
     return in;
   } else {
     dout(10) << "get_dentry_inode on remote dn, opening inode for " << *dn << dendl;
