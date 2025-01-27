@@ -12,10 +12,6 @@
  * 
  */
 
-#ifndef _BACKWARD_BACKWARD_WARNING_H
-#define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
-#endif
-
 #include "include/compat.h"
 #include "include/fs_types.h"
 #include "common/entity_name.h"

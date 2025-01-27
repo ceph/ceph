@@ -5,7 +5,8 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
-#include <strstream>
+
+#include <sstream>
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
