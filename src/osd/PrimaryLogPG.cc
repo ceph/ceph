@@ -13952,7 +13952,7 @@ uint64_t PrimaryLogPG::recover_backfill(
   }
 
   // update our local interval to cope with recent changes
-  backfill_info.begin = last_backfill_started;
+  backfill_info.trim_to(last_backfill_started);
   update_range(&backfill_info, handle);
   ceph_assert(backfill_info.is_populated());
 
@@ -13968,7 +13968,6 @@ uint64_t PrimaryLogPG::recover_backfill(
 	recovery_state.get_peer_info(target).last_backfill,
 	last_backfill_started));
   }
-  backfill_info.trim_to(last_backfill_started);
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   while (ops < max) {
