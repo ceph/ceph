@@ -102,3 +102,27 @@ TEST(formatter, dump_inf_or_nan)
   EXPECT_EQ(parser.find_obj("nan_val")->get_data(), "null");
   EXPECT_EQ(parser.find_obj("nan_val_alt")->get_data(), "null");
 }
+
+TEST(formatter, dump_large_item) {
+  JSONFormatter formatter;
+  formatter.open_object_section("large_item");
+
+  std::string base_url("http://example.com");
+  std::string bucket_name("bucket");
+  std::string object_key(1024, 'a');
+
+  std::string full_url = base_url + "/" + bucket_name + "/" + object_key;
+  formatter.dump_format("Location", "%s/%s/%s", base_url.c_str(), bucket_name.c_str(), object_key.c_str());
+
+  formatter.close_section();
+  bufferlist bl;
+  formatter.flush(bl);
+
+  // std::cout << std::string(bl.c_str(), bl.length()) << std::endl;
+
+  JSONParser parser;
+  parser.parse(bl.c_str(), bl.length());
+
+  EXPECT_TRUE(parser.parse(bl.c_str(), bl.length()));
+  EXPECT_EQ(parser.find_obj("Location")->get_data(), full_url);
+}
