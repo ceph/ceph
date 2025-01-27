@@ -990,6 +990,14 @@ options:
   - mds
   fmt_desc: Ceph will randomly fragment or merge directories.
   with_legacy: true
+- name: mds_allow_async_dirops
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will enable/disable the async dirop feature.
+  with_legacy: true
 - name: mds_dump_cache_on_map
   type: bool
   level: dev

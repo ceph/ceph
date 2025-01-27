@@ -8515,8 +8515,11 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	  lov.add_xlock(&dn->lock);
 	} else {
 	  // force client to flush async dir operation if necessary
-	  if (cur->filelock.is_cached())
+	  if (cur->filelock.is_cached() &&
+	      !(mdr->lock_cache &&
+		static_cast<const MutationImpl*>(mdr->lock_cache)->is_wrlocked(&cur->filelock))) {
 	    lov.add_wrlock(&cur->filelock);
+	  }
 	  lov.add_rdlock(&dn->lock);
 	}
 	if (!mds->locker->acquire_locks(mdr, lov)) {
@@ -8635,8 +8638,11 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		lov.add_xlock(&dn->lock);
 	      } else {
 		// force client to flush async dir operation if necessary
-		if (cur->filelock.is_cached())
+		if (cur->filelock.is_cached() &&
+		    !(mdr->lock_cache &&
+		      static_cast<const MutationImpl*>(mdr->lock_cache)->is_wrlocked(&cur->filelock))) {
 		  lov.add_wrlock(&cur->filelock);
+		}
 		lov.add_rdlock(&dn->lock);
 	      }
 	      if (!mds->locker->acquire_locks(mdr, lov)) {
