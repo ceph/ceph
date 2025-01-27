@@ -13,30 +13,67 @@
  * Represents the objects in a range [begin, end)
  *
  * Possible states:
- * 1) begin == end == hobject_t() indicates the the interval is unpopulated
- * 2) Else, objects contains all objects in [begin, end)
+ * 0) Empty instance - default constructed
+ * 1) Unpopulated    - BackfillInterval::begin == BackfillInterval::end
+ * 2) Populated      - BackfillInterval::objects contains all existing objects
+ *                     in logical range of [BackfillInterval::begin, BackfillInterval::end)
  */
+
 struct BackfillInterval {
   // info about a backfill interval on a peer
   eversion_t version; /// version at which the scan occurred
   std::map<hobject_t,eversion_t> objects;
-  hobject_t begin;
-  hobject_t end;
+  hobject_t begin; /// object to start populating the interval from
+  hobject_t end;   /// object to start populating the interval to
+  bool populated = false;
 
   /// clear content
   void clear() {
     *this = BackfillInterval();
   }
 
-  /// clear objects std::list only
-  void clear_objects() {
-    objects.clear();
+  // Constructs an unpopulated instance where
+  // begin==end. This is used for the
+  // initalzation of peer_backfill_info.
+  BackfillInterval(hobject_t begin);
+
+  // *This ctor overload will be removed in the next commits*
+  BackfillInterval(hobject_t begin,
+                   hobject_t end);
+
+  // Construct a fully populated instance
+  BackfillInterval(hobject_t begin,
+                   hobject_t end,
+                   const std::map<hobject_t,eversion_t>&& _objects,
+                   eversion_t _version);
+
+  // Construct a fully populated instance
+  BackfillInterval(hobject_t begin,
+                   hobject_t end,
+                   const ceph::buffer::list& data);
+
+  BackfillInterval() = default;
+
+  // populate the objects in the interval
+  void populate(const ceph::buffer::list& data) {
+    ceph_assert(objects.empty() && !populated);
+    auto p = data.cbegin();
+    decode_noclear(objects, p);
+    populated = true;
   }
 
-  /// reinstantiate with a new start+end position and sort order
-  void reset(hobject_t start) {
-    clear();
-    begin = end = start;
+  // populate the objects in the interval and update version
+  void populate(const std::map<hobject_t,eversion_t>&& _objects,
+                eversion_t _version) {
+    ceph_assert(objects.empty() && !populated);
+    objects = std::move(_objects);
+    version = _version;
+    populated = true;
+  }
+
+  /// true if interval is populated
+  bool is_populated() {
+    return populated;
   }
 
   /// true if there are no objects in this interval
