@@ -11,8 +11,8 @@ export enum Promqls {
 
 export enum RgwPromqls {
   RGW_REQUEST_PER_SECOND = 'sum(rate(ceph_rgw_req[1m]))',
-  AVG_GET_LATENCY = 'sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) / sum(rate(ceph_rgw_op_get_obj_lat_count[1m]))',
-  AVG_PUT_LATENCY = 'sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])) / sum(rate(ceph_rgw_op_put_obj_lat_count[1m]))',
+  AVG_GET_LATENCY = '(sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) / sum(rate(ceph_rgw_op_get_obj_lat_count[1m]))) * 1000',
+  AVG_PUT_LATENCY = '(sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])) / sum(rate(ceph_rgw_op_put_obj_lat_count[1m]))) * 1000',
   GET_BANDWIDTH = 'sum(rate(ceph_rgw_op_get_obj_bytes[1m]))',
   PUT_BANDWIDTH = 'sum(rate(ceph_rgw_op_put_obj_bytes[1m]))'
 }
