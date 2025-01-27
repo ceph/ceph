@@ -193,7 +193,11 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
-from cephadmlib.listing import daemons_matching, LegacyDaemonEntry
+from cephadmlib.listing import (
+    LegacyDaemonEntry,
+    daemons_matching,
+    daemons_summary,
+)
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -309,7 +313,7 @@ def infer_fsid(func: FuncT) -> FuncT:
         if cp.has_option('global', 'fsid'):
             fsids.add(cp.get('global', 'fsid'))
 
-        daemon_list = list_daemons(ctx, detail=False)
+        daemon_list = daemons_summary(ctx)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
                 # 'unknown' fsid
@@ -353,7 +357,7 @@ def infer_config(func: FuncT) -> FuncT:
             return os.path.join(data_dir, 'config')
 
         def get_mon_daemon_name(fsid: str) -> Optional[str]:
-            daemon_list = list_daemons(ctx, detail=False)
+            daemon_list = daemons_summary(ctx)
             for daemon in daemon_list:
                 if (
                     daemon.get('name', '').startswith('mon.')
@@ -4359,7 +4363,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 
     # stop + disable individual daemon units
     sd_paths = []
-    for d in list_daemons(ctx, detail=False):
+    for d in daemons_summary(ctx):
         if d['fsid'] != ctx.fsid:
             continue
         if d['style'] != 'cephadm:v1':
@@ -4683,7 +4687,7 @@ def update_service_for_daemon(ctx: CephadmContext,
 def command_update_osd_service(ctx: CephadmContext) -> int:
     """update service for provided daemon"""
     update_daemons = [f'osd.{osd_id}' for osd_id in ctx.osd_ids.split(',')]
-    daemons = list_daemons(ctx, detail=False, type_of_daemon='osd')
+    daemons = daemons_summary(ctx, daemon_type='osd')
     if not daemons:
         raise Error(f'Daemon {ctx.osd_ids} does not exists on this host')
     available_daemons = [d['name'] for d in daemons]
