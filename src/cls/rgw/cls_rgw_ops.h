@@ -32,26 +32,20 @@ struct rgw_cls_obj_prepare_op
   cls_rgw_obj_key key;
   std::string tag;
   std::string locator;
-  bool log_op;
-  uint16_t bilog_flags;
-  rgw_zone_set zones_trace;
 
-  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 5, bl);
+    ENCODE_START(8, 5, bl);
     uint8_t c = (uint8_t)op;
     encode(c, bl);
     encode(tag, bl);
     encode(locator, bl);
-    encode(log_op, bl);
     encode(key, bl);
-    encode(bilog_flags, bl);
-    encode(zones_trace, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     uint8_t c;
     decode(c, bl);
     op = (RGWModifyOp)c;
@@ -62,16 +56,19 @@ struct rgw_cls_obj_prepare_op
     if (struct_v >= 2) {
       decode(locator, bl);
     }
-    if (struct_v >= 4) {
+    if (struct_v >= 4 && struct_v < 8) {
+      bool log_op;
       decode(log_op, bl);
     }
     if (struct_v >= 5) {
       decode(key, bl);
     }
-    if (struct_v >= 6) {
+    if (struct_v >= 6 && struct_v < 8) {
+      uint16_t bilog_flags;
       decode(bilog_flags, bl);
     }
-    if (struct_v >= 7) {
+    if (struct_v >= 7 && struct_v < 8) {
+      rgw_zone_set zones_trace;
       decode(zones_trace, bl);
     }
     DECODE_FINISH(bl);
