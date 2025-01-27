@@ -179,8 +179,8 @@ class GrafanaService(CephadmService):
         return config_file, self.get_dependencies(self.mgr)
 
     def prepare_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert = self.mgr.cert_key_store.get_cert('grafana_cert', host=daemon_spec.host)
-        pkey = self.mgr.cert_key_store.get_key('grafana_key', host=daemon_spec.host)
+        cert = self.mgr.cert_mgr.get_cert('grafana_cert', host=daemon_spec.host)
+        pkey = self.mgr.cert_mgr.get_key('grafana_key', host=daemon_spec.host)
         certs_present = (cert and pkey)
         is_valid_certificate = False
         (org, cn) = (None, None)
@@ -206,8 +206,8 @@ class GrafanaService(CephadmService):
             node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
             cert, pkey = self.mgr.cert_mgr.generate_cert([host_fqdn, "grafana_servers"], node_ip)
             # cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
-            self.mgr.cert_key_store.save_cert('grafana_cert', cert, host=daemon_spec.host)
-            self.mgr.cert_key_store.save_key('grafana_key', pkey, host=daemon_spec.host)
+            self.mgr.cert_mgr.save_cert('grafana_cert', cert, host=daemon_spec.host)
+            self.mgr.cert_mgr.save_key('grafana_key', pkey, host=daemon_spec.host)
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
                 self.mgr.check_mon_command({
                     'prefix': 'dashboard set-grafana-api-ssl-verify',
@@ -277,8 +277,8 @@ class GrafanaService(CephadmService):
         """
         if daemon.hostname is not None:
             # delete cert/key entires for this grafana daemon
-            self.mgr.cert_key_store.rm_cert('grafana_cert', host=daemon.hostname)
-            self.mgr.cert_key_store.rm_key('grafana_key', host=daemon.hostname)
+            self.mgr.cert_mgr.rm_cert('grafana_cert', host=daemon.hostname)
+            self.mgr.cert_mgr.rm_key('grafana_key', host=daemon.hostname)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],

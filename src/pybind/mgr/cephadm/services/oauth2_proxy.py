@@ -41,8 +41,8 @@ class OAuth2ProxyService(CephadmService):
         return DaemonDescription()
 
     def get_certificates(self, svc_spec: OAuth2ProxySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert = self.mgr.cert_key_store.get_cert('oauth2_proxy_cert')
-        key = self.mgr.cert_key_store.get_key('oauth2_proxy_key')
+        cert = self.mgr.cert_mgr.get_cert('oauth2_proxy_cert')
+        key = self.mgr.cert_mgr.get_key('oauth2_proxy_key')
         if not (cert and key):
             # not available on store, check if provided on the spec
             if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
@@ -55,8 +55,8 @@ class OAuth2ProxyService(CephadmService):
                 cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, addr)
             # save certificates
             if cert and key:
-                self.mgr.cert_key_store.save_cert('oauth2_proxy_cert', cert)
-                self.mgr.cert_key_store.save_key('oauth2_proxy_key', key)
+                self.mgr.cert_mgr.save_cert('oauth2_proxy_cert', cert)
+                self.mgr.cert_mgr.save_key('oauth2_proxy_key', key)
             else:
                 logger.error("Failed to obtain certificate and key from mgmt-gateway.")
         return cert, key
