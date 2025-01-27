@@ -1,0 +1,3 @@
+overrides:
+  rook:
+    rook_image: rook/ceph:master

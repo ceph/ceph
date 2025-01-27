@@ -1,0 +1,36 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        mon election default strategy: 3
+      mon:
+        mon min osdmap epochs: 25
+        paxos service trim min: 5
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
+        debug mon: 30
+# thrashing monitors may make mgr have trouble w/ its keepalive
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\) # slow mons -> slow peering -> PG_AVAILABILITY
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+      - \(POOL_APP_NOT_ENABLED\)
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+      - \(MON_DOWN\)
+      - \(PG_AVAILABILITY\)
+      - \(SLOW_OPS\)
+      - \[WRN\]
+tasks:
+- install:
+- ceph:
