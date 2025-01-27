@@ -1,0 +1,52 @@
+@use 'sass:map';
+@use './src/styles/vendor/variables' as vv;
+
+/*
+Color documentation:
+https://carbondesignsystem.com/elements/color/overview/
+
+More info on color that can be overriden
+https://github.com/carbon-design-system/carbon/blob/main/packages/themes/docs/sass.md
+*/
+
+$base: (
+  text-disabled: vv.$gray-500,
+  text-error: vv.$danger,
+  text-helper: vv.$body-color,
+  text-inverse: vv.$black,
+  text-on-color: vv.$white,
+  text-on-color-disabled: vv.$gray-700,
+  text-placeholder: vv.$gray-700,
+  text-primary: vv.$body-bg-alt,
+  text-secondary: vv.$body-bg-alt,
+  btn-primary: vv.$primary,
+  border-interactive: vv.$primary,
+  background: vv.$secondary,
+  layer-01: vv.$secondary,
+  icon-primary: vv.$gray-100,
+  icon-secondary: vv.$gray-300,
+  link-primary: vv.$primary,
+  focus: vv.$primary,
+  field-hover-01: vv.$gray-200,
+  icon-disabled: vv.$gray-500,
+  icon-inverse: vv.$gray-100,
+  button-primary: vv.$primary,
+  button-primary-hover: vv.$primary-500,
+  interactive: vv.$primary,
+  support-success: vv.$success,
+  support-warning: vv.$warning,
+  support-error: vv.$danger,
+  support-info: vv.$info,
+  notification-background-info: vv.$info,
+  button-danger-primary: vv.$danger,
+  // Sizes
+  heading-03: 1.75rem,
+  spacing-03: 0.5rem
+);
+
+$layers: (
+  layer-hover-01: vv.$gray-600,
+  layer-hover-02: vv.$gray-100
+);
+
+$theme: map-merge($base, $layers);
