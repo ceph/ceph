@@ -7916,7 +7916,6 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
 {
   dout(10) << "handle_peer_link_prep " << *mdr
 	   << " on " << mdr->peer_request->get_object_info()
-	   << " dest path " << mdr->peer_request->destdnpath
 	   << dendl;
 
   ceph_assert(g_conf()->mds_kill_link_at != 4);
