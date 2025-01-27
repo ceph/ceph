@@ -1249,8 +1249,19 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     }
     Inode *diri = dir->parent_inode;
     clear_dir_complete_and_ordered(diri, false);
-#warning revisit nullopt here
-    dn = link(dir, dname, std::nullopt, in, dn);
+
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
+    if (fscrypt_denc) {
+      string _enc_name;
+      string _alt_name;
+      int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+      }
+      dn = link(dir, dname, _enc_name, in, dn);
+    } else {
+      dn = link(dir, dname, std::nullopt, in, dn);
+    }
 
     if (old_dentry) {
       dn->is_renaming = false;
