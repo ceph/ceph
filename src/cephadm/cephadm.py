@@ -3403,7 +3403,7 @@ def list_daemons(
     daemon_name: Optional[str] = None,
     type_of_daemon: Optional[str] = None,
 ) -> List[Dict[str, str]]:
-    host_version: Optional[str] = None
+    legacy_cache: Dict[str, Any] = {}
     ls = []
 
     data_dir = ctx.data_dir
@@ -3449,21 +3449,9 @@ def list_daemons(
                     'systemd_unit': legacy_unit_name,
                 }
                 if detail:
-                    (val['enabled'], val['state'], _) = check_unit(
-                        ctx, legacy_unit_name
+                    _update_legacy_status(
+                        val, ctx, legacy_unit_name, legacy_cache
                     )
-                    if not host_version:
-                        try:
-                            out, err, code = call(
-                                ctx,
-                                ['ceph', '-v'],
-                                verbosity=CallVerbosity.QUIET,
-                            )
-                            if not code and out.startswith('ceph version '):
-                                host_version = out.split(' ')[2]
-                        except Exception:
-                            pass
-                    val['host_version'] = host_version
                 ls.append(val)
         elif is_fsid(i):
             fsid = str(i)  # convince mypy that fsid is a str here
@@ -3502,6 +3490,29 @@ def list_daemons(
 
                 ls.append(val)
     return ls
+
+
+def _update_legacy_status(
+    val: Dict[str, Any],
+    ctx: CephadmContext,
+    legacy_unit_name: str,
+    cache: Dict[str, Any],
+) -> None:
+    (val['enabled'], val['state'], _) = check_unit(
+        ctx, legacy_unit_name
+    )
+    if not cache.get('host_version'):
+        try:
+            out, err, code = call(
+                ctx,
+                ['ceph', '-v'],
+                verbosity=CallVerbosity.QUIET,
+            )
+            if not code and out.startswith('ceph version '):
+                cache['host_version'] = out.split(' ')[2]
+        except Exception:
+            pass
+    val['host_version'] = cache.get('host_version')
 
 
 def _update_daemon_and_container_status(
