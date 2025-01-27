@@ -7968,6 +7968,16 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
     inc = true;
     pi.inode->nlink++;
 
+    CDentry *target_pdn = targeti->get_projected_parent_dn();
+    SnapRealm *target_realm = target_pdn->get_dir()->inode->find_snaprealm();
+    if (mds->mdsmap->use_global_snaprealm() && !target_realm->get_subvolume_ino()
+        && !targeti->is_projected_snaprealm_global()) {
+      sr_t *newsnap = targeti->project_snaprealm();
+      targeti->mark_snaprealm_global(newsnap);
+      targeti->record_snaprealm_parent_dentry(newsnap, target_realm, target_pdn, true);
+      adjust_realm = true;
+      realm_projected = true;
+    }
     // Link referent inode to the primary inode (targeti)
     //ceph_assert(referent_ino);
     //pi.inode->add_referent_ino(referent_ino);
