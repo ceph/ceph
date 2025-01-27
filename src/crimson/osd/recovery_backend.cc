@@ -253,16 +253,12 @@ RecoveryBackend::scan_for_backfill(
       co_return;
     }
   }));
-  BackfillInterval bi;
-  bi.begin = std::move(start);
-  bi.end = std::move(next);
-  bi.objects = std::move(*version_map);
+  BackfillInterval bi(std::move(start), std::move(next),
+                      std::move(*version_map), eversion_t{});
   DEBUGDPP("{} BackfillInterval filled, leaving, {}",
-           "scan_for_backfill",
-           pg, bi);
+           "scan_for_backfill", pg, bi);
   co_return std::move(bi);
 }
-
 RecoveryBackend::interruptible_future<>
 RecoveryBackend::handle_scan_get_digest(
   MOSDPGScan& m,
@@ -310,15 +306,7 @@ RecoveryBackend::handle_scan_digest(
   // Check that from is in backfill_targets vector
   ceph_assert(pg.is_backfill_target(m.from));
 
-  BackfillInterval bi;
-  bi.begin = m.begin;
-  bi.end = m.end;
-  {
-    auto p = m.get_data().cbegin();
-    // take care to preserve ordering!
-    bi.clear_objects();
-    ::decode_noclear(bi.objects, p);
-  }
+  BackfillInterval bi(m.begin, m.end, m.get_data());
   auto recovery_handler = pg.get_recovery_handler();
   recovery_handler->dispatch_backfill_event(
     crimson::osd::BackfillState::ReplicaScanned{
