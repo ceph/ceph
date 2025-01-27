@@ -1294,7 +1294,7 @@ class RgwZone(RESTController):
 
     @Endpoint()
     @ReadPermission
-    def get_user_list(self, zoneName=None):
+    def get_user_list(self, zoneName=None, realmName=None):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.get_user_list(zoneName)
+        result = multisite_instance.get_user_list(zoneName, realmName)
         return result

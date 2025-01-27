@@ -1290,9 +1290,19 @@ class RgwMultisiteAutomation:
                                                                    path=f'ui-api/rgw/multisite/check-daemons-status?service_name={service_name}',  # noqa E501  # pylint: disable=line-too-long
                                                                    token=cluster_token)
                     logger.info("Daemons status: %s", daemons_status)
+                    realms_list = multi_cluster_instance._proxy(
+                        method='GET',
+                        base_url=cluster_url,
+                        path='api/rgw/realm',
+                        token=cluster_token
+                    )
+                    logger.debug("Realms info in the selected cluster: %s", realms_list)
+                    system_user_param = "realmName" if realms_list.get('default_info') \
+                        else "zoneName"
                     if daemons_status is True:
                         self.check_user_in_second_cluster(cluster_url, cluster_token,
-                                                          username, replication_zone_name)
+                                                          username, replication_zone_name,
+                                                          system_user_param, realm_name)
                     else:
                         self.update_progress("Failed to set credentials in selected cluster", 'fail', "RGW daemons failed to start")  # noqa E501  # pylint: disable=line-too-long
                         return token_import_response
@@ -1310,9 +1320,17 @@ class RgwMultisiteAutomation:
             raise
 
     def check_user_in_second_cluster(self, cluster_url, cluster_token, username,
-                                     replication_zone_name):
+                                     replication_zone_name, system_user_param,
+                                     realm_name):
         logger.info("Checking for user %s in the second cluster", username)
-        path = f'api/rgw/zone/get_user_list?zoneName={replication_zone_name}'
+        params = {
+            "zoneName": f"zoneName={replication_zone_name}",
+            "realmName": f"realmName={realm_name}",
+        }
+        if system_user_param in params:
+            path = f"api/rgw/zone/get_user_list?{params[system_user_param]}"
+        else:
+            raise ValueError(f"Invalid system_user_param: {system_user_param}")
         user_found = False
         start_time = time.time()
         while not user_found:
@@ -1327,6 +1345,7 @@ class RgwMultisiteAutomation:
                 # pylint: disable=protected-access
                 user_content = multi_cluster_instance._proxy(method='GET', base_url=cluster_url,
                                                              path=path, token=cluster_token)
+                logger.debug("user_content in selected cluster: %s", user_content)
                 if isinstance(user_content, list) and username in user_content:
                     user_found = True
                     logger.info("User %s found in the second cluster", username)
@@ -1991,9 +2010,12 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    def get_user_list(self, zoneName: str):
+    def get_user_list(self, zoneName=None, realmName=None):
         user_list = []
-        rgw_user_list_cmd = ['user', 'list', '--rgw-zone', zoneName]
+        if zoneName:
+            rgw_user_list_cmd = ['user', 'list', '--rgw-zone', zoneName]
+        if realmName:
+            rgw_user_list_cmd = ['user', 'list', '--rgw-realm', realmName]
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_list_cmd)
             if exit_code > 0:
