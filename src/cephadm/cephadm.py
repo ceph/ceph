@@ -193,6 +193,7 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
+from cephadmlib.listing import daemons_matching, LegacyDaemonEntry
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -3414,70 +3415,36 @@ def list_daemons(
     seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(ctx)
     seen_cpuperc_cid_len, seen_cpuperc = parsed_container_cpu_perc(ctx)
 
-    for i in os.listdir(data_dir):
-        if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
-            if type_of_daemon and type_of_daemon != i:
-                continue
-            daemon_type = i
-            for j in os.listdir(os.path.join(data_dir, i)):
-                if '-' not in j:
-                    continue
-                (cluster, daemon_id) = j.split('-', 1)
-                fsid = get_legacy_daemon_fsid(
-                    ctx,
-                    cluster,
-                    daemon_type,
-                    daemon_id,
-                    legacy_dir=legacy_dir,
+    daemon_entries = daemons_matching(
+        ctx,
+        legacy_dir,
+        daemon_name=daemon_name,
+        daemon_type=type_of_daemon,
+    )
+    for entry in daemon_entries:
+        if isinstance(entry, LegacyDaemonEntry):
+            status = cast(Dict[str, Any], entry.status)
+            if detail:
+                _update_legacy_status(
+                    status, ctx, entry.name, legacy_cache,
                 )
-                legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
-                val: Dict[str, Any] = {
-                    'style': 'legacy',
-                    'name': '%s.%s' % (daemon_type, daemon_id),
-                    'fsid': fsid if fsid is not None else 'unknown',
-                    'systemd_unit': legacy_unit_name,
-                }
-                if detail:
-                    _update_legacy_status(
-                        val, ctx, legacy_unit_name, legacy_cache
-                    )
-                ls.append(val)
-        elif is_fsid(i):
-            fsid = str(i)  # convince mypy that fsid is a str here
-            for j in os.listdir(os.path.join(data_dir, i)):
-                if not (
-                    '.' in j
-                    and os.path.isdir(os.path.join(data_dir, fsid, j))
-                ):
-                    continue
-                name = j
-                if daemon_name and name != daemon_name:
-                    continue
-                (daemon_type, daemon_id) = j.split('.', 1)
-                if type_of_daemon and type_of_daemon != daemon_type:
-                    continue
-                identity = DaemonIdentity.from_name(fsid, name)
-                val = {
-                    'style': 'cephadm:v1',
-                    'name': name,
-                    'fsid': fsid,
-                    'systemd_unit': identity.unit_name,
-                }
-                if detail:
-                    _update_daemon_and_container_status(
-                        val,
-                        ctx,
-                        identity,
-                        data_dir,
-                        seen_versions,
-                        seen_digests,
-                        seen_memusage_cid_len,
-                        seen_memusage,
-                        seen_cpuperc_cid_len,
-                        seen_cpuperc,
-                    )
-
-                ls.append(val)
+            ls.append(status)
+        else:
+            status = cast(Dict[str, Any], entry.status)
+            if detail:
+                _update_daemon_and_container_status(
+                    status,
+                    ctx,
+                    entry.identity,
+                    data_dir,
+                    seen_versions,
+                    seen_digests,
+                    seen_memusage_cid_len,
+                    seen_memusage,
+                    seen_cpuperc_cid_len,
+                    seen_cpuperc,
+                )
+            ls.append(status)
     return ls
 
 
