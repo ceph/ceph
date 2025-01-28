@@ -346,24 +346,29 @@ class NvmeofThrasher(Thrasher, Greenlet):
         Run some checks to see if everything is running well during thrashing.
         """
         self.log('display and verify stats:')
-        for d in self.daemons:
-            d.remote.sh(d.status_cmd, check_status=False)
-        check_cmd = [
-            'ceph', 'orch', 'ls', '--refresh',
-            run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh',
-            run.Raw('&&'), 'ceph', 'health', 'detail',
-            run.Raw('&&'), 'ceph', '-s',
-            run.Raw('&&'), 'ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0',
-            run.Raw('&&'), 'sudo', 'nvme', 'list',
-        ]
-        self.checker_host.run(args=check_cmd).wait()
+        for retry in range(5):
+            try: 
+                random_gateway_host = None
+                initiator_host = self.checker_host 
+                for d in self.daemons:
+                    random_gateway_host = d.remote
+                    d.remote.sh(d.status_cmd, check_status=False)
+                random_gateway_host.run(args=['ceph', 'orch', 'ls', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'health', 'detail'])
+                random_gateway_host.run(args=['ceph', '-s'])
+                random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
 
-        for dev in self.devices:
-            device_check_cmd = [
-                'sudo', 'nvme', 'list-subsys', dev,
-                run.Raw('|'), 'grep', 'live optimized'
-            ]
-            self.checker_host.run(args=device_check_cmd)    
+                initiator_host.run(args=['sudo', 'nvme', 'list'])
+                for dev in self.devices:
+                    device_check_cmd = [
+                        'sudo', 'nvme', 'list-subsys', dev,
+                        run.Raw('|'), 'grep', 'live optimized'
+                    ]
+                    initiator_host.run(args=device_check_cmd)
+                break
+            except run.CommandFailedError:
+                self.log(f"retry do_checks() for {retry} time")
 
     def switch_task(self):
         """
