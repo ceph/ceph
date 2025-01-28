@@ -24,13 +24,13 @@ private:
 
 public:
   enum {
-    OP_SCAN_GET_DIGEST = 1,      // just objects and versions
-    OP_SCAN_DIGEST = 2,          // result
+    OP_SCAN_GET_DIGEST = 1,        // just objects and versions
+    OP_SCAN_GET_DIGEST_REPLY = 2,  // populated BackfillInterval reply
   };
   const char *get_op_name(int o) const {
     switch (o) {
     case OP_SCAN_GET_DIGEST: return "get_digest";
-    case OP_SCAN_DIGEST: return "digest";
+    case OP_SCAN_GET_DIGEST_REPLY: return "get_digest_reply";
     default: return "???";
     }
   }

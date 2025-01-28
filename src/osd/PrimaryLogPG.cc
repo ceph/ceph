@@ -4514,7 +4514,7 @@ void PrimaryLogPG::do_scan(
 	&bi,
 	handle);
       MOSDPGScan *reply = new MOSDPGScan(
-	MOSDPGScan::OP_SCAN_DIGEST,
+	MOSDPGScan::OP_SCAN_GET_DIGEST_REPLY,
 	pg_whoami,
 	get_osdmap_epoch(), m->query_epoch,
 	spg_t(info.pgid.pgid, get_primary().shard), bi.begin, bi.end);
@@ -4523,7 +4523,7 @@ void PrimaryLogPG::do_scan(
     }
     break;
 
-  case MOSDPGScan::OP_SCAN_DIGEST:
+  case MOSDPGScan::OP_SCAN_GET_DIGEST_REPLY:
     {
       pg_shard_t from = m->from;
 
