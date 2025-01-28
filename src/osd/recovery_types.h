@@ -85,6 +85,11 @@ struct BackfillInterval {
     return end.is_max();
   }
 
+  /// true if begin exists in objects
+  bool is_existing_begin() const {
+    return objects.contains(begin);
+  }
+
   /// removes items <= soid and adjusts begin to the first object
   void trim_to(const hobject_t &soid) {
     trim();

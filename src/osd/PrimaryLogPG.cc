@@ -14127,6 +14127,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	       << " skip_targs=" << skip_targs << dendl;
 
       last_backfill_started = backfill_info.begin;
+      ceph_assert(backfill_info.is_existing_begin());
       add_to_stat.insert(backfill_info.begin); // XXX: Only one for all pushes?
       backfill_info.pop_front();
       vector<pg_shard_t> check_targets = need_ver_targs;
