@@ -37,10 +37,6 @@ struct BackfillInterval {
   // initalzation of peer_backfill_info.
   BackfillInterval(hobject_t begin);
 
-  // *This ctor overload will be removed in the next commits*
-  BackfillInterval(hobject_t begin,
-                   hobject_t end);
-
   // Construct a fully populated instance
   BackfillInterval(hobject_t begin,
                    hobject_t end,

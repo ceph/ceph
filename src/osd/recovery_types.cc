@@ -7,11 +7,6 @@ BackfillInterval::BackfillInterval(hobject_t _begin) :
   begin(_begin), end(_begin) {}
 
 BackfillInterval::BackfillInterval(hobject_t _begin,
-                                   hobject_t _end) :
-  begin(_begin),
-  end(_end) {}
-
-BackfillInterval::BackfillInterval(hobject_t _begin,
                                    hobject_t _end,
                                    const std::map<hobject_t,eversion_t>&& _objects,
                                    eversion_t _version) :
