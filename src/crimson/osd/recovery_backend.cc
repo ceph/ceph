@@ -306,11 +306,10 @@ RecoveryBackend::handle_scan_get_digest_reply(
   // Check that from is in backfill_targets vector
   ceph_assert(pg.is_backfill_target(m.from));
 
-  BackfillInterval bi(m.begin, m.end, m.get_data());
   auto recovery_handler = pg.get_recovery_handler();
   recovery_handler->dispatch_backfill_event(
     crimson::osd::BackfillState::ReplicaScanned{
-      m.from, std::move(bi) }.intrusive_from_this());
+      m.from, m.get_backfill_interval() }.intrusive_from_this());
   return seastar::now();
 }
 
