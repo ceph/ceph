@@ -227,7 +227,8 @@ void Allocator::release(const PExtentVector& release_vec)
  * Final score is obtained by proportion between score that would have been obtained
  * in condition of absolute fragmentation and score in no fragmentation at all.
  */
-double Allocator::get_fragmentation_score()
+
+static void push_next_scale(std::vector<double>& scales)
 {
   // this value represents how much worth is 2X bytes in one chunk then in X + X bytes
   static const double double_size_worth_small = 1.2;
@@ -236,6 +237,21 @@ double Allocator::get_fragmentation_score()
   static const size_t small_chunk_p2 = 20; // 1MB
   static const size_t huge_chunk_p2 = 27; // 128MB
   // for chunks 1MB - 128MB penalty coeffs are linearly weighted 1.2 (at small) ... 1 (at huge)
+  auto ss = scales.size();
+  double scale = double_size_worth_small;
+  if (ss >= huge_chunk_p2) {
+    scale = double_size_worth_huge;
+  } else if (ss > small_chunk_p2) {
+    // linear decrease 1.2 ... 1
+    scale = (double_size_worth_huge * (ss - small_chunk_p2) +
+             double_size_worth_small * (huge_chunk_p2 - ss)) /
+            (huge_chunk_p2 - small_chunk_p2);
+  }
+  scales.push_back(scales[scales.size() - 1] * scale);
+}
+
+double Allocator::get_fragmentation_score()
+{
   static std::vector<double> scales{1};
   double score_sum = 0;
   size_t sum = 0;
@@ -244,16 +260,7 @@ double Allocator::get_fragmentation_score()
     size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
     while (scales.size() <= sc + 1) {
       //unlikely expand scales vector
-      auto ss = scales.size();
-      double scale = double_size_worth_small;
-      if (ss >= huge_chunk_p2) {
-	scale = double_size_worth_huge;
-      } else if (ss > small_chunk_p2) {
-	// linear decrease 1.2 ... 1
-	scale = (double_size_worth_huge * (ss - small_chunk_p2) + double_size_worth_small * (huge_chunk_p2 - ss)) /
-	  (huge_chunk_p2 - small_chunk_p2);
-      }
-      scales.push_back(scales[scales.size() - 1] * scale);
+      push_next_scale(scales);
     }
     size_t sc_shifted = size_t(1) << sc;
     double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
