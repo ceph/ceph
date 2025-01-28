@@ -285,7 +285,7 @@ RecoveryBackend::handle_scan_get_digest(
     [this, query_epoch=m.query_epoch, conn
     ](auto backfill_interval) {
       auto reply = crimson::make_message<MOSDPGScan>(
-	MOSDPGScan::OP_SCAN_DIGEST,
+	MOSDPGScan::OP_SCAN_GET_DIGEST_REPLY,
 	pg.get_pg_whoami(),
 	pg.get_osdmap_epoch(),
 	query_epoch,
@@ -298,7 +298,7 @@ RecoveryBackend::handle_scan_get_digest(
 }
 
 RecoveryBackend::interruptible_future<>
-RecoveryBackend::handle_scan_digest(
+RecoveryBackend::handle_scan_get_digest_reply(
   MOSDPGScan& m)
 {
   LOG_PREFIX(RecoveryBackend::handle_scan_digest);
@@ -328,8 +328,8 @@ RecoveryBackend::handle_scan(
   switch (m.op) {
     case MOSDPGScan::OP_SCAN_GET_DIGEST:
       return handle_scan_get_digest(m, conn);
-    case MOSDPGScan::OP_SCAN_DIGEST:
-      return handle_scan_digest(m);
+    case MOSDPGScan::OP_SCAN_GET_DIGEST_REPLY:
+      return handle_scan_get_digest_reply(m);
     default:
       // FIXME: move to errorator
       ceph_assert("unknown op type for pg scan");
