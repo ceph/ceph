@@ -16,6 +16,7 @@
 #define CEPH_MOSDPGSCAN_H
 
 #include "MOSDFastDispatchOp.h"
+#include "osd/recovery_types.h"
 
 class MOSDPGScan final : public MOSDFastDispatchOp {
 private:
@@ -49,6 +50,11 @@ public:
   }
   spg_t get_spg() const override {
     return pgid;
+  }
+
+  BackfillInterval get_backfill_interval() const {
+    assert(op == OP_SCAN_GET_DIGEST_REPLY);
+    return BackfillInterval{begin, end, get_data()};
   }
 
   void decode_payload() override {
