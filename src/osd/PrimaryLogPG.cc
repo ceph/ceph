@@ -4505,13 +4505,13 @@ void PrimaryLogPG::do_scan(
 	return;
       }
 
-      BackfillInterval bi(m->begin);
       // No need to flush, there won't be any in progress writes occuring
       // past m->begin
-      scan_range(
+      BackfillInterval bi = scan_range(
 	cct->_conf->osd_backfill_scan_min,
 	cct->_conf->osd_backfill_scan_max,
-	&bi,
+	m->begin,
+	info.last_update,
 	handle);
       MOSDPGScan *reply = new MOSDPGScan(
 	MOSDPGScan::OP_SCAN_GET_DIGEST_REPLY,
@@ -14308,8 +14308,7 @@ void PrimaryLogPG::update_range(
   if (bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
-    bi->version = info.last_update;
-    scan_range(local_min, local_max, bi, handle);
+    *bi = scan_range(local_min, local_max, bi->begin, info.last_update, handle);
   }
 
   if (bi->version >= projected_last_update) {
@@ -14345,19 +14344,20 @@ void PrimaryLogPG::update_range(
   }
 }
 
-void PrimaryLogPG::scan_range(
-  int min, int max, BackfillInterval *bi,
+BackfillInterval PrimaryLogPG::scan_range(
+  int min, int max, hobject_t scan_start, eversion_t version,
   ThreadPool::TPHandle &handle)
 {
   ceph_assert(is_locked());
-  dout(10) << "scan_range from " << bi->begin << dendl;
+  dout(10) << "scan_range from " << scan_start << dendl;
   std::map<hobject_t,eversion_t> objects;
+  hobject_t scan_end;
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = pgbackend->objects_list_partial(bi->begin, min, max, &ls, &bi->end);
+  int r = pgbackend->objects_list_partial(scan_start, min, max, &ls, &scan_end);
   ceph_assert(r >= 0);
-  dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
+  dout(10) << " got " << ls.size() << " items, next " << scan_end << dendl;
   dout(20) << ls << dendl;
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
@@ -14391,7 +14391,7 @@ void PrimaryLogPG::scan_range(
       dout(20) << "  " << *p << " " << oi.version << dendl;
     }
   }
-  bi->populate(std::move(objects));
+  return BackfillInterval{scan_start, scan_end, std::move(objects), version};
 }
 
 
