@@ -13973,9 +13973,12 @@ uint64_t PrimaryLogPG::recover_backfill(
     if (backfill_info.begin <= earliest_peer_backfill() &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
       hobject_t next = backfill_info.end;
-      backfill_info = BackfillInterval(next, hobject_t::get_max());
-      update_range(&backfill_info, handle);
-      backfill_info.trim();
+      backfill_info = scan_range(
+	cct->_conf->osd_backfill_scan_min,
+	cct->_conf->osd_backfill_scan_max,
+	next,
+	info.last_update,
+	handle);
     }
 
     dout(20) << "   my backfill interval " << backfill_info << dendl;
