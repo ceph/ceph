@@ -33,9 +33,12 @@ export class HealthComponent implements OnInit, OnDestroy {
   enabledFeature$: FeatureTogglesMap$;
   icons = Icons;
   color: string;
-
   clientStatsConfig: any = {};
   rawCapacityChartConfig: any = {};
+  popovers = {
+    clusterStatus: false,
+    pgStatus: false
+  };
 
   pgStatusChartConfig = {
     options: {
@@ -280,4 +283,5 @@ export class HealthComponent implements OnInit, OnDestroy {
 
     return Math.ceil((dividend / divisor) * 100 * 100) / 100;
   }
+
 }
