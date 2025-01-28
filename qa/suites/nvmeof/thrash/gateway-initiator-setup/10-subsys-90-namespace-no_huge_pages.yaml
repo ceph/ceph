@@ -1,0 +1,37 @@
+tasks:
+- nvmeof:
+    installer: host.a
+    gw_image: quay.io/ceph/nvmeof:latest # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    rbd:
+      pool_name: mypool
+      image_name_prefix: myimage
+    gateway_config:
+      subsystems_count: 10 
+      namespaces_count: 90 # each subsystem
+      cli_image: quay.io/ceph/nvmeof-cli:latest
+
+- cephadm.wait_for_service:
+    service: nvmeof.mypool.mygroup0
+
+- cephadm.exec:
+    host.a:
+      - ceph orch ls nvmeof --export > /tmp/nvmeof-orig.yaml
+      - cp /tmp/nvmeof-orig.yaml /tmp/nvmeof-no-huge-page.yaml 
+      - "sed -i '/  pool: mypool/a\\  spdk_mem_size: 4096' /tmp/nvmeof-no-huge-page.yaml"
+      - cat /tmp/nvmeof-no-huge-page.yaml
+      - ceph orch ls --refresh
+      - ceph orch apply -i /tmp/nvmeof-no-huge-page.yaml
+      - ceph orch redeploy nvmeof.mypool.mygroup0
+      
+- cephadm.wait_for_service:
+    service: nvmeof.mypool.mygroup0
+
+- workunit:
+    no_coverage_and_limits: true
+    clients:
+      client.0:
+        - nvmeof/setup_subsystem.sh
+        - nvmeof/basic_tests.sh
+    env:
+      RBD_POOL: mypool
+      RBD_IMAGE_PREFIX: myimage
