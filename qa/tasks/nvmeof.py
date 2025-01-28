@@ -394,7 +394,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
 
     def kill_daemon(self, daemon):
         kill_methods = [
-            "ceph_daemon_stop", "systemctl_stop",
+            "ceph_daemon_stop", 
+            # "systemctl_stop",
             "daemon_remove",
         ]
         chosen_method = self.rng.choice(kill_methods)
