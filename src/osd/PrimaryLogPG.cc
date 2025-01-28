@@ -4529,9 +4529,8 @@ void PrimaryLogPG::do_scan(
 
       // Check that from is in backfill_targets vector
       ceph_assert(is_backfill_target(from));
-      BackfillInterval bi(m->begin, m->end, m->get_data());
       ceph_assert(peer_backfill_info.contains(from));
-      peer_backfill_info.at(from) = bi;
+      peer_backfill_info.at(from) = m->get_backfill_interval();
 
       dout(10) << __func__ << " " << peer_backfill_info.at(from) << dendl;
 
