@@ -154,6 +154,7 @@ void Background::run() {
       ldpp_dout(dpp, 10) << "Lua background thread resumed" << dendl;
     }
     
+    lguard.reset_start_time();
     const auto rc = read_script();
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do

@@ -70,7 +70,7 @@ void stack_dump(lua_State* L);
 class lua_state_guard {
   const std::size_t max_memory;
   const std::chrono::milliseconds max_runtime;
-  const ceph::real_clock::time_point start_time;
+  ceph::real_clock::time_point start_time;
   const DoutPrefixProvider* const dpp;
   lua_State* const state;
 
@@ -82,6 +82,7 @@ class lua_state_guard {
                   const DoutPrefixProvider* _dpp);
   ~lua_state_guard();
   lua_State* get() { return state; }
+  void reset_start_time() { start_time = ceph::real_clock::now(); }
 };
 
 int dostring(lua_State* L, const char* str);
