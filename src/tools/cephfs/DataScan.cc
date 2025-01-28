@@ -2051,19 +2051,13 @@ int MetadataDriver::inject_with_backtrace(
       }
     }
 
-    if (!created_dirfrag) {
-      // If the parent dirfrag already existed, then stop traversing the
-      // backtrace: assume that the other ancestors already exist too.  This
-      // is an assumption rather than a truth, but it's a convenient way
-      // to avoid the risk of creating multiply-linked directories while
-      // injecting data.  If there are in fact missing ancestors, this
-      // should be fixed up using a separate tool scanning the metadata
-      // pool.
-      break;
-    } else {
-      // Proceed up the backtrace, creating parents
-      ino = parent_ino;
-    }
+    // N.B.: when the metadata pool has suffered a partial loss (like one PG), then
+    // an arbitrary ancestor dirfrag may be missing. We need to traverse up the
+    // backtrace ancestry to create those missing dirfrags/links. There is a risk
+    // that we create duplicate primary links to a directory this way. scan_links
+    // will catch this and pick either a legitimate link (with a version >1) or
+    // an arbitrary injected link, removing the others.
+    ino = parent_ino;
   }
 
   return 0;
