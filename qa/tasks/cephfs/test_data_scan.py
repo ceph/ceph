@@ -15,6 +15,8 @@ from collections import namedtuple, defaultdict
 from textwrap import dedent
 
 from teuthology.exceptions import CommandFailedError
+from teuthology import contextutil
+from tasks.cephfs.filesystem import FSDamaged
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
@@ -84,6 +86,18 @@ class Workload(object):
         pool = self._filesystem.get_metadata_pool_name()
         self._filesystem.rados(["purge", pool, '--yes-i-really-really-mean-it'])
 
+    def is_damaged(self):
+        sleep = 2
+        timeout = 120
+        with contextutil.safe_while(sleep=sleep, tries=timeout/sleep) as proceed:
+            while proceed():
+                try:
+                    self._filesystem.wait_for_daemons()
+                except FSDamaged as e:
+                    if 0 in e.ranks:
+                        return True
+        return False
+
     def flush(self):
         """
         Called after client unmount, after write: flush whatever you want
@@ -138,6 +152,90 @@ class SymlinkWorkload(Workload):
         self.assert_true(stat.S_ISLNK(st['st_mode']))
         target = self._mount.readlink("symlink1_onemegs")
         self.assert_equal(target, "symdir/onemegs")
+        return self._errors
+
+class NestedDirWorkload(Workload):
+    """
+    Nested directories, one is lost.
+    """
+
+    def write(self):
+        self._mount.run_shell_payload("mkdir -p dir_x/dir_xx/dir_xxx/")
+        self._mount.run_shell_payload("dd if=/dev/urandom of=dir_x/dir_xx/dir_xxx/file_y conv=fsync bs=1 count=1")
+        self._initial_state = self._filesystem.read_cache("dir_x/dir_xx", depth=0)
+
+    def damage(self):
+        dirfrag_obj = "{0:x}.00000000".format(self._initial_state[0]['ino'])
+        self._filesystem.radosm(["rm", dirfrag_obj])
+
+    def is_damaged(self):
+        # workload runner expects MDS to be offline
+        self._filesystem.fail()
+        return True
+
+    def validate(self):
+        self._mount.run_shell_payload("find dir_x -execdir stat {} +")
+        self._mount.run_shell_payload("stat dir_x/dir_xx/dir_xxx/file_y")
+        return self._errors
+
+class NestedDirWorkloadRename(Workload):
+    """
+    Nested directories, one is lost. With renames.
+    """
+
+    def write(self):
+        self._mount.run_shell_payload("mkdir -p dir_x/dir_xx/dir_xxx/; mkdir -p dir_y")
+        self._mount.run_shell_payload("dd if=/dev/urandom of=dir_x/dir_xx/dir_xxx/file_y conv=fsync bs=1 count=1")
+        self._initial_state = self._filesystem.read_cache("dir_x/dir_xx", depth=0)
+        self._filesystem.flush()
+        self._mount.run_shell_payload("mv dir_x/dir_xx dir_y/dir_yy; sync dir_y")
+
+    def damage(self):
+        dirfrag_obj = "{0:x}.00000000".format(self._initial_state[0]['ino'])
+        self._filesystem.radosm(["rm", dirfrag_obj])
+
+    def is_damaged(self):
+        # workload runner expects MDS to be offline
+        self._filesystem.fail()
+        return True
+
+    def validate(self):
+        self._mount.run_shell_payload("find . -execdir stat {} +")
+        self._mount.run_shell_payload("stat dir_y/dir_yy/dir_xxx/file_y")
+        return self._errors
+
+class NestedDoubleDirWorkloadRename(Workload):
+    """
+    Nested directories, two lost with backtraces to rebuild. With renames.
+    """
+
+    def write(self):
+        self._mount.run_shell_payload("mkdir -p dir_x/dir_xx/dir_xxx/; mkdir -p dir_y")
+        self._mount.run_shell_payload("dd if=/dev/urandom of=dir_x/dir_xx/dir_xxx/file_y conv=fsync bs=1 count=1")
+        self._initial_state = []
+        self._initial_state.append(self._filesystem.read_cache("dir_x/dir_xx", depth=0))
+        self._initial_state.append(self._filesystem.read_cache("dir_y", depth=0))
+        self._filesystem.flush()
+        self._mount.run_shell_payload("""
+        mv dir_x/dir_xx dir_y/dir_yy
+        sync dir_y
+        dd if=/dev/urandom of=dir_y/dir_yy/dir_xxx/file_z conv=fsync bs=1 count=1
+        """)
+
+    def damage(self):
+        for o in self._initial_state:
+            dirfrag_obj = "{0:x}.00000000".format(o[0]['ino'])
+            self._filesystem.radosm(["rm", dirfrag_obj])
+
+    def is_damaged(self):
+        # workload runner expects MDS to be offline
+        self._filesystem.fail()
+        return True
+
+    def validate(self):
+        self._mount.run_shell_payload("find . -execdir stat {} +")
+        # during recovery: we may get dir_x/dir_xx or dir_y/dir_yy; depending on rados pg iteration order
+        self._mount.run_shell_payload("stat dir_y/dir_yy/dir_xxx/file_y || stat dir_x/dir_xx/dir_xxx/file_y")
         return self._errors
 
 
@@ -364,10 +462,6 @@ class NonDefaultLayout(Workload):
 class TestDataScan(CephFSTestCase):
     MDSS_REQUIRED = 2
 
-    def is_marked_damaged(self, rank):
-        mds_map = self.fs.get_mds_map()
-        return rank in mds_map['damaged']
-
     def _rebuild_metadata(self, workload, workers=1):
         """
         That when all objects in metadata pool are removed, we can rebuild a metadata pool
@@ -397,19 +491,11 @@ class TestDataScan(CephFSTestCase):
         # Reset the MDS map in case multiple ranks were in play: recovery procedure
         # only understands how to rebuild metadata under rank 0
         self.fs.reset()
+        self.assertEqual(self.fs.get_var('max_mds'), 1)
 
         self.fs.set_joinable() # redundant with reset
 
-        def get_state(mds_id):
-            info = self.mds_cluster.get_mds_info(mds_id)
-            return info['state'] if info is not None else None
-
-        self.wait_until_true(lambda: self.is_marked_damaged(0), 60)
-        for mds_id in self.fs.mds_ids:
-            self.wait_until_equal(
-                    lambda: get_state(mds_id),
-                    "up:standby",
-                    timeout=60)
+        self.assertTrue(workload.is_damaged())
 
         self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
@@ -422,7 +508,7 @@ class TestDataScan(CephFSTestCase):
                 self.fs.journal_tool(["journal", "reset", "--yes-i-really-really-mean-it"], 0)
 
         self.fs.journal_tool(["journal", "reset", "--force", "--yes-i-really-really-mean-it"], 0)
-        self.fs.data_scan(["init"])
+        self.fs.data_scan(["init", "--force-init"])
         self.fs.data_scan(["scan_extents"], worker_count=workers)
         self.fs.data_scan(["scan_inodes"], worker_count=workers)
         self.fs.data_scan(["scan_links"])
@@ -431,6 +517,7 @@ class TestDataScan(CephFSTestCase):
         self.run_ceph_cmd('mds', 'repaired', '0')
 
         # Start the MDS
+        self.fs.set_joinable() # necessary for some tests without damage
         self.fs.wait_for_daemons()
         log.info(str(self.mds_cluster.status()))
 
@@ -457,6 +544,15 @@ class TestDataScan(CephFSTestCase):
 
     def test_rebuild_symlink(self):
         self._rebuild_metadata(SymlinkWorkload(self.fs, self.mount_a))
+
+    def test_rebuild_nested(self):
+        self._rebuild_metadata(NestedDirWorkload(self.fs, self.mount_a))
+
+    def test_rebuild_nested_rename(self):
+        self._rebuild_metadata(NestedDirWorkloadRename(self.fs, self.mount_a))
+
+    def test_rebuild_nested_double_rename(self):
+        self._rebuild_metadata(NestedDoubleDirWorkloadRename(self.fs, self.mount_a))
 
     def test_rebuild_moved_file(self):
         self._rebuild_metadata(MovedFile(self.fs, self.mount_a))
