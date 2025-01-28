@@ -323,13 +323,12 @@ RecoveryBackend::handle_scan_get_digest_reply(
   // Check that from is in backfill_targets vector
   ceph_assert(pg.is_backfill_target(m.from));
 
-  BackfillInterval bi(m.begin, m.end, m.get_data());
-
   shard_services.start_operation<crimson::osd::BackfillRecovery>(
     static_cast<crimson::osd::PG*>(&pg),
     shard_services,
     pg.get_osdmap_epoch(),
-    crimson::osd::BackfillState::ReplicaScanned{ m.from, std::move(bi) });
+    crimson::osd::BackfillState::ReplicaScanned{m.from,
+                                                m.get_backfill_interval()});
   return seastar::now();
 }
 
