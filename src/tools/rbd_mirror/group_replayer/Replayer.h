@@ -121,15 +121,18 @@ private:
   void handle_load_remote_group_snapshots(int r);
 
   void validate_image_snaps_sync_complete(const std::string &remote_group_snap_id);
-  void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>& locker);
+  void scan_for_unsynced_group_snapshots();
 
-  void try_create_group_snapshot(cls::rbd::GroupSnapshot snap);
+  void try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
+                                 std::unique_lock<ceph::mutex> &locker);
 
   void create_mirror_snapshot(
-    const std::string &remote_group_snap_id,
-    const cls::rbd::MirrorSnapshotState &snap_state);
+    cls::rbd::GroupSnapshot *snap,
+    const cls::rbd::MirrorSnapshotState &snap_state,
+    std::unique_lock<ceph::mutex> &locker,
+    Context *on_finish);
   void handle_create_mirror_snapshot(
-    const std::string &remote_group_snap_id, int r);
+    int r, const std::string &remote_group_snap_id, Context *on_finish);
 
   std::string prepare_non_primary_mirror_snap_name(
     const std::string &global_group_id, const std::string &snap_id);
