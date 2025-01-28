@@ -304,8 +304,7 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
     }
   }
 
-  std::unique_lock locker{m_lock};
-  scan_for_unsynced_group_snapshots(locker);
+  scan_for_unsynced_group_snapshots();
 }
 
 template <typename I>
@@ -433,13 +432,12 @@ void Replayer<I>::validate_image_snaps_sync_complete(
 
 
 template <typename I>
-void Replayer<I>::scan_for_unsynced_group_snapshots(
-    std::unique_lock<ceph::mutex> &locker) {
+void Replayer<I>::scan_for_unsynced_group_snapshots() {
   dout(10) << dendl;
-  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   bool found = false;
   bool syncs_upto_date = false;
+  std::unique_lock locker{m_lock};
   if (m_remote_group_snaps.empty()) {
     goto out;
   }
@@ -467,17 +465,22 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
     if (found && next_remote_snap == m_remote_group_snaps.end()) {
       syncs_upto_date = true;
       break;
-    }
-    if (next_remote_snap != m_remote_group_snaps.end()) {
-      auto id = next_remote_snap->id;
-      auto itl = std::find_if(
-          m_local_group_snaps.begin(), m_local_group_snaps.end(),
-          [id](const cls::rbd::GroupSnapshot &s) {
-          return s.id == id;
-          });
-      if (found && itl == m_local_group_snaps.end()) {
-        try_create_group_snapshot(*next_remote_snap);
+    } else if (next_remote_snap != m_remote_group_snaps.end()) {
+      if (next_remote_snap->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+        auto id = next_remote_snap->id;
+        auto itl = std::find_if(
+            m_local_group_snaps.begin(), m_local_group_snaps.end(),
+            [id](const cls::rbd::GroupSnapshot &s) {
+            return s.id == id;
+            });
+        if (itl == m_local_group_snaps.end()) {
+          try_create_group_snapshot(*next_remote_snap, locker);
+          schedule_load_group_snapshots();
+          return;
+        }
+      } else {
         locker.unlock();
+        schedule_load_group_snapshots();
         return;
       }
     }
@@ -510,8 +513,8 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
         });
     if (remote_snap != m_remote_group_snaps.rend() &&
         itl == m_local_group_snaps.end()) {
-      try_create_group_snapshot(*remote_snap);
-      locker.unlock();
+      try_create_group_snapshot(*remote_snap, locker);
+      schedule_load_group_snapshots();
       return;
     }
   }
@@ -539,8 +542,10 @@ std::string Replayer<I>::prepare_non_primary_mirror_snap_name(
 }
 
 template <typename I>
-void Replayer<I>::try_create_group_snapshot(cls::rbd::GroupSnapshot snap) {
+void Replayer<I>::try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
+                                            std::unique_lock<ceph::mutex> &locker) {
   dout(10) << snap.id << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   auto snap_type = cls::rbd::get_group_snap_namespace_type(
       snap.snapshot_namespace);
@@ -550,77 +555,119 @@ void Replayer<I>::try_create_group_snapshot(cls::rbd::GroupSnapshot snap) {
     if (snap_ns->is_non_primary()) {
       dout(10) << "remote group snapshot: " << snap.id << "is non primary"
                << dendl;
+      locker.unlock();
       return;
     }
     auto snap_state =
       snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ?
       cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY :
       cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
-    create_mirror_snapshot(snap.id, snap_state);
+    C_SaferCond *ctx = new C_SaferCond;
+    create_mirror_snapshot(&snap, snap_state, locker, ctx);
+    ctx->wait();
   } else if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+    bool found = false;
+    auto next_remote_snap = m_remote_group_snaps.end();
+    for (auto remote_snap = m_remote_group_snaps.begin();
+        remote_snap != m_remote_group_snaps.end(); ++remote_snap) {
+      next_remote_snap = std::next(remote_snap);
+      if (remote_snap->id == snap.id) {
+        found = true;
+      }
+      if (!found) {
+        continue;
+      }
+      if (next_remote_snap == m_remote_group_snaps.end()) {
+        locker.unlock();
+        return; // done
+      }
+      auto st = cls::rbd::get_group_snap_namespace_type(
+          next_remote_snap->snapshot_namespace);
+      if (st == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+        continue;
+      } else if (next_remote_snap->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        locker.unlock();
+        return; //wait and try later
+      } else {
+        break; // We have a mirror group snapshot, we can copy regular group snap
+      }
+    }
+    if (next_remote_snap == m_remote_group_snaps.end()) {
+      locker.unlock();
+      return;
+    }
     dout(10) << "found regular snap, snap name: " << snap.name
              << ", remote group snap id: " << snap.id << dendl;
     C_SaferCond *ctx = new C_SaferCond;
     create_regular_snapshot(snap.name, snap.id, ctx);
     ctx->wait();
+    locker.unlock();
   }
 }
 
 template <typename I>
 void Replayer<I>::create_mirror_snapshot(
-    const std::string &remote_group_snap_id,
-    const cls::rbd::MirrorSnapshotState &snap_state) {
-  dout(10) << remote_group_snap_id << dendl;
+    cls::rbd::GroupSnapshot *snap,
+    const cls::rbd::MirrorSnapshotState &snap_state,
+    std::unique_lock<ceph::mutex> &locker,
+    Context *on_finish) {
+  auto group_snap_id = snap->id;
+  dout(10) << group_snap_id << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   auto itl = std::find_if(
       m_local_group_snaps.begin(), m_local_group_snaps.end(),
-      [remote_group_snap_id](const cls::rbd::GroupSnapshot &s) {
-      return s.id == remote_group_snap_id;
+      [group_snap_id](const cls::rbd::GroupSnapshot &s) {
+      return s.id == group_snap_id;
       });
 
   if (itl != m_local_group_snaps.end() &&
       itl->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
-    dout(20) << "group snapshot: " << remote_group_snap_id << " already exists"
+    dout(20) << "group snapshot: " << group_snap_id << " already exists"
              << dendl;
-    schedule_load_group_snapshots();
+    locker.unlock();
+    on_finish->complete(0);
     return;
   }
 
-  auto requests_it = m_create_snap_requests.find(remote_group_snap_id);
+  auto requests_it = m_create_snap_requests.find(group_snap_id);
   if (requests_it == m_create_snap_requests.end()) {
     requests_it = m_create_snap_requests.insert(
-        {remote_group_snap_id, {}}).first;
+        {group_snap_id, {}}).first;
     cls::rbd::GroupSnapshot local_snap =
-      {remote_group_snap_id,
+      {group_snap_id,
        cls::rbd::GroupSnapshotNamespaceMirror{
-         snap_state, {}, m_remote_mirror_uuid, remote_group_snap_id},
+         snap_state, {}, m_remote_mirror_uuid, group_snap_id},
        {}, cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
     local_snap.name = prepare_non_primary_mirror_snap_name(m_global_group_id,
-        remote_group_snap_id);
+        group_snap_id);
     m_local_group_snaps.push_back(local_snap);
 
     auto comp = create_rados_callback(
-      new LambdaContext([this, remote_group_snap_id](int r) {
-        handle_create_mirror_snapshot(remote_group_snap_id, r);
+      new LambdaContext([this, group_snap_id, on_finish](int r) {
+        handle_create_mirror_snapshot(r, group_snap_id, on_finish);
       }));
+
 
     librados::ObjectWriteOperation op;
     librbd::cls_client::group_snap_set(&op, local_snap);
     int r = m_local_io_ctx.aio_operate(
         librbd::util::group_header_name(m_local_group_id), comp, &op);
     ceph_assert(r == 0);
+    locker.unlock();
     comp->release();
   } else {
-   schedule_load_group_snapshots();
+   locker.unlock();
+   on_finish->complete(0);
   }
 }
 
 template <typename I>
 void Replayer<I>::handle_create_mirror_snapshot(
-    const std::string &remote_group_snap_id, int r) {
+    int r, const std::string &remote_group_snap_id, Context *on_finish) {
   dout(10) << remote_group_snap_id << ", r=" << r << dendl;
 
-  schedule_load_group_snapshots();
+  on_finish->complete(0);
 }
 
 template <typename I>
@@ -835,6 +882,7 @@ template <typename I>
 void Replayer<I>::regular_snapshot_complete(
     const std::string &remote_group_snap_id,
     Context *on_finish) {
+  dout(10) << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   auto itl = std::find_if(
