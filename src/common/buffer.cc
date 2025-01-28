@@ -166,6 +166,7 @@ static ceph::spinlock debug_lock;
     static ceph::unique_leakable_ptr<buffer::raw>
     create(int mempool = mempool::mempool_buffer_anon)
     {
+      ceph_assert(CEPH_PAGE_SIZE > 0);
       const auto ZERO_AREA_SIZE = ZERO_AREA_NUM_PAGES * CEPH_PAGE_SIZE;
       const auto [ptr, datalen] = alloc_data_n_controlblock(
         ZERO_AREA_SIZE, /* align to */CEPH_PAGE_SIZE);
