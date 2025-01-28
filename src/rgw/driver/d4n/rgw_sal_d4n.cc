@@ -2654,14 +2654,21 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
       }
     } //end-if non-versioned buckets
 
-    std::string size;
-    if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
-      size = attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE)->second.to_str();
-    } else {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to retrieve size for for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-      return -EINVAL;
-    }
+    int size;
+    if (objDirty) {
+      std::string size_str;
 
+      if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
+        size_str = attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE)->second.to_str();
+      } else {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to retrieve size for for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+        return -EINVAL;
+      }
+      size = stoi(size_str);
+    } else { //for clean objects
+      size = this->source->get_size();
+    }
+    ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): Size of object is: " << size << dendl;
     // delete data blocks directory entries, when,
     // 1. object is clean, bucket is versioned and there is an instance in the request
     // 2. object is clean, bucket is non-versioned
@@ -2669,7 +2676,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     if ((!objDirty && source->get_bucket()->versioned() && source->have_instance()) ||
         (!objDirty && !source->get_bucket()->versioned()) ||
         (objDirty && !block.deleteMarker)) {
-      off_t lst = std::stoi(size);
+      off_t lst = size;
       off_t fst = 0;
 
       do { // loop through the data blocks
