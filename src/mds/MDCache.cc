@@ -13207,6 +13207,10 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
         ceph_assert(mdr->is_auth_pinned(diri));
         dir = diri->get_or_open_dirfrag(this, leaf);
       }
+      if (mds->damage_table.is_dirfrag_damaged(dir)) {
+        mds->server->respond_to_request(mdr, -CEPHFS_EIO);
+        return;
+      }
       if (dir->get_version() == 0) {
         ceph_assert(dir->is_auth());
         dir->fetch_keys({}, new C_MDS_RetryRequest(this, mdr));
