@@ -1460,7 +1460,7 @@ out:
   }
 }
 
-bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings, mds_gid_t gid)
+bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings, const mds_gid_t& gid)
 {
   for (auto& [_gid, health] : pending_daemon_health) {
     if (gid != MDS_GID_NONE) {
@@ -1480,6 +1480,17 @@ bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings, mds_gid_t gi
     }
   }
 
+  return false;
+}
+
+bool MDSMonitor::has_health_warnings(const vector<mds_metric_t>& warnings,
+				     const std::vector<mds_gid_t>& gids)
+{
+  for (auto& gid : gids) {
+    if (has_health_warnings(warnings, gid)) {
+      return true;
+    }
+  }
   return false;
 }
 
