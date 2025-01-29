@@ -2027,7 +2027,7 @@ class TestPermErrMsg(CephFSTestCase):
 class TestFSFail(TestAdminCommands):
 
     MDSS_REQUIRED = 2
-    CLIENTS_REQUIRED = 1
+    CLIENTS_REQUIRED = 2
 
     def test_with_health_warn_cache_oversized(self):
         '''
@@ -2091,6 +2091,48 @@ class TestFSFail(TestAdminCommands):
         self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
                               retval=1, errmsgs=health_warn)
         self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+    def test_when_other_FS_has_warn_TRIM(self):
+        '''
+        Test that "fs fail" runs successfully for an FS when a MDS which is
+        active for a different FS has health warning MDS_TRIM.
+        '''
+        self.fs1 = self.fs
+
+        self.fs2 = self.fs.newfs(name='cephfs2', create=True)
+        self.mount_b.remount(fsname=self.fs2.name)
+        self.mount_b.wait_until_mounted()
+
+        # generates health warning for self.fs1
+        self.gen_health_warn_mds_trim()
+
+        # actual testing begins now.
+        self.run_ceph_cmd(f'fs fail {self.fs2.name}')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+    def test_when_other_FS_has_warn_CACHE_OVERSIZED(self):
+        '''
+        Test that "fs fail" runs successfully for an FS when a MDS which is
+        active for a different FS) has health warning MDS_CACHE_OVERSIZED.
+        '''
+        self.fs1 = self.fs
+
+        self.fs2 = self.fs.newfs(name='cephfs2', create=True)
+        self.mount_b.remount(fsname=self.fs2.name)
+        self.mount_b.wait_until_mounted()
+
+        # actual testing begins now.
+        self.gen_health_warn_mds_cache_oversized(fs=self.fs1)
+        self.run_ceph_cmd(f'fs fail {self.fs2.name}')
 
         # Bring and wait for MDS to be up since it is needed for unmounting
         # of CephFS in CephFSTestCase.tearDown() to be successful.
