@@ -1115,3 +1115,27 @@
    fun:_dl_init
    ...
 }
+{
+   co_compose bug fixed in Boost 1.86, p1
+   Memcheck:Free
+   fun:_ZdaPvm
+   fun:_ZN8neorados5RADOS12lookup_pool_ENSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEN5boost4asio22any_completion_handlerIJFvNS7_6system10error_codeElEEEE
+   ...
+}
+{
+   co_compose bug fixed in Boost 1.86, p2
+   Memcheck:Free
+   fun:_ZdaPvm
+   fun:_ZNSt8__detail9__variant17__gen_vtable_implINS0_12_Multi_arrayIPFNS0_21__deduce_visit_resultIvEEOZN8Objecter2Op8completeEOSt7variantIJN5boost4asio22any_completion_handlerIJFvNS8_6system10error_codeEEEEEN3fu27abi_3106detail8functionINSH_6configILb1ELb0ELm16EEENSH_8propertyILb1ELb0EJSD_EEEEEP7ContextEESC_iNS9_10io_context19basic_executor_typeISaIvELm0EEEEUlOT_E_SR_EJEEESt16integer_sequenceImJLm0EEEE14__visit_invokeESZ_SR_
+   ...
+}
+{
+   co_compose bug fixed in Boost 1.86, p2
+   Memcheck:Free
+   fun:_ZdaPvm
+   obj:/usr/bin/radosgw
+   obj:/usr/bin/radosgw
+   fun:_ZN5boost4asio6detail17executor_function8completeINS1_7binder0INS1_14append_handlerINS0_22any_completion_handlerIJFvNS_6system10error_codeEN4ceph6buffer7v15_2_04listEEEEEJS8_SC_EEEEESaIvEEEvPNS2_9impl_baseEb
+   obj:/usr/bin/radosgw
+   ...
+}
