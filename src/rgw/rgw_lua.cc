@@ -162,7 +162,7 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
   if (std::filesystem::remove_all(luarocks_path, ec)
       == static_cast<std::uintmax_t>(-1) &&
       ec != std::errc::no_such_file_or_directory) {
-    output.append("failed to clear luarock directory: ");
+    output.append("failed to clear luarocks directory: ");
     output.append(ec.message());
     output.append("\n");
     return ec.value();
@@ -175,11 +175,13 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     return 0;
   }
   if (ret < 0) {
+    output.append("failed to get lua package list");
     return ret;
   }
   // verify that luarocks exists
   const auto p = bp::search_path("luarocks");
   if (p.empty()) {
+    output.append("failed to find luarocks");
     return -ECHILD;
   }
 
