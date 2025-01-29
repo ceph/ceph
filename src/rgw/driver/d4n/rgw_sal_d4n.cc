@@ -1195,8 +1195,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
         object_version = this->get_object_version();
       }
       auto mtime = this->get_mtime();
-      auto score = ceph::real_clock::to_time_t(mtime);
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << std::setprecision(std::numeric_limits<double>::max_digits10) << score << ret << dendl;
+      auto score = ceph::real_clock::to_double(mtime);
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << score << ret << dendl;
       rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
       ret = objDir->zadd(dpp, &object, score, object_version, y);
       if (ret < 0) {
