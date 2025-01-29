@@ -53,7 +53,9 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   bool prepare_update(MonOpRequestRef op) override;
   bool should_propose(double& delay) override;
   bool has_health_warnings(std::vector<mds_metric_t> warnings,
-			   mds_gid_t gid=MDS_GID_NONE);
+			   const mds_gid_t& gid=MDS_GID_NONE);
+  bool has_health_warnings(const std::vector<mds_metric_t>& warnings,
+			   const std::vector<mds_gid_t>& gids);
 
   bool should_print_status() const {
     auto& fs = get_fsmap();
