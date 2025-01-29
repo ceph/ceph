@@ -116,14 +116,14 @@ class FailHandler : public FileSystemCommandHandler
 
     auto fs = fsmap.get_filesystem(fs_name);
 
-  bool confirm = false;
-  cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
-  if (!confirm &&
-      mon->mdsmon()->has_health_warnings({
-	MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
-    ss << errmsg_for_unhealthy_mds;
-    return -EPERM;
-  }
+    bool confirm = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (!confirm &&
+	mon->mdsmon()->has_health_warnings({
+	  MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+      ss << errmsg_for_unhealthy_mds;
+      return -EPERM;
+    }
 
     auto f = [](auto&& fs) {
       fs->get_mds_map().set_flag(CEPH_MDSMAP_NOT_JOINABLE);
