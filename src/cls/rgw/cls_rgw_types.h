@@ -443,6 +443,7 @@ struct rgw_bucket_dir_entry {
     encode(key.instance, bl);
     encode(flags, bl);
     encode(versioned_epoch, bl);
+    encode(key.snap_id, bl);
     encode(snap_skip, bl);
     ENCODE_FINISH(bl);
   }
@@ -475,6 +476,7 @@ struct rgw_bucket_dir_entry {
       decode(versioned_epoch, bl);
     }
     if (struct_v >= 9) {
+      decode(key.snap_id, bl);
       decode(snap_skip, bl);
     }
     DECODE_FINISH(bl);
