@@ -6441,8 +6441,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return 0;
   } // if versioned bucket
 
+  auto& bucket_info = target->get_bucket_info();
+
   rgw_rados_ref ref;
-  int r = store->get_obj_head_ref(dpp, target->get_bucket_info(), obj, &ref);
+  int r = store->get_obj_head_ref(dpp, bucket_info, obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -6452,6 +6454,12 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   r = target->get_state(dpp, &state, &manifest, false, y);
   if (r < 0) {
     return r;
+  }
+
+  if (state->snap_id < bucket_info.local.snap_mgr.get_cur_snap_id()) {
+    ldpp_dout(dpp, 20) << "can't delete object, current snap_id=" << bucket_info.local.snap_mgr.get_cur_snap_id()
+      << " obj snap_id=" << state->snap_id << dendl;
+    return -ERR_FORBIDDEN;
   }
 
   ObjectWriteOperation op;
