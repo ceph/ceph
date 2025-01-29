@@ -1,0 +1,36 @@
+# I would expect setting the context on the postgresql database directories
+# would correctly trickle down to the files created by the postgresql daemon,
+# but this does not appear to work. I would still see denials like:
+
+#     type=AVC msg=audit(1655861665.521:21354): avc:  denied  { create } for  pid=131994 comm="postmaster" name="replorigin_checkpoint.tmp" scontext=system_u:system_r:postgresql_t:s0 tcontext=system_u:object_r:cephfs_t:s0 tclass=file permissive=1'
+
+# Instead, we'll just set the context for the mount and be done with it. I've
+# left in the context setting for the directories below.
+
+overrides:
+  ceph-fuse:
+    client.0:
+      mountpoint: /tmp/cephfs
+      mntopts: ["context=system_u:object_r:postgresql_db_t:s0"]
+  kclient:
+    client.0:
+      mountpoint: /tmp/cephfs
+      mntopts: ["context=system_u:object_r:postgresql_db_t:s0"]
+tasks:
+- exec:
+    client.0:
+      - sudo ls -l /tmp/cephfs/ && sudo df -h /tmp/cephfs/
+      - sudo mkdir -m 755 --context=system_u:system_r:postgresql_t:s0 /tmp/cephfs/postgres && sudo chown postgres:postgres /tmp/cephfs/postgres
+      - sudo -u postgres -- mkdir -m 700 --context=system_u:system_r:postgresql_t:s0 /tmp/cephfs/postgres/data
+      - sudo semanage fcontext -a -t postgresql_db_t "/tmp/cephfs/postgres(/.*)?"
+      - sudo grep -i postgresql /etc/selinux/targeted/contexts/files/file_contexts.local
+      - sudo restorecon -R -v /tmp/cephfs/postgres
+      - sudo ls -lZaR /tmp/cephfs/postgres/
+      - sudo mkdir -p /etc/systemd/system/postgresql.service.d/ && printf '[Service]\nEnvironment=PGDATA=/tmp/cephfs/postgres/data\nEnvironment=PGLOG=/tmp/cephfs/postgres/pgstartup.log\n' | sudo tee /etc/systemd/system/postgresql.service.d/env.conf
+      - sudo -u postgres -- postgresql-setup --initdb
+      - sudo ls -lZaR /tmp/cephfs/postgres/
+      - sudo systemctl start postgresql
+      - sudo -u postgres -- pgbench -s 32 -i
+      - sudo -u postgres -- pgbench -c 100 -j 4 --progress=5 --time=900
+      - sudo systemctl stop postgresql
+      - sudo ls -lZaR /tmp/cephfs/postgres/
