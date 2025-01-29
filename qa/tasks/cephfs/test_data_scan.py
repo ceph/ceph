@@ -388,8 +388,8 @@ class TestDataScan(CephFSTestCase):
 
         # After recovery, we need the MDS to not be strict about stats (in production these options
         # are off by default, but in QA we need to explicitly disable them)
-        self.fs.set_ceph_conf('mds', 'mds verify scatter', False)
-        self.fs.set_ceph_conf('mds', 'mds debug scatterstat', False)
+        self.config_set('mds', 'mds verify scatter', False)
+        self.config_set('mds', 'mds debug scatterstat', False)
 
         # Apply any data damage the workload wants
         workload.damage()
@@ -431,7 +431,6 @@ class TestDataScan(CephFSTestCase):
         self.run_ceph_cmd('mds', 'repaired', '0')
 
         # Start the MDS
-        self.fs.mds_restart()
         self.fs.wait_for_daemons()
         log.info(str(self.mds_cluster.status()))
 
