@@ -122,15 +122,15 @@ class FailHandler : public FileSystemCommandHandler
     };
     fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
 
-    vector<mds_gid_t> to_fail;
+    vector<mds_gid_t> mds_gids_to_fail;
     for (const auto& p : fsp->get_mds_map().get_mds_info()) {
-      to_fail.push_back(p.first);
+      mds_gids_to_fail.push_back(p.first);
     }
 
-    for (const auto& gid : to_fail) {
+    for (const auto& gid : mds_gids_to_fail) {
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
     }
-    if (!to_fail.empty()) {
+    if (!mds_gids_to_fail.empty()) {
       mon->osdmon()->propose_pending();
     }
 
