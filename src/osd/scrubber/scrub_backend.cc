@@ -230,37 +230,30 @@ void ScrubBackend::omap_checks()
   }
 
   stringstream wss;
+  const auto& smap = this_chunk->received_maps.at(m_pg_whoami);
 
   // Iterate through objects and update omap stats
   for (const auto& ho : this_chunk->authoritative_set) {
 
-    for (const auto& [srd, smap] : this_chunk->received_maps) {
-      if (srd != m_pg_whoami) {
-        // Only set omap stats for the primary
-        continue;
-      }
+    const auto it = smap.objects.find(ho);
+    if (it == smap.objects.end()) {
+      continue;
+    }
 
-      auto it = smap.objects.find(ho);
-      if (it == smap.objects.end()) {
-        continue;
-      }
-
-      const ScrubMap::object& smap_obj = it->second;
-      m_omap_stats.omap_bytes += smap_obj.object_omap_bytes;
-      m_omap_stats.omap_keys += smap_obj.object_omap_keys;
-      if (smap_obj.large_omap_object_found) {
-        auto osdmap = m_scrubber.get_osdmap();
-        pg_t pg;
-        osdmap->map_to_pg(ho.pool, ho.oid.name, ho.get_key(), ho.nspace, &pg);
-        pg_t mpg = osdmap->raw_pg_to_pg(pg);
-        m_omap_stats.large_omap_objects++;
-        wss << "Large omap object found. Object: " << ho << " PG: " << pg
-            << " (" << mpg << ")"
-            << " Key count: " << smap_obj.large_omap_object_key_count
-            << " Size (bytes): " << smap_obj.large_omap_object_value_size
-            << '\n';
-        break;
-      }
+    const ScrubMap::object& smap_obj = it->second;
+    m_omap_stats.omap_bytes += smap_obj.object_omap_bytes;
+    m_omap_stats.omap_keys += smap_obj.object_omap_keys;
+    if (smap_obj.large_omap_object_found) {
+      auto osdmap = m_scrubber.get_osdmap();
+      pg_t pg;
+      osdmap->map_to_pg(ho.pool, ho.oid.name, ho.get_key(), ho.nspace, &pg);
+      pg_t mpg = osdmap->raw_pg_to_pg(pg);
+      m_omap_stats.large_omap_objects++;
+      wss << "Large omap object found. Object: " << ho << " PG: " << pg << " ("
+	  << mpg << ")"
+	  << " Key count: " << smap_obj.large_omap_object_key_count
+	  << " Size (bytes): " << smap_obj.large_omap_object_value_size << '\n';
+      break;
     }
   }
 
