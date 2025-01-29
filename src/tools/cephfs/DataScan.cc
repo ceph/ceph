@@ -1296,7 +1296,7 @@ int DataScan::scan_links()
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
-      if (newest.dirino == q.dirino && newest.name == q.name) {
+      if (newest == q) {
 	snaps.insert(make_move_iterator(begin(q.snaps)),
 		     make_move_iterator(end(q.snaps)));
 	continue;
