@@ -3286,6 +3286,7 @@ class TestIngressService:
             '        NFS_Port = 2049;\n'
             '        allow_set_io_flusher_fail = true;\n'
             '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
+            '        Monitoring_Port = 9587;\n'
             '}\n'
             '\n'
             'NFSv4 {\n'
