@@ -47,15 +47,22 @@ class aws_response_handler
 {
 
 private:
-  std::string sql_result;
+  std::string sql_result;//SQL result buffer
+  std::string continue_result;//CONT-MESG buffer
+  std::string error_result;//SQL error buffer
   req_state* s;
   uint32_t header_size;
   // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
   boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true> crc32;
   RGWOp* m_rgwop;
-  std::string m_buff_header;
+  std::string m_buff_header_;//response buffer
+  std::string m_buff_continue;//response buffer
+  //m_buff_ptr : a switch between m_buff_header_ and m_buff_continue
+  std::string* m_buff_ptr=nullptr;
   uint64_t total_bytes_returned;
   uint64_t processed_size;
+  uint32_t m_success_header_size;
+
 
   enum class header_name_En {
     EVENT_TYPE,
@@ -86,7 +93,7 @@ private:
 
   void push_header(const char* header_name, const char* header_value);
 
-  int create_message(u_int32_t header_len);
+  int create_message(u_int32_t header_len,std::string*);
 
 public:
   aws_response_handler(req_state* ps, RGWOp* rgwop) : s(ps), m_rgwop(rgwop), total_bytes_returned{0}, processed_size{0}
@@ -143,7 +150,7 @@ public:
 
   void init_stats_response();
 
-  void init_error_response(const char* error_message);
+  void send_error_response(const char* error_message);
 
   void send_success_response();
 
@@ -151,9 +158,25 @@ public:
 
   void send_stats_response();
 
-  void send_error_response(const char* error_code,
+  void send_error_response_rgw_formatter(const char* error_code,
                            const char* error_message,
                            const char* resource_id);
+
+  std::string* get_buffer()
+  {
+    if(!m_buff_ptr) set_main_buffer();
+    return m_buff_ptr;
+  }
+
+  void set_continue_buffer()
+  {
+    m_buff_ptr = &m_buff_continue;
+  }
+
+  void set_main_buffer()
+  {
+    m_buff_ptr = &m_buff_header_;
+  }
 
 }; //end class aws_response_handler
 
@@ -175,7 +198,6 @@ private:
   std::string m_row_delimiter;
   std::string m_compression_type;
   std::string m_escape_char;
-  std::unique_ptr<char[]>  m_buff_header;
   std::string m_header_info;
   std::string m_sql_query;
   std::string m_enable_progress;
@@ -207,9 +229,15 @@ private:
   std::string range_req_str;
   std::function<int(std::string&)> fp_result_header_format;
   std::function<int(std::string&)> fp_s3select_result_format;
+  std::function<int(std::string&)> fp_s3select_continue;
   std::function<void(const char*)> fp_debug_mesg;
   std::function<void(void)> fp_chunked_transfer_encoding;
   int m_header_size;
+
+  const char* s3select_processTime_error = "s3select-ProcessingTime-Error";
+  const char* s3select_syntax_error = "s3select-Syntax-Error";
+  const char* s3select_resource_id = "resourcse-id";
+  const char* s3select_json_error = "json-Format-Error";
 
 public:
   unsigned int chunk_number;
