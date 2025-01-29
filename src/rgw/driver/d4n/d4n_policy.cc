@@ -475,7 +475,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
   weightSum += ((localWeight < 0) ? 0 : localWeight);
 }
 
-void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool deleteMarker, uint64_t size, time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
+void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
 {
   using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
   State state{State::INIT};
@@ -1002,7 +1002,7 @@ void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t
   entries_map.emplace(key, e);
 }
 
-void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+void LRUPolicy::update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val)
 {
   const std::lock_guard l(lru_lock);

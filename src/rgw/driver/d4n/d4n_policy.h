@@ -52,7 +52,7 @@ class CachePolicy {
       std::string version;
       bool delete_marker;
       uint64_t size;
-      time_t creationTime;
+      double creationTime;
       rgw_user user;
       std::string etag;
       std::string bucket_name;
@@ -60,7 +60,7 @@ class CachePolicy {
       rgw_obj_key obj_key;
       ObjEntry() = default;
       ObjEntry(std::string& key, std::string version, bool delete_marker, uint64_t size,
-		time_t creationTime, rgw_user user, std::string& etag, 
+		double creationTime, rgw_user user, std::string& etag, 
 		const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : key(key), version(version), delete_marker(delete_marker), size(size),
 									      creationTime(creationTime), user(user), etag(etag), 
 									      bucket_name(bucket_name), bucket_id(bucket_id), obj_key(obj_key) {}
@@ -76,7 +76,7 @@ class CachePolicy {
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, std::string& key, uint32_t flag, optional_yield y) = 0;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, uint32_t refcount_flag, optional_yield y, std::string& restore_val=empty) = 0;
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
-			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+			    double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val=empty) = 0;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
@@ -130,7 +130,7 @@ class LFUDAPolicy : public CachePolicy {
       handle_type handle;
 
       LFUDAObjEntry(std::string& key, std::string& version, bool deleteMarker, uint64_t size,
-                     time_t creationTime, rgw_user user, std::string& etag,
+                     double creationTime, rgw_user user, std::string& etag,
                      const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : ObjEntry(key, version, deleteMarker, size,
 									    creationTime, user, etag, bucket_name, bucket_id, obj_key) {}
 
@@ -207,7 +207,7 @@ class LFUDAPolicy : public CachePolicy {
     virtual bool _erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y);
     void save_y(optional_yield y) { this->y = y; }
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
-			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+			    double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val=empty) override;
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, std::string& key) override;
@@ -242,7 +242,7 @@ class LRUPolicy : public CachePolicy {
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, std::string& key, uint32_t flag, optional_yield y) override { return false; }
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, uint32_t refcount_flag, optional_yield y, std::string& restore_val=empty) override;
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, 
-			    time_t creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+			    double creationTime, const rgw_user user, std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
     			    const rgw_obj_key& obj_key, uint32_t refcount_flag, optional_yield y, std::string& restore_val=empty) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
