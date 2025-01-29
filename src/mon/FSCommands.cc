@@ -108,11 +108,16 @@ class FailHandler : public FileSystemCommandHandler
       return -ENOENT;
     }
 
+    vector<mds_gid_t> mds_gids_to_fail;
+    for (const auto& p : fsp->get_mds_map().get_mds_info()) {
+      mds_gids_to_fail.push_back(p.first);
+    }
+
     bool confirm = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
     if (!confirm &&
 	mon->mdsmon()->has_health_warnings({
-	  MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+	  MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED}, mds_gids_to_fail)) {
       ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }
@@ -121,11 +126,6 @@ class FailHandler : public FileSystemCommandHandler
       fs.get_mds_map().set_flag(CEPH_MDSMAP_NOT_JOINABLE);
     };
     fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
-
-    vector<mds_gid_t> mds_gids_to_fail;
-    for (const auto& p : fsp->get_mds_map().get_mds_info()) {
-      mds_gids_to_fail.push_back(p.first);
-    }
 
     for (const auto& gid : mds_gids_to_fail) {
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
