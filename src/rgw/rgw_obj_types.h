@@ -54,18 +54,23 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
 
   bool operator==(const rgw_obj_index_key& k) const {
     return (name.compare(k.name) == 0) &&
-           (instance.compare(k.instance) == 0);
+           (instance.compare(k.instance) == 0) &&
+           (snap_id == k.snap_id);
   }
 
   bool operator!=(const rgw_obj_index_key& k) const {
     return (name.compare(k.name) != 0) ||
-           (instance.compare(k.instance) != 0);
+           (instance.compare(k.instance) != 0) ||
+           (snap_id != k.snap_id);
   }
 
   bool operator<(const rgw_obj_index_key& k) const {
     int r = name.compare(k.name);
     if (r == 0) {
       r = instance.compare(k.instance);
+    }
+    if (r == 0) {
+      return snap_id < k.snap_id;
     }
     return (r < 0);
   }
@@ -262,13 +267,17 @@ struct rgw_obj_key {
     return !instance.empty();
   }
 
+  bool have_non_null_instance() const {
+    return !instance.empty() && !have_null_instance();
+  }
+
   bool need_to_encode_instance() const {
-    return (have_instance() && !have_null_instance()) ||
+    return have_non_null_instance() ||
       snap_id != RGW_BUCKET_SNAP_NOSNAP;
   }
 
   std::string instance_oid_str() const {
-    if (snap_id == RGW_BUCKET_SNAP_NOSNAP) {
+    if (have_non_null_instance()) {
       return instance;
     }
 
@@ -295,10 +304,17 @@ struct rgw_obj_key {
     return oid;
   }
 
+  rgw_bucket_snap_id get_snap_id() const {
+    if (!instance.empty()) {
+      return RGW_BUCKET_SNAP_NOSNAP;
+    }
+    return snap_id;
+  }
+
   bool operator==(const rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0) &&
-           (snap_id == k.snap_id);
+           ((!instance.empty()) || (snap_id == k.snap_id));
   }
 
   bool operator<(const rgw_obj_key& k) const {
@@ -306,7 +322,7 @@ struct rgw_obj_key {
     if (r == 0) {
       r = instance.compare(k.instance);
     }
-    if (r == 0) {
+    if (r == 0  && instance.empty()) {
       return snap_id < k.snap_id;
     }
     return r;
@@ -690,7 +706,7 @@ struct rgw_obj {
         r = key.ns.compare(o.key.ns);
         if (r == 0) {
           r = key.instance.compare(o.key.instance);
-          if (r == 0) {
+          if (r == 0 && key.instance.empty()) { /* don't compare snap_id when instance exists */
             return (key.snap_id < o.key.snap_id);
           }
         }
