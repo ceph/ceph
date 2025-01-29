@@ -149,7 +149,7 @@ class LFUDAPolicy : public CachePolicy {
     std::mutex lfuda_cleaning_lock;
     std::condition_variable cond;
     std::condition_variable state_cond;
-    bool quit{false};
+    inline static std::atomic<bool> quit{false};
 
     int age = 1, weightSum = 0, postedSum = 0;
     optional_yield y = null_yield;
@@ -195,9 +195,9 @@ class LFUDAPolicy : public CachePolicy {
       delete bucketDir;
       delete blockDir;
       delete objDir;
-      std::lock_guard l(lfuda_cleaning_lock);
       quit = true;
       cond.notify_all();
+      if (tc.joinable()) { tc.join(); }
     } 
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver);
