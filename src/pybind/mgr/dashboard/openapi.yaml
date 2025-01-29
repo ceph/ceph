@@ -14939,7 +14939,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Remove smb shares
+      summary: Remove an smb share
       tags:
       - SMB
   /api/summary:
