@@ -10827,7 +10827,7 @@ void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
   uint64_t max_objs_per_shard =
     cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
 
-  if (bucket_info.versioning_enabled()) {
+  if (bucket_info.versioned()) {
     // Since each versioned bucket requires 4 entries for the first object
     // and 2 additional entries for each additional object, we want to
     // trigger resharding sooner.
