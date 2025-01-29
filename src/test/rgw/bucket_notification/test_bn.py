@@ -4631,11 +4631,10 @@ def test_ps_s3_list_topics_v1():
         tenant_topic_conf.del_config(tenant_topic_arn2)
 
 
-@attr('basic_test')
-def test_ps_s3_topic_permissions():
+def ps_s3_topic_permissions(another_tenant=""):
     """ test s3 topic set/get/delete permissions """
     conn1 = connection()
-    conn2, arn2 = another_user()
+    conn2, arn2 = another_user(tenant=another_tenant)
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -4658,17 +4657,20 @@ def test_ps_s3_topic_permissions():
     topic_arn = topic_conf.set_config()
 
     topic_conf2 = PSTopicS3(conn2, topic_name, zonegroup, endpoint_args=endpoint_args)
-    try:
-        # 2nd user tries to override the topic
-        topic_arn = topic_conf2.set_config()
-        assert False, "'AuthorizationError' error is expected"
-    except ClientError as err:
-        if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
-        else:
-            assert_equal(err.response['Code'], 'AuthorizationError')
-    except Exception as err:
-        print('unexpected error type: '+type(err).__name__)
+    # only on the same tenant we can try to override the topic
+    if another_tenant == "":
+        try:
+            # 2nd user tries to override the topic
+            topic_arn = topic_conf2.set_config()
+            assert False, "'AuthorizationError' error is expected"
+        except ClientError as err:
+            if 'Error' in err.response:
+                assert_equal(err.response['Error']['Code'], 'AuthorizationError')
+            else:
+                assert_equal(err.response['Code'], 'AuthorizationError')
+        except Exception as err:
+            print('unexpected error type: '+type(err).__name__)
+            assert False, "'AuthorizationError' error is expected"
 
     # 2nd user tries to fetch the topic
     _, status = topic_conf2.get_config(topic_arn=topic_arn)
@@ -4685,6 +4687,7 @@ def test_ps_s3_topic_permissions():
             assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
+        assert False, "'AuthorizationError' error is expected"
 
     # create bucket for conn2 and try publishing notification to topic
     _ = conn2.create_bucket(bucket_name)
@@ -4703,6 +4706,7 @@ def test_ps_s3_topic_permissions():
             assert_equal(err.response['Code'], 'AccessDenied')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
+        assert False, "'AuthorizationError' error is expected"
 
     try:
         # 2nd user tries to delete the topic
@@ -4715,9 +4719,10 @@ def test_ps_s3_topic_permissions():
             assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
+        assert False, "'AuthorizationError' error is expected"
 
     # Topic policy is now added by the 1st user to allow 2nd user.
-    topic_policy  = topic_policy.replace("Deny", "Allow")
+    topic_policy = topic_policy.replace("Deny", "Allow")
     topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
     topic_arn = topic_conf.set_config()
     # 2nd user try to fetch topic again
@@ -4738,6 +4743,16 @@ def test_ps_s3_topic_permissions():
     s3_notification_conf2.del_config()
     # delete the bucket
     conn2.delete_bucket(bucket_name)
+
+
+@attr('basic_test')
+def test_ps_s3_topic_permissions_same_tenant():
+    ps_s3_topic_permissions()
+
+
+@attr('basic_test')
+def test_ps_s3_topic_permissions_cross_tenant():
+    ps_s3_topic_permissions(another_tenant="boom")
 
 
 @attr('basic_test')
