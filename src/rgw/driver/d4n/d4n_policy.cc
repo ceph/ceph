@@ -67,8 +67,8 @@ int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_
 
   driver = _driver;
   if (dpp->get_cct()->_conf->d4n_writecache_enabled) {
+    quit = false;
     tc = std::thread(&CachePolicy::cleaning, this, dpp);
-    tc.detach();
   }
 
   try {
