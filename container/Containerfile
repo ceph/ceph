@@ -36,6 +36,7 @@ LABEL org.opencontainers.image.authors="Ceph Release Team <ceph-maintainers@ceph
       org.opencontainers.image.documentation="https://docs.ceph.com/"
 
 LABEL \
+ceph=True \
 FROM_IMAGE=${FROM_IMAGE} \
 CEPH_REF=${CEPH_REF} \
 CEPH_SHA1=${CEPH_SHA1} \
