@@ -10810,6 +10810,10 @@ paths:
       - Prometheus
   /api/rgw/accounts:
     get:
+      description: "\n        List all account ids or all detailed account info based\
+        \ on the 'detailed' query parameter.\n\n        - If detailed=True, returns\
+        \ detailed account info.\n        - If detailed=False, returns only account\
+        \ ids.\n        "
       parameters:
       - default: false
         in: query
@@ -10836,18 +10840,41 @@ paths:
       tags:
       - RgwUserAccounts
     post:
+      description: "\n        Create an account\n\n        :param account_name: Account\
+        \ name\n        :return: Returns account resource.\n        :rtype: Dict[str,\
+        \ Any]\n        "
       parameters: []
       requestBody:
         content:
           application/json:
             schema:
               properties:
-                account_id:
-                  type: integer
                 account_name:
-                  type: integer
-                email:
+                  description: Account name
                   type: string
+                email:
+                  description: Email
+                  type: string
+                max_access_keys:
+                  description: Max access keys
+                  type: integer
+                max_buckets:
+                  description: Max buckets
+                  type: integer
+                max_group:
+                  description: Max groups
+                  type: integer
+                max_roles:
+                  description: Max roles
+                  type: integer
+                max_users:
+                  description: Max users
+                  type: integer
+                tenant:
+                  description: Tenant
+                  type: string
+              required:
+              - account_name
               type: object
       responses:
         '201':
@@ -10871,10 +10898,13 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Update RGW account info
       tags:
       - RgwUserAccounts
   /api/rgw/accounts/{account_id}:
     delete:
+      description: "\n        Removes an account\n\n        :param account_id: account\
+        \ identifier\n        :return: None.\n        "
       parameters:
       - description: Account id
         in: path
@@ -10908,6 +10938,7 @@ paths:
       tags:
       - RgwUserAccounts
     get:
+      description: "\n        Get an account by account id\n        "
       parameters:
       - description: Account id
         in: path
@@ -10936,6 +10967,9 @@ paths:
       tags:
       - RgwUserAccounts
     put:
+      description: "\n        Modifies an account\n\n        :param account_id: Account\
+        \ identifier\n        :return: Returns modified account resource.\n      \
+        \  :rtype: Dict[str, Any]\n        "
       parameters:
       - description: Account id
         in: path
@@ -10949,9 +10983,31 @@ paths:
             schema:
               properties:
                 account_name:
-                  type: integer
-                email:
+                  description: Account name
                   type: string
+                email:
+                  description: Email
+                  type: string
+                max_access_keys:
+                  description: Max access keys
+                  type: integer
+                max_buckets:
+                  description: Max buckets
+                  type: integer
+                max_group:
+                  description: Max groups
+                  type: integer
+                max_roles:
+                  description: Max roles
+                  type: integer
+                max_users:
+                  description: Max users
+                  type: integer
+                tenant:
+                  description: Tenant
+                  type: string
+              required:
+              - account_name
               type: object
       responses:
         '200':
@@ -10980,6 +11036,9 @@ paths:
       - RgwUserAccounts
   /api/rgw/accounts/{account_id}/quota:
     put:
+      description: "\n        Modifies quota\n\n        :param account_id: Account\
+        \ identifier\n        :param quota_type: 'account' or 'bucket'\n        :return:\
+        \ Returns modified quota.\n        :rtype: Dict[str, Any]\n        "
       parameters:
       - description: Account id
         in: path
@@ -10992,17 +11051,22 @@ paths:
           application/json:
             schema:
               properties:
+                enabled:
+                  type: string
                 max_objects:
+                  description: Max objects
                   type: string
                 max_size:
                   description: Max size
                   type: string
                 quota_type:
+                  description: Quota type
                   type: string
               required:
               - quota_type
               - max_size
               - max_objects
+              - enabled
               type: object
       responses:
         '200':
@@ -11031,6 +11095,10 @@ paths:
       - RgwUserAccounts
   /api/rgw/accounts/{account_id}/quota/status:
     put:
+      description: "\n        Enable/Disable quota\n\n        :param account_id: Account\
+        \ identifier\n        :param quota_type: 'account' or 'bucket'\n        :param\
+        \ quota_status: 'enable' or 'disable'\n        :return: Returns modified quota.\n\
+        \        :rtype: Dict[str, Any]\n        "
       parameters:
       - description: Account id
         in: path
@@ -11044,8 +11112,10 @@ paths:
             schema:
               properties:
                 quota_status:
+                  description: Quota status
                   type: string
                 quota_type:
+                  description: Quota type
                   type: string
               required:
               - quota_type
