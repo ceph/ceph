@@ -2120,28 +2120,23 @@ int MetadataDriver::find_or_create_dirfrag(
     r = metadata_io.operate(frag_oid.name, &op);
     if (r == -EOVERFLOW || r == -EEXIST) {
       // Someone else wrote it (see case A above)
-      dout(10) << "Dirfrag creation race: 0x" << std::hex
-        << ino << " " << fragment << std::dec << dendl;
+      dout(10) << "Dirfrag creation race: " << ino << "." << fragment << dendl;
       *created = false;
       return 0;
     } else if (r < 0) {
       // We were unable to create or write it, error out
-      derr << "Failed to create dirfrag 0x" << std::hex
-        << ino << std::dec << ": " << cpp_strerror(r) << dendl;
+      derr << "Failed to create dirfrag " << ino << ": " << cpp_strerror(r) << dendl;
       return r;
     } else {
       // Success: the dirfrag object now exists with a value header
-      dout(10) << "Created dirfrag: 0x" << std::hex
-        << ino << std::dec << dendl;
+      dout(10) << "Created dirfrag: " << ino << dendl;
       *created = true;
     }
   } else if (r < 0) {
-    derr << "Unexpected error reading dirfrag 0x" << std::hex
-      << ino << std::dec << " : " << cpp_strerror(r) << dendl;
+    derr << "Unexpected error reading dirfrag " << ino << " : " << cpp_strerror(r) << dendl;
     return r;
   } else {
-    dout(20) << "Dirfrag already exists: 0x" << std::hex
-      << ino << " " << fragment << std::dec << dendl;
+    dout(20) << "Dirfrag already exists: " << ino << "." << fragment << dendl;
   }
 
   return 0;
@@ -2167,14 +2162,10 @@ int MetadataDriver::inject_linkage(
   vals[key] = dentry_bl;
   int r = metadata_io.omap_set(frag_oid.name, vals);
   if (r != 0) {
-    derr << "Error writing dentry 0x" << std::hex
-      << dir_ino << std::dec << "/"
-      << dname << ": " << cpp_strerror(r) << dendl;
+    derr << "Error writing dentry " << dir_ino << "/" << dname << ": " << cpp_strerror(r) << dendl;
     return r;
   } else {
-    dout(20) << "Injected dentry 0x" << std::hex
-      << dir_ino << "/" << dname << " pointing to 0x"
-      << inode.inode->ino << std::dec << dendl;
+    dout(20) << "Injected dentry " << dir_ino << "/" << dname << " pointing to " << inode.inode->ino << dendl;
     return 0;
   }
 }
