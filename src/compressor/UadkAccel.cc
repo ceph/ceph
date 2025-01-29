@@ -267,7 +267,7 @@ int UadkAccel::compress(const bufferlist &in, bufferlist &out)
       } else {
         out_len = std::min<size_t>(UADK_MAX_BUFFER, len * 2);
       }
-      bufferptr ptr = buffer::create_small_page_aligned(out_len);
+      bufferptr_rw ptr = buffer::create_small_page_aligned(out_len);
       unsigned char* c_out = (unsigned char*)ptr.c_str() + begin;
       in_len = std::min<size_t>(UADK_MAX_BUFFER, in_len);
       if (begin) {
