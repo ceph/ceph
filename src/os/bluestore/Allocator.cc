@@ -250,36 +250,41 @@ static void push_next_scale(std::vector<double>& scales)
   scales.push_back(scales[scales.size() - 1] * scale);
 }
 
-double Allocator::get_fragmentation_score()
+double Allocator::get_score(size_t v)
 {
-  static std::vector<double> scales{1};
-  double score_sum = 0;
+  size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
+  while (score_scaled.size() <= sc + 1) {
+    //unlikely expand scales vector
+    push_next_scale(score_scaled);
+  }
+  size_t sc_shifted = size_t(1) << sc;
+  double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
+  // linear extrapolation in its scale grade
+  double score = (sc_shifted    ) * score_scaled[sc]   * (1-x) +
+                 (sc_shifted * 2) * score_scaled[sc+1] * x;
+  return score;
+}
+
+double Allocator::get_fragmentation_score_raw()
+{
+  double score_raw = 0;
   size_t sum = 0;
-
-  auto get_score = [&](size_t v) -> double {
-    size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
-    while (scales.size() <= sc + 1) {
-      //unlikely expand scales vector
-      push_next_scale(scales);
-    }
-    size_t sc_shifted = size_t(1) << sc;
-    double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
-    // linear extrapolation in its scale grade
-    double score = (sc_shifted    ) * scales[sc]   * (1-x) +
-                   (sc_shifted * 2) * scales[sc+1] * x;
-    return score;
-  };
-
   auto iterated_allocation = [&](size_t off, size_t len) {
     ceph_assert(len > 0);
-    score_sum += get_score(len);
+    score_raw += get_score(len);
     sum += len;
   };
   foreach(iterated_allocation);
+  return score_raw;
+}
+double Allocator::get_fragmentation_score()
+{
+  double score_nom = get_fragmentation_score_raw();
+  size_t free_size = get_free();
 
-  double ideal = get_score(sum);
-  double terrible = (sum / block_size) * get_score(block_size);
-  return (ideal - score_sum) / (ideal - terrible);
+  double ideal = get_score(free_size);
+  double terrible = (free_size / block_size) * get_score(block_size);
+  return (ideal - score_nom) / (ideal - terrible);
 }
 
 /*************

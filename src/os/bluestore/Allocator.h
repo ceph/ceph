@@ -295,6 +295,9 @@ public:
   {
     return 0.0;
   }
+  std::vector<double> score_scaled{1};
+  double get_score(size_t v);
+  virtual double get_fragmentation_score_raw();
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
 
