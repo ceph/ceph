@@ -195,7 +195,7 @@ class D4NFilterFixture: public ::testing::Test {
 				     &mtime, real_time(),
 				     attrs, std::nullopt,
 				     real_time(),
-				     nullptr, nullptr, nullptr,
+				     nullptr, nullptr, nullptr, nullptr,
 				     nullptr, nullptr, rctx, 0), 0);
     }
 
@@ -232,7 +232,7 @@ class D4NFilterFixture: public ::testing::Test {
 				     &mtime, real_time(),
 				     attrs, std::nullopt,
 				     real_time(),
-				     nullptr, nullptr, nullptr,
+				     nullptr, nullptr, nullptr, nullptr,
 				     nullptr, nullptr, rctx, 0), 0);
     }
 
@@ -267,7 +267,7 @@ class D4NFilterFixture: public ::testing::Test {
 				     &mtime, real_time(),
 				     attrs, std::nullopt,
 				     real_time(),
-				     nullptr, nullptr, nullptr,
+				     nullptr, nullptr, nullptr, nullptr,
 				     nullptr, nullptr, rctx, 0), 0);
     }
 

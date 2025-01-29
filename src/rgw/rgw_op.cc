@@ -4777,7 +4777,7 @@ void RGWPutObj::execute(optional_yield y)
 			cksum, (delete_at ? *delete_at : real_time()),
 			if_match, if_nomatch,
 			(user_data.empty() ? nullptr : &user_data),
-			nullptr, nullptr, rctx, complete_flags);
+			nullptr, nullptr, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
@@ -5045,7 +5045,7 @@ void RGWPostObj::execute(optional_yield y)
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
 				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
-				 nullptr, nullptr, nullptr, nullptr, nullptr,
+				 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
 				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
@@ -8153,7 +8153,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
 			       attrs, rgw::cksum::no_cksum,
 			       ceph::real_time() /* delete_at */,
-			       nullptr, nullptr, nullptr, nullptr, nullptr,
+			       nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
 			       rctx, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;

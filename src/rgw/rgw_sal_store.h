@@ -42,6 +42,7 @@ struct RGWObjState {
   uint64_t pg_ver{false};
   uint32_t zone_short_id{0};
   bool compressed{false};
+  rgw_bucket_snap_id snap_id{RGW_BUCKET_SNAP_NOSNAP};
 
   /* important! don't forget to update copy constructor */
 
@@ -76,6 +77,7 @@ struct RGWObjState {
     objv_tracker = rhs.objv_tracker;
     pg_ver = rhs.pg_ver;
     compressed = rhs.compressed;
+    snap_id = rhs.snap_id;
   }
 
   ~RGWObjState() {};

@@ -3164,9 +3164,11 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
-                                           bool assume_noent, void *_index_op,
+                                           bool assume_noent,
                                            const req_context& rctx,
-                                           jspan_context& trace, bool log_op)
+                                           jspan_context& trace,
+                                           rgw_bucket_snap_id *psnap_id,
+                                           bool log_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3196,14 +3198,31 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     return -EIO;
   }
 
+  bool is_olh = state->is_olh;
+
+  bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
+
+  auto& snap_mgr = target->get_bucket_info().local.snap_mgr;
+  if (snap_mgr.is_enabled()) {
+    if (!state->exists || reset_obj) {
+      /* object needs a snap_id */
+      state->snap_id = snap_mgr.get_cur_snap_id();
+    }
+  }
+
+  auto snap_id = state->snap_id;
+  
+  if (psnap_id) {
+    *psnap_id = snap_id;
+  }
+
+  obj.key.try_set_snap_id(snap_mgr.get_cur_snap_id());
+
   rgw_rados_ref ref;
   r = store->get_obj_head_ref(rctx.dpp, target->get_meta_placement_rule(), obj, &ref);
   if (r < 0)
     return r;
 
-  bool is_olh = state->is_olh;
-
-  bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
 
   const string *ptag = meta.ptag;
   if (!ptag && !index_op->get_optag()->empty()) {
@@ -3486,7 +3505,8 @@ done_cancel:
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
                                         map<string, bufferlist>& attrs, const req_context& rctx,
-                                        jspan_context& trace, bool log_op)
+                                        jspan_context& trace, rgw_bucket_snap_id *psnap_id,
+                                        bool log_op)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -3505,13 +3525,13 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, rctx, trace, psnap_id, log_op);
     if (r == -EEXIST) {
       assume_noent = false;
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, rctx, trace, psnap_id, log_op);
   }
   return r;
 }
@@ -4714,7 +4734,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
                              attrs, rgw::cksum::no_cksum, delete_at, nullptr, nullptr,
-			     nullptr, zones_trace, &canceled, rctx,
+			     nullptr, zones_trace, &snap_id, &canceled, rctx,
 			     rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto set_err_state;
@@ -5158,7 +5178,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
 
-  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
+  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace, &snap_id);
   if (ret < 0) {
     goto done_ret;
   }
@@ -5289,7 +5309,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   const req_context rctx{dpp, y, nullptr};
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+                            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
@@ -5580,7 +5600,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   rgw_zone_set zone_set{};
   ret = processor.complete(accounted_size, etag, &mtime, set_mtime,
                            attrs, rgw::cksum::no_cksum, delete_at , nullptr, nullptr, nullptr,
-                           (rgw_zone_set *)&zone_set, &canceled, rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+                           (rgw_zone_set *)&zone_set, nullptr, &canceled, rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
   if (ret < 0) {
     return ret;
   }

@@ -870,12 +870,15 @@ public:
 
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     bool assume_noent, void *index_op,
+                     bool assume_noent,
                      const req_context& rctx, jspan_context& trace,
+                     rgw_bucket_snap_id *psnap_id,
                      bool log_op = true);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     const req_context& rctx, jspan_context& trace, bool log_op = true);
+                     const req_context& rctx, jspan_context& trace,
+                     rgw_bucket_snap_id *psnap_id,
+                     bool log_op = true);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
