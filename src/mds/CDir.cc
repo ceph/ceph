@@ -1998,9 +1998,16 @@ CDentry *CDir::_load_dentry(
       if (snaps && !ref_in->snaprealm)
         ref_in->purge_stale_snap_data(*snaps);
       if (!ref_in_found) {
+        dout(15) << "_fetched  referent inode created " << *ref_in << " parent " << ref_in->parent << dendl;
         mdcache->add_inode(ref_in); // add
-        ref_in->set_primary_parent(dn);
+	mdcache->insert_taken_inos(ref_in->ino());
+        //ref_in->set_primary_parent(dn);
+      } else {
+        dout(15) << "_fetched  referent inode found in memory " << *ref_in << " parent " << ref_in->parent << dendl;
       }
+
+      //link_inode_work is necessary for referent inode
+      set_referent_inode(dn, ref_in);
 
       // link to inode?
       CInode *remote_in = mdcache->get_inode(remote_ino);   // we may or may not have it.
@@ -2009,8 +2016,8 @@ CDentry *CDir::_load_dentry(
         dout(12) << "_fetched  got remote link " << remote_ino << " which we have " << *remote_in << dendl;
       } else {
         dout(12) << "_fetched  got remote link " << remote_ino << " (don't have it)" << dendl;
-	dn->get_linkage()->referent_inode = ref_in;
-	dn->get_linkage()->referent_ino = referent_ino;
+	//dn->get_linkage()->referent_inode = ref_in;
+	//dn->get_linkage()->referent_ino = referent_ino;
       }
     }
   } else if (type == 'I' || type == 'i') {
