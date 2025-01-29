@@ -1139,3 +1139,64 @@
    obj:/usr/bin/radosgw
    ...
 }
+   Spurious shutdown nonsense part 1
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:_Znam
+   fun:_ZN8Objecter10start_tickEv
+   ...
+}
+{
+   Spurious shutdown nonsense part 2
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:posix_memalign
+   fun:_ZN4ceph6buffer7v15_2_025create_aligned_in_mempoolEjji
+   fun:_ZN4ceph6buffer7v15_2_014create_alignedEjj
+   ...
+   fun:_ZN13MonConnection16handle_auth_doneEP18AuthConnectionMetamRKN4ceph6buffer7v15_2_04listEP9CryptoKeyPNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+   fun:_ZN9MonClient16handle_auth_doneEP10ConnectionP18AuthConnectionMetamjRKN4ceph6buffer7v15_2_04listEP9CryptoKeyPNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE
+   ...
+}
+{
+   Spurious shutdown nonsense part 3
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:posix_memalign
+   fun:_ZN4ceph6buffer7v15_2_025create_aligned_in_mempoolEjji
+   fun:_ZN4ceph6buffer7v15_2_014create_alignedEjj
+   ...
+   fun:_ZN3rgw7AppMain12init_storageEv
+   ...
+}
+{
+   Spurious shutdown nonsense part 4
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:posix_memalign
+   fun:_ZN4ceph6buffer7v15_2_025create_aligned_in_mempoolEjji
+   fun:_ZN4ceph6buffer7v15_2_014create_alignedEjj
+   ...
+   fun:_ZN10ProtocolV222handle_auth_reply_moreERN4ceph6buffer7v15_2_04listE
+   ...
+}
+{
+   Spurious shutdown nonsense part 5
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:memalign
+   ...
+   fun:_ZN8RGWRados8finalizeEv
+   ...
+}
+{
+   Spurious shutdown nonsense part 6
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:posix_memalign
+   ...
+   fun:_ZN7KeyRing17from_ceph_contextEPN4ceph6common11CephContextE
+   ...
+   fun:_ZN3rgw7AppMain12init_storageEv
+   ...
+}
