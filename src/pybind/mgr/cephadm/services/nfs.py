@@ -122,6 +122,7 @@ class NFSService(CephService):
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
+                "cluster_id": self.mgr._cluster_fsid,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
