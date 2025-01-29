@@ -1495,7 +1495,6 @@ static int write_obj_entries(cls_method_context_t hctx, rgw_bucket_dir_entry& in
 class BIVerObjEntry {
   cls_method_context_t hctx;
   cls_rgw_obj_key key;
-  rgw_bucket_snap_id snap_id;
   string instance_idx;
 
   rgw_bucket_dir_entry instance_entry;
@@ -1503,9 +1502,8 @@ class BIVerObjEntry {
   bool initialized;
 
 public:
-  BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key,
-                rgw_bucket_snap_id _snap_id) : hctx(_hctx), key(_key),
-                                               snap_id(_snap_id), initialized(false) {
+  BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key),
+                                               initialized(false) {
     // empty
   }
 
@@ -1923,7 +1921,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* read instance entry */
-  BIVerObjEntry obj(hctx, op.key, op.meta.snap_id);
+  BIVerObjEntry obj(hctx, op.key);
   int ret = obj.init(op.delete_marker);
 
   /* NOTE: When a delete is issued, a key instance is always provided,
@@ -1989,7 +1987,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
    * its list entry.
    */
   if (op.key.instance.empty()) {
-    BIVerObjEntry other_obj(hctx, op.key, op.meta.snap_id);
+    BIVerObjEntry other_obj(hctx, op.key);
     ret = other_obj.init(!op.delete_marker); /* try reading the other
 					      * null versioned
 					      * entry */
@@ -2059,7 +2057,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       rgw_bucket_olh_entry& olh_entry = olh.get_entry();
       /* found olh, previous instance is no longer the latest, need to update */
       if (!(olh_entry.key == op.key)) {
-        BIVerObjEntry old_obj(hctx, olh_entry.key, olh_entry.snap_id);
+        BIVerObjEntry old_obj(hctx, olh_entry.key);
 
         ret = old_obj.demote_current(header);
         if (ret < 0) {
@@ -2187,7 +2185,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  BIVerObjEntry obj(hctx, dest_key, op.snap_id);
+  BIVerObjEntry obj(hctx, dest_key);
   BIOLHEntry olh(hctx, dest_key);
 
   ret = obj.init();
@@ -2229,7 +2227,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return 0;
     }
 
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.snap_id, false, op.olh_epoch);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false, op.olh_epoch);
     return olh.write(header);
   }
 
@@ -2250,7 +2248,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     }
 
     if (found) {
-      BIVerObjEntry next(hctx, next_key, next_snap_id);
+      BIVerObjEntry next(hctx, next_key);
       ret = next.write(olh.get_epoch(), true, header);
       if (ret < 0) {
         CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
@@ -2274,7 +2272,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (!obj.is_delete_marker()) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.snap_id, false);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false);
   } else {
     /* this is a delete marker, it's our responsibility to remove its
      * instance entry */
