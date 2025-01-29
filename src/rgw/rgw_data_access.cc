@@ -215,7 +215,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 			     delete_at,
 			     nullptr, nullptr,
 			     puser_data,
-			     nullptr, nullptr,
+			     nullptr, nullptr, nullptr,
 			     rctx, rgw::sal::FLAG_LOG_OP);
 }
 

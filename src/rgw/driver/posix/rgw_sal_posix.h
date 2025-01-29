@@ -962,7 +962,8 @@ public:
 		       ceph::real_time delete_at,
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
-		       rgw_zone_set *zones_trace, bool *canceled,
+		       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
 		       const req_context& rctx,
                        uint32_t flags) override;
 };
@@ -1004,7 +1005,8 @@ public:
 		       ceph::real_time delete_at,
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
-		       rgw_zone_set *zones_trace, bool *canceled,
+		       rgw_zone_set *zones_trace, rgw_bucket_snap_id *psnap_id,
+                       bool *canceled,
 		       const req_context& rctx,
                        uint32_t flags) override;
 
