@@ -57,6 +57,7 @@ tasks:
             "printcap name" = "/dev/null"
             "disable spoolss" = "yes"
             "guest ok" = "no"
+            "smbd profiling level" = "on"
             [globals.domain.options]
             security = "USER"
             workgroup = "STANDALONE1"
