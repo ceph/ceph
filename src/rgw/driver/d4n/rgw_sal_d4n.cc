@@ -2764,16 +2764,14 @@ int D4NFilterWriter::prepare(optional_yield y)
     return next->prepare(y);
   } else {
     //for non-versioned buckets or version suspended buckets, we need to delete the older dirty blocks of the object from the cache as dirty blocks do not get evicted
-    //alternatively, we could add logic to delete this lazily
     if (!object->get_bucket()->versioned() || (object->get_bucket()->versioned() && !object->get_bucket()->versioning_enabled())) {
-      std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = object->get_delete_op();
       if (object->get_bucket()->versioned() && !object->get_bucket()->versioning_enabled()) {
-        del_op->params.null_verid = true;
         object->set_instance("null");
       }
-      auto ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): delete_obj failed, ret=" << ret << dendl;
+      rgw::d4n::CacheBlock block;
+      rgw::sal::Attrs attrs;
+      if (object->check_head_exists_in_cache_get_oid(dpp, prev_oid_in_cache, attrs, block, y)) {
+        ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): found in cache, prev_oid_in_cache=" << prev_oid_in_cache << dendl;
       }
       object->clear_instance();
     }
@@ -2985,6 +2983,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
         ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): key=" << key << dendl;
         ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): obj->get_key()=" << obj->get_key() << dendl;
         driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, false, accounted_size, creationTime, std::get<rgw_user>(obj->get_bucket()->get_owner()), objEtag, obj->get_bucket()->get_name(), obj->get_bucket()->get_bucket_id(), obj->get_key(), rgw::d4n::RefCount::NOOP, y);
+        if (!prev_oid_in_cache.empty()) {
+          driver->get_policy_driver()->get_cache_policy()->invalidate_dirty_object(dpp, prev_oid_in_cache);
+        }
       }
     } else { //if get_cache_driver()->put()
       ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): put failed for head_oid_in_cache, ret=" << ret << dendl;
