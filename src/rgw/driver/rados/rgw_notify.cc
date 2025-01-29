@@ -20,32 +20,6 @@
 
 namespace rgw::notify {
 
-struct event_entry_t {
-  rgw_pubsub_s3_event event;
-  std::string push_endpoint;
-  std::string push_endpoint_args;
-  std::string arn_topic;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(event, bl);
-    encode(push_endpoint, bl);
-    encode(push_endpoint_args, bl);
-    encode(arn_topic, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(event, bl);
-    decode(push_endpoint, bl);
-    decode(push_endpoint_args, bl);
-    decode(arn_topic, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(event_entry_t)
-
 using queues_t = std::set<std::string>;
 
 // use mmap/mprotect to allocate 128k coroutine stacks
