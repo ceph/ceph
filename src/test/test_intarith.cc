@@ -38,3 +38,39 @@ TEST(intarith, p2family) {
   ASSERT_EQ(0x1300, p2roundup(0x1234, 0x100));
   ASSERT_EQ(0x5600, p2roundup(0x5600, 0x100));
 }
+
+TEST(intarith, p2log_family) {
+  ASSERT_EQ(13, p2log_ceil(0x1234U));
+  ASSERT_EQ(13, p2log_ceil(0x1234UL));
+  ASSERT_EQ(13, p2log_ceil(0x1234ULL));
+  ASSERT_EQ(13, p2log_ceil(0x1fffU));
+  ASSERT_EQ(13, p2log_ceil(0x1fffUL));
+  ASSERT_EQ(13, p2log_ceil(0x1fffULL));
+  ASSERT_EQ(13, p2log_ceil(0x2000U));
+  ASSERT_EQ(13, p2log_ceil(0x2000UL));
+  ASSERT_EQ(13, p2log_ceil(0x2000ULL));
+  ASSERT_EQ(0,  p2log_ceil(0x1U));
+  ASSERT_EQ(0,  p2log_ceil(0x1UL));
+  ASSERT_EQ(0,  p2log_ceil(0x1ULL));
+  ASSERT_EQ(8,  p2log_ceil(uint8_t(0)));
+  ASSERT_EQ(16, p2log_ceil(uint16_t(0)));
+  ASSERT_EQ(32, p2log_ceil(uint32_t(0)));
+  ASSERT_EQ(64, p2log_ceil(uint64_t(0)));
+
+  ASSERT_EQ(12, p2log_floor(0x1234U));
+  ASSERT_EQ(12, p2log_floor(0x1234UL));
+  ASSERT_EQ(12, p2log_floor(0x1234ULL));
+  ASSERT_EQ(12, p2log_floor(0x1fffU));
+  ASSERT_EQ(12, p2log_floor(0x1fffUL));
+  ASSERT_EQ(12, p2log_floor(0x1fffULL));
+  ASSERT_EQ(13, p2log_floor(0x2000U));
+  ASSERT_EQ(13, p2log_floor(0x2000UL));
+  ASSERT_EQ(13, p2log_floor(0x2000ULL));
+  ASSERT_EQ(0,  p2log_floor(0x1U));
+  ASSERT_EQ(0,  p2log_floor(0x1UL));
+  ASSERT_EQ(0,  p2log_floor(0x1ULL));
+  ASSERT_EQ(-1, p2log_floor(uint8_t(0)));
+  ASSERT_EQ(-1, p2log_floor(uint16_t(0)));
+  ASSERT_EQ(-1, p2log_floor(uint32_t(0)));
+  ASSERT_EQ(-1, p2log_floor(uint64_t(0)));
+}
