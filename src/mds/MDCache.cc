@@ -115,6 +115,10 @@ public:
   explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
+struct LockPathState {
+  std::vector<std::string> locks;
+};
+
 MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
   open_file_table(m),
@@ -9758,6 +9762,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     mds->server->dispatch_peer_request(mdr);
   } else {
     switch (mdr->internal_op) {
+    case CEPH_MDS_OP_LOCK_PATH:
+      dispatch_lock_path(mdr);
+      break;
     case CEPH_MDS_OP_FRAGMENTDIR:
       dispatch_fragment_dir(mdr);
       break;
@@ -9875,7 +9882,7 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
       mdr->clear_ambiguous_auth();
     if (!mdr->more()->waiting_for_finish.empty())
       mds->queue_waiters(mdr->more()->waiting_for_finish);
-  }
+   }
 
   request_drop_locks(mdr);
 
@@ -13439,6 +13446,98 @@ void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
       diri->clear_dirty_rstat();
     diri->clear_scatter_dirty();
   }
+}
+
+void MDCache::dispatch_lock_path(MDRequestRef& mdr)
+{
+  CInode* in = nullptr;
+  CF_MDS_RetryRequestFactory cf(this, mdr, true);
+  static const int ptflags = 0
+    | MDS_TRAVERSE_DISCOVER
+    | MDS_TRAVERSE_RDLOCK_PATH
+    | MDS_TRAVERSE_WANT_INODE
+    ;
+  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &in);
+  if (r > 0)
+    return;
+  if (r < 0) {
+    mds->server->respond_to_request(mdr, r);
+    return;
+  }
+
+  auto& lps = *static_cast<LockPathState*>(mdr->internal_op_private);
+
+  MutationImpl::LockOpVec lov;
+  for (const auto &lock : lps.locks) {
+    auto colonps = lock.find(':');
+    if (colonps == std::string::npos) {
+      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+    auto lock_type = lock.substr(0, colonps);
+    auto lock_kind = lock.substr(colonps+1, lock.size());
+    dout(20) << "lock: " << lock_type << " " << lock_kind << dendl;
+
+    SimpleLock* l;
+    if (lock_type == "snap") {
+      l = &in->snaplock;
+    } else if (lock_type == "policy") {
+      l = &in->policylock;
+    } else if (lock_type == "file") {
+      l = &in->filelock;
+    } else if (lock_type == "nest") {
+      l = &in->nestlock;
+    } else if (lock_type == "dft") {
+      l = &in->dirfragtreelock;
+    } else if (lock_type == "auth") {
+      l = &in->authlock;
+    } else if (lock_type == "link") {
+      l = &in->linklock;
+    } else if (lock_type == "xattr") {
+      l = &in->xattrlock;
+    } else if (lock_type == "flock") {
+      l = &in->flocklock;
+    } else {
+      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    if (lock_kind.size() != 1) {
+      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    switch (lock_kind[0]) {
+      case 'r':
+        lov.add_rdlock(l);
+        break;
+      case 'w':
+        lov.add_wrlock(l);
+        break;
+      case 'x':
+        lov.add_xlock(l);
+        break;
+      default:
+        mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+        return;
+    }
+  }
+
+  if (!mds->locker->acquire_locks(mdr, lov, nullptr, false)) {
+    return;
+  }
+
+  /* deliberately leak until killed */
+}
+
+MDRequestRef MDCache::lock_path(filepath p, std::vector<std::string> locks)
+{
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_LOCK_PATH);
+  mdr->set_filepath(p);
+  mdr->internal_op_finish = new LambdaContext([](int r) {});
+  mdr->internal_op_private = new LockPathState{locks};
+  dispatch_request(mdr);
+  return mdr;
 }
 
 bool MDCache::dump_inode(Formatter *f, uint64_t number) {
