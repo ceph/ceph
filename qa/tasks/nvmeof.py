@@ -209,6 +209,22 @@ class Nvmeof(Task):
         if self.create_mtls_secrets: 
             self.write_mtls_config(gateway_ips)
         log.info("[nvmeof]: executed set_gateway_cfg successfully!")
+    
+    def teardown(self):
+        log.info("[nvmeof] Removing nvmeof service")
+        _shell(self.ctx, self.cluster_name, self.remote, [
+            'ceph', 'orch', 'host', 'ls'
+        ])
+        for i in range(self.groups_count):
+            group_name = self.groups_prefix + str(i)
+            service_name = f"nvmeof.{self.poolname}.{group_name}"
+            _shell(self.ctx, self.cluster_name, self.remote, [
+                'ceph', 'orch', 'rm', service_name
+            ])
+        _shell(self.ctx, self.cluster_name, self.remote, [
+            'ceph', 'orch', 'host', 'ls'
+        ])
+        log.info("[nvmeof] Nvmeof teardown completed!")
 
 
 class NvmeofThrasher(Thrasher, Greenlet):
@@ -541,6 +557,9 @@ class ThrashTest(Nvmeof):
             raise RuntimeError('error during thrashing')
         self.thrasher.join()
         log.info('done joining')
+
+    def teardown(self):
+        log.info('tearing down nvmeof thrasher...')
 
 
 task = Nvmeof
