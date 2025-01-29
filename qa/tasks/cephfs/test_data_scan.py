@@ -688,10 +688,10 @@ class TestDataScan(CephFSTestCase):
         mds0_id = active_mds_names[0]
         mds1_id = active_mds_names[1]
 
-        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.run_shell_payload("mkdir -p dir1/dir2")
         dir_ino = self.mount_a.path_to_ino("dir1")
         self.mount_a.setfattr("dir1", "ceph.dir.pin", "1")
-        # wait for subtree migration
+        self._wait_subtrees([('/dir1', 1)], rank=1)
 
         file_ino = 0;
         while True:
