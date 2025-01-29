@@ -1288,15 +1288,29 @@ class RGWSpec(ServiceSpec):
         self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
 
     def get_port_start(self) -> List[int]:
-        return [self.get_port()]
+        ports = self.get_port()
+        return ports
 
-    def get_port(self) -> int:
+    def get_port(self) -> List[int]:
+        ports = []
         if self.rgw_frontend_port:
-            return self.rgw_frontend_port
-        if self.ssl:
-            return 443
-        else:
-            return 80
+            ports.append(self.rgw_frontend_port)
+
+        ssl_port = next(
+            (
+                int(arg.split('=')[1])
+                for arg in (self.rgw_frontend_extra_args or [])
+                if arg.startswith("ssl_port=")
+            ),
+            None,
+        )
+
+        if self.ssl and ssl_port:
+            ports.append(ssl_port)
+        if not ports:
+            ports.append(443 if self.ssl else 80)
+
+        return ports
 
     def validate(self) -> None:
         super(RGWSpec, self).validate()

@@ -2375,6 +2375,7 @@ Then run the following:
                 virtual_ip=spec.get_virtual_ip(),
                 ports=spec.get_port_start(),
             )
+
             if spec.service_type == 'ingress':
                 # ingress has 2 daemons running per host
                 # but only if it's the full ingress service, not for keepalive-only
