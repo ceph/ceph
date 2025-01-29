@@ -390,37 +390,6 @@ class ManyFilesWorkload(Workload):
         return self._errors
 
 
-class MovedDir(Workload):
-    def write(self):
-        # Create a nested dir that we will then move.  Two files with two different
-        # backtraces referring to the moved dir, claiming two different locations for
-        # it.  We will see that only one backtrace wins and the dir ends up with
-        # single linkage.
-        self._mount.run_shell(["mkdir", "-p", "grandmother/parent"])
-        self._mount.write_n_mb("grandmother/parent/orig_pos_file", 1)
-        self._filesystem.mds_asok(["flush", "journal"])
-        self._mount.run_shell(["mkdir", "grandfather"])
-        self._mount.run_shell(["mv", "grandmother/parent", "grandfather"])
-        self._mount.write_n_mb("grandfather/parent/new_pos_file", 2)
-        self._filesystem.mds_asok(["flush", "journal"])
-
-        self._initial_state = (
-            self._mount.stat("grandfather/parent/orig_pos_file"),
-            self._mount.stat("grandfather/parent/new_pos_file")
-        )
-
-    def validate(self):
-        root_files = self._mount.ls()
-        self.assert_equal(len(root_files), 1)
-        self.assert_equal(root_files[0] in ["grandfather", "grandmother"], True)
-        winner = root_files[0]
-        st_opf = self._mount.stat(f"{winner}/parent/orig_pos_file", sudo=True)
-        st_npf = self._mount.stat(f"{winner}/parent/new_pos_file", sudo=True)
-
-        self.assert_equal(st_opf['st_size'], self._initial_state[0]['st_size'])
-        self.assert_equal(st_npf['st_size'], self._initial_state[1]['st_size'])
-
-
 class MissingZerothObject(Workload):
     def write(self):
         self._mount.run_shell(["mkdir", "subdir"])
@@ -560,8 +529,8 @@ class TestDataScan(CephFSTestCase):
     def test_rebuild_backtraceless(self):
         self._rebuild_metadata(BacktracelessFile(self.fs, self.mount_a))
 
-    def test_rebuild_moved_dir(self):
-        self._rebuild_metadata(MovedDir(self.fs, self.mount_a))
+    def test_rebuild_backtraceless_with_lf_dir_removed(self):
+        self._rebuild_metadata(BacktracelessFileRemoveLostAndFoundDirectory(self.fs, self.mount_a), unmount=False)
 
     def test_rebuild_missing_zeroth(self):
         self._rebuild_metadata(MissingZerothObject(self.fs, self.mount_a))
