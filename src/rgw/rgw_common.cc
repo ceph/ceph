@@ -95,6 +95,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
     { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
     { ERR_MFA_REQUIRED, {403, "AccessDenied" }},
+    { ERR_FORBIDDEN, {403, "Forbidden" }},
     { ENOENT, {404, "NoSuchKey" }},
     { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},
