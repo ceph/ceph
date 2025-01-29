@@ -189,6 +189,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.16.key=user-name&Attributes.entry.16.value=<user-name-string>]
    [&Attributes.entry.17.key=password&Attributes.entry.17.value=<password-string>]
    [&Attributes.entry.18.key=kafka-brokers&Attributes.entry.18.value=<kafka-broker-list>]
+   [&Attributes.entry.19.key=cert-location&Attributes.entry.19.value=<file-path>]
 
 Request parameters:
 
@@ -298,7 +299,7 @@ Request parameters:
     is the default.)
 
  - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
-
+ - cert-location: is used to enable mTLS with the Kafka broker. If this is provided and a secure connection is used, the specified client certificate will be used to authenticate the client to the broker.
 .. note::
 
     - The key-value pair of a specific parameter need not reside in the same
@@ -575,6 +576,7 @@ Valid AttributeName that can be passed:
   - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
     broker before being delivered to their final destinations. 
   - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
+  - cert-location: is used to enable mTLS with the Kafka broker. If this is provided and a secure connection is used, the specified client certificate will be used to authenticate the client to the broker.
 
 Notifications
 ~~~~~~~~~~~~~

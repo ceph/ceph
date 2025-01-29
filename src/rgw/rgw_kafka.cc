@@ -71,9 +71,10 @@ connection_id_t::connection_id_t(
     const std::string& _broker,
     const std::string& _user,
     const std::string& _password,
-    const boost::optional<const std::string&>& _ca_location,
-    const boost::optional<const std::string&>& _mechanism,
-    bool _ssl)
+    boost::optional<const std::string&> _ca_location,
+    boost::optional<const std::string&> _mechanism,
+    bool _ssl,
+    boost::optional<const std::string&> _cert_location)
     : broker(_broker), user(_user), password(_password), ssl(_ssl) {
   if (_ca_location.has_value()) {
     ca_location = _ca_location.get();
@@ -81,14 +82,9 @@ connection_id_t::connection_id_t(
   if (_mechanism.has_value()) {
     mechanism = _mechanism.get();
   }
-}
-
-// equality operator and hasher functor are needed
-// so that connection_id_t could be used as key in unordered_map
-bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
-  return lhs.broker == rhs.broker && lhs.user == rhs.user &&
-         lhs.password == rhs.password && lhs.ca_location == rhs.ca_location &&
-         lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl;
+  if (_cert_location.has_value()) {
+    cert_location = _ca_location.get();
+  }
 }
 
 struct connection_id_hasher {
@@ -100,6 +96,7 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.ca_location);
     boost::hash_combine(h, k.mechanism);
     boost::hash_combine(h, k.ssl);
+    boost::hash_combine(h, k.cert_location);
     return h;
   }
 };
@@ -161,6 +158,7 @@ struct connection_t {
   const std::string user;
   const std::string password;
   const boost::optional<std::string> mechanism;
+  const boost::optional<std::string> cert_location;
   utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
@@ -192,9 +190,10 @@ struct connection_t {
 
   // ctor for setting immutable values
   connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
-          const boost::optional<const std::string&>& _ca_location,
-          const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism) :
-      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism) {}                                                                                                                                                        
+          boost::optional<const std::string&> _ca_location,
+          const std::string& _user, const std::string& _password, boost::optional<const std::string&> _mechanism,
+          boost::optional<const std::string&> _cert_location) :
+      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism), cert_location(_cert_location) {}
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -315,6 +314,10 @@ bool new_producer(connection_t* conn) {
       ldout(conn->cct, 20) << "Kafka connect: successfully configured CA location" << dendl;
     } else {
       ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
+    }
+    if (conn->cert_location) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.certificate.location", conn->cert_location->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured client certificate location (mTLS)" << dendl;
     }
     // Note: when librdkafka.1.0 is available the following line could be uncommented instead of the callback setting call
     // if (rd_kafka_conf_set(conn->conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
@@ -597,7 +600,8 @@ public:
                boost::optional<const std::string&> mechanism,
                boost::optional<const std::string&> topic_user_name,
                boost::optional<const std::string&> topic_password,
-               boost::optional<const std::string&> brokers) {
+               boost::optional<const std::string&> brokers,
+               boost::optional<const std::string&> cert_location) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -641,7 +645,7 @@ public:
     }
 
     connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
-                           use_ssl);
+                           use_ssl, cert_location);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
     // note that ssl vs. non-ssl connection to the same host are two separate connections
@@ -660,7 +664,7 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism);
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism, cert_location);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
@@ -779,11 +783,12 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
              boost::optional<const std::string&> password,
-             boost::optional<const std::string&> brokers) {
+             boost::optional<const std::string&> brokers,
+             boost::optional<const std::string&> cert_location) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
-                            mechanism, user_name, password, brokers);
+                            mechanism, user_name, password, brokers, cert_location);
 }
 
 int publish(const connection_id_t& conn_id,
