@@ -199,6 +199,12 @@ struct rgw_obj_key {
     snap_id = sid;
   }
 
+  void try_set_snap_id(rgw_bucket_snap_id sid) {
+    if (ns.empty() && !have_non_null_instance()) {
+      snap_id = sid;
+    }
+  }
+
   const std::string& get_instance() const {
     return instance;
   }

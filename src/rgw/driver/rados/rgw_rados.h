@@ -1353,6 +1353,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 
   /** Remove an object from the bucket index */
   int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
+                       rgw_bucket_snap_id snap_id,
 		       const DoutPrefixProvider *dpp, optional_yield y);
 
   /**
@@ -1434,7 +1435,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   int olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag, optional_yield y);
   int bucket_index_link_olh(const DoutPrefixProvider *dpp,
                             RGWBucketInfo& bucket_info, RGWObjState& olh_state,
-                            const rgw_obj& obj_instance, bool delete_marker,
+                            const rgw_obj& obj_instance, rgw_bucket_snap_id snap_id,
+                            bool delete_marker,
                             const std::string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
                             ceph::real_time unmod_since, bool high_precision_time,
@@ -1480,6 +1482,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 	      bool delete_marker,
 	      rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch,
+              rgw_bucket_snap_id snap_id,
 	      ceph::real_time unmod_since,
 	      bool high_precision_time,
               optional_yield y,
