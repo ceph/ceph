@@ -1137,6 +1137,19 @@ static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
 {
   encode_obj_index_key(key, idx);
   int rc = read_index_entry(hctx, *idx, entry);
+  if (rc == -ENOENT &&
+      special_delete_marker_name && 
+      key.snap_id != RGW_BUCKET_NO_SNAP &&
+      key.instance.empty()) {
+    /* in the case of null objects in snapshot, we will
+     * have different key if the entry is a delete_marker,
+     * we'll retry it here. This is different than the
+     * non-snapshot case, as in that case there is always
+     * an index entry found so we don't hit -ENOENT
+     */
+    encode_obj_versioned_data_key(key, idx, true);
+    rc = read_index_entry(hctx, *idx, entry);
+  }
   if (rc < 0) {
     return rc;
   }
@@ -1530,7 +1543,7 @@ public:
                                                                               keep separate instance entry for the delete markers */
 
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: read_key_entry() idx=%s ret=%d", instance_idx.c_str(), ret);
+      CLS_LOG(0, "ERROR: read_key_entry() idx=%s ret=%d", escape_str(instance_idx).c_str(), ret);
       return ret;
     }
     initialized = true;
