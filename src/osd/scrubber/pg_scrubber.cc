@@ -1243,61 +1243,11 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
   }
 
   // finish
-  dout(20) << __func__ << " finishing" << dendl;
   ceph_assert(pos.done());
-  repair_oinfo_oid(map);
-
-  dout(20) << __func__ << " done, got " << map.objects.size() << " items"
-	   << dendl;
+  dout(20) << fmt::format("{}: done. {} objects in scrub-map", __func__,
+                          map.objects.size())
+           << dendl;
   return 0;
-}
-
-/// \todo consider moving repair_oinfo_oid() back to the backend
-void PgScrubber::repair_oinfo_oid(ScrubMap& smap)
-{
-  for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
-
-    const hobject_t& hoid = i->first;
-    ScrubMap::object& o = i->second;
-
-    if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
-      continue;
-    }
-    bufferlist bl;
-    bl.push_back(o.attrs[OI_ATTR]);
-    object_info_t oi;
-    try {
-      oi.decode(bl);
-    } catch (...) {
-      continue;
-    }
-
-    if (oi.soid != hoid) {
-      ObjectStore::Transaction t;
-      OSDriver::OSTransaction _t(m_pg->osdriver.get_transaction(&t));
-
-      m_osds->clog->error()
-        << "osd." << m_pg_whoami << " found object info error on pg " << m_pg_id
-        << " oid " << hoid << " oid in object info: " << oi.soid
-        << "...repaired";
-      // Fix object info
-      oi.soid = hoid;
-      bl.clear();
-      encode(oi,
-             bl,
-             m_pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-
-      bufferptr bp(bl.c_str(), bl.length());
-      o.attrs[OI_ATTR] = bp;
-
-      t.setattr(m_pg->coll, ghobject_t(hoid), OI_ATTR, bl);
-      int r = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
-      if (r != 0) {
-        derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
-             << dendl;
-      }
-    }
-  }
 }
 
 
