@@ -86,6 +86,7 @@ import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
 
 @NgModule({
   imports: [
@@ -116,7 +117,8 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     CheckboxModule,
     SelectModule,
     NumberModule,
-    TabsModule
+    TabsModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -175,7 +177,8 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     RgwStorageClassListComponent,
     RgwStorageClassDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent
+    RgwTopicDetailsComponent,
+    RgwCreateTopicFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -366,7 +369,14 @@ const routes: Routes = [
   {
     path: 'topic',
     data: { breadcrumbs: 'Topic' },
-    children: [{ path: '', component: RgwTopicListComponent }]
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      }
+    ]
   }
 ];
 
