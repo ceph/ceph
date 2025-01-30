@@ -5521,6 +5521,16 @@ void RGWDeleteObj::execute(optional_yield y)
         etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
       }
 
+      auto& obj_key = s->object->get_key();
+      if (obj_key.instance.empty() &&
+          obj_key.snap_id != RGW_BUCKET_SNAP_NOSNAP) {
+        /* no instance was specified, so if it's a versioned bucket, the request would be
+         * to create a delete marker, so we shouldn't have snap_id set, otherwise we'll
+         * try to remove that specific instance
+         */
+        obj_key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
+      }
+
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
       if (check_obj_lock) {

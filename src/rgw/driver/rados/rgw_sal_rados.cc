@@ -2683,7 +2683,12 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 {
   RGWObjState *pstate{nullptr};
 
-  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(),
+                                             &pstate, &manifest, follow_olh, y, false, false);
+  if (!pstate->exists /* delete marker */ &&
+    !pstate->obj.key.have_non_null_instance()) {
+    pstate->obj.key.set_snap_id(pstate->snap_id);
+  }
   if (ret < 0) {
     return ret;
   }
@@ -2696,13 +2701,13 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 
   state = *pstate;
 
+  if (state.snap_id != obj.key.snap_id) {
+    obj.key.try_set_snap_id(state.snap_id);
+  }
+
   state.obj = obj;
   state.is_atomic = is_atomic;
   state.prefetch_data = prefetch_data;
-
-  if (state.snap_id != state.obj.key.snap_id) {
-    state.obj.key.try_set_snap_id(state.snap_id);
-  }
 
   return ret;
 }
