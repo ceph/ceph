@@ -17,15 +17,16 @@
 // First because it includes Python.h
 #include "PyModule.h"
 
-#include <string>
-#include <map>
-#include <set>
-#include <memory>
-
 #include "common/LogClient.h"
 
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
+
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
 
 class MgrSession;
 
@@ -70,7 +71,7 @@ public:
   void update_kv_data(
     const std::string prefix,
     bool incremental,
-    const map<std::string, std::optional<bufferlist>, std::less<>>& data) {
+    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data) {
     ceph_assert(active_modules);
     active_modules->update_kv_data(prefix, incremental, data);
   }
@@ -165,7 +166,7 @@ public:
    */
   void get_health_checks(health_check_map_t *checks);
 
-  void get_progress_events(map<std::string,ProgressEvent> *events) {
+  void get_progress_events(std::map<std::string,ProgressEvent> *events) {
     if (active_modules) {
       active_modules->get_progress_events(events);
     }
