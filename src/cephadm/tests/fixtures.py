@@ -154,6 +154,8 @@ def with_cephadm_ctx(
     cmd: List[str],
     list_networks: Optional[Dict[str, Dict[str, List[str]]]] = None,
     hostname: Optional[str] = None,
+    *,
+    mock_cephadm_call_fn: bool = True,
 ):
     """
     :param cmd: cephadm command argv
@@ -166,10 +168,6 @@ def with_cephadm_ctx(
     _cephadm = import_cephadm()
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch('cephadmlib.net_utils.attempt_bind'))
-        stack.enter_context(mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0)))
-        stack.enter_context(mock.patch('cephadmlib.call_wrappers.call_timeout', return_value=0))
-        stack.enter_context(mock.patch('cephadm.call', return_value=('', '', 0)))
-        stack.enter_context(mock.patch('cephadm.call_timeout', return_value=0))
         stack.enter_context(mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'))
         stack.enter_context(mock.patch('cephadm.get_container_info', return_value=None))
         stack.enter_context(mock.patch('cephadm.is_available', return_value=True))
@@ -177,6 +175,11 @@ def with_cephadm_ctx(
         stack.enter_context(mock.patch('cephadm.logger'))
         stack.enter_context(mock.patch('cephadm.FileLock'))
         stack.enter_context(mock.patch('socket.gethostname', return_value=hostname))
+        if mock_cephadm_call_fn:
+            stack.enter_context(mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0)))
+            stack.enter_context(mock.patch('cephadmlib.call_wrappers.call_timeout', return_value=0))
+            stack.enter_context(mock.patch('cephadm.call', return_value=('', '', 0)))
+            stack.enter_context(mock.patch('cephadm.call_timeout', return_value=0))
         if list_networks is not None:
             stack.enter_context(mock.patch('cephadm.list_networks', return_value=list_networks))
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(cmd)
