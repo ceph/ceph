@@ -207,21 +207,11 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 	  f->queue(command_c);
 	});
   } else if (std::string(type) == "mds") {
-    int r = self->py_modules->get_client().mds_command(
-        name,
-        {cmd_json},
-        inbuf,
-        &command_c->outbl,
-        &command_c->outs,
-        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher),
-        one_shot);
-    if (r != 0) {
-      string msg("failed to send command to mds: ");
-      msg.append(cpp_strerror(r));
-      PyEval_RestoreThread(tstate);
-      PyErr_SetString(PyExc_RuntimeError, msg.c_str());
-      return nullptr;
-    }
+    string msg("cannot send command to mds via this interface: ");
+    msg.append(cpp_strerror(-ENOSYS));
+    PyEval_RestoreThread(tstate);
+    PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+    return nullptr;
   } else if (std::string(type) == "pg") {
     pg_t pgid;
     if (!pgid.parse(name)) {

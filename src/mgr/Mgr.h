@@ -35,13 +35,11 @@ class MMgrDigest;
 class MLog;
 class MServiceMap;
 class Objecter;
-class Client;
 
 class Mgr : public AdminSocketHook {
 protected:
   MonClient *monc;
   Objecter  *objecter;
-  Client    *client;
   Messenger *client_messenger;
 
   mutable ceph::mutex lock = ceph::make_mutex("Mgr::lock");
@@ -74,7 +72,7 @@ public:
   Mgr(MonClient *monc_, const MgrMap& mgrmap,
       PyModuleRegistry *py_module_registry_,
       Messenger *clientm_, Objecter *objecter_,
-      Client *client_, LogChannelRef clog_, LogChannelRef audit_clog_);
+      LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
 
   bool is_initialized() const {return initialized;}

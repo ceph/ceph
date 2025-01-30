@@ -14,7 +14,6 @@
 #include <Python.h>
 
 #include "osdc/Objecter.h"
-#include "client/Client.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
@@ -54,10 +53,9 @@ using std::string;
 Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
          PyModuleRegistry *py_module_registry_,
 	 Messenger *clientm_, Objecter *objecter_,
-	 Client* client_, LogChannelRef clog_, LogChannelRef audit_clog_) :
+	 LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
-  client(client_),
   client_messenger(clientm_),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
   digest_received(false),
@@ -351,7 +349,7 @@ void Mgr::init()
   py_module_registry->active_start(
     daemon_state, cluster_state,
     pre_init_store, mon_allows_kv_sub,
-    *monc, clog, audit_clog, *objecter, *client,
+    *monc, clog, audit_clog, *objecter,
     finisher, server);
 
   cluster_state.final_init();

@@ -44,7 +44,7 @@ if(WITH_MGR)
   target_include_directories(ceph-mgr PRIVATE
     $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
   target_link_libraries(ceph-mgr
-    osdc client heap_profiler
+    osdc heap_profiler
     global-static ceph-common
     Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
     Python3::Python
