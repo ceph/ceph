@@ -749,11 +749,12 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
     ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " size is: " << dest_object->get_size() << dendl;
     d4n_dest_object->set_attrs_from_obj_state(dpp, y, baseAttrs, dirty);
   } else {
+    auto o_attrs = baseAttrs; 
     dest_object->load_obj_state(dpp, y);
     baseAttrs = dest_object->get_attrs();
     d4n_dest_object->set_attrs_from_obj_state(dpp, y, baseAttrs, dirty);
-    auto ret = d4n_dest_object->calculate_version(dpp, y, dest_version);
-    if (ret < 0 || dest_version.empty()) {
+    d4n_dest_object->calculate_version(dpp, y, dest_version, o_attrs);
+    if (dest_version.empty()) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
     }
   }
@@ -997,18 +998,15 @@ void D4NFilterObject::set_attrs_from_obj_state(const DoutPrefixProvider* dpp, op
   return;
 }
 
-int D4NFilterObject::calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version)
+int D4NFilterObject::calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs)
 {
   //versioned objects have instance set to versionId, and get_oid() returns oid containing instance, hence using id tag as version for non versioned objects only
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " instance: " << this->have_instance() << dendl;
   if (! this->have_instance() && version.empty()) {
-    bufferlist bl;
-    if (this->get_attr(RGW_ATTR_ID_TAG, bl)) {
-      version = bl.c_str();
+    bufferlist bl = attrs[RGW_ATTR_ID_TAG];
+    version = bl.c_str();
+    if (!version.empty()) {
       ldpp_dout(dpp, 20) << __func__ << " id tag version is: " << version << dendl;
-    } else {
-      ldpp_dout(dpp, 0) << __func__ << " Failed to find id tag" << dendl;
-      return -ENOENT;
     }
   }
   if (this->have_instance()) {
@@ -1477,8 +1475,8 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     attrs = this->get_attrs();
     this->set_attrs_from_obj_state(dpp, y, attrs);
 
-    ret = calculate_version(dpp, y, version);
-    if (ret < 0 || version.empty()) {
+    calculate_version(dpp, y, version, attrs);
+    if (version.empty()) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
     }
     std::string objName = this->get_name();
@@ -1654,8 +1652,8 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     this->source->load_obj_state(dpp, y);
     attrs = source->get_attrs();
     source->set_attrs_from_obj_state(dpp, y, attrs);
-    ret = source->calculate_version(dpp, y, version);
-    if (ret < 0 || version.empty()) {
+    source->calculate_version(dpp, y, version, attrs);
+    if (version.empty()) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
     }
 
@@ -2733,7 +2731,7 @@ int D4NFilterWriter::prepare(optional_yield y)
   d4n_writecache = g_conf()->d4n_writecache_enabled;
 
   if (d4n_writecache == false) {
-    ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): calling next process" << dendl;
+    ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): calling next->prepare" << dendl;
     return next->prepare(y);
   } else {
     //for non-versioned buckets or version suspended buckets, we need to delete the older dirty blocks of the object from the cache as dirty blocks do not get evicted
@@ -2921,8 +2919,8 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     object->set_attrs_from_obj_state(dpp, y, attrs, dirty);
 
     std::string version;
-    ret = object->calculate_version(dpp, y, version);
-    if (ret < 0 || version.empty()) {
+    object->calculate_version(dpp, y, version, attrs);
+    if (version.empty()) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
     }
   }
@@ -3004,8 +3002,8 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
   attrs[RGW_CACHE_ATTR_MULTIPART] = std::move(bl_val);
 
   std::string version;
-  ret = d4n_target_obj->calculate_version(dpp, y, version);
-  if (ret < 0 || version.empty()) {
+  d4n_target_obj->calculate_version(dpp, y, version, attrs);
+  if (version.empty()) {
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
   }
 
