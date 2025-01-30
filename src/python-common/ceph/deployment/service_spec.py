@@ -1340,7 +1340,6 @@ class NvmeofServiceSpec(ServiceSpec):
                  state_update_notify: Optional[bool] = True,
                  state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
-                 enable_key_encryption: Optional[bool] = True,
                  encryption_key: Optional[str] = None,
                  rebalance_period_sec: Optional[int] = 7,
                  max_gws_in_grp: Optional[int] = 16,
@@ -1355,6 +1354,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  bdevs_per_cluster: Optional[int] = 32,
                  verify_nqns: Optional[bool] = True,
                  verify_keys: Optional[bool] = True,
+                 verify_listener_ip: Optional[bool] = True,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
@@ -1437,8 +1437,6 @@ class NvmeofServiceSpec(ServiceSpec):
         self.state_update_interval_sec = state_update_interval_sec
         #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
-        #: ``enable_key_encryption`` encrypt DHCHAP and PSK keys before saving in OMAP
-        self.enable_key_encryption = enable_key_encryption
         #: ``encryption_key`` gateway encryption key
         self.encryption_key = encryption_key
         #: ``rebalance_period_sec`` number of seconds between cycles of auto namesapce rebalancing
@@ -1457,6 +1455,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_nqns = verify_nqns
         #: ``verify_keys`` enables verification of PSJ and DHCHAP keys in the gateway
         self.verify_keys = verify_keys
+        #: ``verify_listener_ip`` enables verification of listener IP address
+        self.verify_listener_ip = verify_listener_ip
         #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
         self.omap_file_lock_duration = omap_file_lock_duration
         #: ``omap_file_lock_retries`` number of retries to lock OMAP file before giving up
@@ -1628,10 +1628,10 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
         verify_boolean(self.state_update_notify, "State update notify")
         verify_boolean(self.enable_spdk_discovery_controller, "Enable SPDK discovery controller")
-        verify_boolean(self.enable_key_encryption, "Enable key encryption")
         verify_boolean(self.enable_prometheus_exporter, "Enable Prometheus exporter")
         verify_boolean(self.verify_nqns, "Verify NQNs")
         verify_boolean(self.verify_keys, "Verify Keys")
+        verify_boolean(self.verify_listener_ip, "Verify listener IP address")
         verify_boolean(self.log_files_enabled, "Log files enabled")
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
