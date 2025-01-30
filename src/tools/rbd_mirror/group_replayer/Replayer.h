@@ -106,6 +106,8 @@ private:
   // map of <group_snap_id, vec<pair<cls::rbd::ImageSnapshotSpec, bool>>>
   std::map<std::string, std::vector<std::pair<cls::rbd::ImageSnapshotSpec, bool>>> m_pending_group_snaps;
 
+  bool is_replay_interrupted();
+  bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
   int local_group_image_list_by_id(
       std::vector<cls::rbd::GroupImageStatus> *image_ids);
 

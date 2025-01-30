@@ -595,9 +595,15 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     return;
   }
 
-  C_SaferCond ctx;
-  create_group_replayer(&ctx);
-  ctx.wait();
+  if (!m_remote_group_id.empty()) {
+    C_SaferCond ctx;
+    create_group_replayer(&ctx);
+    ctx.wait();
+  } else {
+    r = -EINVAL;
+    finish_start(r, "remote is not ready yet"); // bootstrap again
+    return;
+  }
 }
 
 template <typename I>
