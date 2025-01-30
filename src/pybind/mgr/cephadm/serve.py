@@ -31,6 +31,7 @@ from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
 from mgr_module import MonCommandFailed
 from mgr_util import format_bytes, verify_tls, get_cert_issuer_info, ServerConfigException
+from cephadm.services.service_registry import service_registry
 
 from . import utils
 from . import exchange
@@ -552,7 +553,7 @@ class CephadmServe:
             daemon_type_to_service(cast(str, dd.daemon_type))
             for dd in managed
         }
-        _services = [self.mgr.cephadm_services[dt] for dt in svcs]
+        _services = [service_registry.get_service(dt) for dt in svcs]
 
         def _filter(
             service_type: str, daemon_id: str, name: str
@@ -752,7 +753,7 @@ class CephadmServe:
             # return a solid indication
             return False
 
-        svc = self.mgr.cephadm_services[service_type]
+        svc = service_registry.get_service(service_type)
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
         related_service_daemons = self.mgr.cache.get_related_service_daemons(spec)
 
@@ -1112,7 +1113,7 @@ class CephadmServe:
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
                 daemons_post[dd.daemon_type].append(dd)
 
-            if self.mgr.cephadm_services[daemon_type_to_service(dd.daemon_type)].get_active_daemon(
+            if service_registry.get_service(daemon_type_to_service(dd.daemon_type)).get_active_daemon(
                self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
                 dd.is_active = True
             else:
@@ -1196,7 +1197,7 @@ class CephadmServe:
                     self.mgr.requires_post_actions.remove(d.name())
                     run_post = True
             if run_post:
-                self.mgr._get_cephadm_service(daemon_type_to_service(
+                service_registry.get_service(daemon_type_to_service(
                     daemon_type)).daemon_check_post(daemon_descs)
 
     def _purge_deleted_services(self) -> None:
@@ -1212,7 +1213,7 @@ class CephadmServe:
 
             logger.info(f'Purge service {service_name}')
 
-            self.mgr.cephadm_services[spec.service_type].purge(service_name)
+            service_registry.get_service(spec.service_type).purge(service_name)
             self.mgr.spec_store.finally_rm(service_name)
 
     def convert_tags_to_repo_digest(self) -> None:
@@ -1494,7 +1495,7 @@ class CephadmServe:
                     # we have to clean up the daemon. E.g. keyrings.
                     servict_type = daemon_type_to_service(daemon_spec.daemon_type)
                     dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
-                    self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
+                    service_registry.get_service(servict_type).post_remove(dd, is_failed_deploy=True)
                 raise
 
     def _setup_extra_deployment_args(
@@ -1563,7 +1564,7 @@ class CephadmServe:
 
         with set_exception_subject('service', daemon.service_id(), overwrite=True):
 
-            self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
+            service_registry.get_service(daemon_type_to_service(daemon_type)).pre_remove(daemon)
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
             if dd.ports:
@@ -1582,11 +1583,11 @@ class CephadmServe:
 
             if not no_post_remove:
                 if daemon_type not in ['iscsi']:
-                    self.mgr.cephadm_services[daemon_type_to_service(
-                        daemon_type)].post_remove(daemon, is_failed_deploy=False)
+                    service_registry.get_service(daemon_type_to_service(
+                        daemon_type)).post_remove(daemon, is_failed_deploy=False)
                 else:
-                    self.mgr.scheduled_async_actions.append(lambda: self.mgr.cephadm_services[daemon_type_to_service(
-                                                            daemon_type)].post_remove(daemon, is_failed_deploy=False))
+                    self.mgr.scheduled_async_actions.append(lambda: service_registry.get_service(daemon_type_to_service(
+                                                            daemon_type)).post_remove(daemon, is_failed_deploy=False))
                     self.mgr._kick_serve_loop()
 
             self.mgr.recently_altered_daemons[name] = datetime_now()

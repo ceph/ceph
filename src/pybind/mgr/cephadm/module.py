@@ -20,7 +20,7 @@ from cephadm.cert_mgr import CertMgr
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, \
+    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, \
     Awaitable, Iterator
 
 import datetime
@@ -43,6 +43,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
+from cephadm.services.service_registry import service_registry
 
 
 from mgr_module import (
@@ -65,20 +66,12 @@ from orchestrator._interface import daemon_type_to_service
 from . import utils
 from . import ssh
 from .migrations import Migrations
-from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, CephfsMirrorService, CephadmAgent, \
-    CephExporterService
-from .services.ingress import IngressService
+from .services.cephadmservice import MgrService, RgwService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
-from .services.nvmeof import NvmeofService
 from .services.mgmt_gateway import MgmtGatewayService
-from .services.oauth2_proxy import OAuth2ProxyService
-from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
-from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
-    NodeExporterService, SNMPGatewayService, LokiService, PromtailService
-from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
+from .services.monitoring import AlertmanagerService, PrometheusService
 from .services.node_proxy import NodeProxy
 from .services.smb import SMBService
 from .schedule import HostAssignment
@@ -615,49 +608,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.migration = Migrations(self)
 
-        _service_classes: Sequence[Type[CephadmService]] = [
-            AlertmanagerService,
-            CephExporterService,
-            CephadmAgent,
-            CephfsMirrorService,
-            CrashService,
-            CustomContainerService,
-            ElasticSearchService,
-            GrafanaService,
-            IngressService,
-            IscsiService,
-            JaegerAgentService,
-            JaegerCollectorService,
-            JaegerQueryService,
-            LokiService,
-            MdsService,
-            MgrService,
-            MonService,
-            NFSService,
-            NodeExporterService,
-            NodeProxy,
-            NvmeofService,
-            OSDService,
-            PrometheusService,
-            PromtailService,
-            RbdMirrorService,
-            RgwService,
-            SMBService,
-            SNMPGatewayService,
-            MgmtGatewayService,
-            OAuth2ProxyService,
-        ]
+        service_registry.init_services(self)
 
-        # https://github.com/python/mypy/issues/8993
-        self.cephadm_services: Dict[str, CephadmService] = {
-            cls.TYPE: cls(self) for cls in _service_classes}  # type: ignore
-
-        self.mgr_service: MgrService = cast(MgrService, self.cephadm_services['mgr'])
-        self.osd_service: OSDService = cast(OSDService, self.cephadm_services['osd'])
-        self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
-        self.nvmeof_service: NvmeofService = cast(NvmeofService, self.cephadm_services['nvmeof'])
-        self.node_proxy_service: NodeProxy = cast(NodeProxy, self.cephadm_services['node-proxy'])
-        self.rgw_service: RgwService = cast(RgwService, self.cephadm_services['rgw'])
+        self.mgr_service: MgrService = cast(MgrService, service_registry.get_service('mgr'))
+        self.osd_service: OSDService = cast(OSDService, service_registry.get_service('osd'))
+        self.rgw_service: RgwService = cast(RgwService, service_registry.get_service('rgw'))
+        self.node_proxy_service: NodeProxy = cast(NodeProxy, service_registry.get_service('node-proxy'))
+        self.iscsi_service: IscsiService = cast(IscsiService, service_registry.get_service('iscsi'))  # used for UT only
 
         self.scheduled_async_actions: List[Callable] = []
 
@@ -695,10 +652,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.offline_watcher.shutdown()
         self.run = False
         self.event.set()
-
-    def _get_cephadm_service(self, service_type: str) -> CephadmService:
-        assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
-        return self.cephadm_services[service_type]
 
     def get_fqdn(self, hostname: str) -> str:
         """Get a host's FQDN with its hostname.
@@ -1933,9 +1886,9 @@ Then run the following:
                 self.log.info(f"removing: {d.name()}")
 
                 if d.daemon_type != 'osd':
-                    self.cephadm_services[daemon_type_to_service(str(d.daemon_type))].pre_remove(d)
-                    self.cephadm_services[daemon_type_to_service(
-                        str(d.daemon_type))].post_remove(d, is_failed_deploy=False)
+                    service_registry.get_service(daemon_type_to_service(str(d.daemon_type))).pre_remove(d)
+                    service_registry.get_service(daemon_type_to_service(
+                        str(d.daemon_type))).post_remove(d, is_failed_deploy=False)
                 else:
                     cmd_args = {
                         'prefix': 'osd purge-actual',
@@ -2049,8 +2002,8 @@ Then run the following:
         error_notifications: List[str] = []
         okay: bool = True
         for daemon_type, daemon_ids in daemon_map.items():
-            r = self.cephadm_services[daemon_type_to_service(
-                daemon_type)].ok_to_stop(daemon_ids, force=force)
+            r = service_registry.get_service(daemon_type_to_service(
+                daemon_type)).ok_to_stop(daemon_ids, force=force)
             if r.retval:
                 okay = False
                 # collect error notifications so user can see every daemon causing host
@@ -2491,8 +2444,8 @@ Then run the following:
 
         # deploy a new keyring file
         if daemon_spec.daemon_type != 'osd':
-            daemon_spec = self.cephadm_services[daemon_type_to_service(
-                daemon_spec.daemon_type)].prepare_create(daemon_spec)
+            daemon_spec = service_registry.get_service(daemon_type_to_service(
+                daemon_spec.daemon_type)).prepare_create(daemon_spec)
         with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
             self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
 
@@ -2543,8 +2496,8 @@ Then run the following:
 
         if action == 'redeploy' or action == 'reconfig':
             if daemon_spec.daemon_type != 'osd':
-                daemon_spec = self.cephadm_services[daemon_type_to_service(
-                    daemon_spec.daemon_type)].prepare_create(daemon_spec)
+                daemon_spec = service_registry.get_service(daemon_type_to_service(
+                    daemon_spec.daemon_type)).prepare_create(daemon_spec)
             else:
                 # for OSDs, we still need to update config, just not carry out the full
                 # prepare_create function
@@ -2936,7 +2889,7 @@ Then run the following:
                           daemon_type: str,
                           daemon_id: str) -> List[str]:
         svc_type = daemon_type_to_service(daemon_type)
-        svc_cls = self.cephadm_services.get(svc_type, None)
+        svc_cls = service_registry.get_service(svc_type)
         deps = svc_cls.get_dependencies(self, spec, daemon_type) if svc_cls else []
         return sorted(deps)
 
@@ -2990,10 +2943,10 @@ Then run the following:
                                              forcename=name)
 
             if not did_config:
-                self.cephadm_services[service_type].config(spec)
+                service_registry.get_service(service_type).config(spec)
                 did_config = True
 
-            daemon_spec = self.cephadm_services[service_type].make_daemon_spec(
+            daemon_spec = service_registry.get_service(service_type).make_daemon_spec(
                 host, daemon_id, network, spec,
                 # NOTE: this does not consider port conflicts!
                 ports=spec.get_port_start())
@@ -3011,7 +2964,7 @@ Then run the following:
 
         @forall_hosts
         def create_func_map(*args: Any) -> str:
-            daemon_spec = self.cephadm_services[daemon_type].prepare_create(*args)
+            daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
 
@@ -3355,7 +3308,7 @@ Then run the following:
                     'service_type': spec.service_type,
                     'data': self._preview_osdspecs(osdspecs=[cast(DriveGroupSpec, spec)])}
 
-        svc = self.cephadm_services[spec.service_type]
+        svc = service_registry.get_service(spec.service_type)
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.spec_store[spec.service_name()].rank_map
@@ -3459,7 +3412,7 @@ Then run the following:
             draining_hosts=self.cache.get_draining_hosts(),
             networks=self.cache.networks,
             daemons=self.cache.get_daemons_by_service(spec.service_name()),
-            allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
+            allow_colo=service_registry.get_service(spec.service_type).allow_colo(),
         ).validate()
 
         self.log.info('Saving service %s spec with placement %s' % (

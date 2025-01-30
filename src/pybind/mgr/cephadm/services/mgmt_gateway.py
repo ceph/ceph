@@ -4,6 +4,7 @@ from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
+from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@register_cephadm_service
 class MgmtGatewayService(CephadmService):
     TYPE = 'mgmt-gateway'
     SVC_TEMPLATE_PATH = 'services/mgmt-gateway/nginx.conf.j2'
