@@ -343,6 +343,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
+                            rgw_bucket_snap_id max_snap,
                             rgw_cls_list_ret* result)
 {
   bufferlist in;
@@ -352,6 +353,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   call.delimiter = delimiter;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
+  call.max_snap = max_snap;
   encode(call, in);
 
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
@@ -366,13 +368,15 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
 				 const std::string& delimiter,
 				 uint32_t num_entries,
 				 bool list_versions,
+                                 rgw_bucket_snap_id max_snap,
 				 BucketIndexAioManager *manager,
 				 rgw_cls_list_ret *pdata)
 {
   librados::ObjectReadOperation op;
   cls_rgw_bucket_list_op(op,
 			 start_obj, filter_prefix, delimiter,
-                         num_entries, list_versions, pdata);
+                         num_entries, list_versions, max_snap,
+                         pdata);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
@@ -393,8 +397,8 @@ int CLSRGWIssueBucketList::issue_op(const int shard_id, const string& oid)
 
   return issue_bucket_list_op(io_ctx, shard_id, oid,
 			      marker, filter_prefix, delimiter,
-			      num_entries, list_versions, &manager,
-			      &result[shard_id]);
+			      num_entries, list_versions, max_snap,
+                              &manager, &result[shard_id]);
 }
 
 
@@ -786,7 +790,7 @@ int CLSRGWIssueGetDirHeader::issue_op(const int shard_id, const string& oid)
   string empty_delimiter;
   return issue_bucket_list_op(io_ctx, shard_id, oid,
 			      empty_key, empty_prefix, empty_delimiter,
-			      0, false, &manager, &result[shard_id]);
+			      0, false, RGW_BUCKET_NO_SNAP, &manager, &result[shard_id]);
 }
 
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
