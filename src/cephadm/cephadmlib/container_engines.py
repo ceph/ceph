@@ -329,3 +329,44 @@ class ContainerInfo:
             and self.start == other.start
             and self.version == other.version
         )
+
+
+def _container_stats(
+    ctx: CephadmContext,
+    container_name: str,
+    *,
+    container_path: str,
+) -> Tuple[str, str, int]:
+    """returns container id, image name, image id, created time, and ceph version if available"""
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = '', '', -1
+    cmd = [
+        container_path,
+        'inspect',
+        '--format',
+        '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+        container_name,
+    ]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
+    return out, err, code
+
+
+def _parse_container_stats(
+    out: str, err: str, code: int
+) -> Optional[ContainerInfo]:
+    if code != 0:
+        return None
+    # container_id, image_name, image_id, start, version
+    return ContainerInfo(*list(out.strip().split(',')))
+
+
+def parsed_container_stats(
+    ctx: CephadmContext,
+    container_name: str,
+    *,
+    container_path: str,
+) -> Optional[ContainerInfo]:
+    out, err, code = _container_stats(
+        ctx, container_name, container_path=container_path
+    )
+    return _parse_container_stats(out, err, code)
