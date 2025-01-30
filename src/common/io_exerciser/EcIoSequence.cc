@@ -14,7 +14,7 @@ bool EcIoSequence::is_supported(Sequence sequence) const { return true; }
 std::unique_ptr<IoSequence> EcIoSequence ::generate_sequence(
     Sequence sequence, std::pair<int, int> obj_size_range,
     std::optional<std::pair<int, int>> km,
-    std::optional<std::pair<std::string_view, std::string_view>> mappingLayers,
+    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers,
     int seed) {
   switch (sequence) {
     case Sequence::SEQUENCE_SEQ0:
@@ -37,9 +37,9 @@ std::unique_ptr<IoSequence> EcIoSequence ::generate_sequence(
       [[fallthrough]];
     case Sequence::SEQUENCE_SEQ9:
       return std::make_unique<ReadInjectSequence>(obj_size_range, seed,
-                                                  sequence, km, mappingLayers);
+                                                  sequence, km, mappinglayers);
     case Sequence::SEQUENCE_SEQ10:
-      return std::make_unique<Seq10>(obj_size_range, seed, km, mappingLayers);
+      return std::make_unique<Seq10>(obj_size_range, seed, km, mappinglayers);
     default:
       ceph_abort_msg("Unrecognised sequence");
   }
@@ -54,19 +54,19 @@ EcIoSequence::EcIoSequence(std::pair<int, int> obj_size_range, int seed)
 void EcIoSequence ::select_random_data_shard_to_inject_read_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
-        mappingLayers) {
+        mappinglayers) {
   if (km) {
     shard_to_inject = rng(km->first - 1);
   }
-  if (mappingLayers) {
-    int count = std::ranges::count(mappingLayers->first, 'D');
-    int dataShardPosition = rng(count - 1);
+  if (mappinglayers) {
+    int count = std::ranges::count(mappinglayers->first, 'D');
+    int data_shard_position = rng(count - 1);
     shard_to_inject = 0;
-    for (int i = 0; i < dataShardPosition; i++) {
+    for (int i = 0; i < data_shard_position; i++) {
       shard_to_inject =
-          std::distance(std::find(mappingLayers->first.begin(),
-                                  mappingLayers->first.end(), *shard_to_inject),
-                        mappingLayers->first.begin());
+          std::distance(std::find(mappinglayers->first.begin(),
+                                  mappinglayers->first.end(), *shard_to_inject),
+                        mappinglayers->first.begin());
       ceph_assert(*shard_to_inject != std::string::npos);
     }
   }
@@ -76,23 +76,23 @@ void EcIoSequence ::select_random_data_shard_to_inject_read_error(
 void EcIoSequence ::select_random_data_shard_to_inject_write_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
-        mappingLayers) {
+        mappinglayers) {
   // Write errors do not support injecting to the primary OSD
   if (km) {
     shard_to_inject = rng(1, km->first - 1);
   }
-  if (mappingLayers) {
-    int count = std::ranges::count(mappingLayers->first, 'D');
-    if (mappingLayers->first[0] == 'D') {
+  if (mappinglayers) {
+    int count = std::ranges::count(mappinglayers->first, 'D');
+    if (mappinglayers->first[0] == 'D') {
       count--;
     }
-    int dataShardPosition = rng(1, count - 1);
+    int data_shard_position = rng(1, count - 1);
     shard_to_inject = 0;
-    for (int i = 1; i < dataShardPosition; i++) {
+    for (int i = 1; i < data_shard_position; i++) {
       shard_to_inject =
-          std::distance(std::find(mappingLayers->first.begin(),
-                                  mappingLayers->first.end(), *shard_to_inject),
-                        mappingLayers->first.begin());
+          std::distance(std::find(mappinglayers->first.begin(),
+                                  mappinglayers->first.end(), *shard_to_inject),
+                        mappinglayers->first.begin());
       ceph_assert(*shard_to_inject != std::string::npos);
     }
   }
@@ -102,19 +102,19 @@ void EcIoSequence ::select_random_data_shard_to_inject_write_error(
 void EcIoSequence ::select_random_shard_to_inject_read_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
-        mappingLayers) {
+        mappinglayers) {
   if (km) {
     shard_to_inject = rng(km->first + km->second - 1);
   }
-  if (mappingLayers) {
-    int count = std::ranges::count(mappingLayers->first, 'D');
-    int dataShardPosition = rng(count - 1);
+  if (mappinglayers) {
+    int count = std::ranges::count(mappinglayers->first, 'D');
+    int data_shard_position = rng(count - 1);
     shard_to_inject = 0;
-    for (int i = 0; i < dataShardPosition; i++) {
+    for (int i = 0; i < data_shard_position; i++) {
       shard_to_inject =
-          std::distance(std::find(mappingLayers->first.begin(),
-                                  mappingLayers->first.end(), *shard_to_inject),
-                        mappingLayers->first.begin());
+          std::distance(std::find(mappinglayers->first.begin(),
+                                  mappinglayers->first.end(), *shard_to_inject),
+                        mappinglayers->first.begin());
       ceph_assert(*shard_to_inject != std::string::npos);
     }
   }
@@ -124,23 +124,23 @@ void EcIoSequence ::select_random_shard_to_inject_read_error(
 void EcIoSequence ::select_random_shard_to_inject_write_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
-        mappingLayers) {
+        mappinglayers) {
   // Write errors do not support injecting to the primary OSD
   if (km) {
     shard_to_inject = rng(1, km->first + km->second - 1);
   }
-  if (mappingLayers) {
-    int count = std::ranges::count(mappingLayers->first, 'D');
-    if (mappingLayers->first[0] == 'D') {
+  if (mappinglayers) {
+    int count = std::ranges::count(mappinglayers->first, 'D');
+    if (mappinglayers->first[0] == 'D') {
       count--;
     }
-    int dataShardPosition = rng(count - 1);
+    int data_shard_position = rng(count - 1);
     shard_to_inject = 0;
-    for (int i = 0; i < dataShardPosition; i++) {
+    for (int i = 0; i < data_shard_position; i++) {
       shard_to_inject =
-          std::distance(std::find(mappingLayers->first.begin(),
-                                  mappingLayers->first.end(), *shard_to_inject),
-                        mappingLayers->first.begin());
+          std::distance(std::find(mappinglayers->first.begin(),
+                                  mappinglayers->first.end(), *shard_to_inject),
+                        mappinglayers->first.begin());
       ceph_assert(*shard_to_inject != std::string::npos);
     }
   }
@@ -162,10 +162,10 @@ void EcIoSequence::generate_random_write_inject_type() {
 ceph::io_exerciser::ReadInjectSequence::ReadInjectSequence(
     std::pair<int, int> obj_size_range, int seed, Sequence s,
     std::optional<std::pair<int, int>> km,
-    std::optional<std::pair<std::string_view, std::string_view>> mappingLayers)
+    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers)
     : EcIoSequence(obj_size_range, seed) {
   child_sequence = IoSequence::generate_sequence(s, obj_size_range, seed);
-  select_random_data_shard_to_inject_read_error(km, mappingLayers);
+  select_random_data_shard_to_inject_read_error(km, mappinglayers);
   generate_random_read_inject_type();
 }
 
@@ -186,17 +186,17 @@ std::string ceph::io_exerciser::ReadInjectSequence::get_name() const {
 std::unique_ptr<IoOp> ReadInjectSequence::next() {
   step++;
 
-  if (nextOp) {
-    std::unique_ptr<IoOp> retOp = nullptr;
-    nextOp.swap(retOp);
-    return retOp;
+  if (next_op) {
+    std::unique_ptr<IoOp> ret_op = nullptr;
+    next_op.swap(ret_op);
+    return ret_op;
   }
 
-  std::unique_ptr<IoOp> childOp = child_sequence->next();
+  std::unique_ptr<IoOp> child_op = child_sequence->next();
 
-  switch (childOp->getOpType()) {
+  switch (child_op->getOpType()) {
     case OpType::Remove:
-      nextOp.swap(childOp);
+      next_op.swap(child_op);
       switch (inject_op_type) {
         ceph_assert(shard_to_inject.has_value());
         case InjectOpType::ReadEIO:
@@ -216,19 +216,19 @@ std::unique_ptr<IoOp> ReadInjectSequence::next() {
     case OpType::Create:
       switch (inject_op_type) {
         case InjectOpType::ReadEIO:
-          nextOp = InjectReadErrorOp::generate(
+          next_op = InjectReadErrorOp::generate(
               *shard_to_inject, 0, 0, std::numeric_limits<uint64_t>::max());
           break;
         case InjectOpType::ReadMissingShard:
-          nextOp = InjectReadErrorOp::generate(
+          next_op = InjectReadErrorOp::generate(
               *shard_to_inject, 1, 0, std::numeric_limits<uint64_t>::max());
           break;
         case InjectOpType::WriteFailAndRollback:
-          nextOp = InjectWriteErrorOp::generate(
+          next_op = InjectWriteErrorOp::generate(
               *shard_to_inject, 0, 0, std::numeric_limits<uint64_t>::max());
           break;
         case InjectOpType::WriteOSDAbort:
-          nextOp = InjectWriteErrorOp::generate(
+          next_op = InjectWriteErrorOp::generate(
               *shard_to_inject, 3, 0, std::numeric_limits<uint64_t>::max());
           break;
         case InjectOpType::None:
@@ -242,7 +242,7 @@ std::unique_ptr<IoOp> ReadInjectSequence::next() {
       break;
   }
 
-  return childOp;
+  return child_op;
 }
 
 std::unique_ptr<ceph::io_exerciser::IoOp>
@@ -257,7 +257,7 @@ ceph::io_exerciser::ReadInjectSequence::_next() {
 ceph::io_exerciser::Seq10::Seq10(
     std::pair<int, int> obj_size_range, int seed,
     std::optional<std::pair<int, int>> km,
-    std::optional<std::pair<std::string_view, std::string_view>> mappingLayers)
+    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers)
     : EcIoSequence(obj_size_range, seed),
       offset(0),
       length(1),
@@ -269,7 +269,7 @@ ceph::io_exerciser::Seq10::Seq10(
       test_all_sizes(
           false)  // Only test obj_size(rand()) due to time constraints
 {
-  select_random_shard_to_inject_write_error(km, mappingLayers);
+  select_random_shard_to_inject_write_error(km, mappinglayers);
   // We will inject specifically as part of our sequence in this sequence
   setup_inject = false;
   if (!test_all_sizes) {
