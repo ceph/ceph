@@ -17,6 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
+from cephadm.tlsobject_store import TLSObjectScope
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -57,7 +58,7 @@ from mgr_module import (
     NotifyType,
     MonCommandFailed,
 )
-from mgr_util import build_url
+from mgr_util import build_url, verify_cacrt_content, ServerConfigException
 import orchestrator
 from orchestrator.module import to_format, Format
 
@@ -410,6 +411,36 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
+            'certificate_automated_rotation_enabled',
+            type='bool',
+            default=False,
+            desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
+        ),
+        Option(
+            'certificate_check_period',
+            type='int',
+            default=1,  # Default to checking certificates once per day
+            desc='Specifies how often (in days) the certificate should be checked for validity.',
+            min=1,
+            max=3,  # must be lesr than min of certificate_renewal_threshold_days
+        ),
+        Option(
+            'certificate_duration_days',
+            type='int',
+            default=(3 * 365),
+            desc='Specifies the duration of self certificates generated and signed by cephadm root CA',
+            min=90,
+            max=(10 * 365)
+        ),
+        Option(
+            'certificate_renewal_threshold_days',
+            type='int',
+            default=30,
+            desc='Specifies the lead time in days to initiate certificate renewal before expiration.',
+            min=10,
+            max=90
+        ),
+        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -542,6 +573,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.oob_default_addr = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
+            self.certificate_duration_days = 0
+            self.certificate_renewal_threshold_days = 0
+            self.certificate_automated_rotation_enabled = False
+            self.certificate_check_period = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -592,7 +627,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
+        self._init_cert_mgr()
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -660,6 +695,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
            be returned instead.
         """
         return self.inventory.get_fqdn(hostname) or self.inventory.get_addr(hostname)
+
+    def _init_cert_mgr(self) -> None:
+
+        self.cert_mgr = CertMgr(self)
+
+        # register global certificates
+        self.cert_mgr.register_cert_key_pair('mgmt-gateway', 'mgmt_gw_cert', 'mgmt_gw_key', TLSObjectScope.GLOBAL)
+        self.cert_mgr.register_cert_key_pair('oauth2-proxy', 'oauth2_proxy_cert', 'oauth2_proxy_key', TLSObjectScope.GLOBAL)
+
+        # register per-service certificates
+        self.cert_mgr.register_cert_key_pair('ingress', 'ingress_ssl_cert', 'ingress_ssl_key', TLSObjectScope.SERVICE)
+        self.cert_mgr.register_cert_key_pair('iscsi', 'iscsi_ssl_cert', 'iscsi_ssl_key', TLSObjectScope.SERVICE)
+        self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
+        self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
+        self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
+        self.cert_mgr.register_cert('rgw', 'rgw_frontend_ssl_cert', TLSObjectScope.SERVICE)
+        self.cert_mgr.register_key('nvmeof', 'nvmeof_encryption_key', TLSObjectScope.SERVICE)
+
+        # register per-host certificates
+        self.cert_mgr.register_cert_key_pair('grafana', 'grafana_cert', 'grafana_key', TLSObjectScope.HOST)
+
+        self.cert_mgr.init_tlsobject_store()
 
     def _get_security_config(self) -> Tuple[bool, bool, bool]:
         oauth2_proxy_enabled = len(self.cache.get_daemons_by_service('oauth2-proxy')) > 0
@@ -3133,7 +3190,7 @@ Then run the following:
 
     @handle_orch_error
     def cert_store_cert_ls(self) -> Dict[str, Any]:
-        return self.cert_key_store.cert_ls()
+        return self.cert_mgr.cert_ls()
 
     @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
