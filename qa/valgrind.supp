@@ -1,0 +1,1117 @@
+
+{
+   <allthefrees, so we can behave with tcmalloc>
+   Memcheck:Free
+   fun:free
+   ...
+}
+{
+   operator delete[] in Rados::shutdown
+   Memcheck:Free
+   fun:_ZdaPvm
+   ...
+   fun:_ZN8librados7v14_2_05Rados8shutdownEv
+}
+{
+   older boost mersenne twister uses uninitialized memory for randomness
+   Memcheck:Cond
+   ...
+   fun:*Monitor::prepare_new_fingerprint*
+   ...
+}
+{
+   older boost mersenne twister uses uninitialized memory for randomness
+   Memcheck:Value8
+   ...
+   fun:*Monitor::prepare_new_fingerprint*
+   ...
+}
+{
+   apparent TLS leak in eglibc
+   Memcheck:Leak
+   fun:calloc
+   ...
+   fun:_dl_allocate_tls
+   fun:pthread_create*
+   ...
+}
+{
+   osd: ignore ec plugin loading (FIXME SOMEDAY)
+   Memcheck:Leak
+   ...
+   fun:*ErasureCodePluginRegistry*load*
+   ...
+}
+{
+   osd: ignore ec plugin factory (FIXME SOMEDAY)
+   Memcheck:Leak
+   ...
+   fun:*ErasureCodePluginRegistry*factory*
+   ...
+}
+{
+   tcmalloc: libboost_thread-mt.so.1.53 is linked with tcmalloc
+   Memcheck:Param
+   msync(start)
+   obj:/usr/lib64/libpthread-2.17.so
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   ...
+   fun:*tcmalloc*ThreadCache*
+   ...
+   obj:/usr/lib64/libboost_thread-mt.so.1.53.0
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (centos 6.5)
+   Memcheck:Param
+   msync(start)
+   obj:/lib64/libpthread-2.12.so
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to unaddressible bytes (centos 6.5 #2)
+   Memcheck:Param
+   msync(start)
+   obj:/lib64/libpthread-2.12.so
+   obj:/usr/lib64/libunwind.so.7.0.0
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (rhel7)
+   Memcheck:Param
+   msync(start)
+   obj:/usr/lib64/libpthread-2.17.so
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (rhel7 #2)
+   Memcheck:Param
+   msync(start)
+   obj:/usr/lib64/libpthread-2.17.so
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   obj:/usr/lib64/libtcmalloc.so.4.2.6
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (wheezy)
+   Memcheck:Param
+   msync(start)
+   obj:/lib/x86_64-linux-gnu/libpthread-2.13.so
+   obj:/usr/lib/libunwind.so.7.0.0
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (precise)
+   Memcheck:Param
+   msync(start)
+   obj:/lib/x86_64-linux-gnu/libpthread-2.15.so
+   obj:/usr/lib/libunwind.so.7.0.0
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+   obj:/usr/lib/libtcmalloc.so.0.1.0
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (trusty)
+   Memcheck:Param
+   msync(start)
+   obj:/lib/x86_64-linux-gnu/libpthread-2.19.so
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes 2 (trusty)
+   Memcheck:Param
+   msync(start)
+   fun:__msync_nocancel
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+   fun:_ZN8tcmalloc15CentralFreeList8PopulateEv
+   fun:_ZN8tcmalloc15CentralFreeList18FetchFromSpansSafeEv
+   fun:_ZN8tcmalloc15CentralFreeList11RemoveRangeEPPvS2_i
+}
+{
+   tcmalloc: msync (xenial)
+   Memcheck:Param
+   msync(start)
+   fun:__msync_nocancel
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:*tcmalloc*
+   fun:*GetStackTrace*
+}
+{
+   tcmalloc: param points to uninit bytes under call_init (centos9) or call_init.part.0 (jammy)
+   Memcheck:Param
+   write(buf)
+   fun:syscall
+   obj:*libunwind*
+   ...
+   obj:*libunwind*
+   fun:_ULx86_64_step
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   fun:call_init*
+}
+{
+	tcmalloc: string
+	Memcheck:Leak
+	...
+	obj:*tcmalloc*
+	fun:call_init*
+	...
+}
+{
+	ceph global: deliberate onexit leak
+	Memcheck:Leak
+	...
+	fun:*set_flush_on_exit*
+	...
+}
+{
+	libcurl: ignore libcurl leaks
+	Memcheck:Leak
+	...
+	fun:*curl_global_init
+}
+{
+	ignore gnutls leaks
+	Memcheck:Leak
+	...
+	fun:gnutls_global_init
+}
+{
+	ignore libfcgi leak; OS_LibShutdown has no callers!
+	Memcheck:Leak
+	...
+	fun:OS_LibInit
+	fun:FCGX_Init
+}
+{
+	ignore libnss3 leaks
+	Memcheck:Leak
+	...
+	obj:*libnss3*
+	...
+}
+{
+        strptime suckage
+        Memcheck:Cond
+        fun:__GI___strncasecmp_l
+        fun:__strptime_internal
+        ...
+}
+{
+        strptime suckage 2
+        Memcheck:Value8
+        fun:__GI___strncasecmp_l
+        fun:__strptime_internal
+        ...
+}
+{
+        strptime suckage 3
+        Memcheck:Addr8
+        fun:__GI___strncasecmp_l
+        fun:__strptime_internal
+        ...
+}
+{
+	inet_ntop does something lame on local stack
+	Memcheck:Value8
+	...
+	fun:inet_ntop
+	...
+}
+{
+	inet_ntop does something lame on local stack
+	Memcheck:Addr8
+	...
+	fun:inet_ntop
+	...
+}
+{
+	dl-lookup.c thing .. Invalid write of size 8
+	Memcheck:Value8
+	fun:do_lookup_x
+	...
+	fun:_dl_lookup_symbol_x
+	...
+}
+{
+	dl-lookup.c thing .. Invalid write of size 8
+	Memcheck:Addr8
+	fun:do_lookup_x
+	...
+	fun:_dl_lookup_symbol_x
+	...
+}
+{
+	dl-init.c possible lost init
+	Memcheck:Leak
+	...
+	fun:__trans_list_add
+	fun:call_init.part.0
+	fun:call_init
+	...
+}
+{
+	weird thing from libc
+	Memcheck:Leak
+	...
+	fun:*sub_I_comparator*
+	fun:__libc_csu_init
+	...
+}
+{
+	libfuse leak
+	Memcheck:Leak
+	...
+	fun:fuse_parse_cmdline
+	...
+}
+{
+	boost thread leaks on exit
+	Memcheck:Leak
+	...
+	fun:*boost*detail*
+	...
+	fun:exit
+}
+{
+	lttng appears to not clean up state
+	Memcheck:Leak
+	...
+	fun:lttng_ust_baddr_statedump_init
+	fun:lttng_ust_init
+	fun:call_init.part.0
+	...
+}
+{
+	fun:PK11_CreateContextBySymKey race
+	Helgrind:Race
+	obj:/usr/*lib*/libfreebl*3.so
+	...
+	obj:/usr/*lib*/libsoftokn3.so
+	...
+	obj:/usr/*lib*/libnss3.so
+	fun:PK11_CreateContextBySymKey
+	...
+}
+{
+	thread init race
+	Helgrind:Race
+	fun:mempcpy
+	fun:_dl_allocate_tls_init
+	...
+	fun:pthread_create@*
+	...
+}
+{
+	thread_local memory is falsely detected (https://svn.boost.org/trac/boost/ticket/3296)
+	Memcheck:Leak
+	...
+	fun:*boost*detail*get_once_per_thread_epoch*
+	fun:*boost*call_once*
+	fun:*boost*detail*get_current_thread_data*
+	...
+}
+{
+	rocksdb thread local singletons
+	Memcheck:Leak
+	...
+	fun:rocksdb::Env::Default()
+	...
+}
+{
+	rocksdb column thread local leaks
+	Memcheck:Leak
+	...
+	fun:rocksdb::ThreadLocalPtr::StaticMeta::SetHandler*
+	fun:rocksdb::ColumnFamilyData::ColumnFamilyData*
+	...
+}
+{
+	rocksdb thread crap
+	Memcheck:Leak
+	...
+	fun:*ThreadLocalPtr*
+	...
+}
+{
+	rocksdb singleton Env leak, blech
+	Memcheck:Leak
+	...
+	fun:CreateThreadStatusUpdater
+	fun:PosixEnv
+	...
+}
+{
+	rocksdb::Env::Default()
+	Memcheck:Leak
+	...
+	fun:*rocksdb*Env*Default*
+	...
+}
+{
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*rocksdb*Configurable*ParseOption*
+	...
+}
+{
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*RocksDBStore*ParseOptionsFromString*
+	...
+}
+{
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*RocksDBStore*do_open*
+	...
+}
+{
+	rocksdb column family init
+	Memcheck:Leak
+	...
+	fun:*rocksdb*ColumnFamilyOptions*
+	...
+	fun:*RocksDBStore*init*
+	...
+}
+{
+	rocksdb cache get-or-create
+	Memcheck:Leak
+	...
+	fun:*rocksdb*RegisterCacheDeleterRole*
+	...
+	fun:*rocksdb*GetCacheItemHelperForRole*
+	...
+}
+{
+	rocksdb BGThreadWrapper
+	Memcheck:Leak
+	...
+	fun:*BGThreadWrapper*
+	...
+}
+{
+	rocksdb VersionStorageInfo
+	Memcheck:Leak
+	...
+	fun:*VersionStorageInfo
+	...
+}
+{
+        rocksdb version builder
+        Memcheck:Leak
+        ...
+        fun:*rocksdb*VersionBuilder*Rep*LoadTableHandlers*
+        ...
+}
+{
+        rocksdb ObjectLibrary AddFactory centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rocksdb ObjectLibrary DefaultEv centos 9 leak 1
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:_ZN7rocksdb13ObjectLibrary7DefaultEv
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        static_initalization_and_destruction centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.140
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        malloc centos 9 leak 1
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:malloc
+        fun:strdup
+        fun:_dl_load_cache_lookup
+        fun:_dl_map_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        malloc centos 9 leak 2
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        static_initialization_and_destruction centos 9 leak 2
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary12PatternEntryC1ERKS1_
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        static_initialization_and_destruction centos 9 leak 3
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rocksdb ObjectLibrary AddFactoryEntry centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        malloc centos 9 leak 3
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:malloc
+        fun:strdup
+        fun:_dl_load_cache_lookup
+        fun:_dl_map_object
+        fun:openaux
+        fun:_dl_catch_exception
+        fun:_dl_map_object_deps
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        malloc centos 9 leak 4
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:openaux
+        fun:_dl_catch_exception
+        fun:_dl_map_object_deps
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        HashtableHash_node rocksdb centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:_ZNSt8__detail16_Hashtable_allocISaINS_10_Hash_nodeISt4pairIKjN7rocksdb6DBImpl24MultiGetColumnFamilyDataEELb0EEEEE19_M_allocate_bucketsEm.constprop.0
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary15AddFactoryEntryEPKcOSt10unique_ptrINS0_5EntryESt14default_deleteIS4_EE
+        fun:UnknownInlinedFun
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rocksdb ObjectLibrary DefaultEv centos 9 leak 2
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:_Znam
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:UnknownInlinedFun
+        fun:_ZN7rocksdb13ObjectLibrary7DefaultEv
+        fun:_Z41__static_initialization_and_destruction_0ii.constprop.60
+        fun:_sub_I_65535_0.0
+        fun:__libc_start_main@@GLIBC_2.34
+        fun:(below main)
+}
+{
+        rockdb malloc centos 9 leak 5
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:add_dependency
+        fun:_dl_lookup_symbol_x
+        fun:elf_machine_rela
+        fun:elf_dynamic_do_Rela
+        fun:_dl_relocate_object
+        fun:_dl_open_relocate_one_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb malloc centos 9 leak 6
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:malloc
+        fun:UnknownInlinedFun
+        fun:add_to_global_resize
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb malloc centos 9 leak 7
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:calloc
+        fun:UnknownInlinedFun
+        fun:_dl_check_map_versions
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb malloc centos 9 leak 8
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:calloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+        rocksdb calloc centos 9 leak
+        Memcheck:Leak
+        match-leak-kinds: reachable
+        fun:calloc
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        fun:_dl_map_object_from_fd
+        fun:_dl_map_object
+        fun:openaux
+        fun:_dl_catch_exception
+        fun:_dl_map_object_deps
+        fun:dl_open_worker_begin
+        fun:_dl_catch_exception
+        fun:dl_open_worker
+        fun:_dl_catch_exception
+        fun:_dl_open
+        fun:dlopen_doit
+        fun:_dl_catch_exception
+        fun:_dl_catch_error
+        fun:_dlerror_run
+        fun:dlopen@@GLIBC_2.34
+        fun:_sub_I_65535_0.0
+        fun:call_init
+        fun:call_init
+        fun:_dl_init
+        obj:/usr/lib64/ld-linux-x86-64.so.2
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+        obj:*
+}
+{
+	libstdc++ leak on xenial
+	Memcheck:Leak
+	fun:malloc
+	...
+	fun:call_init.part.0
+	fun:call_init
+	fun:_dl_init
+	...
+}
+{
+	strange leak of std::string memory from md_config_t seen in radosgw
+	Memcheck:Leak
+	...
+	fun:_ZNSs4_Rep9_S_createEmmRKSaIcE
+	fun:_ZNSs12_S_constructIPKcEEPcT_S3_RKSaIcESt20forward_iterator_tag
+	...
+	fun:_ZN11md_config_tC1Ev
+	fun:_ZN11CephContextC1Eji
+	...
+}
+{
+    python does not reset the member field when dealloc an object
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:Py_InitializeEx
+    ...
+}
+{
+    statically allocated python types don't get members freed
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyType_Ready
+    ...
+}
+{
+    manually constructed python module members don't get freed
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:Py_InitModule4_64
+    ...
+}
+{
+    manually constructed python module members don't get freed
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyModule_AddObject
+    ...
+}
+{
+    python subinterpreters may not clean up properly
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:Py_NewInterpreter
+    ...
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyEval_EvalCode
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyImport_ImportModuleLevel
+}
+{
+    python-owned threads may not full clean up after themselves
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyEval_CallObjectWithKeywords
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyEval_EvalFrameEx
+    ...
+    obj:/usr/lib64/libpython2.7.so.1.0
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyObject_Call
+}
+
+{
+   rados cython constants
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:PyObject_Malloc
+   fun:PyCode_New
+   fun:__Pyx_InitCachedConstants
+   fun:initrados
+   fun:_PyImport_LoadDynamicModule
+   ...
+   fun:PyImport_ImportModuleLevel
+   ...
+   fun:PyObject_Call
+   fun:PyEval_CallObjectWithKeywords
+   fun:PyEval_EvalFrameEx
+}
+
+{
+   rbd cython constants
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:PyObject_Malloc
+   fun:PyCode_New
+   fun:__Pyx_InitCachedConstants
+   fun:initrbd
+   fun:_PyImport_LoadDynamicModule
+   ...
+   fun:PyImport_ImportModuleLevel
+   ...
+   fun:PyObject_Call
+   fun:PyEval_CallObjectWithKeywords
+   fun:PyEval_EvalFrameEx
+}
+
+{
+  dlopen() with -lceph-common https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=700899
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  fun:*alloc
+  ...
+  fun:_dlerror_run
+  fun:dlopen@@GLIBC_2.2.5
+}
+
+{
+  ethdev_init_log thing
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  ...
+  fun:ethdev_init_log
+  ...
+}
+
+{
+  rte_log_init() in DPDK fails to reset strdup()'ed string at exit
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  fun:*alloc
+  ...
+  fun:rte_log_init
+  fun:__libc_csu_init
+}
+
+{
+  libc_csu_init (strdup, rte_log_register, etc.)
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  ...
+  fun:__libc_csu_init
+  ...
+}
+
+{
+  Boost.Thread fails to call tls_destructor() when the thread exists
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  ...
+  fun:_Znwm
+  ...
+  fun:*boost*detail*set_tss_data*
+  ...
+}
+
+{
+  ignore *all* ceph-mgr python crap.  this is overkill, but better than nothing
+  Memcheck:Leak
+  match-leak-kinds: all
+  ...
+  fun:Py*
+  ...
+}
+
+{
+  something in glibc
+  Memcheck:Leak
+  match-leak-kinds: all
+  ...
+  fun:strdup
+  fun:__trans_list_add
+  ...
+  fun:_dl_init
+  ...
+}
+
+# "Conditional jump or move depends on uninitialised value(s)" in OpenSSL
+# https://github.com/openssl/openssl/issues/19719
+{
+  uninitialized value in gcm_cipher_internal
+  Memcheck:Cond
+  ...
+  fun:gcm_cipher_internal
+  ...
+  fun:ossl_gcm_stream_final
+  fun:EVP_DecryptFinal_ex
+  ...
+}
+{
+   tracker #62141 : valgrind: UninitCondition under __run_exit_handlers
+   Memcheck:Cond
+   fun:free
+   fun:free_res
+   fun:__libc_freeres
+   fun:_vgnU_freeres
+   fun:__run_exit_handlers
+   fun:exit
+   fun:(below main)
+}
+{
+   tracker #65779: __trans_list_add annoyance
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:__trans_list_add
+   ...
+   fun:_dl_init
+   ...
+}
