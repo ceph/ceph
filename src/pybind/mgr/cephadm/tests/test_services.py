@@ -402,6 +402,7 @@ prometheus_port = 10008
 prometheus_stats_interval = 10
 verify_nqns = True
 verify_keys = True
+verify_listener_ip = True
 omap_file_lock_duration = 20
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
