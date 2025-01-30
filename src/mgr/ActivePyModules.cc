@@ -54,11 +54,11 @@ ActivePyModules::ActivePyModules(
   DaemonStateIndex &ds, ClusterState &cs,
   MonClient &mc, LogChannelRef clog_,
   LogChannelRef audit_clog_, Objecter &objecter_,
-  Client &client_, Finisher &f, DaemonServer &server,
+  Finisher &f, DaemonServer &server,
   PyModuleRegistry &pmr)
 : module_config(module_config_), daemon_state(ds), cluster_state(cs),
   monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
-  client(client_), finisher(f),
+  finisher(f),
   cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
   server(server), py_module_registry(pmr)
 {

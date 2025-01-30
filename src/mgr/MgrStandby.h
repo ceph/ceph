@@ -21,7 +21,6 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
-#include "client/Client.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 #include "PyModuleRegistry.h"
@@ -44,7 +43,6 @@ protected:
   MonClient monc;
   std::unique_ptr<Messenger> client_messenger;
   Objecter objecter;
-  Client client;
 
   MgrClient mgrc;
 
