@@ -1633,7 +1633,6 @@ class CephadmAgent(DaemonForm):
         # not changed for any daemon, we assume our cached info is good.
         daemons: Dict[str, Dict[str, Any]] = {}
         data_dir = self.ctx.data_dir
-        seen_memusage = {}  # type: Dict[str, int]
         seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(self.ctx)
         # we need a mapping from container names to ids. Later we will convert daemon
         # names to container names to get daemons container id to see if it has changed
@@ -3446,8 +3445,6 @@ def list_daemons(
     seen_digests = {}   # type: Dict[str, List[str]]
 
     # keep track of memory and cpu usage we've seen
-    seen_memusage = {}  # type: Dict[str, int]
-    seen_cpuperc = {}  # type: Dict[str, str]
     seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(ctx)
     seen_cpuperc_cid_len, seen_cpuperc = parsed_container_cpu_perc(ctx)
 
