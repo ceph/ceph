@@ -147,8 +147,9 @@ from cephadmlib.container_types import (
     InitContainer,
     SidecarContainer,
     extract_uid_gid,
-    is_container_running,
+    get_container_stats,
     get_mgr_images,
+    is_container_running,
 )
 from cephadmlib.decorators import (
     deprecated_command,
@@ -511,10 +512,11 @@ def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -
                     version=version)
         else:
             d_type, d_id = matching_daemons[0]['name'].split('.', 1)
-            out, _, code = get_container_stats(ctx, ctx.container_engine.path, ctx.fsid, d_type, d_id)
-            if not code:
-                (container_id, image_name, image_id, start, version) = out.strip().split(',')
-                return ContainerInfo(container_id, image_name, image_id, start, version)
+            cinfo = get_container_stats(
+                ctx, DaemonIdentity(ctx.fsid, d_type, d_id)
+            )
+            if cinfo:
+                return cinfo
     return None
 
 
@@ -3490,10 +3492,17 @@ def list_daemons(
                         version = None
                         start_stamp = None
 
-                        out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
-                        if not code:
-                            (container_id, image_name, image_id, start,
-                             version) = out.strip().split(',')
+                        cinfo = get_container_stats(
+                            ctx,
+                            DaemonIdentity(fsid, daemon_type, daemon_id),
+                            container_path=container_path
+                        )
+                        if cinfo:
+                            container_id = cinfo.container_id
+                            image_name = cinfo.image_name
+                            image_id = cinfo.image_id
+                            start = cinfo.start
+                            version = cinfo.version
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
@@ -3636,24 +3645,6 @@ def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
             continue
         return d
     raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
-
-
-def get_container_stats(ctx: CephadmContext, container_path: str, fsid: str, daemon_type: str, daemon_id: str) -> Tuple[str, str, int]:
-    """returns container id, image name, image id, created time, and ceph version if available"""
-    c = CephContainer.for_daemon(
-        ctx, DaemonIdentity(fsid, daemon_type, daemon_id), 'bash'
-    )
-    out, err, code = '', '', -1
-    for name in (c.cname, c.old_cname):
-        cmd = [
-            container_path, 'inspect',
-            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
-            name
-        ]
-        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
-        if not code:
-            break
-    return out, err, code
 
 
 def get_container_stats_by_image_name(ctx: CephadmContext, container_path: str, image_name: str) -> Tuple[str, str, int]:
