@@ -213,7 +213,7 @@ def create_users(ctx, config, s3tests_conf):
         for client in config.keys():
             for user in users.values():
                 # don't need to delete keystone users
-                if not user in keystone_users:
+                if section in keystone_users:
                     continue
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
