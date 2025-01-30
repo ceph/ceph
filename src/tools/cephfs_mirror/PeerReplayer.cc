@@ -1199,6 +1199,39 @@ int PeerReplayer::pre_sync_check_and_open_handles(
   return 0;
 }
 
+// Determines if the source is the local (previous) snapshot or the remote dir_root
+int PeerReplayer::validate_source(const std::string &dir_root,
+                                  boost::optional<Snapshot> prev,
+                                  FHandles *fh) {
+  MountRef mnt = m_local_mount;
+  auto prev_snap_path = snapshot_path(m_cct, dir_root, (*prev).first);
+  auto fd = open_dir(mnt, prev_snap_path, (*prev).second);
+
+  if (fd < 0) {
+    if (!prev || fd != -ENOENT) {
+      ceph_close(m_local_mount, fh->c_fd);
+      return fd;
+    }
+
+    // ENOENT of previous snap, switching to remote dir_root
+    dout(5) << ": previous snapshot=" << *prev << " missing" << dendl;
+    mnt = m_remote_mount;
+    fd = open_dir(mnt, dir_root, boost::none);
+    if (fd < 0) {
+      ceph_close(m_local_mount, fh->c_fd);
+      return fd;
+    }
+  }
+
+  // "previous" snapshot or dir_root file descriptor
+  fh->p_fd = fd;
+  fh->p_mnt = mnt;
+
+  dout(5) << ": using " << ((fh->p_mnt == m_local_mount) ? "local (previous) snapshot" : "remote dir_root")
+          << " for incremental transfer" << dendl;
+  return 0;
+}
+
 // sync the mode of the remote dir_root with that of the local dir_root
 int PeerReplayer::sync_perms(const std::string& path) {
   int r = 0;
@@ -1451,6 +1484,11 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       break;
     }
 
+    r = validate_source(dir_root, prev, &fh);
+    if (r < 0) {
+      derr << ": cannot proceed with sync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
     dout(20) << ": " << sync_queue.size() << " entries in queue" << dendl;
     const auto &queue_entry = sync_queue.front();
     epath = queue_entry.epath;
