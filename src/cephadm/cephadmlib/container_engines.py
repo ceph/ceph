@@ -3,7 +3,7 @@
 import os
 import logging
 
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Optional, Dict, Any
 
 from .call_wrappers import call_throws, call, CallVerbosity
 from .context import CephadmContext
@@ -302,3 +302,30 @@ def parsed_container_cpu_perc(
         ctx, container_path=container_path, verbosity=verbosity
     )
     return _parse_cpu_perc(code, out)
+
+
+class ContainerInfo:
+    def __init__(
+        self,
+        container_id: str,
+        image_name: str,
+        image_id: str,
+        start: str,
+        version: str,
+    ) -> None:
+        self.container_id = container_id
+        self.image_name = image_name
+        self.image_id = image_id
+        self.start = start
+        self.version = version
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ContainerInfo):
+            return NotImplemented
+        return (
+            self.container_id == other.container_id
+            and self.image_name == other.image_name
+            and self.image_id == other.image_id
+            and self.start == other.start
+            and self.version == other.version
+        )

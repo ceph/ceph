@@ -85,6 +85,7 @@ from cephadmlib.call_wrappers import (
     concurrent_tasks,
 )
 from cephadmlib.container_engines import (
+    ContainerInfo,
     Podman,
     check_container_engine,
     find_container_engine,
@@ -196,30 +197,6 @@ FuncT = TypeVar('FuncT', bound=Callable)
 
 logger = logging.getLogger()
 
-
-##################################
-
-
-class ContainerInfo:
-    def __init__(self, container_id: str,
-                 image_name: str,
-                 image_id: str,
-                 start: str,
-                 version: str) -> None:
-        self.container_id = container_id
-        self.image_name = image_name
-        self.image_id = image_id
-        self.start = start
-        self.version = version
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ContainerInfo):
-            return NotImplemented
-        return (self.container_id == other.container_id
-                and self.image_name == other.image_name
-                and self.image_id == other.image_id
-                and self.start == other.start
-                and self.version == other.version)
 
 ##################################
 
