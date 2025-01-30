@@ -51,15 +51,21 @@ class interval_map {
   }
   std::pair<cmapiter, cmapiter> get_range(K off, K len) const {
     // fst is first iterator with end after off (may be end)
+    auto fst = get_range_fst(off);
+
+    // lst is first iterator with start after off + len (may be end)
+    auto lst = m.lower_bound(off + len);
+    return std::make_pair(fst, lst);
+  }
+  cmapiter get_range_fst(K off) const {
+    // fst is first iterator with end after off (may be end)
     auto fst = m.upper_bound(off);
     if (fst != m.begin())
       --fst;
     if (fst != m.end() && off >= (fst->first + fst->second.first))
       ++fst;
 
-    // lst is first iterator with start after off + len (may be end)
-    auto lst = m.lower_bound(off + len);
-    return std::make_pair(fst, lst);
+    return fst;
   }
   void try_merge(mapiter niter) {
     if (niter != m.begin()) {
@@ -245,6 +251,11 @@ public:
     const_iterator &operator*() {
       return *this;
     }
+    constexpr bool contains(K _off, K _len) const {
+      K off = get_off();
+      K len = get_len();
+      return off <= _off && _off + _len <= off + len;
+    }
   };
   const_iterator begin() const {
     return const_iterator(m.begin());
@@ -257,6 +268,32 @@ public:
     K len) const {
     auto rng = get_range(off, len);
     return std::make_pair(const_iterator(rng.first), const_iterator(rng.second));
+  }
+
+  const_iterator get_lower_range(
+      K off,
+      K len) const {
+    return const_iterator(get_range_fst(off));
+  }
+  K get_start_off() const
+  {
+    auto i = m.begin();
+    ceph_assert(i != m.end());
+    return i->first;
+  }
+  K get_end_off() const
+  {
+    auto i = m.rbegin();
+    ceph_assert(i != m.rend());
+    return i->first + i->second.first;
+  }
+  bool contains(K off, K len) const {
+    auto it = get_range_fst(off);
+    if (it == m.end()) return false;
+
+    K _off = it->first;
+    K _len = it->second.first;
+    return _off <= off && _off + _len >= off + len;
   }
   unsigned ext_count() const {
     return m.size();
