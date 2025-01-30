@@ -114,7 +114,7 @@ public:
                 const std::map<std::string, std::string> &kv_store,
 		bool mon_provides_kv_sub,
                 MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
-                Objecter &objecter_, Client &client_, Finisher &f,
+                Objecter &objecter_, Finisher &f,
                 DaemonServer &server);
   void standby_start(MonClient &mc, Finisher &f);
 
