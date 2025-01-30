@@ -1094,19 +1094,23 @@ class RgwClient(RestClient):
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
-                     push_endpoint: Optional[str] = '', opaqueData: Optional[str] = '',
-                     persistent: Optional[bool] = None, time_to_live: Optional[str] = '',
+                     push_endpoint: Optional[str] = '', OpaqueData: Optional[str] = '',
+                     persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
                      max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
-                     Policy: Optional[str] = ''):
-
-        # Prepare the parameters to send with the request
+                     policy: Optional[str] = '',
+                     verify_ssl: Optional[bool] = False, cloud_events: Optional[bool] = False,
+                     ca_location: Optional[str] = None, amqp_exchange: Optional[str] = None,
+                     amqp_ack_level: Optional[str] = None,
+                     use_ssl: Optional[bool] = False, kafka_ack_level: Optional[str] = None,
+                     kafka_brokers: Optional[str] = None, mechanism: Optional[str] = None,
+                     ):
         params = {'Name': name}
 
         if push_endpoint:
             params['push-endpoint'] = push_endpoint
-        if opaqueData:
-            params['opaqueData'] = opaqueData
-        if persistent is not None:
+        if OpaqueData:
+            params['OpaqueData'] = OpaqueData
+        if persistent:
             params['persistent'] = 'true' if persistent else 'false'
         if time_to_live:
             params['time_to_live'] = time_to_live
@@ -1114,8 +1118,26 @@ class RgwClient(RestClient):
             params['max_retries'] = max_retries
         if retry_sleep_duration:
             params['retry_sleep_duration'] = retry_sleep_duration
-        if Policy:
-            params['Policy'] = Policy
+        if policy:
+            params['Policy'] = policy
+        if verify_ssl:
+            params['verify_ssl'] = 'true' if verify_ssl else 'false'
+        if cloud_events:
+            params['cloud_events'] = 'true' if cloud_events else 'false'
+        if ca_location:
+            params['ca_location'] = ca_location
+        if amqp_exchange:
+            params['amqp_exchange'] = amqp_exchange
+        if amqp_ack_level:
+            params['amqp_ack_level'] = amqp_ack_level
+        if use_ssl:
+            params['use_ssl'] = 'true' if use_ssl else 'false'
+        if kafka_ack_level:
+            params['kafka_ack_level'] = kafka_ack_level
+        if kafka_brokers:
+            params['kafka_brokers'] = kafka_brokers
+        if mechanism:
+            params['mechanism'] = mechanism
 
         # Now make the request with the parameters included
         try:
@@ -2627,7 +2649,7 @@ class RgwMultisite:
             return False
 
 
-class RgwTopicmanagement:
+class RgwTopics:
 
     def list_topics(self, uid: Optional[str], tenant: Optional[str]):
         rgw_topics_list = {}
@@ -2674,12 +2696,10 @@ class RgwTopicmanagement:
         rgw_delete_topic_cmd = ['topic', 'rm']
         try:
             if tenant:
-                rgw_delete_topic_cmd.append('--tenant')
-                rgw_delete_topic_cmd.append(tenant)
+                rgw_delete_topic_cmd.extend(['--tenant', tenant])
 
             if name:
-                rgw_delete_topic_cmd.append('--topic')
-                rgw_delete_topic_cmd.append(name)
+                rgw_delete_topic_cmd.extend(['--topic', name])
 
             exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_topic_cmd)
 

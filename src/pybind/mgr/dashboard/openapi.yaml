@@ -12991,25 +12991,48 @@ paths:
           application/json:
             schema:
               properties:
-                Policy:
-                  description: policy
+                OpaqueData:
+                  description: OpaqueData
+                  type: string
+                amqp_ack_level:
+                  description: amqp ack level
+                  type: string
+                amqp_exchange:
+                  description: amqp exchange
+                  type: string
+                ca_location:
+                  description: ca location
+                  type: string
+                cloud_events:
+                  default: false
+                  description: cloud events
                   type: string
                 daemon_name:
+                  type: string
+                kafka_ack_level:
+                  description: kafka ack level
+                  type: string
+                kafka_brokers:
+                  description: kafka brokers
                   type: string
                 max_retries:
                   description: max retries
                   type: string
+                mechanism:
+                  description: mechanism
+                  type: string
                 name:
                   description: Name of the topic
-                  type: string
-                opaqueData:
-                  description: opaqueData
                   type: string
                 owner:
                   type: string
                 persistent:
+                  default: false
                   description: persistent
                   type: boolean
+                policy:
+                  description: policy
+                  type: string
                 push_endpoint:
                   description: Push Endpoint
                   type: string
@@ -13019,6 +13042,14 @@ paths:
                 time_to_live:
                   description: Time to live
                   type: string
+                use_ssl:
+                  default: false
+                  description: use ssl
+                  type: boolean
+                verify_ssl:
+                  default: false
+                  description: verify ssl
+                  type: boolean
               required:
               - name
               type: object
@@ -13089,12 +13120,14 @@ paths:
       - RGW Topic Management
     get:
       parameters:
-      - in: path
+      - description: Name of the user
+        in: path
         name: name
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: Name of the tenant
         in: query
         name: tenant
         schema:
@@ -13116,6 +13149,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: get RGW Topic
       tags:
       - RGW Topic Management
   /api/rgw/user:

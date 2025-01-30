@@ -96,6 +96,7 @@ import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
 
 @NgModule({
   imports: [
@@ -128,13 +129,13 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     SelectModule,
     NumberModule,
     TabsModule,
-    IconModule,
     SelectModule,
     RadioModule,
     SelectModule,
     NumberModule,
     TagModule,
-    TooltipModule
+    TooltipModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -198,7 +199,8 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent
+    RgwTopicDetailsComponent,
+    RgwCreateTopicFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -401,7 +403,14 @@ const routes: Routes = [
   {
     path: 'topic',
     data: { breadcrumbs: 'Topic' },
-    children: [{ path: '', component: RgwTopicListComponent }]
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      }
+    ]
   }
 ];
 
