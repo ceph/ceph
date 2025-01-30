@@ -84,9 +84,9 @@ class ErasureCodePlugin;
 namespace io_sequence {
 namespace tester {
 // Choices for min and max object size
-inline static constexpr size_t objectSizeSize = 10;
-inline static constexpr std::array<std::pair<int, int>, objectSizeSize>
-    objectSizeChoices = {{{1, 32},  // Default - best for boundary checking
+inline static constexpr size_t object_size_array_size = 10;
+inline static constexpr std::array<std::pair<int, int>, object_size_array_size>
+    object_size_choices = {{{1, 32},  // Default - best for boundary checking
                           {12, 14},
                           {28, 30},
                           {36, 38},
@@ -99,30 +99,30 @@ inline static constexpr std::array<std::pair<int, int>, objectSizeSize>
 
 using SelectObjectSize =
     ProgramOptionSelector<std::pair<int, int>,
-                          io_sequence::tester ::objectSizeSize,
-                          io_sequence::tester ::objectSizeChoices>;
+                          io_sequence::tester::object_size_array_size,
+                          io_sequence::tester::object_size_choices>;
 
 // Choices for block size
-inline static constexpr int blockSizeSize = 5;
-inline static constexpr std::array<uint64_t, blockSizeSize> blockSizeChoices = {
+inline static constexpr int block_size_array_size = 5;
+inline static constexpr std::array<uint64_t, block_size_array_size> block_size_choices = {
     {2048,  // Default - test boundaries for EC 4K chunk size
      512, 3767, 4096, 32768}};
 
 using SelectBlockSize =
     ProgramOptionSelector<uint64_t,
-                          io_sequence::tester ::blockSizeSize,
-                          io_sequence::tester ::blockSizeChoices>;
+                          io_sequence::tester::block_size_array_size,
+                          io_sequence::tester::block_size_choices>;
 
 // Choices for number of threads
-inline static constexpr int threadArraySize = 4;
-inline static constexpr std::array<int, threadArraySize> threadCountChoices = {
+inline static constexpr int thread_array_size = 4;
+inline static constexpr std::array<int, thread_array_size> thread_count_choices = {
     {1,  // Default
      2, 4, 8}};
 
 using SelectNumThreads =
     ProgramOptionSelector<int,
-                          io_sequence::tester ::threadArraySize,
-                          io_sequence::tester ::threadCountChoices>;
+                          io_sequence::tester::thread_array_size,
+                          io_sequence::tester::thread_count_choices>;
 
 class SelectSeqRange
     : public ProgramOptionReader<std::pair<ceph::io_exerciser ::Sequence,
@@ -134,14 +134,14 @@ class SelectSeqRange
 };
 
 // Choices for plugin
-inline static constexpr int pluginListSize = 5;
-inline static constexpr std::array<std::string_view, pluginListSize>
-    pluginChoices = {{"jerasure", "isa", "clay", "shec", "lrc"}};
+inline static constexpr int plugin_array_size = 5;
+inline static constexpr std::array<std::string_view, plugin_array_size>
+    plugin_choices = {{"jerasure", "isa", "clay", "shec", "lrc"}};
 
 using SelectErasurePlugin =
     ProgramOptionSelector<std::string_view,
-                          io_sequence::tester ::pluginListSize,
-                          io_sequence::tester ::pluginChoices>;
+                          io_sequence::tester::plugin_array_size,
+                          io_sequence::tester::plugin_choices>;
 
 class SelectErasureKM
     : public ProgramOptionGeneratedSelector<std::pair<int, int>> {
@@ -226,9 +226,9 @@ class SelectErasurePacketSize
 namespace lrc {
 // Choices for lrc mappings and layers. The index selected for the mapping
 // matches what index will be chosen from the layers array.
-inline static constexpr int mappingLayerListSizes = 15;
+inline static constexpr int mapping_layer_array_sizes = 15;
 
-inline static std::array<std::string, mappingLayerListSizes> mappingChoices = {{
+inline static std::array<std::string, mapping_layer_array_sizes> mapping_choices = {{
     "_DD",
     "_DDD",
     "_DDDD",
@@ -246,7 +246,7 @@ inline static std::array<std::string, mappingLayerListSizes> mappingChoices = {{
     "_D_D_DDDD",
 }};
 
-inline static std::array<std::string, mappingLayerListSizes> layerChoices = {{
+inline static std::array<std::string, mapping_layer_array_sizes> layer_choices = {{
     "[[\"cDD\",\"\"]]",
     "[[\"cDDD\",\"\"]]",
     "[[\"cDDDD\",\"\"]]",
@@ -266,13 +266,13 @@ inline static std::array<std::string, mappingLayerListSizes> layerChoices = {{
 
 using SelectMapping =
     ProgramOptionSelector<std::string,
-                          io_sequence::tester::lrc::mappingLayerListSizes,
-                          io_sequence::tester::lrc::mappingChoices>;
+                          io_sequence::tester::lrc::mapping_layer_array_sizes,
+                          io_sequence::tester::lrc::mapping_choices>;
 
 using SelectLayers =
     ProgramOptionSelector<std::string,
-                          io_sequence::tester::lrc::mappingLayerListSizes,
-                          io_sequence::tester::lrc::layerChoices>;
+                          io_sequence::tester::lrc::mapping_layer_array_sizes,
+                          io_sequence::tester::lrc::layer_choices>;
 
 class SelectMappingAndLayers {
  public:
@@ -358,7 +358,7 @@ class SelectErasureProfile : public ProgramOptionReader<Profile> {
   SelectErasurePlugin spl;
   lrc::SelectMappingAndLayers sml;
 
-  std::unique_ptr<ErasureCodePlugin> erasureCode;
+  std::unique_ptr<ErasureCodePlugin> erasure_code;
 };
 
 class SelectErasurePool : public ProgramOptionReader<std::string> {
@@ -442,9 +442,9 @@ class TestObject {
   ceph::util::random_number_generator<int>& rng;
   bool verbose;
   std::optional<int> seqseed;
-  std::optional<std::pair<int, int>> poolKM;
+  std::optional<std::pair<int, int>> pool_km;
   std::optional<std::pair<std::string_view, std::string_view>>
-      poolMappingLayers;
+      pool_mappinglayers;
   bool testrecovery;
 };
 
