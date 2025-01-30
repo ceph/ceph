@@ -89,14 +89,14 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   po::validators::check_first_occurrence(v);
   const std::string& s = po::validators::get_single_string(values);
 
-  const std::string_view* pluginIt =
-      std::find(ceph::io_sequence::tester::pluginChoices.begin(),
-                ceph::io_sequence::tester::pluginChoices.end(), s);
-  if (ceph::io_sequence::tester::pluginChoices.end() == pluginIt) {
+  const std::string_view* plugin_iter =
+      std::find(ceph::io_sequence::tester::plugin_choices.begin(),
+                ceph::io_sequence::tester::plugin_choices.end(), s);
+  if (ceph::io_sequence::tester::plugin_choices.end() == plugin_iter) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
 
-  v = boost::any(*pluginIt);
+  v = boost::any(*plugin_iter);
 }
 
 constexpr std::string_view usage[] = {
@@ -590,38 +590,38 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
       shec::SelectErasureC ssc{rng, vm, profile.plugin, profile.km, first_use};
       profile.c = ssc.select();
     } else if (profile.plugin == "lrc") {
-      std::pair<std::string, std::string> mappingAndLayers = sml.select();
-      profile.mapping = mappingAndLayers.first;
-      profile.layers = mappingAndLayers.second;
+      std::pair<std::string, std::string> mappinglayers = sml.select();
+      profile.mapping = mappinglayers.first;
+      profile.layers = mappinglayers.second;
     }
 
-    ErasureCodeProfile erasureCodeProfile;
-    erasureCodeProfile["plugin"] = std::string(profile.plugin);
+    ErasureCodeProfile erasure_code_profile;
+    erasure_code_profile["plugin"] = std::string(profile.plugin);
     if (profile.km) {
-      erasureCodeProfile["k"] = std::to_string(profile.km->first);
-      erasureCodeProfile["m"] = std::to_string(profile.km->second);
+      erasure_code_profile["k"] = std::to_string(profile.km->first);
+      erasure_code_profile["m"] = std::to_string(profile.km->second);
     }
     if (profile.technique) {
-      erasureCodeProfile["technique"] = *profile.technique;
+      erasure_code_profile["technique"] = *profile.technique;
     }
     if (profile.packet_size) {
-      erasureCodeProfile["packetsize"] = std::to_string(*profile.packet_size);
+      erasure_code_profile["packetsize"] = std::to_string(*profile.packet_size);
     }
     if (profile.c) {
-      erasureCodeProfile["c"] = std::to_string(*profile.c);
+      erasure_code_profile["c"] = std::to_string(*profile.c);
     }
     if (profile.w) {
-      erasureCodeProfile["packetsize"] = std::to_string(*profile.w);
+      erasure_code_profile["packetsize"] = std::to_string(*profile.w);
     }
     if (profile.jerasure_per_chunk_alignment) {
-      erasureCodeProfile["jerasure_per_chunk_alignment"] =
+      erasure_code_profile["jerasure_per_chunk_alignment"] =
           std::to_string(*profile.jerasure_per_chunk_alignment);
     }
     if (profile.mapping) {
-      erasureCodeProfile["mapping"] = *profile.mapping;
+      erasure_code_profile["mapping"] = *profile.mapping;
     }
     if (profile.layers) {
-      erasureCodeProfile["layers"] = *profile.layers;
+      erasure_code_profile["layers"] = *profile.layers;
     }
 
     ErasureCodePluginRegistry& instance = ErasureCodePluginRegistry::instance();
@@ -629,7 +629,7 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
     std::stringstream ss;
     instance.factory(std::string(profile.plugin),
                      cct->_conf.get_val<std::string>("erasure_code_dir"),
-                     erasureCodeProfile, &ec_impl, &ss);
+                     erasure_code_profile, &ec_impl, &ss);
     ceph_assert(ec_impl);
 
     SelectErasureChunkSize scs{rng, vm, ec_impl, first_use};
@@ -704,10 +704,10 @@ void ceph::io_sequence::tester::SelectErasureProfile::create(
 
   bool force =
       profile.chunk_size.has_value() && (*(profile.chunk_size) % 4096 != 0);
-  ceph::messaging::osd::OSDECProfileSetRequest ecProfileSetRequest{
+  ceph::messaging::osd::OSDECProfileSetRequest ec_profile_set_request{
       profile.name, profile_values, force};
   int rc =
-      send_mon_command(ecProfileSetRequest, rados, "OSDECProfileSetRequest",
+      send_mon_command(ec_profile_set_request, rados, "OSDECProfileSetRequest",
                        inbl, &outbl, formatter.get());
   ceph_assert(rc == 0);
 }
@@ -719,9 +719,9 @@ ceph::io_sequence::tester::SelectErasureProfile::selectExistingProfile(
   bufferlist inbl, outbl;
   auto formatter = std::make_shared<JSONFormatter>(false);
 
-  ceph::messaging::osd::OSDECProfileGetRequest osdECProfileGetRequest{
+  ceph::messaging::osd::OSDECProfileGetRequest ec_profile_get_request{
       profile_name};
-  rc = send_mon_command(osdECProfileGetRequest, rados, "OSDECProfileGetRequest",
+  rc = send_mon_command(ec_profile_get_request, rados, "OSDECProfileGetRequest",
                         inbl, &outbl, formatter.get());
   ceph_assert(rc == 0);
 
@@ -802,10 +802,10 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
       bool success = p.parse(outbl.c_str(), outbl.length());
       ceph_assert(success);
 
-      ceph::messaging::osd::OSDPoolGetReply osdPoolGetReply;
-      osdPoolGetReply.decode_json(&p);
+      ceph::messaging::osd::OSDPoolGetReply pool_get_reply;
+      pool_get_reply.decode_json(&p);
 
-      profile = sep.selectExistingProfile(osdPoolGetReply.erasure_code_profile);
+      profile = sep.selectExistingProfile(pool_get_reply.erasure_code_profile);
     } else {
       created_pool_name = create();
     }
@@ -829,9 +829,9 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
   profile = sep.select();
   pool_name = fmt::format("testpool-pr{}", profile->name);
 
-  ceph::messaging::osd::OSDECPoolCreateRequest poolCreateRequest{
+  ceph::messaging::osd::OSDECPoolCreateRequest pool_create_request{
       pool_name, "erasure", 8, 8, profile->name};
-  rc = send_mon_command(poolCreateRequest, rados, "OSDECPoolCreateRequest",
+  rc = send_mon_command(pool_create_request, rados, "OSDECPoolCreateRequest",
                         inbl, &outbl, formatter.get());
   ceph_assert(rc == 0);
 
@@ -849,21 +849,21 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
   auto formatter = std::make_shared<JSONFormatter>(false);
 
   if (!allow_pool_autoscaling) {
-    ceph::messaging::osd::OSDSetRequest setNoAutoscaleRequest{"noautoscale",
+    ceph::messaging::osd::OSDSetRequest no_autoscale_request{"noautoscale",
                                                               std::nullopt};
-    rc = send_mon_command(setNoAutoscaleRequest, rados, "OSDSetRequest", inbl,
+    rc = send_mon_command(no_autoscale_request, rados, "OSDSetRequest", inbl,
                           &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 
   if (!allow_pool_balancer) {
-    ceph::messaging::balancer::BalancerOffRequest balancerOffRequest;
-    rc = send_mon_command(balancerOffRequest, rados, "BalancerOffRequest", inbl,
+    ceph::messaging::balancer::BalancerOffRequest balancer_off_request;
+    rc = send_mon_command(balancer_off_request, rados, "BalancerOffRequest", inbl,
                           &outbl, formatter.get());
     ceph_assert(rc == 0);
 
-    ceph::messaging::balancer::BalancerStatusRequest balancerStatusRequest;
-    rc = send_mon_command(balancerStatusRequest, rados, "BalancerStatusRequest",
+    ceph::messaging::balancer::BalancerStatusRequest balancer_status_request;
+    rc = send_mon_command(balancer_status_request, rados, "BalancerStatusRequest",
                           inbl, &outbl, formatter.get());
     ceph_assert(rc == 0);
 
@@ -871,37 +871,37 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
     bool success = p.parse(outbl.c_str(), outbl.length());
     ceph_assert(success);
 
-    ceph::messaging::balancer::BalancerStatusReply reply;
-    reply.decode_json(&p);
-    ceph_assert(!reply.active);
+    ceph::messaging::balancer::BalancerStatusReply balancer_status_reply;
+    balancer_status_reply.decode_json(&p);
+    ceph_assert(!balancer_status_reply.active);
   }
 
-  if (allow_pool_deep_scrubbing) {
-    ceph::messaging::osd::OSDSetRequest setNoDeepScrubRequest{"nodeep-scrub",
+  if (!allow_pool_deep_scrubbing) {
+    ceph::messaging::osd::OSDSetRequest no_deep_scrub_request{"nodeep-scrub",
                                                               std::nullopt};
-    rc = send_mon_command(setNoDeepScrubRequest, rados, "setNoDeepScrubRequest",
+    rc = send_mon_command(no_deep_scrub_request, rados, "setNoDeepScrubRequest",
                           inbl, &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 
-  if (allow_pool_scrubbing) {
-    ceph::messaging::osd::OSDSetRequest setNoScrubRequest{"noscrub",
+  if (!allow_pool_scrubbing) {
+    ceph::messaging::osd::OSDSetRequest no_scrub_request{"noscrub",
                                                           std::nullopt};
-    rc = send_mon_command(setNoScrubRequest, rados, "OSDSetRequest", inbl,
+    rc = send_mon_command(no_scrub_request, rados, "OSDSetRequest", inbl,
                           &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 
   if (test_recovery) {
-    ceph::messaging::config::ConfigSetRequest configSetBluestoreDebugRequest{
+    ceph::messaging::config::ConfigSetRequest bluestore_debug_request{
         "global", "bluestore_debug_inject_read_err", "true", std::nullopt};
-    rc = send_mon_command(configSetBluestoreDebugRequest, rados,
+    rc = send_mon_command(bluestore_debug_request, rados,
                           "ConfigSetRequest", inbl, &outbl, formatter.get());
     ceph_assert(rc == 0);
 
-    ceph::messaging::config::ConfigSetRequest configSetMaxMarkdownRequest{
+    ceph::messaging::config::ConfigSetRequest max_markdown_request{
         "global", "osd_max_markdown_count", "99999999", std::nullopt};
-    rc = send_mon_command(configSetMaxMarkdownRequest, rados,
+    rc = send_mon_command(max_markdown_request, rados,
                           "ConfigSetRequest", inbl, &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
@@ -922,9 +922,9 @@ ceph::io_sequence::tester::TestObject::TestObject(
     const std::string pool = spo.select();
     if (!dryrun) {
       ceph_assert(spo.getProfile());
-      poolKM = spo.getProfile()->km;
+      pool_km = spo.getProfile()->km;
       if (spo.getProfile()->mapping && spo.getProfile()->layers) {
-        poolMappingLayers = {*spo.getProfile()->mapping,
+        pool_mappinglayers = {*spo.getProfile()->mapping,
                              *spo.getProfile()->layers};
       }
     }
@@ -966,7 +966,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
   if (testrecovery) {
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
-        curseq, obj_size_range, poolKM, poolMappingLayers,
+        curseq, obj_size_range, pool_km, pool_mappinglayers,
         seqseed.value_or(rng()));
   } else {
     seq = ceph::io_exerciser::IoSequence::generate_sequence(
@@ -1005,7 +1005,7 @@ bool ceph::io_sequence::tester::TestObject::next() {
       } else {
         if (testrecovery) {
           seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
-              curseq, obj_size_range, poolKM, poolMappingLayers,
+              curseq, obj_size_range, pool_km, pool_mappinglayers,
               seqseed.value_or(rng()));
         } else {
           seq = ceph::io_exerciser::IoSequence::generate_sequence(
@@ -1103,15 +1103,15 @@ void ceph::io_sequence::tester::TestRunner::list_sequence(bool testrecovery) {
     std::optional<ceph::io_sequence::tester::Profile> profile =
         spo.getProfile();
     std::optional<std::pair<int, int>> km;
-    std::optional<std::pair<std::string_view, std::string_view>> mappingLayers;
+    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers;
     if (profile) {
       km = profile->km;
       if (profile->mapping && profile->layers) {
-        mappingLayers = {*spo.getProfile()->mapping, *spo.getProfile()->layers};
+        mappinglayers = {*spo.getProfile()->mapping, *spo.getProfile()->layers};
       }
     }
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
-        s, obj_size_range, km, mappingLayers, seqseed.value_or(rng()));
+        s, obj_size_range, km, mappinglayers, seqseed.value_or(rng()));
   } else {
     seq = ceph::io_exerciser::IoSequence::generate_sequence(
         s, obj_size_range, seqseed.value_or(rng()));
@@ -1207,8 +1207,8 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     bufferlist inbl, outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
 
-    ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, object_name, ""};
-    int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", inbl,
+    ceph::messaging::osd::OSDMapRequest osd_map_request{pool, object_name, ""};
+    int rc = send_mon_command(osd_map_request, rados, "OSDMapRequest", inbl,
                               &outbl, formatter.get());
     ceph_assert(rc == 0);
 
@@ -1216,11 +1216,11 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     bool success = p.parse(outbl.c_str(), outbl.length());
     ceph_assert(success);
 
-    ceph::messaging::osd::OSDMapReply reply{};
-    reply.decode_json(&p);
+    ceph::messaging::osd::OSDMapReply osd_map_reply{};
+    osd_map_reply.decode_json(&p);
 
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, object_name, reply.acting, sbs.select(), rng(),
+        rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), rng(),
         1,  // 1 thread
         lock, cond);
   }

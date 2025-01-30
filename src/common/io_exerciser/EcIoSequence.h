@@ -11,7 +11,7 @@ class EcIoSequence : public IoSequence {
       Sequence s, std::pair<int, int> obj_size_range,
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappingLayers,
+          mappinglayers,
       int seed);
 
  protected:
@@ -27,19 +27,19 @@ class EcIoSequence : public IoSequence {
   void select_random_data_shard_to_inject_read_error(
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappingLayers);
+          mappinglayers);
   void select_random_data_shard_to_inject_write_error(
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappingLayers);
+          mappinglayers);
   void select_random_shard_to_inject_read_error(
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappingLayers);
+          mappinglayers);
   void select_random_shard_to_inject_write_error(
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappingLayers);
+          mappinglayers);
   void generate_random_read_inject_type();
   void generate_random_write_inject_type();
 };
@@ -50,7 +50,7 @@ class ReadInjectSequence : public EcIoSequence {
       std::pair<int, int> obj_size_range, int seed, Sequence s,
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappingLayers);
+          mappinglayers);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -59,7 +59,7 @@ class ReadInjectSequence : public EcIoSequence {
 
  private:
   std::unique_ptr<IoSequence> child_sequence;
-  std::unique_ptr<IoOp> nextOp;
+  std::unique_ptr<IoOp> next_op;
 };
 
 class Seq10 : public EcIoSequence {
@@ -67,7 +67,7 @@ class Seq10 : public EcIoSequence {
   Seq10(std::pair<int, int> obj_size_range, int seed,
         std::optional<std::pair<int, int>> km,
         std::optional<std::pair<std::string_view, std::string_view>>
-            mappingLayers);
+            mappinglayers);
 
   Sequence get_id() const override;
   std::string get_name() const override;
