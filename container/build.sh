@@ -64,10 +64,12 @@ fi
 : "${BRANCH:?}"
 : "${CEPH_SHA1:?}"
 : "${ARCH:?}"
-: "${CONTAINER_REPO_HOSTNAME:?}"
-: "${CONTAINER_REPO_ORGANIZATION:?}"
-: "${CONTAINER_REPO_USERNAME:?}"
-: "${CONTAINER_REPO_PASSWORD:?}"
+if [[ ${NO_PUSH} != "true" ]] ; then
+    : "${CONTAINER_REPO_HOSTNAME:?}"
+    : "${CONTAINER_REPO_ORGANIZATION:?}"
+    : "${CONTAINER_REPO_USERNAME:?}"
+    : "${CONTAINER_REPO_PASSWORD:?}"
+fi
 if [[ ${CI_CONTAINER} != "true" ]] ; then : "${VERSION:?}"; fi
 
 # check for valid repo auth (if pushing)
