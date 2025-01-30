@@ -8,11 +8,11 @@ import {
   AUTHMODE,
   CLUSTERING,
   PLACEMENT,
-  RequestModel,
-  CLUSTER_RESOURCE,
   RESOURCE,
   DomainSettings,
-  JoinSource
+  JoinSource,
+  CLUSTER_RESOURCE,
+  ClusterRequestModel
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -212,7 +212,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       join_sources: joinSourceObj
     };
 
-    const requestModel: RequestModel = {
+    const requestModel: ClusterRequestModel = {
       cluster_resource: {
         resource_type: CLUSTER_RESOURCE,
         cluster_id: rawFormValue.cluster_id,

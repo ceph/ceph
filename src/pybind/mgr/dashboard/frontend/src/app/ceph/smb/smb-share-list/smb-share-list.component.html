@@ -7,5 +7,14 @@
     [hasDetails]="false"
     (fetchData)="loadSMBShares()"
   >
+    <div class="table-actions">
+      <cd-table-actions
+        class="btn-group"
+        [permission]="permission"
+        [selection]="selection"
+        [tableActions]="tableActions"
+      >
+      </cd-table-actions>
+    </div>
   </cd-table>
-  </ng-container>
+</ng-container>
