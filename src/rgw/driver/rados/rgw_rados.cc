@@ -6704,16 +6704,25 @@ static bool has_olh_tag(map<string, bufferlist>& attrs)
 int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
 				   obj_ctx, RGWBucketInfo& bucket_info,
 				   const rgw_obj& obj, rgw_bucket_snap_id snap_id,
+                                   bool delete_marker_enoent,
                                    RGWObjState *olh_state,
 				   RGWObjStateManifest **psm, optional_yield y)
 {
   ceph_assert(olh_state->is_olh);
 
   rgw_obj target;
+  bool delete_marker;
   int r = RGWRados::follow_olh(dpp, bucket_info, obj_ctx, olh_state,
-                               obj, snap_id, &target, y); /* might return -EAGAIN */
+                               obj, snap_id, &target, &delete_marker, y); /* might return -EAGAIN */
   if (r < 0) {
     return r;
+  }
+
+  if (delete_marker) {
+    if (delete_marker_enoent) {
+      return -ENOENT;
+    }
+    return 0;
   }
 
   return get_obj_state(dpp, &obj_ctx, bucket_info, target, psm, false, y);
@@ -6723,7 +6732,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
                                  RGWBucketInfo& bucket_info, const rgw_obj& obj,
                                  RGWObjStateManifest** psm, bool follow_olh,
                                  rgw_bucket_snap_id snap_id,
-                                 optional_yield y, bool assume_noent)
+                                 optional_yield y,
+                                 bool assume_noent, bool delete_marker_enoent)
 {
   if (obj.empty()) {
     return -EINVAL;
@@ -6738,7 +6748,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
     bool has_snap_info = s->attrset.find(RGW_ATTR_OLH_SNAP_INFO) != s->attrset.end();
     bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info);
     if (s->is_olh && need_follow_olh) {
-      return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id, s, psm, y);
+      return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id,
+                                  delete_marker_enoent, s, psm, y);
     }
     return 0;
   }
@@ -6762,7 +6773,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
                               olh_obj, psm,
                               true, /* follow olh */
                               obj.key.get_snap_id(),
-                              y, assume_noent);
+                              y, assume_noent,
+                              delete_marker_enoent);
   }
 
   if (r == -ENOENT) {
@@ -6914,7 +6926,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
     ldpp_dout(dpp, 20) << __func__ << ": setting s->olh_tag to " << string(s->olh_tag.c_str(), s->olh_tag.length()) << dendl;
 
     if (need_follow_olh) {
-      return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id, s, psm, y);
+      return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id,
+                                  delete_marker_enoent, s, psm, y);
     } else if (obj.key.have_null_instance() && !sm->manifest) {
       // read null version, and the head object only have olh info
       s->exists = false;
@@ -6928,13 +6941,15 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
 int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                             RGWBucketInfo& bucket_info, const rgw_obj& obj,
                             RGWObjStateManifest** psm, bool follow_olh,
-                            optional_yield y, bool assume_noent)
+                            optional_yield y, bool assume_noent,
+                            bool delete_marker_enoent)
 {
   int ret;
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
-                             follow_olh, RGW_BUCKET_SNAP_NOSNAP, y, assume_noent);
+                             follow_olh, RGW_BUCKET_SNAP_NOSNAP, y,
+                             assume_noent, delete_marker_enoent);
   } while (ret == -EAGAIN);
 
   return ret;
@@ -6943,11 +6958,12 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
 int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                             RGWBucketInfo& bucket_info, const rgw_obj& obj,
                             RGWObjState** pstate, RGWObjManifest** pmanifest,
-                            bool follow_olh, optional_yield y, bool assume_noent)
+                            bool follow_olh, optional_yield y, bool assume_noent,
+                            bool delete_marker_enoent)
 {
   RGWObjStateManifest* sm = nullptr;
   int r = get_obj_state(dpp, rctx, bucket_info, obj, &sm,
-                        follow_olh, y, assume_noent);
+                        follow_olh, y, assume_noent, delete_marker_enoent);
   if (r < 0) {
     return r;
   }
@@ -9569,7 +9585,8 @@ int RGWRados::remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RG
 }
 
 int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state,
-                         const rgw_obj& olh_obj, rgw_bucket_snap_id snap_id, rgw_obj *target, optional_yield y)
+                         const rgw_obj& olh_obj, rgw_bucket_snap_id snap_id,
+                         rgw_obj *target, bool *delete_marker, optional_yield y)
 {
   map<string, bufferlist> pending_entries;
   rgw_filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
@@ -9625,13 +9642,13 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     }
     --siter;
 
+
     auto& entry = siter->second;
-    if (entry.delete_marker) {
-      return -ENOENT;
-    }
+
+    *delete_marker = entry.delete_marker;
+    state->snap_id = entry.key.snap_id;
 
     *target = rgw_obj(bucket_info.bucket, entry.key);
-
     return 0;
   }
 
@@ -9646,10 +9663,9 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     return ret;
   }
 
-  if (olh.removed) {
-    return -ENOENT;
-  }
+  state->snap_id = olh.target.key.snap_id;
 
+  *delete_marker = olh.removed;
   *target = olh.target;
 
   return 0;

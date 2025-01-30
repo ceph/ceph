@@ -460,14 +460,15 @@ class RGWRados
 
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx,
 			   RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                           rgw_bucket_snap_id snap_id,
+                           rgw_bucket_snap_id snap_id, bool delete_marker_enoent,
 			   RGWObjState *olh_state, RGWObjStateManifest **psm,
 			   optional_yield y);
   int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                          RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          RGWObjStateManifest** psm, bool follow_olh,
                          rgw_bucket_snap_id snap_id,
-                         optional_yield y, bool assume_noent = false);
+                         optional_yield y, bool assume_noent,
+                         bool delete_marker_enoent);
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state,
 			 RGWObjManifest** pmanifest, optional_yield y);
@@ -1376,13 +1377,15 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     RGWObjStateManifest** psm, bool follow_olh,
-                    optional_yield y, bool assume_noent = false);
+                    optional_yield y, bool assume_noent = false,
+                    bool delete_marker_enoent = true);
 
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     RGWObjState** pstate, RGWObjManifest** pmanifest,
                     bool follow_olh, optional_yield y,
-                    bool assume_noent = false);
+                    bool assume_noent = false,
+                    bool delete_marker_enoent = true);
 
   using iterate_obj_cb = int (*)(const DoutPrefixProvider*, const rgw_raw_obj&, off_t, off_t,
                                  off_t, bool, RGWObjState*, void*);
@@ -1502,7 +1505,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs, optional_yield y);
   int follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj,
-                 rgw_bucket_snap_id snap_id, rgw_obj *target, optional_yield y);
+                 rgw_bucket_snap_id snap_id, rgw_obj *target, bool *delete_marker, optional_yield y);
   int get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh, RGWOLHSnapInfo *olh_snap_info, optional_yield y);
 
   void gen_rand_obj_instance_name(rgw_obj_key *target_key);
