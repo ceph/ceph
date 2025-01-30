@@ -239,7 +239,7 @@ source. Its ``source-spec`` JSON is encoded as follows::
         }
 
 For example, to import a raw-format image from a file located at
-"/mnt/image.raw", its ``source-spec`` JSON is encoded as follows::
+`/mnt/image.raw`, its ``source-spec`` JSON is encoded as follows::
 
         {
             "type": "raw",
@@ -261,14 +261,14 @@ server. Its ``source-spec`` JSON is encoded as follows::
         }
 
 For example, to import a raw-format image from a file located at
-``http://download.ceph.com/image.raw``, its ``source-spec`` JSON is encoded
+`https://download.ceph.com/image.raw`, its ``source-spec`` JSON is encoded
 as follows::
 
         {
             "type": "raw",
             "stream": {
                 "type": "http",
-                "url": "http://download.ceph.com/image.raw"
+                "url": "https://download.ceph.com/image.raw"
             }
         }
 
@@ -286,14 +286,14 @@ The ``s3`` stream can be used to import from a remote S3 bucket. Its
         }
 
 For example, to import a raw-format image from a file located at
-`http://s3.ceph.com/bucket/image.raw`, its ``source-spec`` JSON is encoded
+`https://s3.ceph.com/bucket/image.raw`, its ``source-spec`` JSON is encoded
 as follows::
 
         {
             "type": "raw",
             "stream": {
                 "type": "s3",
-                "url": "http://s3.ceph.com/bucket/image.raw",
+                "url": "https://s3.ceph.com/bucket/image.raw",
                 "access_key": "NX5QOQKC6BH2IDN8HC7A",
                 "secret_key": "LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn"
             }
