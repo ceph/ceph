@@ -29,8 +29,29 @@ describe('SmbService', () => {
     expect(req.request.method).toBe('GET');
   });
 
-  it('should call create', () => {
-    service.createCluster('test').subscribe();
+  it('should call create cluster', () => {
+    const request = {
+      cluster_resource: {
+        resource_type: 'ceph.smb.cluster',
+        cluster_id: 'clusterUserTest',
+        auth_mode: 'active-directory',
+        intent: 'present',
+        domain_settings: {
+          realm: 'DOMAIN1.SINK.TEST',
+          join_sources: [
+            {
+              source_type: 'resource',
+              ref: 'join1-admin'
+            }
+          ]
+        },
+        custom_dns: ['192.168.76.204'],
+        placement: {
+          count: 1
+        }
+      }
+    };
+    service.createCluster(request).subscribe();
     const req = httpTesting.expectOne('api/smb/cluster');
     expect(req.request.method).toBe('POST');
   });
@@ -57,5 +78,27 @@ describe('SmbService', () => {
     service.listUsersGroups().subscribe();
     const req = httpTesting.expectOne('api/smb/usersgroups');
     expect(req.request.method).toBe('GET');
+  });
+
+  it('should call create share', () => {
+    const request = {
+      share_resource: {
+        resource_type: 'ceph.smb.share',
+        cluster_id: 'clusterUserTest',
+        share_id: 'share1',
+        intent: 'present',
+        name: 'share1name',
+        readonly: false,
+        browseable: true,
+        cephfs: {
+          volume: 'fs1',
+          path: '/',
+          provider: 'samba-vfs'
+        }
+      }
+    };
+    service.createShare(request).subscribe();
+    const req = httpTesting.expectOne('api/smb/share');
+    expect(req.request.method).toBe('POST');
   });
 });
