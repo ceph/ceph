@@ -1508,7 +1508,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         @forall_hosts
         def run(h: str) -> str:
             with self.async_timeout_handler(h, 'cephadm deploy (osd daemon)'):
-                return self.wait_async(self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd'))
+                return self.wait_async(
+                    self.osd_service.deploy_osd_daemons_for_existing_osds(
+                        h, DriveGroupSpec(service_type='osd', service_id='')
+                    )
+                )
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
 
