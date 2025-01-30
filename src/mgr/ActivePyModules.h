@@ -33,6 +33,10 @@
 #include "ClusterState.h"
 #include "OSDPerfMetricTypes.h"
 
+#include <map>
+#include <set>
+#include <string>
+
 class health_check_map_t;
 class DaemonServer;
 class MgrSession;
@@ -179,7 +183,7 @@ public:
   void update_kv_data(
     const std::string prefix,
     bool incremental,
-    const map<std::string, std::optional<bufferlist>, std::less<>>& data);
+    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data);
   void _refresh_config_map();
 
   // Public so that MonCommandCompletion can use it
