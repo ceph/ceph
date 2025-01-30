@@ -384,16 +384,18 @@ struct rgw_cls_list_op
   std::string filter_prefix;
   bool list_versions;
   std::string delimiter;
+  rgw_bucket_snap_id max_snap = RGW_BUCKET_NO_SNAP;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(6, 4, bl);
+    ENCODE_START(7, 4, bl);
     encode(num_entries, bl);
     encode(filter_prefix, bl);
     encode(start_obj, bl);
     encode(list_versions, bl);
     encode(delimiter, bl);
+    encode(max_snap, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -413,6 +415,9 @@ struct rgw_cls_list_op
     }
     if (struct_v >= 6) {
       decode(delimiter, bl);
+    }
+    if (struct_v >= 7) {
+      decode(max_snap, bl);
     }
     DECODE_FINISH(bl);
   }

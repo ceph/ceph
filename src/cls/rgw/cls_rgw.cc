@@ -700,6 +700,15 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
+      if (op.max_snap != RGW_BUCKET_NO_SNAP &&
+          entry.meta.snap_id != RGW_BUCKET_NO_SNAP &&
+          entry.meta.snap_id > op.max_snap) {
+        CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: max_snap=%d",
+		__func__, key.name.c_str(), key.instance.c_str(),
+                (int)entry.meta.snap_id, (int)op.max_snap);
+        continue;
+      }
+
       // filter out noncurrent versions, delete markers, and initial marker
       if (!op.list_versions &&
 	  (!entry.is_visible() || op.start_obj.name == key.name)) {

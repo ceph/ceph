@@ -1809,6 +1809,11 @@ void RGWGetUsage_ObjStore_S3::send_response()
 int RGWListBucket_ObjStore_S3::get_common_params()
 {
   list_versions = s->info.args.exists("versions");
+  const char *max_snap_header = s->info.env->get("HTTP_RGWX_MAX_SNAP");
+  if (max_snap_header) {
+    string max_snap_str(max_snap_header);
+    max_snap = std::stoll(max_snap_str);
+  }
   prefix = s->info.args.get("prefix");
 
   // non-standard

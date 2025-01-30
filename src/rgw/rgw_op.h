@@ -957,6 +957,7 @@ protected:
   std::string delimiter;
   std::string encoding_type;
   bool list_versions{false};
+  rgw_bucket_snap_id max_snap{RGW_BUCKET_SNAP_NOSNAP};
   int max{0};
   std::vector<rgw_bucket_dir_entry> objs;
   std::map<std::string, bool> common_prefixes;

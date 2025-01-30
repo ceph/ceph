@@ -834,6 +834,7 @@ class Bucket {
       rgw::AccessListFilter access_list_filter{};
       RGWBucketListNameFilter force_check_filter;
       bool list_versions{false};
+      rgw_bucket_snap_id max_snap;
       bool allow_unordered{false};
       int shard_id{RGW_NO_SHARD};
 
@@ -845,6 +846,7 @@ class Bucket {
 	  "\", ns=\"" << p.ns <<
 	  "\", enforce_ns=" << p.enforce_ns <<
 	  ", list_versions=" << p.list_versions <<
+	  ", max_snap=" << (int64_t)p.max_snap <<
 	  ", allow_unordered=" << p.allow_unordered <<
 	  ", shard_id=" << p.shard_id <<
 	  " }";
