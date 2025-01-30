@@ -12,7 +12,6 @@
   $theme: default.$theme,
   $fallback: compat.$g90,
   );
-
 /******************************************
   Component token overrides should go here
   ******************************************/
@@ -155,4 +154,8 @@ Tooltip
 ******************************************/
 .cds--tooltip-content {
   background-color: theme.$layer-02;
+}
+
+.form-group-header {
+  @include type.type-style('heading-01');
 }

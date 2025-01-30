@@ -16,7 +16,7 @@ from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
-     RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit, RgwTopicmanagement
+    RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit, RgwTopics
 from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
@@ -1416,12 +1416,24 @@ class RgwTopic(RESTController):
         parameters={
             "name": (str, "Name of the topic"),
             "push_endpoint": (str, "Push Endpoint"),
-            "opaqueData": (str, "opaqueData"),
+            "OpaqueData": (str, "OpaqueData"),
             "persistent": (bool, "persistent"),
             "time_to_live": (str, "Time to live"),
             "max_retries": (str, "max retries"),
             "retry_sleep_duration": (str, "retry sleep duration"),
-            "Policy": (str, "policy"),
+            "policy": (str, "policy"),
+            "verify_ssl": (bool, 'verify ssl'),
+            "cloud_events": (str, 'cloud events'),
+            "user": (str, 'user'),
+            "password": (str, 'password'),
+            "vhost": (str, 'vhost'),
+            "ca_location": (str, 'ca location'),
+            "amqp_exchange": (str, 'amqp exchange'),
+            "amqp_ack_level": (str, 'amqp ack level'),
+            "use_ssl": (bool, 'use ssl'),
+            "kafka_ack_level": (str, 'kafka ack level'),
+            "kafka_brokers": (str, 'kafka brokers'),
+            "mechanism": (str, 'mechanism'),
         },
     )
     def create(
@@ -1430,23 +1442,41 @@ class RgwTopic(RESTController):
         daemon_name=None,
         owner=None,
         push_endpoint: Optional[str] = None,
-        opaqueData: Optional[str] = None,
-        persistent: Optional[bool] = None,
+        OpaqueData: Optional[str] = None,
+        persistent: Optional[bool] = False,
         time_to_live: Optional[str] = None,
         max_retries: Optional[str] = None,
         retry_sleep_duration: Optional[str] = None,
-        Policy: Optional[str] = None
+        policy: Optional[str] = None,
+        verify_ssl: Optional[bool] = False,
+        cloud_events: Optional[bool] = False,
+        ca_location: Optional[str] = None,
+        amqp_exchange: Optional[str] = None,
+        amqp_ack_level: Optional[str] = None,
+        use_ssl: Optional[bool] = False,
+        kafka_ack_level: Optional[str] = None,
+        kafka_brokers: Optional[str] = None,
+        mechanism: Optional[str] = None
     ):
         rgw_topic_instance = RgwClient.instance(owner, daemon_name=daemon_name)
         return rgw_topic_instance.create_topic(
             name=name,
             push_endpoint=push_endpoint,
-            opaqueData=opaqueData,
+            OpaqueData=OpaqueData,
             persistent=persistent,
             time_to_live=time_to_live,
             max_retries=max_retries,
             retry_sleep_duration=retry_sleep_duration,
-            Policy=Policy
+            policy=policy,
+            verify_ssl=verify_ssl,
+            cloud_events=cloud_events,
+            ca_location=ca_location,
+            amqp_exchange=amqp_exchange,
+            amqp_ack_level=amqp_ack_level,
+            use_ssl=use_ssl,
+            kafka_ack_level=kafka_ack_level,
+            kafka_brokers=kafka_brokers,
+            mechanism=mechanism
         )
 
     @EndpointDoc(
@@ -1457,12 +1487,19 @@ class RgwTopic(RESTController):
         },
     )
     def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
-        rgw_topic_instance = RgwTopicmanagement()
+        rgw_topic_instance = RgwTopics()
         result = rgw_topic_instance.list_topics(uid, tenant)
         return result
 
+    @EndpointDoc(
+        "get RGW Topic",
+        parameters={
+            "name": (str, "Name of the user"),
+            "tenant": (str, "Name of the tenant"),
+        },
+    )
     def get(self, name: str, tenant: Optional[str] = None):
-        rgw_topic_instance = RgwTopicmanagement()
+        rgw_topic_instance = RgwTopics()
         result = rgw_topic_instance.get_topic(name, tenant)
         return result
 
@@ -1474,6 +1511,6 @@ class RgwTopic(RESTController):
         },
     )
     def delete(self, name: str, tenant: Optional[str] = None):
-        rgw_topic_instance = RgwTopicmanagement()
+        rgw_topic_instance = RgwTopics()
         result = rgw_topic_instance.delete_topic(name=name, tenant=tenant)
         return result

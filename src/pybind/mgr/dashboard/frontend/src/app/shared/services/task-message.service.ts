@@ -426,6 +426,9 @@ export class TaskMessageService {
     'smb/standalone/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.smbUsersgroups(metadata)
     ),
+    'rgw/topic/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.topic(metadata)
+    ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
       this.commonOperations.update,
@@ -531,6 +534,9 @@ export class TaskMessageService {
     ),
     'smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.smbCluster(metadata)
+    ),
+    'rgw/topic/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.topic(metadata)
     )
   };
 
@@ -606,6 +612,9 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
+  topic(metadata: any) {
+    return $localize`Topic  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }
