@@ -1,10 +1,11 @@
 # container_engines.py - container engine types and selection funcs
 
 import os
+import logging
 
 from typing import Tuple, List, Optional, Dict
 
-from .call_wrappers import call_throws, CallVerbosity
+from .call_wrappers import call_throws, call, CallVerbosity
 from .context import CephadmContext
 from .container_engine_base import ContainerEngine
 from .constants import (
@@ -13,7 +14,11 @@ from .constants import (
     MIN_PODMAN_VERSION,
     PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
 )
+from .data_utils import with_units_to_int
 from .exceptions import Error
+
+
+logger = logging.getLogger()
 
 
 class Podman(ContainerEngine):
@@ -189,3 +194,57 @@ def pull_command(
         if os.path.exists('/etc/ceph/podman-auth.json'):
             cmd.append('--authfile=/etc/ceph/podman-auth.json')
     return cmd
+
+
+def _container_mem_usage(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[str, str, int]:
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = call(
+        ctx,
+        [
+            container_path,
+            'stats',
+            '--format',
+            '{{.ID}},{{.MemUsage}}',
+            '--no-stream',
+        ],
+        verbosity=verbosity,
+    )
+    return out, err, code
+
+
+def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
+    # keep track of memory usage we've seen
+    seen_memusage = {}  # type: Dict[str, int]
+    seen_memusage_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, usage) = line.split(',')
+            (used, limit) = usage.split(' / ')
+            try:
+                seen_memusage[cid] = with_units_to_int(used)
+                if not seen_memusage_cid_len:
+                    seen_memusage_cid_len = len(cid)
+            except ValueError:
+                logger.info(
+                    'unable to parse memory usage line\n>{}'.format(line)
+                )
+                pass
+    return seen_memusage_cid_len, seen_memusage
+
+
+def parsed_container_mem_usage(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[int, Dict[str, int]]:
+    """Return memory useage values parsed from the container engine's container status."""
+    out, _, code = _container_mem_usage(
+        ctx, container_path=container_path, verbosity=verbosity
+    )
+    return _parse_mem_usage(code, out)
