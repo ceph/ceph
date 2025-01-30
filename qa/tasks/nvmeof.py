@@ -404,7 +404,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
             ):
                 other_thrasher = t
                 self.log('switch_task: waiting for other thrasher')
-                other_thrasher.switch_thrasher.wait(300)
+                other_thrasher.switch_thrasher.wait(600)
                 self.log('switch_task: done waiting for the other thrasher')
                 other_thrasher.switch_thrasher.clear()
 
