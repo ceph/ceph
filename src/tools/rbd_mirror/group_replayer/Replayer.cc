@@ -70,6 +70,23 @@ Replayer<I>::~Replayer() {
 }
 
 template <typename I>
+bool Replayer<I>::is_replay_interrupted() {
+  std::unique_lock locker{m_lock};
+  return is_replay_interrupted(&locker);
+}
+
+template <typename I>
+bool Replayer<I>::is_replay_interrupted(std::unique_lock<ceph::mutex>* locker) {
+  if (m_state == STATE_COMPLETE) {
+    locker->unlock();
+
+    return true;
+  }
+
+  return false;
+}
+
+template <typename I>
 void Replayer<I>::schedule_load_group_snapshots() {
   dout(10) << dendl;
 
@@ -195,6 +212,10 @@ template <typename I>
 void Replayer<I>::load_local_group_snapshots() {
   dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
 
+  if (is_replay_interrupted()) {
+    return;
+  }
+
   if (m_state != STATE_COMPLETE) {
     m_state = STATE_REPLAYING;
   }
@@ -258,6 +279,9 @@ void Replayer<I>::load_remote_group_snapshots() {
   dout(10) << "m_remote_group_id=" << m_remote_group_id << dendl;
 
   std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
   m_remote_group_snaps.clear();
   auto ctx = new LambdaContext(
     [this] (int r) {
@@ -311,6 +335,9 @@ template <typename I>
 void Replayer<I>::validate_image_snaps_sync_complete(
     const std::string &remote_group_snap_id) {
   std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
   // 1. get group membership
   // 2. get snap list of each image and check any image snap has the group
   // snapid and is set to complete. If yes call complete
@@ -437,7 +464,12 @@ void Replayer<I>::scan_for_unsynced_group_snapshots() {
 
   bool found = false;
   bool syncs_upto_date = false;
+
   std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
+
   if (m_remote_group_snaps.empty()) {
     goto out;
   }
@@ -545,6 +577,9 @@ template <typename I>
 void Replayer<I>::try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
                                             std::unique_lock<ceph::mutex> &locker) {
   dout(10) << snap.id << dendl;
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   auto snap_type = cls::rbd::get_group_snap_namespace_type(
@@ -874,8 +909,6 @@ void Replayer<I>::handle_create_regular_snapshot(
          << cpp_strerror(r) << dendl;
   }
   on_finish->complete(0);
-
-  schedule_load_group_snapshots();
 }
 
 template <typename I>
