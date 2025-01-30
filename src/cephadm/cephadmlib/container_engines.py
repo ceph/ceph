@@ -248,3 +248,57 @@ def parsed_container_mem_usage(
         ctx, container_path=container_path, verbosity=verbosity
     )
     return _parse_mem_usage(code, out)
+
+
+def _container_cpu_perc(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[str, str, int]:
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = call(
+        ctx,
+        [
+            container_path,
+            'stats',
+            '--format',
+            '{{.ID}},{{.CPUPerc}}',
+            '--no-stream',
+        ],
+        verbosity=CallVerbosity.QUIET,
+    )
+    return out, err, code
+
+
+def _parse_cpu_perc(code: int, out: str) -> Tuple[int, Dict[str, str]]:
+    seen_cpuperc = {}
+    seen_cpuperc_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, cpuperc) = line.split(',')
+            try:
+                seen_cpuperc[cid] = cpuperc
+                if not seen_cpuperc_cid_len:
+                    seen_cpuperc_cid_len = len(cid)
+            except ValueError:
+                logger.info(
+                    'unable to parse cpu percentage line\n>{}'.format(line)
+                )
+                pass
+    return seen_cpuperc_cid_len, seen_cpuperc
+
+
+def parsed_container_cpu_perc(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[int, Dict[str, str]]:
+    """Return cpu percentage used values parsed from the container engine's
+    container status.
+    """
+    out, _, code = _container_cpu_perc(
+        ctx, container_path=container_path, verbosity=verbosity
+    )
+    return _parse_cpu_perc(code, out)
