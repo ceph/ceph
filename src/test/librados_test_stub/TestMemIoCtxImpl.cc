@@ -90,7 +90,7 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
   std::unique_lock l{file->lock};
   auto off = file->data.length();
   ensure_minimum_length(off + bl.length(), &file->data);
-  file->data.begin(off).copy_in(bl.length(), bl);
+  bufferlist_rw::from_ro_unsafe(file->data).begin(off).copy_in(bl.length(), bl);
   return 0;
 }
 
@@ -654,7 +654,7 @@ int TestMemIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
   }
 
   ensure_minimum_length(off + len, &file->data);
-  file->data.begin(off).copy_in(len, bl);
+  bufferlist_rw::from_ro_unsafe(file->data).begin(off).copy_in(len, bl);
   return 0;
 }
 
@@ -688,7 +688,7 @@ int TestMemIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
 
   file->data.clear();
   ensure_minimum_length(bl.length(), &file->data);
-  file->data.begin().copy_in(bl.length(), bl);
+  bufferlist_rw::from_ro_unsafe(file->data).begin().copy_in(bl.length(), bl);
   return 0;
 }
 
@@ -721,7 +721,7 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl,
 
   ensure_minimum_length(off + len, &file->data);
   while (len > 0) {
-    file->data.begin(off).copy_in(bl.length(), bl);
+    bufferlist_rw::from_ro_unsafe(file->data).begin(off).copy_in(bl.length(), bl);
     off += bl.length();
     len -= bl.length();
   }

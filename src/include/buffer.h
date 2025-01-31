@@ -1359,6 +1359,9 @@ struct error_code;
     const char *c_str() {
       return list::c_str();
     }
+
+    // SHALL NOT be used apart of unit tests
+    static list_rw& from_ro_unsafe(list& target);
   };
 } // inline namespace v15_2_0
 
