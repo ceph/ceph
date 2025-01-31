@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <iosfwd>
 #include <list>
 #include <map>
@@ -14,7 +15,6 @@
 #include "include/Context.h"
 #include "common/ThrottleInterface.h"
 #include "common/Timer.h"
-#include "common/convenience.h"
 #if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include "crimson/common/perf_counters_collection.h"
 #else

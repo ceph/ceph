@@ -18,16 +18,19 @@
 #include <boost/container/small_vector.hpp>
 
 #include <iostream>
+#include <list>
+#include <set>
 
 #include <stdint.h>
-#include <stdio.h>
 
 #include "buffer.h"
 #include "compact_map.h"
 
 #include "ceph_frag.h"
+#include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/ceph_assert.h"
+#include "include/types.h" // for operator<<(std::set)
 
 #include "common/dout.h"
 

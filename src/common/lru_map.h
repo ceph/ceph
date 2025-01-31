@@ -3,6 +3,10 @@
 
 #include "common/ceph_mutex.h"
 
+#include <cstddef>
+#include <list>
+#include <map>
+
 template <class K, class V>
 class lru_map {
   struct entry {

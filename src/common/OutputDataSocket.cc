@@ -12,11 +12,12 @@
  * 
  */
 
+#include "common/OutputDataSocket.h"
+
 #include <poll.h>
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "common/OutputDataSocket.h"
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
@@ -25,6 +26,8 @@
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
+
+#include <sstream>
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix

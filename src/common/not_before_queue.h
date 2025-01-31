@@ -7,6 +7,9 @@
 
 #include "include/utime.h"
 
+#include <numeric> // for std::accumulate()
+#include <optional>
+
 /**
  * not_before_queue_t
  *

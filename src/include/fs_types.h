@@ -3,7 +3,14 @@
 #ifndef CEPH_INCLUDE_FS_TYPES_H
 #define CEPH_INCLUDE_FS_TYPES_H
 
-#include "types.h"
+#include <cstdint>
+#include <iostream>
+
+#include "common/Formatter.h"
+#include "include/buffer.h"
+#include "include/ceph_fs.h" // for struct ceph_file_layout
+#include "include/hash.h" // for rjhash
+
 class JSONObj;
 
 #define CEPHFS_EBLOCKLISTED    108

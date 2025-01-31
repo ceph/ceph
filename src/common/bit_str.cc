@@ -15,6 +15,8 @@
 #include "common/Formatter.h"
 #include "include/ceph_assert.h"
 
+#include <iostream>
+
 static void _dump_bit_str(
     uint64_t bits,
     std::ostream *out,

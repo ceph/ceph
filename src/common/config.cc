@@ -26,6 +26,8 @@
 
 #include <fmt/core.h>
 
+#include <sstream>
+
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
  * initialization happens here.
