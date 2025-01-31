@@ -12,7 +12,6 @@
  *
  */
 
-#include "include/compat.h"
 #include "common/common_init.h"
 #include "common/admin_socket.h"
 #include "common/ceph_argparse.h"
@@ -23,6 +22,8 @@
 #include "common/strtol.h"
 #include "common/valgrind.h"
 #include "common/zipkin_trace.h"
+#include "include/compat.h"
+#include "log/Log.h"
 
 #define dout_subsys ceph_subsys_
 

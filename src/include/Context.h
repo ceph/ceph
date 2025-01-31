@@ -21,7 +21,10 @@
 #include <functional>
 #include <list>
 #include <memory>
+
+#ifdef DEBUG_GATHER
 #include <set>
+#endif
 
 #include <boost/function.hpp>
 #include <boost/system/error_code.hpp>

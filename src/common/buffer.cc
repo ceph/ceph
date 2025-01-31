@@ -19,7 +19,9 @@
 
 #include <sys/uio.h>
 
+#include <iomanip> // for std::setw()
 #include <iostream>
+#include <sstream>
 
 #include "include/ceph_assert.h"
 #include "include/types.h"

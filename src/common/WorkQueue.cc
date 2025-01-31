@@ -16,6 +16,8 @@
 #include "include/compat.h"
 #include "common/errno.h"
 
+#include <sstream>
+
 #define dout_subsys ceph_subsys_tp
 #undef dout_prefix
 #define dout_prefix *_dout << name << " "
