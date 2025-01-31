@@ -489,11 +489,12 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
         entry.meta.storage_class = "CACHE";
         entry.meta.size = block.cacheObj.size;
         entry.meta.accounted_size = block.cacheObj.size;
-        struct std::tm tm;
-        std::istringstream ss(block.cacheObj.creationTime);
-        ss >> std::get_time(&tm, "%H:%M:%S");
-        std::time_t creationTime = mktime(&tm);
-        entry.meta.mtime = ceph::real_clock::from_time_t(creationTime);
+        try {
+          double time = std::stod(block.cacheObj.creationTime);
+          entry.meta.mtime = ceph::real_clock::from_double(time);
+        } catch (const std::exception& e) {
+          ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " Invalid value of time: " << block.cacheObj.creationTime << dendl;
+        }
         entry.meta.etag = block.cacheObj.etag;
         entry.meta.owner = block.cacheObj.user_id;
         entry.meta.owner_display_name = block.cacheObj.display_name;
