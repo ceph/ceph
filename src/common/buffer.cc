@@ -828,10 +828,10 @@ static ceph::spinlock debug_lock;
   }
 
   template<bool is_const>
-  buffer::ptr buffer::list::iterator_impl<is_const>::copy_deep(unsigned len)
+  buffer::ptr_rw buffer::list::iterator_impl<is_const>::copy_deep(unsigned len)
   {
     if (!len) {
-      return ptr{};
+      return ptr_rw{};
     }
     if (p == ls->end())
       throw end_of_buffer();
