@@ -425,6 +425,7 @@ struct rgw_bucket_dir_entry {
   uint64_t versioned_epoch;
 
   rgw_bucket_snap_skip_entry snap_skip;
+  rgw_bucket_snap_id demoted_at_snap = RGW_BUCKET_NO_SNAP;
 
   rgw_bucket_dir_entry() :
     exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
@@ -445,6 +446,7 @@ struct rgw_bucket_dir_entry {
     encode(versioned_epoch, bl);
     encode(key.snap_id, bl);
     encode(snap_skip, bl);
+    encode(demoted_at_snap, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -478,6 +480,7 @@ struct rgw_bucket_dir_entry {
     if (struct_v >= 9) {
       decode(key.snap_id, bl);
       decode(snap_skip, bl);
+      decode(demoted_at_snap, bl);
     }
     DECODE_FINISH(bl);
   }
