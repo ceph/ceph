@@ -47,10 +47,16 @@ using namespace std;
 
 
 static int (*do_ceph_mount)(struct ceph_mount_info *cmount, const char *root) = ceph_mount;
+static std::string dir_prefix = std::string("/");
 
 void libcephfs_test_set_mount_call(int (*mount_call)(struct ceph_mount_info *cmount, const char *root))
 {
   do_ceph_mount = mount_call;
+}
+
+void libcephfs_test_set_dir_prefix(std::string (prefix))
+{
+  dir_prefix = prefix;
 }
 
 TEST(LibCephFS, OpenEmptyComponent) {
@@ -1445,6 +1451,10 @@ TEST(LibCephFS, UseUnmounted) {
 }
 
 TEST(LibCephFS, GetPoolId) {
+  if (dir_prefix != "/") {
+    GTEST_SKIP() << "Layout is only available on dir after explicit customization";
+  }
+
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
@@ -1461,6 +1471,10 @@ TEST(LibCephFS, GetPoolId) {
 }
 
 TEST(LibCephFS, GetPoolReplication) {
+  if (dir_prefix != "/") {
+    GTEST_SKIP() << "Layout is only available on dir after explicit customization";
+  }
+
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
@@ -1667,6 +1681,10 @@ TEST(LibCephFS, Nlink) {
 }
 
 TEST(LibCephFS, SlashDotDot) {
+  if (dir_prefix != "/") {
+    GTEST_SKIP() << "We aren't at root, skipping test";
+  }
+
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
