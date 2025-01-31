@@ -963,60 +963,41 @@ static ceph::spinlock debug_lock;
     : iterator_impl(l, o, ip, po)
   {}
 
-  void buffer::list::iterator::copy_in(unsigned len, const ptr& bp)
-  {
-    const auto orig_len = len;
-    if (len == 0) {
-      return;
-    }
-    list_iter_t prev_p; // = ls->before_begin();
-    if (p == ls->end()) {
-      seek(off);
-    }
-    // punch hole
-    while (len > 0) {
-      if (p == ls->end()) {
-	throw end_of_buffer();
-      }
-      const unsigned available_in_p = p->length() - p_off;
-      const unsigned take_from_p = std::min(available_in_p, len);
-      const unsigned residue_in_p = available_in_p - take_from_p;
-
-      // this will create a potentially non-zero ptr at the beginning
-      // of the hole -- this is the only case when a non-zero can appear
-      p->set_length(p->length() - take_from_p);
-
-      if (residue_in_p > 0) {
-        // link the residual part of last existing buffer we punched
-        // the hole thorugh. this can happen at the last iteration
-        // only
-        ls->insert_after(p,
-          *ptr_node::create(*p, take_from_p, residue_in_p).release());
-        ++bl->_num;
-      }
-
-      len -= take_from_p;
-      prev_p = p++;
-      p_off = 0;
-    }
-    // link the node
-    ls->insert_after(prev_p, *ptr_node::create(bp, 0, orig_len).release());
-    ++bl->_num;
-  }
-
-  void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
-  {
-    for (const auto& node: otherl._buffers) {
-      const unsigned round_len = std::min(len, node.length());
-      copy_in(round_len, node);
-      len -= round_len;
-    }
-  }
-
+  // copy data in
   void buffer::list::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
   {
-    ptr_rw newbuf(src, len);
-    copy_in(len, newbuf);
+    // copy
+    if (p == ls->end())
+      seek(off);
+    while (len > 0) {
+      if (p == ls->end())
+	throw end_of_buffer();
+      
+      unsigned howmuch = p->length() - p_off;
+      if (len < howmuch)
+	howmuch = len;
+      p->copy_in(p_off, howmuch, src, crc_reset);
+	
+      src += howmuch;
+      len -= howmuch;
+      *this += howmuch;
+    }
+  }
+  
+  void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
+  {
+    if (p == ls->end())
+      seek(off);
+    unsigned left = len;
+    for (const auto& node : otherl._buffers) {
+      unsigned l = node.length();
+      if (left < l)
+	l = left;
+      copy_in(l, node.c_str());
+      left -= l;
+      if (left == 0)
+	break;
+    }
   }
 
   // -- buffer::list --
