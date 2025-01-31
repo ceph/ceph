@@ -7,6 +7,7 @@ namespace ceph {
       class ptr;
       class ptr_rw;
       class list;
+      class list_rw;
     }
     class hash;
   }
@@ -14,6 +15,7 @@ namespace ceph {
   using bufferptr = buffer::ptr;
   using bufferptr_rw = buffer::ptr_rw;
   using bufferlist = buffer::list;
+  using bufferlist_rw = buffer::list_rw;
   using bufferhash = buffer::hash;
 }
 

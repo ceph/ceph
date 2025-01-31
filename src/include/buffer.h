@@ -683,9 +683,7 @@ struct error_code;
       }
     };
 
-    class iterator;
-
-  private:
+  protected:
     // my private bits
     buffers_t _buffers;
 
@@ -727,7 +725,7 @@ struct error_code;
       iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
 	: bl(l), ls(&bl->_buffers), p(ip), off(o), p_off(po) {}
-      iterator_impl(const list::iterator& i);
+      iterator_impl(const iterator_impl<false>& i);
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
@@ -785,16 +783,7 @@ struct error_code;
 
   public:
     typedef iterator_impl<true> const_iterator;
-
-    class CEPH_BUFFER_API iterator : public iterator_impl<false> {
-    public:
-      iterator() = default;
-      iterator(bl_t *l, unsigned o=0);
-      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
-      // copy data in
-      void copy_in(unsigned len, const char *src, bool crc_reset = true);
-      void copy_in(unsigned len, const list& otherl);
-    };
+    typedef const_iterator iterator;
 
     struct reserve_t {
       char* bp_data;
@@ -974,7 +963,7 @@ struct error_code;
       return page_aligned_appender(this, min_pages);
     }
 
-  private:
+  protected:
     // always_empty_bptr has no underlying raw but its _len is always 0.
     // This is useful for e.g. get_append_buffer_unused_tail_length() as
     // it allows to avoid conditionals on hot paths.
@@ -1287,6 +1276,90 @@ struct error_code;
     static list static_from_string(std::string& s);
   };
 
+  class list_rw : list {
+  public:
+    using list::const_iterator;
+
+    class CEPH_BUFFER_API iterator : public iterator_impl<false> {
+    public:
+      iterator() = default;
+      iterator(list_rw *l, unsigned o=0);
+      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
+      // copy data in
+      void copy_in(unsigned len, const char *src, bool crc_reset = true);
+      void copy_in(unsigned len, const list& otherl);
+    };
+
+    list_rw() : list() {
+    }
+    list_rw(const list_rw& other)
+      : list(static_cast<const list&>(other)) {
+    }
+
+    iterator begin(size_t offset=0) {
+      return iterator(this, offset);
+    }
+    iterator end() {
+      return iterator(this, _len, _buffers.end(), 0);
+    }
+
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset);
+    }
+    const_iterator cbegin(size_t offset=0) const {
+      return begin(offset);
+    }
+    const_iterator end() const {
+      return const_iterator(this, _len, _buffers.end(), 0);
+    }
+
+    // regular list (ro) overload SHALL NOT be available
+    void substr_of(const list_rw& other, unsigned off, unsigned len) {
+      list::substr_of(static_cast<const list&>(other), off, len);
+    }
+
+    void clear() noexcept {
+      list::clear();
+    }
+
+    // regular list (ro) overload SHALL NOT be available
+    void swap(list_rw& other) noexcept {
+      list::swap(static_cast<list&>(other));
+    }
+    unsigned length() const {
+      return list::length();
+    }
+    // regular ptr (ro) overload SHALL NOT be available
+    void append(const ptr_rw& bp) {
+      list::append(static_cast<const ptr&>(bp));
+    }
+    // regular list (ro) overload SHALL NOT be available
+    void append(const list_rw& bl) {
+      list::append(static_cast<const list&>(bl));
+    }
+    void append(const char *data, unsigned len) {
+      list::append(data, len);
+    }
+    void append(const char* s) {
+      list::append(s);
+    }
+    void append_zero(unsigned len);
+    uint32_t crc32c(uint32_t crc) const {
+      return list::crc32c(crc);
+    }
+    list as_new_bl() const {
+      return *this;
+    }
+    const list& as_const_bl() const {
+      return *this;
+    }
+    const char& operator[](unsigned n) const {
+      return list::operator[](n);
+    }
+    const char *c_str() {
+      return list::c_str();
+    }
+  };
 } // inline namespace v15_2_0
 
   /*
@@ -1311,6 +1384,11 @@ struct error_code;
   };
 
 inline bool operator==(const bufferlist &lhs, const bufferlist &rhs) {
+  if (lhs.length() != rhs.length())
+    return false;
+  return std::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
+inline bool operator==(const bufferlist_rw &lhs, const bufferlist_rw &rhs) {
   if (lhs.length() != rhs.length())
     return false;
   return std::equal(lhs.begin(), lhs.end(), rhs.begin());

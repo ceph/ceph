@@ -737,7 +737,7 @@ static ceph::spinlock debug_lock;
   }
 
   template<bool is_const>
-  buffer::list::iterator_impl<is_const>::iterator_impl(const buffer::list::iterator& i)
+  buffer::list::iterator_impl<is_const>::iterator_impl(const iterator_impl<false>& i)
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
   template<bool is_const>
@@ -957,16 +957,16 @@ static ceph::spinlock debug_lock;
   template class buffer::list::iterator_impl<true>;
   template class buffer::list::iterator_impl<false>;
 
-  buffer::list::iterator::iterator(bl_t *l, unsigned o)
+  buffer::list_rw::iterator::iterator(list_rw *l, unsigned o)
     : iterator_impl(l, o)
   {}
 
-  buffer::list::iterator::iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
+  buffer::list_rw::iterator::iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
     : iterator_impl(l, o, ip, po)
   {}
 
   // copy data in
-  void buffer::list::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
+  void buffer::list_rw::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
   {
     // copy
     if (p == ls->end())
@@ -986,12 +986,12 @@ static ceph::spinlock debug_lock;
     }
   }
   
-  void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
+  void buffer::list_rw::iterator::copy_in(unsigned len, const list& otherl)
   {
     if (p == ls->end())
       seek(off);
     unsigned left = len;
-    for (const auto& node : otherl._buffers) {
+    for (const auto& node : otherl.buffers()) {
       unsigned l = node.length();
       if (left < l)
 	l = left;
@@ -1555,8 +1555,11 @@ static ceph::spinlock debug_lock;
       _num += 1;
       len -= round_size;
     }
+  }
 
-#if 0
+  void buffer::list_rw::append_zero(unsigned len)
+  {
+    _len += len;
     const unsigned free_in_last = get_append_buffer_unused_tail_length();
     const unsigned first_round = std::min(len, free_in_last);
     if (first_round) {
@@ -1575,7 +1578,6 @@ static ceph::spinlock debug_lock;
       new_back.set_length(second_round);
       new_back.zero(false);
     }
-#endif
   }
 
   
