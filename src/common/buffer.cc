@@ -777,9 +777,6 @@ static ceph::spinlock debug_lock;
   {
     if (p == ls->end())
       throw end_of_buffer();
-    while (p->length() == 0) {
-      ++p;
-    }
     return (*p)[p_off];
   }
 
@@ -985,6 +982,10 @@ static ceph::spinlock debug_lock;
       const unsigned take_from_p = std::min(available_in_p, len);
       const unsigned residue_in_p = available_in_p - take_from_p;
 
+      // this will create a potentially non-zero ptr at the beginning
+      // of the hole -- this is the only case when a non-zero can appear
+      p->set_length(p->length() - take_from_p);
+
       if (residue_in_p > 0) {
         // link the residual part of last existing buffer we punched
         // the hole thorugh. this can happen at the last iteration
@@ -993,10 +994,6 @@ static ceph::spinlock debug_lock;
           *ptr_node::create(*p, take_from_p, residue_in_p).release());
         ++bl->_num;
       }
-
-      // this will create a potentially non-zero ptr at the beginning
-      // of the hole -- this is the only case when a non-zero can appear
-      p->set_length(p->length() - take_from_p - residue_in_p);
 
       len -= take_from_p;
       prev_p = p++;

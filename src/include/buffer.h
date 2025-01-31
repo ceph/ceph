@@ -710,7 +710,7 @@ struct error_code;
 					typename buffers_t::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
-      mutable list_iter_t p;
+      list_iter_t p;
       unsigned off; // in bl
       unsigned p_off;   // in *p
       friend class iterator_impl<true>;
