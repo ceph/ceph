@@ -156,7 +156,7 @@ public:
     ASSERT_TRUE(hdr.length() >= sizeof(rbd_obj_header_ondisk));
     ASSERT_EQ(0, memcmp(RBD_HEADER_TEXT, hdr.c_str(), sizeof(RBD_HEADER_TEXT)));
 
-    bufferlist::iterator it = hdr.begin();
+    bufferlist_rw::iterator it = bufferlist_rw::from_ro_unsafe(hdr).begin();
     it.copy_in(sizeof(RBD_MIGRATE_HEADER_TEXT), RBD_MIGRATE_HEADER_TEXT);
     ASSERT_EQ(0, ictx->md_ctx.write(ictx->header_oid, hdr, hdr.length(), 0));
   }
