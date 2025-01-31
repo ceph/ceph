@@ -803,7 +803,7 @@ class TestCephAdm(object):
         )
 
     def test_get_container_info_daemon_down(self, funkypatch):
-        _get_stats_by_name = funkypatch.patch('cephadm.get_container_stats_by_image_name')
+        _get_stats_by_name = funkypatch.patch('cephadmlib.container_engines.parsed_container_image_stats')
         _get_stats = funkypatch.patch('cephadmlib.container_types.get_container_stats')
         _list_daemons = funkypatch.patch('cephadm.list_daemons')
 
@@ -845,9 +845,6 @@ class TestCephAdm(object):
                 "configured": "2024-03-11T17:37:28.494075Z"
         }
         _list_daemons.return_value = [down_osd_json]
-        _get_stats_by_name.return_value = (('a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318,'
-                                   '2023-11-28 21:34:38.045413692 +0000 UTC,'),
-                                   '', 0)
 
         expected_container_info = _cephadm.ContainerInfo(
             container_id='',
@@ -855,6 +852,10 @@ class TestCephAdm(object):
             image_id='a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318',
             start='2023-11-28 21:34:38.045413692 +0000 UTC',
             version='')
+        # refactoring get_container_stats_by_image_name into
+        # parsed_container_image_stats has made this part of the test somewhat
+        # redundant
+        _get_stats_by_name.return_value = expected_container_info
 
         assert _cephadm.get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
         assert not _get_stats.called, 'only get_container_stats_by_image_name should have been called'
