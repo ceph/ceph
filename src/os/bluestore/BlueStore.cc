@@ -18740,7 +18740,7 @@ bool BlueStore::BlueStoreThrottle::try_start_transaction(
   {
     std::lock_guard l(lock);
     auto cost0 = throttle_bytes.get_current();
-    if (cost0 + txc.cost > bytes_observed_max) {
+    if (cost0 + static_cast<int64_t>(txc.cost) > bytes_observed_max) {
       bytes_observed_max = cost0 + txc.cost;
       bytes_max_ts = ceph_clock_now();
     }
