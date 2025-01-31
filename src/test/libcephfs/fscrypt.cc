@@ -239,6 +239,7 @@ static int init_fscrypt()
   }
 
   libcephfs_test_set_mount_call(do_fscrypt_mount);
+  libcephfs_test_set_dir_prefix(fscrypt_dir);
   std::clog << __func__ << "(): init fscrypt done" << std::endl;
 
   return 0;

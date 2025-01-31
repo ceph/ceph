@@ -4,3 +4,4 @@
 struct ceph_mount_info;
 
 void libcephfs_test_set_mount_call(int (*mount_call)(struct ceph_mount_info *cmount, const char *root));
+void libcephfs_test_set_dir_prefix(std::string (prefix));
