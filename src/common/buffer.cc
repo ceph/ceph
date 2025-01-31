@@ -1002,6 +1002,19 @@ static ceph::spinlock debug_lock;
     }
   }
 
+  buffer::list_rw& buffer::list_rw::from_ro_unsafe(buffer::list& target) {
+    buffer::list_rw replacement;
+    for (auto& bp : target.buffers()) {
+      if (bp.is_zero_fast()) {
+	replacement.append_zero(bp.length());
+      } else {
+	replacement.append(bp);
+      }
+    }
+    target.swap(static_cast<buffer::list&>(replacement));
+    return static_cast<buffer::list_rw&>(target);
+  }
+
   // -- buffer::list --
 
   void buffer::list::swap(list& other) noexcept
