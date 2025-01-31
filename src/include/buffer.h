@@ -753,7 +753,7 @@ struct error_code;
       void copy(unsigned len, char *dest);
       // deprecated, use copy_deep()
       void copy(unsigned len, ptr &dest) __attribute__((deprecated));
-      ptr copy_deep(unsigned len);
+      ptr_rw copy_deep(unsigned len);
       ptr copy_shallow(unsigned len);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
