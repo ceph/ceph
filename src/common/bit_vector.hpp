@@ -35,7 +35,7 @@ private:
   template <typename DataIterator>
   class ReferenceImpl {
   protected:
-    DataIterator m_data_iterator;
+    mutable DataIterator m_data_iterator;
     uint64_t m_shift;
 
     ReferenceImpl(const DataIterator& data_iterator, uint64_t shift)

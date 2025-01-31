@@ -773,13 +773,12 @@ static ceph::spinlock debug_lock;
   }
 
   template<bool is_const>
-  char buffer::list::iterator_impl<is_const>::operator*() const
+  char buffer::list::iterator_impl<is_const>::operator*()
   {
     if (p == ls->end())
       throw end_of_buffer();
-    while (p->length() == 0) {
-      ++p;
-    }
+    if (p_off >= p->length())
+      *this += 0;
     return (*p)[p_off];
   }
 

@@ -416,7 +416,7 @@ void dump_services(Formatter* f, const map<string, list<string> >& services, con
 // base64 encoded string indicating whether it did.
 string cleanbin(bufferlist &bl, bool &base64, bool show)
 {
-  bufferlist::iterator it;
+  bufferlist::const_iterator it;
   for (it = bl.begin(); it != bl.end(); ++it) {
     if (iscntrl(*it))
       break;
