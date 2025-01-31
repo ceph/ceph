@@ -293,6 +293,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   encode_json("pending_map", pending_map, f);
   encode_json("versioned_epoch", versioned_epoch , f);
   encode_json("snap_skip", snap_skip , f);
+  encode_json("demoted_at_snap", demoted_at_snap , f);
 }
 
 void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
@@ -309,6 +310,7 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("pending_map", pending_map, obj);
   JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
   JSONDecoder::decode_json("snap_skip", snap_skip, obj);
+  JSONDecoder::decode_json("demoted_at_snap", demoted_at_snap, obj);
 }
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)

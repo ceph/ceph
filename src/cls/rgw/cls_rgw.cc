@@ -700,13 +700,20 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
-      if (op.max_snap != RGW_BUCKET_NO_SNAP &&
-          entry.meta.snap_id != RGW_BUCKET_NO_SNAP &&
-          entry.meta.snap_id > op.max_snap) {
-        CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: max_snap=%d",
-		__func__, key.name.c_str(), key.instance.c_str(),
-                (int)entry.meta.snap_id, (int)op.max_snap);
-        continue;
+      if (op.max_snap != RGW_BUCKET_NO_SNAP) {
+        if (entry.meta.snap_id != RGW_BUCKET_NO_SNAP &&
+            entry.meta.snap_id > op.max_snap) {
+          CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: max_snap=%d",
+                  __func__, key.name.c_str(), key.instance.c_str(),
+                  (int)entry.meta.snap_id, (int)op.max_snap);
+          continue;
+        }
+
+        if (!entry.is_visible() &&
+            entry.demoted_at_snap > op.max_snap) {
+          /* make it current as it was current during the requested snapshot */
+          entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+        }
       }
 
       // filter out noncurrent versions, delete markers, and initial marker
@@ -1607,14 +1614,15 @@ public:
     return 0;
   }
 
-  int write_entries(uint64_t flags_set, uint64_t flags_reset,
-                    rgw_bucket_dir_header& header) {
-    if (!initialized) {
-      int ret = init();
-      if (ret < 0) {
-        return ret;
-      }
+  int _validate_init() {
+    if (initialized) {
+      return 0;
     }
+    return init();
+  }
+
+  int _write_entries(uint64_t flags_set, uint64_t flags_reset,
+                     rgw_bucket_dir_header& header) {
     instance_entry.flags &= ~flags_reset;
     instance_entry.flags |= flags_set;
 
@@ -1628,6 +1636,15 @@ public:
     }
 
     return 0;
+  }
+
+  int write_entries(uint64_t flags_set, uint64_t flags_reset,
+                    rgw_bucket_dir_header& header) {
+    int ret = _validate_init();
+    if (ret < 0) {
+      return ret;
+    }
+    return _write_entries(flags_set, flags_reset, header);
   }
 
   int write(uint64_t epoch, bool current, rgw_bucket_dir_header& header) {
@@ -1649,8 +1666,13 @@ public:
     return write_entries(flags, 0, header);
   }
 
-  int demote_current(rgw_bucket_dir_header& header) {
-    return write_entries(0, rgw_bucket_dir_entry::FLAG_CURRENT, header);
+  int demote_current(rgw_bucket_snap_id demoted_at_snap, rgw_bucket_dir_header& header) {
+    int ret = _validate_init();
+    if (ret < 0) {
+      return ret;
+    }
+    instance_entry.demoted_at_snap = demoted_at_snap;
+    return _write_entries(0, rgw_bucket_dir_entry::FLAG_CURRENT, header);
   }
 
   bool is_delete_marker() {
@@ -1869,6 +1891,7 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
                                             cls_rgw_obj_key& key,
                                             bool demote_current,
                                             bool instance_only,
+                                            rgw_bucket_snap_id demoted_at_snap,
                                             rgw_bucket_dir_header& header)
 {
   if (!key.instance.empty()) {
@@ -2075,7 +2098,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       if (!(olh_entry.key == op.key)) {
         BIVerObjEntry old_obj(hctx, olh_entry.key);
 
-        ret = old_obj.demote_current(header);
+        ret = old_obj.demote_current(op.meta.snap_id, header);
         if (ret < 0) {
           CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
           return ret;
@@ -2086,7 +2109,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   } else {
     bool instance_only = (op.key.instance.empty() && op.delete_marker);
     cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+    ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, op.meta.snap_id, header);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
@@ -2222,7 +2245,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   if (!olh_found) {
     bool instance_only = false;
     cls_rgw_obj_key key(dest_key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only, header);
+    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only,
+                                           RGW_BUCKET_NO_SNAP, /* demoted_at_sap: doesn't matter,
+                                                                  as we're about to remove this entry */
+                                           header);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
