@@ -1189,6 +1189,14 @@ class RgwZonegroup(RESTController):
         result = multisite_instance.delete_placement_targets(placement_id, storage_class)
         return result
 
+    @Endpoint('POST', path='storage-class')
+    @CreatePermission
+    # pylint: disable=W0102
+    def storage_class(self, zone_group, placement_targets: List[Dict[str, str]] = []):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.add_placement_targets(zone_group, placement_targets)
+        return result
+
     @Endpoint()
     @ReadPermission
     def get_all_zonegroups_info(self):

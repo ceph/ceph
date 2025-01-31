@@ -117,24 +117,25 @@ class RgwServiceManager:
         return port
 
     def restart_rgw_daemons_and_set_credentials(self):
-        # Restart RGW daemons and set credentials.
-        logger.info("Restarting RGW daemons and setting credentials")
+        if self.restart_rgw_daemons():
+            logger.info("All daemons are up, configuring RGW credentials")
+            self.configure_rgw_credentials()
+        else:
+            logger.error("Not all daemons are up, skipping RGW credentials configuration")
+
+    def restart_rgw_daemons(self):
+        # Restart RGW daemons
+        logger.info("Restarting RGW daemons")
         orch = OrchClient.instance()
         services, _ = orch.services.list(service_type='rgw', offset=0)
-
         all_daemons_up = True
         for service in services:
             logger.info("Verifying service restart for: %s", service['service_id'])
             daemons_up = verify_service_restart('rgw', service['service_id'])
             if not daemons_up:
-                logger.error("Service %s restart verification failed", service['service_id'])
                 all_daemons_up = False
 
-        if all_daemons_up:
-            logger.info("All daemons are up, configuring RGW credentials")
-            self.configure_rgw_credentials()
-        else:
-            logger.error("Not all daemons are up, skipping RGW credentials configuration")
+        return all_daemons_up
 
     def _parse_secrets(self, user: str, data: dict) -> Tuple[str, str]:
         for key in data.get('keys', []):
