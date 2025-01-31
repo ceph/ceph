@@ -1192,15 +1192,15 @@ TEST(BufferListIterator, copy) {
   }
 }
 
-TEST(BufferListIterator, copy_in) {
-  bufferlist bl;
+TEST(BufferListRWIterator, copy_in) {
+  bufferlist_rw bl;
   const char *existing = "XXX";
   bl.append(existing, 3);
   //
   // void buffer::list::iterator::copy_in(unsigned len, const char *src)
   //
   {
-    bufferlist::iterator i(&bl);
+    bufferlist_rw::iterator i(&bl);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
@@ -1217,7 +1217,7 @@ TEST(BufferListIterator, copy_in) {
   // void copy_in(unsigned len, const char *src) via begin(size_t offset)
   //
   {
-    bufferlist bl;
+    bufferlist_rw bl;
     bl.append("XXX");
     EXPECT_THROW(bl.begin((unsigned)100).copy_in((unsigned)100, (char*)0), buffer::end_of_buffer);
     bl.begin(1).copy_in(2, "AB");
@@ -1227,7 +1227,7 @@ TEST(BufferListIterator, copy_in) {
   // void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
   //
   {
-    bufferlist::iterator i(&bl);
+    bufferlist_rw::iterator i(&bl);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
@@ -1245,7 +1245,7 @@ TEST(BufferListIterator, copy_in) {
   // void copy_in(unsigned len, const list& src) via begin(size_t offset)
   //
   {
-    bufferlist bl;
+    bufferlist_rw bl;
     bl.append("XXX");
     bufferlist src;
     src.append("ABC");
@@ -3033,7 +3033,7 @@ TEST(BufferList, TestIsProvidedBuffer) {
 }
 
 TEST(BufferList, DISABLED_DanglingLastP) {
-  bufferlist bl;
+  bufferlist_rw bl;
   {
     // previously we're using the unsharable buffer type to distinguish
     // the last_p-specific problem from the generic crosstalk issues we
@@ -3043,7 +3043,7 @@ TEST(BufferList, DISABLED_DanglingLastP) {
     // been dropped.
     bufferptr_rw bp(buffer::create(10));
     bp.copy_in(0, 3, "XXX");
-    bl.push_back(std::move(bp));
+    bl.append(std::move(bp));
     EXPECT_EQ(0, ::memcmp("XXX", bl.c_str(), 3));
 
     // let `copy_in` to set `last_p` member of bufferlist
@@ -3051,11 +3051,11 @@ TEST(BufferList, DISABLED_DanglingLastP) {
     EXPECT_EQ(0, ::memcmp("ABX", bl.c_str(), 3));
   }
 
-  bufferlist empty;
+  bufferlist_rw empty;
   // before the fix this would have left `last_p` unchanged leading to
   // the dangerous dangling state – keep in mind that the initial,
   // unsharable bptr will be freed.
-  bl = const_cast<const bufferlist&>(empty);
+  bl = const_cast<const bufferlist_rw&>(empty);
   bl.append("123");
 
   // we must continue from where the previous copy_in had finished.
