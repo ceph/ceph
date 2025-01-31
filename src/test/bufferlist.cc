@@ -3032,7 +3032,7 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_FALSE(bl.is_provided_buffer(buff));
 }
 
-TEST(BufferList, DISABLED_DanglingLastP) {
+TEST(BufferList, DanglingLastP) {
   bufferlist_rw bl;
   {
     // previously we're using the unsharable buffer type to distinguish
