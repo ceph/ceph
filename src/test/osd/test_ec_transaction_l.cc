@@ -14,10 +14,12 @@
 
 #include <gtest/gtest.h>
 #include "osd/PGTransaction.h"
-#include "osd/ECTransaction.h"
+#include "osd/ECTransactionL.h"
 #include "common/debug.h"
 
 #include "test/unit.cc"
+
+using namespace ECLegacy;
 
 struct mydpp : public DoutPrefixProvider {
   std::ostream& gen_prefix(std::ostream& out) const override { return out << "foo"; }
@@ -38,12 +40,12 @@ TEST(ectransaction, two_writes_separated)
   b.append_zero(2437120);
   t->write(h, 669856, b.length(), b, 0);
 
-  ECUtil::stripe_info_t sinfo(2, 2, 8192);
-  auto plan = ECTransaction::get_write_plan(
+  ECUtilL::stripe_info_t sinfo(2, 2, 8192);
+  auto plan = ECTransactionL::get_write_plan(
     sinfo,
     *t,
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
+      ECUtilL::HashInfoRef ref(new ECUtilL::HashInfo(1));
       return ref;
     },
     &dpp);
@@ -62,17 +64,17 @@ TEST(ectransaction, two_writes_nearby)
   t->create(h);
 
   // two nearby writes, both partly touching the same 8192-byte stripe
-  ECUtil::stripe_info_t sinfo(2, 2, 8192);
+  ECUtilL::stripe_info_t sinfo(2, 2, 8192);
   a.append_zero(565760);
   t->write(h, 0, a.length(), a, 0);
   b.append_zero(2437120);
   t->write(h, 569856, b.length(), b, 0);
 
-  auto plan = ECTransaction::get_write_plan(
+  auto plan = ECTransactionL::get_write_plan(
     sinfo,
     *t,
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
+      ECUtilL::HashInfoRef ref(new ECUtilL::HashInfo(1));
       return ref;
     },
     &dpp);
@@ -92,7 +94,7 @@ TEST(ectransaction, many_writes)
   b.append_zero(4096);
   t->create(h);
 
-  ECUtil::stripe_info_t sinfo(2, 2, 8192);
+  ECUtilL::stripe_info_t sinfo(2, 2, 8192);
   // write 2801664~512
   // write 2802176~512
   // write 2802688~512
@@ -109,11 +111,11 @@ TEST(ectransaction, many_writes)
   t->write(h, 2809856, b.length(), b, 0);
   t->write(h, 2813952, b.length(), b, 0);
 
-  auto plan = ECTransaction::get_write_plan(
+  auto plan = ECTransactionL::get_write_plan(
     sinfo,
     *t,
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
+      ECUtilL::HashInfoRef ref(new ECUtilL::HashInfo(1));
       return ref;
     },
     &dpp);
