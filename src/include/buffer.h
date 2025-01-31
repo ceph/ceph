@@ -710,7 +710,7 @@ struct error_code;
 					typename buffers_t::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
-      list_iter_t p;
+      mutable list_iter_t p;
       unsigned off; // in bl
       unsigned p_off;   // in *p
       friend class iterator_impl<true>;
@@ -742,7 +742,7 @@ struct error_code;
 	//return off == bl->length();
       }
       void seek(unsigned o);
-      char operator*();
+      char operator*() const;
       iterator_impl& operator+=(unsigned o);
       iterator_impl& operator++();
       bool is_pointing_same_raw(const ptr& other) const;
@@ -1172,10 +1172,10 @@ struct error_code;
     operator seastar::net::packet() &&;
 #endif
 
-    const_iterator begin(size_t offset=0) {
+    iterator begin(size_t offset=0) {
       return iterator(this, offset);
     }
-    const_iterator end() {
+    iterator end() {
       return iterator(this, _len, _buffers.end(), 0);
     }
 
