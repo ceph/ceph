@@ -163,6 +163,10 @@ public:
       return *this;
     }
 
+    void lock_excl_sync() {
+      target_state.lock_excl_sync();
+    }
+
     ObjectContextRef &get_obc() {
       ceph_assert(!target_state.is_empty());
       ceph_assert(target_state.obc->is_loaded());
@@ -216,6 +220,12 @@ public:
   Manager get_obc_manager(const hobject_t &oid, bool resolve_clone = true) {
     Manager ret(*this, oid);
     ret.options.resolve_clone = resolve_clone;
+    return ret;
+  }
+
+  Manager get_obc_manager(ObjectContextRef obc) {
+    Manager ret = get_obc_manager(obc->obs.oi.soid, false);
+    ret.set_state_obc(ret.target_state, obc);
     return ret;
   }
 
