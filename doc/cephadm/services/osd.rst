@@ -311,10 +311,11 @@ OSDs that are not safe to destroy will be rejected.
     specs see :ref:`drivegroups`. For more info on the declarative nature of
     cephadm in reference to deploying OSDs, see :ref:`cephadm-osd-declarative`
 
-Monitoring OSD State
---------------------
+Monitoring OSD State During OSD Removal
+---------------------------------------
 
-You can query the state of OSD operation with the following command:
+You can query the state of OSD operations during the process of removing OSDS
+by running the following command:
 
 .. prompt:: bash #
 
