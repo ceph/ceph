@@ -3106,8 +3106,19 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
     {
       size_t maxlen = 3;
       auto& service_map = mgrstatmon()->get_service_map();
+      std::map<std::string, std::set<std::string>> nvmeof_groups;
       for (auto& p : service_map.services) {
-	maxlen = std::max(maxlen, p.first.size());
+        if (p.first == "nvmeof") {
+          auto daemons = p.second.daemons;
+          for (auto& d : daemons) {
+            auto group = d.second.metadata.find("group");
+            auto gw_id = d.second.metadata.find("id"); 
+            nvmeof_groups[group->second].insert(gw_id->second);
+            maxlen = std::max(maxlen, p.first.size() + group->second.size() + 3); 
+          }
+        } else {
+          maxlen = std::max(maxlen, p.first.size());
+        }
       }
       string spacing(maxlen - 3, ' ');
       const auto quorum_names = get_quorum_names();
@@ -3153,8 +3164,23 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
         if (ServiceMap::is_normal_ceph_entity(service)) {
           continue;
         }
+        if (p.first == "nvmeof") {
+          for (auto& group : nvmeof_groups) {
+            ss << "    " << p.first << " (" << group.first << "): ";
+            ss << string(maxlen - p.first.size() - group.first.size() - 3, ' ');
+            ss << group.second.size() << " gateway" << (group.second.size() ? "s" : "") << " active (";
+            for (auto gw = group.second.begin(); gw != group.second.end(); ++gw){
+              if (gw != group.second.begin()) {
+	              ss << ", ";
+              }
+              ss << *gw; 
+            }
+            ss << ") \n";
+          }
+        } else {
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
 	   << p.second.get_summary() << "\n";
+        }
       }
     }
 
