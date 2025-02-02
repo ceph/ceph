@@ -112,30 +112,25 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     const std::string &logger,
     const std::string &counter) const
 {
-  f->open_object_section("perfcounter_collection");
+  Formatter::ObjectSection collection_section(*f, "perfcounter_collection"sv);
 
   if (dump_labeled == select_labeled_t::labeled) {
+    // dump all counters (labeled and unlabeled), using the "labeled format"
+    std::optional<Formatter::ArraySection> array_section;
     std::string prev_key_name;
     for (auto l = m_loggers.begin(); l != m_loggers.end(); ++l) {
       std::string_view key_name = ceph::perf_counters::key_name((*l)->get_name());
       if (key_name != prev_key_name) {
         // close previous set of counters before dumping new one
-        if (!prev_key_name.empty()) {
-          f->close_section(); // array section
-        }
+        array_section.emplace(*f, key_name);
         prev_key_name = key_name;
-
-        f->open_array_section(key_name);
-        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, "");
+        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, ""s);
       } else {
-        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, "");
+        (*l)->dump_formatted_generic(f, schema, histograms, select_labeled_t::labeled, ""s);
       }
     }
-    if (!m_loggers.empty()) {
-      f->close_section(); // final array section
-    }
   } else {
-    // unlabeled
+    // unlabeled (only unlabeled, and using the "unlabeled format")
     if (logger.empty()) {
       // dump all loggers
       for (auto& l : m_loggers) {
@@ -151,7 +146,6 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
       }
     }
   }
-  f->close_section();
 }
 
 void PerfCountersCollectionImpl::with_counters(std::function<void(
@@ -381,21 +375,36 @@ void PerfCounters::reset()
 }
 
 
+/* Note:
+ * This function dumps one counter. The dump format depends on
+ * the dump request. Specifically - if the dump_labeled parameter
+ * is set - even un-labeled counters are dumped using the "labeled
+ * counter format".
+ */
 void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     bool histograms, select_labeled_t dump_labeled,
     const std::string &counter) const
 {
+  // 'labeled_2nd_lvl_section' is only used in the context of dumping
+  // labeled counters
+  std::optional<Formatter::ObjectSection> labeled_2nd_lvl_section;
+
+  // the 'counters_section' is used for both labeled and unlabeled - but
+  // have different text in the two cases.
+  std::optional<Formatter::ObjectSection> counters_section;
+
   if (dump_labeled == select_labeled_t::labeled) {
-    f->open_object_section(""); // should be enclosed by array
-    f->open_object_section("labels");
-    for (auto label : ceph::perf_counters::key_labels(m_name)) {
+    // we are allowed to open an object section here, as - for
+    // labeled counters format - the caller has opened an array section
+    labeled_2nd_lvl_section.emplace(*f, "");
+    for (Formatter::ObjectSection labels_section{*f, "labels"};
+	 const auto& label : ceph::perf_counters::key_labels(m_name)) {
       // don't dump labels with empty label names
       if (!label.first.empty()) {
-        f->dump_string(label.first, label.second);
+	f->dump_string(label.first, label.second);
       }
     }
-    f->close_section(); // labels
-    f->open_object_section("counters");
+    counters_section.emplace(*f, "counters");
   } else {
     auto labels = ceph::perf_counters::key_labels(m_name);
     // do not dump counters when counter instance is labeled and dump_labeled is not set
@@ -403,7 +412,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       return;
     }
 
-    f->open_object_section(m_name.c_str());
+    counters_section.emplace(*f, m_name);
   }
 
   for (perf_counter_data_vec_t::const_iterator d = m_data.begin();
@@ -420,7 +429,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     }
 
     if (schema) {
-      f->open_object_section(d->name);
+      Formatter::ObjectSection schedma_section{*f, d->name};
       // we probably should not have exposed this raw field (with bit
       // values), but existing plugins rely on it so we're stuck with
       // it.
@@ -465,10 +474,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       } else if (d->unit == UNIT_BYTES) {
 	f->dump_string("units", "bytes");
       }
-      f->close_section();
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
-	f->open_object_section(d->name);
+        Formatter::ObjectSection longrunavg_section{*f, d->name};
 	pair<uint64_t,uint64_t> a = d->read_avg();
 	if (d->type & PERFCOUNTER_U64) {
 	  f->dump_unsigned("avgcount", a.second);
@@ -491,13 +499,11 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	} else {
 	  ceph_abort();
 	}
-	f->close_section();
       } else if (d->type & PERFCOUNTER_HISTOGRAM) {
         ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
         ceph_assert(d->histogram);
-        f->open_object_section(d->name);
+        Formatter::ObjectSection histogram_section{*f, d->name};
         d->histogram->dump_formatted(f);
-        f->close_section();
       } else {
 	uint64_t v = d->u64;
 	if (d->type & PERFCOUNTER_U64) {
@@ -512,10 +518,6 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       }
     }
   }
-  if (dump_labeled == select_labeled_t::labeled) {
-    f->close_section(); // counters
-  }
-  f->close_section();
 }
 
 const std::string &PerfCounters::get_name() const
