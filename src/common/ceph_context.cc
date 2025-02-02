@@ -120,9 +120,8 @@ public:
     }
   }
 
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {"lockdep", NULL};
-    return KEYS;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {"lockdep"s};
   }
 
   void handle_conf_change(const ConfigProxy& conf,
@@ -164,12 +163,8 @@ public:
   }
 
   // md_config_obs_t
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {
-      "mempool_debug",
-      NULL
-    };
-    return KEYS;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {"mempool_debug"s};
   }
 
   void handle_conf_change(const ConfigProxy& conf,
@@ -278,29 +273,27 @@ public:
     : log(l), lock(ceph::make_mutex("log_obs")) {
   }
 
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {
-      "log_file",
-      "log_max_new",
-      "log_max_recent",
-      "log_to_file",
-      "log_to_syslog",
-      "err_to_syslog",
-      "log_stderr_prefix",
-      "log_to_stderr",
-      "err_to_stderr",
-      "log_to_graylog",
-      "err_to_graylog",
-      "log_graylog_host",
-      "log_graylog_port",
-      "log_to_journald",
-      "err_to_journald",
-      "log_coarse_timestamps",
-      "fsid",
-      "host",
-      NULL
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return std::vector<std::string>{
+      "log_file"s,
+      "log_max_new"s,
+      "log_max_recent"s,
+      "log_to_file"s,
+      "log_to_syslog"s,
+      "err_to_syslog"s,
+      "log_stderr_prefix"s,
+      "log_to_stderr"s,
+      "err_to_stderr"s,
+      "log_to_graylog"s,
+      "err_to_graylog"s,
+      "log_graylog_host"s,
+      "log_graylog_port"s,
+      "log_to_journald"s,
+      "err_to_journald"s,
+      "log_coarse_timestamps"s,
+      "fsid"s,
+      "host"s
     };
-    return KEYS;
   }
 
   void handle_conf_change(const ConfigProxy& conf,
