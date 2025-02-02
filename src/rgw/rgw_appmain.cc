@@ -591,8 +591,7 @@ void rgw::AppMain::init_dedup()
     dedup_background = std::make_unique<rgw::dedup::Background>(driver, dpp->get_cct());
     dedup_background->start();
     env.dedup.background = dedup_background.get();
-    // TBD - check with yuval
-    //env.dedup.background->watch_reload(dpp);
+    env.dedup.background->watch_reload(dpp);
   }
 }
 

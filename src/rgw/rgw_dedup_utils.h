@@ -6,6 +6,7 @@
 #include "include/utime.h"
 
 namespace rgw::dedup {
+  static constexpr const char* DEDUP_WATCH_OBJ = "DEDUP_WATCH_OBJ";
   static constexpr uint64_t HEAD_OBJ_SIZE = 4*1024*1024; // 4MB
   using work_shard_t   = uint8_t;
   using md5_shard_t    = uint8_t;
@@ -367,6 +368,16 @@ namespace rgw::dedup {
     return disk_blocks * DISK_ALLOC_SIZE;
   }
 
+  enum urgent_msg_t {
+    URGENT_MSG_NONE    = 0,
+    URGENT_MSG_ABORT   = 1,
+    URGENT_MSG_PASUE   = 2,
+    URGENT_MSG_RESUME  = 3,
+    URGENT_MSG_RESTART = 4,
+    URGENT_MSG_INVALID = 5
+  };
+
+  const char* get_urgent_msg_names(int msg);
   uint64_t hex2int(const char *p, const char* p_end);
   uint16_t dec2int(const char *p, const char* p_end);
   uint16_t get_num_parts(const std::string & etag);

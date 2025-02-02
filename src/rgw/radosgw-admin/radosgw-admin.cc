@@ -81,7 +81,6 @@ extern "C" {
 #include "rgw_data_access.h"
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
-#include "cls/cmpxattr/ops.h"
 #include "rgw_dedup_cluster.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -9139,15 +9138,24 @@ next:
     rgw::dedup::cluster::collect_all_shard_stats(store, dpp());
   }
 
-  if (opt_cmd == OPT::DEDUP_ABORT) {
-    std::cerr << "OPT::DEDUP_ABORT" << std::endl;
+  if (opt_cmd == OPT::DEDUP_ABORT || opt_cmd == OPT::DEDUP_PAUSE || opt_cmd == OPT::DEDUP_RESUME) {
+    int urgent_msg;
+    if (opt_cmd == OPT::DEDUP_ABORT) {
+      urgent_msg = rgw::dedup::URGENT_MSG_ABORT;
+    }
+    else if (opt_cmd == OPT::DEDUP_PAUSE) {
+      urgent_msg = rgw::dedup::URGENT_MSG_PASUE;
+    }
+    else {
+      urgent_msg = rgw::dedup::URGENT_MSG_RESUME;
+    }
+
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
       cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
       ceph_abort("Bad Rados driver");
     }
-    rgw::dedup::cluster::dedup_control(store, dpp(),
-				       cls::cmpxattr::URGENT_MSG_ABORT);
+    rgw::dedup::cluster::dedup_control(store, dpp(), urgent_msg);
   }
 
   if (opt_cmd == OPT::DEDUP_RESTART_DRY || opt_cmd == OPT::DEDUP_RESTART) {
@@ -9158,28 +9166,6 @@ next:
       ceph_abort("Bad Rados driver");
     }
     rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
-  }
-
-  if (opt_cmd == OPT::DEDUP_PAUSE) {
-    std::cerr << "OPT::DEDUP_PAUSE" << std::endl;
-    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (!store) {
-      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
-      ceph_abort("Bad Rados driver");
-    }
-    rgw::dedup::cluster::dedup_control(store, dpp(),
-				       cls::cmpxattr::URGENT_MSG_PASUE);
-  }
-
-  if (opt_cmd == OPT::DEDUP_RESUME) {
-    std::cerr << "OPT::DEDUP_RESUME" << std::endl;
-    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (!store) {
-      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
-      ceph_abort("Bad Rados driver");
-    }
-    rgw::dedup::cluster::dedup_control(store, dpp(),
-				       cls::cmpxattr::URGENT_MSG_RESUME);
   }
 
   if (opt_cmd == OPT::GC_LIST) {

@@ -223,8 +223,8 @@ namespace rgw::dedup {
   {
     disk_block_header_t *p_header = get_header();
     if (unlikely(p_header->rec_count >= MAX_REC_IN_BLOCK)) {
-      ldpp_dout(dpp, 1)  << __func__ << "::rec_count=" << p_header->rec_count
-			 << ", MAX_REC_IN_BLOCK=" << MAX_REC_IN_BLOCK << dendl;
+      ldpp_dout(dpp, 10)  << __func__ << "::rec_count=" << p_header->rec_count
+			  << ", MAX_REC_IN_BLOCK=" << MAX_REC_IN_BLOCK << dendl;
       return MAX_REC_IN_BLOCK;
     }
 

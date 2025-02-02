@@ -298,8 +298,8 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
 #if 0
   // REMOVE-ME!!
   // temp output to help dedbug dedup code
-  if (strcmp(name, "cluster_lock") == 0) {
-    dout(1) << "::lock_update::oid=" << (*pctx)->obs->oi.soid.oid << dendl;
+  if (strcmp(name, "rgw.dedup.attr.epoch") == 0) {
+    dout(1) << "::epoch::oid=" << (*pctx)->obs->oi.soid.oid << dendl;
   }
 #endif
   op.op.op = CEPH_OSD_OP_GETXATTR;

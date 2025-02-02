@@ -28,6 +28,10 @@ namespace cls::cmpxattr {
   /// process each of the xattrs value comparisons according to the same rules as
   /// cmpxattr(). IFF **all** key/value pairs in @cmp_pairs compare successfully
   /// a set operation will be perfrom for **all** key/value pairs in @set_pairs.
+  /// Caller must supply non-empty cmp_pairs and set_pairs
+  /// However, it is legal to pass an empty value bl for any key
+  ///         An empty value will match key with an empty value or a non-existing key!
+  ///
   /// for comparisons with Mode::U64, failure to decode an input value is
   /// reported as -EINVAL.
   /// a decode failure of a stored value is treated as an unsuccessful comparison
@@ -36,25 +40,6 @@ namespace cls::cmpxattr {
 				      Mode mode, Op comparison,
 				      const ComparisonMap& cmp_pairs,
 				      const std::map<std::string, bufferlist>& set_pairs);
-
-  // A server side locking facility using the server internal clock.
-  // This guarantees a consistent view over multiple unsynchronized RGWs
-  //
-  // Create a lock object if doesn't exist with your name and curr time
-  // If exists and you are the owner -> update time to now
-  // If exists and you are *NOT* the owner:
-  //    -> If duration since lock-time is higher than allowed_duration:
-  //         -> Break the lock and set a new lock under your name with curr time
-  //    -> Otherwise, fail operation
-  void lock_update(librados::ObjectWriteOperation& writeop,
-		   const std::string& owner,
-		   const std::string& key_name,
-		   const utime_t&     max_lock_duration,
-		   operation_flags_t  op_flags,
-		   ceph::bufferlist   in_bl,
-		   uint64_t           progress_a,
-		   uint64_t           progress_b,
-		   int32_t            urgent_msg);
 
   // bufferlist factories for comparison values
   inline ceph::bufferlist string_buffer(const std::string_view& value) {
