@@ -301,7 +301,8 @@ void AbstractWriteLog<I>::log_perf() {
   ss << "\"image\": \"" << m_image_ctx.name << "\",";
   bl.append(ss);
   bl.append("\"stats\": ");
-  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(f, false, false);
+  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(
+      f, false, select_labeled_t::unlabeled);
   f->flush(bl);
   bl.append(",\n\"histograms\": ");
   m_image_ctx.cct->get_perfcounters_collection()->dump_formatted_histograms(f, 0);

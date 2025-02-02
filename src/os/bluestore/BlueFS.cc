@@ -625,7 +625,7 @@ uint64_t BlueFS::get_free(unsigned id)
 void BlueFS::dump_perf_counters(Formatter *f)
 {
   f->open_object_section("bluefs_perf_counters");
-  logger->dump_formatted(f, false, false);
+  logger->dump_formatted(f, false, select_labeled_t::unlabeled);
   f->close_section();
 }
 

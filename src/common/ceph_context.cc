@@ -538,17 +538,18 @@ int CephContext::_do_command(
     std::string counter;
     cmd_getval(cmdmap, "logger", logger);
     cmd_getval(cmdmap, "counter", counter);
-    _perf_counters_collection->dump_formatted(f, false, false, logger, counter);
+    _perf_counters_collection->dump_formatted(f, false, select_labeled_t::unlabeled,
+                                              logger, counter);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
     command == "perf schema") {
-    _perf_counters_collection->dump_formatted(f, true, false);
+    _perf_counters_collection->dump_formatted(f, true, select_labeled_t::unlabeled);
   }
   else if (command == "counter dump") {
-    _perf_counters_collection->dump_formatted(f, false, true);
+    _perf_counters_collection->dump_formatted(f, false, select_labeled_t::labeled);
   }
   else if (command == "counter schema") {
-    _perf_counters_collection->dump_formatted(f, true, true);
+    _perf_counters_collection->dump_formatted(f, true, select_labeled_t::labeled);
   }
   else if (command == "perf histogram dump") {
     std::string logger;
