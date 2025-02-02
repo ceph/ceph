@@ -589,8 +589,7 @@ void rgw::AppMain::init_dedup()
     dedup_background = std::make_unique<rgw::dedup::Background>(driver, dpp->get_cct());
     dedup_background->start();
     env.dedup.background = dedup_background.get();
-    // TBD - check with yuval
-    //env.dedup.background->watch_reload(dpp);
+    env.dedup.background->watch_reload(dpp);
   }
 }
 
@@ -599,8 +598,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
-    // TBD - check with yuval
-    //(env.dedup.background->get())->unwatch_reload(dpp);
+    (env.dedup.background)->unwatch_reload(dpp);
   }
 
   for (auto& fe : fes) {

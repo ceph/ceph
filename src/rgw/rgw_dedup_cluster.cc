@@ -1,4 +1,8 @@
 #include "rgw_dedup_cluster.h"
+#include "rgw_dedup.h"
+#include "rgw_dedup_epoch.h"
+#include "rgw_common.h"
+#include "rgw_dedup_store.h"
 #include "include/ceph_assert.h"
 #include "include/rados/rados_types.hpp"
 #include "include/rados/buffer.h"
@@ -13,8 +17,6 @@
 #include "rgw_sal.h"
 #include "driver/rados/rgw_sal_rados.h"
 #include "cls/cmpxattr/client.h"
-#include "cls/cmpxattr/server.h"
-#include <random>
 #include <cstdlib>
 #include <ctime>
 #include <string>
@@ -24,73 +26,93 @@ using namespace ::cls::cmpxattr;
 namespace rgw::dedup {
 #define DEDUP_EPOCH_TOKEN  "EPOCH_TOKEN"
 
-  static const std::string KEY_NAME("cluster_lock");
-  //static constexpr unsigned MAX_LOCK_DURATION_SEC = 3600; // 1 hour
   static constexpr unsigned EPOCH_MAX_LOCK_DURATION_SEC = 30;
   static constexpr unsigned MAX_LOCK_DURATION_SEC = 60;
   static const ceph::bufferlist null_bl;
 
-  const uint64_t URGENT_MSG_ID_VAL = 0x00FFFFFFFFFFFFFFULL;
-
-  static int get_epoch(rgw::sal::RadosStore *store,
+  static int get_epoch(librados::IoCtx *p_ioctx,
 		       const DoutPrefixProvider *dpp,
 		       dedup_epoch_t *p_epoch, /* OUT */
 		       const char *caller);
-  static int set_epoch(rgw::sal::RadosStore *store,
+  static int set_epoch(librados::IoCtx *p_ioctx,
 		       const std::string &cluster_id,
 		       const DoutPrefixProvider *dpp);
+  struct shard_progress_t;
   static int collect_shard_stats(librados::IoCtx *p_ioctx,
 				 const DoutPrefixProvider *dpp,
 				 utime_t epoch_time,
 				 unsigned shards_count,
 				 const char *prefix,
 				 bufferlist bl_arr[],
-				 named_time_lock_t *ntl_arr);
+				 struct shard_progress_t *sp_arr);
+
+  const uint64_t SP_ALL_OBJECTS = ULLONG_MAX;
+  const uint64_t SP_NO_OBJECTS  = 0ULL;
+  const char* SHARD_PROGRESS_ATTR = "shard_progress";
+  //---------------------------------------------------------------------------
+  struct shard_progress_t {
+    shard_progress_t() {
+      this->creation_time   = utime_t();
+      this->completion_time = utime_t();
+      this->update_time     = utime_t();
+    }
+
+    shard_progress_t(uint64_t _progress_a,
+		     uint64_t _progress_b,
+		     bool _completed,
+		     const std::string &_owner,
+		     const bufferlist  &_in_bl) :owner(_owner), in_bl(_in_bl) {
+      this->progress_a  = _progress_a;
+      this->progress_b  = _progress_b;
+      this->completed   = _completed;
+      this->update_time = ceph_clock_now();
+
+      if (_progress_a == SP_NO_OBJECTS && _progress_b == SP_NO_OBJECTS) {
+	this->creation_time = ceph_clock_now();
+      }
+      if (_completed) {
+	this->completion_time = ceph_clock_now();
+      }
+    }
+
+    uint64_t    progress_a = SP_NO_OBJECTS;
+    uint64_t    progress_b = SP_NO_OBJECTS;
+    bool        completed = false;
+    utime_t     update_time;
+    utime_t     creation_time;
+    utime_t     completion_time;
+    std::string owner;
+    bufferlist  in_bl;
+  };
 
   //---------------------------------------------------------------------------
-  static int set_cluster_id(char buff[], unsigned buff_size, uint64_t id)
+  void encode(const shard_progress_t& sp, ceph::bufferlist& bl)
   {
-    char hex_string[sizeof(id)*2+1];
-    memset(hex_string, 0, sizeof(hex_string));
-    unsigned n = snprintf(hex_string, sizeof(hex_string), "%016lx", id);
-    if (n != 16) {
-      std::cerr << "n=" << n << std::endl;
-    }
-    ceph_assert(buff_size <= n);
-    memset(buff, 0, buff_size);
-    unsigned copy_size = std::min(buff_size, n) - 1;
-    memcpy(buff, hex_string, copy_size);
-    return copy_size;
+    ENCODE_START(1, 1, bl);
+    encode(sp.progress_a, bl);
+    encode(sp.progress_b, bl);
+    encode(sp.completed, bl);
+    encode(sp.creation_time, bl);
+    encode(sp.completion_time, bl);
+    encode(sp.update_time, bl);
+    encode(sp.owner, bl);
+    encode(sp.in_bl, bl);
+    ENCODE_FINISH(bl);
   }
 
   //---------------------------------------------------------------------------
-  static std::string get_urgent_msg_cluster_id()
+  void decode(shard_progress_t & sp, ceph::bufferlist::const_iterator& bl)
   {
-    char buff[15];
-    int n = set_cluster_id(buff, sizeof(buff), URGENT_MSG_ID_VAL);
-    std::string cluster_id(buff, n);
-    return cluster_id;
-  }
-
-  //---------------------------------------------------------------------------
-  static void assign_cluster_id(std::string & cluster_id,
-				const DoutPrefixProvider *dpp)
-  {
-    // choose a 14 Bytes Random ID (so strings won't use dynamic allocation)
-    // Seed with a real random value, if available
-    std::random_device r;
-    // Choose a random mean between 1 ULLONG_MAX
-    std::default_random_engine e1(r());
-    std::uniform_int_distribution<uint64_t> uniform_dist(1, std::numeric_limits<uint64_t>::max());
-    uint64_t rand_high = uniform_dist(e1);
-    while (rand_high == URGENT_MSG_ID_VAL) {
-      rand_high = uniform_dist(e1);
-    }
-    char buff[15];
-    int n = set_cluster_id(buff, sizeof(buff), rand_high);
-    cluster_id.insert(0, buff, n);
-
-    ldpp_dout(dpp, 1) << __func__ << "::" << cluster_id << "::" << dendl;
+    DECODE_START(1, bl);
+    decode(sp.progress_a, bl);
+    decode(sp.progress_b, bl);
+    decode(sp.completed, bl);
+    decode(sp.creation_time, bl);
+    decode(sp.completion_time, bl);
+    decode(sp.update_time, bl);
+    decode(sp.owner, bl);
+    decode(sp.in_bl, bl);
+    DECODE_FINISH(bl);
   }
 
   //---------------------------------------------------------------------------
@@ -134,13 +156,17 @@ namespace rgw::dedup {
     return ret;
   }
 
+  //==========================================================================
+  static constexpr auto COOKIE_LEN = 15;
+  static constexpr auto CLUSTER_ID_LEN = 15;
   //---------------------------------------------------------------------------
-  cluster::cluster(const DoutPrefixProvider *_dpp) : dpp(_dpp)
+  cluster::cluster(const DoutPrefixProvider *_dpp, CephContext* const _cct) :
+    dpp(_dpp), cct(_cct),
+    d_lock_cookie(gen_rand_alphanumeric(cct, COOKIE_LEN)),
+    d_cluster_id (gen_rand_alphanumeric(cct, CLUSTER_ID_LEN))
   {
     d_was_initialized = false;
-    // use current time as seed for random generator
-    std::srand(std::time(nullptr));
-    assign_cluster_id(d_cluster_id, dpp);
+    ldpp_dout(dpp, 1) << __func__ << "::cluser_id=" << d_cluster_id << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -170,17 +196,19 @@ namespace rgw::dedup {
     int ret;
     reset();
     if (init_epoch) {
-      ret = set_epoch(store, d_cluster_id, dpp);
+      ldpp_dout(dpp, 1) << __func__ << "::init_epoch is set" << dendl;
+      ret = set_epoch(p_ioctx, d_cluster_id, dpp);
       if (ret != 0) {
 	ldpp_dout(dpp, 1) << "failed set_epoch()! ret=" << ret
 			  << "::" << cpp_strerror(ret) << dendl;
 	return ret;
       }
     }
-    ret = get_epoch(store, dpp, p_epoch, __func__);
+    ret = get_epoch(p_ioctx, dpp, p_epoch, __func__);
     if (ret != 0) {
       return ret;
     }
+    ldpp_dout(dpp, 1) << "get_epoch() successfully" << dendl;
     d_epoch_time = p_epoch->time;
     cleanup_prev_run(p_ioctx);
     create_shard_tokens(p_ioctx, MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
@@ -213,6 +241,11 @@ namespace rgw::dedup {
       }
       unsigned deleted_count = 0, skipped_count = 0, failed_count= 0;;
       for (const std::string& oid : oids) {
+	if (oid == DEDUP_WATCH_OBJ || oid == DEDUP_EPOCH_TOKEN) {
+	  ldpp_dout(dpp, 0) << __func__ << "::skipping " << oid << dendl;
+	  skipped_count++;
+	  continue;
+	}
 	uint64_t size;
 	struct timespec tspec;
 	if (p_ioctx->stat2(oid, &size, &tspec) != 0) {
@@ -239,32 +272,23 @@ namespace rgw::dedup {
 	}
       }
       ldpp_dout(dpp, 0) << __func__ << "::oids.size()=" << oids.size()
-			<< "::deleted="     << deleted_count
-			<< "::failed="      << failed_count
-			<< "::skipped_new=" << skipped_count << dendl;
+			<< "::deleted=" << deleted_count
+			<< "::failed="  << failed_count
+			<< "::skipped=" << skipped_count << dendl;
 
     } while (truncated);
     return 0;
   }
 
   //---------------------------------------------------------------------------
-  static int get_epoch(rgw::sal::RadosStore *store,
+  static int get_epoch(librados::IoCtx *p_ioctx,
 		       const DoutPrefixProvider *dpp,
 		       dedup_epoch_t *p_epoch, /* OUT */
 		       const char *caller)
   {
-    auto& pool = store->svc()->zone->get_zone_params().log_pool;
-    librados::IoCtx ioctx;
-    int ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), pool, ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:"
-			<< pool.to_str() << dendl;
-      return -EIO;
-    }
-
     std::string oid(DEDUP_EPOCH_TOKEN);
     bufferlist bl;
-    ret = ioctx.getxattr(oid, RGW_DEDUP_ATTR_EPOCH, bl);
+    int ret = p_ioctx->getxattr(oid, RGW_DEDUP_ATTR_EPOCH, bl);
     if (ret > 0) {
       try {
 	auto p = bl.cbegin();
@@ -286,18 +310,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int set_epoch(rgw::sal::RadosStore *store,
+  static int set_epoch(librados::IoCtx *p_ioctx,
 		       const std::string &cluster_id,
 		       const DoutPrefixProvider *dpp)
   {
     std::string oid(DEDUP_EPOCH_TOKEN);
-    auto sysobj = store->svc()->sysobj;
-    auto& pool  = store->svc()->zone->get_zone_params().log_pool;
-    bufferlist null_bl;
     ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << dendl;
     bool exclusive = true; // block overwrite of old objects
-    int ret = rgw_put_system_obj(dpp, sysobj, pool, oid, null_bl, exclusive, nullptr, real_time(), null_yield);
-    if (ret == 0) {
+    int ret = p_ioctx->create(oid, exclusive);
+    if (ret >= 0) {
       ldpp_dout(dpp, 0) << __func__ << "::successfully created Epoch object!" << dendl;
       // now try and take ownership
     }
@@ -306,34 +327,29 @@ namespace rgw::dedup {
       // try and take ownership
     }
     else{
-      ldpp_dout(dpp, 0) << __func__ << "::ERROR: failed to write log obj " << oid
+      ldpp_dout(dpp, 0) << __func__ << "::ERROR: failed to create " << oid
 			<<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
       return ret;
     }
 
-    // TBD: CMP-SWAP with null CMP
+    uint32_t serial = 0;
+    int dedup_type = DEDUP_TYPE_DRY_RUN;
+    dedup_epoch_t new_epoch = { serial, dedup_type, ceph_clock_now()};
+    bufferlist new_epoch_bl, empty_bl;
+    encode(new_epoch, new_epoch_bl);
+    ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, empty_bl}};
+    std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    utime_t max_lock_duration(EPOCH_MAX_LOCK_DURATION_SEC, 0);
-    operation_flags_t epoch_flag;
-    epoch_flag = operation_flags_t::LOCK_UPDATE_OP_SET_EPOCH;
-    ldpp_dout(dpp, 0) << __func__ << "::LOCK_UPDATE_OP_SET_EPOCH" << dendl;
-    operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK | epoch_flag);
-    lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl,
-		0, 0, URGENT_MSG_NONE);
-    librados::IoCtx ioctx;
-    ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), pool, ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:"
-			<< pool.to_str() << dendl;
-      return -EIO;
+    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
+    if (ret != 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::failed cmp_vals_set_vals" << dendl;
     }
-
-    ldpp_dout(dpp, 10) << __func__ << "::send Cluster Lock CLS" << dendl;
-    ret = ioctx.operate(oid, &op);
+    ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
+    ret = p_ioctx->operate(oid, &op);
     if (ret == 0) {
       ldpp_dout(dpp, 1) << __func__ << "::Epoch object was written" << dendl;
     }
-    else if (ret == -EBUSY) {
+    else if (ret == -EEXIST) {
       ldpp_dout(dpp, 1) << __func__ << "::Accept existing Epoch object" << dendl;
       ret = 0;
     }
@@ -361,11 +377,12 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 5) << __func__ << "::oid=" << oid << " was created!" << dendl;
       }
       else if (ret == -EEXIST) {
-	ldpp_dout(dpp, 10) << "failed ioctx.create(" << oid << ") -EEXIST!" << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.create("
+			   << oid << ") -EEXIST!" << dendl;
       }
       else {
-	ldpp_dout(dpp, 1) << "failed ioctx.create(" << oid << ") with: " << ret
-			  << "::" << cpp_strerror(ret) << dendl;
+	ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.create(" << oid
+			  << ") with: " << ret  << "::" << cpp_strerror(ret) << dendl;
       }
     }
 
@@ -373,95 +390,26 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void ntl_display_progress(const named_time_lock_t &ntl, unsigned shard)
+  static void display_progress(uint64_t progress_a, uint64_t progress_b, unsigned shard)
   {
-    if (ntl.progress_a == 0 && ntl.progress_b == 0) {
+    if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
       return;
     }
 
     std::cout << std::hex << "0x" << std::setw(2) << std::setfill('0') << shard << std::dec << "] ";
-    if (ntl.progress_b == NTL_ALL_OBJECTS) {
-      std::cout << "Token is marked completed! obj_count="
-		<< ntl.progress_a << std::endl;
+    if (progress_b == SP_ALL_OBJECTS) {
+      std::cout << "Token is marked completed! obj_count=" << progress_a << std::endl;
     }
-    else if (ntl.progress_a == 0 && ntl.progress_b == 0) {
+    else if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
       std::cout << "Token was not started yet!" << std::endl;
     }
-    else if (ntl.progress_b == 0) {
-      std::cout << "Token is incomplete: progress = "
-		<< ntl.progress_a <<  std::endl;
+    else if (progress_b == SP_NO_OBJECTS) {
+      std::cout << "Token is incomplete: progress=" << progress_a << std::endl;
     }
     else {
-      std::cout << "Token is incomplete: progress = [" << ntl.progress_a
-		<< ", " << ntl.progress_b << "]" <<  std::endl;
+      std::cout << "Token is incomplete: progress = [" << progress_a
+		<< ", " << progress_b << "]" <<  std::endl;
     }
-  }
-
-  //---------------------------------------------------------------------------
-  static int check_urgent_msg(librados::IoCtx *p_ioctx,
-			      const DoutPrefixProvider *dpp,
-			      const std::string &cluster_id,
-			      const std::string &oid,
-			      int *p_urgent_msg /* OUT PARAM */,
-			      bool silent = false)
-  {
-    if (!silent) {
-      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << dendl;
-    }
-    bufferlist bl;
-    int ret = p_ioctx->getxattr(oid, "cluster_lock", bl);
-    if (ret == -ENODATA) {
-      ldpp_dout(dpp, 0) << __func__ << "::Resume request removed lock on oid::" << oid << dendl;
-    }
-
-    if (unlikely(ret <= 0)) {
-      ldpp_dout(dpp, 0) << __func__ << "::>" << oid
-			<< "::failed ioctx.getxattr() ret=" << ret
-			<< "::" << cpp_strerror(ret) << dendl;
-      return -1;
-    }
-
-    named_time_lock_t ntl;
-    try {
-      auto p = bl.cbegin();
-      decode(ntl, p);
-    }
-    catch (const buffer::error&) {
-      ldpp_dout(dpp, 0) << __func__ << "::(3)failed named_time_lock_t decode!::" << oid << dendl;
-      return -1;
-    }
-    if (ntl.urgent_msg == URGENT_MSG_NONE) {
-      ldpp_dout(dpp, 10) << __func__ << "::URGENT_MSG_NONE" << dendl;
-      *p_urgent_msg = URGENT_MSG_NONE;
-      return 0;
-    }
-
-    if (ntl.is_urgent_stop_msg()) {
-      if (!silent) {
-	ldpp_dout(dpp, 0) << __func__ << "::>" << oid << get_urgent_msg_names(ntl.urgent_msg) << dendl;
-      }
-      *p_urgent_msg = ntl.urgent_msg;
-    }
-    else if (ntl.urgent_msg == URGENT_MSG_RESUME) {
-      ldpp_dout(dpp, 0) << __func__ << "::" << oid << "::URGENT_MSG_RESUME" << dendl;
-      *p_urgent_msg = ntl.urgent_msg;
-    }
-    else {
-      ldpp_dout(dpp, 0) << __func__ << "::SKIP" << dendl;
-      *p_urgent_msg = URGENT_MSG_SKIP;
-    }
-    return 0;
-  }
-
-  //---------------------------------------------------------------------------
-  int cluster::get_urgent_msg_state(librados::IoCtx *p_ioctx,
-				    int *urgent_msg /* OUT-PARAM */)
-  {
-    char buff[16];
-    // use the first work-shard to test urgent-messages
-    int n = snprintf(buff, sizeof(buff), "%s%02x", WORKER_SHARD_PREFIX, 0);
-    const std::string oid(buff, n);
-    return check_urgent_msg(p_ioctx, dpp, d_cluster_id, oid, urgent_msg, true);
   }
 
   //---------------------------------------------------------------------------
@@ -469,111 +417,18 @@ namespace rgw::dedup {
 					    unsigned shard,
 					    uint64_t count_a,
 					    uint64_t count_b,
-					    const char *prefix,
-					    int *p_urgent_msg /* IN-OUT PARAM */)
+					    const char *prefix)
   {
     ceph_assert(d_was_initialized);
     char buff[16];
     int n = snprintf(buff, sizeof(buff), "%s%02x", prefix, shard);
     std::string oid(buff, n);
-    librados::ObjectWriteOperation op;
-    utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
-    operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK);
-    // TBD: can use a simple attribute write since we hold the lock ??
-    lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags,
-		null_bl, count_a, count_b, *p_urgent_msg);
-    *p_urgent_msg = URGENT_MSG_NONE;
-    int ret = p_ioctx->operate(oid, &op);
-    if (ret == 0) {
-      ldpp_dout(dpp, 10) << __func__ << "::success!::" << oid << dendl;
-      return 0;
-    }
-
-    return check_urgent_msg(p_ioctx, dpp, d_cluster_id, oid, p_urgent_msg);
-  }
-
-  //---------------------------------------------------------------------------
-  int cluster::get_next_shard_token(librados::IoCtx *p_ioctx,
-				    unsigned start_shard,
-				    unsigned max_shard,
-				    const char *prefix,
-				    int *p_urgent_msg /* IN-OUT PARAM */)
-  {
-    ceph_assert(d_was_initialized);
-    char buff[16];
-    int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
-    utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
-    for (auto shard = start_shard; shard < max_shard; shard++) {
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
-
-      for (unsigned ii = 0; ii < 2; ii++) {
-	ldpp_dout(dpp, 20) << __func__ << "::try garbbing " << oid << dendl;
-	librados::ObjectWriteOperation op;
-	operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK);
-	// TBD: maybe use RGW/CLS existing lock mechanism
-	lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl,
-		    0, 0, URGENT_MSG_NONE);
-
-	int ret = p_ioctx->operate(oid, &op);
-	if (ret == 0) {
-	  ldpp_dout(dpp, 0) << __func__ << "::SUCCESS!::" << oid << dendl;
-	  return shard;
-	}
-
-	// check if token is marked for an urgent message
-	*p_urgent_msg = URGENT_MSG_NONE;
-	ret = check_urgent_msg(p_ioctx, dpp, d_cluster_id, oid, p_urgent_msg);
-
-	// Token is set for an URGENT-STOP
-	if (*p_urgent_msg == URGENT_MSG_ABORT || *p_urgent_msg == URGENT_MSG_PASUE) {
-	  return -1;
-	}
-
-	if (ret != 0 || *p_urgent_msg != URGENT_MSG_NONE) {
-	  // might be a recoverable issue -> retry one more time
-	  // most likely scenario: token lock failed because of an urgent messages
-	  // which has been removed since and now we can take the token
-	  ldpp_dout(dpp, 1) << __func__ << "::retry garbbing " << oid << dendl;
-	}
-	else {
-	  // someone else took this token -> move to the next one
-	  break;
-	}
-      }
-    }
-
-    return -1;
-  }
-
-  //---------------------------------------------------------------------------
-  work_shard_t cluster::get_next_work_shard_token(librados::IoCtx *p_ioctx,
-						  int *p_urgent_msg /* IN-OUT PARAM */)
-  {
-    int shard = get_next_shard_token(p_ioctx, d_curr_worker_shard, MAX_WORK_SHARD,
-				     WORKER_SHARD_PREFIX, p_urgent_msg);
-    if (shard >= 0 && shard < MAX_WORK_SHARD) {
-      d_curr_worker_shard = shard + 1;
-      return shard;
-    }
-    else {
-      return NULL_WORK_SHARD;
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  md5_shard_t cluster::get_next_md5_shard_token(librados::IoCtx *p_ioctx,
-						int *p_urgent_msg /* IN-OUT PARAM */)
-  {
-    int shard = get_next_shard_token(p_ioctx, d_curr_md5_shard, MAX_MD5_SHARD,
-				     MD5_SHARD_PREFIX, p_urgent_msg);
-    if (shard >= 0 && shard < MAX_MD5_SHARD) {
-      d_curr_md5_shard = shard + 1;
-      return shard;
-    }
-    else {
-      return NULL_MD5_SHARD;
-    }
+    bufferlist empty_bl;
+    shard_progress_t sp(count_a, count_b, false, d_cluster_id, empty_bl);
+    sp.creation_time = d_token_creation_time;
+    bufferlist sp_bl;
+    encode(sp, sp_bl);
+    return p_ioctx->setxattr(oid, SHARD_PROGRESS_ATTR, sp_bl);
   }
 
   //---------------------------------------------------------------------------
@@ -589,24 +444,110 @@ namespace rgw::dedup {
     std::string oid(buff,  n);
     ldpp_dout(dpp, 10) << __func__ << "::" << prefix << "::" << oid << dendl;
 
-    librados::ObjectWriteOperation op;
-    utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
-    operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK |
-			       operation_flags_t::LOCK_UPDATE_OP_MARK_COMPLETED);
-    // TBD: can probably be done without compare since we hold lock
-    lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags,
-		bl, obj_count, NTL_ALL_OBJECTS, URGENT_MSG_NONE);
-
-    int ret = p_ioctx->operate(oid, &op);
+    shard_progress_t sp(obj_count, SP_ALL_OBJECTS, true, d_cluster_id, bl);
+    sp.creation_time = d_token_creation_time;
+    bufferlist sp_bl;
+    encode(sp, sp_bl);
+    int ret = p_ioctx->setxattr(oid, SHARD_PROGRESS_ATTR, sp_bl);
     if (ret == 0) {
-      ldpp_dout(dpp, 10) << __func__ << "::Done ioctx.operate(" << oid << ")" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::Done ioctx.setxattr(" << oid << ")" << dendl;
     }
     else {
-      ldpp_dout(dpp, 0) << __func__ << "::Failed ioctx.operate(" << oid << ") ret="
+      ldpp_dout(dpp, 0) << __func__ << "::Failed ioctx.setxattr(" << oid << ") ret="
 			<< ret << "::" << cpp_strerror(ret) << dendl;
     }
 
     return ret;
+  }
+
+  //---------------------------------------------------------------------------
+  int cluster::get_next_shard_token(librados::IoCtx *p_ioctx,
+				    unsigned start_shard,
+				    unsigned max_shard,
+				    const char *prefix)
+  {
+    ceph_assert(d_was_initialized);
+
+    char buff[16];
+    int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
+
+    // lock paramters:
+    const utime_t     lock_duration;  // zero duration means lock doesn't expire
+    const uint8_t     lock_flags = 0; // no flags
+    const std::string lock_tag;       // no tag
+
+    for (auto shard = start_shard; shard < max_shard; shard++) {
+      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
+      std::string oid(buff, prefix_len + n);
+
+      ldpp_dout(dpp, 10) << __func__ << "::try garbbing " << oid << dendl;
+      librados::ObjectWriteOperation op;
+      op.assert_exists();
+      rados::cls::lock::lock(&op, oid, ClsLockType::EXCLUSIVE, d_lock_cookie,
+			     lock_tag, "dedup_shard_token", lock_duration, lock_flags);
+      int ret = rgw_rados_operate(dpp, *p_ioctx, oid, &op, null_yield);
+      if (ret == -EBUSY) {
+	// someone else took this token -> move to the next one
+	ldpp_dout(dpp, 1) << __func__ << "::Failed lock. " << oid <<
+	  " is owned by other rgw" << dendl;
+	continue;
+      }
+      else if (ret == -ENOENT) {
+	// token is deleted - processing will stop the next time we try to read from the queue
+	ldpp_dout(dpp, 1) << __func__ << "::" << oid
+			  << " token doesn't exist, fail lock!" << dendl;
+	continue;
+      }
+      else if (ret < 0) {
+	// failed to lock for another reason, continue to process other queues
+	ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to lock token: " << oid
+			  << ":: ret=" << ret << "::" << cpp_strerror(ret) << dendl;
+	//has_error = true;
+	continue;
+      }
+      ldpp_dout(dpp, 10) << __func__ << "::successfully locked " << oid << dendl;
+      bufferlist empty_bl;
+      shard_progress_t sp(SP_NO_OBJECTS, SP_NO_OBJECTS, false, d_cluster_id, empty_bl);
+      d_token_creation_time = sp.creation_time;
+
+      bufferlist sp_bl;
+      encode(sp, sp_bl);
+      ret = p_ioctx->setxattr(oid, SHARD_PROGRESS_ATTR, sp_bl);
+      if (ret == 0) {
+	ldpp_dout(dpp, 0) << __func__ << "::SUCCESS!::" << oid << dendl;
+	return shard;
+      }
+    }
+
+    return -1;
+  }
+
+  //---------------------------------------------------------------------------
+  work_shard_t cluster::get_next_work_shard_token(librados::IoCtx *p_ioctx)
+  {
+    int shard = get_next_shard_token(p_ioctx, d_curr_worker_shard, MAX_WORK_SHARD,
+				     WORKER_SHARD_PREFIX);
+    if (shard >= 0 && shard < MAX_WORK_SHARD) {
+      d_curr_worker_shard = shard + 1;
+      return shard;
+    }
+    else {
+      return NULL_WORK_SHARD;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  md5_shard_t cluster::get_next_md5_shard_token(librados::IoCtx *p_ioctx)
+  {
+    int shard = get_next_shard_token(p_ioctx, d_curr_md5_shard, MAX_MD5_SHARD,
+				     MD5_SHARD_PREFIX);
+    if (shard >= 0 && shard < MAX_MD5_SHARD) {
+      d_curr_md5_shard = shard + 1;
+      return shard;
+    }
+    else {
+      return NULL_MD5_SHARD;
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -615,13 +556,9 @@ namespace rgw::dedup {
 					   const char *prefix,
 					   uint16_t *p_num_completed,
 					   uint8_t completed_arr[],
-					   uint32_t *ttl,
 					   uint64_t *p_total_ingressed)
   {
     ceph_assert(d_was_initialized);
-    // default 3 seconds ttl;
-    *ttl = 3;
-
     unsigned count = 0;
     char buff[16];
     int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
@@ -635,38 +572,39 @@ namespace rgw::dedup {
       std::string oid(buff, prefix_len + n);
       ldpp_dout(dpp, 0) << __func__ << "::checking object: " << oid << dendl;
       bufferlist bl;
-      int ret = p_ioctx->getxattr(oid, "cluster_lock", bl);
+      int ret = p_ioctx->getxattr(oid, SHARD_PROGRESS_ATTR, bl);
       if (unlikely(ret <= 0)) {
 	if (ret != -ENODATA) {
 	  ldpp_dout(dpp, 0) << __func__ << "::failed ioctx.getxattr() ret="
-			    << ret << ", ttl=" << *ttl << dendl;
+			    << ret << "::" << cpp_strerror(ret) << dendl;
 	}
 	continue;
       }
 
-      named_time_lock_t ntl;
+      shard_progress_t sp;
       try {
 	auto p = bl.cbegin();
-	decode(ntl, p);
+	decode(sp, p);
       }
       catch (const buffer::error&) {
-	ldpp_dout(dpp, 0) << __func__ << "::failed named_time_lock_t decode!" << dendl;
+	ldpp_dout(dpp, 0) << __func__ << "::failed shard_progress_t decode!" << dendl;
 	return false;
       }
 
-      if (ntl.progress_b == NTL_ALL_OBJECTS) {
-	utime_t duration = ntl.completion_time - ntl.creation_time;
+      if (sp.progress_b == SP_ALL_OBJECTS) {
+	utime_t duration = sp.completion_time - sp.creation_time;
 	// mark token completed;
 	(*p_num_completed)++;
 	completed_arr[shard] = TOKEN_STATE_COMPLETED;
-	d_total_ingressed_obj += ntl.progress_a;
+	d_total_ingressed_obj += sp.progress_a;
 	ldpp_dout(dpp, 20) << __func__ << "::" << oid
 			   << "::completed! duration=" << duration << dendl;
 	count++;
       }
       else {
-	utime_t time_elapsed = ntl.lock_time - ntl.creation_time;
-	if (time_elapsed > ntl.max_lock_duration) {
+	static const utime_t heartbeat_timeout(EPOCH_MAX_LOCK_DURATION_SEC, 0);
+	utime_t time_elapsed = sp.update_time - sp.creation_time;
+	if (time_elapsed > heartbeat_timeout) {
 	  // lock expired -> try and break lock
 	  ldpp_dout(dpp, 0) << __func__ << "::" << oid << "::expired lock, skipping" << dendl;
 	  completed_arr[shard] = TOKEN_STATE_TIMED_OUT;
@@ -677,6 +615,9 @@ namespace rgw::dedup {
 	else {
 	  return false;
 	}
+	// TBD: need to store copies and declare token with no progress for N seconds
+	// as failing and then skip it
+	return false;
       }
     } // loop
 
@@ -691,7 +632,7 @@ namespace rgw::dedup {
 				 unsigned shards_count,
 				 const char *prefix,
 				 bufferlist bl_arr[],
-				 named_time_lock_t *ntl_arr)
+				 shard_progress_t *sp_arr)
   {
     unsigned count = 0;
     char buff[16];
@@ -704,54 +645,38 @@ namespace rgw::dedup {
       uint64_t size;
       struct timespec tspec;
       if (p_ioctx->stat2(oid, &size, &tspec) != 0) {
-	ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
+	ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
 	continue;
       }
       utime_t mtime(tspec);
       if (epoch_time > mtime) {
-	ldpp_dout(dpp, 10) << __func__ << "::skipping old obj! "
-			   << "::EPOCH={" << epoch_time.tv.tv_sec << ":" << epoch_time.tv.tv_nsec << "} "
-			   << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
+	ldpp_dout(dpp, 1) << __func__ << "::skipping old obj! "
+			  << "::EPOCH={" << epoch_time.tv.tv_sec << ":" << epoch_time.tv.tv_nsec << "} "
+			  << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
 	continue;
       }
 
+      shard_progress_t sp;
       bufferlist bl;
-      int ret = p_ioctx->getxattr(oid, "cluster_lock", bl);
+      int ret = p_ioctx->getxattr(oid, SHARD_PROGRESS_ATTR, bl);
       if (ret > 0) {
-	named_time_lock_t ntl;
 	try {
 	  auto p = bl.cbegin();
-	  decode(ntl, p);
-	  if (ntl.urgent_msg != URGENT_MSG_NONE) {
-	    // TBD: should we abort opertions??
-	    ldpp_dout(dpp, 0) << __func__ << "::shard=" << shard
-			      << " urgent message=" << ntl.urgent_msg << dendl;
-	  }
-	  ntl_arr[shard] = ntl;
+	  decode(sp, p);
+	  sp_arr[shard] = sp;
+	  count++;
 	}
 	catch (const buffer::error&) {
-	  ldpp_dout(dpp, 0) << __func__ << "::(1)failed named_time_lock_t decode!" << dendl;
-	  //continue;
+	  ldpp_dout(dpp, 0) << __func__ << "::(1)failed shard_progress_t decode!" << dendl;
+	  return false;
 	}
-      }
-      else if (ret != -ENODATA) {
-	ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.getxattr() ret=" << ret << dendl;
-	//continue;
-      }
-
-      ret = p_ioctx->getxattr(oid, "completion_stats", bl_arr[shard]);
-      if (ret > 0) {
-	count++;
-      }
-      else if (ret == -ENODATA) {
-	ldpp_dout(dpp, 10) << __func__ << "::shard is not completed yet " << oid << dendl;
-	continue;
       }
       else {
 	ldpp_dout(dpp, 0) << __func__ << "::" << oid << "::failed ioctx.getxattr() ret="
 			  << ret << "::" << cpp_strerror(ret) << dendl;
 	continue;
       }
+      bl_arr[shard] = sp.in_bl;
     }
 
     if (count != shards_count) {
@@ -772,7 +697,6 @@ namespace rgw::dedup {
   static utime_t show_time_func(const utime_t &start_time, bool show_time,
 				const std::map<std::string, member_time_t> &owner_map)
   {
-    std::string urgent_msg_cluster_id = get_urgent_msg_cluster_id();
     member_time_t all_members_time;
     all_members_time.start_time = start_time;
     all_members_time.end_time   = start_time;
@@ -780,8 +704,7 @@ namespace rgw::dedup {
 
     for (const auto& [owner, value] : owner_map) {
       uint32_t sec = value.end_time.tv.tv_sec - value.start_time.tv.tv_sec;
-      std::cout << ((owner != urgent_msg_cluster_id) ? owner : "")
-		<< "::start time = [" << value.start_time.tv.tv_sec % 1000
+      std::cout << owner << "::start time = [" << value.start_time.tv.tv_sec % 1000
 		<< ":" << value.start_time.tv.tv_nsec / (1000*1000) << "] "
 		<< "::aggregated time = " << value.aggregated_time.tv.tv_sec
 		<< "(" << sec << ") seconds " << std::endl;
@@ -806,39 +729,28 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static void collect_single_shard_stats(const DoutPrefixProvider *dpp,
 					 std::map<std::string, member_time_t> &owner_map,
-					 const named_time_lock_t ntl_arr[],
+					 const shard_progress_t sp_arr[],
 					 unsigned shard,
 					 bool *p_show_time,
 					 const char *name)
   {
     const utime_t null_time;
-    const named_time_lock_t &ntl = ntl_arr[shard];
-    if (ntl.creation_time == null_time || ntl.completion_time == null_time) {
+    const shard_progress_t &sp = sp_arr[shard];
+    if (sp.creation_time == null_time || sp.completion_time == null_time) {
       *p_show_time = false;
       return;
     }
 
-    if (ntl.progress_b != NTL_ALL_OBJECTS && ntl.is_urgent_stop_msg()) {
-      const int32_t &msg = ntl.urgent_msg;
-      std::cout << name << " Shard #" << shard << " is marked for urgent message"
-		<< msg << std::endl;
-      std::cout << __func__ << "::" << get_urgent_msg_names(msg) << std::endl;
-      *p_show_time = false;
-      return;
-    }
-
-    std::string urgent_msg_cluster_id = get_urgent_msg_cluster_id();
-    const std::string &owner = ntl.owner;
-
-    utime_t duration = ntl.completion_time - ntl.creation_time;
+    const std::string &owner = sp.owner;
+    utime_t duration = sp.completion_time - sp.creation_time;
     if (owner_map.find(owner) != owner_map.end()) {
       owner_map[owner].aggregated_time += duration;
-      owner_map[owner].end_time = ntl.completion_time;
+      owner_map[owner].end_time = sp.completion_time;
     }
     else {
-      owner_map[owner].start_time = ntl.creation_time;
+      owner_map[owner].start_time = sp.creation_time;
       owner_map[owner].aggregated_time = duration;
-      owner_map[owner].end_time = ntl.completion_time;
+      owner_map[owner].end_time = sp.completion_time;
     }
     ldpp_dout(dpp, 10) << __func__ << "::Got " << name
 		       << " stats for shard #" << (int)shard << dendl;
@@ -870,16 +782,16 @@ namespace rgw::dedup {
   int cluster::collect_all_shard_stats(rgw::sal::RadosStore *store,
 				       const DoutPrefixProvider *dpp)
   {
-    dedup_epoch_t epoch;
-    if (get_epoch(store, dpp, &epoch, nullptr) != 0) {
+    librados::IoCtx ioctx, *p_ioctx = &ioctx;
+    if (init_dedup_pool_ioctx(store->getRados(), dpp, p_ioctx) != 0) {
       return -1;
     }
 
-    RGWRados *rados = store->getRados();
-    librados::IoCtx ioctx, *p_ioctx = &ioctx;
-    if (init_dedup_pool_ioctx(rados, dpp, p_ioctx) != 0) {
+    dedup_epoch_t epoch;
+    if (get_epoch(p_ioctx, dpp, &epoch, nullptr) != 0) {
       return -1;
     }
+
     unsigned completed_work_shards_count = 0;
     unsigned completed_md5_shards_count  = 0;
     utime_t md5_start_time;
@@ -888,8 +800,9 @@ namespace rgw::dedup {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
       bufferlist bl_arr[MAX_WORK_SHARD];
-      named_time_lock_t ntl_arr[MAX_WORK_SHARD];
-      int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_WORK_SHARD, WORKER_SHARD_PREFIX, bl_arr, ntl_arr);
+      shard_progress_t sp_arr[MAX_WORK_SHARD];
+      int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_WORK_SHARD,
+				    WORKER_SHARD_PREFIX, bl_arr, sp_arr);
       if (cnt != MAX_WORK_SHARD) {
 	std::cerr << ">>>Partial work shard stats recived " << cnt << " / "
 		  << (int)MAX_WORK_SHARD << "\n" << std::endl;
@@ -897,7 +810,7 @@ namespace rgw::dedup {
 
       for (unsigned shard = 0; shard < MAX_WORK_SHARD; shard++) {
 	if (bl_arr[shard].length() == 0) {
-	  ntl_display_progress(ntl_arr[shard], shard);
+	  display_progress(sp_arr[shard].progress_a, sp_arr[shard].progress_b, shard);
 	  continue;
 	}
 	completed_work_shards_count++;
@@ -910,7 +823,7 @@ namespace rgw::dedup {
 	  std::cerr << __func__ << "::(2)failed worker_stats_t decode #" << (int)shard << std::endl;
 	  continue;
 	}
-	collect_single_shard_stats(dpp, owner_map, ntl_arr, shard, &show_time, "WORKER");
+	collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "WORKER");
       }
       std::cout << "Aggreagted work-shard stats counters:\n" << wrk_stats_sum << std::endl;
       md5_start_time = show_time_func(epoch.time, show_time, owner_map);
@@ -921,8 +834,9 @@ namespace rgw::dedup {
       bool show_time = true;
       md5_stats_t md5_stats_sum;
       bufferlist bl_arr[MAX_WORK_SHARD];
-      named_time_lock_t ntl_arr[MAX_WORK_SHARD];
-      int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_MD5_SHARD, MD5_SHARD_PREFIX, bl_arr, ntl_arr);
+      shard_progress_t sp_arr[MAX_WORK_SHARD];
+      int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_MD5_SHARD,
+				    MD5_SHARD_PREFIX, bl_arr, sp_arr);
       if (cnt != MAX_MD5_SHARD) {
 	std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
 		  << (int)MAX_MD5_SHARD << "\n" << std::endl;
@@ -930,7 +844,7 @@ namespace rgw::dedup {
 
       for (unsigned shard = 0; shard < MAX_MD5_SHARD; shard++) {
 	if (bl_arr[shard].length() == 0) {
-	  ntl_display_progress(ntl_arr[shard], shard);
+	  display_progress(sp_arr[shard].progress_a, sp_arr[shard].progress_b, shard);
 	  continue;
 	}
 	completed_md5_shards_count++;
@@ -943,7 +857,7 @@ namespace rgw::dedup {
 	  std::cerr << __func__ << "::failed md5_stats_t decode #" << (int)shard << std::endl;
 	  continue;
 	}
-	collect_single_shard_stats(dpp, owner_map, ntl_arr, shard, &show_time, "MD5");
+	collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "MD5");
       }
       std::cout << "Aggreagted md5-shard stats counters:\n" << md5_stats_sum << std::endl;
       show_dedup_ratio(wrk_stats_sum, md5_stats_sum);
@@ -961,77 +875,62 @@ namespace rgw::dedup {
 			     const DoutPrefixProvider *dpp,
 			     int urgent_msg)
   {
-    std::cout << __func__ << "::dedup_control=" << urgent_msg << std::endl;
-    ldpp_dout(dpp, 0) << __func__ << "::dedup_control req " << urgent_msg << "::"
+    ldpp_dout(dpp, 0) << __func__ << "::dedup_control req = "
 		      << get_urgent_msg_names(urgent_msg) << dendl;
-    if (urgent_msg != URGENT_MSG_RESUME &&
-	urgent_msg != URGENT_MSG_PASUE  &&
+    if (urgent_msg != URGENT_MSG_RESUME  &&
+	urgent_msg != URGENT_MSG_PASUE   &&
+	urgent_msg != URGENT_MSG_RESTART &&
 	urgent_msg != URGENT_MSG_ABORT) {
-      std::cerr << __func__ << "::illegal urgent_msg=" << urgent_msg << std::endl;
-      ceph_abort();
+      ldpp_dout(dpp, 1) << __func__ << "::illegal urgent_msg="<< urgent_msg << dendl;
       return -1;
     }
 
-    std::string cluster_id = get_urgent_msg_cluster_id();
-    RGWRados *rados = store->getRados();
     librados::IoCtx ioctx, *p_ioctx = &ioctx;
-    if (init_dedup_pool_ioctx(rados, dpp, p_ioctx) != 0) {
+    if (init_dedup_pool_ioctx(store->getRados(), dpp, p_ioctx) != 0) {
       return -1;
     }
+    // 10 seconds timeout
+    const uint64_t timeout_ms = 10*1000;
+    bufferlist reply_bl, urgent_msg_bl;
+    ceph::encode(urgent_msg, urgent_msg_bl);
+    int ret = rgw_rados_notify(dpp, ioctx, DEDUP_WATCH_OBJ, urgent_msg_bl,
+			       timeout_ms, &reply_bl, null_yield);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_notify("
+			<< DEDUP_WATCH_OBJ << ")::err="<<cpp_strerror(ret) << dendl;
+      return ret;
+    }
+    std::vector<librados::notify_ack_t> acks;
+    std::vector<librados::notify_timeout_t> timeouts;
+    ioctx.decode_notify_response(reply_bl, &acks, &timeouts);
+    if (timeouts.size() > 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_notify("
+			<< DEDUP_WATCH_OBJ << ")::timeout error" << dendl;
+      return -EAGAIN;
+    }
 
-    // 1 year lock
-    utime_t max_lock_duration(60*60*24*365, 0);
-    operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK |
-			       operation_flags_t::LOCK_UPDATE_OP_URGENT_MSG);
-
-    unsigned failed_worker_tokens = 0;
-    char buff[16];
-    memset(buff, 0, sizeof(buff));
-    int prefix_len = snprintf(buff, sizeof(buff), "%s", WORKER_SHARD_PREFIX);
-    for (unsigned shard = 0; shard < MAX_WORK_SHARD; shard++) {
-      librados::ObjectWriteOperation op;
-      // TBD: maybe use RGW built-in control mechanism ??
-      lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags,
-		  null_bl, 0, 0, urgent_msg);
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
-
-      int ret = p_ioctx->operate(oid, &op);
+    for (auto& ack : acks) {
+      try {
+	ldpp_dout(dpp, 1) << __func__ << "::ACK: notifier_id=" << ack.notifier_id
+			  << "::cookie=" << ack.cookie << dendl;
+	auto iter = ack.payload_bl.cbegin();
+	ceph::decode(ret, iter);
+	struct rgw::dedup::control_t ctl;
+	decode(ctl, iter);
+	ldpp_dout(dpp, 1) << __func__ << "::++ACK::ctl=" << ctl << "::ret=" << ret << dendl;
+      } catch (buffer::error& err) {
+	ldpp_dout(dpp, 1) << __func__ << "::failed decoding notify acks" << dendl;
+	return -EINVAL;
+      }
       if (ret != 0) {
-	failed_worker_tokens++;
-	std::cerr << __func__ << "::Failed::" << oid << std::endl;
+	ldpp_dout(dpp, 1) << __func__ << "::Bad notify ack, ret=" << ret
+			  << "::err=" << cpp_strerror(ret) << dendl;
+	return ret;
       }
     }
-    unsigned failed_md5_tokens = 0;
-    memset(buff, 0, sizeof(buff));
-    prefix_len = snprintf(buff, sizeof(buff), "%s", MD5_SHARD_PREFIX);
-    for (unsigned shard = 0; shard < MAX_MD5_SHARD; shard++) {
-      librados::ObjectWriteOperation op;
-      // TBD: maybe use RGW built-in control mechanism ??
-      lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags,
-		  null_bl, 0, 0, urgent_msg);
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
-
-      int ret = p_ioctx->operate(oid, &op);
-      if (ret != 0) {
-	failed_md5_tokens++;
-	std::cerr << __func__ << "::Failed::" << oid << std::endl;
-      }
-    }
-
-    if (!failed_worker_tokens && !failed_md5_tokens) {
-      return 0;
-    }
-    if (failed_worker_tokens) {
-      std::cerr << __func__ << "::Failed setting " << failed_worker_tokens << " / "
-		<< MAX_WORK_SHARD << " worker-tokens" << std::endl;
-    }
-    if (failed_md5_tokens) {
-      std::cerr << __func__ << "::Failed setting " << failed_md5_tokens << " / "
-		<< MAX_MD5_SHARD << " md5-tokens" << std::endl;
-    }
-    return -1;
+    ldpp_dout(dpp, 0) << __func__ << "::" << get_urgent_msg_names(urgent_msg)
+		      << " finished successfully!" << dendl;
+    return 0;
   }
 
   //---------------------------------------------------------------------------
@@ -1039,23 +938,22 @@ namespace rgw::dedup {
 				  bool dry_run,
 				  const DoutPrefixProvider *dpp)
   {
+    librados::IoCtx ioctx, *p_ioctx = &ioctx;
+    if (init_dedup_pool_ioctx(store->getRados(), dpp, p_ioctx) != 0) {
+      return -1;
+    }
+
     dedup_epoch_t old_epoch;
     // store the previous epoch for cmp-swap
-    int ret = get_epoch(store, dpp, &old_epoch, __func__);
+    int ret = get_epoch(p_ioctx, dpp, &old_epoch, __func__);
     if (ret != 0) {
       return ret;
     }
 
     // first abort all dedup work!
-    dedup_control(store, dpp, URGENT_MSG_ABORT);
-    // wait 6 second for all workers to process the abort request
-    std::this_thread::sleep_for(std::chrono::seconds(6));
-    auto& pool = store->svc()->zone->get_zone_params().log_pool;
-    librados::IoCtx ioctx;
-    ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), pool, ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed rgw_init_ioctx" << dendl;
-      return -EIO;
+    ret = dedup_control(store, dpp, URGENT_MSG_ABORT);
+    if (ret != 0) {
+      return ret;
     }
 
     ldpp_dout(dpp, 1) << __func__ << (dry_run ?"::DRY RUN":"::FULL DEDUP") << dendl;
@@ -1070,9 +968,10 @@ namespace rgw::dedup {
     ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
     ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
     std::string oid(DEDUP_EPOCH_TOKEN);
-    ret = ioctx.operate(oid, &op);
+    ret = p_ioctx->operate(oid, &op);
     if (ret == 0) {
       ldpp_dout(dpp, 1) << __func__ << "::Epoch object was reset" << dendl;
+      dedup_control(store, dpp, URGENT_MSG_RESTART);
     }
     else {
       ldpp_dout(dpp, 0) << __func__ << "::Failed to reset EPOCH object with: "
@@ -1087,8 +986,13 @@ namespace rgw::dedup {
 				   const DoutPrefixProvider *dpp)
   {
     ldpp_dout(dpp, 10) << __func__ << "::epoch=" << epoch_time << dendl;
+    librados::IoCtx ioctx, *p_ioctx = &ioctx;
+    if (init_dedup_pool_ioctx(store->getRados(), dpp, p_ioctx) != 0) {
+      return -1;
+    }
+
     dedup_epoch_t new_epoch;
-    if (get_epoch(store, dpp, &new_epoch, nullptr) != 0) {
+    if (get_epoch(p_ioctx, dpp, &new_epoch, nullptr) != 0) {
       ldpp_dout(dpp, 1) << __func__ << "::No Epoch Object::"
 			<< "::scan can be restarted!\n\n\n" << dendl;
       // no epoch object exists -> we should start a new scan

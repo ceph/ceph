@@ -1,36 +1,30 @@
 #pragma once
 #include "common/dout.h"
-#include "rgw_common.h"
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup_store.h"
 #include <string>
 
-struct named_time_lock_t;
-namespace cls::cmpxattr {
-  struct dedup_epoch_t;
-}
 namespace rgw::dedup {
 #define DEDUP_POOL_NAME       "rgw_dedup_pool"
 #define MD5_SHARD_PREFIX      "MD5.SHRD.TKN."
 #define WORKER_SHARD_PREFIX   "WRK.SHRD.TKN."
+  struct dedup_epoch_t;
   int   init_dedup_pool_ioctx(RGWRados                 *rados,
 			      const DoutPrefixProvider *dpp,
 			      librados::IoCtx          *p_ioctx);
+
   class cluster{
 #define TOKEN_STATE_PENDING   0x00
 #define TOKEN_STATE_TIMED_OUT 0xDD
 #define TOKEN_STATE_COMPLETED 0xFF
   public:
-    cluster(const DoutPrefixProvider   *_dpp);
-
+    cluster(const DoutPrefixProvider *_dpp, CephContext* const _cct);
     int          init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx,
-		      ::cls::cmpxattr::dedup_epoch_t*, bool init_epoch);
+		      struct dedup_epoch_t*, bool init_epoch);
     bool         was_initialized() { return d_was_initialized; }
     utime_t      get_epoch_time() { return d_epoch_time; }
-    work_shard_t get_next_work_shard_token(librados::IoCtx *p_ioctx,
-					   int *p_urgent_msg /* IN-OUT PARAM */);
-    md5_shard_t  get_next_md5_shard_token(librados::IoCtx *p_ioctx,
-					  int *p_urgent_msg /* IN-OUT PARAM */);
+    work_shard_t get_next_work_shard_token(librados::IoCtx *p_ioctx);
+    md5_shard_t  get_next_md5_shard_token(librados::IoCtx *p_ioctx);
     static bool  can_start_new_scan(rgw::sal::RadosStore *store,
 				    const utime_t &epoch,
 				    const DoutPrefixProvider *dpp);
@@ -71,32 +65,10 @@ namespace rgw::dedup {
 				     unsigned shard,
 				     uint64_t count_a,
 				     uint64_t count_b,
-				     const char *prefix,
-				     int *p_urgent_msg /* OUT-PARAM */);
+				     const char *prefix);
 
     //---------------------------------------------------------------------------
-    int update_work_shard_token_heartbeat(librados::IoCtx *p_ioctx,
-					  work_shard_t shard,
-					  uint64_t obj_count,
-					  int *p_urgent_msg /* OUT-PARAM */)
-    {
-      return update_shard_token_heartbeat(p_ioctx, shard, obj_count, 0,
-					  WORKER_SHARD_PREFIX, p_urgent_msg);
-    }
-
-    //---------------------------------------------------------------------------
-    int update_md5_shard_token_heartbeat(librados::IoCtx *p_ioctx,
-					 md5_shard_t shard,
-					 uint64_t load_count,
-					 uint64_t dedup_count,
-					 int *p_urgent_msg /* OUT-PARAM */)
-    {
-      return update_shard_token_heartbeat(p_ioctx, shard, load_count, dedup_count,
-					  MD5_SHARD_PREFIX, p_urgent_msg);
-    }
-
-    //---------------------------------------------------------------------------
-    bool all_work_shard_tokens_completed(librados::IoCtx *p_ioctx, uint32_t *ttl,
+    bool all_work_shard_tokens_completed(librados::IoCtx *p_ioctx,
 					 uint64_t *p_total_ingressed)
     {
       return all_shard_tokens_completed(p_ioctx,
@@ -104,12 +76,11 @@ namespace rgw::dedup {
 					WORKER_SHARD_PREFIX,
 					&d_num_completed_workers,
 					d_completed_workers,
-					ttl,
 					p_total_ingressed);
     }
 
     //---------------------------------------------------------------------------
-    bool all_md5_shard_tokens_completed(librados::IoCtx *p_ioctx, uint32_t *ttl,
+    bool all_md5_shard_tokens_completed(librados::IoCtx *p_ioctx,
 					uint64_t *p_total_ingressed)
     {
       return all_shard_tokens_completed(p_ioctx,
@@ -117,12 +88,9 @@ namespace rgw::dedup {
 					MD5_SHARD_PREFIX,
 					&d_num_completed_md5,
 					d_completed_md5,
-					ttl,
 					p_total_ingressed);
     }
 
-    int  get_urgent_msg_state(librados::IoCtx *p_ioctx,
-			      int *urgent_msg /* OUT-PARAM */);
   private:
     void reset();
     bool all_shard_tokens_completed(librados::IoCtx *p_ioctx,
@@ -130,14 +98,12 @@ namespace rgw::dedup {
 				    const char *prefix,
 				    uint16_t *p_num_completed,
 				    uint8_t completed_arr[],
-				    uint32_t *ttl,
 				    uint64_t *p_total_ingressed);
     int cleanup_prev_run(librados::IoCtx *p_ioctx);
     int get_next_shard_token(librados::IoCtx *p_ioctx,
 			     unsigned start_shard,
 			     unsigned max_count,
-			     const char *prefix,
-			     int *p_urgent_msg /* IN-OUT PARAM */);
+			     const char *prefix);
     int create_shard_tokens(librados::IoCtx *p_ioctx,
 			    unsigned shards_count,
 			    const char *prefix);
@@ -148,11 +114,14 @@ namespace rgw::dedup {
 				   const bufferlist &bl);
 
     const DoutPrefixProvider *dpp;
+    CephContext* const cct;
+    std::string               d_lock_cookie;
     std::string               d_cluster_id;
     bool                      d_was_initialized = false;
     md5_shard_t               d_curr_md5_shard = 0;
     work_shard_t              d_curr_worker_shard = 0;
     utime_t                   d_epoch_time;
+    utime_t                   d_token_creation_time;
     uint64_t                  d_total_ingressed_obj = 0;
     uint8_t                   d_completed_workers[MAX_WORK_SHARD];
     uint8_t                   d_completed_md5[MAX_WORK_SHARD];

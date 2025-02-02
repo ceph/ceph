@@ -136,6 +136,25 @@ namespace rgw::dedup {
     return crypto::digest<crypto::SHA1>(bl).to_str();
   }
 
+  static const char* s_urgent_msg_names[] = {
+    "URGENT_MSG_NONE",
+    "URGENT_MSG_ABORT",
+    "URGENT_MSG_PASUE",
+    "URGENT_MSG_RESUME",
+    "URGENT_MSG_RESTART",
+    "URGENT_MSG_INVALID"
+  };
+
+  //---------------------------------------------------------------------------
+  const char* get_urgent_msg_names(int msg) {
+    if (msg <= URGENT_MSG_INVALID && msg >= URGENT_MSG_NONE) {
+      return s_urgent_msg_names[msg];
+    }
+    else {
+      return s_urgent_msg_names[URGENT_MSG_INVALID];
+    }
+  }
+
   //---------------------------------------------------------------------------
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s)
   {

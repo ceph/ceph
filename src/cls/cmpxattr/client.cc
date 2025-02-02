@@ -22,6 +22,9 @@ namespace cls::cmpxattr {
 			const ComparisonMap& cmp_pairs,
 			const std::map<std::string, bufferlist>& set_pairs)
   {
+    // Caller must supply non-empty cmp_pairs and set_pairs
+    // However, it is legal to pass an empty value bl for the key
+    //         this is used when try to set a new key/value atomically
     if (cmp_pairs.size() > max_keys || cmp_pairs.empty() || set_pairs.empty() ) {
       return -E2BIG;
     }
@@ -35,71 +38,6 @@ namespace cls::cmpxattr {
     encode(call, in);
     op.exec("cmpxattr", "cmp_vals_set_vals", in);
     return 0;
-  }
-
-  void lock_update(librados::ObjectWriteOperation& writeop,
-		   const std::string& owner,
-		   const std::string& key_name,
-		   const utime_t&     max_lock_duration,
-		   operation_flags_t  op_flags,
-		   ceph::bufferlist   in_bl,
-		   uint64_t           progress_a,
-		   uint64_t           progress_b,
-		   int32_t            urgent_msg)
-  {
-    // TBD: snaity check paramters
-
-    lock_update_op call;
-    call.owner = owner;
-    call.progress_a = progress_a;
-    call.progress_b = progress_b;
-    call.key_name = key_name;
-    call.max_lock_duration = max_lock_duration;
-    call.op_flags = op_flags;
-    call.in_bl = in_bl;
-    call.urgent_msg = urgent_msg;
-    bufferlist in;
-    encode(call, in);
-    writeop.exec("cmpxattr", "lock_update", in);
-  }
-
-  static const char* s_urgent_msg_names[] = {
-    "URGENT_MSG_NONE",
-    "URGENT_MSG_ABORT",
-    "URGENT_MSG_PASUE",
-    "URGENT_MSG_RESUME",
-    "URGENT_MSG_SKIP",
-    "URGENT_MSG_INVALID"
-  };
-
-  //---------------------------------------------------------------------------
-  const char* get_urgent_msg_names(int msg) {
-    if (msg <= URGENT_MSG_INVALID && msg >= URGENT_MSG_NONE) {
-      return s_urgent_msg_names[msg];
-    }
-    else {
-      return s_urgent_msg_names[URGENT_MSG_INVALID];
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  std::ostream& operator<<(std::ostream &out, const dedup_epoch_t &d)
-  {
-    out << "EPOCH::Time={" << d.time.tv.tv_sec <<":"<< d.time.tv.tv_nsec << "}::";
-    if (d.dedup_type == DEDUP_TYPE_NONE) {
-      out << "DEDUP_TYPE_NONE";
-    }
-    else if (d.dedup_type == DEDUP_TYPE_DRY_RUN) {
-      out << "DEDUP_TYPE_DRY_RUN";
-    }
-    else if (d.dedup_type == DEDUP_TYPE_FULL) {
-      out << "DEDUP_TYPE_FULL";
-    }
-    else {
-      ceph_abort("unexpected dedup_type");
-    }
-    out << "::serial=" << d.serial;
-    return out;
   }
 
 } // namespace cls::cmpxattr

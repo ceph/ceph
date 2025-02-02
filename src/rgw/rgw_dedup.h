@@ -11,22 +11,74 @@
 #include <iostream>
 #include <ostream>
 using namespace std;
-namespace cls::cmpxattr {
-  struct dedup_epoch_t;
-}
+
 namespace rgw::dedup {
+  struct dedup_epoch_t;
+  struct control_t {
+    control_t() {
+      reset();
+    }
+    void reset();
+    inline bool local_urgent_req() const {
+      return (shutdown_req || local_pause_req);
+    }
+    inline bool should_stop() const {
+      return (shutdown_req || remote_abort_req);
+    }
+    inline bool should_pause() const {
+      return (local_pause_req || remote_pause_req);
+    }
+    void show_dedup_type(const DoutPrefixProvider* const dpp, const char* caller);
+
+    // TBD: pack state data members in a struct
+    // allow to start/pasue/resume/stop execution
+    int  dedup_type         = 0;
+    bool started            = false;
+    bool dedup_exec         = false;
+    bool shutdown_req       = false;
+    bool shutdown_done      = false;
+    bool local_pause_req    = false;
+    bool local_paused       = false;
+    bool remote_abort_req   = false;
+    bool remote_aborted     = false;
+    bool remote_pause_req   = false;
+    bool remote_paused      = false;
+    bool remote_restart_req = false;
+  };
+  std::ostream& operator<<(std::ostream &out, const control_t &ctl);
+  void encode(const control_t& ctl, ceph::bufferlist& bl);
+  void decode(control_t& ctl, ceph::bufferlist::const_iterator& bl);
+
   class disk_block_array_t;
   struct disk_record_t;
   struct key_t;
   //Interval between each execution of the script is set to 5 seconds
   static inline constexpr int INIT_EXECUTE_INTERVAL = 5;
   class Background : public RGWRealmReloader::Pauser {
+    class DedupWatcher : public librados::WatchCtx2, public DoutPrefixProvider {
+      Background* const parent;
+    public:
+      DedupWatcher(Background* _parent) : parent(_parent) {}
+      ~DedupWatcher() override = default;
+      void handle_notify(uint64_t notify_id, uint64_t cookie,
+			 uint64_t notifier_id, bufferlist& bl) override;
+      void handle_error(uint64_t cookie, int err) override;
+
+      // DoutPrefixProvider iterface
+      CephContext* get_cct() const override;
+      unsigned get_subsys() const override;
+      std::ostream& gen_prefix(std::ostream& out) const override;
+    };
+
   public:
     Background(rgw::sal::Driver* _driver,
 	       CephContext* _cct,
 	       int _execute_interval = INIT_EXECUTE_INTERVAL);
 
     ~Background();
+    int  watch_reload(const DoutPrefixProvider* dpp);
+    int  unwatch_reload(const DoutPrefixProvider* dpp);
+    void handle_notify(uint64_t notify_id, uint64_t cookie, bufferlist &bl);
     void start();
     void shutdown();
     void pause() override;
@@ -41,33 +93,29 @@ namespace rgw::dedup {
       STEP_REMOVE_DUPLICATES
     };
 
+    void ack_notify(uint64_t notify_id, uint64_t cookie, int status);
     void run();
-    int  setup(::cls::cmpxattr::dedup_epoch_t*);
-    bool all_shards_completed(dedup_step_t step, uint32_t *ttl,
-			      uint64_t *p_total_ingressed);
+    int  setup(struct dedup_epoch_t*);
+    bool all_shards_completed(dedup_step_t step, uint64_t *p_total_ingressed);
     void all_shards_barrier(dedup_step_t step, const char *stepname);
     void handle_pause_req(const char* caller);
-    bool should_stop() {
-      return (unlikely(d_shutdown_req || d_remote_abort_req));
-    }
     const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
-    bool need_to_update_heartbeat();
-    int  check_and_update_heartbeat(unsigned shard_id, uint64_t count_a, uint64_t count_b,
+    void check_and_update_heartbeat(unsigned shard_id, uint64_t count_a, uint64_t count_b,
 				    const char *prefix);
 
-    inline int  check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
-    inline int  check_and_update_md5_heartbeat(md5_shard_t md5_id,
+    inline void check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
+    inline void check_and_update_md5_heartbeat(md5_shard_t md5_id,
 					       uint64_t load_count,
 					       uint64_t dedup_count);
-    int  ingress_bucket_idx_single_object(rgw::sal::Bucket           *bucket,
+    int  ingress_bucket_idx_single_object(const rgw::sal::Bucket     *bucket,
 					  const rgw_bucket_dir_entry &entry,
 					  worker_stats_t             *p_worker_stats /*IN-OUT*/);
-    int  process_bucket_shards(rgw::sal::Bucket     *bucket,
-			       std::map<int, string> &oids,
-			       librados::IoCtx       &ioctx,
+    int  process_bucket_shards(const rgw::sal::Bucket *bucket,
+			       std::map<int, string>  &oids,
+			       librados::IoCtx        &ioctx,
 			       work_shard_t           shard_id,
-			       worker_stats_t        *p_worker_stats /*IN-OUT*/);
+			       worker_stats_t         *p_worker_stats /*IN-OUT*/);
     int  ingress_bucket_objects_single_shard(const rgw_bucket &bucket_rec,
 					     work_shard_t      worker_id,
 					     worker_stats_t   *p_worker_stats /*IN-OUT*/);
@@ -150,16 +198,11 @@ namespace rgw::dedup {
     uint64_t d_num_rados_objects_bytes = 0;
     // we don't benefit from deduping RGW objects smaller than head-object size
     uint32_t d_min_obj_size_for_dedup = (4ULL * 1024 * 1024);
-    // allow to start/pasue/resume/stop execution
-    bool d_shutdown_req     = false;
-    bool d_remote_abort_req = false;
-    bool d_started          = false;
-    bool d_local_paused     = false;
-    bool d_local_pause_req  = false;
-    bool d_remote_paused    = false;
-    bool d_remote_pause_req = false;
-    int  d_dedup_type       = 0; //DEDUP_TYPE_NONE;
+
     int  d_execute_interval;
+    control_t d_ctl;
+    uint64_t d_watch_handle = 0;
+    DedupWatcher d_watcher_ctx;
 
     std::thread d_runner;
     std::mutex  d_cond_mutex;

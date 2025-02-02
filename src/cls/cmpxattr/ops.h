@@ -15,14 +15,12 @@
 #pragma once
 
 #include "types.h"
-#include "server.h"
 #include "include/encoding.h"
 #include <time.h>
 #include "include/utime.h"
 #include "common/ceph_time.h"
 
 namespace cls::cmpxattr {
-  constexpr const char* RGW_DEDUP_ATTR_EPOCH = "rgw.dedup.attr.epoch";
   struct cmp_vals_set_vals_op {
     Mode mode;
     Op comparison;
@@ -49,159 +47,4 @@ namespace cls::cmpxattr {
     decode(o.set_pairs, bl);
     DECODE_FINISH(bl);
   }
-
-  //===========================================================================
-  struct operation_flags_t {
-    friend inline void encode(const operation_flags_t& o, ceph::bufferlist& bl);
-    friend inline void decode(operation_flags_t& o, ceph::bufferlist::const_iterator& bl);
-    static constexpr uint8_t LOCK_UPDATE_OP_SET_LOCK       = 0x01;
-    static constexpr uint8_t LOCK_UPDATE_OP_SET_EPOCH      = 0x02;
-    static constexpr uint8_t LOCK_UPDATE_OP_MARK_COMPLETED = 0x04;
-    static constexpr uint8_t LOCK_UPDATE_OP_URGENT_MSG     = 0x08;
-
-    operation_flags_t() : flags(0) {}
-    operation_flags_t(uint8_t _flags) : flags(_flags) {}
-    inline void clear() { this->flags = 0; }
-    inline operator uint16_t() const {
-      return this->flags;
-    }
-
-    inline bool is_set_lock() const {
-      return ((flags & LOCK_UPDATE_OP_SET_LOCK) != 0);
-    }
-    inline bool is_set_epoch() const {
-      return ((flags & LOCK_UPDATE_OP_SET_EPOCH) != 0);
-    }
-    inline bool is_mark_completed() const {
-      return ((flags & LOCK_UPDATE_OP_MARK_COMPLETED) != 0);
-    }
-
-    inline bool is_urgent_msg() const {
-      return ((flags & LOCK_UPDATE_OP_URGENT_MSG) != 0);
-    }
-  private:
-    uint16_t flags;
-  };
-
-  inline void encode(const operation_flags_t& o, ceph::bufferlist& bl)
-  {
-    ENCODE_START(1, 1, bl);
-    encode(o.flags, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  inline void decode(operation_flags_t& o, ceph::bufferlist::const_iterator& bl)
-  {
-    DECODE_START(1, bl);
-    decode(o.flags, bl);
-    DECODE_FINISH(bl);
-  }
-
-  //===========================================================================
-  enum dedup_req_type_t {
-    DEDUP_TYPE_NONE    = 0,
-    DEDUP_TYPE_DRY_RUN = 1,
-    DEDUP_TYPE_FULL    = 2
-  };
-  struct dedup_epoch_t {
-    uint32_t serial;
-    int dedup_type;
-    utime_t time;
-  };
-  std::ostream& operator<<(std::ostream &out, const dedup_epoch_t &d);
-
-  inline void encode(const dedup_epoch_t& o, ceph::bufferlist& bl)
-  {
-    ENCODE_START(1, 1, bl);
-    encode(o.serial, bl);
-    encode(o.dedup_type, bl);
-    encode(o.time, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  inline void decode(dedup_epoch_t& o, ceph::bufferlist::const_iterator& bl)
-  {
-    DECODE_START(1, bl);
-    decode(o.serial, bl);
-    decode(o.dedup_type, bl);
-    decode(o.time, bl);
-    DECODE_FINISH(bl);
-  }
-
-  struct lock_update_op {
-    bool is_urgent_stop_msg() const {
-      return (op_flags.is_urgent_msg() &&
-	      ((urgent_msg == URGENT_MSG_ABORT) || (urgent_msg == URGENT_MSG_PASUE)));
-    }
-
-    bool is_lock_revert_msg() const {
-      return (op_flags.is_urgent_msg() && (urgent_msg == URGENT_MSG_RESUME));
-    }
-
-    bool is_urgent_msg() const { return op_flags.is_urgent_msg(); }
-
-    bool is_mark_completed_msg() const { return op_flags.is_mark_completed(); }
-
-    bool verify() const {
-      if (op_flags.is_urgent_msg()) {
-	return (op_flags.is_set_lock()        &&
-		!op_flags.is_set_epoch()      &&
-		!op_flags.is_mark_completed() &&
-		in_bl.length() == 0           &&
-		urgent_msg != URGENT_MSG_NONE &&
-		!progress_a && !progress_b);
-      }
-
-      if (op_flags.is_set_epoch()) {
-	return (op_flags.is_set_lock()        &&
-		!op_flags.is_mark_completed() &&
-		in_bl.length() == 0           &&
-		urgent_msg == URGENT_MSG_NONE &&
-		!progress_a && !progress_b);
-      }
-
-      if (op_flags.is_mark_completed() ) {
-	return (in_bl.length() > 0 && urgent_msg == URGENT_MSG_NONE);
-      }
-
-      return true;
-    }
-    utime_t           max_lock_duration; // max duration for holding a lock
-    uint64_t          progress_a = 0;
-    uint64_t          progress_b = 0;
-    std::string       owner;
-    std::string       key_name;
-    operation_flags_t op_flags = 0;
-    ceph::bufferlist  in_bl;
-    int32_t           urgent_msg = URGENT_MSG_NONE;
-  };
-
-  inline void encode(const lock_update_op& o, ceph::bufferlist& bl)
-  {
-    ENCODE_START(1, 1, bl);
-    encode(o.max_lock_duration, bl);
-    encode(o.progress_a, bl);
-    encode(o.progress_b, bl);
-    encode(o.owner, bl);
-    encode(o.key_name, bl);
-    encode(o.op_flags, bl);
-    encode(o.in_bl, bl);
-    encode(o.urgent_msg, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  inline void decode(lock_update_op& o, ceph::bufferlist::const_iterator& bl)
-  {
-    DECODE_START(1, bl);
-    decode(o.max_lock_duration, bl);
-    decode(o.progress_a, bl);
-    decode(o.progress_b, bl);
-    decode(o.owner, bl);
-    decode(o.key_name, bl);
-    decode(o.op_flags, bl);
-    decode(o.in_bl, bl);
-    decode(o.urgent_msg, bl);
-    DECODE_FINISH(bl);
-  }
-
 } // namespace cls::cmpxattr
