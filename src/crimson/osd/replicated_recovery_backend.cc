@@ -837,39 +837,42 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     pull_info.recovery_info.version = push_op.version;
 
   if (pull_info.recovery_progress.first) {
-    auto fut = pg.obc_loader.with_obc<RWState::RWNONE>(
-      pull_info.recovery_info.soid,
-      [FNAME, this, &pull_info, &recovery_waiter, &push_op](auto, auto obc) {
-        pull_info.obc = obc;
-        recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
-                                  push_op.soid);
-        auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
-        if (ss_attr_iter != push_op.attrset.end()) {
-          if (!obc->ssc) {
-            obc->ssc = new crimson::osd::SnapSetContext(
-              push_op.soid.get_snapdir());
-          }
-          try {
-            obc->ssc->snapset = SnapSet(ss_attr_iter->second);
-            obc->ssc->exists = true;
-          } catch (const buffer::error&) {
-            WARNDPP("unable to decode SnapSet", pg);
-            throw crimson::osd::invalid_argument();
-          }
-          assert(!pull_info.obc->ssc->exists ||
-                 obc->ssc->snapset.seq == pull_info.obc->ssc->snapset.seq);
-        }
-        pull_info.recovery_info.oi = obc->obs.oi;
-        if (pull_info.recovery_info.soid.snap &&
-            pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
-            recalc_subsets(pull_info.recovery_info,
-                           pull_info.obc->ssc);
-        }
-        return crimson::osd::PG::load_obc_ertr::now();
-      }, false).handle_error_interruptible(crimson::ct_error::assert_all{});
-    co_await std::move(fut);
-  };
+    auto obc_manager = pg.obc_loader.get_obc_manager(pull_info.recovery_info.soid);
+    co_await pg.obc_loader.load_and_lock(
+      obc_manager, RWState::RWNONE
+    ).handle_error_interruptible(
+      crimson::ct_error::assert_all("unexpected error")
+    );
+
+    auto obc = obc_manager.get_obc();
+    pull_info.obc = obc;
+    recovery_waiter.obc = obc;
+    // TODO: move to ObjectContextLoader once constructing obc from attrset is supported
+    obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
+                              push_op.soid);
+    auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
+    if (ss_attr_iter != push_op.attrset.end()) {
+      if (!obc->ssc) {
+        obc->ssc = new crimson::osd::SnapSetContext(
+          push_op.soid.get_snapdir());
+      }
+      try {
+        obc->ssc->snapset = SnapSet(ss_attr_iter->second);
+        obc->ssc->exists = true;
+      } catch (const buffer::error&) {
+        WARNDPP("unable to decode SnapSet", pg);
+        throw crimson::osd::invalid_argument();
+      }
+      assert(!pull_info.obc->ssc->exists ||
+             obc->ssc->snapset.seq == pull_info.obc->ssc->snapset.seq);
+    }
+    pull_info.recovery_info.oi = obc->obs.oi;
+    if (pull_info.recovery_info.soid.snap &&
+        pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
+        recalc_subsets(pull_info.recovery_info,
+                       pull_info.obc->ssc);
+    }
+  }
 
   const bool first = pull_info.recovery_progress.first;
   pull_info.recovery_progress = push_op.after_progress;
