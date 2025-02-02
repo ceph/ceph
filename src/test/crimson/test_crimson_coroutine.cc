@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include "seastar/core/sleep.hh"
+#include "seastar/core/loop.hh"
 
 #include "crimson/common/coroutine.h"
 #include "crimson/common/errorator.h"
@@ -100,6 +101,28 @@ TEST_F(coroutine_test_t, test_coroutine)
     constexpr int CHECK = 20;
     auto unwrapped = co_await seastar::make_ready_future<int>(CHECK);
     EXPECT_EQ(unwrapped, CHECK);
+  });
+}
+
+TEST_F(coroutine_test_t, test_coroutine_loops)
+{
+  run_scl([]() -> seastar::future<> {
+    int CHECK = 0;
+    std::vector<int> v = {1,2,3};
+    co_await seastar::parallel_for_each(v,
+      [&CHECK] (auto i) -> seastar::future<> {
+      CHECK++;
+      co_return;
+    });
+    EXPECT_EQ(CHECK, v.size());
+
+    co_await seastar::do_until(
+      [&CHECK] { return CHECK == 0; },
+      [&CHECK] () -> seastar::future<> {
+      CHECK--;
+      co_return;
+    });
+    EXPECT_EQ(CHECK, 0);
   });
 }
 
