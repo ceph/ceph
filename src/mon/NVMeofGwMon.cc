@@ -553,7 +553,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	dout(1) << " Warning :GW marked as Available in the NVmeofGwMon "
 		<< "database, performed full startup - Apply GW!"
 		<< gw_id << dendl;
-	 pending_map.handle_gw_performing_fast_reboot(gw_id, group_key, propose);
+	 process_gw_down(gw_id, group_key, propose, avail);
 	 LastBeacon lb = {gw_id, group_key};
 	 last_beacon[lb] = now; //Update last beacon
       } else if (
