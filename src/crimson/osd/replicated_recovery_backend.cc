@@ -773,10 +773,6 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_pull);
   DEBUGDPP("{}", pg, *m);
-  if (pg.can_discard_replica_op(*m)) {
-    DEBUGDPP("discarding {}", pg, *m);
-    return seastar::now();
-  }
   return seastar::do_with(m->take_pulls(), [FNAME, this, from=m->from](auto& pulls) {
     return interruptor::parallel_for_each(
       pulls,
@@ -943,10 +939,6 @@ ReplicatedRecoveryBackend::handle_pull_response(
   Ref<MOSDPGPush> m)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_pull_response);
-  if (pg.can_discard_replica_op(*m)) {
-    DEBUGDPP("discarding {}", pg, *m);
-    co_return;
-  }
   PushOp& push_op = m->pushes[0]; //TODO: only one push per message for now.
   if (push_op.version == eversion_t()) {
     // replica doesn't have it!
