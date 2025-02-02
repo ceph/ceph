@@ -1,6 +1,6 @@
-from typing import NamedTuple, Optional
+from typing import List, NamedTuple, Optional
 
-
+    
 class GatewayInfo(NamedTuple):
     cli_version: str
     version: str
@@ -19,14 +19,14 @@ class GatewayVersion(NamedTuple):
 class GatewayLogLevelInfo(NamedTuple):
     status: int
     error_message: str
-    log_level: int
+    log_level: str
 
 
 class SpdkNvmfLogFlagsAndLevelInfo(NamedTuple):
     status: int
     error_message: str
-    log_level: int
-    log_print_level: int
+    log_level: str
+    log_print_level: str
 
 
 class Subsystem(NamedTuple):
@@ -41,6 +41,12 @@ class Subsystem(NamedTuple):
     max_namespaces: int
 
 
+class SubsystemList(NamedTuple):
+    status: int
+    error_message: str
+    subsystems: List[Subsystem]
+
+
 class Connection(NamedTuple):
     traddr: str
     trsvcid: int
@@ -51,7 +57,16 @@ class Connection(NamedTuple):
     controller_id: int
 
 
+class ConnectionList(NamedTuple):
+    status: int
+    error_message: str
+    subsystem_nqn: str
+    connections: List[Connection]
+
+
 class NamespaceCreation(NamedTuple):
+    status: int
+    error_message: str
     nsid: int
 
 
@@ -71,7 +86,16 @@ class Namespace(NamedTuple):
     trash_image: bool
 
 
+class NamespaceList(NamedTuple):
+    status: int
+    error_message: str
+    namespaces: List[Namespace]
+
+
 class NamespaceIOStats(NamedTuple):
+    status: int
+    error_message: str
+    subsystem_nqn: str
     nsid: int
     uuid: str
     bdev_name: str
@@ -95,7 +119,7 @@ class NamespaceIOStats(NamedTuple):
     copy_latency_ticks: int
     max_copy_latency_ticks: int
     min_copy_latency_ticks: int
-    # io_error: List[int]
+    io_error: List[int]
 
 
 class Listener(NamedTuple):
@@ -104,6 +128,12 @@ class Listener(NamedTuple):
     traddr: str
     adrfam: int = 0  # 0: IPv4, 1: IPv6
     trsvcid: int = 4420
+
+
+class ListenerList(NamedTuple):
+    status: int
+    error_message: str
+    listeners: List[Listener]
 
 
 class Host(NamedTuple):
