@@ -525,6 +525,17 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
   string group_header_oid = librbd::util::group_header_name(group_id);
 
+  cls::rbd::MirrorGroup mirror_info;
+  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_info);
+  if (r < 0  && r != -ENOENT && r != -ENOTSUP) {
+    lderr(cct) << "error getting mirror info of group: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 &&
+             mirror_info.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
+    lderr(cct) << "cannot add image to mirror enabled group" << dendl;
+    return -EINVAL;
+  }
 
   ldout(cct, 20) << "adding image to group name " << group_name
 		 << " group id " << group_header_oid << dendl;
@@ -611,6 +622,19 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
   if (r < 0) {
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  cls::rbd::MirrorGroup mirror_info;
+  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_info);
+  if (r < 0  && r != -ENOENT && r != -ENOTSUP) {
+    lderr(cct) << "error getting mirror info of group: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 &&
+             mirror_info.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
+    lderr(cct) << "cannot remove image from mirror enabled group"
+               << dendl;
+    return -EINVAL;
   }
 
   ldout(cct, 20) << "removing image from group name " << group_name
