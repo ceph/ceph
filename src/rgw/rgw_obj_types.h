@@ -341,13 +341,16 @@ struct rgw_obj_key {
       return;
     } 
 
-    if (field[0] != '#') {
+    if (field[0] == '#') {
+      snap_id = std::stoll(field.substr(1));
+    } else if (field.starts_with("null#")) {
+      snap_id = std::stoll(field.substr(5));
+    } else {
       instance = field;
       snap_id = RGW_BUCKET_SNAP_NOSNAP;
       return;
     }
 
-    snap_id = std::stoll(field.substr(1));
   }
 
   static void parse_ns_field(std::string& ns, std::string& instance, rgw_bucket_snap_id& snap_id) {
