@@ -8777,10 +8777,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      if (flag == pg_pool_t::FLAG_NOPGCHANGE && p.is_crimson()) {
-	ss << "cannot clear FLAG_NOPGCHANGE on a crimson pool";
-	return -EINVAL;
-      }
       p.unset_flag(flag);
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
