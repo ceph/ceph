@@ -21,6 +21,50 @@
 typedef interval_set<uint64_t> release_set_t;
 typedef release_set_t::value_type release_set_entry_t;
 
+class FastScore;
+class Allocator;
+namespace ceph {
+class Formatter;
+}
+
+class FastScore {
+  Allocator* alloc;
+  uint32_t alloc_size = 0;
+  // buckets is a bit larger than needed, we have always alloc_size > 1.
+  std::array<int64_t, 64> buckets = {0}; // bits in uint64_t
+
+  class SocketHook;
+  std::unique_ptr<SocketHook> asok_hook;
+
+  // Debug-grade elements below
+  // check if allocator always calls now_free and now_occupied
+  // useful for updating an alloctor to FastScore mode
+  static constexpr bool check_allocated = true;
+  // since score is a float numer it brings serious doubt on numerical stability
+  // when enabled, updates drag_score with each call
+  static constexpr bool check_drag_score = true;
+  // verify whether the content of buckets reflect current allocator state
+  static constexpr bool check_buckets = true;
+  // verify results against slow - calculated score
+  static constexpr bool check_slow = true;
+  // assert on discrepancy
+  static constexpr bool assert_on_verify = false;
+
+  interval_set<uint32_t> debug_allocated; //used when check_now_tracking == true
+  double score_sum_drag = 0; // used when check_score_drag == true
+
+  std::pair<unsigned char, uint64_t> split_by_log2(uint64_t length);
+  static bool close_enough(double a, double b);
+public:
+  FastScore(CephContext* cct, Allocator* alloc);
+  ~FastScore();
+  void now_free(uint64_t offset, uint64_t length);
+  void now_occupied(uint64_t offset, uint64_t length);
+  double get_fragmentation_score_raw();
+  // check various aspects of transformation slow->fast score
+  void debug_check(std::ostream& ss);
+};
+
 class Allocator {
 protected:
 
