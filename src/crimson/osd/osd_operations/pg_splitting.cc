@@ -91,7 +91,7 @@ seastar::future<> PGSplitting::start()
 	  shard_services.get_map()->get_epoch());
       return shard_services.start_operation<PGAdvanceMap>(
         child_pg, shard_services, shard_services.get_map()->get_epoch(),
-	std::move(rctx), true).second.then([] {
+	std::move(rctx), true, true).second.then([] {
 	  return seastar::now();
 	});
     });
