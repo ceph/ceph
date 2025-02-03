@@ -5106,11 +5106,11 @@ void PeeringState::Backfilling::backfill_release_reservations()
   }
 }
 
-void PeeringState::Backfilling::cancel_backfill()
+void PeeringState::Backfilling::suspend_backfill()
 {
   DECLARE_LOCALS;
   backfill_release_reservations();
-  pl->on_backfill_canceled();
+  pl->on_backfill_suspended();
 }
 
 boost::statechart::result
@@ -5128,7 +5128,7 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
   psdout(10) << "defer backfill, retry delay " << c.delay << dendl;
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   ps->state_clear(PG_STATE_BACKFILLING);
-  cancel_backfill();
+  suspend_backfill();
 
   pl->schedule_event_after(
     std::make_shared<PGPeeringEvent>(
@@ -5146,7 +5146,7 @@ PeeringState::Backfilling::react(const UnfoundBackfill &c)
   psdout(10) << "backfill has unfound, can't continue" << dendl;
   ps->state_set(PG_STATE_BACKFILL_UNFOUND);
   ps->state_clear(PG_STATE_BACKFILLING);
-  cancel_backfill();
+  suspend_backfill();
   return transit<NotBackfilling>();
 }
 
@@ -5157,7 +5157,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 
   ps->state_set(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILLING);
-  cancel_backfill();
+  suspend_backfill();
 
   pl->schedule_event_after(
     std::make_shared<PGPeeringEvent>(
@@ -5174,7 +5174,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevoked &)
 {
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_BACKFILL_WAIT);
-  cancel_backfill();
+  suspend_backfill();
   if (ps->needs_backfill()) {
     return transit<WaitLocalBackfillReserved>();
   } else {
