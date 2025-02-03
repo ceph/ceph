@@ -1361,9 +1361,10 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_hosts_per_namespace: Optional[int] = 8,
                  max_namespaces_with_netmask: Optional[int] = 1000,
                  max_subsystems: Optional[int] = 128,
+                 max_hosts: Optional[int] = 2048,
                  max_namespaces: Optional[int] = 1024,
                  max_namespaces_per_subsystem: Optional[int] = 256,
-                 max_hosts_per_subsystem: Optional[int] = 32,
+                 max_hosts_per_subsystem: Optional[int] = 128,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1471,6 +1472,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.max_namespaces_with_netmask = max_namespaces_with_netmask
         #: ``max_subsystems`` max number of subsystems
         self.max_subsystems = max_subsystems
+        #: ``max_hosts`` max number of hosts on all subsystems
+        self.max_hosts = max_hosts
         #: ``max_namespaces`` max number of namespaces on all subsystems
         self.max_namespaces = max_namespaces
         #: ``max_namespaces_per_subsystem`` max number of namespaces per one subsystem
@@ -1618,6 +1621,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.max_hosts_per_namespace, "Max hosts per namespace")
         verify_non_negative_int(self.max_namespaces_with_netmask, "Max namespaces with netmask")
         verify_positive_int(self.max_subsystems, "Max subsystems")
+        verify_positive_int(self.max_hosts, "Max hosts")
         verify_positive_int(self.max_namespaces, "Max namespaces")
         verify_positive_int(self.max_namespaces_per_subsystem, "Max namespaces per subsystem")
         verify_positive_int(self.max_hosts_per_subsystem, "Max hosts per subsystem")
