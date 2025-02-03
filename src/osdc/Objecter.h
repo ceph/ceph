@@ -1692,7 +1692,7 @@ public:
   using OpCompletion = boost::asio::any_completion_handler<OpSignature>;
 
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 

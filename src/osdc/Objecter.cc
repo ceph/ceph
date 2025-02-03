@@ -90,6 +90,7 @@ using ceph::timespan;
 using ceph::shunique_lock;
 using ceph::acquire_shared;
 using ceph::acquire_unique;
+using namespace std::literals;
 
 namespace bc = boost::container;
 namespace bs = boost::system;
@@ -218,15 +219,13 @@ std::unique_lock<std::mutex> Objecter::OSDSession::get_lock(object_t& oid)
   return {completion_locks[h % num_locks], std::defer_lock};
 }
 
-const char** Objecter::get_tracked_conf_keys() const
+std::vector<std::string> Objecter::get_tracked_keys() const noexcept
 {
-  static const char *config_keys[] = {
-    "crush_location",
-    "rados_mon_op_timeout",
-    "rados_osd_op_timeout",
-    NULL
+  return {
+    "crush_location"s,
+    "rados_mon_op_timeout"s,
+    "rados_osd_op_timeout"s
   };
-  return config_keys;
 }
 
 
