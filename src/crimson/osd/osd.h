@@ -95,6 +95,8 @@ class OSD final : public crimson::net::Dispatcher,
 
   OSDSuperblock superblock;
 
+  pool_pg_num_history_t pg_num_history;
+
   // Dispatcher methods
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef, MessageRef) final;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
@@ -223,6 +225,15 @@ private:
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
+
+  seastar::future<> track_pools_and_pg_num_changes(const std::map<epoch_t,
+                                                   OSDMapService::local_cached_map_t>& added_maps,
+                                                   ceph::os::Transaction& t);
+
+  void _track_pools_and_pg_num_changes(ceph::os::Transaction& t,
+                                       const OSDMapService::local_cached_map_t& lastmap,
+                                       const OSDMapService::local_cached_map_t& current_added_map,
+                                       epoch_t current_added_map_epoch);
 
   seastar::future<> check_osdmap_features();
 
