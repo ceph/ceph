@@ -694,6 +694,21 @@ public:
     }
     return true;
   }
+  bool has_snapshot(std::string oid) {
+    io_ctx.snap_set_read(librados::SNAP_DIR);
+    librados::snap_set_t snap_set;
+    int snap_ret;
+    librados::ObjectReadOperation op;
+    op.list_snaps(&snap_set, &snap_ret);
+    io_ctx.operate(prefix+oid, &op, NULL);
+    bool has_snap = false;
+    if (snap_set.clones.size()) {
+      has_snap = true;
+      std::cout << __func__ << " has snap true " << std::endl;
+    }
+    io_ctx.snap_set_read(0);
+    return has_snap;
+  }
 };
 
 void read_callback(librados::completion_t comp, void *arg);
@@ -2985,6 +3000,7 @@ public:
 
     int r = completion->get_return_value();
     std::cout << num << ":  got " << cpp_strerror(r) << std::endl;
+
     if (r == 0) {
       // sucess
       context->update_object_tier_flushed(oid, snap);
@@ -2997,8 +3013,13 @@ public:
       if (src_value.deleted()) {
 	std::cout << num << ":  got expected ENOENT (src dne)" << std::endl;
       } else {
-	std::cerr << num << ": got unexpected ENOENT" << std::endl;
-	ceph_abort();
+	if (context->has_snapshot(oid)) {
+	  std::cout << num << ":  got expected ENOENT \
+	    -- adjacent snapshot might not be recovered yet" << std::endl;
+	} else {
+	  std::cerr << num << ": got unexpected ENOENT" << std::endl;
+	  ceph_abort();
+	}
       }
     } else {
       if (r != -ENOENT && src_value.deleted()) {
