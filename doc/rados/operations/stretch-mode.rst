@@ -123,7 +123,7 @@ Stretch Mode
 Stretch mode is designed to handle netsplit scenarios between two data zones as well
 as the loss of one data zone. It handles the netsplit scenario by choosing the surviving zone
 that has the better connection to the ``tiebreaker monitor``. It handles the loss of one zone by
-reducing the ``size`` to ``2`` and ``min_size`` to ``1``, allowing the cluster to continue operating
+reducing the ``min_size`` of all pools to ``1``, allowing the cluster to continue operating
 with the remaining zone. When the lost zone comes back, the cluster will recover the lost data
 and return to normal operation.
 
