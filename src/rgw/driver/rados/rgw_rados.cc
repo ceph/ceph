@@ -6411,14 +6411,22 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       }
     } else {
       rgw_bucket_dir_entry dirent;
+      auto& bucket_info = target->get_bucket_info();
 
-      int r = store->bi_get_instance(dpp, target->get_bucket_info(), obj, &dirent, y);
+      int r = store->bi_get_instance(dpp, bucket_info, obj, &dirent, y);
       if (r < 0) {
         return r;
       }
+
+      if (dirent.meta.snap_id < bucket_info.local.snap_mgr.get_cur_snap_id()) {
+        ldpp_dout(dpp, 20) << "can't delete object, current snap_id=" << bucket_info.local.snap_mgr.get_cur_snap_id()
+          << " obj snap_id=" << dirent.meta.snap_id << dendl;
+        return -ERR_FORBIDDEN;
+      }
+
       result.delete_marker = dirent.is_delete_marker();
       r = store->unlink_obj_instance(
-	dpp, target->get_ctx(), target->get_bucket_info(), obj,
+	dpp, target->get_ctx(), bucket_info, obj,
 	params.olh_epoch, y, params.bilog_flags,
 	params.null_verid, params.zones_trace, add_log, force);
       if (r < 0) {
@@ -6457,12 +6465,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   r = target->get_state(dpp, &state, &manifest, false, y);
   if (r < 0) {
     return r;
-  }
-
-  if (state->snap_id < bucket_info.local.snap_mgr.get_cur_snap_id()) {
-    ldpp_dout(dpp, 20) << "can't delete object, current snap_id=" << bucket_info.local.snap_mgr.get_cur_snap_id()
-      << " obj snap_id=" << state->snap_id << dendl;
-    return -ERR_FORBIDDEN;
   }
 
   ObjectWriteOperation op;

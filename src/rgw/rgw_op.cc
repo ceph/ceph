@@ -5502,6 +5502,8 @@ void RGWDeleteObj::execute(optional_yield y)
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
       null_verid = (s->object->get_instance() == "null");
 
+      rgw_obj_key orig_obj_key = s->object->get_key();
+
       op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5523,11 +5525,12 @@ void RGWDeleteObj::execute(optional_yield y)
       }
 
       auto& obj_key = s->object->get_key();
-      if (obj_key.instance.empty() &&
+      if (orig_obj_key.snap_id == RGW_BUCKET_SNAP_NOSNAP &&
+          orig_obj_key.instance.empty() &&
           obj_key.snap_id != RGW_BUCKET_SNAP_NOSNAP) {
-        /* no instance was specified, so if it's a versioned bucket, the request would be
-         * to create a delete marker, so we shouldn't have snap_id set, otherwise we'll
-         * try to remove that specific instance
+        /* no version id was specified originally so if it's a versioned bucket the request is
+         * to create a delete marker. We shouldn't have snap_id set, otherwise we'll
+         * try to remove that specific instance.
          */
         obj_key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
       }
