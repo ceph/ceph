@@ -10384,12 +10384,6 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
     return r;
   }
 
-  if (dirinode->is_fscrypt_enabled()) {
-    if (mask & CEPH_FILE_MODE_WR) {
-      mask |= CEPH_FILE_MODE_RD;
-    }
-  }
-
   r = path_walk(path, &in, perms, followsym, mask, dirinode);
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -CEPHFS_EEXIST;
@@ -10705,11 +10699,6 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     cflags |= CEPH_O_LAZY;
 
   int cmode = ceph_flags_to_mode(cflags);
-
-  if (in->fscrypt_ctx &&
-      cmode & CEPH_FILE_MODE_WR) {
-    cmode |= CEPH_FILE_MODE_RD;
-  }
 
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
@@ -15556,11 +15545,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     cflags |= CEPH_O_LAZY;
 
   int cmode = ceph_flags_to_mode(cflags);
-
-  if (dir->fscrypt_ctx &&
-      cmode & CEPH_FILE_MODE_WR) {
-    cmode |= CEPH_FILE_MODE_RD;
-  }
 
   int64_t pool_id = -1;
   if (data_pool && *data_pool) {

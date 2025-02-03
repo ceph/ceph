@@ -342,8 +342,14 @@ int Inode::caps_file_wanted()
 {
   int want = 0;
   for (const auto &[mode, cnt] : open_by_mode)
-    if (cnt)
+    if (cnt) {
       want |= ceph_caps_for_mode(mode);
+
+      //want Fr cap during fscrypt rmw
+      if ((mode == CEPH_FILE_MODE_WR) && fscrypt_ctx) {
+        want |= CEPH_CAP_FILE_RD;
+      }
+    }
   return want;
 }
 
