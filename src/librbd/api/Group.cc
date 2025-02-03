@@ -720,9 +720,18 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   std::vector<C_SaferCond*> on_finishes;
   std::vector<uint64_t> quiesce_requests;
   NoOpProgressContext prog_ctx;
+  uint64_t internal_flags = 0;
 
-  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
-                                 group_name, &group_id);
+  int r = librbd::util::snap_create_flags_api_to_internal(cct, flags,
+                                                          &internal_flags);
+  if (r < 0) {
+    return r;
+  }
+  internal_flags &= ~(SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE |
+                      SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR);
+
+  r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
+                             &group_id);
   if (r < 0) {
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
     return r;
