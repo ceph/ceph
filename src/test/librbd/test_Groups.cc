@@ -508,9 +508,6 @@ TEST_F(TestGroup, snap_get_info)
 
   const char *gp_name = "gp_snapgetinfo";
   ASSERT_EQ(0, rbd_group_create(ioctx2, gp_name));
-  ASSERT_EQ(0, rbd_group_image_add(ioctx2, gp_name, ioctx,
-                                   m_image_name.c_str(), 0));
-
   const char *gp_snap_name = "snap_snapshot";
   ASSERT_EQ(0, rbd_group_snap_create(ioctx2, gp_name, gp_snap_name));
 
@@ -564,9 +561,6 @@ TEST_F(TestGroup, snap_get_infoPP)
 
   const char *gp_name = "gp_snapgetinfoPP";
   ASSERT_EQ(0, m_rbd.group_create(ioctx2, gp_name));
-  ASSERT_EQ(0, m_rbd.group_image_add(ioctx2, gp_name, m_ioctx,
-                                     m_image_name.c_str(), 0));
-
   const char *gp_snap_name = "snap_snapshot";
   ASSERT_EQ(0, m_rbd.group_snap_create(ioctx2, gp_name, gp_snap_name));
 
@@ -894,7 +888,7 @@ TEST_F(TestGroup, mirrorPP)
   ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
                                           RBD_MIRROR_PEER_DIRECTION_RX_TX,
                                           "cluster", "client"));
-  const char *group_name = "snap_group";
+  const char *group_name = "snap_group1";
   ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group_name));
   ASSERT_EQ(0, m_rbd.group_image_add(m_ioctx, group_name, m_ioctx,
                                      m_image_name.c_str(), 0));
