@@ -487,6 +487,10 @@ public:
     return {get_reactor_utilization()};
   }
 
+  auto get_or_create_pg(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
