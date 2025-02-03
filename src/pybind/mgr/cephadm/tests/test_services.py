@@ -414,9 +414,10 @@ enable_monitor_client = True
 max_hosts_per_namespace = 8
 max_namespaces_with_netmask = 1000
 max_subsystems = 128
+max_hosts = 2048
 max_namespaces = 1024
 max_namespaces_per_subsystem = 256
-max_hosts_per_subsystem = 32
+max_hosts_per_subsystem = 128
 
 [gateway-logs]
 log_level = INFO
