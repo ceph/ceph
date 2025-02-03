@@ -448,6 +448,19 @@ seastar::future<> OSD::start()
       superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
     }
     return pg_shard_manager.set_superblock(superblock);
+  }).then([this, FNAME] {
+    return pg_shard_manager.get_meta_coll().load_pg_num_history(
+    ).handle_error(
+      crimson::ct_error::enoent::handle([FNAME] {
+	DEBUG("No PG History to load");
+	pool_pg_num_history_t pg_num_history;
+	return seastar::make_ready_future<pool_pg_num_history_t>(pool_pg_num_history_t{});
+      }),
+      crimson::ct_error::assert_all("open_meta_coll error")
+    );
+  }).then([this](pool_pg_num_history_t&& pg_num_hist) {
+    pg_num_history = std::move(pg_num_hist);
+    return pg_shard_manager.set_pg_num_history(pg_num_history);
   }).then([this] {
     return pg_shard_manager.get_local_map(superblock.current_epoch);
   }).then([this](OSDMapService::local_cached_map_t&& map) {
@@ -1119,37 +1132,129 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
   return seastar::do_with(ceph::os::Transaction{},
                           [=, this](auto& t) {
-    return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] {
+    return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] (const auto&& added_maps) {
       // even if this map isn't from a mon, we may have satisfied our subscription
       monc->sub_got("osdmap", last);
 
-      if (!superblock.maps.empty()) {
-        pg_shard_manager.trim_maps(t, superblock);
-        // TODO: once we support pg splitting, update pg_num_history here
-        //pg_num_history.prune(superblock.get_oldest_map());
-      }
+      return seastar::do_with(std::move(added_maps), std::ref(t),
+	  [=, this](auto& added_maps, auto& t) {
+	  return track_pools_and_pg_num_changes(added_maps, t);
+      }).then([this, &t] {
+        if (!superblock.maps.empty()) {
+          pg_shard_manager.trim_maps(t, superblock);
+          pg_num_history.prune(superblock.get_oldest_map());
+	}
+	return pg_shard_manager.set_pg_num_history(pg_num_history);
+      }).then([FNAME, this, &t, first, last] {
 
-      superblock.insert_osdmap_epochs(first, last);
-      superblock.current_epoch = last;
+	superblock.insert_osdmap_epochs(first, last);
+	superblock.current_epoch = last;
 
-      // note in the superblock that we were clean thru the prior epoch
-      if (boot_epoch && boot_epoch >= superblock.mounted) {
-        superblock.mounted = boot_epoch;
-        superblock.clean_thru = last;
-      }
-      pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
-      return pg_shard_manager.set_superblock(superblock).then(
-      [FNAME, this, &t] {
-        DEBUG("submitting transaction");
-        return store.get_sharded_store().do_transaction(
-          pg_shard_manager.get_meta_coll().collection(),
-          std::move(t));
+	// note in the superblock that we were clean thru the prior epoch
+	if (boot_epoch && boot_epoch >= superblock.mounted) {
+	  superblock.mounted = boot_epoch;
+	  superblock.clean_thru = last;
+	}
+	pg_shard_manager.get_meta_coll().store_pg_num_history(t, pg_num_history);
+	pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
+	return pg_shard_manager.set_superblock(superblock).then(
+	[FNAME, this, &t] {
+	  DEBUG("submitting transaction");
+	  return store.get_sharded_store().do_transaction(
+	    pg_shard_manager.get_meta_coll().collection(),
+	    std::move(t));
+        });
       });
     });
   }).then([=, this] {
     // TODO: write to superblock and commit the transaction
     return committed_osd_maps(start, last, m);
   });
+}
+
+/*
+ * Compare between the previous last_map we had to
+ * each one of the added_maps.
+ * Track all of the changes relevant in pg_num_history.
+ */
+seastar::future<> OSD::track_pools_and_pg_num_changes(
+  const std::map<epoch_t, OSDMapService::local_cached_map_t>& added_maps,
+  ceph::os::Transaction& t)
+{
+  LOG_PREFIX(OSD::track_pools_and_pg_num_changes);
+  epoch_t first = added_maps.begin()->first;
+  epoch_t last = added_maps.rbegin()->first;
+
+  // Unless this is the first start of this OSD,
+  // lastmap should be the newest_map we have.
+  OSDMapService::local_cached_map_t lastmap;
+
+  if (superblock.maps.empty()) {
+    DEBUG(" no maps stored, this is probably the first start of this osd");
+    lastmap = added_maps.at(first);
+  } else {
+    if (first > superblock.get_newest_map() + 1) {
+      ceph_assert(first == superblock.cluster_osdmap_trim_lower_bound);
+      DEBUG(" can't get previous map {} first start of this osd after a map gap",
+	  superblock.get_newest_map());
+    }
+
+    auto map = co_await pg_shard_manager.get_local_map(superblock.get_newest_map());
+    if (!map) {
+      // This is unexpected
+      ceph_abort();
+    }
+    lastmap = map;
+  }
+
+  for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
+    _track_pools_and_pg_num_changes(t, lastmap,
+				    current_added_map,
+				    current_added_map_epoch);
+    lastmap = current_added_map;
+  }
+  pg_num_history.epoch = last;
+  co_return;
+}
+
+void OSD::_track_pools_and_pg_num_changes(
+  ceph::os::Transaction& t,
+  const OSDMapService::local_cached_map_t& lastmap,
+  const OSDMapService::local_cached_map_t& current_added_map,
+  epoch_t current_added_map_epoch)
+{
+  LOG_PREFIX(OSD::_track_pools_and_pg_num_changes);
+  if (lastmap < current_added_map) {
+    // 1) Check if a pool was deleted
+    for (auto& [pool_id, pg_pool] : lastmap->get_pools()) {
+      if (!current_added_map->have_pg_pool(pool_id)) {
+	pg_num_history.log_pool_delete(current_added_map_epoch, pool_id);
+	DEBUG(" recording final pg_pool_t for pool {}", pool_id);
+	std::map<epoch_t, LocalOSDMapRef> added_map;
+	added_map.emplace(current_added_map_epoch, current_added_map);
+	pg_shard_manager.get_meta_coll().store_final_pool_info(t, lastmap, added_map);
+      // 2) For existing pools, check if pg_num was changed
+      } else if (unsigned new_pg_num = current_added_map->get_pg_num(pool_id);
+		 new_pg_num != pg_pool.get_pg_num()) {
+	DEBUG(" recording pool {} pg_num {} -> {}", pool_id,
+	      pg_pool.get_pg_num(), new_pg_num);
+	pg_num_history.log_pg_num_change(current_added_map_epoch,
+					 pool_id,
+					 new_pg_num);
+      }
+    }
+
+    // 3) Check if a pool was created
+    for (auto& [pool_id, pg_pool] : current_added_map->get_pools()) {
+      if (!lastmap->have_pg_pool(pool_id)) {
+	DEBUG(" recording new pool {} pg_num {}", pool_id,
+	      pg_pool.get_pg_num());
+	pg_num_history.log_pg_num_change(current_added_map_epoch,
+					 pool_id,
+					 pg_pool.get_pg_num());
+      }
+    }
+  }
 }
 
 seastar::future<> OSD::committed_osd_maps(

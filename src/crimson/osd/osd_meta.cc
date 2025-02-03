@@ -78,6 +78,26 @@ OSDMeta::load_superblock_ret OSDMeta::load_superblock()
   });
 }
 
+void OSDMeta::store_pg_num_history(ceph::os::Transaction& t,
+                                   const pool_pg_num_history_t& pg_num_history)
+{
+  bufferlist bl;
+  encode(pg_num_history, bl);
+  t.write(coll->get_cid(), pg_num_history_oid(), 0, bl.length(), bl);
+}
+
+OSDMeta::load_pg_num_hist_ret OSDMeta::load_pg_num_history()
+{
+  return store.read(
+    coll, pg_num_history_oid(), 0, 0
+  ).safe_then([] (bufferlist&& bl) {
+    auto p = bl.cbegin();
+    pool_pg_num_history_t pg_num_history;
+    decode(pg_num_history, p);
+    return seastar::make_ready_future<pool_pg_num_history_t>(std::move(pg_num_history));
+  });
+}
+
 seastar::future<std::tuple<pg_pool_t,
 			   std::string,
 			   OSDMeta::ec_profile_t>>
@@ -154,4 +174,9 @@ ghobject_t OSDMeta::final_pool_info_oid(int64_t pool)
 ghobject_t OSDMeta::superblock_oid()
 {
   return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)));
+}
+
+ghobject_t OSDMeta::pg_num_history_oid()
+{
+  return ghobject_t(hobject_t(sobject_t(object_t("pg_num_history"), CEPH_NOSNAP)));
 }

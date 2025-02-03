@@ -58,6 +58,13 @@ public:
   using load_superblock_ret = load_superblock_ertr::future<OSDSuperblock>;
   load_superblock_ret load_superblock();
 
+  void store_pg_num_history(ceph::os::Transaction& t,
+                            const pool_pg_num_history_t& pg_num_history);
+
+  using load_pg_num_hist_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
+  using load_pg_num_hist_ret = load_pg_num_hist_ertr::future<pool_pg_num_history_t>;
+  load_pg_num_hist_ret load_pg_num_history();
+
   using ec_profile_t = std::map<std::string, std::string>;
   seastar::future<std::tuple<pg_pool_t,
 			     std::string,
@@ -71,4 +78,5 @@ private:
   static ghobject_t inc_osdmap_oid(epoch_t epoch);
   static ghobject_t final_pool_info_oid(int64_t pool);
   static ghobject_t superblock_oid();
+  static ghobject_t pg_num_history_oid();
 };
