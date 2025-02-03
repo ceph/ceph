@@ -49,7 +49,7 @@ struct range_seg_t {
   boost::intrusive::avl_set_member_hook<> size_hook;
 };
 
-class AvlAllocator : public Allocator {
+class AvlAllocator : public Allocator, public FastScore {
   struct dispose_rs {
     void operator()(range_seg_t* p)
     {
@@ -84,7 +84,9 @@ public:
   void release(const release_set_t& release_set) override;
   uint64_t get_free() override;
   double get_fragmentation() override;
-
+  double get_fragmentation_score_raw() override {
+    return FastScore::get_fragmentation_score_raw();
+  };
   void dump() override;
   void foreach(
     std::function<void(uint64_t offset, uint64_t length)> notify) override;
@@ -183,12 +185,13 @@ private:
     ceph_assert(num_free >= r.length());
     num_free -= r.length();
     range_size_tree.erase(r);
-
+    now_occupied(r.start, r.length());
   }
   void _range_size_tree_try_insert(range_seg_t& r) {
     if (_try_insert_range(r.start, r.end)) {
       range_size_tree.insert(r);
       num_free += r.length();
+      now_free(r.start, r.length());
     } else {
       range_tree.erase_and_dispose(r, dispose_rs{});
     }
@@ -196,7 +199,9 @@ private:
   bool _try_insert_range(uint64_t start,
                          uint64_t end,
                         range_tree_t::iterator* insert_pos = nullptr) {
-    bool res = !range_count_cap || range_size_tree.size() < range_count_cap;
+    bool res = (range_count_cap == 0) || range_size_tree.size() < range_count_cap;
+    // res == true -> do not affect bitmap
+    // res == false -> is smallest, swap with bitmap
     bool remove_lowest = false;
     if (!res) {
       if (end - start > _lowest_size_available()) {
@@ -205,21 +210,32 @@ private:
       }
     }
     if (!res) {
+      // this one goes to bitmap
       _spillover_range(start, end);
     } else {
+      // res == true => remove_lowest == false
       // NB:  we should do insertion before the following removal
       // to avoid potential iterator disposal insertion might depend on.
+      uint64_t rs_start;
+      uint64_t rs_length;
       if (insert_pos) {
         auto new_rs = new range_seg_t{ start, end };
         range_tree.insert_before(*insert_pos, *new_rs);
         range_size_tree.insert(*new_rs);
         num_free += new_rs->length();
+        rs_start = new_rs->start;
+        rs_length = new_rs->length();
       }
       if (remove_lowest) {
         auto r = range_size_tree.begin();
         _range_size_tree_rm(*r);
+        // ^ marks (r->start, r->length()) as occupied
         _spillover_range(r->start, r->end);
         range_tree.erase_and_dispose(*r, dispose_rs{});
+      }
+      if (insert_pos) {
+        // continuation of previous if, but mark free after removal
+        now_free(rs_start, rs_length);
       }
     }
     return res;
