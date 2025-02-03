@@ -492,7 +492,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'set_coredump_overrides',
             type='bool',
-            default=True,
+            default=False,
             desc='Whether cephadm should use a systemd drop-in to modify coredump settings'
         ),
         Option(
@@ -600,7 +600,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
-            self.set_coredump_overrides = True
+            self.set_coredump_overrides = False
             self.coredump_max_size = 0
 
         self.notify(NotifyType.mon_map, None)
