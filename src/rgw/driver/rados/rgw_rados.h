@@ -136,13 +136,15 @@ WRITE_CLASS_ENCODER(RGWOLHSnapInfo)
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
+  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
 
   RGWOLHInfo() : removed(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(target, bl);
     encode(removed, bl);
+    encode(snap_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -150,6 +152,7 @@ struct RGWOLHInfo {
      DECODE_START(1, bl);
      decode(target, bl);
      decode(removed, bl);
+     decode(snap_id, bl);
      DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<RGWOLHInfo*>& o);
