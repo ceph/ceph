@@ -1921,6 +1921,13 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   }
 
   if (op_ret >= 0) {
+    auto& snap_mgr = s->bucket->get_info().local.snap_mgr;
+    auto check_snap = snap_mgr.get_cur_snap_id();
+    if (max_snap != RGW_BUCKET_SNAP_NOSNAP &&
+        max_snap < check_snap) {
+      check_snap = max_snap;
+    }
+
     if (objs_container) {
       s->formatter->open_array_section("Entries");
     }
@@ -1938,6 +1945,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       string version_id = key.instance;
       if (version_id.empty()) {
         version_id = "null";
+        if (key.snap_id < check_snap) {
+          version_id.append("#");
+          version_id.append(std::to_string(key.snap_id));
+        }
       }
       if (s->system_request) {
         if (iter->versioned_epoch > 0) {
