@@ -1,0 +1,19 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd client message cap: 5000
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    wait-for-scrub: false
+    log-ignorelist:
+      - \(PG_
+      - \(OSD_
+      - \(OBJECT_
+      - overall HEALTH
+      - \(POOL_APP_NOT_ENABLED\)
+- ssh_keys:
