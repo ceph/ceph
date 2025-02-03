@@ -417,7 +417,7 @@ public:
 
     // ============ recovery reservation notifications ==========
     virtual void on_backfill_reserved() = 0;
-    virtual void on_backfill_canceled() = 0;
+    virtual void on_backfill_suspended() = 0;
     virtual void on_recovery_reserved() = 0;
     virtual void on_recovery_cancelled() = 0;
 
@@ -963,7 +963,7 @@ public:
     boost::statechart::result react(const RemoteReservationRevoked& evt);
     boost::statechart::result react(const DeferBackfill& evt);
     boost::statechart::result react(const UnfoundBackfill& evt);
-    void cancel_backfill();
+    void suspend_backfill();
     void exit();
   };
 
