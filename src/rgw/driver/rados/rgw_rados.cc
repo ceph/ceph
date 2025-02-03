@@ -5535,6 +5535,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   store->remove_rgw_head_obj(op);
 
   auto& ioctx = ref.pool.ioctx();
+  ioctx.set_pool_full_try(); // allow deletion at pool quota limit
   version_t epoch = 0;
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y, 0, &epoch);
 
