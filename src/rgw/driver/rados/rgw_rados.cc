@@ -6441,6 +6441,7 @@ int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
 				   obj_ctx, RGWBucketInfo& bucket_info,
 				   const rgw_obj& obj, rgw_bucket_snap_id snap_id,
                                    bool delete_marker_enoent,
+                                   bool follow_snap,
                                    RGWObjState *olh_state,
 				   RGWObjStateManifest **psm, optional_yield y)
 {
@@ -6461,7 +6462,10 @@ int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
     return 0;
   }
 
-  return get_obj_state(dpp, &obj_ctx, bucket_info, target, psm, false, y);
+  return get_obj_state(dpp, &obj_ctx, bucket_info,
+                       target, psm, false, y,
+                       false, true,
+                       follow_snap);
 }
 
 int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
@@ -6469,7 +6473,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
                                  RGWObjStateManifest** psm, bool follow_olh,
                                  rgw_bucket_snap_id snap_id,
                                  optional_yield y,
-                                 bool assume_noent, bool delete_marker_enoent)
+                                 bool assume_noent, bool delete_marker_enoent,
+                                 bool follow_snap)
 {
   if (obj.empty()) {
     return -EINVAL;
@@ -6485,7 +6490,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
     bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info);
     if (s->is_olh && need_follow_olh) {
       return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id,
-                                  delete_marker_enoent, s, psm, y);
+                                  delete_marker_enoent, follow_snap, s, psm, y);
     }
     return 0;
   }
@@ -6503,14 +6508,16 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
 
   if (r == -ENOENT &&
       bucket_info.versioned() &&
-      obj.key.get_snap_id() != RGW_BUCKET_SNAP_NOSNAP) {
+      obj.key.get_snap_id() != RGW_BUCKET_SNAP_NOSNAP &&
+      follow_snap) {
     rgw_obj olh_obj(obj.bucket, obj.key.name);
     return get_obj_state_impl(dpp, octx, bucket_info,
                               olh_obj, psm,
                               true, /* follow olh */
                               obj.key.get_snap_id(),
                               y, assume_noent,
-                              delete_marker_enoent);
+                              delete_marker_enoent,
+                              false /* don't follow snap to avoid inifinite recursion */);
   }
 
   if (r == -ENOENT) {
@@ -6663,7 +6670,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
 
     if (need_follow_olh) {
       return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id,
-                                  delete_marker_enoent, s, psm, y);
+                                  delete_marker_enoent, follow_snap, s, psm, y);
     } else if (obj.key.have_null_instance() && !sm->manifest) {
       // read null version, and the head object only have olh info
       s->exists = false;
@@ -6678,14 +6685,16 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                             RGWBucketInfo& bucket_info, const rgw_obj& obj,
                             RGWObjStateManifest** psm, bool follow_olh,
                             optional_yield y, bool assume_noent,
-                            bool delete_marker_enoent)
+                            bool delete_marker_enoent,
+                            bool follow_snap)
 {
   int ret;
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
                              follow_olh, RGW_BUCKET_SNAP_NOSNAP, y,
-                             assume_noent, delete_marker_enoent);
+                             assume_noent, delete_marker_enoent,
+                             follow_snap);
   } while (ret == -EAGAIN);
 
   return ret;
@@ -6695,11 +6704,13 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                             RGWBucketInfo& bucket_info, const rgw_obj& obj,
                             RGWObjState** pstate, RGWObjManifest** pmanifest,
                             bool follow_olh, optional_yield y, bool assume_noent,
-                            bool delete_marker_enoent)
+                            bool delete_marker_enoent,
+                            bool follow_snap)
 {
   RGWObjStateManifest* sm = nullptr;
   int r = get_obj_state(dpp, rctx, bucket_info, obj, &sm,
-                        follow_olh, y, assume_noent, delete_marker_enoent);
+                        follow_olh, y, assume_noent, delete_marker_enoent,
+                        follow_snap);
   if (r < 0) {
     return r;
   }
@@ -9329,11 +9340,10 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     }
     --siter;
 
-
     auto& entry = siter->second;
 
     *delete_marker = entry.delete_marker;
-    state->snap_id = entry.key.snap_id;
+    state->snap_id = siter->first;
 
     *target = rgw_obj(bucket_info.bucket, entry.key);
     return 0;
