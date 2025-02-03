@@ -189,6 +189,7 @@ class PerShardState {
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
   seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+  seastar::future<> update_shard_pg_num_history(pool_pg_num_history_t pg_num_history);
 
   // Time state
   const ceph::mono_time startup_time;
@@ -200,6 +201,8 @@ class PerShardState {
   OSDSuperblock per_shard_superblock;
   std::list<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
+
+  pool_pg_num_history_t per_shard_pg_num_history;
 
 public:
   PerShardState(
@@ -275,6 +278,11 @@ private:
     superblock = std::move(_superblock);
   }
 
+  pool_pg_num_history_t pg_num_history;
+  void set_singleton_pg_num_history(pool_pg_num_history_t _pg_num_history) {
+    pg_num_history = std::move(_pg_num_history);
+  }
+
   seastar::future<MURef<MOSDMap>> build_incremental_map_msg(
     epoch_t first,
     epoch_t last);
@@ -336,8 +344,9 @@ private:
                     epoch_t e, bufferlist&& bl);
   void store_inc_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
-  seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
+  seastar::future<std::map<epoch_t, local_cached_map_t>> store_maps(
+    ceph::os::Transaction& t,
+    epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 };
 
