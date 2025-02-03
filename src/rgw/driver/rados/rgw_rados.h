@@ -464,6 +464,7 @@ class RGWRados
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx,
 			   RGWBucketInfo& bucket_info, const rgw_obj& obj,
                            rgw_bucket_snap_id snap_id, bool delete_marker_enoent,
+                           bool follow_snap,
 			   RGWObjState *olh_state, RGWObjStateManifest **psm,
 			   optional_yield y);
   int get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
@@ -471,7 +472,8 @@ class RGWRados
                          RGWObjStateManifest** psm, bool follow_olh,
                          rgw_bucket_snap_id snap_id,
                          optional_yield y, bool assume_noent,
-                         bool delete_marker_enoent);
+                         bool delete_marker_enoent,
+                         bool follow_snap);
   int append_atomic_test(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state,
 			 RGWObjManifest** pmanifest, optional_yield y);
@@ -1383,14 +1385,16 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     RGWObjStateManifest** psm, bool follow_olh,
                     optional_yield y, bool assume_noent = false,
-                    bool delete_marker_enoent = true);
+                    bool delete_marker_enoent = true,
+                    bool follow_snap = true);
 
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     RGWObjState** pstate, RGWObjManifest** pmanifest,
                     bool follow_olh, optional_yield y,
                     bool assume_noent = false,
-                    bool delete_marker_enoent = true);
+                    bool delete_marker_enoent = true,
+                    bool follow_snap = true);
 
   using iterate_obj_cb = int (*)(const DoutPrefixProvider*, const rgw_raw_obj&, off_t, off_t,
                                  off_t, bool, RGWObjState*, void*);
