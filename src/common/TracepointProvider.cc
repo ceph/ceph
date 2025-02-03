@@ -6,7 +6,7 @@
 
 TracepointProvider::TracepointProvider(CephContext *cct, const char *library,
                                        const char *config_key)
-  : m_cct(cct), m_library(library), m_config_keys{config_key, NULL}
+  : m_cct(cct), m_library(library), m_config_key{config_key}
 {
   m_cct->_conf.add_observer(this);
   verify_config(m_cct->_conf);
@@ -21,7 +21,7 @@ TracepointProvider::~TracepointProvider() {
 
 void TracepointProvider::handle_conf_change(
     const ConfigProxy& conf, const std::set<std::string> &changed) {
-  if (changed.count(m_config_keys[0])) {
+  if (changed.count(m_config_key)) {
     verify_config(conf);
   }
 }
@@ -34,7 +34,7 @@ void TracepointProvider::verify_config(const ConfigProxy& conf) {
 
   char buf[10];
   char *pbuf = buf;
-  if (conf.get_val(m_config_keys[0], &pbuf, sizeof(buf)) != 0 ||
+  if (conf.get_val(m_config_key, &pbuf, sizeof(buf)) != 0 ||
       strncmp(buf, "true", 5) != 0) {
     return;
   }

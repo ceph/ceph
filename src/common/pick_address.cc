@@ -201,14 +201,11 @@ const struct sockaddr *find_ip_in_subnet_list(
 #ifndef WITH_SEASTAR
 // observe this change
 struct Observer : public md_config_obs_t {
-  const char *keys[2];
-  explicit Observer(const char *c) {
-    keys[0] = c;
-    keys[1] = NULL;
-  }
+  const std::string key;
+  explicit Observer(const char *c) : key(c) {}
 
-  const char** get_tracked_conf_keys() const override {
-    return (const char **)keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return std::vector<std::string>{key};
   }
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override {
