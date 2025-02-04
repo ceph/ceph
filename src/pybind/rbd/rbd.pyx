@@ -2850,7 +2850,7 @@ cdef class Group(object):
         completion_obj.rbd_comp = completion
         return completion_obj
 
-    def add_image(self, image_ioctx, image_name, flags=0):
+    def add_image(self, image_ioctx, image_name):
         """
         Add an image to a group.
 
@@ -2858,8 +2858,6 @@ cdef class Group(object):
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to add
         :type name: str
-        :param flags: quiesce hook flags
-        :type flags: int
 
         :raises: :class:`ObjectNotFound`
         :raises: :class:`ObjectExists`
@@ -2870,14 +2868,13 @@ cdef class Group(object):
         cdef:
             rados_ioctx_t _image_ioctx = convert_ioctx(image_ioctx)
             char *_image_name = image_name
-            uint32_t _flags = flags
         with nogil:
             ret = rbd_group_image_add(self._ioctx, self._name, _image_ioctx,
-                                      _image_name, _flags)
+                                      _image_name)
         if ret != 0:
             raise make_ex(ret, 'error adding image to group', group_errno_to_exception)
 
-    def remove_image(self, image_ioctx, image_name, flags=0):
+    def remove_image(self, image_ioctx, image_name):
         """
         Remove an image from a group.
 
@@ -2885,8 +2882,6 @@ cdef class Group(object):
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
         :type name: str
-        :param flags: quiesce hook flags
-        :type flags: int
 
         :raises: :class:`ObjectNotFound`
         :raises: :class:`InvalidArgument`
@@ -2896,10 +2891,9 @@ cdef class Group(object):
         cdef:
             rados_ioctx_t _image_ioctx = convert_ioctx(image_ioctx)
             char *_image_name = image_name
-            uint32_t _flags = flags
         with nogil:
             ret = rbd_group_image_remove(self._ioctx, self._name,
-                                         _image_ioctx, _image_name, _flags)
+                                         _image_ioctx, _image_name)
         if ret != 0:
             raise make_ex(ret, 'error removing image from group', group_errno_to_exception)
 
