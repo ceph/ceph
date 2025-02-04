@@ -4314,6 +4314,7 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
   uint64_t level0_size = 0;
   uint64_t level_base = 0;
   uint64_t level_multiplier = 0;
+  size_t extra_level = 0;
   enum {
     OLD_POLICY,
     USE_SOME_EXTRA
@@ -4351,9 +4352,11 @@ public:
       uint64_t prev_levels = _level0_size;
       uint64_t cur_level = _level_base;
       uint64_t cur_threshold = prev_levels + cur_level;
+      extra_level = 1;
       do {
 	uint64_t next_level = cur_level * _level_multiplier;
         uint64_t next_threshold = prev_levels + cur_level + next_level;
+        ++extra_level;
         if (_db_total <= next_threshold) {
 	  cur_threshold *= reserved_factor;
           db_avail4slow = cur_threshold < _db_total ? _db_total - cur_threshold : 0;
@@ -4366,6 +4369,7 @@ public:
       } while (true);
     } else {
       db_avail4slow = reserved < _db_total ? _db_total - reserved : 0;
+      extra_level = 0;
     }
   }
 
