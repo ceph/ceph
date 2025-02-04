@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd memory target: 1610612736 # reduced to 1.5_G
+
