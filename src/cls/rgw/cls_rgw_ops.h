@@ -674,6 +674,7 @@ WRITE_CLASS_ENCODER(rgw_cls_usage_log_add_op)
 struct rgw_cls_bi_get_op {
   cls_rgw_obj_key key;
   BIIndexType type; /* namespace: plain, instance, olh */
+  bool delete_marker{false};
 
   rgw_cls_bi_get_op() : type(BIIndexType::Plain) {}
 
@@ -681,6 +682,7 @@ struct rgw_cls_bi_get_op {
     ENCODE_START(1, 1, bl);
     encode(key, bl);
     encode((uint8_t)type, bl);
+    encode(delete_marker, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -690,12 +692,14 @@ struct rgw_cls_bi_get_op {
     uint8_t c;
     decode(c, bl);
     type = (BIIndexType)c;
+    decode(delete_marker, bl);
     DECODE_FINISH(bl);
   }
 
   void dump(ceph::Formatter *f) const {
     f->dump_stream("key") << key;
     f->dump_int("type", (int)type);
+    f->dump_bool("delete_marker", (int)delete_marker);
   }
 
   static void generate_test_instances(std::list<rgw_cls_bi_get_op*>& o) {
