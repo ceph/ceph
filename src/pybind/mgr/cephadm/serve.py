@@ -1,3 +1,4 @@
+from datetime import datetime
 import ipaddress
 import hashlib
 import json
@@ -30,7 +31,7 @@ from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
 from mgr_module import MonCommandFailed
-from mgr_util import format_bytes, verify_tls, get_cert_issuer_info, ServerConfigException
+from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
 
 from . import utils
@@ -63,6 +64,7 @@ class CephadmServe:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
+        self.last_certificates_check: Optional[datetime] = None
 
     def serve(self) -> None:
         """
@@ -111,10 +113,7 @@ class CephadmServe:
 
                     self._check_daemons()
 
-                    services_to_reconfig, _ = self.mgr.cert_mgr.check_services_certificates(fix_issues=True)
-                    for svc in services_to_reconfig:
-                        logger.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
-                        self.mgr.service_action('reconfig', svc)
+                    self._check_certificates()
 
                     self._purge_deleted_services()
 
@@ -142,39 +141,24 @@ class CephadmServe:
         self.log.debug("serve exit")
 
     def _check_certificates(self) -> None:
-        for d in self.mgr.cache.get_daemons_by_type('grafana'):
-            host = d.hostname
-            assert host is not None
-            cert = self.mgr.cert_mgr.get_cert('grafana_cert', host=host)
-            key = self.mgr.cert_mgr.get_key('grafana_key', host=host)
-            if not cert or not key:
-                # certificate/key are empty... nothing to check
-                return
 
-            try:
-                get_cert_issuer_info(cert)
-                verify_tls(cert, key)
-                self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
-            except ServerConfigException as e:
-                err_msg = f"""
-                Detected invalid grafana certificates. Please, use the following commands:
+        # Check certificates if:
+        # - This is the first time (startup, last_certificates_check is None)
+        # - Or the elapsed time is greater than or equal to the configured check period
+        check_certificates = False
+        if self.last_certificates_check is None:
+            check_certificates = True
+        else:
+            elapsed_time = datetime_now() - self.last_certificates_check
+            check_certificates = elapsed_time.days >= self.mgr.certificate_check_period
 
-                  > ceph config-key set mgr/cephadm/{d.hostname}/grafana_crt -i <path-to-ctr-file>
-                  > ceph config-key set mgr/cephadm/{d.hostname}/grafana_key -i <path-to-key-file>
-
-                to set valid key and certificate or reset their value to an empty string
-                in case you want cephadm to generate self-signed Grafana certificates.
-
-                Once done, run the following command to reconfig the daemon:
-
-                  > ceph orch daemon reconfig grafana.{d.hostname}
-
-                """
-                self.log.error(f'Detected invalid grafana certificate on host {d.hostname}: {e}')
-                self.mgr.set_health_warning('CEPHADM_CERT_ERROR',
-                                            f'Invalid grafana certificate on host {d.hostname}: {e}',
-                                            1, [err_msg])
-                break
+        if check_certificates:
+            self.log.debug('_check_certificates')
+            self.last_certificates_check = datetime_now()
+            services_to_reconfig, _ = self.mgr.cert_mgr.check_services_certificates(fix_issues=True)
+            for svc in services_to_reconfig:
+                logger.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
+                self.mgr.service_action('reconfig', svc)
 
     def _serve_sleep(self) -> None:
         sleep_interval = max(
