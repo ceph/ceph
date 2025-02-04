@@ -1290,8 +1290,8 @@
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
     --export-format arg       format of image file
-    --estimated-size arg      estimated image size (valid only for import from
-                              stdin, in M/G/T) [default: M]
+    --estimated-size arg      estimated image size (valid only for raw import
+                              from stdin, in M/G/T) [default: M]
   
   Image Features:
     (*) supports enabling/disabling on existing images
