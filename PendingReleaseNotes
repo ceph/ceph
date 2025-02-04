@@ -101,6 +101,10 @@
   `PutBucketPolicy`. Additionally, the root user will always have access to modify
   the bucket policy, even if the current policy explicitly denies access.
 
+* erasure-code: The default plugin for erasure coded pools has been changed
+  from Jerasure to ISA-L. This change applies to new clusters only. ISA-L is
+  recommended for new pools because the Jerasure library is no longer maintained.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
