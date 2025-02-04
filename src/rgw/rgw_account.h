@@ -53,6 +53,7 @@ struct AdminOpState {
   std::optional<int64_t> quota_max_size;
   std::optional<int64_t> quota_max_objects;
   std::optional<bool> quota_enabled;
+  bool purge_data = false;
 };
 
 /// create an account
