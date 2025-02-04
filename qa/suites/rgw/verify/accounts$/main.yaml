@@ -1,0 +1,4 @@
+overrides:
+  s3tests:
+    accounts:
+      s3 main: RGW11111111111111111
