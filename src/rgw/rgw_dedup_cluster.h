@@ -5,19 +5,48 @@
 #include <string>
 
 namespace rgw::dedup {
-#define DEDUP_POOL_NAME       "rgw_dedup_pool"
-#define MD5_SHARD_PREFIX      "MD5.SHRD.TKN."
-#define WORKER_SHARD_PREFIX   "WRK.SHRD.TKN."
+  static constexpr const char* DEDUP_POOL_NAME     = "rgw_dedup_pool";
+  static constexpr const char* MD5_SHARD_PREFIX    = "MD5.SHRD.TK.";
+  static constexpr const char* WORKER_SHARD_PREFIX = "WRK.SHRD.TK.";
+
   struct dedup_epoch_t;
   int   init_dedup_pool_ioctx(RGWRados                 *rados,
 			      const DoutPrefixProvider *dpp,
 			      librados::IoCtx          *p_ioctx);
 
   class cluster{
-#define TOKEN_STATE_PENDING   0x00
-#define TOKEN_STATE_TIMED_OUT 0xDD
-#define TOKEN_STATE_COMPLETED 0xFF
   public:
+    //==================================================================================
+    class shard_token_oid {
+    public:
+      //---------------------------------------------------------------------------
+      shard_token_oid(const char *prefix) {
+	this->prefix_len = snprintf(this->buff, BUFF_SIZE, "%s", prefix);
+	this->total_len = this->prefix_len;
+      }
+
+      //---------------------------------------------------------------------------
+      shard_token_oid(const char *prefix, uint16_t shard) {
+	this->prefix_len = snprintf(this->buff, BUFF_SIZE, "%s", prefix);
+	set_shard(shard);
+      }
+
+      //---------------------------------------------------------------------------
+      void set_shard(uint16_t shard) {
+	int n = snprintf(this->buff + this->prefix_len, BUFF_SIZE, "%03x", shard);
+	this->total_len = this->prefix_len + n;
+      }
+
+      inline const char* get_buff() { return this->buff; }
+      inline unsigned get_buff_size() { return this->total_len; }
+    private:
+      static const unsigned BUFF_SIZE = 15;
+      unsigned total_len  = 0;
+      unsigned prefix_len = 0;
+      char buff[BUFF_SIZE];
+    };
+
+    //==================================================================================
     cluster(const DoutPrefixProvider *_dpp, CephContext* const _cct);
     int          init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx,
 		      struct dedup_epoch_t*, bool init_epoch);
@@ -92,6 +121,10 @@ namespace rgw::dedup {
     }
 
   private:
+    static constexpr unsigned TOKEN_STATE_PENDING   = 0x00;
+    static constexpr unsigned TOKEN_STATE_TIMED_OUT = 0xDD;
+    static constexpr unsigned TOKEN_STATE_COMPLETED = 0xFF;
+
     void reset();
     bool all_shard_tokens_completed(librados::IoCtx *p_ioctx,
 				    unsigned shards_count,
@@ -100,10 +133,10 @@ namespace rgw::dedup {
 				    uint8_t completed_arr[],
 				    uint64_t *p_total_ingressed);
     int cleanup_prev_run(librados::IoCtx *p_ioctx);
-    int get_next_shard_token(librados::IoCtx *p_ioctx,
-			     unsigned start_shard,
-			     unsigned max_count,
-			     const char *prefix);
+    int32_t get_next_shard_token(librados::IoCtx *p_ioctx,
+				 uint16_t start_shard,
+				 uint16_t max_count,
+				 const char *prefix);
     int create_shard_tokens(librados::IoCtx *p_ioctx,
 			    unsigned shards_count,
 			    const char *prefix);
@@ -124,7 +157,7 @@ namespace rgw::dedup {
     utime_t                   d_token_creation_time;
     uint64_t                  d_total_ingressed_obj = 0;
     uint8_t                   d_completed_workers[MAX_WORK_SHARD];
-    uint8_t                   d_completed_md5[MAX_WORK_SHARD];
+    uint8_t                   d_completed_md5[MAX_MD5_SHARD];
     uint16_t                  d_num_completed_workers = 0;
     uint16_t                  d_num_completed_md5 = 0;
     uint16_t                  d_num_failed_workers = 0;

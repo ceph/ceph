@@ -503,7 +503,7 @@ namespace rgw::dedup {
   std::string disk_block_id_t::get_slab_name(md5_shard_t md5_shard) const
   {
     // SLAB.MD5_ID.WORKER_ID.SLAB_SEQ_ID
-    const char *SLAB_NAME_FORMAT = "SLAB.%02X.%02X.%04X";
+    const char *SLAB_NAME_FORMAT = "SLB.%03X.%02X.%04X";
     static constexpr uint32_t SLAB_NAME_SIZE = 16;
     char name_buf[SLAB_NAME_SIZE];
     slab_id_t slab_id = get_slab_id();
@@ -530,11 +530,13 @@ namespace rgw::dedup {
     bufferlist bl;
     int ret = p_ioctx->read(oid, bl, read_len, byte_offset);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERR: failed to read block from "
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read block from "
 			<< oid << ", error is " << cpp_strerror(ret) << dendl;
       return ret;
     }
-
+    else {
+      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+    }
     const char *p = nullptr;
     auto bl_itr = bl.cbegin();
     size_t n = bl_itr.get_ptr_and_advance(sizeof(disk_block_t), &p);
@@ -556,13 +558,13 @@ namespace rgw::dedup {
 	return 0;
       }
       else {
-	ldpp_dout(dpp, 1) << __func__ << "::Bad record in block=" << block_id
+	ldpp_dout(dpp, 1) << __func__ << "::ERR: Bad record in block=" << block_id
 			  << ", rec_id=" << rec_id << dendl;
 	return -1;
       }
     }
     else {
-      ldpp_dout(dpp, 1) << __func__ << "::unexpected short read n=" << n << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: unexpected short read n=" << n << dendl;
       return -1;
     }
 
@@ -587,8 +589,11 @@ namespace rgw::dedup {
 
     int ret = p_ioctx->read_full(oid, bl);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERR: failed to read " << oid
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << oid
 			<< ", error is " << cpp_strerror(ret) << dendl;
+    }
+    else {
+      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     }
     return ret;
   }
@@ -603,7 +608,7 @@ namespace rgw::dedup {
   {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
-    ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     int ret = p_ioctx->write_full(oid, bl);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to write " << oid

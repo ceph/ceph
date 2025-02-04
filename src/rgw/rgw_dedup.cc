@@ -75,7 +75,7 @@ namespace rgw::dedup {
     ldpp_dout(this, 1) << __func__ << "::notify_id=" << notify_id << "::cookie="
 		       << cookie << "::notifier_id=" << notifier_id << dendl;
     if (parent->d_watch_handle != cookie) {
-      ldpp_dout(this, 5) << __func__ << "::wrong cookie=" << cookie
+      ldpp_dout(this, 5) << __func__ << "::ERR: wrong cookie=" << cookie
 			 << "::d_watch_handle=" << parent->d_watch_handle << dendl;
       return;
     }
@@ -86,7 +86,7 @@ namespace rgw::dedup {
   void Background::DedupWatcher::handle_error(uint64_t cookie, int err)
   {
     if (parent->d_watch_handle != cookie) {
-      ldpp_dout(this, 5) << __func__ << "::wrong cookie=" << cookie
+      ldpp_dout(this, 5) << __func__ << "::ERR: wrong cookie=" << cookie
 			 << "::d_watch_handle=" << parent->d_watch_handle << dendl;
       return;
     }
@@ -274,11 +274,16 @@ namespace rgw::dedup {
     d_execute_interval(_execute_interval),
     d_watcher_ctx(this)
   {
+#if 0
+    // TBD: use config-file
+    // temp hack to allow processing small files
+    d_min_obj_size_for_dedup = 1024;
+#endif
     // TBD1: disk_block_array_t should be released after bucket-index scan
     // TBD2: d_table should be dynamiclly allocated
     // TBD3: disk_block_array_t and d_table should use the same memory-buffer
     // TBD4: memory-buffer should be released after dedup is completed
-    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
+    for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
       // TBD: check allocation success
       p_disk_arr[md5_shard] = new disk_block_array_t(dpp, md5_shard);
     }
@@ -337,7 +342,7 @@ namespace rgw::dedup {
       rgw_rados_ref obj;
       int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
       if (ret < 0) {
-	ldpp_dout(dpp, 1) << "manifest::failed to open rados context for " << obj << dendl;
+	ldpp_dout(dpp, 1) << "ERR: manifest::failed to open rados context for " << obj << dendl;
 	continue;
       }
       librados::IoCtx ioctx = obj.ioctx;
@@ -367,7 +372,7 @@ namespace rgw::dedup {
       int local_ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
       if (local_ret < 0) {
 	ret_code = local_ret;
-	ldpp_dout(dpp, 1) << "manifest::failed to open rados context for " << obj << dendl;
+	ldpp_dout(dpp, 1) << "ERR: manifest::failed to open rados context for " << obj << dendl;
 	// skip bad objects, nothing we can do
 	continue;
       }
@@ -402,7 +407,7 @@ namespace rgw::dedup {
       rgw_rados_ref obj;
       ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
       if (ret < 0) {
-	ldpp_dout(dpp, 1) << "manifest::failed to open rados context for " << obj << dendl;
+	ldpp_dout(dpp, 1) << "ERR: manifest::failed to open rados context for " << obj << dendl;
 	break;
       }
 
@@ -543,7 +548,7 @@ namespace rgw::dedup {
     }
     ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), data_pool, *p_ioctx);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:"
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to get IO context from data pool:"
 			<< data_pool.to_str() << dendl;
       return -EIO;
     }
@@ -562,7 +567,7 @@ namespace rgw::dedup {
     rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
     int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
     if (unlikely(ret != 0)) {
-      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      derr << __func__ << "::ERR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
       return -ret;
     }
 
@@ -666,7 +671,8 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS" << dendl;
       ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
       if (ret < 0) {
-	ldpp_dout(dpp, 1) << __func__ << "::failed TGT rgw_rados_operate() ret=" << ret << dendl;
+	ldpp_dout(dpp, 1) << __func__ << "::ERR: failed TGT rgw_rados_operate() ret="
+			  << ret << dendl;
 	rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
 	return ret;
       }
@@ -678,7 +684,8 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 20) << __func__ << "::send SRC CLS" << dendl;
 	ret = src_ioctx.operate(src_oid, &src_op);
 	if (ret < 0) {
-	  ldpp_dout(dpp, 1) << __func__ << "::failed SRC rgw_rados_operate() ret=" << ret << dendl;
+	  ldpp_dout(dpp, 1) << __func__ << "::ERR: failed SRC rgw_rados_operate() ret="
+			    << ret << dendl;
 	  return ret;
 	}
       }
@@ -809,22 +816,24 @@ namespace rgw::dedup {
     ret = driver->load_bucket(dpp, b, &bucket, null_yield);
     if (unlikely(ret != 0)) {
       // could happen when the bucket is removed between passes
-      ldpp_dout(dpp, 1) << __func__ << "::Failed driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERR Failed driver->load_bucket(): "
+			<< cpp_strerror(-ret) << dendl;
       return -ret;
     }
 
     unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(p_rec->obj_name);
     if (unlikely(!p_obj)) {
       // could happen when the object is removed between passes
-      ldpp_dout(dpp, 1) << "::Failed bucket->get_object(" << p_rec->obj_name << ")" << dendl;
+      ldpp_dout(dpp, 1) << "::ERR: Failed bucket->get_object("
+			<< p_rec->obj_name << ")" << dendl;
       p_stats->ingress_failed_get_object++;
       return 0;
     }
 
     ret = p_obj->get_obj_attrs(null_yield, dpp);
     if (unlikely(ret < 0)) {
-      derr << "::ERROR: failed to stat object(" << p_rec->obj_name << "), returned error: "
-	   << cpp_strerror(-ret) << dendl;
+      derr << __func__ << "::ERROR: failed to stat object(" << p_rec->obj_name
+	   << "), returned error: " << cpp_strerror(-ret) << dendl;
       p_stats->ingress_failed_get_obj_attrs++;
       return 1;
     }
@@ -942,7 +951,7 @@ namespace rgw::dedup {
     ret = load_record(p_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
     if (unlikely(ret != 0)) {
       // we can withstand most errors moving to the next object
-      ldpp_dout(dpp, 5) << __func__ << "::Failed load_record("
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed load_record("
 			<< src_block_id << ", " << src_rec_id << ")" << dendl;
       return 0;
     }
@@ -1001,7 +1010,7 @@ namespace rgw::dedup {
       }
     }
     else {
-      derr << __func__ << "::Failed dedup for " << src_rec.bucket_name
+      derr << __func__ << "::ERR: Failed dedup for " << src_rec.bucket_name
 	   << "/" << src_rec.obj_name << dendl;
       p_stats->failed_dedup++;
     }
@@ -1170,7 +1179,7 @@ namespace rgw::dedup {
 	else {
 	  // TBD - How to test this path?
 	  // It requires that rados.read() will allocate bufferlist in small chunks
-	  derr << __func__ << "::unexpected short read n=" << n << dendl;
+	  derr << __func__ << "::ERR: unexpected short read n=" << n << dendl;
 	  break;
 	}
       }
@@ -1321,7 +1330,7 @@ namespace rgw::dedup {
 			     max_entries, list_versions, &result);
       int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
       if (unlikely(ret < 0)) {
-	ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_operate() ret="
+	ldpp_dout(dpp, 1) << __func__ << "::ERR: failed rgw_rados_operate() ret="
 			  << ret << "::" << cpp_strerror(-ret) << dendl;
 	current_shard = move_to_next_bucket_index_shard(dpp, current_shard, MAX_WORK_SHARD,
 							bucket->get_name(), &marker);
@@ -1365,7 +1374,8 @@ namespace rgw::dedup {
     unique_ptr<rgw::sal::Bucket> bucket;
     int ret = driver->load_bucket(dpp, bucket_rec, &bucket, null_yield);
     if (unlikely(ret != 0)) {
-      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      derr << __func__ << "::ERROR: driver->load_bucket(): "
+	   << cpp_strerror(-ret) << dendl;
       return -ret;
     }
 
@@ -1379,7 +1389,7 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 1) << __func__ << "::ret == -ENOENT" << dendl;
 	return 0;
       }
-      ldpp_dout(dpp, 1) << __func__ << ":: ERROR: get_bucket_instance_info(), ret="
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: get_bucket_instance_info(), ret="
 			<< ret << "::" << cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -1394,7 +1404,7 @@ namespace rgw::dedup {
       return process_bucket_shards(bucket.get(), oids, ioctx, worker_id, p_worker_stats);
     }
     else {
-      ldpp_dout(dpp, 1) << __func__ << ":: ERROR: open_bucket_index()  ret="
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: open_bucket_index()  ret="
 			<< ret << "::" << cpp_strerror(ret) << dendl;
       return ret;
     }
@@ -1485,13 +1495,13 @@ namespace rgw::dedup {
     d_table.remove_singletons_and_redistribute_keys();
     // The SLABs holds minimal data set brought from the bucket-index
     // Objects participating in DEDUP need to read attributes from the Head-Object
-    // TBD  - find a better name than NULL_WORK_SHARD for the combined output
+    // TBD  - find a better name than MAX_WORK_SHARD for the combined output
     // TBD2 - worker_stats needs to be reflected, maybe move tham to MD5 stats??
     // (egress_slabs, egress_blocks, egress_records)
     {
       disk_block_array_t disk_block_arr(dpp, md5_shard);
       worker_stats_t worker_stats;
-      disk_block_arr.set_worker_id(NULL_WORK_SHARD, &worker_stats);
+      disk_block_arr.set_worker_id(MAX_WORK_SHARD, &worker_stats);
       for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
 	run_dedup_step(STEP_READ_ATTRIBUTES, md5_shard, worker_id, slab_count_arr, p_stats, &disk_block_arr);
 	if (unlikely(d_ctl.should_stop())) {
@@ -1509,14 +1519,14 @@ namespace rgw::dedup {
 #if 1
     ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::started..." << dendl;
     // TBD: skip this step when running in estimate mode
-    run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, NULL_WORK_SHARD, slab_count_arr, p_stats, nullptr);
+    run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, MAX_WORK_SHARD, slab_count_arr, p_stats, nullptr);
     if (unlikely(d_ctl.should_stop())) {
       ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
       return -1;
     }
     ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::finished..." << dendl;
 #endif
-    remove_slabs(NULL_WORK_SHARD, md5_shard, slab_count_arr);
+    remove_slabs(MAX_WORK_SHARD, md5_shard, slab_count_arr);
     return 0;
   }
 
@@ -1528,13 +1538,14 @@ namespace rgw::dedup {
     unique_ptr<rgw::sal::Bucket> bucket;
     int ret = driver->load_bucket(dpp, bucket_rec, &bucket, null_yield);
     if (unlikely(ret != 0)) {
-      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      derr << __func__ << "::ERROR: driver->load_bucket(): "
+	   << cpp_strerror(-ret) << dendl;
       return -ret;
     }
 
     const auto& index = bucket->get_info().get_current_index();
     if (is_layout_indexless(index)) {
-      derr << "error, indexless buckets do not maintain stats; bucket="
+      derr << __func__ << "::ERROR, indexless buckets do not maintain stats; bucket="
 	   << bucket->get_name() << dendl;
       return -EINVAL;
     }
@@ -1544,7 +1555,7 @@ namespace rgw::dedup {
     std::string max_marker;
     ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
     if (ret < 0) {
-      derr << "error getting bucket stats bucket=" << bucket->get_name()
+      derr << __func__ << """ERROR getting bucket stats bucket=" << bucket->get_name()
 	   << " ret=" << ret << dendl;
       return ret;
     }
@@ -1570,7 +1581,8 @@ namespace rgw::dedup {
     void *handle = nullptr;
     ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
     if (ret < 0) {
-      derr << __func__ << "::Failed meta_list_keys_init: " << cpp_strerror(ret) << dendl;
+      derr << __func__ << "::ERR: Failed meta_list_keys_init: "
+	   << cpp_strerror(ret) << dendl;
       return -ret;
     }
 
@@ -1588,7 +1600,8 @@ namespace rgw::dedup {
 	  rgw_bucket bucket;
 	  ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
 	  if (unlikely(ret < 0)) {
-	    derr << __func__ << "::Failed rgw_bucket_parse_bucket_key: " << cpp_strerror(ret) << dendl;
+	    derr << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
+		 << cpp_strerror(ret) << dendl;
 	    goto err;
 	  }
 	  ldpp_dout(dpp, 10) <<__func__ << "::bucket=" << bucket << dendl;
@@ -1602,7 +1615,7 @@ namespace rgw::dedup {
 	driver->meta_list_keys_complete(handle);
       }
       else {
-	derr << __func__ << "::failed driver->meta_list_keys_next()" << dendl;
+	derr << __func__ << "::ERR: failed driver->meta_list_keys_next()" << dendl;
 	ret = -1;
 	goto err;
       }
@@ -1661,7 +1674,8 @@ namespace rgw::dedup {
     void *handle = nullptr;
     ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
     if (ret < 0) {
-      derr << __func__ << "::Failed meta_list_keys_init: " << cpp_strerror(ret) << dendl;
+      derr << __func__ << "::ERR: Failed meta_list_keys_init: "
+	   << cpp_strerror(ret) << dendl;
       return ret;
     }
     bool has_more = true;
@@ -1678,7 +1692,7 @@ namespace rgw::dedup {
 	  ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
 	  if (unlikely(ret < 0)) {
 	    // bad bucket entry, skip to the next one
-	    derr << __func__ << "::Failed rgw_bucket_parse_bucket_key: "
+	    derr << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
 		 << cpp_strerror(ret) << dendl;
 	    continue;
 	  }
@@ -1720,7 +1734,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 10) << __func__ << "::calling ioctx->remove(" << oid << ")" << dendl;
       int ret = p_dedup_cluster_ioctx->remove(oid);
       if (ret != 0) {
-	ldpp_dout(dpp, 0) << __func__ << "::Failed ioctx->remove(" << oid << ")" << dendl;
+	ldpp_dout(dpp, 0) << __func__ << "::ERR Failed ioctx->remove(" << oid << ")" << dendl;
 	failure_count++;
       }
     }
@@ -1740,8 +1754,8 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 0) << "stat counters [worker]:\n" << worker_stats << dendl;
       ldpp_dout(dpp, 0) << "Shard Process Duration   = " << worker_stats.duration << dendl;
     }
-    ldpp_dout(dpp, 0) << __func__ << "::sleep for 2 seconds\n" << dendl;
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    //ldpp_dout(dpp, 0) << __func__ << "::sleep for 2 seconds\n" << dendl;
+    //std::this_thread::sleep_for(std::chrono::seconds(2));
     return ret;
   }
 
@@ -1767,7 +1781,7 @@ namespace rgw::dedup {
   {
     while (true) {
       d_heart_beat_last_update = ceph_clock_now();
-      int shard_id;
+      uint16_t shard_id;
       if (ingress_work_shards) {
 	shard_id = d_cluster.get_next_work_shard_token(p_dedup_cluster_ioctx);
       }
@@ -1811,7 +1825,8 @@ namespace rgw::dedup {
     auto rados_handle = rados->get_rados_handle();
     int ret = rados_handle->get_pool_stats(vec, stats);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "error fetching pool stats: " << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 0) << __func__ << ":ERROR: fetching pool stats: "
+			<< cpp_strerror(ret) << dendl;
       return ret;
     }
     for (auto i = stats.begin(); i != stats.end(); ++i) {
@@ -1835,7 +1850,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 1) << __func__ << "::calling d_cluster.init()" << dendl;
     int ret = d_cluster.init(store, p_dedup_cluster_ioctx, p_epoch, false);
     if (ret != 0) {
-      derr << __func__ << "::failed cluster.init()" << dendl;
+      derr << __func__ << "::ERR: failed cluster.init()" << dendl;
       return -1;
     }
 
@@ -1856,7 +1871,7 @@ namespace rgw::dedup {
   {
     if (!p_dedup_cluster_ioctx->is_valid()) {
       ldpp_dout(dpp, 1) << __func__
-			<< "::invalid pool handler (missing pool)" << dendl;
+			<< "::ERR: invalid pool handler (missing pool)" << dendl;
       return -ENOENT;
     }
     const std::string & oid = DEDUP_WATCH_OBJ;
@@ -1870,14 +1885,14 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::"<< oid << " exists" << dendl;
     }
     else {
-      ldpp_dout(dpp, 1) << "failed ioctx.create(" << oid << ") with: "
-			<< ret << "::" << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed ioctx.create(" << oid
+			<< ") with: " << ret << "::" << cpp_strerror(ret) << dendl;
       return ret;
     }
 
     ret = p_dedup_cluster_ioctx->watch2(oid, &d_watch_handle, &d_watcher_ctx);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed watch2() " << oid
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed watch2() " << oid
 			<< ". error: " << cpp_strerror(ret) << dendl;
       return ret;
     }
@@ -1896,12 +1911,12 @@ namespace rgw::dedup {
 
     if (!p_dedup_cluster_ioctx->is_valid()) {
       ldpp_dout(dpp, 1) << __func__
-			<< "::invalid pool handler (missing pool)" << dendl;
+			<< "::ERR: invalid pool handler (missing pool)" << dendl;
       return -ENOENT;
     }
     const auto ret = p_dedup_cluster_ioctx->unwatch2(d_watch_handle);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed unwatch2() " << DEDUP_WATCH_OBJ
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed unwatch2() " << DEDUP_WATCH_OBJ
 			<< ". error: " << cpp_strerror(ret) << dendl;
       return ret;
     }
@@ -1915,7 +1930,7 @@ namespace rgw::dedup {
   {
     if (!p_dedup_cluster_ioctx->is_valid()) {
       ldpp_dout(dpp, 1) << __func__
-			<< "::invalid pool handler (missing pool)" << dendl;
+			<< "::ERR: invalid pool handler (missing pool)" << dendl;
       return;
     }
     ldpp_dout(dpp, 1) << __func__ << "::status=" << status << dendl;
