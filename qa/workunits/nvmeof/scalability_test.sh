@@ -12,9 +12,25 @@ fi
 pip3 install yq
 
 status_checks() {
-    ceph nvme-gw show mypool ''
-    ceph orch ls
-    ceph orch ps 
+    expected_count=$1
+
+    output=$(ceph nvme-gw show $POOL $GROUP) 
+    nvme_show=$(echo $output | grep -o '"AVAILABLE"' | wc -l)
+    if [ "$nvme_show" -ne "$expected_count" ]; then
+        return 1
+    fi
+
+    orch_ls=$(ceph orch ls)
+    if ! echo "$orch_ls" | grep -q "$expected_count/$expected_count"; then
+        return 1
+    fi
+
+    output=$(ceph orch ps --service-name nvmeof.$POOL.$GROUP)     
+    orch_ps=$(echo $output | grep -o 'running' | wc -l)
+    if [ "$orch_ps" -ne "$expected_count" ]; then
+        return 1
+    fi
+
     ceph -s
 }
 
