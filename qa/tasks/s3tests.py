@@ -281,6 +281,7 @@ def create_users(ctx, config, s3tests_conf):
                             '--cluster', cluster_name,
                             'account', 'rm',
                             '--account-id', account_id,
+                            '--purge-data',
                             ])
 
 
