@@ -4650,6 +4650,7 @@ done_ret:
         continue;
       }
       auto& ref = obj.get_ref();
+      ref.pool.ioctx().set_pool_full_try();  // allow deletion at pool quota limit
 
       ObjectWriteOperation op;
       cls_refcount_put(op, ref_tag, true);
@@ -5066,6 +5067,7 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
         obj.pool << dendl;
         continue;
       }
+      ctx->set_pool_full_try();  // allow deletion at pool quota limit
       last_pool = obj.pool;
     }
     ctx->locator_set_key(obj.loc);
