@@ -16,12 +16,14 @@ if(NOT CMAKE_BUILD_TYPE)
   if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
     message(WARNING "CMAKE_BUILD_TYPE not specified, assuming CMAKE_BUILD_TYPE=Debug because .git exists.")
     set(default_build_type "Debug")
-    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-        STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
   else()
-    message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
+    message(WARNING "CMAKE_BUILD_TYPE not specified, setting to RelWithDebInfo because .git does NOT exist.")
+    set(default_build_type "RelWithDebInfo")
   endif()
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+  STRING "BUILD_TYPE is ${default_build_type}, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
+message(STATUS "BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
