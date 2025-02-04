@@ -1,5 +1,7 @@
 overrides:
   install:
+    exclude_packages:
+      - ceph-selinux
     extra_system_packages:
       rpm:
         - fio
