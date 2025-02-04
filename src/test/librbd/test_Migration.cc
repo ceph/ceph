@@ -743,7 +743,7 @@ TEST_F(TestMigration, Group)
 
   ASSERT_EQ(0, librbd::api::Group<>::create(m_ioctx, "123"));
   ASSERT_EQ(0, librbd::api::Group<>::image_add(m_ioctx, "123", m_ioctx,
-                                               m_image_name.c_str(), 0));
+                                               m_image_name.c_str()));
   librbd::group_info_t info;
   ASSERT_EQ(0, librbd::api::Group<>::image_get_group(m_ictx, &info));
 
@@ -755,7 +755,7 @@ TEST_F(TestMigration, Group)
   ASSERT_EQ(info.name, "123");
 
   ASSERT_EQ(0, librbd::api::Group<>::image_remove(m_ioctx, "123", m_ioctx,
-                                                  name.c_str(), 0));
+                                                  name.c_str()));
   ASSERT_EQ(0, librbd::api::Group<>::remove(m_ioctx, "123"));
 }
 
@@ -765,7 +765,7 @@ TEST_F(TestMigration, GroupAbort)
 
   ASSERT_EQ(0, librbd::api::Group<>::create(m_ioctx, "123"));
   ASSERT_EQ(0, librbd::api::Group<>::image_add(m_ioctx, "123", m_ioctx,
-                                               m_image_name.c_str(), 0));
+                                               m_image_name.c_str()));
   librbd::group_info_t info;
   ASSERT_EQ(0, librbd::api::Group<>::image_get_group(m_ictx, &info));
 
@@ -783,7 +783,7 @@ TEST_F(TestMigration, GroupAbort)
   ASSERT_EQ(info.name, "123");
 
   ASSERT_EQ(0, librbd::api::Group<>::image_remove(m_ioctx, "123", m_ioctx,
-                                                  m_image_name.c_str(), 0));
+                                                  m_image_name.c_str()));
   ASSERT_EQ(0, librbd::api::Group<>::remove(m_ioctx, "123"));
 }
 
