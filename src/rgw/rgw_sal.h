@@ -686,7 +686,7 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
-};
+}; // class Driver
 
 
 /// \brief Ref-counted callback object for User/Bucket read_stats_async().
