@@ -9096,7 +9096,14 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
                      << (entry.delete_marker ? "(delete)" : "") << dendl;
       switch (entry.op) {
       case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
-        remove_instances.push_back(entry.key);
+        {
+          remove_instances.push_back(entry.key);
+          auto snap_iter = snap_info.snap_map.find(entry.snap_id);
+          if (snap_iter != snap_info.snap_map.end()
+              && snap_iter->second.key == entry.key) {
+            snap_info.snap_map.erase(snap_iter);
+          }
+        }
         break;
       case CLS_RGW_OLH_OP_LINK_OLH:
         // only overwrite a link of the same epoch if its key sorts before
