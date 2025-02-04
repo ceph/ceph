@@ -158,13 +158,6 @@ struct Mirror {
                                    const std::string& group_name,
                                    uint32_t flags, std::string *snap_id);
 
-  static int group_image_add(IoCtx &group_ioctx, const std::string &group_id,
-                             IoCtx &image_ioctx, const std::string &image_id,
-                             uint32_t flags);
-  static int group_image_remove(IoCtx &group_ioctx, const std::string &group_id,
-                                IoCtx &image_ioctx, const std::string &image_id,
-                                uint32_t flags);
-
   static int group_status_list(librados::IoCtx& io_ctx,
                                const std::string &start_id, size_t max,
                                IdToMirrorGroupStatus *groups);

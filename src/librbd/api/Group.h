@@ -32,16 +32,13 @@ struct Group {
                     const char *dest_group_name);
 
   static int image_add(librados::IoCtx& group_ioctx, const char *group_name,
-                       librados::IoCtx& image_ioctx, const char *image_name,
-                       uint32_t flags);
+                       librados::IoCtx& image_ioctx, const char *image_name);
   static int image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-                          librados::IoCtx& image_ioctx, const char *image_name,
-                          uint32_t flags);
+                          librados::IoCtx& image_ioctx, const char *image_name);
   static int image_remove_by_id(librados::IoCtx& group_ioctx,
                                 const char *group_name,
                                 librados::IoCtx& image_ioctx,
-                                const char *image_id,
-                                uint32_t flags);
+                                const char *image_id);
   static int image_list(librados::IoCtx& group_ioctx, const char *group_name,
 		        std::vector<group_image_info_t> *images);
 
@@ -70,9 +67,7 @@ struct Group {
   static int group_image_remove(librados::IoCtx& group_ioctx,
                                 std::string group_id,
                                 librados::IoCtx& image_ioctx,
-                                std::string image_id,
-                                bool resync,
-                                uint32_t flags);
+                                std::string image_id);
 
 };
 
