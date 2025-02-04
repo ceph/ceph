@@ -25,6 +25,7 @@ boostSrcDir="${depsSrcDir}/boost_1_79_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
+zlibTag="v1.3.1"
 backtraceDir="${depsToolsetDir}/libbacktrace"
 backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
@@ -106,7 +107,7 @@ source "$SCRIPT_DIR/mingw_conf.sh"
 echo "Building zlib."
 cd $depsSrcDir
 if [[ ! -d $zlibSrcDir ]]; then
-    git clone --depth 1 https://github.com/madler/zlib
+    git clone --branch $zlibTag --depth 1 https://github.com/madler/zlib
 fi
 cd $zlibSrcDir
 # Apparently the configure script is broken...
