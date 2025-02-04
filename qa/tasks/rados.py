@@ -61,6 +61,7 @@ def task(ctx, config):
               snap_remove: 0
             ec_pool: create an ec pool, defaults to False
             erasure_code_use_overwrites: test overwrites, default false
+            erasure_code_use_optimizations: test optimizations, default false
             erasure_code_profile:
               name: teuthologyprofile
               k: 2
@@ -272,7 +273,9 @@ def task(ctx, config):
                         erasure_code_profile_name=profile_name,
                         erasure_code_crush_rule_name=crush_name,
                         erasure_code_use_overwrites=
-                          config.get('erasure_code_use_overwrites', False)
+                          config.get('erasure_code_use_overwrites', False),
+                        erasure_code_use_optimizations=
+                          config.get('erasure_code_use_optimizations', False)
                     )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
