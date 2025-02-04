@@ -178,6 +178,7 @@ seastar::future<> OperationThrottler::acquire_throttle(
   crimson::osd::scheduler::item_t item{params, seastar::promise<>()};
   auto fut = item.wake.get_future();
   scheduler->enqueue(std::move(item));
+  wake();
   return fut;
 }
 
