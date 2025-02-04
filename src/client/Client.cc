@@ -11781,6 +11781,11 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   uint64_t read_start;
   uint64_t read_len;
 
+  auto effective_size = in->effective_size();
+  if (off + len > effective_size) {
+    len = effective_size - off;
+  }
+
   FSCryptFDataDencRef fscrypt_denc;
   fscrypt->prepare_data_read(in->fscrypt_ctx,
                              &in->fscrypt_key_validator,
@@ -11791,7 +11796,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   // get Fc cap ref before commencing read
   get_cap_ref(in, CEPH_CAP_FILE_CACHE);
 
-  auto effective_size = in->effective_size();
   if (onfinish != nullptr) {
     io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in, bl,
                                               f->pos, off, len,
@@ -11819,10 +11823,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
     // Signal async completion
     return 0;
-  }
-
-  if (off + len > effective_size) {
-    len = effective_size - off;
   }
 
   auto target_len = std::min(len, effective_size - off);
