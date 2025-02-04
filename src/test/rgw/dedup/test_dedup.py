@@ -1362,6 +1362,10 @@ def test_dedup_inc_with_remove():
                 log.debug("delete key::%s::", key);
                 object_keys.append(key)
 
+            if len(object_keys) == 0:
+                log.info("Skiping file=%s, num_remove=%d", filename, num_remove)
+                continue
+
             response=conn.delete_objects(Bucket=bucket_name,
                                          Delete={"Objects": [{"Key": key} for key in object_keys]})
             # must call garbage collection for predictable count
@@ -1513,7 +1517,7 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale_with_tenants():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
@@ -1553,7 +1557,7 @@ def test_dedup_large_scale():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_empty_bucket():
-    return
+    #return
 
     prepare_test(OUT_DIR)
     log.info("test_empty_bucket: connect to AWS ...")

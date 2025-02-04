@@ -35,6 +35,9 @@ namespace rgw::dedup {
   using block_offset_t = uint8_t;
   using record_id_t    = uint8_t;
 
+  // disk_block_id_t is a 32 bites concataion of shard_id, slab_id and block_off
+  // ---8---- | -------16------- | ---8----
+  // shard_id |      slab_id     | block_off
   struct __attribute__ ((packed)) disk_block_id_t
   {
   public:
@@ -42,9 +45,10 @@ namespace rgw::dedup {
       block_id = 0;
     }
 
-    disk_block_id_t(work_shard_t work_shard_id, uint32_t seq_number) {
-      ceph_assert((SEQ_NUMBER_MASK & seq_number) == seq_number);
-      block_id = (uint32_t)work_shard_id << OBJ_SHARD_SHIFT | seq_number;
+    disk_block_id_t(work_shard_t shard_id, uint32_t seq_number) {
+      ceph_assert((seq_number & SEQ_NUMBER_MASK) == seq_number);
+      ceph_assert(shard_id <= MAX_WORK_SHARD);
+      block_id = (uint32_t)shard_id << OBJ_SHARD_SHIFT | seq_number;
     }
 
     disk_block_id_t& operator =(const disk_block_id_t &other) {
@@ -211,7 +215,7 @@ namespace rgw::dedup {
   public:
     disk_block_array_t(const DoutPrefixProvider* _dpp, md5_shard_t md5_shard) {
       d_md5_shard = md5_shard;
-      d_worker_id = NULL_WORK_SHARD;
+      d_worker_id = 0;
       dpp = _dpp;
       slab_reset();
     }
@@ -262,10 +266,10 @@ namespace rgw::dedup {
     // 256 Blocks of 8KB each = 2MB array!!
     disk_block_t    d_arr[DISK_BLOCK_COUNT];
     disk_block_t   *p_curr_block = nullptr;
-    work_shard_t    d_md5_shard = 0;
-    md5_shard_t     d_worker_id = 0;
+    work_shard_t    d_worker_id  = 0;
+    md5_shard_t     d_md5_shard  = 0;
     uint32_t        d_seq_number = 0;
-    const DoutPrefixProvider* dpp;
     worker_stats_t *p_stats = nullptr;
+    const DoutPrefixProvider *dpp;
   };
 } //namespace rgw::dedup

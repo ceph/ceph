@@ -49,7 +49,7 @@ namespace rgw::dedup {
 
   class dedup_table_t {
   public:
-    // 6 Bytes Value
+    // 10 Bytes Value
     struct value_t {
       value_t() {
 	this->block_idx = 0xFFFFFFFF;

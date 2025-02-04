@@ -365,11 +365,10 @@ namespace rgw::dedup {
 				   unsigned shards_count,
 				   const char *prefix)
   {
-    char buff[16];
-    int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
+    shard_token_oid sto(prefix);
     for (unsigned shard = 0; shard < shards_count; shard++) {
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
+      sto.set_shard(shard);
+      std::string oid(sto.get_buff(), sto.get_buff_size());
       ldpp_dout(dpp, 10) << __func__ << "::creating object: " << oid << dendl;
       bool exclusive = true;
       int ret = p_ioctx->create(oid, exclusive);
@@ -420,9 +419,8 @@ namespace rgw::dedup {
 					    const char *prefix)
   {
     ceph_assert(d_was_initialized);
-    char buff[16];
-    int n = snprintf(buff, sizeof(buff), "%s%02x", prefix, shard);
-    std::string oid(buff, n);
+    shard_token_oid sto(prefix, shard);
+    std::string oid(sto.get_buff(), sto.get_buff_size());
     bufferlist empty_bl;
     shard_progress_t sp(count_a, count_b, false, d_cluster_id, empty_bl);
     sp.creation_time = d_token_creation_time;
@@ -439,9 +437,8 @@ namespace rgw::dedup {
 					  const bufferlist &bl)
   {
     ceph_assert(d_was_initialized);
-    char buff[16];
-    int n = snprintf(buff, sizeof(buff), "%s%02x", prefix, shard);
-    std::string oid(buff,  n);
+    shard_token_oid sto(prefix, shard);
+    std::string oid(sto.get_buff(), sto.get_buff_size());
     ldpp_dout(dpp, 10) << __func__ << "::" << prefix << "::" << oid << dendl;
 
     shard_progress_t sp(obj_count, SP_ALL_OBJECTS, true, d_cluster_id, bl);
@@ -461,25 +458,22 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int cluster::get_next_shard_token(librados::IoCtx *p_ioctx,
-				    unsigned start_shard,
-				    unsigned max_shard,
-				    const char *prefix)
+  int32_t cluster::get_next_shard_token(librados::IoCtx *p_ioctx,
+					uint16_t start_shard,
+					uint16_t max_shard,
+					const char *prefix)
   {
     ceph_assert(d_was_initialized);
-
-    char buff[16];
-    int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
 
     // lock paramters:
     const utime_t     lock_duration;  // zero duration means lock doesn't expire
     const uint8_t     lock_flags = 0; // no flags
     const std::string lock_tag;       // no tag
 
+    shard_token_oid sto(prefix);
     for (auto shard = start_shard; shard < max_shard; shard++) {
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
-
+      sto.set_shard(shard);
+      std::string oid(sto.get_buff(), sto.get_buff_size());
       ldpp_dout(dpp, 10) << __func__ << "::try garbbing " << oid << dendl;
       librados::ObjectWriteOperation op;
       op.assert_exists();
@@ -488,7 +482,7 @@ namespace rgw::dedup {
       int ret = rgw_rados_operate(dpp, *p_ioctx, oid, &op, null_yield);
       if (ret == -EBUSY) {
 	// someone else took this token -> move to the next one
-	ldpp_dout(dpp, 1) << __func__ << "::Failed lock. " << oid <<
+	ldpp_dout(dpp, 10) << __func__ << "::Failed lock. " << oid <<
 	  " is owned by other rgw" << dendl;
 	continue;
       }
@@ -519,14 +513,14 @@ namespace rgw::dedup {
       }
     }
 
-    return -1;
+    return NULL_SHARD;
   }
 
   //---------------------------------------------------------------------------
   work_shard_t cluster::get_next_work_shard_token(librados::IoCtx *p_ioctx)
   {
-    int shard = get_next_shard_token(p_ioctx, d_curr_worker_shard, MAX_WORK_SHARD,
-				     WORKER_SHARD_PREFIX);
+    int32_t shard = get_next_shard_token(p_ioctx, d_curr_worker_shard,
+					 MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
     if (shard >= 0 && shard < MAX_WORK_SHARD) {
       d_curr_worker_shard = shard + 1;
       return shard;
@@ -539,8 +533,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   md5_shard_t cluster::get_next_md5_shard_token(librados::IoCtx *p_ioctx)
   {
-    int shard = get_next_shard_token(p_ioctx, d_curr_md5_shard, MAX_MD5_SHARD,
-				     MD5_SHARD_PREFIX);
+    int32_t shard = get_next_shard_token(p_ioctx, d_curr_md5_shard,
+					 MAX_MD5_SHARD, MD5_SHARD_PREFIX);
     if (shard >= 0 && shard < MAX_MD5_SHARD) {
       d_curr_md5_shard = shard + 1;
       return shard;
@@ -560,23 +554,22 @@ namespace rgw::dedup {
   {
     ceph_assert(d_was_initialized);
     unsigned count = 0;
-    char buff[16];
-    int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
+    shard_token_oid sto(prefix);
     for (unsigned shard = 0; shard < shards_count; shard++) {
       if (completed_arr[shard] != TOKEN_STATE_PENDING) {
 	count++;
 	continue;
       }
 
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
-      ldpp_dout(dpp, 0) << __func__ << "::checking object: " << oid << dendl;
+      sto.set_shard(shard);
+      std::string oid(sto.get_buff(), sto.get_buff_size());
+      ldpp_dout(dpp, 10) << __func__ << "::checking object: " << oid << dendl;
       bufferlist bl;
       int ret = p_ioctx->getxattr(oid, SHARD_PROGRESS_ATTR, bl);
       if (unlikely(ret <= 0)) {
 	if (ret != -ENODATA) {
-	  ldpp_dout(dpp, 0) << __func__ << "::failed ioctx.getxattr() ret="
-			    << ret << "::" << cpp_strerror(ret) << dendl;
+	  ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.getxattr() ret="
+			     << ret << "::" << cpp_strerror(ret) << dendl;
 	}
 	continue;
       }
@@ -609,7 +602,6 @@ namespace rgw::dedup {
 	  ldpp_dout(dpp, 0) << __func__ << "::" << oid << "::expired lock, skipping" << dendl;
 	  completed_arr[shard] = TOKEN_STATE_TIMED_OUT;
 	  d_num_failed_workers++;
-	  count++;
 	  continue;
 	}
 	else {
@@ -622,6 +614,10 @@ namespace rgw::dedup {
     } // loop
 
     *p_total_ingressed = d_total_ingressed_obj;
+    if (count < shards_count) {
+      unsigned n = shards_count - count;
+      ldpp_dout(dpp, 0) << __func__ << "::waiting for " << n << " tokens" << dendl;
+    }
     return (count == shards_count);
   }
 
@@ -635,17 +631,17 @@ namespace rgw::dedup {
 				 shard_progress_t *sp_arr)
   {
     unsigned count = 0;
-    char buff[16];
-    int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
+    cluster::shard_token_oid sto(prefix);
     for (unsigned shard = 0; shard < shards_count; shard++) {
-      int n = snprintf(buff + prefix_len, sizeof(buff), "%02x", shard);
-      std::string oid(buff, prefix_len + n);
+      sto.set_shard(shard);
+      std::string oid(sto.get_buff(), sto.get_buff_size());
       ldpp_dout(dpp, 10) << __func__ << "::checking object: " << oid << dendl;
 
       uint64_t size;
       struct timespec tspec;
       if (p_ioctx->stat2(oid, &size, &tspec) != 0) {
-	ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.stat( " << oid << " )"
+			   << "::shards_count=" << shards_count << dendl;
 	continue;
       }
       utime_t mtime(tspec);
@@ -671,8 +667,8 @@ namespace rgw::dedup {
 	  return false;
 	}
       }
-      else {
-	ldpp_dout(dpp, 0) << __func__ << "::" << oid << "::failed ioctx.getxattr() ret="
+      else if (ret != -ENODATA) {
+	ldpp_dout(dpp, 1) << __func__ << "::" << oid << "::failed getxattr() ret="
 			  << ret << "::" << cpp_strerror(ret) << dendl;
 	continue;
       }
@@ -833,8 +829,8 @@ namespace rgw::dedup {
       std::map<std::string, member_time_t> owner_map;
       bool show_time = true;
       md5_stats_t md5_stats_sum;
-      bufferlist bl_arr[MAX_WORK_SHARD];
-      shard_progress_t sp_arr[MAX_WORK_SHARD];
+      bufferlist bl_arr[MAX_MD5_SHARD];
+      shard_progress_t sp_arr[MAX_MD5_SHARD];
       int cnt = collect_shard_stats(p_ioctx, dpp, epoch.time, MAX_MD5_SHARD,
 				    MD5_SHARD_PREFIX, bl_arr, sp_arr);
       if (cnt != MAX_MD5_SHARD) {

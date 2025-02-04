@@ -8,27 +8,35 @@
 namespace rgw::dedup {
   static constexpr const char* DEDUP_WATCH_OBJ = "DEDUP_WATCH_OBJ";
   static constexpr uint64_t HEAD_OBJ_SIZE = 4*1024*1024; // 4MB
-  using work_shard_t   = uint8_t;
-  using md5_shard_t    = uint8_t;
+  using work_shard_t   = uint16_t;
+  using md5_shard_t    = uint16_t;
 #if 1
   // REMOVE-ME
   // temporary settings to help debug small systems
   const work_shard_t MAX_WORK_SHARD = 4;
-  const md5_shard_t  MAX_MD5_SHARD  = 4;
+  const md5_shard_t  MAX_MD5_SHARD  = 8;
 #else
   // Those are the correct values for production system
-  // can go as high as 0xFF-1
   const work_shard_t MAX_WORK_SHARD = 128;
-  const md5_shard_t  MAX_MD5_SHARD  = 128;
+  const md5_shard_t  MAX_MD5_SHARD  = 256;
 #endif
-  const work_shard_t NULL_WORK_SHARD = 0xFF;
-  const md5_shard_t  NULL_MD5_SHARD  = 0xFF;
-  const unsigned     NULL_SHARD      = 0xFF;
+  const work_shard_t NULL_WORK_SHARD = 0xFFFF;
+  const md5_shard_t  NULL_MD5_SHARD  = 0xFFFF;
+  const unsigned     NULL_SHARD      = 0xFFFF;
 
-  // we use a single byte to store shard-id (work/MD5) so max must be no higher than 0xFF
-  // We reseve the value 0xFF for NULL_WORK_SHARD/NULL_MD5_SHARD so MAX must be lower than 0xFF
+  // work_shard  is an 8 bits int with 255 legal values for the first iteration
+  // and one value (0xFF) reserved for second iteration
+  const unsigned     WORK_SHARD_HARD_LIMIT = 0x0FF;
+  // md5_shard_t is a 12 bits int with 4096 possible values
+  const unsigned     MD5_SHARD_HARD_LIMIT  = 0xFFF;
+
+  static_assert(MAX_WORK_SHARD < NULL_WORK_SHARD);
   static_assert(MAX_WORK_SHARD < NULL_SHARD);
+  static_assert(MAX_WORK_SHARD <= WORK_SHARD_HARD_LIMIT);
+  static_assert(MAX_MD5_SHARD  < NULL_MD5_SHARD);
   static_assert(MAX_MD5_SHARD  < NULL_SHARD);
+  static_assert(MAX_MD5_SHARD  <= MD5_SHARD_HARD_LIMIT);
+
   struct __attribute__ ((packed)) dedup_flags_t {
   private:
     static constexpr uint8_t RGW_DEDUP_FLAG_SHA256          = 0x01;
