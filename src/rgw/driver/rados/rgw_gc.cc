@@ -674,6 +674,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	  }
 
 	  ctx->locator_set_key(obj.loc);
+	  ctx->set_pool_full_try(); // allow deletion at pool quota limit
 
 	  const string& oid = obj.key.name; /* just stored raw oid there */
 
