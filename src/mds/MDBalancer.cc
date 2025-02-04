@@ -830,8 +830,9 @@ void MDBalancer::prep_rebalance(int beat)
       dout(7) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
       return;
     }
+    auto overload_epochs = g_conf().get_val<int64_t>("mds_bal_overload_epochs");
     // am i over long enough?
-    if (last_epoch_under && beat_epoch - last_epoch_under < g_conf()->mds_bal_overload_epochs) {
+    if (last_epoch_under && beat_epoch - last_epoch_under < overload_epochs) {
       dout(7) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
       return;
     }
@@ -854,7 +855,7 @@ void MDBalancer::prep_rebalance(int beat)
 	importer_set.insert(it->second);
       } else {
 	int mds_last_epoch_under = mds_last_epoch_under_map[it->second];
-	if (!(mds_last_epoch_under && beat_epoch - mds_last_epoch_under < 2)) {
+	if (!(mds_last_epoch_under && beat_epoch - mds_last_epoch_under < overload_epochs)) {
 	  dout(15) << "   mds." << it->second << " is exporter" << dendl;
 	  exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
 	  exporter_set.insert(it->second);
