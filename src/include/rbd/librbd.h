@@ -1590,18 +1590,15 @@ CEPH_RBD_API void rbd_config_image_list_cleanup(rbd_config_option_t *options,
 CEPH_RBD_API int rbd_group_image_add(rados_ioctx_t group_p,
                                      const char *group_name,
                                      rados_ioctx_t image_p,
-                                     const char *image_name,
-                                     uint32_t flags);
+                                     const char *image_name);
 CEPH_RBD_API int rbd_group_image_remove(rados_ioctx_t group_p,
                                         const char *group_name,
                                         rados_ioctx_t image_p,
-                                        const char *image_name,
-                                        uint32_t flags);
+                                        const char *image_name);
 CEPH_RBD_API int rbd_group_image_remove_by_id(rados_ioctx_t group_p,
                                               const char *group_name,
                                               rados_ioctx_t image_p,
-                                              const char *image_id,
-                                              uint32_t flags);
+                                              const char *image_id);
 CEPH_RBD_API int rbd_group_image_list(rados_ioctx_t group_p,
                                       const char *group_name,
                                       rbd_group_image_info_t *images,
