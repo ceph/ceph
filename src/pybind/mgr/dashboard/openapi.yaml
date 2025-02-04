@@ -9003,12 +9003,21 @@ paths:
                   default: true
                   description: Create RBD image
                   type: boolean
+                force:
+                  default: false
+                  description: Force create namespace even it image is used by other
+                    namespace
+                  type: boolean
                 gw_group:
                   description: NVMeoF gateway group
                   type: string
                 load_balancing_group:
                   description: Load balancing group
                   type: integer
+                no_auto_visible:
+                  default: false
+                  description: Namespace will be visible only for the allowed hosts
+                  type: boolean
                 rbd_image_name:
                   description: RBD image name
                   type: string
@@ -9023,6 +9032,10 @@ paths:
                   default: 1024
                   description: RBD image size
                   type: integer
+                trash_image:
+                  default: false
+                  description: Trash the RBD image when namespace is removed
+                  type: boolean
               required:
               - rbd_image_name
               type: object
@@ -9070,6 +9083,12 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - default: 'false'
+        description: Force remove the RBD image
+        in: query
+        name: force
         schema:
           type: string
       responses:
@@ -9174,6 +9193,9 @@ paths:
                 rw_mbytes_per_second:
                   description: Read/Write MB/s
                   type: integer
+                trash_image:
+                  description: Trash RBD image after removing namespace
+                  type: boolean
                 w_mbytes_per_second:
                   description: Write MB/s
                   type: integer
