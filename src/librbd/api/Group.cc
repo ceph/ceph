@@ -278,8 +278,7 @@ template <typename I>
 int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                                  const char *group_name,
                                  librados::IoCtx& image_ioctx,
-                                 const char *image_id,
-                                 uint32_t flags)
+                                 const char *image_id)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
@@ -298,8 +297,8 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
   ldout(cct, 20) << "removing image from group name " << group_name
                  << " group id " << group_id << dendl;
 
-  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx, image_id,
-                                   false, flags);
+  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
+                                   image_id);
 
   return r;
 }
@@ -391,7 +390,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
     }
 
     r = Group<I>::group_image_remove(io_ctx, group_id, image_ioctx,
-                                     image.spec.image_id, false, 0);
+                                     image.spec.image_id);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing image from a group" << dendl;
       return r;
@@ -502,8 +501,7 @@ int Group<I>::get_name(IoCtx& io_ctx, const char *group_id,
 
 template <typename I>
 int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
-                        librados::IoCtx& image_ioctx, const char *image_name,
-                        uint32_t flags)
+                        librados::IoCtx& image_ioctx, const char *image_name)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
@@ -583,12 +581,6 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
   ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
 
-  r = Mirror<I>::group_image_add(group_ioctx, group_id,
-                                 image_ioctx, image_id, flags);
-  if (r < 0) {
-    return r;
-  }
-
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
 				  attached_st);
   if (r < 0) {
@@ -601,10 +593,10 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 }
 
 template <typename I>
-int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-                           librados::IoCtx& image_ioctx, const char *image_name,
-                           uint32_t flags)
-{
+int Group<I>::image_remove(librados::IoCtx& group_ioctx,
+                           const char *group_name,
+                           librados::IoCtx& image_ioctx,
+                           const char *image_name) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
                  << ", group_name=" << group_name << ", image= "
@@ -649,8 +641,7 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx, image_id,
-                                   false, flags);
+  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx, image_id);
 
   return r;
 }
@@ -1271,8 +1262,8 @@ int Group<I>::group_image_list_by_id(librados::IoCtx& group_ioctx,
 
 template <typename I>
 int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
-		       librados::IoCtx& image_ioctx, string image_id,
-                       bool resync, uint32_t flags) {
+		                 librados::IoCtx& image_ioctx,
+                                 string image_id) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
   string group_header_oid = librbd::util::group_header_name(group_id);
@@ -1296,16 +1287,6 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
     lderr(cct) << "couldn't put image into removing state: "
 	       << cpp_strerror(-r) << dendl;
     return r;
-  }
-
-  if (!resync) {
-    r = Mirror<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
-        image_id, flags);
-    if (r < 0) {
-      lderr(cct) << "couldn't remove image from group"
-                 << cpp_strerror(-r) << dendl;
-      return r;
-    }
   }
 
   r = cls_client::image_group_remove(&image_ioctx, image_header_oid,

@@ -1647,7 +1647,7 @@ int Migration<I>::remove_group(I *image_ctx, group_info_t *group_info) {
   r = librbd::api::Group<I>::image_remove_by_id(group_ioctx,
                                                 group_info->name.c_str(),
                                                 image_ctx->md_ctx,
-                                                image_ctx->id.c_str(), 0);
+                                                image_ctx->id.c_str());
   if (r < 0) {
     lderr(m_cct) << "failed to remove image from group: " << cpp_strerror(r)
                  << dendl;
@@ -1674,7 +1674,7 @@ int Migration<I>::add_group(I *image_ctx, group_info_t &group_info) {
 
   r = librbd::api::Group<I>::image_add(group_ioctx, group_info.name.c_str(),
                                        image_ctx->md_ctx,
-                                       image_ctx->name.c_str(), 0);
+                                       image_ctx->name.c_str());
   if (r < 0) {
     lderr(m_cct) << "failed to add image to group: " << cpp_strerror(r)
                  << dendl;
