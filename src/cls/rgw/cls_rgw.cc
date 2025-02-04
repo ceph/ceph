@@ -408,13 +408,13 @@ static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *in
   _append_obj_versioned_data_key(index_key, key, append_delete_marker_suffix);
 }
 
-static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
+static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key, bool delete_marker = false)
 {
   if (key.instance.empty() &&
       key.snap_id == RGW_BUCKET_NO_SNAP) {
     *index_key = key.name;
   } else {
-    encode_obj_versioned_data_key(key, index_key);
+    encode_obj_versioned_data_key(key, index_key, delete_marker);
   }
 }
 
@@ -3001,7 +3001,7 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
       idx = op.key.name;
       break;
     case BIIndexType::Instance:
-      encode_obj_index_key(op.key, &idx);
+      encode_obj_index_key(op.key, &idx, op.delete_marker);
       break;
     case BIIndexType::OLH:
       encode_olh_data_key(op.key, &idx);

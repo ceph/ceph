@@ -6413,7 +6413,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       rgw_bucket_dir_entry dirent;
       auto& bucket_info = target->get_bucket_info();
 
-      int r = store->bi_get_instance(dpp, bucket_info, obj, &dirent, y);
+      int r = store->bi_get_instance(dpp, bucket_info, obj, false, &dirent, y);
+      if (r == -ENOENT &&
+          obj.key.instance.empty()) {
+        r = store->bi_get_instance(dpp, bucket_info, obj, true, &dirent, y);
+      }
       if (r < 0) {
         return r;
       }
@@ -10116,10 +10120,10 @@ string RGWRados::list_raw_objs_get_cursor(RGWListRawObjsCtx& ctx)
 }
 
 int RGWRados::bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                              rgw_bucket_dir_entry *dirent, optional_yield y)
+                              bool delete_marker, rgw_bucket_dir_entry *dirent, optional_yield y)
 {
   rgw_cls_bi_entry bi_entry;
-  int r = bi_get(dpp, bucket_info, obj, BIIndexType::Instance, &bi_entry, y);
+  int r = bi_get(dpp, bucket_info, obj, BIIndexType::Instance, &bi_entry, y, delete_marker);
   if (r < 0 && r != -ENOENT) {
     ldpp_dout(dpp, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
@@ -10160,7 +10164,7 @@ int RGWRados::bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
 }
 
 int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                     BIIndexType index_type, rgw_cls_bi_entry *entry, optional_yield y)
+                     BIIndexType index_type, rgw_cls_bi_entry *entry, optional_yield y, bool delete_marker)
 {
   BucketShard bs(this);
   int ret = bs.init(dpp, bucket_info, obj, y);
@@ -10174,7 +10178,7 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
 
   auto& ref = bs.bucket_obj;
 
-  return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
+  return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry, delete_marker);
 }
 
 void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)

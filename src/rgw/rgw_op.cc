@@ -5535,6 +5535,11 @@ void RGWDeleteObj::execute(optional_yield y)
         obj_key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
       }
 
+      if (null_verid &&
+          obj_key.instance.empty()) {
+        obj_key.instance = orig_obj_key.instance;
+      }
+
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
       if (check_obj_lock) {

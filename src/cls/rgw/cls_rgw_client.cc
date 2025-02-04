@@ -267,12 +267,13 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtim
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
-                   rgw_cls_bi_entry *entry)
+                   rgw_cls_bi_entry *entry, bool delete_marker)
 {
   bufferlist in, out;
   rgw_cls_bi_get_op call;
   call.key = key;
   call.type = index_type;
+  call.delete_marker = delete_marker;
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_GET, in, out);
   if (r < 0)
