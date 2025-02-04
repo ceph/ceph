@@ -285,7 +285,7 @@ TEST(HObject, fmt_random)
 
     auto name_length = (i * 17) % 51;
     std::string name;
-    for (int j = 0; j < name_length; j++) {
+    for (int j = 0; std::cmp_less(j, name_length); j++) {
       name.push_back((i * name_length + j) % 256);
     }
 

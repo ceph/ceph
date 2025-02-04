@@ -100,7 +100,7 @@ TEST_P(ParameterTest, parameter_all)
   //minimum_to_decode
   //want_to_decode will be a combination that chooses 1~c from k+m
   set<int> want_to_decode, available_chunks, minimum_chunks;
-  int array_want_to_decode[shec->get_chunk_count()];
+  std::vector<int> array_want_to_decode(shec->get_chunk_count());
   struct Recover_d comb;
 
   for (int w = 1; w <= i_c; w++) {
@@ -147,8 +147,8 @@ TEST_P(ParameterTest, parameter_all)
       available_chunks.clear();
       minimum_chunks.clear();
     } while (std::prev_permutation(
-		 array_want_to_decode,
-		 array_want_to_decode + shec->get_chunk_count()));
+	       array_want_to_decode.data(),
+		 array_want_to_decode.data() + shec->get_chunk_count()));
   }
 
   //minimum_to_decode_with_cost
@@ -189,14 +189,14 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_EQ(c_size, encoded[0].length());
 
   //decode
-  int want_to_decode2[i_k + i_m];
+  std::vector<int> want_to_decode2(i_k + i_m);
   map<int, bufferlist> decoded;
 
   for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
     want_to_decode2[i] = i;
   }
 
-  result = shec->_decode(set<int>(want_to_decode2, want_to_decode2 + 2),
+  result = shec->_decode(set<int>(want_to_decode2.data(), want_to_decode2.data() + 2),
 			 encoded, &decoded);
   EXPECT_EQ(0, result);
   EXPECT_EQ(2u, decoded.size());

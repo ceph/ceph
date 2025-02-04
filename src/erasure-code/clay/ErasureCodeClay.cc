@@ -385,8 +385,7 @@ void ErasureCodeClay::get_repair_subchunks(const int &lost_node,
 
 int ErasureCodeClay::get_repair_sub_chunk_count(const set<int> &want_to_read)
 {
-  int weight_vector[t];
-  std::fill(weight_vector, weight_vector + t, 0);
+  std::vector<int> weight_vector(t, 0);
   for (auto to_read : want_to_read) {
     weight_vector[to_read / q]++;
   }
@@ -475,7 +474,7 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
   unsigned repair_subchunks = (unsigned)sub_chunk_no / q;
   unsigned sub_chunksize = repair_blocksize / repair_subchunks;
 
-  int z_vec[t];
+  std::vector<int> z_vec(t);
   map<int, set<int> > ordered_planes;
   map<int, int> repair_plane_to_ind;
   int plane_ind = 0;
@@ -486,7 +485,7 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 
   for (auto [index,count] : repair_sub_chunks_ind) {
     for (int j = index; j < index + count; j++) {
-      get_plane_vector(j, z_vec);
+      get_plane_vector(j, z_vec.data());
       int order = 0;
       // check across all erasures and aloof nodes
       for ([[maybe_unused]] auto& [node, bl] : recovered_data) {
@@ -535,7 +534,7 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
       break;
     }
     for (auto z : ordered_planes[order]) {
-      get_plane_vector(z, z_vec);
+      get_plane_vector(z, z_vec.data());
 
       for (int y = 0; y < t; y++) {
 	for (int x = 0; x < q; x++) {
@@ -667,8 +666,8 @@ int ErasureCodeClay::decode_layered(set<int> &erased_chunks,
   ceph_assert(num_erasures == m);
 
   int max_iscore = get_max_iscore(erased_chunks);
-  int order[sub_chunk_no];
-  int z_vec[t];
+  std::vector<int> order(sub_chunk_no);
+  std::vector<int> z_vec(t);
   for (int i = 0; i < q*t; i++) {
     if (U_buf[i].length() == 0) {
       bufferptr buf(buffer::create_aligned(size, SIMD_ALIGN));
@@ -677,7 +676,7 @@ int ErasureCodeClay::decode_layered(set<int> &erased_chunks,
     }
   }
 
-  set_planes_sequential_decoding_order(order, erased_chunks);
+  set_planes_sequential_decoding_order(order.data(), erased_chunks);
 
   for (int iscore = 0; iscore <= max_iscore; iscore++) {
    for (int z = 0; z < sub_chunk_no; z++) {
@@ -688,18 +687,18 @@ int ErasureCodeClay::decode_layered(set<int> &erased_chunks,
 
     for (int z = 0; z < sub_chunk_no; z++) {
       if (order[z] == iscore) {
-	get_plane_vector(z, z_vec);
+	get_plane_vector(z, z_vec.data());
         for (auto node_xy : erased_chunks) {
           int x = node_xy % q;
           int y = node_xy / q;
 	  int node_sw = y*q+z_vec[y];
           if (z_vec[y] != x) {
             if (erased_chunks.count(node_sw) == 0) {
-	      recover_type1_erasure(chunks, x, y, z, z_vec, sc_size);
+	      recover_type1_erasure(chunks, x, y, z, z_vec.data(), sc_size);
 	    } else if (z_vec[y] < x){
               ceph_assert(erased_chunks.count(node_sw) > 0);
               ceph_assert(z_vec[y] != x);
-              get_coupled_from_uncoupled(chunks, x, y, z, z_vec, sc_size);
+              get_coupled_from_uncoupled(chunks, x, y, z, z_vec.data(), sc_size);
 	    }
 	  } else {
 	    char* C = (*chunks)[node_xy].c_str();
@@ -717,9 +716,9 @@ int ErasureCodeClay::decode_layered(set<int> &erased_chunks,
 int ErasureCodeClay::decode_erasures(const set<int>& erased_chunks, int z,
 				     map<int, bufferlist>* chunks, int sc_size)
 {
-  int z_vec[t];
+  std::vector<int> z_vec(t);
 
-  get_plane_vector(z, z_vec);
+  get_plane_vector(z, z_vec.data());
 
   for (int x = 0; x < q; x++) {
     for (int y = 0; y < t; y++) {
@@ -727,14 +726,14 @@ int ErasureCodeClay::decode_erasures(const set<int>& erased_chunks, int z,
       int node_sw = q*y+z_vec[y];
       if (erased_chunks.count(node_xy) == 0) {
 	if (z_vec[y] < x) {
-	  get_uncoupled_from_coupled(chunks, x, y, z, z_vec, sc_size);
+	  get_uncoupled_from_coupled(chunks, x, y, z, z_vec.data(), sc_size);
 	} else if (z_vec[y] == x) {
 	  char* uncoupled_chunk = U_buf[node_xy].c_str();
 	  char* coupled_chunk = (*chunks)[node_xy].c_str();
           memcpy(&uncoupled_chunk[z*sc_size], &coupled_chunk[z*sc_size], sc_size);
         } else {
           if (erased_chunks.count(node_sw) > 0) {
-            get_uncoupled_from_coupled(chunks, x, y, z, z_vec, sc_size);
+            get_uncoupled_from_coupled(chunks, x, y, z, z_vec.data(), sc_size);
           }
         }
       }
@@ -764,9 +763,9 @@ int ErasureCodeClay::decode_uncoupled(const set<int>& erased_chunks, int z, int 
 }
 
 void ErasureCodeClay::set_planes_sequential_decoding_order(int* order, set<int>& erasures) {
-  int z_vec[t];
+  std::vector<int> z_vec(t);
   for (int z = 0; z < sub_chunk_no; z++) {
-    get_plane_vector(z,z_vec);
+    get_plane_vector(z, z_vec.data());
     order[z] = 0;
     for (auto i : erasures) {
       if (i % q == z_vec[i / q]) {
@@ -875,9 +874,8 @@ void ErasureCodeClay::get_uncoupled_from_coupled(map<int, bufferlist>* chunks,
 
 int ErasureCodeClay::get_max_iscore(set<int>& erased_chunks)
 {
-  int weight_vec[t];
+  std::vector<int> weight_vec(t, 0);
   int iscore = 0;
-  memset(weight_vec, 0, sizeof(int)*t);
 
   for (auto i : erased_chunks) {
     if (weight_vec[i / q] == 0) {

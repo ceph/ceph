@@ -477,11 +477,11 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
     int log2 = (rand()%18) + 1;
     int size = (rand() % (1 << log2)) + 1;
 
-    char test[size];
+    std::vector<char> test(size);
     for (int i=0; i<size; ++i)
       test[i] = rand()%256;
     bufferlist in, out;
-    in.append(test, size);
+    in.append(test.data(), size);
 
     std::optional<int32_t> compressor_message;
     int res = isal->compress(in, out, compressor_message);
@@ -490,7 +490,7 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
     res = zlib->decompress(out, after, compressor_message);
     EXPECT_EQ(res, 0);
     bufferlist exp;
-    exp.append(test, size);
+    exp.append(test.data(), size);
     EXPECT_TRUE(exp.contents_equal(after));
   }
 }
@@ -516,12 +516,12 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
 
     int range = 1;
 
-    char test[size];
+    std::vector<char> test(size);
     test[0] = rand()%256;
     for (int i=1; i<size; ++i)
       test[i] = test[i-1] + rand()%(range*2+1) - range;
     bufferlist in, out;
-    in.append(test, size);
+    in.append(test.data(), size);
 
     std::optional<int32_t> compressor_message;
     int res = isal->compress(in, out, compressor_message);
@@ -530,7 +530,7 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
     res = zlib->decompress(out, after, compressor_message);
     EXPECT_EQ(res, 0);
     bufferlist exp;
-    exp.append(test, size);
+    exp.append(test.data(), size);
     EXPECT_TRUE(exp.contents_equal(after));
   }
 }
@@ -555,13 +555,13 @@ TEST(QAT, enc_qat_dec_noqat) {
       srand(cnt + 1000);
       int log2 = (rand()%18) + 1;
       int size = (rand() % (1 << log2)) + 1;
-  
-      char test[size];
+
+      std::vector<char> test(size);
       for (int i=0; i<size; ++i)
         test[i] = rand()%256;
       bufferlist in, out;
-      in.append(test, size);
-  
+      in.append(test.data(), size);
+
       std::optional<int32_t> compressor_message;
       int res = q->compress(in, out, compressor_message);
       EXPECT_EQ(res, 0);
@@ -569,7 +569,7 @@ TEST(QAT, enc_qat_dec_noqat) {
       res = noq->decompress(out, after, compressor_message);
       EXPECT_EQ(res, 0);
       bufferlist exp;
-      exp.append(test, size);
+      exp.append(test.data(), size);
       EXPECT_TRUE(exp.contents_equal(after));
     }
   }
@@ -592,13 +592,13 @@ TEST(QAT, enc_noqat_dec_qat) {
       srand(cnt + 1000);
       int log2 = (rand()%18) + 1;
       int size = (rand() % (1 << log2)) + 1;
-  
-      char test[size];
+
+      std::vector<char> test(size);
       for (int i=0; i<size; ++i)
         test[i] = rand()%256;
       bufferlist in, out;
-      in.append(test, size);
-  
+      in.append(test.data(), size);
+
       std::optional<int32_t> compressor_message;
       int res = noq->compress(in, out, compressor_message);
       EXPECT_EQ(res, 0);
@@ -606,7 +606,7 @@ TEST(QAT, enc_noqat_dec_qat) {
       res = q->decompress(out, after, compressor_message);
       EXPECT_EQ(res, 0);
       bufferlist exp;
-      exp.append(test, size);
+      exp.append(test.data(), size);
       EXPECT_TRUE(exp.contents_equal(after));
     }
   }

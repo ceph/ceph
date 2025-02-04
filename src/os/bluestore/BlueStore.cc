@@ -13,6 +13,7 @@
  */
 
 #include <bit>
+#include <utility>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -205,7 +206,7 @@ const vector<uint64_t> bdev_label_positions = {
 template<typename S>
 static void append_escaped(const string &in, S *out)
 {
-  char hexbyte[in.length() * 3 + 1];
+  std::vector<char> hexbyte(in.length() * 3 + 1);
   char* ptr = &hexbyte[0];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') { // bug: unexpected result for *i > 0x7f
@@ -221,7 +222,7 @@ static void append_escaped(const string &in, S *out)
     }
   }
   *ptr++ = '!';
-  out->append(hexbyte, ptr - &hexbyte[0]);
+  out->append(hexbyte.data(), ptr - &hexbyte[0]);
 }
 
 inline unsigned h2i(char c)
@@ -18740,7 +18741,7 @@ bool BlueStore::BlueStoreThrottle::try_start_transaction(
   {
     std::lock_guard l(lock);
     auto cost0 = throttle_bytes.get_current();
-    if (cost0 + txc.cost > bytes_observed_max) {
+    if (std::cmp_greater(cost0 + txc.cost, bytes_observed_max)) {
       bytes_observed_max = cost0 + txc.cost;
       bytes_max_ts = ceph_clock_now();
     }

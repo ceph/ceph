@@ -1654,7 +1654,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return r;
   }
 
-  int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp)
+  int poll_io_events(ImageCtx *ictx, rbd_completion_t *comps, int numcomp)
   {
     if (numcomp <= 0)
       return -EINVAL;
@@ -1662,7 +1662,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp
                    << dendl;
     int i = 0;
-    while (i < numcomp && ictx->event_socket_completions.pop(comps[i])) {
+    io::AioCompletion* aio_completion;
+    while (i < numcomp && ictx->event_socket_completions.pop(aio_completion)) {
+      comps[i] = aio_completion->rbd_comp;
       ++i;
     }
 

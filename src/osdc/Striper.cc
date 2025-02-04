@@ -34,9 +34,10 @@ using ceph::bufferlist;
 namespace {
 
 object_t format_oid(const char* object_format, uint64_t object_no) {
-  char buf[strlen(object_format) + 32];
-  snprintf(buf, sizeof(buf), object_format, (long long unsigned)object_no);
-  return object_t(buf);
+  std::vector<char> buf(strlen(object_format) + 32);
+  snprintf(buf.data(), buf.size(), object_format,
+	   static_cast<long long unsigned>(object_no));
+  return object_t(buf.data());
 }
 
 struct OrderByObject {

@@ -2342,12 +2342,8 @@ int RGWRados::create_pool(const DoutPrefixProvider *dpp, const rgw_pool& pool)
 
 void RGWRados::create_bucket_id(string *bucket_id)
 {
-  uint64_t iid = instance_id();
-  uint64_t bid = next_bucket_id();
-  char buf[svc.zone->get_zone_params().get_id().size() + 48];
-  snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%" PRIu64,
-           svc.zone->get_zone_params().get_id().c_str(), iid, bid);
-  *bucket_id = buf;
+  *bucket_id = fmt::format("{}.{}.{}", svc.zone->get_zone_params().get_id(),
+			   uint64_t(instance_id()), uint64_t(next_bucket_id()));
 }
 
 int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
@@ -2931,10 +2927,10 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   }
 
   const string& src_name = obj.get_oid();
-  char buf[src_name.size() + 32];
   struct timespec ts = ceph::real_clock::to_timespec(state->mtime);
-  snprintf(buf, sizeof(buf), "%03x%s/%lld.%06ld", (int)src_name.size(),
-           src_name.c_str(), (long long)ts.tv_sec, ts.tv_nsec / 1000);
+  auto buf = fmt::format("{:03x}{}{}{:06}", int(src_name.size()),
+			src_name, static_cast<long long>(ts.tv_sec),
+			ts.tv_nsec / 1000);
 
   RGWBucketInfo dest_bucket_info;
 

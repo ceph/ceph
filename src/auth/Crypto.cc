@@ -595,9 +595,13 @@ void CryptoKey::print(std::ostream &out) const
 void CryptoKey::to_str(std::string& s) const
 {
   int len = secret.length() * 4;
-  char buf[len];
-  hex2str(secret.c_str(), secret.length(), buf, len);
-  s = buf;
+  // Since we have to copy the result into the string anyway, we may
+  // as well just put it there.
+  if (std::ssize(s) < len) {
+    s.resize(len);
+  }
+  len = hex2str(secret.c_str(), secret.length(), s.data(), len);
+  s.resize(len);
 }
 
 void CryptoKey::encode_formatted(string label, Formatter *f, bufferlist &bl)

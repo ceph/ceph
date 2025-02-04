@@ -82,13 +82,10 @@ int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
     if (*it < 0 || k+m <= *it) return -EINVAL;
   }
 
-  int want[k + m];
-  int avails[k + m];
-  int minimum[k + m];
+  std::vector<int> want(k + m, 0);
+  std::vector<int> avails(k + m, 0);
+  std::vector<int> minimum(k + m, 0);
 
-  memset(want, 0, sizeof(want));
-  memset(avails, 0, sizeof(avails));
-  memset(minimum, 0, sizeof(minimum));
   (*minimum_chunks).clear();
 
   for (set<int>::const_iterator i = want_to_read.begin();
@@ -104,13 +101,12 @@ int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
   }
 
   {
-    int decoding_matrix[k*k];
-    int dm_row[k];
-    int dm_column[k];
-    memset(decoding_matrix, 0, sizeof(decoding_matrix));
-    memset(dm_row, 0, sizeof(dm_row));
-    memset(dm_column, 0, sizeof(dm_column));
-    if (shec_make_decoding_matrix(true, want, avails, decoding_matrix, dm_row, dm_column, minimum) < 0) {
+    std::vector<int> decoding_matrix(k*k, 0);
+    std::vector<int> dm_row(k, 0);
+    std::vector<int> dm_column(k, 0);
+    if (shec_make_decoding_matrix(true, want.data(), avails.data(),
+				  decoding_matrix.data(), dm_row.data(),
+				  dm_column.data(), minimum.data()) < 0) {
       return -EIO;
     }
   }
@@ -162,7 +158,7 @@ int ErasureCodeShec::encode(const set<int> &want_to_encode,
 int ErasureCodeShec::encode_chunks(const set<int> &want_to_encode,
 				   map<int, bufferlist> *encoded)
 {
-  char *chunks[k + m];
+  std::vector<char*> chunks(k + m, nullptr);
   for (int i = 0; i < k + m; i++){
     chunks[i] = (*encoded)[i].c_str();
   }
@@ -222,11 +218,11 @@ int ErasureCodeShec::decode_chunks(const set<int> &want_to_read,
 				   map<int, bufferlist> *decoded)
 {
   unsigned blocksize = (*chunks.begin()).second.length();
-  int erased[k + m];
+  std::vector<int> erased(k + m, 0);
   int erased_count = 0;
-  int avails[k + m];
-  char *data[k];
-  char *coding[m];
+  std::vector<int> avails(k + m, 0);
+  std::vector<char*> data(k, nullptr);
+  std::vector<char*> coding(m, 0);
 
   for (int i = 0; i < k + m; i++) {
     erased[i] = 0;
@@ -246,7 +242,8 @@ int ErasureCodeShec::decode_chunks(const set<int> &want_to_read,
   }
 
   if (erased_count > 0) {
-    return shec_decode(erased, avails, data, coding, blocksize);
+    return shec_decode(erased.data(), avails.data(), data.data(), coding.data(),
+		       blocksize);
   } else {
     return 0;
   }
@@ -396,7 +393,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
 
     dout(10) << "matrix = " << dendl;
     for (int i=0; i<m; i++) {
-      char mat[k+1];
+      std::vector<char> mat(k+1, '\0');
       for (int j=0; j<k; j++) {
         if (matrix[i*k+j] > 0) {
           mat[j] = '1';
@@ -422,7 +419,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
 // Mearged from shec.cc.
 
 double ErasureCodeShec::shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2){
-  int r_eff_k[k];
+  std::vector<int> r_eff_k(k, 0);
   double r_e1;
   int i, rr, cc, start, end;
   int first_flag;
@@ -537,9 +534,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
                                                int *minimum)
 {
   int mindup = k+1, minp = k+1;
-  int want[k + m];
-
-  memset(want, 0, sizeof(want));
+  std::vector<int> want(k + m, 0);
 
   for (int i = 0; i < k + m; ++i) {
     want[i] = want_[i];
@@ -559,7 +554,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
                                        dm_row, dm_column, minimum,
                                        technique,
                                        k, m, c, w,
-                                       want, avails)) {
+                                       want.data(), avails)) {
     return 0;
   }
 
@@ -567,7 +562,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 
     // select parity chunks
     int ek = 0;
-    int p[m];
+    std::vector<int> p(m);
     for (int i=0; i < m; ++i) {
       if (pp & (1ull << i)) {
         p[ek++] = i;
@@ -590,14 +585,8 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
       continue;
     }
 
-    int tmprow[k + m];
-    int tmpcolumn[k];
-    for (int i = 0; i < k + m; i++) {
-      tmprow[i] = 0;
-    }
-    for (int i = 0; i < k; i++) {
-      tmpcolumn[i] = 0;
-    }
+    std::vector<int> tmprow(k + m, 0);
+    std::vector<int> tmpcolumn(k, 0);
 
     for (int i=0; i < k; i++) {
       if (want[i] && !avails[i]) {
@@ -649,7 +638,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 
     // minimum is updated.
     if (dup < mindup) {
-      int tmpmat[dup * dup];
+      std::vector<int> tmpmat(dup * dup, 0);
       {
         for (int i = 0, row = 0; i < k + m; i++) {
           if (tmprow[i]) {
@@ -667,7 +656,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
           }
         }
       }
-      int det = calc_determinant(tmpmat, dup);
+      int det = calc_determinant(tmpmat.data(), dup);
 
       if (det != 0) {
         int row_id = 0;
@@ -730,7 +719,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
     return 0;
   }
 
-  int tmpmat[mindup * mindup];
+  std::vector<int> tmpmat(mindup * mindup, 0);
   for (int i=0; i < mindup; i++) {
     for (int j=0; j < mindup; j++) {
       if (dm_row[i] < k) {
@@ -754,10 +743,10 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
     return 0;
   }
 
-  int ret = jerasure_invert_matrix(tmpmat, decoding_matrix, mindup, w);
+  int ret = jerasure_invert_matrix(tmpmat.data(), decoding_matrix, mindup, w);
 
   tcache.putDecodingTableToCache(decoding_matrix, dm_row, dm_column, minimum, technique,
-                                 k, m, c, w, want, avails);
+                                 k, m, c, w, want.data(), avails);
 
   return ret;
 }
@@ -765,19 +754,15 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 int ErasureCodeShec::shec_matrix_decode(int *want, int *avails, char **data_ptrs,
                                         char **coding_ptrs, int size)
 {
-  int decoding_matrix[k*k];
-  int dm_row[k], dm_column[k];
-  int minimum[k + m];
-
-  memset(decoding_matrix, 0, sizeof(decoding_matrix));
-  memset(dm_row, -1, sizeof(dm_row));
-  memset(dm_column, -1, sizeof(dm_column));
-  memset(minimum, -1, sizeof(minimum));
+  std::vector<int> decoding_matrix(k*k, -1);
+  std::vector<int> dm_row(k, 0), dm_column(k, -1);
+  std::vector<int> minimum(k + m, -1);
 
   if (w != 8 && w != 16 && w != 32) return -1;
 
-  if (shec_make_decoding_matrix(false, want, avails, decoding_matrix,
-                                dm_row, dm_column, minimum) < 0) {
+  if (shec_make_decoding_matrix(false, want, avails, decoding_matrix.data(),
+                                dm_row.data(), dm_column.data(),
+				minimum.data()) < 0) {
     return -1;
   }
 
@@ -790,7 +775,7 @@ int ErasureCodeShec::shec_matrix_decode(int *want, int *avails, char **data_ptrs
     dm_size++;
   }
 
-  char *dm_data_ptrs[dm_size];
+  std::vector<char*> dm_data_ptrs(dm_size, nullptr);
   for (int i = 0; i < dm_size; i++) {
     dm_data_ptrs[i] = data_ptrs[dm_column[i]];
   }
@@ -798,8 +783,9 @@ int ErasureCodeShec::shec_matrix_decode(int *want, int *avails, char **data_ptrs
   // Decode the data drives
   for (int i = 0; i < dm_size; i++) {
     if (!avails[dm_column[i]]) {
-      jerasure_matrix_dotprod(dm_size, w, decoding_matrix + (i * dm_size),
-                              dm_row, i, dm_data_ptrs, coding_ptrs, size);
+      jerasure_matrix_dotprod(dm_size, w, decoding_matrix.data() + (i * dm_size),
+                              dm_row.data(), i, dm_data_ptrs.data(),
+			      coding_ptrs, size);
     }
   }
 

@@ -305,7 +305,7 @@ void MgrStandby::respawn()
   // to main() so that /proc/$pid/stat field 2 contains "(ceph-mgr)"
   // instead of "(exe)", so that killall (and log rotation) will work.
 
-  char *new_argv[orig_argc+1];
+  std::vector<char *> new_argv(orig_argc+1);
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
   for (int i=0; i<orig_argc; i++) {
     new_argv[i] = (char *)orig_argv[i];
@@ -335,7 +335,7 @@ void MgrStandby::respawn()
   dout(1) << " exe_path " << exe_path << dendl;
 
   unblock_all_signals(NULL);
-  execv(exe_path, new_argv);
+  execv(exe_path, new_argv.data());
 
   derr << "respawn execv " << orig_argv[0]
        << " failed with " << cpp_strerror(errno) << dendl;
