@@ -113,6 +113,15 @@
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
 
+* RADOS: The default plugin for erasure coded pools has been changed
+  from Jerasure to ISA-L. Clusters created on T or later releases will
+  use ISA-L as the default plugin when creating a new pool. Clusters that upgrade
+  to the T release will continue to use their existing default values.
+  The default values can be overriden by creating a new erasure code profile and
+  selecting it when creating a new pool.
+  ISA-L is recommended for new pools because the Jerasure library is
+  no longer maintained.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
