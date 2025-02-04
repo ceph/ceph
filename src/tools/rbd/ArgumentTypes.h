@@ -187,9 +187,9 @@ void add_create_journal_options(
 
 void add_size_option(boost::program_options::options_description *opt);
 
-void add_sparse_size_option(boost::program_options::options_description *opt);
-
 void add_estimated_size_option(boost::program_options::options_description *opt);
+
+void add_sparse_size_option(boost::program_options::options_description *opt);
 
 void add_path_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt,

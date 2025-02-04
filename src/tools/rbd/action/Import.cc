@@ -825,7 +825,8 @@ out:
 static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 		     librados::IoCtx& io_ctx, const char *imgname,
 		     const char *path, librbd::ImageOptions& opts,
-		     bool no_progress, int import_format, size_t sparse_size, size_t estimated_size)
+		     bool no_progress, int import_format, size_t sparse_size,
+         size_t estimated_size)
 {
   int fd, r;
   struct stat stat_buf;
@@ -992,16 +993,6 @@ int execute(const po::variables_map &vm,
     sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
   }
 
-  size_t estimated_size = 0;
-  if (vm.count(at::IMAGE_ESTIMATED_SIZE)) {
-    if (strcmp(path.c_str(), "-")) {
-      std::cerr << "rbd: --estimated-size can be specified "
-                << "only for import from stdin" << std::endl;
-      return -EINVAL;
-    }
-    estimated_size = vm[at::IMAGE_ESTIMATED_SIZE].as<size_t>();
-  }
-
   std::string pool_name = deprecated_pool_name;
   std::string namespace_name;
   std::string image_name;
@@ -1035,9 +1026,25 @@ int execute(const po::variables_map &vm,
   if (vm.count("export-format"))
     format = vm["export-format"].as<uint64_t>();
 
+  size_t estimated_size = 0;
+  if (vm.count(at::IMAGE_ESTIMATED_SIZE)) {
+    if (path != "-") {
+      std::cerr << "rbd: --estimated-size can be specified "
+                << "only for import from stdin" << std::endl;
+      return -EINVAL;
+    }
+    estimated_size = vm[at::IMAGE_ESTIMATED_SIZE].as<size_t>();
+
+    if (format != 1) {
+      std::cerr << "rbd: --estimated-size can be specified "
+                << "only for raw import (--export-format 1)" << std::endl;
+    }
+  }
+
   librbd::RBD rbd;
   r = do_import(rados, rbd, io_ctx, image_name.c_str(), path.c_str(),
-                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size, estimated_size);
+                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size,
+                estimated_size);
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;
