@@ -10,6 +10,7 @@ set(libos_srcs
 if(WITH_BLUESTORE)
   list(APPEND libos_srcs
     bluestore/Allocator.cc
+    bluestore/AllocatorBase.cc
     bluestore/BitmapFreelistManager.cc
     bluestore/BlueFS.cc
     bluestore/bluefs_types.cc

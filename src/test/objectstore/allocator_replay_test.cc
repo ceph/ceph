@@ -16,6 +16,7 @@
 #include "include/denc.h"
 #include "global/global_init.h"
 #include "os/bluestore/Allocator.h"
+#include "os/bluestore/AllocatorBase.h"
 
 using namespace std;
 
@@ -773,7 +774,7 @@ int main(int argc, char **argv)
         std::cout << "Allocation unit:" << alloc_unit
                   << std::endl;
 
-        Allocator::FreeStateHistogram hist(num_buckets);
+        AllocatorBase::FreeStateHistogram hist(num_buckets);
         a->foreach(
           [&](size_t off, size_t len) {
             hist.record_extent(uint64_t(alloc_unit), off, len);
