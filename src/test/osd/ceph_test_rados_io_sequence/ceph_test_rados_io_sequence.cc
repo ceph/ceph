@@ -253,7 +253,7 @@ ceph::io_sequence::tester::SelectSeqRange::SelectSeqRange(po::variables_map& vm)
 }
 
 const std::pair<ceph::io_exerciser::Sequence, ceph::io_exerciser::Sequence>
-ceph::io_sequence::tester::SelectSeqRange ::select() {
+ceph::io_sequence::tester::SelectSeqRange::select() {
   if (force_value.has_value()) {
     return *force_value;
   } else {
@@ -262,7 +262,7 @@ ceph::io_sequence::tester::SelectSeqRange ::select() {
   }
 }
 
-ceph::io_sequence::tester::SelectErasureTechnique ::SelectErasureTechnique(
+ceph::io_sequence::tester::SelectErasureTechnique::SelectErasureTechnique(
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     std::string_view plugin, bool first_use)
     : ProgramOptionGeneratedSelector<std::string>(rng, vm, "technique",
@@ -292,7 +292,7 @@ ceph::io_sequence::tester::SelectErasureTechnique::generate_selections() {
   return techniques;
 }
 
-ceph::io_sequence::tester::lrc::SelectMappingAndLayers ::SelectMappingAndLayers(
+ceph::io_sequence::tester::lrc::SelectMappingAndLayers::SelectMappingAndLayers(
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     bool first_use)
     : rng_seed(rng()),
@@ -306,11 +306,11 @@ ceph::io_sequence::tester::lrc::SelectMappingAndLayers ::SelectMappingAndLayers(
 }
 
 const std::pair<std::string, std::string>
-ceph::io_sequence::tester::lrc::SelectMappingAndLayers ::select() {
+ceph::io_sequence::tester::lrc::SelectMappingAndLayers::select() {
   return std::pair<std::string, std::string>(sma.select(), sly.select());
 }
 
-ceph::io_sequence::tester::SelectErasureKM ::SelectErasureKM(
+ceph::io_sequence::tester::SelectErasureKM::SelectErasureKM(
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     std::string_view plugin, const std::optional<std::string>& technique,
     bool first_use)
@@ -321,7 +321,7 @@ ceph::io_sequence::tester::SelectErasureKM ::SelectErasureKM(
       technique(technique) {}
 
 const std::vector<std::pair<int, int>>
-ceph::io_sequence::tester::SelectErasureKM ::generate_selections() {
+ceph::io_sequence::tester::SelectErasureKM::generate_selections() {
   std::vector<std::pair<int, int>> selection;
 
   // Gives different spreads of k and m depending on the plugin and technique
@@ -349,11 +349,11 @@ ceph::io_sequence::tester::SelectErasureKM ::generate_selections() {
   // Add extra miscelaneous interesting options for testing w values
   if (plugin == "jerasure") {
     if (technique == "reed_sol_van")
-      // Double change of chosing to test more w values
+      // Double chance of chosing to test more w values
       for (int i = 0; i < 2; i++) selection.push_back({6, 3});
 
     if (technique == "liberation" || technique == "blaum_roth")
-      // Double change of chosing to test more different w values
+      // Double chance of chosing to test more different w values
       for (int i = 0; i < 2; i++) selection.push_back({6, 2});
 
     if (technique == "liber8tion") selection.push_back({2, 2});
@@ -362,7 +362,7 @@ ceph::io_sequence::tester::SelectErasureKM ::generate_selections() {
   return selection;
 }
 
-ceph::io_sequence::tester::jerasure::SelectErasureW ::SelectErasureW(
+ceph::io_sequence::tester::jerasure::SelectErasureW::SelectErasureW(
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     std::string_view plugin, const std::optional<std::string_view>& technique,
     const std::optional<std::pair<int, int>>& km,
@@ -400,7 +400,7 @@ ceph::io_sequence::tester::jerasure::SelectErasureW::generate_selections() {
   return selection;
 }
 
-ceph::io_sequence::tester::shec::SelectErasureC ::SelectErasureC(
+ceph::io_sequence::tester::shec::SelectErasureC::SelectErasureC(
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     std::string_view plugin, const std::optional<std::pair<int, int>>& km,
     bool first_use)
@@ -425,7 +425,7 @@ ceph::io_sequence::tester::shec::SelectErasureC::generate_selections() {
   return selection;
 }
 
-ceph::io_sequence::tester::jerasure::SelectErasurePacketSize ::
+ceph::io_sequence::tester::jerasure::SelectErasurePacketSize::
     SelectErasurePacketSize(ceph::util::random_number_generator<int>& rng,
                             po::variables_map& vm, std::string_view plugin,
                             const std::optional<std::string_view>& technique,
@@ -439,7 +439,7 @@ ceph::io_sequence::tester::jerasure::SelectErasurePacketSize ::
       km(km) {}
 
 const std::vector<uint64_t> ceph::io_sequence::tester::jerasure::
-    SelectErasurePacketSize ::generate_selections() {
+    SelectErasurePacketSize::generate_selections() {
   std::vector<uint64_t> selection = {};
 
   if (plugin != "jerasure") {
@@ -472,7 +472,7 @@ const std::vector<uint64_t> ceph::io_sequence::tester::jerasure::
   return selection;
 }
 
-ceph::io_sequence::tester::SelectErasureChunkSize ::SelectErasureChunkSize(
+ceph::io_sequence::tester::SelectErasureChunkSize::SelectErasureChunkSize(
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     ErasureCodeInterfaceRef ec_impl, bool first_use)
     : ProgramOptionGeneratedSelector(rng, vm, "chunksize", first_use),
@@ -509,7 +509,7 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
   return choices;
 }
 
-ceph::io_sequence::tester::SelectErasureProfile ::SelectErasureProfile(
+ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
     boost::intrusive_ptr<CephContext> cct,
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     librados::Rados& rados, bool dry_run, bool first_use)
@@ -539,7 +539,7 @@ ceph::io_sequence::tester::SelectErasureProfile ::SelectErasureProfile(
 }
 
 const ceph::io_sequence::tester::Profile
-ceph::io_sequence::tester ::SelectErasureProfile::select() {
+ceph::io_sequence::tester::SelectErasureProfile::select() {
   ceph::io_sequence::tester::Profile profile;
 
   if (force_value) {
@@ -651,7 +651,7 @@ ceph::io_sequence::tester ::SelectErasureProfile::select() {
   return profile;
 }
 
-void ceph::io_sequence::tester::SelectErasureProfile ::create(
+void ceph::io_sequence::tester::SelectErasureProfile::create(
     const ceph::io_sequence::tester::Profile& profile) {
   bufferlist inbl, outbl;
   auto formatter = std::make_unique<JSONFormatter>(false);
@@ -695,7 +695,7 @@ void ceph::io_sequence::tester::SelectErasureProfile ::create(
 }
 
 const ceph::io_sequence::tester::Profile
-ceph::io_sequence::tester ::SelectErasureProfile::selectExistingProfile(
+ceph::io_sequence::tester::SelectErasureProfile::selectExistingProfile(
     const std::string& profile_name) {
   int rc;
   bufferlist inbl, outbl;
@@ -728,7 +728,7 @@ ceph::io_sequence::tester ::SelectErasureProfile::selectExistingProfile(
   return profile;
 }
 
-ceph::io_sequence::tester::SelectErasurePool ::SelectErasurePool(
+ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
     boost::intrusive_ptr<CephContext> cct,
     ceph::util::random_number_generator<int>& rng, po::variables_map& vm,
     librados::Rados& rados, bool dry_run, bool allow_pool_autoscaling,
@@ -815,7 +815,7 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
   return pool_name;
 }
 
-void ceph::io_sequence::tester::SelectErasurePool ::configureServices(
+void ceph::io_sequence::tester::SelectErasurePool::configureServices(
     bool allow_pool_autoscaling, bool allow_pool_balancer,
     bool allow_pool_deep_scrubbing, bool allow_pool_scrubbing,
     bool test_recovery) {
@@ -1113,7 +1113,7 @@ std::string ceph::io_sequence::tester::TestRunner::get_token() {
 }
 
 std::optional<std::string>
-ceph::io_sequence::tester::TestRunner ::get_optional_token() {
+ceph::io_sequence::tester::TestRunner::get_optional_token() {
   std::optional<std::string> ret = std::nullopt;
   if (tokens != split.end()) {
     ret = std::string(*tokens++);
@@ -1132,7 +1132,7 @@ uint64_t ceph::io_sequence::tester::TestRunner::get_numeric_token() {
 }
 
 std::optional<uint64_t>
-ceph::io_sequence::tester::TestRunner ::get_optional_numeric_token() {
+ceph::io_sequence::tester::TestRunner::get_optional_numeric_token() {
   std::string parse_error;
   std::optional<std::string> token = get_optional_token();
   if (token) {

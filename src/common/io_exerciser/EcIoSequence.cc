@@ -11,7 +11,7 @@ using ReadInjectSequence = ceph::io_exerciser::ReadInjectSequence;
 
 bool EcIoSequence::is_supported(Sequence sequence) const { return true; }
 
-std::unique_ptr<IoSequence> EcIoSequence ::generate_sequence(
+std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
     Sequence sequence, std::pair<int, int> obj_size_range,
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>> mappinglayers,
@@ -51,7 +51,7 @@ EcIoSequence::EcIoSequence(std::pair<int, int> obj_size_range, int seed)
       clear_inject(false),
       shard_to_inject(std::nullopt) {}
 
-void EcIoSequence ::select_random_data_shard_to_inject_read_error(
+void EcIoSequence::select_random_data_shard_to_inject_read_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
         mappinglayers) {
@@ -73,7 +73,7 @@ void EcIoSequence ::select_random_data_shard_to_inject_read_error(
   setup_inject = true;
 }
 
-void EcIoSequence ::select_random_data_shard_to_inject_write_error(
+void EcIoSequence::select_random_data_shard_to_inject_write_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
         mappinglayers) {
@@ -99,7 +99,7 @@ void EcIoSequence ::select_random_data_shard_to_inject_write_error(
   setup_inject = true;
 }
 
-void EcIoSequence ::select_random_shard_to_inject_read_error(
+void EcIoSequence::select_random_shard_to_inject_read_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
         mappinglayers) {
@@ -121,7 +121,7 @@ void EcIoSequence ::select_random_shard_to_inject_read_error(
   setup_inject = true;
 }
 
-void EcIoSequence ::select_random_shard_to_inject_write_error(
+void EcIoSequence::select_random_shard_to_inject_write_error(
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>>
         mappinglayers) {
@@ -149,14 +149,14 @@ void EcIoSequence ::select_random_shard_to_inject_write_error(
 
 void EcIoSequence::generate_random_read_inject_type() {
   inject_op_type = static_cast<InjectOpType>(
-      rng(static_cast<int>(InjectOpType ::ReadEIO),
-          static_cast<int>(InjectOpType ::ReadMissingShard)));
+      rng(static_cast<int>(InjectOpType::ReadEIO),
+          static_cast<int>(InjectOpType::ReadMissingShard)));
 }
 
 void EcIoSequence::generate_random_write_inject_type() {
   inject_op_type = static_cast<InjectOpType>(
-      rng(static_cast<int>(InjectOpType ::WriteFailAndRollback),
-          static_cast<int>(InjectOpType ::WriteOSDAbort)));
+      rng(static_cast<int>(InjectOpType::WriteFailAndRollback),
+          static_cast<int>(InjectOpType::WriteOSDAbort)));
 }
 
 ceph::io_exerciser::ReadInjectSequence::ReadInjectSequence(
