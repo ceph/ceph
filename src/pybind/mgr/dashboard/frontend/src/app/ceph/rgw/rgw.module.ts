@@ -75,7 +75,10 @@ import {
   CheckboxModule,
   TreeviewModule,
   SelectModule,
-  NumberModule
+  NumberModule,
+  RadioModule,
+  TooltipModule,
+  ComboBoxModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -110,7 +113,10 @@ import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw
     InputModule,
     CheckboxModule,
     SelectModule,
-    NumberModule
+    NumberModule,
+    RadioModule,
+    TooltipModule,
+    ComboBoxModule
   ],
   exports: [
     RgwDaemonListComponent,
