@@ -686,7 +686,7 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
-};
+}; // class Driver
 
 
 /// \brief Ref-counted callback object for User/Bucket read_stats_async().
@@ -889,6 +889,8 @@ class Bucket {
       std::optional<std::string> swift_ver_location;
       std::optional<RGWQuotaInfo> quota;
       std::optional<ceph::real_time> creation_time;
+      std::optional<rgw::BucketIndexType> index_type;
+      std::optional<uint32_t> index_shards;
     };
 
     /// Create this bucket in the backing store.

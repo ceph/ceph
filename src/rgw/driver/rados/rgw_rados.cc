@@ -2362,6 +2362,8 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
                             const std::optional<std::string>& swift_ver_location,
                             const std::optional<RGWQuotaInfo>& quota,
                             std::optional<ceph::real_time> creation_time,
+                            std::optional<rgw::BucketIndexType> index_type,
+                            std::optional<uint32_t> index_shards,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
@@ -2392,8 +2394,11 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
     }
 
     if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
       init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
-                                 zone_placement->index_type);
+                                 index_type, index_shards);
     }
 
     info.requester_pays = false;
@@ -10802,6 +10807,7 @@ int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBuck
 void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
 					  const uint64_t num_objs,
 					  const uint32_t num_source_shards,
+					  const uint32_t min_layout_shards,
 					  bool& need_resharding,
 					  uint32_t* suggested_num_shards)
 {
@@ -10813,6 +10819,7 @@ void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
 
   RGWBucketReshard::calculate_preferred_shards(dpp,
 					       max_dynamic_shards,
+					       min_layout_shards,
 					       max_objs_per_shard,
 					       is_multisite,
 					       num_objs,
@@ -10846,8 +10853,11 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
   uint32_t suggested_num_shards = 0;
   const uint32_t num_source_shards =
     rgw::current_num_shards(bucket_info.layout);
+  const uint32_t min_layout_shards =
+    rgw::current_min_layout_shards(bucket_info.layout);
 
-  calculate_preferred_shards(dpp, num_objs, num_source_shards,
+  calculate_preferred_shards(dpp, num_objs,
+			     num_source_shards, min_layout_shards,
 			     need_resharding, &suggested_num_shards);
   if (! need_resharding) {
     return 0;
