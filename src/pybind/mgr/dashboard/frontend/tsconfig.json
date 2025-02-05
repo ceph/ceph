@@ -1,0 +1,38 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "downlevelIteration": true,
+    "esModuleInterop": true,
+    "importHelpers": true,
+    "outDir": "./dist/out-tsc",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": true,
+    "suppressImplicitAnyIndexErrors": true,
+    "target": "ES2020",
+    "module": "es2020",
+    "baseUrl": "./",
+    "resolveJsonModule": true,
+    "paths": {
+      "~/*": ["src/*"],
+      "timers": [
+          "node_modules/timers-browserify"
+        ],
+        "stream": [
+          "node_modules/stream-browserify"
+        ]
+    },
+    "typeRoots": ["node_modules/@types"],
+    "lib": ["es2017", "dom"],
+    "allowJs": true
+  },
+  "exclude": ["coverage", "dist", "node_modules", "cypress"]
+}

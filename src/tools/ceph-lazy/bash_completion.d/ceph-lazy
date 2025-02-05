@@ -1,0 +1,27 @@
+_ceph-lazy()
+{
+  local cur prev all_opts commands
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+  commands="host-get-osd host-get-nodes host-osd-usage host-all-usage pg-get-host pg-most-write pg-less-write pg-most-write-kb pg-less-write-kb pg-most-read pg-less-read pg-most-read-kb pg-less-read-kb pg-empty rbd-prefix rbd-count rbd-host rbd-osd rbd-size rbd-all-size osd-most-used osd-less-used osd-get-ppg osd-get-pg object-get-host"
+
+  all_opts="$commands -d -h"
+
+
+
+# If first option is -d keep completing without -d & -h
+  if [[ ${prev} == "-d" && ${#COMP_WORDS[@]} -eq 3 ]] ; then
+    COMPREPLY=( $(compgen -W "${commands}" -- ${cur}) )
+    return 0
+# Do completion for first args
+  elif [[ ${#COMP_WORDS[@]} -eq 2 ]]; then
+    COMPREPLY=( $(compgen -W "${all_opts}" -- ${cur}) )
+    return 0
+# Else do nothing
+  else
+    return 0
+  fi
+}
+complete -F _ceph-lazy ceph-lazy

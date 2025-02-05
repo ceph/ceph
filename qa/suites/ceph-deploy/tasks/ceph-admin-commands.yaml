@@ -1,0 +1,12 @@
+meta:
+- desc: "test basic ceph admin commands"
+tasks:
+- ssh_keys:
+- print: "**** done ssh_keys"
+- ceph-deploy:
+- print: "**** done ceph-deploy"
+- workunit:
+     clients:
+        client.0:
+           - ceph-tests/ceph-admin-commands.sh
+- print: "**** done ceph-tests/ceph-admin-commands.sh"
