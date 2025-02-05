@@ -1721,7 +1721,7 @@ TEST(BlueFS, test_69481_truncate_corrupts_log) {
   fs.fsync(f);
 
   bufferlist bl;
-  bl.append(std::string(" ", 0x15678));
+  bl.append(std::string(0x15678, ' '));
   f->append(bl);
   fs.truncate(f, 0x15678);
   fs.fsync(f);
@@ -1765,7 +1765,7 @@ TEST(BlueFS, test_69481_truncate_asserts) {
   fs.fsync(f);
 
   bufferlist bl;
-  bl.append(std::string(" ", 0x35678));
+  bl.append(std::string(0x35678, ' '));
   f->append(bl);
   fs.truncate(f, 0x35678);
   fs.fsync(f);
