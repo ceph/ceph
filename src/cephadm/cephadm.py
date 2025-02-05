@@ -88,17 +88,18 @@ from cephadmlib.container_engines import (
     Podman,
     check_container_engine,
     find_container_engine,
+    parsed_container_mem_usage,
+    parsed_container_cpu_perc,
     pull_command,
     registry_login,
 )
 from cephadmlib.data_utils import (
     dict_get_join,
-    get_legacy_config_fsid,
+    get_legacy_daemon_fsid,
     is_fsid,
     normalize_image_digest,
     try_convert_datetime,
     read_config,
-    with_units_to_int,
     _extract_host_info_from_applied_spec,
 )
 from cephadmlib.file_utils import (
@@ -736,27 +737,6 @@ def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -
         return daemon['systemd_unit']
     except KeyError:
         raise Error('Failed to get unit name for {}'.format(daemon))
-
-
-def get_legacy_daemon_fsid(ctx, cluster,
-                           daemon_type, daemon_id, legacy_dir=None):
-    # type: (CephadmContext, str, str, Union[int, str], Optional[str]) -> Optional[str]
-    fsid = None
-    if daemon_type == 'osd':
-        try:
-            fsid_file = os.path.join(ctx.data_dir,
-                                     daemon_type,
-                                     'ceph-%s' % daemon_id,
-                                     'ceph_fsid')
-            if legacy_dir is not None:
-                fsid_file = os.path.abspath(legacy_dir + fsid_file)
-            with open(fsid_file, 'r') as f:
-                fsid = f.read().strip()
-        except IOError:
-            pass
-    if not fsid:
-        fsid = get_legacy_config_fsid(cluster, legacy_dir=legacy_dir)
-    return fsid
 
 
 def create_daemon_dirs(
@@ -1653,13 +1633,7 @@ class CephadmAgent(DaemonForm):
         # not changed for any daemon, we assume our cached info is good.
         daemons: Dict[str, Dict[str, Any]] = {}
         data_dir = self.ctx.data_dir
-        seen_memusage = {}  # type: Dict[str, int]
-        out, err, code = call(
-            self.ctx,
-            [self.ctx.container_engine.path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
-            verbosity=CallVerbosity.DEBUG
-        )
-        seen_memusage_cid_len, seen_memusage = _parse_mem_usage(code, out)
+        seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(self.ctx)
         # we need a mapping from container names to ids. Later we will convert daemon
         # names to container names to get daemons container id to see if it has changed
         out, err, code = call(
@@ -3471,21 +3445,8 @@ def list_daemons(
     seen_digests = {}   # type: Dict[str, List[str]]
 
     # keep track of memory and cpu usage we've seen
-    seen_memusage = {}  # type: Dict[str, int]
-    seen_cpuperc = {}  # type: Dict[str, str]
-    out, err, code = call(
-        ctx,
-        [container_path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
-        verbosity=CallVerbosity.QUIET
-    )
-    seen_memusage_cid_len, seen_memusage = _parse_mem_usage(code, out)
-
-    out, err, code = call(
-        ctx,
-        [container_path, 'stats', '--format', '{{.ID}},{{.CPUPerc}}', '--no-stream'],
-        verbosity=CallVerbosity.QUIET
-    )
-    seen_cpuperc_cid_len, seen_cpuperc = _parse_cpu_perc(code, out)
+    seen_memusage_cid_len, seen_memusage = parsed_container_mem_usage(ctx)
+    seen_cpuperc_cid_len, seen_cpuperc = parsed_container_cpu_perc(ctx)
 
     # /var/lib/ceph
     if os.path.exists(data_dir):
@@ -3686,40 +3647,6 @@ def list_daemons(
                     ls.append(val)
 
     return ls
-
-
-def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
-    # keep track of memory usage we've seen
-    seen_memusage = {}  # type: Dict[str, int]
-    seen_memusage_cid_len = 0
-    if not code:
-        for line in out.splitlines():
-            (cid, usage) = line.split(',')
-            (used, limit) = usage.split(' / ')
-            try:
-                seen_memusage[cid] = with_units_to_int(used)
-                if not seen_memusage_cid_len:
-                    seen_memusage_cid_len = len(cid)
-            except ValueError:
-                logger.info('unable to parse memory usage line\n>{}'.format(line))
-                pass
-    return seen_memusage_cid_len, seen_memusage
-
-
-def _parse_cpu_perc(code: int, out: str) -> Tuple[int, Dict[str, str]]:
-    seen_cpuperc = {}
-    seen_cpuperc_cid_len = 0
-    if not code:
-        for line in out.splitlines():
-            (cid, cpuperc) = line.split(',')
-            try:
-                seen_cpuperc[cid] = cpuperc
-                if not seen_cpuperc_cid_len:
-                    seen_cpuperc_cid_len = len(cid)
-            except ValueError:
-                logger.info('unable to parse cpu percentage line\n>{}'.format(line))
-                pass
-    return seen_cpuperc_cid_len, seen_cpuperc
 
 
 def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):

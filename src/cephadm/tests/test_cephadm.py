@@ -226,7 +226,9 @@ class TestCephAdm(object):
 
     @mock.patch('cephadm.logger')
     def test_parse_mem_usage(self, _logger):
-        len, summary = _cephadm._parse_mem_usage(0, 'c6290e3f1489,-- / --')
+        from cephadmlib.container_engines import _parse_mem_usage
+
+        len, summary = _parse_mem_usage(0, 'c6290e3f1489,-- / --')
         assert summary == {}
 
     def test_CustomValidation(self):
@@ -1665,7 +1667,9 @@ class TestBootstrap(object):
 
 class TestShell(object):
 
-    def test_fsid(self, cephadm_fs):
+    def test_fsid(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
         fsid = '00000000-0000-0000-0000-0000deadbeef'
 
         cmd = ['shell', '--fsid', fsid]
@@ -1699,7 +1703,10 @@ class TestShell(object):
                 assert retval == 1
                 assert ctx.fsid == None
 
-    def test_name(self, cephadm_fs):
+    def test_name(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--name', 'foo']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1718,7 +1725,10 @@ class TestShell(object):
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
 
-    def test_config(self, cephadm_fs):
+    def test_config(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1737,7 +1747,10 @@ class TestShell(object):
             assert retval == 0
             assert ctx.config == 'foo'
 
-    def test_keyring(self, cephadm_fs):
+    def test_keyring(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1756,24 +1769,33 @@ class TestShell(object):
             assert retval == 0
             assert ctx.keyring == 'foo'
 
-    @mock.patch('cephadm.CephContainer')
-    def test_mount_no_dst(self, _ceph_container, cephadm_fs):
+    def test_mount_no_dst(self, cephadm_fs, funkypatch):
+        _ceph_container = funkypatch.patch('cephadm.CephContainer')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--mount', '/etc/foo']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
             assert _ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/mnt/foo'
 
-    @mock.patch('cephadm.CephContainer')
-    def test_mount_with_dst_no_opt(self, _ceph_container, cephadm_fs):
+    def test_mount_with_dst_no_opt(self, cephadm_fs, funkypatch):
+        _ceph_container = funkypatch.patch('cephadm.CephContainer')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
             assert _ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/opt/foo/bar'
 
-    @mock.patch('cephadm.CephContainer')
-    def test_mount_with_dst_and_opt(self, _ceph_container, cephadm_fs):
+    def test_mount_with_dst_and_opt(self, cephadm_fs, funkypatch):
+        _ceph_container = funkypatch.patch('cephadm.CephContainer')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar:Z']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1790,7 +1812,10 @@ class TestCephVolume(object):
             '--', 'inventory', '--format', 'json'
         ]
 
-    def test_noop(self, cephadm_fs):
+    def test_noop(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = self._get_cmd()
         with with_cephadm_ctx(cmd) as ctx:
             _cephadm.command_ceph_volume(ctx)
@@ -1799,7 +1824,10 @@ class TestCephVolume(object):
             assert ctx.keyring == None
             assert ctx.config_json == None
 
-    def test_fsid(self, cephadm_fs):
+    def test_fsid(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         fsid = '00000000-0000-0000-0000-0000deadbeef'
 
         cmd = self._get_cmd('--fsid', fsid)
@@ -1830,7 +1858,10 @@ class TestCephVolume(object):
                 _cephadm.command_ceph_volume(ctx)
                 assert ctx.fsid == None
 
-    def test_config(self, cephadm_fs):
+    def test_config(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = self._get_cmd('--config', 'foo')
         with with_cephadm_ctx(cmd) as ctx:
             err = r'No such file or directory'
@@ -1843,7 +1874,10 @@ class TestCephVolume(object):
             _cephadm.command_ceph_volume(ctx)
             assert ctx.config == 'bar'
 
-    def test_keyring(self, cephadm_fs):
+    def test_keyring(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = self._get_cmd('--keyring', 'foo')
         with with_cephadm_ctx(cmd) as ctx:
             err = r'No such file or directory'
@@ -2260,7 +2294,7 @@ class TestPull:
         funkypatch.patch('cephadm.logger')
         _giifi = funkypatch.patch('cephadm.get_image_info_from_inspect')
         _giifi.return_value = {}
-        _call = funkypatch.patch('cephadmlib.call_wrappers.call')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False
