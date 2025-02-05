@@ -362,6 +362,20 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_notify_all(BaseMgrModule *self, PyObject *args)
+{
+  char *type = nullptr;
+  char *id = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_notify_all", &type, &id)) {
+    return nullptr;
+  }
+
+  without_gil([&] {
+    self->py_modules->notify_all(type, id);
+  });
+  return nullptr;
+}
 
 static PyObject*
 ceph_state_get(BaseMgrModule *self, PyObject *args)
@@ -1421,6 +1435,9 @@ ceph_get_daemon_health_metrics(BaseMgrModule *self, PyObject *args)
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
+
+  {"_ceph_notify_all", (PyCFunction)ceph_notify_all, METH_VARARGS,
+   "notify all modules"},
 
   {"_ceph_get_server", (PyCFunction)ceph_get_server, METH_VARARGS,
    "Get a server object"},
