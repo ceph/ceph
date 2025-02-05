@@ -2775,7 +2775,7 @@ void PeeringState::activate(
 
       psdout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
-      #if defined(WITH_SEASTAR)
+      #ifdef WITH_SEASTAR
       MURef<MOSDPGLog> m;
       #else
       MRef<MOSDPGLog> m;

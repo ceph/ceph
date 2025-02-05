@@ -15,7 +15,7 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 // for ObjectStore.h
 struct ThreadPool {
   struct TPHandle {

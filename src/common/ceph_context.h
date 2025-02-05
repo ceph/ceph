@@ -34,7 +34,7 @@
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
 #include "msg/msg_types.h"
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -66,7 +66,7 @@ namespace ceph {
   }
 }
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 namespace crimson::common {
 class CephContext {
 public:
@@ -423,7 +423,7 @@ private:
 #endif
 #endif	// WITH_SEASTAR
 
-#if !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN)) && defined(__cplusplus)
+#if !defined(WITH_SEASTAR) && defined(__cplusplus)
 namespace ceph::common {
 inline void intrusive_ptr_add_ref(CephContext* cct)
 {
@@ -435,5 +435,5 @@ inline void intrusive_ptr_release(CephContext* cct)
   cct->put();
 }
 }
-#endif // !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN)) && defined(__cplusplus)
+#endif // !defined(WITH_SEASTAR) && defined(__cplusplus)
 #endif

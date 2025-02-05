@@ -30,7 +30,7 @@
 #include "include/ceph_assert.h" // fio.h clobbers our assert.h
 #include <algorithm>
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"
