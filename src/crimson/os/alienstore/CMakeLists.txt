@@ -2,7 +2,7 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
 add_library(alien::cflags INTERFACE IMPORTED)
 set_target_properties(alien::cflags PROPERTIES
-  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR;WITH_ALIEN"
+  INTERFACE_COMPILE_DEFINITIONS ""
   INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
 
 set(crimson_alien_common_srcs
@@ -77,5 +77,5 @@ target_link_libraries(crimson-alienstore
     crimson-alien-common
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
-    crimson
+    seastar
     blk)
