@@ -1,0 +1,189 @@
+commit a913ded2ff138aefb8cb84d347d72164099cfd60
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri Dec 20 19:28:37 2013 +0000
+
+    v0.72.2
+
+commit b570c8014325fef590d16e6157cb33026155932c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Dec 18 13:11:01 2013 -0800
+
+    rgw: fix use-after-free when releasing completion handle
+
+    Backport: emperor, dumpling
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c8890ab2d46fe8e12200a0d2f9eab31c461fb871)
+
+commit 451381b4dba9d50fbee2accf5d75562615001ef3
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Dec 18 13:10:21 2013 -0800
+
+    rgw: don't return data within the librados cb
+
+    Fixes: #7030
+    The callback is running within a single Finisher thread, thus we
+    shouldn't block there. Append read data to a list and flush it within
+    the iterate context.
+
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit d6a4f6adfaa75c3140d07d6df7be03586cc16183)
+
+commit c044b218cb32d7ef2f2aa5db81ebf38ad0dc1049
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Dec 1 22:21:31 2013 -0800
+
+    Partial revert "mon: osd pool set syntax relaxed, modify unit tests"
+
+    This reverts commit 08327fed8213a5d24cd642e12b38a171b98924cb, except
+    for the hashpspool bit.  We switched back to an integer argument in
+    commit 337195f04653eed8e8f153a5b074f3bd48408998.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e80ab94bf44e102fcd87d16dc11e38ca4c0eeadb)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 1983ed8013637e9b80ca4a0e8d2800d6a36b120e
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Nov 19 23:21:11 2013 +0000
+
+    mon: OSDMonitor: drop cmdval_get() for unused variable
+
+    We don't ever use any value as a float, so just drop obtaining it.  This
+    makes it easier to partially revert 2fe0d0d9 in an upcoming patch.
+
+    Backport: emperor
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 7191bb2b2485c7819ca7b9d9434d803d0c94db7a)
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 1c4759cebb11ae1aa84aa3cbdb2b31e6d111f28e
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Fri Nov 22 02:10:35 2013 +0000
+
+    mon: OSDMonitor: receive CephInt on 'osd pool set' instead on CephString
+
+    This partially reverts 2fe0d0d9 in order to allow Emperor monitors to
+    forward mon command messages to Dumpling monitors without breaking a
+    cluster.
+
+    The need for this patch became obvious after issue #6796 was triggered.
+    Basically, in a mixed cluster of Emperor/Dumpling monitors, if a client
+    happens to obtain the command descriptions from an Emperor monitor and
+    then issue an 'osd pool set' this can turn out in one of two ways:
+
+    1. client msg gets forwarded to an Emperor leader and everything's a-okay;
+    2. client msg gets forwarded to a Dumpling leader and the string fails to
+    be interpreted without the monitor noticing, thus leaving the monitor with
+    an uninitialized variable leading to trouble.
+
+    If 2 is triggered, a multitude of bad things can happen, such as thousands
+    of pg splits, due to a simple 'osd set pool foo pg_num 128' turning out
+    to be interpreted as 109120394 or some other random number.
+
+    This patch is such that we make sure the client sends an integer instead
+    of a string. We also make sure to interpret anything the client sends as
+    possibly being a string, or an integer.
+
+    Fixes: 6796
+    Backport: emperor
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 337195f04653eed8e8f153a5b074f3bd48408998)
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit c2e467b42dfaecf082a3838b10e873f9f8bd5633
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Nov 25 13:43:43 2013 -0800
+
+    init, upstart: prevent daemons being started by both
+
+    There can be only one init system starting a daemon. If there is a
+    host entry in ceph.conf for a daemon, sysvinit would try to start it
+    even if the daemon's directory did not include a sysvinit file. This
+    preserves backwards compatibility with older installs using sysvinit,
+    but if an upstart file is present in the daemon's directory, upstart
+    will try to start them, regardless of host entries in ceph.conf.
+
+    If there's an upstart file in a daemon's directory and a host entry
+    for that daemon in ceph.conf, both sysvinit and upstart would attempt
+    to manage it.
+
+    Fix this by only starting daemons if the marker file for the other
+    init system is not present. This maintains backwards compatibility
+    with older installs using neither sysvinit or upstart marker files,
+    and does not break any valid configurations. The only configuration
+    that would break is one with both sysvinit and upstart files present
+    for the same daemon.
+
+    Backport: emperor, dumpling
+    Reported-by: Tim Spriggs <tims@uahirise.org>
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 5e34beb61b3f5a1ed4afd8ee2fe976de40f95ace)
+
+commit 8812c4e958b154ca401c7257fd48ccaffe013639
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Nov 27 13:34:00 2013 -0800
+
+    rgw: don't error out on empty owner when setting acls
+
+    Fixes: #6892
+    Backport: dumpling, emperor
+    s3cmd specifies empty owner field when trying to set acls on object
+    / bucket. We errored out as it didn't match the current owner name, but
+    with this change we ignore it.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 14cf4caff58cc2c535101d48c53afd54d8632104)
+
+commit 69e055f367ae37dd771c050f158d684e2a3cb246
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Nov 22 07:04:01 2013 -0800
+
+    rgw: lower some debug message
+
+    Fixes: #6084
+    Backport: dumpling, emperor
+
+    Reported-by: Ron Allred <rallred@itrefined.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b35fc1bc2ec8c8376ec173eb1c3e538e02c1694e)
+
+commit 53951fd5459d6396b6ab59b52dc33df0ebcf4414
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Nov 12 15:15:26 2013 -0800
+
+    ReplicatedPG: test for missing head before find_object_context
+
+    find_object_context doesn't return EAGAIN for a missing head.
+    I chose not to change that behavior since it might hide bugs
+    in the future.  All other callers check for missing on head
+    before calling into find_object_context because we potentially
+    need head or snapdir to map a snapid onto a clone.
+
+    Backport: emperor
+    Fixes: 6758
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit dd9d8b020286d5e3a69455023c3724a7b436d687)
+
+commit 83ee6843de6432278dc2891526691006c51eb1fa
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Nov 18 14:39:12 2013 -0800
+
+    osd: fix bench block size
+
+    The command was declared to take 'size' in dumpling, but was trying to
+    read 'bsize' instead, so it always used the default of 4MiB. Change
+    the bench command to read 'size', so it matches what existing clients
+    are sending.
+
+    Fixes: #6795
+    Backport: emperor, dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 40a76ef0d09f8ecbea13712410d9d34f25b91935)
