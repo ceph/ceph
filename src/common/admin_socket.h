@@ -15,7 +15,7 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 #include "crimson/admin/admin_socket.h"
 #else
 
