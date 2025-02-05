@@ -95,6 +95,9 @@ cdef nogil:
         pass
     int ceph_fsetattrx(ceph_mount_info *cmount, int fd, statx *stx, int mask):
         pass
+    ctypedef void (*libcephfs_c_completion_t)(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) nogil
+    int ceph_mds_command2(ceph_mount_info* cmount, const char* mds_spec, const char** cmd, size_t cmdlen, const char* inbuf, size_t inbuflen, int one_shot, libcephfs_c_completion_t c, void* ud):
+        pass
     int ceph_mds_command(ceph_mount_info *cmount, const char *mds_spec, const char **cmd, size_t cmdlen,
                          const char *inbuf, size_t inbuflen, char **outbuf, size_t *outbuflen,
                          char **outs, size_t *outslen):

@@ -111,6 +111,13 @@ cdef extern from "Python.h":
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
     void PyEval_InitThreads()
 
+cdef void completion_callback(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) nogil:
+    # This GIL awkwardness is due to incompatible types with function pointers defined with mds_command2:
+    with gil:
+        pyout = (<unsigned char*>out)[:outlen]
+        pyouts = (<unsigned char*>outs)[:outslen]
+        (<object>ud).complete(rc, pyout, pyouts)
+        ref.Py_DECREF(<object>ud)
 
 class Error(Exception):
     def get_error_code(self):
@@ -2279,6 +2286,49 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in rename {} to {}".format(src.decode(
                           'utf-8'), dst.decode('utf-8')))
+
+    def mds_command2(self, result, mds_spec, args, input_data=None, one_shot=False):
+        """
+        :param: result: a completion object with a complete method accepting an integer rc, bytes output, and bytes error output
+        :param: mds_spec: the identity of one or more MDS to send the command to (e.g. "*" or "fsname:0")
+        :param: args: the JSON-encoded MDS command
+        :param: input_data: optional input data to the command
+        :param: one_shot: optional boolean indicating if the command should only be tried/sent once
+        :returns: 0 if command is/will be sent or an exception is raised
+        """
+
+        if input_data is None:
+            input_data = ""
+
+        mds_spec = cstr(mds_spec, 'mds_spec')
+        args = cstr(args, 'args')
+        input_data = cstr(input_data, 'input_data')
+
+        cdef:
+            char *_mds_spec = opt_str(mds_spec)
+            char **_cmd = to_bytes_array([args])
+            size_t _cmdlen = 1
+
+            char *_inbuf = input_data
+            size_t _inbuf_len = len(input_data)
+
+            int _one_shot = one_shot
+
+
+        try:
+            with nogil:
+                ret = ceph_mds_command2(self.cluster, _mds_spec,
+                                        <const char **>_cmd, _cmdlen,
+                                        <const char*>_inbuf, _inbuf_len,
+                                        _one_shot,
+                                        completion_callback,
+                                        <void*>result)
+            if ret == 0:
+                ref.Py_INCREF(result)
+            else:
+                raise make_ex(ret, "error in mds_command2")
+        finally:
+            free(_cmd)
 
     def mds_command(self, mds_spec, args, input_data):
         """
