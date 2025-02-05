@@ -28,8 +28,9 @@ using namespace std;
 TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  ErasureCodeProfile profile;
   {
+    ErasureCodeProfile profile;
+    profile["technique"] = "doesnotexist";
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(-ENOENT, instance.factory("jerasure",
