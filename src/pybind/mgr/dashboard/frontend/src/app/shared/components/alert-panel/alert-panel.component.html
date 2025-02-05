@@ -1,0 +1,19 @@
+<cds-actionable-notification class="mb-1 content-theme"
+                             [ngClass]="spacingClass"
+                             [notificationObj]="notificationContent"
+                             (close)="onClose()"></cds-actionable-notification>
+
+<ng-template #content>
+  <ng-content></ng-content>
+</ng-template>
+
+<ng-template #actionTpl>
+  <button cdsActionableButton
+          cdsButton="ghost"
+          size="md"
+          [title]="actionName"
+          (click)="onAction()"
+          *ngIf="actionName"
+          i18n>{{ actionName }}
+  </button>
+</ng-template>
