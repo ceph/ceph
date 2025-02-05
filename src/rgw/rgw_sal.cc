@@ -415,4 +415,38 @@ int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
   }
   return 0;
 }
+
+
+std::string_view rgw_restore_status_dump(rgw::sal::RGWRestoreStatus status)
+{
+  switch (status)
+  {
+  case RGWRestoreStatus::None:
+    return "None";
+  case RGWRestoreStatus::RestoreAlreadyInProgress:
+    return "RestoreAlreadyInProgress";
+  case RGWRestoreStatus::CloudRestored:
+    return "CloudRestored";
+  case RGWRestoreStatus::RestoreFailed:
+    return "RestoreFailed";
+  default:
+    return "";
+  }
+}
+
+std::string_view rgw_restore_type_dump(rgw::sal::RGWRestoreType type)
+{
+  switch (type)
+  {
+  case RGWRestoreType::None:
+    return "None";
+  case RGWRestoreType::Temporary:
+    return "Temporary";
+  case RGWRestoreType::Permanent:
+    return "Permanent";
+  default:
+    return "";
+  }
+}
+
 } // namespace rgw::sal
