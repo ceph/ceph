@@ -3256,7 +3256,7 @@ class TestIngressService:
             '\n'
             'RADOS_KV {\n'
             '        UserId = "nfs.foo.test.0.0";\n'
-            '        nodeid = "nfs.foo.None";\n'
+            '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
             '}\n'
@@ -3357,6 +3357,7 @@ class TestIngressService:
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
+                rank=0,
             ),
         )
         assert nfs_generated_conf == nfs_expected_conf
