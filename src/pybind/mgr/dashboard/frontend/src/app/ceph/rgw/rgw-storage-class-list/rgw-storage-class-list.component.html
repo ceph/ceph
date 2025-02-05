@@ -1,0 +1,14 @@
+<cd-table
+  [data]="storageClassList"
+  columnMode="flex"
+  [columns]="columns"
+  (fetchData)="loadStorageClass()"
+  selectionType="single"
+  [hasDetails]="true"
+  (setExpandedRow)="setExpandedRow($event)"
+  (updateSelection)="updateSelection($event)"
+>
+  <cd-rgw-storage-class-details *cdTableDetail
+                                [selection]="expandedRow">
+  </cd-rgw-storage-class-details>
+</cd-table>
