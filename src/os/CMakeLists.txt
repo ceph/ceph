@@ -45,6 +45,7 @@ target_link_libraries(os
   legacy-option-headers
   blk)
 
+target_compile_definitions(os PRIVATE -DWITH_KSTORE)
 target_link_libraries(os heap_profiler kv)
 
 if(WITH_BLUEFS)
