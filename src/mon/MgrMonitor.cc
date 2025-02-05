@@ -1014,14 +1014,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr module ls") {
     if (f) {
-      const auto always_on_modules = map.get_always_on_modules();
+      const auto active_modules = map.get_always_on_modules();
       const auto available_modules = map.available_modules;
 
       f->open_object_section("modules");
       
       // always_on_modules
       f->open_array_section("always_on_modules");
-      for (const auto& module_name : always_on_modules) {
+      for (const auto& module_name : active_modules) {
         auto module_itr = std::find_if(
           available_modules.begin(), 
           available_modules.end(), 
@@ -1042,7 +1042,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       // enabled_modules
       f->open_array_section("enabled_modules");
       for (const auto& module_name : map.modules) {
-        if (always_on_modules.count(module_name) > 0)
+        if (active_modules.contains(module_name))
           continue;
         auto module_itr = std::find_if(
           available_modules.begin(), 
@@ -1058,8 +1058,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       // disabled_modules
       f->open_array_section("disabled_modules");
       for (const auto& p : map.available_modules) {
-        if (map.modules.count(p.name) == 0 &&
-            always_on_modules.count(p.name) == 0) {
+        if (!map.modules.contains(p.name) &&
+            !active_modules.contains(p.name)) {
           p.dump(f.get());
         }
       }
@@ -1067,7 +1067,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       
       f->close_section();
       f->flush(rdata);
-  } else {
+    } else {
       TextTable tbl;
       tbl.define_column("MODULE", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("      ", TextTable::LEFT, TextTable::LEFT);
