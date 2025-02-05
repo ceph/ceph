@@ -195,11 +195,21 @@ tests:
    promql_expr_test:
      - expr: |
          abs(
-           (
-             (ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0)
-             by (job)
-           ) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)
-         ) * on(ceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
+              (
+                (
+                  (ceph_osd_numpg > 0)
+                  * on (%(cluster)sjob, %(cluster)sceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+                )
+                - on (%(cluster)sjob, device_class) group_left avg(
+                  (ceph_osd_numpg > 0)
+                  * on (%(cluster)sjob, %(cluster)sceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+                ) by (%(cluster)sjob, device_class)
+              )
+              / on (%(cluster)sjob, device_class) group_left avg(
+                (ceph_osd_numpg > 0)
+                * on (%(cluster)sjob, %(cluster)sceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+              ) by (%(cluster)sjob, device_class)
+            ) > 0.30
 
        eval_time: 5m
        exp_samples:
