@@ -48,7 +48,7 @@
 #include "common/PluginRegistry.h"
 #include "common/valgrind.h"
 #include "include/spinlock.h"
-#if !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN))
+#ifndef WITH_SEASTAR
 #include "mon/MonMap.h"
 #endif
 
@@ -64,7 +64,7 @@ using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 namespace crimson::common {
 CephContext::CephContext()
   : _conf{crimson::common::local_conf()},

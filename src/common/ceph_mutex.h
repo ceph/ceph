@@ -14,7 +14,7 @@
 // and make_recursive_mutex() factory methods, which take a string
 // naming the mutex for the purposes of the lockdep debug variant.
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 #include <seastar/core/condition-variable.hh>
 
 #include "crimson/common/log.h"
@@ -87,7 +87,7 @@ namespace ceph {
   #define ceph_mutex_is_locked_by_me(m) true
 }
 
-#else  // defined (WITH_SEASTAR) && !defined(WITH_ALIEN)
+#else  // ifdef WITH_SEASTAR
 //
 // For legacy Mutex users that passed recursive=true, use
 // ceph::make_recursive_mutex.  For legacy Mutex users that passed
