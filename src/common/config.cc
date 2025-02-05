@@ -70,6 +70,20 @@ const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config,/etc/ceph/$cluster.conf,$
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
+// Populate list of legacy_values according to the OPTION() definitions
+// Note that this is just setting up our map of name->member ptr.  The
+// default values etc will get loaded in along with new-style data,
+// as all loads write to both the values map, and the legacy
+// members if present.
+const std::map<std::string_view, md_config_t::member_ptr_t> md_config_t::legacy_values = {
+#define OPTION(name, type) \
+  {STRINGIFY(name), &ConfigValues::name},
+#define SAFE_OPTION(name, type) OPTION(name, type)
+#include "options/legacy_config_opts.h"
+#undef OPTION
+#undef SAFE_OPTION
+};
+
 const char *ceph_conf_level_name(int level)
 {
   switch (level) {
@@ -171,20 +185,6 @@ md_config_t::md_config_t(ConfigValues& values,
   for (auto& opt : subsys_options) {
     schema.emplace(opt.name, opt);
   }
-
-  // Populate list of legacy_values according to the OPTION() definitions
-  // Note that this is just setting up our map of name->member ptr.  The
-  // default values etc will get loaded in along with new-style data,
-  // as all loads write to both the values map, and the legacy
-  // members if present.
-  legacy_values = {
-#define OPTION(name, type) \
-    {STRINGIFY(name), &ConfigValues::name},
-#define SAFE_OPTION(name, type) OPTION(name, type)
-#include "options/legacy_config_opts.h"
-#undef OPTION
-#undef SAFE_OPTION
-  };
 
   validate_schema();
 

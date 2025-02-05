@@ -92,7 +92,7 @@ public:
   /*
    * Mapping from legacy config option names to class members
    */
-  std::map<std::string_view, member_ptr_t> legacy_values;
+  static const std::map<std::string_view, member_ptr_t> legacy_values;
 
   /**
    * The configuration schema, in the form of Option objects describing
