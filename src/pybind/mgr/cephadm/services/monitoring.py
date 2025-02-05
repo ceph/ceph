@@ -4,6 +4,8 @@ import os
 import socket
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
 import ipaddress
+import time
+import requests
 
 from mgr_module import HandleCommandResult
 from .service_registry import register_cephadm_service
@@ -445,6 +447,36 @@ class AlertmanagerService(CephadmService):
                 service_url
             )
 
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before Alertmanager is removed
+        """
+        if daemon.hostname is None:
+            return
+        try:
+            current_api_host = self.mgr.check_mon_command({"prefix": "dashboard get-alertmanager-api-host"}).stdout.strip()
+            daemon_addr = daemon.ip if daemon.ip else self.mgr.get_fqdn(daemon.hostname)
+            daemon_port = daemon.ports[0] if daemon.ports else self.DEFAULT_SERVICE_PORT
+            service_url = build_url(scheme='http', host=daemon_addr, port=daemon_port)
+
+            if current_api_host == service_url:
+                # This is the active daemon, update or reset the settings
+                remaining_daemons = [
+                    d for d in self.mgr.cache.get_daemons_by_service(self.TYPE)
+                    if d.name() != daemon.name()
+                ]
+                if remaining_daemons:
+                    self.config_dashboard(remaining_daemons)
+                    logger.info("Updated dashboard API settings to point to a remaining Alertmanager daemon")
+                else:
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-alertmanager-api-host"})
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-alertmanager-api-ssl-verify"})
+                    logger.info("Reset dashboard API settings as no Alertmnager daemons are remaining")
+            else:
+                logger.info(f"Alertmanager {daemon.name()} removed; no changes to dashboard API settings")
+        except Exception as e:
+            logger.error(f"Error in Alertmanager pre_remove: {str(e)}")
+
     def ok_to_stop(self,
                    daemon_ids: List[str],
                    force: bool = False,
@@ -719,6 +751,48 @@ class PrometheusService(CephadmService):
                 'dashboard set-prometheus-api-host',
                 service_url
             )
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before Prometheus daemon is removed
+        """
+        MAX_RETRIES = 5
+        RETRY_INTERVAL = 5
+        if daemon.hostname is None:
+            return
+        try:
+            current_api_host = self.mgr.check_mon_command({"prefix": "dashboard get-prometheus-api-host"}).stdout.strip()
+            daemon_addr = daemon.ip if daemon.ip else self.mgr.get_fqdn(daemon.hostname)
+            daemon_port = daemon.ports[0] if daemon.ports else self.DEFAULT_SERVICE_PORT
+            service_url = build_url(scheme="http", host=daemon_addr, port=daemon_port)
+
+            if current_api_host == service_url:
+                remaining_daemons = [
+                    d for d in self.mgr.cache.get_daemons_by_service(self.TYPE)
+                    if d.name() != daemon.name()
+                ]
+                if remaining_daemons:
+                    self.config_dashboard(remaining_daemons)
+                    logger.info("Updated Dashboard Settings to point to remaining Prometheus daemons")
+                    for attempt in range(MAX_RETRIES):
+                        try:
+                            response = requests.get(f"{service_url}/api/v1/rules", timeout=5)
+                            if response.status_code == 200:
+                                logger.info(f"Prometheus daemon is ready at {service_url}.")
+                                break
+                        except Exception as e:
+                            logger.info(f"Retry {attempt + 1}: Waiting for Prometheus daemon at {service_url}: {e}")
+                        time.sleep(RETRY_INTERVAL)
+                    else:
+                        logger.warning("Prometheus daemon did not become ready after retries.")
+                else:
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-prometheus-api-host"})
+                    self.mgr.check_mon_command({"prefix": "dashboard reset-prometheus-api-ssl-verify"})
+                    logger.info("Reset Prometheus API settings as no daemons are remaining")
+            else:
+                logger.info("Prometheus daemon removed; no changes to dashboard API settings")
+        except Exception as e:
+            logger.error(f"Error in Prometheus pre_remove {str(e)}")
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
