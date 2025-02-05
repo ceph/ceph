@@ -6684,10 +6684,8 @@ int BlueStore::_read_bdev_label(
     decode(expected_crc, p);
   }
   catch (ceph::buffer::error& e) {
-    derr << __func__ << " unable to decode label " << path.c_str()
-         << " at offset " << p.get_off()
-	 << ": " << e.what()
-	 << dendl;
+    derr << __func__ << " " << path.c_str() << " data at " << std::hex << disk_position
+      << std::dec << ", " << "unable to decode label " << dendl;
     return -ENOENT;
   }
   if (crc != expected_crc) {
@@ -8974,6 +8972,15 @@ int BlueStore::expand_devices(ostream& out)
           << " : size label updated to " << size
           << std::endl;
       }
+      if (bdev_label_multi) {
+        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+        for (uint64_t loc : bdev_label_positions) {
+          if ((loc >= size0) && (loc + lsize <= size)) {
+            bdev_label_valid_locations.push_back(loc);
+          }
+        }
+        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
+      }
     }
     _close_db_and_around();
 
@@ -8988,15 +8995,6 @@ int BlueStore::expand_devices(ostream& out)
     if (fm && fm->is_null_manager()) {
       // we grow the allocation range, must reflect it in the allocation file
       alloc->init_add_free(size0, size - size0);
-      if (bdev_label_multi) {
-        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-        for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
-            bdev_label_valid_locations.push_back(loc);
-          }
-        }
-        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
-      }
       need_to_destage_allocation_file = true;
     }
     umount();
