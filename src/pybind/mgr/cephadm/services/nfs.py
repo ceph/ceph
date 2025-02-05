@@ -109,6 +109,19 @@ class NFSService(CephService):
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
 
+        port = daemon_spec.ports[0] if daemon_spec.ports else 2049
+
+        stunnel_conf = {}
+        if spec.deploy_stunnel:
+            ip = spec.virtual_ip or self.mgr.inventory.get_addr(host)
+            stunnel_port = spec.stunnel_port
+            args = f"--endpoint {ip}:{port} --bind {ip} --port {stunnel_port} --server"
+            stunnel_conf = {"port": stunnel_port,
+                            "tls_dir": spec.stunnel_tls_dir,
+                            "image": self.mgr.container_image_stunnel,
+                            "args": args.split()}
+            daemon_spec.port_ips = {str(stunnel_port): ip}
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -169,6 +182,7 @@ class NFSService(CephService):
                 'user': rgw_user,
                 'keyring': rgw_keyring,
             }
+            config['stunnel'] = stunnel_conf
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 

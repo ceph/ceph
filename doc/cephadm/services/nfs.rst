@@ -208,6 +208,59 @@ For example:
       enable_haproxy_protocol: true
 
 
+NFS Encryption with Stunnel TLS
+----------------------------------
+
+Cephadm supports deploying NFS with a sidecar Stunnel container
+to provide another endpoint with TLS encryption. Clients will need
+to run a Stunnel client and mount from the client. The Stunnel image
+is based on `alpine-stunnel`_ with some modifications to the run script.
+
+There are self-signed default certificates present in the image,
+however, it is strongly recommended to use your own certificates.
+
+.. _alpine-stunnel: https://github.com/flitbit/alpine-stunnel
+
+To use this feature, you'll want to create certificates on every host that the NFS
+server is going to be placed on. This is done by creating a certificate directory
+and having files named `cert.pem`, `key.pem` and `ca.pem` available.
+The `stunnel_tls_dir` option allows for specifying the path to this folder on
+the NFS hosts which is mounted into the Stunnel container under `/etc/tls`.
+
+A port for Stunnel can be specified otherwise it defaults to `20490`.
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      port: 2049
+      deploy_stunnel: true
+      stunnel_tls_dir: /etc/mynfscerts
+      stunnel_port: 20490
+
+The same container image that is used as a server can be used as the client.
+In the example below, we run a Stunnel client container and can use the
+client's own IP and port used in the `docker/podman run` command to mount the NFS share.
+
+::
+    docker run -v /etc/mynfscerts:/etc/tls --network host quay.io/adk3798/stunnel:0.1.0.build-5 --endpoint {nfs_ip/virtual_ip}:{stunnel_port} --bind 0.0.0.0 --port 2049
+
+    mount -t nfs 127.0.0.1:2049/test /mnt/nfs
+
+Some more information about NFS encryption using Stunnel can
+be found in `Encrypting NFSv4 with Stunnel TLS`_ article.
+
+.. _Encrypting NFSv4 with Stunnel TLS: https://www.linuxjournal.com/content/encrypting-nfsv4-stunnel-tls
+
+
+
 Further Reading
 ===============
 

@@ -493,6 +493,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_jaeger_query = ''
             self.container_image_samba = ''
             self.container_image_samba_metrics = ''
+            self.container_image_stunnel = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -1646,6 +1647,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'snmp-gateway': self.container_image_snmp_gateway,
                 'mgmt-gateway': self.container_image_nginx,
                 'oauth2-proxy': self.container_image_oauth2_proxy,
+                'stunnel': self.container_image_stunnel,
                 # The image can't be resolved here, the necessary information
                 # is only available when a container is deployed (given
                 # via spec).

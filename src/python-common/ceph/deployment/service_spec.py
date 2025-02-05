@@ -1148,6 +1148,9 @@ class NFSServiceSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
+                 deploy_stunnel:  bool = False,
+                 stunnel_tls_dir: Optional[str] = None,
+                 stunnel_port: Optional[int] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'nfs'
@@ -1163,11 +1166,23 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
+        self.deploy_stunnel = deploy_stunnel
+        self.stunnel_port = stunnel_port
+        self.stunnel_tls_dir = stunnel_tls_dir
+
+    def validate(self) -> None:
+        super(NFSServiceSpec, self).validate()
+        if self.deploy_stunnel and not self.stunnel_port:
+            raise SpecValidationError(
+                    'Cannot add NFS: deploy_stunnel specified but no stunnel_port specified')
 
     def get_port_start(self) -> List[int]:
+        ports = []
         if self.port:
-            return [self.port]
-        return []
+            ports.append(self.port)
+        if self.deploy_stunnel and self.stunnel_port:
+            ports.append(self.stunnel_port)
+        return ports
 
     def rados_config_name(self):
         # type: () -> str

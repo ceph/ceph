@@ -32,6 +32,7 @@ class DefaultImages(Enum):
     GRAFANA = _create_image('quay.io/ceph/grafana:10.4.8', 'grafana')
     HAPROXY = _create_image('quay.io/ceph/haproxy:2.3', 'haproxy')
     KEEPALIVED = _create_image('quay.io/ceph/keepalived:2.2.4', 'keepalived')
+    STUNNEL = _create_image('quay.io/adk3798/stunnel:0.1.0.build-5', 'stunnel')
     NVMEOF = _create_image('quay.io/ceph/nvmeof:1.4', 'nvmeof')
     SNMP_GATEWAY = _create_image('docker.io/maxwo/snmp-notifier:v1.2.1', 'snmp_gateway')
     ELASTICSEARCH = _create_image('quay.io/omrizeneva/elasticsearch:6.8.23', 'elasticsearch')
