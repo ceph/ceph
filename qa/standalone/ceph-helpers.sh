@@ -2100,7 +2100,6 @@ function test_wait_for_scrub() {
 # @param plugin erasure code plugin
 # @return 0 on success, 1 on error
 #
-
 function erasure_code_plugin_exists() {
     local plugin=$1
     local status
@@ -2115,10 +2114,13 @@ function erasure_code_plugin_exists() {
     local status=$?
     if [ $status -eq 0 ]; then
         ceph osd erasure-code-profile rm TESTPROFILE
-    elif ! echo $s | grep --quiet "$grepstr" ; then
+    elif echo $s | grep --quiet "$grepstr" ; then
+        # expected error when the plugin doesn't exist
         status=1
-        # display why the string was rejected.
+    else
+        # any other error means plugin exists but can't initialize
         echo $s
+        status=0
     fi
     return $status
 }
