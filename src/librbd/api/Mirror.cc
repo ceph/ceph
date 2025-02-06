@@ -29,12 +29,12 @@
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/GetStatusRequest.h"
 #include "librbd/mirror/GetUuidRequest.h"
+#include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
 #include "librbd/mirror/snapshot/GroupCreatePrimaryRequest.h"
-#include "librbd/mirror/snapshot/GroupGetInfoRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
@@ -550,6 +550,39 @@ int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
 
   return -ENOENT;
 }
+
+struct C_GroupGetInfo : public Context {
+  mirror_group_info_t *mirror_group_info;
+  Context *on_finish;
+
+  cls::rbd::MirrorGroup mirror_group;
+  mirror::PromotionState promotion_state = mirror::PROMOTION_STATE_PRIMARY;
+
+  C_GroupGetInfo(mirror_group_info_t *mirror_group_info,
+                 Context *on_finish)
+    : mirror_group_info(mirror_group_info),
+      on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0 && r != -ENOENT) {
+      on_finish->complete(r);
+      return;
+    }
+
+    if (mirror_group_info != nullptr) {
+      mirror_group_info->primary = (
+        promotion_state == mirror::PROMOTION_STATE_PRIMARY);
+      mirror_group_info->mirror_image_mode =
+        static_cast<rbd_mirror_image_mode_t>(mirror_group.mirror_image_mode);
+      mirror_group_info->state =
+        static_cast<rbd_mirror_group_state_t>(mirror_group.state);
+      mirror_group_info->global_id = mirror_group.global_group_id;
+    }
+
+    on_finish->complete(0);
+  }
+};
 
 } // anonymous namespace
 
@@ -3974,8 +4007,10 @@ void Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << "group_name=" << group_name << dendl;
 
-  auto req = mirror::snapshot::GroupGetInfoRequest<I>::create(
-    io_ctx, group_name, mirror_group_info, on_finish);
+  auto ctx = new C_GroupGetInfo(mirror_group_info, on_finish);
+
+  auto req = mirror::GroupGetInfoRequest<I>::create(
+    io_ctx, group_name, &ctx->mirror_group, &ctx->promotion_state, ctx);
   req->send();
 }
 
@@ -3990,11 +4025,10 @@ int Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
   group_get_info(io_ctx, group_name, mirror_group_info, &ctx);
   int r = ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to get mirror info of group '" << group_name
-               << "': " << cpp_strerror(r) << dendl;
+    return r;
   }
 
-  return r;
+  return 0;
 }
 
 template <typename I>

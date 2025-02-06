@@ -154,6 +154,7 @@ set(librbd_internal_srcs
   mirror/GetInfoRequest.cc
   mirror/GetStatusRequest.cc
   mirror/GetUuidRequest.cc
+  mirror/GroupGetInfoRequest.cc
   mirror/ImageRemoveRequest.cc
   mirror/ImageStateUpdateRequest.cc
   mirror/PromoteRequest.cc
@@ -162,7 +163,6 @@ set(librbd_internal_srcs
   mirror/snapshot/DemoteRequest.cc
   mirror/snapshot/GetImageStateRequest.cc
   mirror/snapshot/GroupCreatePrimaryRequest.cc
-  mirror/snapshot/GroupGetInfoRequest.cc
   mirror/snapshot/GroupPrepareImagesRequest.cc
   mirror/snapshot/ImageMeta.cc
   mirror/snapshot/PromoteRequest.cc
