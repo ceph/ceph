@@ -20,7 +20,11 @@
 #include <cstdlib>
 #include <ctime>
 #include <string>
-static constexpr auto dout_subsys = ceph_subsys_rgw;
+
+static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
+//#define dout_context cct
+//#undef dout_prefix
+//#define dout_prefix *_dout << "RGW_DEDUP:: "
 
 using namespace ::cls::cmpxattr;
 namespace rgw::dedup {
@@ -139,11 +143,11 @@ namespace rgw::dedup {
     int ret = rados->get_rados_handle()->mon_command(command, inbl, nullptr, &output);
     if (output.length()) {
       if (output != "pool 'rgw_dedup_pool' already exists") {
-	ldpp_dout(dpp, 0) << __func__ << "::" << output << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::" << output << dendl;
       }
     }
     if (ret != 0 && ret != -EEXIST) {
-      ldpp_dout(dpp, 0) << __func__ << "::failed to create pool " << DEDUP_POOL_NAME
+      ldpp_dout(dpp, 1) << __func__ << "::failed to create pool " << DEDUP_POOL_NAME
 			<< " with: " << cpp_strerror(ret) << ", ret=" << ret << dendl;
     }
 
@@ -166,7 +170,7 @@ namespace rgw::dedup {
     d_cluster_id (gen_rand_alphanumeric(cct, CLUSTER_ID_LEN))
   {
     d_was_initialized = false;
-    ldpp_dout(dpp, 1) << __func__ << "::cluser_id=" << d_cluster_id << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::cluser_id=" << d_cluster_id << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -196,7 +200,7 @@ namespace rgw::dedup {
     int ret;
     reset();
     if (init_epoch) {
-      ldpp_dout(dpp, 1) << __func__ << "::init_epoch is set" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::init_epoch is set" << dendl;
       ret = set_epoch(p_ioctx, d_cluster_id, dpp);
       if (ret != 0) {
 	ldpp_dout(dpp, 1) << "failed set_epoch()! ret=" << ret
@@ -208,7 +212,7 @@ namespace rgw::dedup {
     if (ret != 0) {
       return ret;
     }
-    ldpp_dout(dpp, 1) << "get_epoch() successfully" << dendl;
+
     d_epoch_time = p_epoch->time;
     cleanup_prev_run(p_ioctx);
     create_shard_tokens(p_ioctx, MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
@@ -231,7 +235,7 @@ namespace rgw::dedup {
       int ret = rgw_list_pool(dpp, *p_ioctx, max, filter, marker, &oids, &truncated);
       if (ret == -ENOENT) {
 	ret = 0;
-	ldpp_dout(dpp, 0) << __func__ << "::-ENOENT"<< dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::rgw_list_pool() ret == -ENOENT"<< dendl;
 	break;
       }
       else if (ret < 0) {
@@ -242,7 +246,7 @@ namespace rgw::dedup {
       unsigned deleted_count = 0, skipped_count = 0, failed_count= 0;;
       for (const std::string& oid : oids) {
 	if (oid == DEDUP_WATCH_OBJ || oid == DEDUP_EPOCH_TOKEN) {
-	  ldpp_dout(dpp, 0) << __func__ << "::skipping " << oid << dendl;
+	  ldpp_dout(dpp, 10) << __func__ << "::skipping " << oid << dendl;
 	  skipped_count++;
 	  continue;
 	}
@@ -271,11 +275,10 @@ namespace rgw::dedup {
 			     << ret << "::" << cpp_strerror(ret) << dendl;
 	}
       }
-      ldpp_dout(dpp, 0) << __func__ << "::oids.size()=" << oids.size()
-			<< "::deleted=" << deleted_count
-			<< "::failed="  << failed_count
-			<< "::skipped=" << skipped_count << dendl;
-
+      ldpp_dout(dpp, 10) << __func__ << "::oids.size()=" << oids.size()
+			 << "::deleted=" << deleted_count
+			 << "::failed="  << failed_count
+			 << "::skipped=" << skipped_count << dendl;
     } while (truncated);
     return 0;
   }
@@ -295,16 +298,17 @@ namespace rgw::dedup {
 	decode(*p_epoch, p);
       }catch (const buffer::error&) {
 	ldpp_dout(dpp, 0) << __func__ << "::failed epoch decode!" << dendl;
+	return -EINVAL;
       }
       if (caller) {
-	ldpp_dout(dpp, 1) << __func__ << "::" << caller<< "::" << *p_epoch << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::"<< caller<< "::" << *p_epoch << dendl;
       }
       return 0;
     }
     else {
-      ldpp_dout(dpp, 1) << __func__ << "::" << (caller ? caller : "")
-			<< "::failed ioctx.getxattr() with: "
-			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::" << (caller ? caller : "")
+			 << "::failed ioctx.getxattr() with: "
+			 << cpp_strerror(ret) << ", ret=" << ret << dendl;
       return ret;
     }
   }
@@ -319,15 +323,15 @@ namespace rgw::dedup {
     bool exclusive = true; // block overwrite of old objects
     int ret = p_ioctx->create(oid, exclusive);
     if (ret >= 0) {
-      ldpp_dout(dpp, 0) << __func__ << "::successfully created Epoch object!" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::successfully created Epoch object!" << dendl;
       // now try and take ownership
     }
     else if (ret == -EEXIST) {
-      ldpp_dout(dpp, 0) << __func__ << "::Epoch object exists -> trying to take over" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::Epoch object exists -> trying to take over" << dendl;
       // try and take ownership
     }
     else{
-      ldpp_dout(dpp, 0) << __func__ << "::ERROR: failed to create " << oid
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to create " << oid
 			<<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
       return ret;
     }
@@ -342,19 +346,20 @@ namespace rgw::dedup {
     librados::ObjectWriteOperation op;
     ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
     if (ret != 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed cmp_vals_set_vals" << dendl;
+      ldpp_dout(dpp, 5) << __func__ << "::failed cmp_vals_set_vals" << dendl;
+      return -EINVAL;
     }
-    ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::send EPOCH CLS" << dendl;
     ret = p_ioctx->operate(oid, &op);
     if (ret == 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::Epoch object was written" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::Epoch object was written" << dendl;
     }
     else if (ret == -EEXIST) {
-      ldpp_dout(dpp, 1) << __func__ << "::Accept existing Epoch object" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::Accept existing Epoch object" << dendl;
       ret = 0;
     }
     else {
-      ldpp_dout(dpp, 0) << __func__ << "::failed ioctx.operate() with: "
+      ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.operate() with: "
 			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
     }
     return ret;
@@ -369,14 +374,14 @@ namespace rgw::dedup {
     for (unsigned shard = 0; shard < shards_count; shard++) {
       sto.set_shard(shard);
       std::string oid(sto.get_buff(), sto.get_buff_size());
-      ldpp_dout(dpp, 10) << __func__ << "::creating object: " << oid << dendl;
+      ldpp_dout(dpp, 15) << __func__ << "::creating object: " << oid << dendl;
       bool exclusive = true;
       int ret = p_ioctx->create(oid, exclusive);
       if (ret >= 0) {
-	ldpp_dout(dpp, 5) << __func__ << "::oid=" << oid << " was created!" << dendl;
+	ldpp_dout(dpp, 15) << __func__ << "::oid=" << oid << " was created!" << dendl;
       }
       else if (ret == -EEXIST) {
-	ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.create("
+	ldpp_dout(dpp, 15) << __func__ << "::failed ioctx.create("
 			   << oid << ") -EEXIST!" << dendl;
       }
       else {
@@ -386,29 +391,6 @@ namespace rgw::dedup {
     }
 
     return 0;
-  }
-
-  //---------------------------------------------------------------------------
-  static void display_progress(uint64_t progress_a, uint64_t progress_b, unsigned shard)
-  {
-    if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
-      return;
-    }
-
-    std::cout << std::hex << "0x" << std::setw(2) << std::setfill('0') << shard << std::dec << "] ";
-    if (progress_b == SP_ALL_OBJECTS) {
-      std::cout << "Token is marked completed! obj_count=" << progress_a << std::endl;
-    }
-    else if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
-      std::cout << "Token was not started yet!" << std::endl;
-    }
-    else if (progress_b == SP_NO_OBJECTS) {
-      std::cout << "Token is incomplete: progress=" << progress_a << std::endl;
-    }
-    else {
-      std::cout << "Token is incomplete: progress = [" << progress_a
-		<< ", " << progress_b << "]" <<  std::endl;
-    }
   }
 
   //---------------------------------------------------------------------------
@@ -488,7 +470,7 @@ namespace rgw::dedup {
       }
       else if (ret == -ENOENT) {
 	// token is deleted - processing will stop the next time we try to read from the queue
-	ldpp_dout(dpp, 1) << __func__ << "::" << oid
+	ldpp_dout(dpp, 5) << __func__ << "::" << oid
 			  << " token doesn't exist, fail lock!" << dendl;
 	continue;
       }
@@ -508,7 +490,7 @@ namespace rgw::dedup {
       encode(sp, sp_bl);
       ret = p_ioctx->setxattr(oid, SHARD_PROGRESS_ATTR, sp_bl);
       if (ret == 0) {
-	ldpp_dout(dpp, 0) << __func__ << "::SUCCESS!::" << oid << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::SUCCESS!::" << oid << dendl;
 	return shard;
       }
     }
@@ -616,7 +598,7 @@ namespace rgw::dedup {
     *p_total_ingressed = d_total_ingressed_obj;
     if (count < shards_count) {
       unsigned n = shards_count - count;
-      ldpp_dout(dpp, 0) << __func__ << "::waiting for " << n << " tokens" << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "::waiting for " << n << " tokens" << dendl;
     }
     return (count == shards_count);
   }
@@ -646,9 +628,9 @@ namespace rgw::dedup {
       }
       utime_t mtime(tspec);
       if (epoch_time > mtime) {
-	ldpp_dout(dpp, 1) << __func__ << "::skipping old obj! "
-			  << "::EPOCH={" << epoch_time.tv.tv_sec << ":" << epoch_time.tv.tv_nsec << "} "
-			  << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::skipping old obj! "
+			   << "::EPOCH={" << epoch_time.tv.tv_sec << ":" << epoch_time.tv.tv_nsec << "} "
+			   << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
 	continue;
       }
 
@@ -664,7 +646,7 @@ namespace rgw::dedup {
 	}
 	catch (const buffer::error&) {
 	  ldpp_dout(dpp, 0) << __func__ << "::(1)failed shard_progress_t decode!" << dendl;
-	  return false;
+	  return 0; //-EINVAL;
 	}
       }
       else if (ret != -ENODATA) {
@@ -775,6 +757,30 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static void display_progress(uint64_t progress_a, uint64_t progress_b, unsigned shard)
+  {
+    if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
+      return;
+    }
+
+    std::cout << std::hex << "0x" << std::setw(2) << std::setfill('0') << shard << std::dec << "] ";
+    if (progress_b == SP_ALL_OBJECTS) {
+      std::cout << "Token is marked completed! obj_count=" << progress_a << std::endl;
+    }
+    else if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
+      std::cout << "Token was not started yet!" << std::endl;
+    }
+    else if (progress_b == SP_NO_OBJECTS) {
+      std::cout << "Token is incomplete: progress=" << progress_a << std::endl;
+    }
+    else {
+      std::cout << "Token is incomplete: progress = [" << progress_a
+		<< ", " << progress_b << "]" <<  std::endl;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  // command-line called from radosgw-admin.cc
   int cluster::collect_all_shard_stats(rgw::sal::RadosStore *store,
 				       const DoutPrefixProvider *dpp)
   {
@@ -867,12 +873,13 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  // command-line called from radosgw-admin.cc
   int cluster::dedup_control(rgw::sal::RadosStore *store,
 			     const DoutPrefixProvider *dpp,
 			     int urgent_msg)
   {
-    ldpp_dout(dpp, 0) << __func__ << "::dedup_control req = "
-		      << get_urgent_msg_names(urgent_msg) << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::dedup_control req = "
+		       << get_urgent_msg_names(urgent_msg) << dendl;
     if (urgent_msg != URGENT_MSG_RESUME  &&
 	urgent_msg != URGENT_MSG_PASUE   &&
 	urgent_msg != URGENT_MSG_RESTART &&
@@ -907,13 +914,13 @@ namespace rgw::dedup {
 
     for (auto& ack : acks) {
       try {
-	ldpp_dout(dpp, 1) << __func__ << "::ACK: notifier_id=" << ack.notifier_id
-			  << "::cookie=" << ack.cookie << dendl;
+	ldpp_dout(dpp, 20) << __func__ << "::ACK: notifier_id=" << ack.notifier_id
+			   << "::cookie=" << ack.cookie << dendl;
 	auto iter = ack.payload_bl.cbegin();
 	ceph::decode(ret, iter);
 	struct rgw::dedup::control_t ctl;
 	decode(ctl, iter);
-	ldpp_dout(dpp, 1) << __func__ << "::++ACK::ctl=" << ctl << "::ret=" << ret << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::++ACK::ctl=" << ctl << "::ret=" << ret << dendl;
       } catch (buffer::error& err) {
 	ldpp_dout(dpp, 1) << __func__ << "::failed decoding notify acks" << dendl;
 	return -EINVAL;
@@ -924,12 +931,13 @@ namespace rgw::dedup {
 	return ret;
       }
     }
-    ldpp_dout(dpp, 0) << __func__ << "::" << get_urgent_msg_names(urgent_msg)
-		      << " finished successfully!" << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::" << get_urgent_msg_names(urgent_msg)
+		       << " finished successfully!" << dendl;
     return 0;
   }
 
   //---------------------------------------------------------------------------
+  // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
 				  bool dry_run,
 				  const DoutPrefixProvider *dpp)
