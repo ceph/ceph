@@ -283,8 +283,8 @@ void rgw_bucket_snap_skip_entry::decode_json(JSONObj *obj) {
 void rgw_bucket_dirent_snap_info::dump(Formatter *f) const
 {
   encode_json("skip", skip, f);
-  encode_json("demoted_at", demoted_at , f);
-  encode_json("removed_at", removed_at , f);
+  encode_json("demoted_at", (int64_t)demoted_at, f);
+  encode_json("removed_at", (int64_t)removed_at, f);
 }
 
 void rgw_bucket_dirent_snap_info::decode_json(JSONObj *obj) {

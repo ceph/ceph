@@ -408,16 +408,16 @@ struct rgw_bucket_dirent_snap_info {
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     encode(skip, bl);
-    encode(demoted_at, bl);
-    encode(removed_at, bl);
+    encode((uint64_t)demoted_at, bl);
+    encode((uint64_t)removed_at, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(skip, bl);
-    decode(demoted_at, bl);
-    decode(removed_at, bl);
+    decode((uint64_t&)demoted_at, bl);
+    decode((uint64_t&)removed_at, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -502,6 +502,7 @@ struct rgw_bucket_dir_entry {
       decode(versioned_epoch, bl);
     }
     if (struct_v >= 9) {
+      decode(key.snap_id, bl);
       decode(snap_info, bl);
     }
     DECODE_FINISH(bl);
