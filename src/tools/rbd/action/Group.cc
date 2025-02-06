@@ -293,6 +293,16 @@ int execute_info(const po::variables_map &vm,
   std::string group_id;
   r = rbd.group_get_id(io_ctx, group_name.c_str(), &group_id);
   if (r < 0) {
+    std::cout << "rbd: failed to get info for group " << group_name << " : "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  librbd::mirror_group_info_t mirror_group_info;
+  mirror_group_info.state = RBD_MIRROR_GROUP_DISABLED;
+  r = rbd.mirror_group_get_info(io_ctx, group_name.c_str(), &mirror_group_info,
+                                sizeof(mirror_group_info));
+  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
@@ -300,11 +310,41 @@ int execute_info(const po::variables_map &vm,
     f->open_object_section("group");
     f->dump_string("group_name", group_name);
     f->dump_string("group_id", group_id);
-    f->close_section();
-    f->flush(std::cout);
   } else {
     std::cout << "rbd group '" << group_name << "':\n"
-              << "\t" << "id: " << group_id << std::endl;
+              << "\t" << "id: " << group_id
+              << std::endl;
+  }
+
+  if (mirror_group_info.state != RBD_MIRROR_GROUP_DISABLED) {
+    if (f) {
+      f->open_object_section("mirroring");
+      f->dump_string("mode",
+                     utils::mirror_image_mode(mirror_group_info.mirror_image_mode));
+      f->dump_string("state",
+                     utils::mirror_group_state(mirror_group_info.state));
+      f->dump_string("global_id", mirror_group_info.global_id);
+      f->dump_bool("primary", mirror_group_info.primary);
+      f->close_section();
+    } else {
+      std::cout << "\tmirroring state: "
+                << utils::mirror_group_state(mirror_group_info.state)
+                << std::endl;
+      if (mirror_group_info.state != RBD_MIRROR_GROUP_DISABLED) {
+	std::cout << "\tmirroring mode: "
+                  << utils::mirror_image_mode(mirror_group_info.mirror_image_mode)
+                  << std::endl
+                  << "\tmirroring global id: " << mirror_group_info.global_id
+                  << std::endl
+                  << "\tmirroring primary: "
+                  << (mirror_group_info.primary ? "true" : "false") <<std::endl;
+      }
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
   }
 
   return 0;
