@@ -1643,8 +1643,8 @@ CtPtr ProtocolV2::handle_keepalive2(ceph::bufferlist &payload)
 
   ldout(cct, 30) << __func__ << " got KEEPALIVE2 tag ..." << dendl;
 
-  auto keepalive_ack_frame = KeepAliveFrameAck::Encode(keepalive_frame.timestamp());
   connection->write_lock.lock();
+  auto keepalive_ack_frame = KeepAliveFrameAck::Encode(keepalive_frame.timestamp());
   if (!append_frame(keepalive_ack_frame)) {
     connection->write_lock.unlock();
     return _fault();
