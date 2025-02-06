@@ -33,6 +33,8 @@ struct Replayer {
   virtual std::string get_error_description() const = 0;
 
   virtual void prune_snapshot(uint64_t) = 0;
+  virtual void set_remote_snap_id_end_limit(uint64_t) = 0;
+  virtual uint64_t get_remote_snap_id_end_limit() = 0;
 };
 
 } // namespace image_replayer
