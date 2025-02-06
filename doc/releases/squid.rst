@@ -25,6 +25,7 @@ Notable Changes
   on the root inode, which then will restore the layout to the default.
 
 * RADOS: A performance bottleneck in the balancer mgr module has been fixed.
+
   Related Tracker: https://tracker.ceph.com/issues/68657
 
 * RADOS: Based on tests performed at scale on an HDD-based Ceph cluster, it was found
