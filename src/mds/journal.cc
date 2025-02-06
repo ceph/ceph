@@ -38,6 +38,7 @@
 #include "events/ESegment.h"
 #include "events/ELid.h"
 
+#include "include/denc.h"
 #include "include/stringify.h"
 
 #include "LogSegment.h"
@@ -686,12 +687,14 @@ void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
   ENCODE_START(3, 2, bl);
   encode(dn, bl);
-  encode(dnfirst, bl);
-  encode(dnlast, bl);
-  encode(dnv, bl);
-  encode(ino, bl);
-  encode(d_type, bl);
-  encode(dirty, bl);
+  encode(std::tuple{
+    dnfirst,
+      dnlast,
+      dnv,
+      ino,
+      d_type,
+      dirty,
+  }, bl, 0);
   encode(alternate_name, bl);
   ENCODE_FINISH(bl);
 }
@@ -758,10 +761,12 @@ void EMetaBlob::nullbit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
   encode(dn, bl);
-  encode(dnfirst, bl);
-  encode(dnlast, bl);
-  encode(dnv, bl);
-  encode(dirty, bl);
+  encode(std::tuple{
+    dnfirst,
+    dnlast,
+    dnv,
+    dirty,
+  }, bl, 0);
   ENCODE_FINISH(bl);
 }
 
@@ -799,10 +804,12 @@ void EMetaBlob::dirlump::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   encode(*fnode, bl);
-  encode(state, bl);
-  encode(nfull, bl);
-  encode(nremote, bl);
-  encode(nnull, bl);
+  encode(std::tuple{
+    state,
+    nfull,
+    nremote,
+    nnull,
+  }, bl, 0);
   _encode_bits(features);
   encode(dnbl, bl);
   ENCODE_FINISH(bl);
@@ -879,13 +886,17 @@ void EMetaBlob::encode(bufferlist& bl, uint64_t features) const
   encode(lump_map, bl, features);
   encode(roots, bl, features);
   encode(table_tids, bl);
-  encode(opened_ino, bl);
-  encode(allocated_ino, bl);
-  encode(used_preallocated_ino, bl);
+  encode(std::tuple{
+    opened_ino,
+    allocated_ino,
+    used_preallocated_ino,
+  }, bl, 0);
   encode(preallocated_inos, bl);
   encode(client_name, bl);
-  encode(inotablev, bl);
-  encode(sessionmapv, bl);
+  encode(std::tuple{
+    inotablev,
+    sessionmapv,
+  }, bl, 0);
   encode(truncate_start, bl);
   encode(truncate_finish, bl);
   encode(destroyed_inodes, bl);
@@ -896,8 +907,10 @@ void EMetaBlob::encode(bufferlist& bl, uint64_t features) const
     // make MDSRank use v6 format happy
     int64_t i = -1;
     bool b = false;
-    encode(i, bl);
-    encode(b, bl);
+    encode(std::tuple{
+      i,
+      b,
+    }, bl, 0);
   }
   encode(client_flushes, bl);
   ENCODE_FINISH(bl);

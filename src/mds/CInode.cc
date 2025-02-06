@@ -40,6 +40,7 @@
 
 #include "common/config.h"
 #include "global/global_context.h"
+#include "include/denc.h"
 #include "include/ceph_assert.h"
 
 #include "mds/MDSContinuation.h"
@@ -4110,35 +4111,39 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     ENCODE_START(7, 1, bl);
-    encode(oi->ino, bl);
-    encode(snapid, bl);
-    encode(oi->rdev, bl);
-    encode(version, bl);
-    encode(xattr_version, bl);
+    encode(std::tuple{
+      oi->ino,
+      snapid,
+      oi->rdev,
+      version,
+      xattr_version,
+    }, bl, 0);
     encode(ecap, bl);
     {
       ceph_file_layout legacy_layout;
       layout.to_legacy(&legacy_layout);
       encode(legacy_layout, bl);
     }
-    encode(any_i->ctime, bl);
-    encode(file_i->mtime, bl);
-    encode(file_i->atime, bl);
-    encode(file_i->time_warp_seq, bl);
-    encode(file_i->size, bl);
-    encode(max_size, bl);
-    encode(file_i->truncate_size, bl);
-    encode(file_i->truncate_seq, bl);
-    encode(auth_i->mode, bl);
-    encode((uint32_t)auth_i->uid, bl);
-    encode((uint32_t)auth_i->gid, bl);
-    encode(link_i->nlink, bl);
-    encode(file_i->dirstat.nfiles, bl);
-    encode(file_i->dirstat.nsubdirs, bl);
-    encode(file_i->rstat.rbytes, bl);
-    encode(file_i->rstat.rfiles, bl);
-    encode(file_i->rstat.rsubdirs, bl);
-    encode(file_i->rstat.rctime, bl);
+    encode(std::tuple{
+      any_i->ctime,
+      file_i->mtime,
+      file_i->atime,
+      file_i->time_warp_seq,
+      file_i->size,
+      max_size,
+      file_i->truncate_size,
+      file_i->truncate_seq,
+      auth_i->mode,
+      (uint32_t)auth_i->uid,
+      (uint32_t)auth_i->gid,
+      link_i->nlink,
+      file_i->dirstat.nfiles,
+      file_i->dirstat.nsubdirs,
+      file_i->rstat.rbytes,
+      file_i->rstat.rfiles,
+      file_i->rstat.rsubdirs,
+      file_i->rstat.rctime,
+    }, bl, 0);
     dirfragtree.encode(bl);
     encode(symlink, bl);
     encode(file_i->dir_layout, bl);
