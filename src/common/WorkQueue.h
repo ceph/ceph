@@ -108,11 +108,15 @@ protected:
   // track thread pool size changes
   unsigned _num_threads;
   std::string _thread_num_option;
-  const char **_conf_keys;
 
-  const char **get_tracked_conf_keys() const override {
-    return _conf_keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    if (_thread_num_option.empty()) {
+      return {};
+    } else {
+      return {_thread_num_option};
+    }
   }
+
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override;
 
