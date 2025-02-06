@@ -15,7 +15,7 @@
 #ifndef ECTRANSACTION_H
 #define ECTRANSACTION_H
 
-#include "ECUtil.h"
+#include "ECUtilL.h"
 #include "ECExtentCacheL.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
@@ -27,12 +27,12 @@ namespace ECTransactionL {
     std::map<hobject_t,extent_set> to_read;
     std::map<hobject_t,extent_set> will_write; // superset of to_read
 
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
+    std::map<hobject_t,ECUtilL::HashInfoRef> hash_infos;
   };
 
   template <typename F>
   WritePlan get_write_plan(
-    const ECUtil::stripe_info_t &sinfo,
+    const ECUtilL::stripe_info_t &sinfo,
     PGTransaction& t,
     F &&get_hinfo,
     DoutPrefixProvider *dpp) {
@@ -40,7 +40,7 @@ namespace ECTransactionL {
     t.safe_create_traverse(
       [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
         const auto& [obj, op] = i;
-	ECUtil::HashInfoRef hinfo = get_hinfo(obj);
+	ECUtilL::HashInfoRef hinfo = get_hinfo(obj);
 	plan.hash_infos[obj] = hinfo;
 
 	uint64_t projected_size =
@@ -57,7 +57,7 @@ namespace ECTransactionL {
 	  // typically clone or mv
 	  plan.invalidates_cache = true;
 
-	  ECUtil::HashInfoRef shinfo = get_hinfo(source);
+	  ECUtilL::HashInfoRef shinfo = get_hinfo(source);
 	  projected_size = shinfo->get_projected_total_logical_size(sinfo);
 	  plan.hash_infos[source] = shinfo;
 	}
@@ -181,7 +181,7 @@ namespace ECTransactionL {
     WritePlan &plan,
     ceph::ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
-    const ECUtil::stripe_info_t &sinfo,
+    const ECUtilL::stripe_info_t &sinfo,
     const std::map<hobject_t,extent_map> &partial_extents,
     std::vector<pg_log_entry_t> &entries,
     std::map<hobject_t,extent_map> *written,

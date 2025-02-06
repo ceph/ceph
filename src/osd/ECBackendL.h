@@ -22,7 +22,7 @@
 #include "OSD.h"
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
-#include "ECUtil.h"
+#include "ECUtilL.h"
 #include "ECTransactionL.h"
 #include "ECExtentCacheL.h"
 
@@ -192,7 +192,7 @@ public:
     CephContext* cct;
     const coll_t &coll;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     ReadPipeline& read_pipeline;
     UnstableHashInfoRegistry& unstable_hashinfo_registry;
     // TODO: lay an interface down here
@@ -209,7 +209,7 @@ public:
     RecoveryBackend(CephContext* cct,
 		    const coll_t &coll,
 		    ceph::ErasureCodeInterfaceRef ec_impl,
-		    const ECUtil::stripe_info_t& sinfo,
+		    const ECUtilL::stripe_info_t& sinfo,
 		    ReadPipeline& read_pipeline,
 		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		    ECListener* parent,
@@ -244,7 +244,7 @@ public:
     // must be filled if state == WRITING
     std::map<int, ceph::buffer::list> returned_data;
     std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
-    ECUtil::HashInfoRef hinfo;
+    ECUtilL::HashInfoRef hinfo;
     ObjectContextRef obc;
     std::set<pg_shard_t> waiting_on_pushes;
 
@@ -305,7 +305,7 @@ public:
     ECRecoveryBackend(CephContext* cct,
 		      const coll_t &coll,
 		      ceph::ErasureCodeInterfaceRef ec_impl,
-		      const ECUtil::stripe_info_t& sinfo,
+		      const ECUtilL::stripe_info_t& sinfo,
 		      ReadPipeline& read_pipeline,
 		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		      Listener* parent,
@@ -398,7 +398,7 @@ public:
   }
 
 
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtilL::stripe_info_t sinfo;
 
   ECCommonL::UnstableHashInfoRegistry unstable_hashinfo_registry;
 

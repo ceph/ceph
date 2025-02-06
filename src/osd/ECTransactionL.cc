@@ -17,7 +17,7 @@
 #include <sstream>
 
 #include "ECTransactionL.h"
-#include "ECUtil.h"
+#include "ECUtilL.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 
@@ -37,13 +37,13 @@ using ceph::ErasureCodeInterfaceRef;
 static void encode_and_write(
   pg_t pgid,
   const hobject_t &oid,
-  const ECUtil::stripe_info_t &sinfo,
+  const ECUtilL::stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ecimpl,
   const set<int> &want,
   uint64_t offset,
   bufferlist bl,
   uint32_t flags,
-  ECUtil::HashInfoRef hinfo,
+  ECUtilL::HashInfoRef hinfo,
   extent_map &written,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   DoutPrefixProvider *dpp)
@@ -54,7 +54,7 @@ static void encode_and_write(
   ceph_assert(bl.length());
 
   map<int, bufferlist> buffers;
-  int r = ECUtil::encode(
+  int r = ECUtilL::encode(
     sinfo, ecimpl, bl, want, &buffers);
   ceph_assert(r == 0);
 
@@ -99,7 +99,7 @@ void ECTransactionL::generate_transactions(
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
-  const ECUtil::stripe_info_t &sinfo,
+  const ECUtilL::stripe_info_t &sinfo,
   const map<hobject_t,extent_map> &partial_extents,
   vector<pg_log_entry_t> &entries,
   map<hobject_t,extent_map> *written_map,
@@ -144,7 +144,7 @@ void ECTransactionL::generate_transactions(
 	ceph_assert(oid.is_temp());
       }
 
-      ECUtil::HashInfoRef hinfo;
+      ECUtilL::HashInfoRef hinfo;
       {
 	auto iter = hash_infos.find(oid);
 	ceph_assert(iter != hash_infos.end());
@@ -190,7 +190,7 @@ void ECTransactionL::generate_transactions(
       ceph_assert(hinfo);
       bufferlist old_hinfo;
       encode(*hinfo, old_hinfo);
-      xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
+      xattr_rollback[ECUtilL::get_hinfo_key()] = old_hinfo;
 
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
 	ceph_assert(entry);
@@ -650,7 +650,7 @@ void ECTransactionL::generate_transactions(
 	  i.second.setattr(
 	    coll_t(spg_t(pgid, i.first)),
 	    ghobject_t(oid, ghobject_t::NO_GEN, i.first),
-	    ECUtil::get_hinfo_key(),
+	    ECUtilL::get_hinfo_key(),
 	    hbuf);
 	}
       }

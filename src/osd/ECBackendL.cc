@@ -147,7 +147,7 @@ ECBackendL::RecoveryBackend::RecoveryBackend(
   CephContext* cct,
   const coll_t &coll,
   ceph::ErasureCodeInterfaceRef ec_impl,
-  const ECUtil::stripe_info_t& sinfo,
+  const ECUtilL::stripe_info_t& sinfo,
   ReadPipeline& read_pipeline,
   UnstableHashInfoRegistry& unstable_hashinfo_registry,
   ECListener* parent,
@@ -383,7 +383,7 @@ void ECBackendL::RecoveryBackend::handle_recovery_read_complete(
   }
   dout(10) << __func__ << ": " << from << dendl;
   int r;
-  r = ECUtil::decode(sinfo, ec_impl, from, target);
+  r = ECUtilL::decode(sinfo, ec_impl, from, target);
   ceph_assert(r == 0);
   if (attrs) {
     op.xattrs.swap(*attrs);
@@ -400,20 +400,20 @@ void ECBackendL::RecoveryBackend::handle_recovery_read_complete(
            ++it) {
         it->second.rebuild();
       }
-      // Need to remove ECUtil::get_hinfo_key() since it should not leak out
+      // Need to remove ECUtilL::get_hinfo_key() since it should not leak out
       // of the backend (see bug #12983)
       map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
-      sanitized_attrs.erase(ECUtil::get_hinfo_key());
+      sanitized_attrs.erase(ECUtilL::get_hinfo_key());
       op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
       ceph_assert(op.obc);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
     }
 
-    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+    ECUtilL::HashInfo hinfo(ec_impl->get_chunk_count());
     if (op.obc->obs.oi.size > 0) {
-      ceph_assert(op.xattrs.count(ECUtil::get_hinfo_key()));
-      auto bp = op.xattrs[ECUtil::get_hinfo_key()].cbegin();
+      ceph_assert(op.xattrs.count(ECUtilL::get_hinfo_key()));
+      auto bp = op.xattrs[ECUtilL::get_hinfo_key()].cbegin();
       decode(hinfo, bp);
     }
     op.hinfo = unstable_hashinfo_registry.maybe_put_hash_info(hoid, std::move(hinfo));
@@ -588,7 +588,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
           return;
         }
 	op.xattrs = op.obc->attr_cache;
-	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
+	encode(*(op.hinfo), op.xattrs[ECUtilL::get_hinfo_key()]);
       }
 
       map<pg_shard_t, vector<pair<int, int>>> to_read;
@@ -1095,7 +1095,7 @@ void ECBackendL::handle_sub_read(
 	// are read in sections, so the digest check here won't be done here.
 	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
 	// the state of our chunk in case other chunks could substitute.
-        ECUtil::HashInfoRef hinfo;
+        ECUtilL::HashInfoRef hinfo;
         map<string, bufferlist, less<>> attrs;
 	struct stat st;
 	int r = object_stat(i->first, &st);
@@ -1432,7 +1432,7 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
   void generate_transactions(
       ceph::ErasureCodeInterfaceRef &ecimpl,
       pg_t pgid,
-      const ECUtil::stripe_info_t &sinfo,
+      const ECUtilL::stripe_info_t &sinfo,
       std::map<hobject_t,extent_map> *written,
       std::map<shard_id_t, ObjectStore::Transaction> *transactions,
       DoutPrefixProvider *dpp,
@@ -1457,7 +1457,7 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
 
   template <typename F>
   static ECTransactionL::WritePlan get_write_plan(
-    const ECUtil::stripe_info_t &sinfo,
+    const ECUtilL::stripe_info_t &sinfo,
     PGTransaction& t,
     F &&get_hinfo,
     DoutPrefixProvider *dpp)
@@ -1533,7 +1533,7 @@ void ECBackendL::submit_transaction(
     *(op->t),
     [&](const hobject_t &i) {
       dout(10) << "submit_transaction: obtaining hash info for get_write_plan" << dendl;
-      ECUtil::HashInfoRef ref;
+      ECUtilL::HashInfoRef ref;
       if (auto [r, attrs, size] = get_attrs_n_size_from_disk(i); r >= 0 || r == -ENOENT) {
         ref = unstable_hashinfo_registry.get_hash_info(
 	  i,
@@ -1716,7 +1716,7 @@ int ECBackendL::objects_get_attrs(
   for (map<string, bufferlist>::iterator i = out->begin();
        i != out->end();
        ) {
-    if (ECUtil::is_hinfo_key_string(i->first))
+    if (ECUtilL::is_hinfo_key_string(i->first))
       out->erase(i++);
     else
       ++i;
@@ -1794,7 +1794,7 @@ int ECBackendL::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(poid, false, o.attrs, o.size);
+  ECUtilL::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(poid, false, o.attrs, o.size);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;

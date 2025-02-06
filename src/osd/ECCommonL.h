@@ -20,7 +20,7 @@
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
-#include "ECUtil.h"
+#include "ECUtilL.h"
 #if WITH_SEASTAR
 #include "ECExtentCacheL.h"
 #include "crimson/osd/object_context.h"
@@ -34,7 +34,7 @@ struct ECTransaction {
     std::map<hobject_t,extent_set> to_read;
     std::map<hobject_t,extent_set> will_write; // superset of to_read
 
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
+    std::map<hobject_t,ECUtilL::HashInfoRef> hash_infos;
   };
 };
 
@@ -423,7 +423,7 @@ struct ECCommonL {
 
     CephContext* cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     // TODO: lay an interface down here
     ECListener* parent;
 
@@ -434,7 +434,7 @@ struct ECCommonL {
 
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
-                const ECUtil::stripe_info_t& sinfo,
+                const ECUtilL::stripe_info_t& sinfo,
                 ECListener* parent)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
@@ -459,7 +459,7 @@ struct ECCommonL {
     static void get_min_want_to_read_shards(
       const uint64_t offset,
       const uint64_t length,
-      const ECUtil::stripe_info_t& sinfo,
+      const ECUtilL::stripe_info_t& sinfo,
       std::set<int> *want_to_read);
 
     int get_remaining_shards(
@@ -584,7 +584,7 @@ struct ECCommonL {
       virtual void generate_transactions(
         ceph::ErasureCodeInterfaceRef &ecimpl,
         pg_t pgid,
-        const ECUtil::stripe_info_t &sinfo,
+        const ECUtilL::stripe_info_t &sinfo,
         std::map<hobject_t,extent_map> *written,
         std::map<shard_id_t, ceph::os::Transaction> *transactions,
         DoutPrefixProvider *dpp,
@@ -687,13 +687,13 @@ struct ECCommonL {
     // end of iface
 
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     ECListener* parent;
     ECCommonL& ec_backend;
 
     RMWPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
-                const ECUtil::stripe_info_t& sinfo,
+                const ECUtilL::stripe_info_t& sinfo,
                 ECListener* parent,
                 ECCommonL& ec_backend)
       : cct(cct),
@@ -708,7 +708,7 @@ struct ECCommonL {
     CephContext *cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
     /// If modified, ensure that the ref is held until the update is applied
-    SharedPtrRegistry<hobject_t, ECUtil::HashInfo> registry;
+    SharedPtrRegistry<hobject_t, ECUtilL::HashInfo> registry;
 
   public:
     UnstableHashInfoRegistry(
@@ -717,11 +717,11 @@ struct ECCommonL {
       : cct(cct),
 	ec_impl(std::move(ec_impl)) {}
 
-    ECUtil::HashInfoRef maybe_put_hash_info(
+    ECUtilL::HashInfoRef maybe_put_hash_info(
       const hobject_t &hoid,
-      ECUtil::HashInfo &&hinfo);
+      ECUtilL::HashInfo &&hinfo);
 
-    ECUtil::HashInfoRef get_hash_info(
+    ECUtilL::HashInfoRef get_hash_info(
       const hobject_t &hoid,
       bool create,
       const std::map<std::string, ceph::buffer::list, std::less<>>& attr,

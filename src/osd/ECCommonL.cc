@@ -327,7 +327,7 @@ int ECCommonL::ReadPipeline::get_min_avail_to_read_shards(
 void ECCommonL::ReadPipeline::get_min_want_to_read_shards(
   const uint64_t offset,
   const uint64_t length,
-  const ECUtil::stripe_info_t& sinfo,
+  const ECUtilL::stripe_info_t& sinfo,
   set<int> *want_to_read)
 {
   const auto [left_chunk_index, right_chunk_index] =
@@ -546,14 +546,14 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
                << " wanted_to_read=" << wanted_to_read
                << " to_decode=" << to_decode
                << dendl;
-      int r = ECUtil::decode(
+      int r = ECUtilL::decode(
 	read_pipeline.sinfo,
 	read_pipeline.ec_impl,
 	wanted_to_read,
 	to_decode,
 	&bl);
       if (r < 0) {
-        dout(10) << __func__ << " error on ECUtil::decode r=" << r << dendl;
+        dout(10) << __func__ << " error on ECUtilL::decode r=" << r << dendl;
         res.r = r;
         goto out;
       }
@@ -964,7 +964,7 @@ struct ECDummyOp : ECCommonL::RMWPipeline::Op {
   void generate_transactions(
       ceph::ErasureCodeInterfaceRef &ecimpl,
       pg_t pgid,
-      const ECUtil::stripe_info_t &sinfo,
+      const ECUtilL::stripe_info_t &sinfo,
       std::map<hobject_t,extent_map> *written,
       std::map<shard_id_t, ObjectStore::Transaction> *transactions,
       DoutPrefixProvider *dpp,
@@ -1058,26 +1058,26 @@ void ECCommonL::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) 
   }
 }
 
-ECUtil::HashInfoRef ECCommonL::UnstableHashInfoRegistry::maybe_put_hash_info(
+ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::maybe_put_hash_info(
   const hobject_t &hoid,
-  ECUtil::HashInfo &&hinfo)
+  ECUtilL::HashInfo &&hinfo)
 {
   return registry.lookup_or_create(hoid, hinfo);
 }
 
-ECUtil::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
+ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
   const hobject_t &hoid,
   bool create,
   const map<string, bufferlist, less<>>& attrs,
   uint64_t size)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
-  ECUtil::HashInfoRef ref = registry.lookup(hoid);
+  ECUtilL::HashInfoRef ref = registry.lookup(hoid);
   if (!ref) {
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
-    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+    ECUtilL::HashInfo hinfo(ec_impl->get_chunk_count());
     bufferlist bl;
-    map<string, bufferlist>::const_iterator k = attrs.find(ECUtil::get_hinfo_key());
+    map<string, bufferlist>::const_iterator k = attrs.find(ECUtilL::get_hinfo_key());
     if (k == attrs.end()) {
       dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
     } else {
@@ -1089,12 +1089,12 @@ ECUtil::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
         decode(hinfo, bp);
       } catch(...) {
         dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
-        return ECUtil::HashInfoRef();
+        return ECUtilL::HashInfoRef();
       }
       if (hinfo.get_total_chunk_size() != size) {
         dout(0) << __func__ << ": Mismatch of total_chunk_size "
       		       << hinfo.get_total_chunk_size() << dendl;
-        return ECUtil::HashInfoRef();
+        return ECUtilL::HashInfoRef();
       } else {
         create = true;
       }
