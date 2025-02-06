@@ -387,14 +387,12 @@ class CephContextObs : public md_config_obs_t {
 public:
   explicit CephContextObs(CephContext *cct) : cct(cct) {}
 
-  const char** get_tracked_conf_keys() const override {
-    static const char *KEYS[] = {
-      "enable_experimental_unrecoverable_data_corrupting_features",
-      "crush_location",
-      "container_image",  // just so we don't hear complaints about it!
-      NULL
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {
+      "enable_experimental_unrecoverable_data_corrupting_features"s,
+      "crush_location"s,
+      "container_image"s  // just so we don't hear complaints about it!
     };
-    return KEYS;
   }
 
   void handle_conf_change(const ConfigProxy& conf,
