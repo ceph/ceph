@@ -270,6 +270,90 @@ This removes the user defined configuration.
    for the new config blocks to be effective.
 
 
+Enable QoS bandwidth control for NFS Ganesha cluster
+----------------------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs cluster qos enable bandwidth_control <cluster_id> <qos_type:PerShare|PerClient|PerShare_PerClient> [--combined-rw-bw-ctrl] [--max_export_write_bw <value>] [--max_export_read_bw <value>] [--max_client_write_bw <value>] [--max_client_read_bw <value>] [--max_export_combined_bw <value>] [--max_client_combined_bw <value>]
+
+This command will enable/update QoS bandwidth control for NFS Ganesha cluster, where
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<qos_type>`` is the type of bandwidth control. It can be PerShare, PerClient and PerShare_PerClient.
+If PerShare qos_type is selected, then the cluster level QoS config will be applicable to all exports created on that NFS Ganesha cluster. It requires max_export_write_bw and max_export_read_bw paramters if combined-rw-bw-ctrl is False else needs max_export_combined_bw.
+If PerClient qos_type is selected, then the cluster level qos config will be applicable to all clients accessing exports created on that cluster. It requires max_client_write_bw and max_client_read_bw parameters if combined-rw-bw-ctrl is False else max_client_combined_bw.
+If PerShare_PerClient qos_type is selected, then the cluster level config will be applicable to all exports as well as all clients of that NFS Ganesha cluster. It requires max_export_write_bw, max_export_read_bw, max_client_write_bw and max_client_read_bw parameters if combined-rw-bw-ctrl is False else max_export_combined_bw and max_client_combined_bw.
+
+``<combined-rw-bw-ctrl>`` will enable combined read and write bandwidth. If its True, then only max_export_combined_bw and max_client_combined_bw paramaters are allowed based on qos_type.
+
+``<max_export_write_bw>`` is the maximum bandwidth that can be used for export write per second.
+
+``<max_export_read_bw>`` is the maximum bandwidth that can be used for export read per second.
+
+``<max_client_write_bw>`` is the maximum bandwidth that client can use for write per second.
+
+``<max_client_read_bw>`` is the maximum bandwidth that client can use for read per second.
+
+``<max_export_combined_bw>`` is the maximum combined read/write bandwidth for export per second.
+
+``<max_client_combined_bw>`` is the maximum combined read/write bandwidth for client per second.
+
+.. note:: If this command is used to update qos_type, make sure of updating all the exports with required parameters.
+
+By default, all the export will inherit cluster level QoS setting, if QOS_BLOCK is not present in export block.
+
+Disable QoS bandwidth control for NFS Ganesha cluster
+-----------------------------------------------------
+
+.. code:: bash
+
+    $ ceph nfs cluster qos disable bandwidth_control <cluster_id>
+
+This command is to disable the bandwidth control QoS in cluster. If cluster level qos is disabled, then export level qos will not be applicable even if its enabled.
+
+Enable QoS OPS control for NFS Ganesha cluster
+----------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs cluster qos enable ops_control <cluster_id> <qos_type:PerShare|PerClient|PerShare_PerClient> [<export_ops_count:int>] [<client_ops_count:int>]
+
+This command will enable/update OPS control for NFS cluster.
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<qos_type>`` is the type of ops control. It can be PerShare, PerClient and PerShare_PerClient.
+If PerShare qos_type is selected, then the cluster level QoS config will be applicable to all exports created on that NFS Ganesha cluster. It requires export_ops_count parameter.
+If PerClient qos_type is selected, then the cluster level qos config will be applicable to all clients accessing exports created on that cluster. It requires client_ops_count parameter.
+If PerShare_PerClient qos_type is selected, then the cluster level config will be applicable to all exports as well as all clients of that NFS Ganesha cluster. It requires both export_ops_count and client_ops_count parameters.
+
+``<export_ops_count>`` is the count of IOPS operation for export.
+
+``<client_ops_count>`` is the count of IOPS operation for a client of export.
+
+.. note:: If this command is used to update qos_type, make sure of updating all the exports with required parameters.
+
+Disable QoS OPS control for NFS Ganesha cluster
+-----------------------------------------------
+
+.. code:: bash
+
+   $ nfs cluster qos disable ops_control <cluster_id>
+
+This command will disable OPS control for NFS Ganesha cluster. After disabling ops control at cluster level, export level OPS control will not be applicable even if its enabled.
+
+Get QoS configuration for NFS Ganesha cluster
+---------------------------------------------
+
+.. code:: bash
+
+   $ ceph nfs cluster qos get <cluster_id> [--format <value>]
+
+This command displays all the QoS global default configuration for a given cluster.
+
+
 Export Management
 =================
 
@@ -446,6 +530,83 @@ where:
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
 ``<pseudo_path>`` is the pseudo root path (must be an absolute path).
+
+Enable QoS bandwidth control for export
+---------------------------------------
+
+.. code:: bash
+
+    $ nfs export qos enable bandwidth_control <cluster_id> <pseudo_path> [--combined-rw-bw-ctrl] [--max_export_write_bw <value>] [--max_export_read_bw <value>] [--max_client_write_bw <value>] [--max_client_read_bw <value>] [--max_export_combined_bw <value>] [--max_client_combined_bw <value>]
+
+This command will enable/update QoS bandwidth control for export. Cluster level bandwidth control should be enable with qos_type PerShare or PerShare_PerClient to enable export level bandwidth control. It will create QOS_BLOCK in export block, where
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
+
+``<combined-rw-bw-ctrl>`` will enable combined read and write bandwidth. If its True, then only max_export_combined_bw and max_client_combined_bw paramaters are allowed based on qos_type.
+
+``<max_export_write_bw>`` is the maximum bandwidth that can be used for export write per second.
+
+``<max_export_read_bw>`` is the maximum bandwidth that can be used for export read per second.
+
+``<max_client_write_bw>`` is the maximum bandwidth that client can use for write per second.
+
+``<max_client_read_bw>`` is the maximum bandwidth that client can use for read per second.
+
+``<max_export_combined_bw>`` is the maximum combined read/write bandwidth for export per second.
+
+``<max_client_combined_bw>`` is the maximum combined read/write bandwidth for client per second.
+
+.. note:: Export level bandwidth control can't be enabled, If cluster level qos_type is PerClient.
+
+Disable QoS bandwidth control for export
+----------------------------------------
+
+.. code:: bash
+
+   $ nfs export qos disable bandwidth_control <cluster_id> <pseudo_path>
+
+This will disable QoS bandwidth control for export. Export can use unlimited I/O bandwidth after disabling export qos i.e. it will not follow cluster level values.
+
+.. note:: To use cluster level qos bandwidth control values for export again, we can use ``nfs export apply <cluster_id>`` command, with export block not having QOS_BLOCK.
+
+Enable QoS OPS control for export
+---------------------------------
+
+.. code:: bash
+
+   $ nfs export qos enable ops_control <cluster_id> <pseudo_path> [<export_ops_count:int>] [<client_ops_count:int>]
+
+This will enable IOPS control for specified export. Same command can be used to update OPS count. Cluster level OPS control should be enabled with qos_type PerShare or PerShare_PerClient to enable export level OPS control.
+
+``<cluster_id>`` is the NFS Ganesha cluster ID.
+
+``<pseudo_path>`` is the pseudo root path (must be an absolute path).
+
+``<export_ops_count>`` is the count of IOPS operation for export.
+
+``<client_ops_count>`` is the count of IOPS operation for a client of export.
+
+.. note:: Export level OPS control can't be enabled, If cluster level qos_type is PerClient.
+
+Disable QoS OPS control for export
+----------------------------------
+
+.. code:: bash
+
+   $ nfs export qos disable ops_control <cluster_id> <pseudo_path>
+
+This command will disable QoS OPS control for export. Export will not have any limit on OPS control in this case i.e. it will not have cluster level OPS restriction.
+
+GET QoS configuration for export
+--------------------------------
+
+.. code:: bash
+
+    $ nfs export qos get <cluster_id> <pseudo_path> [--format <value>]
+
+This command is to display QoS configuration of given export. Export will not have any bandwidth restriction in this case i.e. it will not have cluster level bandwidth restriction.
 
 
 Create or update export via JSON specification
