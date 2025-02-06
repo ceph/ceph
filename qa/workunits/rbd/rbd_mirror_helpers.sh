@@ -21,7 +21,7 @@
 #  RBD_MIRROR_INSTANCES  - number of daemons to start per cluster
 #  RBD_MIRROR_CONFIG_KEY - if not empty, use config-key for remote cluster
 #                          secrets
-#  RBD_MIRROR_SHOW_CMD     if not empty, external commands sent to the cluster and
+#  RBD_MIRROR_SHOW_CLI_CMD if not empty, external commands sent to the cluster and
 #                          more information on test failures will be printed.
 #                          The script will exit on fatal test failures
 # The cleanup can be done as a separate step, running the script with
@@ -173,7 +173,7 @@ run_cmd_internal() {
     local rc
     local frame=0 LINE SUB FILE
 
-    if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+    if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
         if [ 'true' = "${as_admin}" ]; then
             echo "CEPH_ARGS=''" "$cmd"
         else
@@ -193,7 +193,7 @@ run_cmd_internal() {
     rc=$?
     set -e
 
-    if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+    if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
         cat "$CMD_STDOUT"
         cat "$CMD_STDERR" 1>&2
     fi
@@ -210,7 +210,7 @@ run_cmd_internal() {
     else
         local frame=1 LINE SUB FILE
 
-        if [ -n "${RBD_MIRROR_SHOW_CMD}" ]; then
+        if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
             echo "ERR: rc=" $rc 1>&2
             read -r LINE SUB FILE < <(caller "$frame")
             printf "ERR: Non-fatal failure at: %s:%s %s()\n" "${FILE}" "${LINE}" "${SUB}" 1>&2
@@ -250,7 +250,7 @@ fail() {
     local fatal=$1
     local frame=0 LINE SUB FILE
 
-    if [ -z "${RBD_MIRROR_SHOW_CMD}" ]; then
+    if [ -z "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
         return 0
     fi
 
@@ -401,6 +401,18 @@ peer_add()
     return 1
 }
 
+setup_dummy_objects()
+{
+    local cluster=$1
+    # Create and delete a pool, image, group and snapshots so that ids on the two clusters mismatch
+    run_admin_cmd "ceph --cluster ${cluster} osd pool create dummy_pool 64 64"
+    image_create "${cluster}" "dummy_pool/dummy_image"
+    create_snapshot "${cluster}" "dummy_pool" "dummy_image" "dummy_snap"
+    group_create "${cluster}" "dummy_pool/dummy_group"
+    group_snap_create "${cluster}" "dummy_pool/dummy_group" "dummy_snap"
+    run_admin_cmd "ceph --cluster ${cluster} osd pool delete dummy_pool dummy_pool --yes-i-really-really-mean-it"
+}
+
 setup_pools()
 {
     local cluster=$1
@@ -410,16 +422,6 @@ setup_pools()
     local admin_key_file
     local uuid
 
-    # Create and delete a random number of pools, images and snapshots so that ids on the two clusters sometimes mismatch
-    pool_count=$(( RANDOM % 2 ))
-    for loop_instance in $(seq 0 ${pool_count}); do
-      run_admin_cmd "ceph --cluster ${cluster} osd pool create dummy_pool 64 64"
-      image_create "${cluster}" "dummy_pool/dummy_image"
-      create_snapshot "${cluster}" "dummy_pool" "dummy_image" "dummy_snap"
-      group_create "${cluster}" "dummy_pool/dummy_group"
-      group_snap_create "${cluster}" "dummy_pool/dummy_group" "dummy_snap"
-      run_admin_cmd "ceph --cluster ${cluster} osd pool delete dummy_pool dummy_pool --yes-i-really-really-mean-it"
-    done
 
     CEPH_ARGS='' ceph --cluster ${cluster} osd pool create ${POOL} 64 64
     CEPH_ARGS='' ceph --cluster ${cluster} osd pool create ${PARENT_POOL} 64 64
@@ -488,7 +490,7 @@ setup()
         setup_cluster "${CLUSTER1}"
         setup_cluster "${CLUSTER2}"
     fi
-
+    setup_dummy_objects "${CLUSTER1}"
     setup_pools "${CLUSTER1}" "${CLUSTER2}"
     setup_pools "${CLUSTER2}" "${CLUSTER1}"
 
@@ -1053,6 +1055,39 @@ get_fields_from_mirror_group_status()
       result=$($XMLSTARLET sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
       _group_result_arr+=( "${result}" )
     done
+}
+
+get_fields_from_group_info()
+{
+    local cluster=$1 ; shift
+    local group_spec=$1 ; shift
+    local -n _group_info_result_arr=$1 ; shift
+    local fields=("$@")
+
+    run_cmd "rbd --cluster ${cluster} group info ${group_spec} --format xml --pretty-format" || { fail; return 1; }
+
+    local field result
+    for field in "${fields[@]}"; do
+      result=$($XMLSTARLET sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
+      _group_info_result_arr+=( "${result}" )
+    done
+}
+
+# TODO need to verify the new mirroring fields in the group info once they are available
+test_fields_in_group_info()
+{
+    local cluster=$1 ; shift
+    local group_spec=$1 ; shift
+    local expected_mode=$1 ; shift
+    local expected_state=$1 ; shift
+    local expected_is_primary=$1 ; shift
+
+    local fields=(//group/group_name //group/group_id //group/mirroring/mode //group/mirroring/state //group/mirroring/global_id //group/mirroring/primary)
+    local fields_arr
+    get_fields_from_group_info "${cluster}" "${group_spec}" fields_arr "${fields[@]}"
+    test "${fields_arr[2]}" = "${expected_mode}" || { fail "mode = ${fields_arr[2]}"; return 1; }
+    test "${fields_arr[3]}" = "${expected_state}" || { fail "state = ${fields_arr[3]}"; return 1; }
+    test "${fields_arr[5]}" = "${expected_is_primary}" || { fail "primary = ${fields_arr[5]}"; return 1; }
 }
 
 get_fields_from_mirror_image_status()
@@ -2079,7 +2114,7 @@ wait_for_group_synced()
     fi
 
     local group_snap_id
-    get_newest_group_mirror_snapshot_id "${cluster}" "${group_spec}" group_snap_id
+    get_newest_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
     wait_for_group_snap_present "${secondary_cluster}" "${secondary_group_spec}" "${group_snap_id}"
     wait_for_group_snap_sync_complete "${secondary_cluster}" "${secondary_group_spec}" "${group_snap_id}"
 }
@@ -2319,7 +2354,7 @@ test_group_present()
     local test_image_count=$5
     local current_image_count
 
-    run_cmd "rbd --cluster ${cluster} group list ${pool} --format xml --pretty-format"
+    run_cmd "rbd --cluster ${cluster} group list ${pool} --format xml --pretty-format" || { fail; return 1; }
     test "${test_group_count}" = "$($XMLSTARLET sel -t -v "count(//groups[name='${group}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 
     # if the group is not expected to be present in the list then don't bother checking for images
@@ -2555,7 +2590,7 @@ wait_for_group_replay_stopped()
     wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0
 }
 
-get_newest_group_mirror_snapshot_id()
+get_newest_group_snapshot_id()
 {
     local cluster=$1
     local group_spec=$2
@@ -2635,7 +2670,7 @@ test_images_in_latest_synced_group()
     local expected_synced_image_count=$3
 
     local group_snap_id
-    get_newest_group_mirror_snapshot_id "${cluster}" "${group_spec}" group_snap_id
+    get_newest_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
     test_group_synced_image_status "${cluster}" "${group_spec}" "${group_snap_id}" "${expected_synced_image_count}"
 }
 
