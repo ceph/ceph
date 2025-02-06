@@ -163,15 +163,21 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-    def gen_health_warn_mds_cache_oversized(self, mds_id=None):
+    def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None):
         health_warn = 'MDS_CACHE_OVERSIZED'
 
         # cs_name = config section name
         cs_name = None   # declaring here in case no if/elif condition is true
-        if mds_id:
+        if mds_id and not fs:
             cs_name = f'mds.{mds_id}'
-        elif not mds_id:
+        elif not mds_id and fs:
+            mds_id = self.fs.get_active_names()[0]
+            cs_name = f'mds.{mds_id}'
+        elif not mds_id and not fs:
             cs_name = 'mds'
+        elif mds_id and fs:
+            raise RuntimeError('Makes no sense to pass both, mds_id as well as '
+                               'FS object')
 
         self.config_set(cs_name, 'mds_cache_memory_limit', '1K')
         self.config_set(cs_name, 'mds_health_cache_threshold', '1.00000')
