@@ -6422,12 +6422,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
-      if (dirent.meta.snap_id < bucket_info.local.snap_mgr.get_cur_snap_id()) {
-        ldpp_dout(dpp, 20) << "can't delete object, current snap_id=" << bucket_info.local.snap_mgr.get_cur_snap_id()
-          << " obj snap_id=" << dirent.meta.snap_id << dendl;
-        return -ERR_FORBIDDEN;
-      }
-
       result.delete_marker = dirent.is_delete_marker();
       r = store->unlink_obj_instance(
 	dpp, target->get_ctx(), bucket_info, obj,
@@ -8808,11 +8802,14 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
   r = guard_reshard(dpp, &bs, obj_instance, bucket_info,
 		    [&](BucketShard *bs) -> int {
 		      auto& ref = bs->bucket_obj;
+                      auto& snap_mgr = bucket_info.local.snap_mgr;
 		      librados::ObjectWriteOperation op;
 		      op.assert_exists(); // bucket index shard must exist
 		      cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
 		      cls_rgw_bucket_unlink_instance(op, key, op_tag,
-						     olh_tag, olh_epoch, log_op, bilog_flags, zones_trace);
+						     olh_tag, olh_epoch, log_op, bilog_flags, zones_trace,
+                                                     snap_mgr.get_cur_snap_id(),
+                                                     rgw_cls_unlink_instance_op::UnlinkFlags::None);
                       return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
                     }, y);
   if (r < 0) {

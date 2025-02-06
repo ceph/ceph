@@ -700,6 +700,12 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
+      if (entry.removed_at_snap() != RGW_BUCKET_NO_SNAP &&
+          (op.max_snap == RGW_BUCKET_NO_SNAP ||
+           op.max_snap >= entry.removed_at_snap())) {
+        continue;
+      }
+
       if (op.max_snap != RGW_BUCKET_NO_SNAP) {
         if (entry.meta.snap_id != RGW_BUCKET_NO_SNAP &&
             entry.meta.snap_id > op.max_snap) {
@@ -1547,6 +1553,8 @@ class BIVerObjEntry {
 
   bool initialized;
 
+  bool can_rm{true};
+
 public:
   BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key),
                                                initialized(false) {
@@ -1600,10 +1608,20 @@ public:
     /* this instance has a previous list entry, remove that entry */
     get_list_index_key(instance_entry, &list_idx);
     CLS_LOG(20, "unlink_list_entry() list_idx=%s", escape_str(list_idx).c_str());
-    int ret = remove_entry(hctx, list_idx, instance_entry.key, header);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: remove_entry() list_idx=%s ret=%d", list_idx.c_str(), ret);
-      return ret;
+
+    if (can_rm) {
+      int ret = remove_entry(hctx, list_idx, instance_entry.key, header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: remove_entry() list_idx=%s ret=%d", list_idx.c_str(), ret);
+        return ret;
+      }
+    } else {
+CLS_LOG(0, "%s() instance_entry.removed_at=%d", __func__, (int)instance_entry.removed_at_snap());
+      int ret = write_entries(0, 0, header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: %s(): write_entries() returned %d", __func__, ret);
+        return ret;
+      }
     }
     return 0;
   }
@@ -1611,10 +1629,14 @@ public:
   int unlink(rgw_bucket_dir_header& header, const cls_rgw_obj_key& key) {
     /* remove the instance entry */
     CLS_LOG(20, "unlink() idx=%s", escape_str(instance_idx).c_str());
-    int ret = remove_entry(hctx, instance_idx, key, header);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: remove_entry() instance_idx=%s ret=%d", instance_idx.c_str(), ret);
-      return ret;
+    if (can_rm) {
+      int ret = remove_entry(hctx, instance_idx, key, header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: remove_entry() instance_idx=%s ret=%d", instance_idx.c_str(), ret);
+        return ret;
+      }
+    } else {
+      CLS_LOG(20, "unlink() idx=%s: skipping removal of non-current snapshot entry", escape_str(instance_idx).c_str());
     }
     return 0;
   }
@@ -1780,6 +1802,21 @@ public:
 
   real_time mtime() {
     return instance_entry.meta.mtime;
+  }
+
+  rgw_bucket_snap_id snap_id() const {
+    return instance_entry.meta.snap_id;
+  }
+
+  void set_unlink_conf(rgw_bucket_snap_id cur_snap_id,
+                       rgw_cls_unlink_instance_op::UnlinkFlags flags) {
+    can_rm = (flags & rgw_cls_unlink_instance_op::UnlinkFlags::RemoveNoncurrentSnap) ||
+      (instance_entry.meta.snap_id >= cur_snap_id);
+    instance_entry.set_snap_info().removed_at = cur_snap_id;
+  }
+
+  bool can_be_unlinked() const {
+    return can_rm;
   }
 }; // class BIVerObjEntry
 
@@ -2264,6 +2301,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     obj.set_epoch(1);
   }
 
+  obj.set_unlink_conf(op.snap_id, op.flags);
+
   if (!olh.start_modify(op.olh_epoch)) {
     ret = obj.unlink_list_entry(header);
     if (ret < 0) {
@@ -2273,8 +2312,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     if (obj.is_delete_marker()) {
       return 0;
     }
-
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false, op.olh_epoch);
+  
+    if (obj.can_be_unlinked()) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false, op.olh_epoch);
+    }
     return olh.write(header);
   }
 
@@ -2319,7 +2360,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (!obj.is_delete_marker()) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false);
+    if (obj.can_be_unlinked()) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, op.key.snap_id, false);
+    }
   } else {
     /* this is a delete marker, it's our responsibility to remove its
      * instance entry */
