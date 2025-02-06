@@ -1,10 +1,5 @@
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
-add_library(alien::cflags INTERFACE IMPORTED)
-set_target_properties(alien::cflags PROPERTIES
-  INTERFACE_COMPILE_DEFINITIONS ""
-  INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
-
 set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
@@ -38,6 +33,10 @@ endif()
 add_library(crimson-alien-common STATIC
   ${crimson_alien_common_srcs})
 
+add_library(alien::cflags INTERFACE IMPORTED)
+set_target_properties(alien::cflags PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
+
 set(alien_store_srcs
   alien_store.cc
   thread_pool.cc
@@ -63,11 +62,13 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Writer.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_debug.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
+
 add_library(crimson-alienstore STATIC
   ${alien_store_srcs})
 if(WITH_LTTNG)
   add_dependencies(crimson-alienstore bluestore-tp)
 endif()
+
 target_link_libraries(crimson-alienstore
   PRIVATE
     alien::cflags
