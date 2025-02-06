@@ -812,6 +812,31 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   return 0;
 }
 
+int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
+                             bool follow_olh)
+{
+  if (load_from_store) {
+    return next->load_obj_state(dpp, y, follow_olh);
+  }
+  bool has_instance = false;
+  if (!this->get_instance().empty()) {
+    has_instance = true;
+  }
+  int ret = get_obj_attrs_from_cache(dpp, y);
+  if (ret) {
+    //clearing instance if not present in object before
+    //calling get_obj_attrs_from_cache as it incorrectly
+    //causes delete obj to be invoked for an instance
+    //even though a simple delete request has been issued
+    //(after load_obj_state is invoked)
+    if (!has_instance) {
+      this->clear_instance();
+    }
+    return 0;
+  }
+  return next->load_obj_state(dpp, y, follow_olh);
+}
+
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags)
 {
@@ -930,7 +955,9 @@ int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, opt
         }
       }//end-if
     }//end-for
-    this->set_instance(instance); //set this only after setting object state else it won't take effect
+    if (!instance.empty()) {
+      this->set_instance(instance); //set this only after setting object state else it won't take effect
+    }
     attrs.erase(RGW_CACHE_ATTR_MTIME);
     attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
     attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
@@ -1438,6 +1465,7 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
       }
       std::string key = head_oid_in_cache;
       this->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, 0, 0, version, block.cacheObj.dirty, rgw::d4n::REFCOUNT_DECR, y);
+      this->exists_in_cache = true;
     } else {
       found_in_cache = false;
     }
@@ -2993,6 +3021,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
       ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): writing to backend store failed, ret=" << ret << dendl;
       return ret;
     }
+    //we want to always load latest object state from store
+    //to avoid reading stale state in case of object overwrites.
+    object->set_load_obj_from_store(true);
     object->load_obj_state(dpp, y);
     attrs = object->get_attrs();
     object->set_attrs_from_obj_state(dpp, y, attrs, dirty);
@@ -3072,6 +3103,9 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
   D4NFilterObject* d4n_target_obj = dynamic_cast<D4NFilterObject*>(target_obj);
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
+  //we want to always load latest object state from store
+  //to avoid reading stale state in case of object overwrites.
+  d4n_target_obj->set_load_obj_from_store(true);
   d4n_target_obj->load_obj_state(dpp, y);
   attrs = d4n_target_obj->get_attrs();
   d4n_target_obj->set_attrs_from_obj_state(dpp, y, attrs);
