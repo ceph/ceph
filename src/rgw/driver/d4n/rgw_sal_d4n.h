@@ -133,6 +133,8 @@ class D4NFilterObject : public FilterObject {
     rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
     bool multipart{false};
     bool delete_marker{false};
+    bool exists_in_cache{false};
+    bool load_from_store{false};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -244,6 +246,8 @@ class D4NFilterObject : public FilterObject {
                               optional_yield y) override;
 
     virtual const std::string &get_name() const override { return next->get_name(); }
+    virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
+                             bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -276,6 +280,9 @@ class D4NFilterObject : public FilterObject {
     int set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
     int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y);
     bool is_delete_marker() { return delete_marker; }
+    bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
+    bool load_obj_from_store() { return load_from_store; }
+    void set_load_obj_from_store(bool load_from_store) { this->load_from_store = load_from_store; }
 };
 
 class D4NFilterWriter : public FilterWriter {
