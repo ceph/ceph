@@ -111,20 +111,20 @@ public:
       f->dump_float("fragmentation_rating", alloc->get_fragmentation());
       f->close_section();
     } else if (command == "bluestore allocator fragmentation histogram " + name) {
-      int64_t alloc_unit = 4096;
+      int64_t alloc_unit = alloc->get_block_size();
       cmd_getval(cmdmap, "alloc_unit", alloc_unit);
       if (alloc_unit <= 0  ||
           p2align(alloc_unit, alloc->get_block_size()) != alloc_unit) {
         ss << "Invalid allocation unit: '" << alloc_unit
-           << ", to be aligned with: '" << alloc->get_block_size()
-           << std::endl;
+           << "', to be aligned with: '" << alloc->get_block_size()
+           << "'" << std::endl;
         return -EINVAL;
       }
       int64_t num_buckets = 8;
       cmd_getval(cmdmap, "num_buckets", num_buckets);
       if (num_buckets < 2) {
         ss << "Invalid amount of buckets (min=2): '" << num_buckets
-           << std::endl;
+           << "'" << std::endl;
         return -EINVAL;
       }
 
