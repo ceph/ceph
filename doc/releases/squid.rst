@@ -12,22 +12,22 @@ We recommend that all users update to this release.
 Notable Changes
 ---------------
 
-* CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
+* CephFS: The command `fs subvolume create` now allows tagging subvolumes by supplying the option
   `--earmark` with a unique identifier needed for NFS or SMB services. The earmark
   string for a subvolume is empty by default. To remove an already present earmark,
-  an empty string can be assigned to it. Additionally, commands
-  `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get` and
+  an empty string can be assigned to it. Additionally, the commands
+  `ceph fs subvolume earmark set`, `ceph fs subvolume earmark get`, and
   `ceph fs subvolume earmark rm` have been added to set, get and remove earmark from a given subvolume.
 
-* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+* CephFS: Expanded removexattr support for CephFS virtual extended attributes.
   Previously one had to use setxattr to restore the default in order to "remove".
   You may now properly use removexattr to remove. You can also now remove layout
-  on root inode, which then will restore layout to default layout.
+  on the root inode, which then will restore the layout to the default.
 
 * RADOS: A performance bottleneck in the balancer mgr module has been fixed.
   Related Tracker: https://tracker.ceph.com/issues/68657
 
-* RADOS: Based on tests performed at scale on a HDD based Ceph cluster, it was found
+* RADOS: Based on tests performed at scale on an HDD-based Ceph cluster, it was found
   that scheduling with mClock was not optimal with multiple OSD shards. For
   example, in the test cluster with multiple OSD node failures, the client
   throughput was found to be inconsistent across test runs coupled with multiple
@@ -37,9 +37,11 @@ Notable Changes
   Therefore, as an interim measure until the issue with multiple OSD shards
   (or multiple mClock queues per OSD) is investigated and fixed, the following
   change to the default HDD OSD shard configuration is made:
-   - osd_op_num_shards_hdd = 1 (was 5)
-   - osd_op_num_threads_per_shard_hdd = 5 (was 1)
-  For more details see https://tracker.ceph.com/issues/66289.
+
+    * `osd_op_num_shards_hdd = 1` (was 5)
+    * `osd_op_num_threads_per_shard_hdd = 5` (was 1)
+
+  For more details, see https://tracker.ceph.com/issues/66289.
 
 * mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
   Without this feature, and in the absence of manual deletion of old requests,
