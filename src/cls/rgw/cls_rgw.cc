@@ -710,7 +710,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         }
 
         if (!entry.is_visible() &&
-            entry.demoted_at_snap > op.max_snap) {
+            entry.demoted_at_snap() > op.max_snap) {
           /* make it current as it was current during the requested snapshot */
           entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
         }
@@ -1586,8 +1586,13 @@ public:
   }
 
   void set_snap_skip(rgw_bucket_snap_id snap_id, const string& next_index_key) {
-    instance_entry.snap_skip.snap_id = snap_id;
-    instance_entry.snap_skip.index_key = next_index_key;
+    auto& snap_skip = instance_entry.set_snap_info().skip;
+    snap_skip.snap_id = snap_id;
+    snap_skip.index_key = next_index_key;
+  }
+
+  void set_snap_skip_from(const rgw_bucket_dir_entry& next) {
+    instance_entry.set_snap_skip_from(next);
   }
 
   int unlink_list_entry(rgw_bucket_dir_header& header) {
@@ -1671,7 +1676,7 @@ public:
     if (ret < 0) {
       return ret;
     }
-    instance_entry.demoted_at_snap = demoted_at_snap;
+    instance_entry.set_snap_info().demoted_at = demoted_at_snap;
     return _write_entries(0, rgw_bucket_dir_entry::FLAG_CURRENT, header);
   }
 
@@ -2151,7 +2156,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
           next_entry.meta.snap_id < op.meta.snap_id) {
         obj.set_snap_skip(next_entry.meta.snap_id, next_idx);
       } else {
-        obj.set_snap_skip(next_entry.snap_skip.snap_id, next_entry.snap_skip.index_key);
+        obj.set_snap_skip_from(next_entry);
       }
     }
   }

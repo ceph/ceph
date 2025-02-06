@@ -280,6 +280,19 @@ void rgw_bucket_snap_skip_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("index_key", index_key, obj);
 }
 
+void rgw_bucket_dirent_snap_info::dump(Formatter *f) const
+{
+  encode_json("skip", skip, f);
+  encode_json("demoted_at", demoted_at , f);
+  encode_json("removed_at", removed_at , f);
+}
+
+void rgw_bucket_dirent_snap_info::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("skip", skip, obj);
+  JSONDecoder::decode_json("demoted_at", demoted_at, obj);
+  JSONDecoder::decode_json("removed_at", removed_at, obj);
+}
+
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
   encode_json("name", key.name, f);
@@ -292,8 +305,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   encode_json("flags", (int)flags , f);
   encode_json("pending_map", pending_map, f);
   encode_json("versioned_epoch", versioned_epoch , f);
-  encode_json("snap_skip", snap_skip , f);
-  encode_json("demoted_at_snap", demoted_at_snap , f);
+  encode_json("snap_info", snap_info , f);
 }
 
 void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
@@ -309,8 +321,7 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
   flags = (uint16_t)val;
   JSONDecoder::decode_json("pending_map", pending_map, obj);
   JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
-  JSONDecoder::decode_json("snap_skip", snap_skip, obj);
-  JSONDecoder::decode_json("demoted_at_snap", demoted_at_snap, obj);
+  JSONDecoder::decode_json("snap_info", snap_info, obj);
 }
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)

@@ -397,6 +397,33 @@ struct rgw_bucket_snap_skip_entry {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_snap_skip_entry)
 
+struct rgw_bucket_dirent_snap_info {
+  rgw_bucket_snap_skip_entry skip;
+  rgw_bucket_snap_id demoted_at = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id removed_at = RGW_BUCKET_NO_SNAP;
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(skip, bl);
+    encode(demoted_at, bl);
+    encode(removed_at, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(skip, bl);
+    decode(demoted_at, bl);
+    decode(removed_at, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_dirent_snap_info)
+
+
 struct rgw_bucket_dir_entry {
   /* a versioned object instance */
   static constexpr uint16_t FLAG_VER =                0x1;
@@ -423,9 +450,7 @@ struct rgw_bucket_dir_entry {
   std::string tag;
   uint16_t flags;
   uint64_t versioned_epoch;
-
-  rgw_bucket_snap_skip_entry snap_skip;
-  rgw_bucket_snap_id demoted_at_snap = RGW_BUCKET_NO_SNAP;
+  std::optional<rgw_bucket_dirent_snap_info> snap_info;
 
   rgw_bucket_dir_entry() :
     exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
@@ -445,8 +470,7 @@ struct rgw_bucket_dir_entry {
     encode(flags, bl);
     encode(versioned_epoch, bl);
     encode(key.snap_id, bl);
-    encode(snap_skip, bl);
-    encode(demoted_at_snap, bl);
+    encode(snap_info, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -478,9 +502,7 @@ struct rgw_bucket_dir_entry {
       decode(versioned_epoch, bl);
     }
     if (struct_v >= 9) {
-      decode(key.snap_id, bl);
-      decode(snap_skip, bl);
-      decode(demoted_at_snap, bl);
+      decode(snap_info, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -502,6 +524,36 @@ struct rgw_bucket_dir_entry {
   }
   bool is_common_prefix() const {
     return flags & rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
+  }
+
+  rgw_bucket_snap_id demoted_at_snap() const {
+    if (!snap_info) {
+      return RGW_BUCKET_NO_SNAP;
+    }
+    return snap_info->demoted_at;
+  }
+  rgw_bucket_snap_id removed_at_snap() const {
+    if (!snap_info) {
+      return RGW_BUCKET_NO_SNAP;
+    }
+    return snap_info->removed_at;
+  }
+  rgw_bucket_dirent_snap_info& set_snap_info() {
+    if (!snap_info) {
+      snap_info.emplace(rgw_bucket_dirent_snap_info());
+    }
+    return *snap_info;
+  }
+  void set_snap_skip_from(const rgw_bucket_dir_entry& entry) {
+    if (!snap_info && !entry.snap_info) {
+      return;
+    }
+    auto& info = set_snap_info();
+    if (!entry.snap_info) {
+      info.skip = rgw_bucket_snap_skip_entry();
+    } else {
+      info.skip = entry.snap_info->skip;
+    }
   }
 
   void dump(ceph::Formatter *f) const;
