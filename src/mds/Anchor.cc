@@ -15,12 +15,15 @@
 #include "mds/Anchor.h"
 
 #include "common/Formatter.h"
+#include "include/denc.h"
 
 void Anchor::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 1, bl);
-  encode(ino, bl);
-  encode(dirino, bl);
+  encode(std::tuple{
+    ino,
+    dirino,
+  }, bl, 0);
   encode(d_name, bl);
   encode(d_type, bl);
   encode(frags, bl);
