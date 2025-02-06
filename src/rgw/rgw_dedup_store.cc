@@ -13,7 +13,11 @@
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup.h"
 #include "rgw_dedup_store.h"
-static constexpr auto dout_subsys = ceph_subsys_rgw;
+
+static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
+//#define dout_context cct
+//#undef dout_prefix
+//#define dout_prefix *_dout << "RGW_DEDUP:: "
 
 namespace rgw::dedup {
 
@@ -223,7 +227,7 @@ namespace rgw::dedup {
   {
     disk_block_header_t *p_header = get_header();
     if (unlikely(p_header->rec_count >= MAX_REC_IN_BLOCK)) {
-      ldpp_dout(dpp, 10)  << __func__ << "::rec_count=" << p_header->rec_count
+      ldpp_dout(dpp, 20)  << __func__ << "::rec_count=" << p_header->rec_count
 			  << ", MAX_REC_IN_BLOCK=" << MAX_REC_IN_BLOCK << dendl;
       return MAX_REC_IN_BLOCK;
     }
@@ -326,7 +330,7 @@ namespace rgw::dedup {
 	p_rec->ref_tag = itr->second.to_str();
       }
       else {
-	ldpp_dout(dpp, 1) << __func__ << "::No TAIL_TAG and no ID_TAG" << dendl;
+	ldpp_dout(dpp, 5) << __func__ << "::No TAIL_TAG and no ID_TAG" << dendl;
 	return -1;
       }
     }
@@ -352,7 +356,7 @@ namespace rgw::dedup {
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
       if (tail_placement.bucket.name.empty()) {
-	ldpp_dout(dpp, 10) << "dedup::updating tail placement" << dendl;
+	ldpp_dout(dpp, 20) << "dedup::updating tail placement" << dendl;
 	rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
 	manifest.set_tail_placement(tail_placement.placement_rule, b);
 	encode(manifest, p_rec->manifest_bl);
@@ -363,7 +367,7 @@ namespace rgw::dedup {
       p_rec->s.manifest_len = p_rec->manifest_bl.length();
     }
     else {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: no manifest" << dendl;
+      ldpp_dout(dpp, 5)  << __func__ << "::ERROR: no manifest" << dendl;
       return -1;
     }
 
@@ -376,7 +380,7 @@ namespace rgw::dedup {
 	bufferlist bl = itr->second;
 	auto bl_iter = bl.cbegin();
 	decode(pg_ver, bl_iter);
-	ldpp_dout(dpp, 1)  << __func__ << "::pg_ver=" << bl.to_str() << dendl;;
+	ldpp_dout(dpp, 10)  << __func__ << "::pg_ver=" << bl.to_str() << dendl;;
 	p_rec->s.version = pg_ver;
 	p_rec->s.flags |= RGW_DEDUP_FLAG_PG_VER;
       } catch (buffer::error& err) {
@@ -402,12 +406,12 @@ namespace rgw::dedup {
       sha256_to_bufferlist(p_rec->s.sha256[0], p_rec->s.sha256[1],
 			   p_rec->s.sha256[2], p_rec->s.sha256[3], &sha_bl);
       if (sha256 == sha_bl.to_str()) {
-	ldpp_dout(dpp, 1)  << __func__ << "::Valid SHA256!!" << dendl;
+	ldpp_dout(dpp, 10)  << __func__ << "::Valid SHA256!!" << dendl;
       }
       else {
-	ldpp_dout(dpp, 1)  << __func__ << "::>>Invalid SHA256<<" << dendl;
-	ldpp_dout(dpp, 1)  << "SHA256(A):|:" << sha256 << ":|:" << dendl;
-	ldpp_dout(dpp, 1)  << "SHA256(B):|:" << sha_bl.to_str() << ":|:" << dendl;
+	ldpp_dout(dpp, 10)  << __func__ << "::>>Invalid SHA256<<" << dendl;
+	ldpp_dout(dpp, 10)  << "SHA256(A):|:" << sha256 << ":|:" << dendl;
+	ldpp_dout(dpp, 10)  << "SHA256(B):|:" << sha_bl.to_str() << ":|:" << dendl;
       }
 #endif
     }
@@ -460,28 +464,28 @@ namespace rgw::dedup {
 					      const disk_record_t      &rec)
   {
     char buff[DISK_BLOCK_SIZE];
-    ldpp_dout(dpp, 1)  << __func__ << "::Disk Record:\n" << rec << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::Disk Record:\n" << rec << dendl;
     print_manifest(dpp, rados, rec.manifest_bl);
 
-    ldpp_dout(dpp, 1)  << __func__ << "::Disk Record length = " << rec.length() << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::Disk Record length = " << rec.length() << dendl;
     int n = rec.serialize(buff);
-    ldpp_dout(dpp, 1)  << __func__ << "::Disk Record serialized length = " << n << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::Disk Record serialized length = " << n << dendl;
     disk_record_t rec2(buff);
-    ldpp_dout(dpp, 1)  << __func__ << "::Disk Record2:\n" << rec2 << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::Disk Record2:\n" << rec2 << dendl;
     print_manifest(dpp, rados, rec2.manifest_bl);
-    ldpp_dout(dpp, 1)  << __func__ << "::Disk Record length = " << rec2.length() << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::Disk Record length = " << rec2.length() << dendl;
     n = rec2.serialize(buff);
-    ldpp_dout(dpp, 1)  << __func__ << "::Disk Record serialized length = " << n << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::Disk Record serialized length = " << n << dendl;
 
     //if (std::memcmp(&rec, &rec2, rec2.length()) == 0) {}
     if (rec == rec2) {
-      ldpp_dout(dpp, 1)  << __func__ << "::Disk Records match!" << dendl;
+      ldpp_dout(dpp, 20)  << __func__ << "::Disk Records match!" << dendl;
     }
     else {
-      ldpp_dout(dpp, 1)  << __func__ << "::Disk Records mismatch!" << dendl;
+      ldpp_dout(dpp, 10)  << __func__ << "::Disk Records mismatch!" << dendl;
     }
-    ldpp_dout(dpp, 1)  << __func__ << "::manifest.length()=" << rec.s.manifest_len << dendl;
-    ldpp_dout(dpp, 1)  << __func__ << "::sizeof(packed_rec_t)=" << sizeof(rec.s) << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::manifest.length()=" << rec.s.manifest_len << dendl;
+    ldpp_dout(dpp, 20)  << __func__ << "::sizeof(packed_rec_t)=" << sizeof(rec.s) << dendl;
   }
 
   //---------------------------------------------------------------------------
@@ -535,7 +539,7 @@ namespace rgw::dedup {
       return ret;
     }
     else {
-      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     }
     const char *p = nullptr;
     auto bl_itr = bl.cbegin();
@@ -558,13 +562,13 @@ namespace rgw::dedup {
 	return 0;
       }
       else {
-	ldpp_dout(dpp, 1) << __func__ << "::ERR: Bad record in block=" << block_id
+	ldpp_dout(dpp, 5) << __func__ << "::ERR: Bad record in block=" << block_id
 			  << ", rec_id=" << rec_id << dendl;
 	return -1;
       }
     }
     else {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: unexpected short read n=" << n << dendl;
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: unexpected short read n=" << n << dendl;
       return -1;
     }
 
@@ -589,11 +593,11 @@ namespace rgw::dedup {
 
     int ret = p_ioctx->read_full(oid, bl);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << oid
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed to read " << oid
 			<< ", error is " << cpp_strerror(ret) << dendl;
     }
     else {
-      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     }
     return ret;
   }
