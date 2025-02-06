@@ -1666,8 +1666,11 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	// TODO: Needs to call with related_snaprealm??
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDir *dir = dn->dir;
-          // TODO: What does this mean for referent inode ?? Passing 0 for now.
-	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), 0, in->d_type(), dn->alternate_name, oldfirst, dir_follows);
+          // TODO: What does this mean for referent inode ?? Passing nullptr for now.
+	  if (mds->mdsmap->allow_referent_inodes()) {
+	    dout(10) << __func__ << " NEEDS FIX1 - Adding dentry as remote when referent inode feature is enabled !!! " << *dn << dendl;
+	  }
+	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
 	  dout(10) << " olddn " << *olddn << dendl;
 	  ceph_assert(dir->is_projected());
 	  olddn->set_projected_version(dir->get_projected_version());
@@ -1772,7 +1775,10 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     } else {
       ceph_assert(dnl->is_remote() || dnl->is_referent());
       //No need to journal referent inode for cow
-      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), 0, dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
+      if (mds->mdsmap->allow_referent_inodes()) {
+        dout(10) << __func__ << " NEEDS FIX2 - Adding dentry as remote when referent inode feature is enabled !!! " << *dn << dendl;
+      }
+      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
       olddn->set_projected_version(dir->get_projected_version());
@@ -4822,20 +4828,21 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
         }
         if (!dn) {
 	  if (d.is_remote() || d.is_referent()) {
-	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.referent_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
+	    CInode *ref_in = nullptr;
 	    if (d.is_referent()) {
-	      CInode *ref_in = get_inode(d.referent_ino, ss.snapid);
+	      // TODO: ss.snapid for referent inode ? Since it's not snapped, always use
+	      // default CEPH_NOSNAP. Validate this by testing.
+	      ref_in = get_inode(d.referent_ino);
 	      if (!ref_in) {
 	        dout(20) << " rejoin:  referent inode not found in memory for dentry " << *dn << " inventing " << dendl;
-		ref_in = rejoin_invent_inode(d.referent_ino, ss.snapid);
+		ref_in = rejoin_invent_inode(d.referent_ino, CEPH_NOSNAP);
                 ref_in->set_remote_ino(d.remote_ino);
 	      }
-              dn->dir->set_referent_inode(dn, ref_in);
-	      dout(20) << " rejoin: referent inode invented/linked " << ref_in << dendl;
+	      dout(20) << " rejoin: referent inode invented " << *ref_in << " for dentry " << *dn << dendl;
 	    } else {
-	      dout(10) << " rejoin: referent inode not found for dentry " << *dn << dendl;
+	      dout(20) << " rejoin: add remote inode for dentry " << *dn << dendl;
 	    }
-
+	    dn = dir->add_remote_dentry(ss.name, ref_in, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
 	  } else if (d.is_null()) {
 	    dn = dir->add_null_dentry(ss.name, d.first, ss.snapid);
 	  } else {
@@ -11072,7 +11079,7 @@ void MDCache::encode_replica_dir(CDir *dir, mds_rank_t to, bufferlist& bl)
 
 void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(dn->get_name(), bl);
   encode(dn->last, bl);
 
@@ -11085,6 +11092,7 @@ void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
   bool need_recover = mds->get_state() < MDSMap::STATE_ACTIVE;
   encode(need_recover, bl);
   encode(dn->alternate_name, bl);
+  encode(dn->linkage.referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -11194,10 +11202,17 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
     decode(alternate_name, p);
   }
 
+  inodeno_t referent_ino;
+  if (struct_v >= 3) {
+    decode(referent_ino, p);
+  }
+
   if (is_new) {
     dn->set_alternate_name(std::move(alternate_name));
-    if (rino)
+    if (rino && !referent_ino)
       dir->link_remote_inode(dn, rino, rdtype);
+    else if (rino && referent_ino)
+      dir->link_null_referent_inode(dn, referent_ino, rino, rdtype);
     if (need_recover)
       dn->lock.mark_need_recover();
   } else {
@@ -11229,12 +11244,11 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     else if (in->is_mdsdir())
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
     dout(10) << __func__ << " added " << *in << dendl;
-    // TODO: This is the only place where remote check is used for a referent inode.
-    // This sender doesn't mark the linkage as referent. It marks it as remote. The
-    // linkage is made referent here.
-    if (dn && dn->get_linkage()->is_remote()){
-      dout(10) << __func__ << " setting referent inode " << *in << dendl;
-      dn->dir->set_referent_inode(dn, in);
+    if (dn && dn->get_linkage()->get_referent_ino() > 0) {
+      dout(10) << __func__ << " linking referent inode " << *in << dendl;
+      ceph_assert(!dn->get_linkage()->get_referent_inode());
+      ceph_assert(dn->get_linkage()->get_referent_ino() == in->ino());
+      dn->dir->link_referent_inode(dn, in, dn->get_linkage()->get_remote_ino(), dn->get_linkage()->get_remote_d_type());
     } else if (dn) {
       ceph_assert(dn->get_linkage()->is_null());
       dn->dir->link_primary_inode(dn, in);
@@ -11244,9 +11258,9 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     in->_decode_base(p);
     in->_decode_locks_state_for_replica(p, false);
     dout(10) << __func__ << " had " << *in << dendl;
-    if (dn && dn->get_linkage()->is_remote()) {
-      dn->dir->set_referent_inode(dn, in);
-      dout(10) << __func__ << " had referent inode, setting it" << *in << dendl;
+    if (dn && dn->get_linkage()->get_referent_ino() > 0) {
+      if (!dn->get_linkage()->is_referent() || dn->get_linkage()->get_referent_inode() != in)
+        dout(10) << __func__ << " different referent inode linkage in dentry " << *dn << " inode " << *in << dendl;
     }
   }
 
@@ -11414,11 +11428,13 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
 
 void MDCache::encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   inodeno_t ino = dnl->get_remote_ino();
   encode(ino, bl);
   __u8 d_type = dnl->get_remote_d_type();
   encode(d_type, bl);
+  inodeno_t referent_ino = dnl->get_referent_ino();
+  encode(referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -11430,7 +11446,14 @@ void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::cons
   decode(ino, p);
   decode(d_type, p);
   dout(10) << __func__ << "  remote " << ino << " " << d_type << dendl;
-  dir->link_remote_inode(dn, ino, d_type);
+  inodeno_t referent_ino;
+  if (struct_v >= 2) {
+    decode(referent_ino, p);
+  }
+  if (referent_ino > 0)
+    dir->link_null_referent_inode(dn, referent_ino, ino, d_type);
+  else
+    dir->link_remote_inode(dn, ino, d_type);
   DECODE_FINISH(p);
 }
 
@@ -11501,9 +11524,9 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
     } else {
       // remote link, easy enough.
       decode_remote_dentry_link(dir, dn, p);
-      // decode referent inode and add it to linkage.
-      // TODO: This is the only place, were remote is treated as referent.
-      decode_replica_inode(in, p, dn, finished);
+      // decode referent inode and link it, only if it's referent
+      if (dn->get_linkage()->get_referent_ino() > 0)
+        decode_replica_inode(in, p, dn, finished);
     }
   } else {
     ceph_abort();
