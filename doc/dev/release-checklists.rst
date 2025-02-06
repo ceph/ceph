@@ -45,7 +45,7 @@ Scripts
 
 - [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`)
 - [x] src/script/backport-create-issue (`releases()`)
-- [ ] src/script/ceph-release-notes (X-1)
+- [x] src/script/ceph-release-notes (up to X)
 
 Misc
 ~~~~
