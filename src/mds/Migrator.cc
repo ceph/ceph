@@ -3350,7 +3350,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
     if (dn->get_linkage()->get_referent_inode() != in) {
       ceph_assert(!dn->get_linkage()->get_referent_inode());
       dout(20) << __func__ << " null dentry_linkage, linking decode referent_inode, linkage referent_inode=" << dn->get_linkage()->get_referent_inode() << dendl;
-      dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->ino(), in->d_type());
+      dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->d_type());
     } else {
       dout(20) << __func__ << " non-null dentry_linkage, validating decoded referent_inode against existing" << dendl;
       ceph_assert(dn->get_linkage()->get_remote_ino() == in->get_remote_ino());
