@@ -51,8 +51,6 @@ class RadosIo : public Model {
   template <int N>
   class AsyncOpInfo {
    public:
-    librados::ObjectReadOperation rop;
-    librados::ObjectWriteOperation wop;
     std::array<ceph::bufferlist, N> bufferlist;
     std::array<uint64_t, N> offset;
     std::array<uint64_t, N> length;
