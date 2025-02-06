@@ -1069,6 +1069,21 @@ std::string mirror_image_global_status_state(
   return mirror_image_site_status_state(local_status);
 }
 
+
+std::string mirror_group_state(librbd::mirror_group_state_t state) {
+  switch (state) {
+    case RBD_MIRROR_GROUP_DISABLING:
+      return "disabling";
+    case RBD_MIRROR_GROUP_ENABLING:
+      return "enabling";
+    case RBD_MIRROR_GROUP_ENABLED:
+      return "enabled";
+    case RBD_MIRROR_GROUP_DISABLED:
+      return "disabled";
+    default:
+      return "unknown";
+  }
+}
 std::string mirror_group_status_state(
     librbd::mirror_group_status_state_t state) {
   switch (state) {

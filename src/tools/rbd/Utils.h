@@ -255,6 +255,8 @@ std::string mirror_image_site_status_state(
 std::string mirror_image_global_status_state(
     const librbd::mirror_image_global_status_t& status);
 
+std::string mirror_group_state(
+    librbd::mirror_group_state_t mirror_group_state);
 std::string mirror_group_status_state(
     librbd::mirror_group_status_state_t state);
 std::string mirror_group_site_status_state(

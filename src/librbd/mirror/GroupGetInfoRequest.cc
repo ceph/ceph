@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include "librbd/mirror/snapshot/GroupGetInfoRequest.h"
+#include "librbd/mirror/GroupGetInfoRequest.h"
 #include "include/ceph_assert.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -13,12 +13,11 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::mirror::snapshot::GroupGetInfoRequest: " \
+#define dout_prefix *_dout << "librbd::mirror::GroupGetInfoRequest: " \
                            << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace mirror {
-namespace snapshot {
 
 using librbd::util::create_rados_callback;
 
@@ -88,29 +87,26 @@ template <typename I>
 void GroupGetInfoRequest<I>::handle_get_info(int r) {
   auto cct = reinterpret_cast<CephContext *>(m_group_ioctx.cct());
   ldout(cct, 10) << "r=" << r << dendl;
+  
+  m_mirror_group->state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
+  *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+
+  if (r == 0) {
+    auto it = m_outbl.cbegin();
+    r = cls_client::mirror_group_get_finish(&it, m_mirror_group);
+  }
+
+  if (r == -ENOENT) {
+    ldout(cct, 20) << "mirroring is disabled" << dendl;
+    finish(r);
+    return;
+  }
   if (r < 0) {
     lderr(cct) << "failed to get mirror info of group '" << m_group_name
                << "': " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
-
-  auto it = m_outbl.cbegin();
-  cls::rbd::MirrorGroup mirror_group;
-  r = cls_client::mirror_group_get_finish(&it, &mirror_group);
-  if (r < 0) {
-    lderr(cct) << "failed to get mirror info of group '" << m_group_name
-               << "': " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  m_mirror_group_info->global_id = mirror_group.global_group_id;
-  m_mirror_group_info->mirror_image_mode =
-      static_cast<rbd_mirror_image_mode_t>(mirror_group.mirror_image_mode);
-  m_mirror_group_info->state =
-      static_cast<rbd_mirror_group_state_t>(mirror_group.state);
-  m_mirror_group_info->primary = false;
 
   get_last_mirror_snapshot_state();
 }
@@ -147,8 +143,18 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
       &it->snapshot_namespace);
     if (ns != nullptr) {
       // XXXMG: check primary_mirror_uuid matches?
-      m_mirror_group_info->primary =
-	(ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY);
+      switch (ns->state) {
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY:
+        *m_promotion_state = PROMOTION_STATE_PRIMARY;
+        break;
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY:
+        *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+        break;
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
+        *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        break;
+      }
       break;
     }
   }
@@ -165,8 +171,7 @@ void GroupGetInfoRequest<I>::finish(int r) {
   delete this;
 }
 
-} // namespace snapshot
 } // namespace mirror
 } // namespace librbd
 
-template class librbd::mirror::snapshot::GroupGetInfoRequest<librbd::ImageCtx>;
+template class librbd::mirror::GroupGetInfoRequest<librbd::ImageCtx>;
