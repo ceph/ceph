@@ -289,6 +289,23 @@ void ImageReplayer<I>::prune_snapshot(uint64_t snap_id) {
 }
 
 template <typename I>
+void ImageReplayer<I>::set_remote_snap_id_end_limit(uint64_t snap_id) {
+  std::unique_lock locker(m_lock);
+  if (m_replayer != nullptr) {
+    m_replayer->set_remote_snap_id_end_limit(snap_id);
+  }
+}
+
+template <typename I>
+uint64_t ImageReplayer<I>::get_remote_snap_id_end_limit() {
+  std::unique_lock locker(m_lock);
+  if (m_replayer != nullptr) {
+    return m_replayer->get_remote_snap_id_end_limit();
+  }
+  return CEPH_NOSNAP;
+}
+
+template <typename I>
 void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
   dout(10) << "r=" << r << ", desc=" << desc << dendl;
 

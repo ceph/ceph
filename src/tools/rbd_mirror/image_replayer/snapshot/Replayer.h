@@ -104,6 +104,16 @@ public:
     m_prune_snap_ids_by_gr.insert(snap_id);
   }
 
+  void set_remote_snap_id_end_limit(uint64_t snap_id) {
+    std::unique_lock locker(m_lock);
+    m_remote_group_image_snap_id = snap_id;
+  }
+
+  uint64_t get_remote_snap_id_end_limit() {
+    std::unique_lock locker(m_lock);
+    return m_remote_group_image_snap_id;
+  }
+
 private:
   /**
    * @verbatim
@@ -243,6 +253,7 @@ private:
   std::string m_remote_mirror_peer_uuid;
   uint64_t m_remote_snap_id_start = 0;
   uint64_t m_remote_snap_id_end = CEPH_NOSNAP;
+  uint64_t m_remote_group_image_snap_id = CEPH_NOSNAP;
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
 
   int64_t m_local_group_pool_id = -1;

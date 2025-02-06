@@ -227,16 +227,25 @@ bool GroupReplayer<I>::needs_restart() const {
   dout(10) << dendl;
 
   std::lock_guard locker{m_lock};
-  if (m_state != STATE_REPLAYING) {
-    dout(10) << dendl;
-    return false;
+  if (!m_replayer) {
+    return true;
   }
 
-  for (auto &[_, image_replayer] : m_image_replayers) {
-    if (image_replayer->is_stopped()) {
-      dout(10) << "image replayer is in stopped state, needs restart" << dendl;
+  if (!m_local_group_ctx.primary) {
+    if (m_state != STATE_REPLAYING) {
       return true;
     }
+    for (auto &[_, image_replayer] : m_image_replayers) {
+      if (image_replayer->is_stopped()) {
+        dout(10) << "image replayer is in stopped state, needs restart" << dendl;
+        return true;
+      }
+    }
+  } else {
+    // this is how we determine if the remote state has changed,
+    // if we never restart the group replayer we never get to see updated
+    // snapshot information on remote and see if its demoted at all.
+    return true;
   }
 
   return false;
