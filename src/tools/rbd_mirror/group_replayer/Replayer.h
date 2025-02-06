@@ -146,6 +146,7 @@ private:
   void handle_mirror_snapshot_complete(
     int r, const std::string &remote_group_snap_id, Context *on_finish);
 
+  bool prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap);
   void unlink_group_snapshots(const std::string &remote_group_snap_id);
 
   void create_regular_snapshot(
@@ -153,6 +154,9 @@ private:
     const std::string &remote_group_snap_id,
     Context *on_finish);
   void handle_create_regular_snapshot(int r, Context *on_finish);
+  void set_image_replayer_limits(const std::string &image_id,
+                                 cls::rbd::GroupSnapshot *remote_snap);
+
   void regular_snapshot_complete(
     const std::string &remote_group_snap_id,
     Context *on_finish);
