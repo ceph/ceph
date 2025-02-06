@@ -767,7 +767,19 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                    << dendl;
           get_local_image_state();
         } else {
-          copy_snapshots();
+          // Standalone image mirroring
+          if (!m_remote_mirror_snap_ns.group_spec.is_valid() &&
+              m_remote_mirror_snap_ns.group_snap_id.empty()) {
+            copy_snapshots();
+            return;
+          }
+          // Image is part of group enabled for mirroring
+          auto limit = get_remote_snap_id_end_limit();
+          if (limit != CEPH_NOSNAP && limit >= m_remote_snap_id_end) {
+            copy_snapshots();
+          } else {
+            load_local_image_meta();
+          }
         }
         return;
       } else {
