@@ -2335,6 +2335,7 @@ int RadosObject::copy_object(User* user,
 				optional_yield y)
 {
   return store->getRados()->copy_obj(*rados_ctx,
+				     *static_cast<RadosObject*>(dest_object)->rados_ctx,
 				     user->get_id(),
 				     info,
 				     source_zone,
