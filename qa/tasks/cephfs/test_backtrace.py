@@ -5,8 +5,8 @@ from tasks.cephfs.filesystem import ObjectNotFound
 class TestBacktrace(CephFSTestCase):
     def test_backtrace(self):
         """
-        That the 'parent' 'layout' and 'symlink' xattrs on the head objects of files
-        are updated correctly.
+        That the 'parent', 'layout', 'symlink' and 'remote_inode' xattrs on the
+        head objects of files are updated correctly.
         """
 
         old_data_pool_name = self.fs.get_data_pool_name()
@@ -35,6 +35,22 @@ class TestBacktrace(CephFSTestCase):
         self.assertEqual(symlink, {
             "s" : "./file1",
             })
+
+        # Validate 'remote_inode' xattr on hardlink creation
+        self.mount_a.run_shell(["mkdir", "hardlink_dir"])
+        self.mount_a.run_shell(["touch", "hardlink_dir/file1"])
+        self.mount_a.run_shell(["ln", "hardlink_dir/file1", "hardlink_dir/hl_file1"])
+        self.fs.mds_asok(["flush", "journal"])
+
+        dir_ino = self.mount_a.path_to_ino("hardlink_dir", follow_symlinks=False)
+        file1_inode = self.fs.read_meta_inode(dir_ino, "file1")
+        referent_ino = file1_inode["referent_inodes"][0]
+
+        remote_ino = self.mount_a.path_to_ino("hardlink_dir/file1", follow_symlinks=False)
+
+        remote_inode_xattr = self.fs.read_remote_inode(referent_ino)
+        self.assertEqual(remote_inode_xattr['val'], remote_ino)
+
 
         # Create a file for subsequent checks
         self.mount_a.run_shell(["mkdir", "parent_a"])

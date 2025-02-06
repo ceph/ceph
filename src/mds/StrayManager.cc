@@ -117,7 +117,14 @@ void StrayManager::purge(CDentry *dn)
     SnapRealm *realm = in->find_snaprealm();
     if (realm) {
       dout(10) << " realm " << *realm << dendl;
-      snapc = &realm->get_snap_context();
+      if (mds->mdsmap->use_global_snaprealm()) {
+        snapc = &realm->get_snap_context();
+      } else {
+        std::vector<SnapRealm*> related_realms;
+        dout(20) << "StrayManager::purge ----> get_related_realms for inode "<< *in << dendl;
+        in->get_related_realms(related_realms);
+        snapc = &realm->get_snap_context(related_realms);
+      }
     } else {
       dout(10) << " NO realm, using null context" << dendl;
       snapc = &nullsnapc;
@@ -578,7 +585,7 @@ void StrayManager::eval_remote(CDentry *remote_dn)
   dout(10) << __func__ << " " << *remote_dn << dendl;
 
   CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
   CInode *in = dnl->get_inode();
 
   if (!in) {
@@ -609,7 +616,7 @@ class C_RetryEvalRemote : public StrayManagerContext {
       dn->get(CDentry::PIN_PTRWAITER);
     }
     void finish(int r) override {
-      if (dn->get_projected_linkage()->is_remote())
+      if (dn->get_projected_linkage()->is_remote() || dn->get_projected_linkage()->is_referent())
 	sm->eval_remote(dn);
       dn->put(CDentry::PIN_PTRWAITER);
     }
@@ -739,8 +746,8 @@ StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
 
 void StrayManager::truncate(CDentry *dn)
 {
-  const CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  const CInode *in = dnl->get_inode();
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  CInode *in = dnl->get_inode();
   ceph_assert(in);
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
   ceph_assert(!dn->is_replicated());
@@ -748,7 +755,15 @@ void StrayManager::truncate(CDentry *dn)
   const SnapRealm *realm = in->find_snaprealm();
   ceph_assert(realm);
   dout(10) << " realm " << *realm << dendl;
-  const SnapContext *snapc = &realm->get_snap_context();
+  const SnapContext *snapc;
+  if (mds->mdsmap->use_global_snaprealm()) {
+    snapc = &realm->get_snap_context();
+  } else {
+    std::vector<SnapRealm*> related_realms;
+    dout(20) << "StrayManger::truncate ----> get_related_realms for inode "<< *in << dendl;
+    in->get_related_realms(related_realms);
+    snapc = &realm->get_snap_context(related_realms);
+  }
 
   uint64_t to = std::max(in->get_inode()->size, in->get_inode()->get_max_size());
   // when truncating a file, the filer does not delete stripe objects that are

@@ -151,6 +151,32 @@ class SymlinkWorkload(Workload):
         return self._errors
 
 
+class HardlinkWorkload(Workload):
+    """
+    Hardlink file, check that it gets recovered as hardlink
+    with referent inode pointing to the remote inode
+    """
+    def write(self):
+        self._mount.run_shell(["mkdir", "hardlink_dir"])
+        self._mount.write_n_mb("hardlink_dir/file1", 1)
+        self._mount.run_shell(["ln", "hardlink_dir/file1", "hardlink_dir/hl_file1"])
+        self._mount.run_shell(["ln", "hardlink_dir/file1", "hardlink_dir/hl_file2"])
+
+    def validate(self):
+        self._mount.run_shell(["sudo", "ls", "hardlink_dir"], omit_sudo=False)
+        st_file1 = self._mount.lstat("hardlink_dir/file1")
+        st_hl_file1 = self._mount.lstat("hardlink_dir/hl_file1")
+        st_hl_file2 = self._mount.lstat("hardlink_dir/hl_file2")
+        # link count check
+        self.assert_equal(3, st_file1['st_nlink'])
+        self.assert_equal(3, st_hl_file1['st_nlink'])
+        self.assert_equal(3, st_hl_file2['st_nlink'])
+        # ino number check
+        self.assert_equal(st_file1['st_ino'], st_hl_file1['st_ino'])
+        self.assert_equal(st_file1['st_ino'], st_hl_file2['st_ino'])
+        return self._errors
+
+
 class MovedFile(Workload):
     def write(self):
         # Create a file whose backtrace disagrees with his eventual position
@@ -489,6 +515,9 @@ class TestDataScan(CephFSTestCase):
 
     def test_rebuild_symlink(self):
         self._rebuild_metadata(SymlinkWorkload(self.fs, self.mount_a))
+
+    def test_rebuild_hardlink(self):
+        self._rebuild_metadata(HardlinkWorkload(self.fs, self.mount_a))
 
     def test_rebuild_moved_file(self):
         self._rebuild_metadata(MovedFile(self.fs, self.mount_a))

@@ -415,7 +415,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       if (mdr->lock_cache) { // debug
 	ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
 	CDentry *dn = mdr->dn[0].back();
-	ceph_assert(dn->get_projected_linkage()->is_remote());
+	ceph_assert(dn->get_projected_linkage()->is_remote() || dn->get_projected_linkage()->is_referent());
       }
 
       if (object->is_ambiguous_auth()) {
@@ -451,7 +451,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	{ // debug
 	  ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
 	  CDentry *dn = mdr->dn[0].back();
-	  ceph_assert(dn->get_projected_linkage()->is_remote());
+	  ceph_assert(dn->get_projected_linkage()->is_remote() || dn->get_projected_linkage()->is_referent());
 	}
       }
 
@@ -3482,7 +3482,15 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     }
 
     SnapRealm *realm = head_in->find_snaprealm();
-    snapid_t snap = realm->get_snap_following(follows);
+    snapid_t snap;
+    if (mds->mdsmap->use_global_snaprealm()) {
+      snap = realm->get_snap_following(follows);
+    } else {
+      std::vector<SnapRealm*> related_realms;
+      dout(20) << "handle_client_caps ----> get_related_realms for inode "<< *head_in << dendl;
+      head_in->get_related_realms(related_realms);
+      snap = realm->get_snap_following(follows, related_realms);
+    }
     dout(10) << "  flushsnap follows " << follows << " -> snap " << snap << dendl;
 
     auto p = head_in->client_need_snapflush.begin();
@@ -4503,7 +4511,7 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
       ceph_assert(dnl->get_inode() == in);
       mask = CEPH_LEASE_PRIMARY_LINK;
     } else {
-      if (dnl->is_remote())
+      if (dnl->is_remote() || dnl->is_referent())
         ceph_assert(dnl->get_remote_ino() == in->ino());
       else
         ceph_assert(!in);
