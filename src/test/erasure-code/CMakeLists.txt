@@ -62,6 +62,17 @@ target_link_libraries(unittest_erasure_code
   ceph-common
   )
 
+# unittest_erasure_code_plugins
+add_executable(unittest_erasure_code_plugins
+  TestErasureCodePlugins.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_erasure_code_plugins)
+target_link_libraries(unittest_erasure_code_plugins
+  global
+  ceph-common
+  )
+
 # unittest_erasure_code_plugin_jerasure
 add_executable(unittest_erasure_code_plugin_jerasure
   TestErasureCodePluginJerasure.cc
