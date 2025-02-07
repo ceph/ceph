@@ -1,0 +1,10 @@
+This suite was introduced to test the `getvxattr` op for newer clients with
+older MDSs. There was a bug where the MDS would crash when a newer client
+would send a `getvxattr` op(which the MDS did not understand). Then,
+subsequently, we added more test to this under PR #48280 which added tests
+to start from pacific and upgrade to reef since reef was the latest release
+at that moment.
+
+This suite should be testing what has been released (or close to being
+released) and verify that a newer client (say on `main`) can talk to a
+N-1|N-2 MDS.
