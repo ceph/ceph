@@ -4,6 +4,7 @@ import { BucketTagModalComponent } from './bucket-tag-modal.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('BucketTagModalComponent', () => {
   let component: BucketTagModalComponent;
@@ -13,6 +14,7 @@ describe('BucketTagModalComponent', () => {
     await TestBed.configureTestingModule({
       declarations: [BucketTagModalComponent],
       imports: [HttpClientTestingModule, ReactiveFormsModule],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
       providers: [NgbActiveModal]
     }).compileComponents();
 

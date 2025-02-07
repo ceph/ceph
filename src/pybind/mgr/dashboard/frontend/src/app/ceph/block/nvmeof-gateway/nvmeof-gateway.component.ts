@@ -1,4 +1,4 @@
-import { Component, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 
@@ -28,7 +28,7 @@ type Gateway = {
   templateUrl: './nvmeof-gateway.component.html',
   styleUrls: ['./nvmeof-gateway.component.scss']
 })
-export class NvmeofGatewayComponent {
+export class NvmeofGatewayComponent implements OnInit {
   @ViewChild('statusTpl', { static: true })
   statusTpl: TemplateRef<any>;
 

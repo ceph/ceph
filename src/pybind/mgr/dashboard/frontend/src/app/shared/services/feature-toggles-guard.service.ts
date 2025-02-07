@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, CanActivate, CanActivateChild } from '@angular/router';
+import { ActivatedRouteSnapshot } from '@angular/router';
 
 import { map } from 'rxjs/operators';
 
@@ -9,7 +9,7 @@ import { FeatureTogglesMap, FeatureTogglesService } from './feature-toggles.serv
 @Injectable({
   providedIn: 'root'
 })
-export class FeatureTogglesGuardService implements CanActivate, CanActivateChild {
+export class FeatureTogglesGuardService {
   constructor(private featureToggles: FeatureTogglesService) {}
 
   canActivate(route: ActivatedRouteSnapshot) {

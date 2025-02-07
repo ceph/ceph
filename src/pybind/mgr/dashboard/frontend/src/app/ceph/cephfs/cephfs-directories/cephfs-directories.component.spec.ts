@@ -12,7 +12,6 @@ import _ from 'lodash';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -388,21 +387,18 @@ describe('CephfsDirectoriesComponent', () => {
     }
   };
 
-  configureTestBed(
-    {
-      imports: [
-        HttpClientTestingModule,
-        SharedModule,
-        RouterTestingModule,
-        TreeviewModule,
-        ToastrModule.forRoot(),
-        NgbModalModule
-      ],
-      declarations: [CephfsDirectoriesComponent],
-      providers: [NgbActiveModal]
-    },
-    [CriticalConfirmationModalComponent, FormModalComponent, ConfirmationModalComponent]
-  );
+  configureTestBed({
+    imports: [
+      HttpClientTestingModule,
+      SharedModule,
+      RouterTestingModule,
+      TreeviewModule,
+      ToastrModule.forRoot(),
+      NgbModalModule
+    ],
+    declarations: [CephfsDirectoriesComponent],
+    providers: [NgbActiveModal]
+  });
 
   beforeEach(() => {
     noAsyncUpdate = false;
@@ -674,7 +670,6 @@ describe('CephfsDirectoriesComponent', () => {
       mockLib.selectNode('/a/c');
       mockLib.selectNode('/a/c/a');
       component.selectOrigin('/a');
-      console.debug('component.selectedDir', component.selectedDir);
       expect(component.selectedDir.path).toBe('/a');
     });
 
