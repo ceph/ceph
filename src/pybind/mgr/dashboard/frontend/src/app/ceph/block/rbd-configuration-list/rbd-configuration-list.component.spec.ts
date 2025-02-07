@@ -4,7 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgChartsModule } from 'ng2-charts';
+import { BaseChartDirective } from 'ng2-charts';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
@@ -25,7 +25,7 @@ describe('RbdConfigurationListComponent', () => {
       RouterTestingModule,
       ComponentsModule,
       NgbDropdownModule,
-      NgChartsModule,
+      BaseChartDirective,
       SharedModule,
       NgbTooltipModule
     ],

@@ -13,7 +13,7 @@ import {
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
 import { ClickOutsideModule } from 'ng-click-outside';
-import { NgChartsModule } from 'ng2-charts';
+import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 import {
   UIShellModule,
@@ -93,7 +93,6 @@ import InfoIcon from '@carbon/icons/es/information/16';
     NgbPopoverModule,
     NgbProgressbarModule,
     NgbTooltipModule,
-    NgChartsModule,
     ReactiveFormsModule,
     PipesModule,
     DirectivesModule,
@@ -121,7 +120,8 @@ import InfoIcon from '@carbon/icons/es/information/16';
     DropdownModule,
     SelectModule,
     ComboBoxModule,
-    ProgressIndicatorModule
+    ProgressIndicatorModule,
+    BaseChartDirective
   ],
   declarations: [
     SparklineComponent,
@@ -165,7 +165,7 @@ import InfoIcon from '@carbon/icons/es/information/16';
     UpgradableComponent,
     ProgressComponent
   ],
-  providers: [],
+  providers: [provideCharts(withDefaultRegisterables())],
   exports: [
     SparklineComponent,
     HelperComponent,

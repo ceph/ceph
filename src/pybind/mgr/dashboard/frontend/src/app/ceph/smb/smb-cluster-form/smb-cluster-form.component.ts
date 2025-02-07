@@ -49,7 +49,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   resource: string;
   icons = Icons;
   domainSettingsObject: DomainSettings;
-  modalData$ = this.smbService.modalData$;
+  modalData$!: Observable<DomainSettings>;
 
   constructor(
     private hostService: HostService,
@@ -63,6 +63,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`Cluster`;
+    this.modalData$ = this.smbService.modalData$;
   }
   ngOnInit() {
     this.action = this.actionLabels.CREATE;

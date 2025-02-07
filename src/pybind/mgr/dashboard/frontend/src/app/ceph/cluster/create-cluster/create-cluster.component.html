@@ -45,7 +45,7 @@
   <div cdsCol
        [columnNumbers]="{'lg': 14, 'md': 14, 'sm': 14}">
     <ng-container [ngSwitch]="currentStep?.stepIndex">
-      <div *ngSwitchCase="'0'"
+      <div *ngSwitchCase="0"
            class="ms-5">
         <h4 class="title"
             i18n>Add Hosts</h4>
@@ -56,7 +56,7 @@
                   [showGeneralActionsOnly]="true"
                   [showExpandClusterBtn]="false"></cd-hosts>
       </div>
-      <div *ngSwitchCase="'1'"
+      <div *ngSwitchCase="1"
            class="ms-5">
         <h4 class="title"
             i18n>Create OSDs</h4>
@@ -68,7 +68,7 @@
                        (emitMode)="setDeploymentMode($event)"></cd-osd-form>
         </div>
       </div>
-      <div *ngSwitchCase="'2'"
+      <div *ngSwitchCase="2"
            class="ms-5">
         <h4 class="title"
             i18n>Create Services</h4>
@@ -77,7 +77,7 @@
                      [hiddenColumns]="['status.running', 'status.size', 'status.last_refresh']"
                      [routedModal]="false"></cd-services>
       </div>
-      <div *ngSwitchCase="'3'"
+      <div *ngSwitchCase="3"
            class="ms-5">
         <cd-create-cluster-review></cd-create-cluster-review>
       </div>

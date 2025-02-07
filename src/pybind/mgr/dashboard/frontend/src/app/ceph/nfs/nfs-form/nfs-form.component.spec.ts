@@ -11,7 +11,6 @@ import { Observable, of } from 'rxjs';
 import { NfsFormClientComponent } from '~/app/ceph/nfs/nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from '~/app/ceph/nfs/nfs-form/nfs-form.component';
 import { Directory } from '~/app/shared/api/nfs.service';
-import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
@@ -23,26 +22,23 @@ describe('NfsFormComponent', () => {
   let activatedRoute: ActivatedRouteStub;
   let router: Router;
 
-  configureTestBed(
-    {
-      declarations: [NfsFormComponent, NfsFormClientComponent],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot(),
-        NgbTypeaheadModule
-      ],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: new ActivatedRouteStub({ cluster_id: 'mynfs', export_id: '1' })
-        }
-      ]
-    },
-    [LoadingPanelComponent]
-  );
+  configureTestBed({
+    declarations: [NfsFormComponent, NfsFormClientComponent],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastrModule.forRoot(),
+      NgbTypeaheadModule
+    ],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: new ActivatedRouteStub({ cluster_id: 'mynfs', export_id: '1' })
+      }
+    ]
+  });
 
   const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
     component.ngOnInit();

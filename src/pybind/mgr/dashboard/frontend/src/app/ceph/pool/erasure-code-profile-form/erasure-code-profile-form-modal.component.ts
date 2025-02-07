@@ -26,7 +26,7 @@ export class ErasureCodeProfileFormModalComponent
   @Output()
   submitAction = new EventEmitter();
 
-  tooltips = this.ecpService.formTooltips;
+  tooltips!: Record<string, any>;
   PLUGIN = {
     LRC: 'lrc', // Locally Repairable Erasure Code
     SHEC: 'shec', // Shingled Erasure Code
@@ -365,6 +365,8 @@ export class ErasureCodeProfileFormModalComponent
   }
 
   ngOnInit() {
+    this.tooltips = this.ecpService.formTooltips;
+
     this.ecpService
       .getInfo()
       .subscribe(

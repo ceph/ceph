@@ -10,7 +10,6 @@ import { of } from 'rxjs';
 
 import { RoleService } from '~/app/shared/api/role.service';
 import { ScopeService } from '~/app/shared/api/scope.service';
-import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -32,19 +31,16 @@ describe('RoleFormComponent', () => {
 
   const routes: Routes = [{ path: 'roles', component: FakeComponent }];
 
-  configureTestBed(
-    {
-      imports: [
-        RouterTestingModule.withRoutes(routes),
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        ToastrModule.forRoot(),
-        SharedModule
-      ],
-      declarations: [RoleFormComponent, FakeComponent]
-    },
-    [LoadingPanelComponent]
-  );
+  configureTestBed({
+    imports: [
+      RouterTestingModule.withRoutes(routes),
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      ToastrModule.forRoot(),
+      SharedModule
+    ],
+    declarations: [RoleFormComponent, FakeComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RoleFormComponent);

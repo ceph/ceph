@@ -3,9 +3,9 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'mdsSummary'
+  name: 'mdsDashboardSummary'
 })
-export class MdsSummaryPipe implements PipeTransform {
+export class MdsDashboardSummaryPipe implements PipeTransform {
   transform(value: any): any {
     if (!value) {
       return '';

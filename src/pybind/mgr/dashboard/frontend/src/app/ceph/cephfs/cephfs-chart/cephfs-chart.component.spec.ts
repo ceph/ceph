@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { NgChartsModule } from 'ng2-charts';
+import { BaseChartDirective } from 'ng2-charts';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsChartComponent } from './cephfs-chart.component';
@@ -18,7 +18,7 @@ describe('CephfsChartComponent', () => {
   ];
 
   configureTestBed({
-    imports: [NgChartsModule],
+    imports: [BaseChartDirective],
     declarations: [CephfsChartComponent]
   });
 
