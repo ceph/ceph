@@ -184,11 +184,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
             nqn: this.subsystemNQN,
             nsid: this.nsid
           }),
-          call: this.nvmeofService.updateNamespace(
-            this.subsystemNQN,
-            this.nsid,
-            request as NamespaceUpdateRequest
-          )
+          call: this.nvmeofService.updateNamespace(this.subsystemNQN, this.nsid, request)
         });
       } else {
         action = this.taskWrapperService.wrapTaskAroundCall({
