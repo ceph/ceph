@@ -131,14 +131,14 @@ Packages take hours to build. Use those hours to create the Release Notes and An
 
 See `the Ceph Tracker wiki page that explains how to write the release notes <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_write_the_release_notes>`_.
 
+.. _Signing and Publishing the Build:
+
 4. Signing and Publishing the Build
 ===================================
 
 #. Obtain the sha1 of the version commit from the `build job <https://jenkins.ceph.com/view/all/job/ceph>`_ or the ``sha1`` file created by the `ceph-setup <https://jenkins.ceph.com/job/ceph-setup/>`_ job.
 
-#. Download the packages from chacra.ceph.com to the signing virtual machine. These packages get downloaded to ``/opt/repos`` where the `Sepia Lab Long Running (Ceph) Cluster <https://wiki.sepia.ceph.com/doku.php?id=services:longrunningcluster>`_ is mounted.  Note: this step will also run a command to transfer the
-source tarballs from chacra.ceph.com to download.ceph.com directly, by
-ssh'ing to download.ceph.com and running /home/signer/bin/get-tarballs.sh.
+#. Download the packages from chacra.ceph.com to the signing virtual machine. These packages get downloaded to ``/opt/repos`` where the `Sepia Lab Long Running (Ceph) Cluster <https://wiki.sepia.ceph.com/doku.php?id=services:longrunningcluster>`_ is mounted.  Note: this step will also run a command to transfer the source tarballs from chacra.ceph.com to download.ceph.com directly, by ssh'ing to download.ceph.com and running /home/signer/bin/get-tarballs.sh.
 
    .. prompt:: bash $
 
@@ -206,7 +206,7 @@ ssh'ing to download.ceph.com and running /home/signer/bin/get-tarballs.sh.
 
       etc...
 
-5. Publish the packages to download.ceph.com:
+#. Publish the packages to download.ceph.com:
 
    .. prompt:: bash $
 
@@ -223,51 +223,91 @@ mv the directories and the tarballs from the prerelease home
 5. Build Containers
 ===================
 
-Architecture-specific containers are built during the ceph build and
-pushed to quay.ceph.io/ceph/prerelease-{amd64,arm64}, containing the
-packages built in that ceph build.  The prerelease 'fat' container,
-or manifest-list container, that refers to both arch-specific containers,
-is built by hand using the command "make-manifest-list.py" in
-ceph.git:src/container/make-manifest-list.py.  Note that you must
-be logged into the appropriate container repos for any of these
-manipulations: quay.ceph.io for fetching prerelease arch-specific
-containers and pushing the prerelease manifest-list container, and
-quay.io for promoting the prerelease containers to released containers.
+Unlike CI builds, which have access to packages in the correct form for
+the container, release builds do not, because the build does not 
+sign the packages.  Thus, release builds do not build the containers.
+This must be done after :ref:`Signing and Publishing the Build`.
+
+Architecture-specific containers are built first, and pushed to
+quay.ceph.io/ceph/prerelease-{amd64,arm64}.  Note: this must be done on
+both architectures.
+
+#. Use a host with a relatively-recent version of podman and skopeo available.
+   CentOS/RHEL/Fedora usually have later versions than Ubuntu, but Ubuntu 22.04
+   or later are probably ok.
+
+#. Copy and run this shell wrapper for building a container (in container/ is
+   assumed below, to invoke ``./build.sh``), replacing the values in ``<>`` as
+   appropriate:
+
+     .. code-block:: bash
+
+        #!/bin/bash
+        set -xa
+
+        CI_CONTAINER=false
+        VERSION=19.2.1
+        FLAVOR=default
+        BRANCH=squid
+        ARCH=x86_64
+        CEPH_SHA1=58a7fab8be0a062d730ad7da874972fd3fba59fb
+        CONTAINER_REPO_HOSTNAME=quay.ceph.io
+        CONTAINER_REPO_ORGANIZATION=ceph
+        CONTAINER_REPO_USERNAME=<quay.ceph.io username>
+        CONTAINER_REPO_PASSWORD=<password for above>
+        PRERELEASE_USERNAME=<download.ceph.com prerelease username>
+        PRERELEASE_PASSWORD=<password for above>
+        unset NO_PUSH
+        ./build.sh  | tee build.sh.log
+
+#. Verify that the container images exist on
+   ``quay.ceph.io/ceph/prerelease-amd64`` and
+   ``quay.ceph.io/ceph/prerelease-arm64``.
+
+#. The prerelease manifest-list container, which refers to both arch-specific
+   containers, is built by using the command ``make-manifest-list.py`` in
+   ``ceph.git:src/container/make-manifest-list.py``. Note that you must be
+   logged into the appropriate container repos for any of these manipulations:
+   ``quay.ceph.io`` for fetching prerelease arch-specific containers and
+   pushing the prerelease manifest-list container, and ``quay.io`` for
+   promoting the prerelease containers to released containers.
 
     .. prompt:: bash
 
-       cd <ceph-checkout>/src/container
+       cd <ceph-checkout>/container
        ./make-manifest-list.py
 
-Reasonable defaults are set for all inputs, but environment variables
-can be used to override:
+   Reasonable defaults are set for all inputs, but environment variables can be
+   used to override the following:
 
-    * ARCH_SPECIFIC_HOST (default 'quay.ceph.io'): host of prerelease repos
-    * AMD64_REPO (default 'ceph/prerelease-amd64') prerelease amd64 repo
-    * ARM64_REPO (default 'ceph/prerelease-arm64') prerelease arm64 repo
+    * ``ARCH_SPECIFIC_HOST`` (default 'quay.ceph.io'): host of prerelease repos
+    * ``AMD64_REPO`` (default 'ceph/prerelease-amd64') prerelease amd64 repo
+    * ``ARM64_REPO`` (default 'ceph/prerelease-arm64') prerelease arm64 repo
 
-(prerelease arch-specific containers will be copied from here)
+   (prerelease arch-specific containers will be copied from here)
 
-    * MANIFEST_HOST (default 'quay.ceph.io') prerelease manifest-list host
-    * MANIFEST_REPO (default 'ceph/prerelease') prerelease manifest-list repo
+    * ``MANIFEST_HOST`` (default 'quay.ceph.io') prerelease manifest-list host
+    * ``MANIFEST_REPO`` (default 'ceph/prerelease') prerelease manifest-list
+      repo
 
-(prerelease manifest-list containers will be placed here)
+   (prerelease manifest-list containers will be placed here)
 
-Finally, when all appropriate testing/ verification is done on the
-container images, you can use make-manifest-list.py to promote them to
-their final release location on quay.io/ceph/ceph:
+#. Finally, when all appropriate testing and verification is done on the
+   container images, you can use ``make-manifest-list.py`` to promote them to
+   their final release location on ``quay.io/ceph/ceph`` (again, be sure you're
+   logged into ``quay.io/ceph`` with appropriate permissions):
 
     .. prompt:: bash
 
        cd <ceph-checkout>/src/container
        ./make-manifest-list.py --promote
 
-Two more environment variables can override the default destination for
-promotion (the source of the prerelease container to be promoted is
-as above, in MANIFEST_HOST/REPO):
+   Two more environment variables can override the default destination for
+   promotion (the source of the prerelease container to be promoted is as
+   above, in ``MANIFEST_HOST/REPO``):
 
-    * RELEASE_MANIFEST_HOST (default 'quay.io') release host
-    * RELEASE_MANIFEST_REPO (default 'ceph/ceph') release repo
+    * ``RELEASE_MANIFEST_HOST`` (default 'quay.io') release host
+    * ``RELEASE_MANIFEST_REPO`` (default 'ceph/ceph') release repo
 
 
 6. Announce the Release
