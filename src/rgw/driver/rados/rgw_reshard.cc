@@ -214,7 +214,7 @@ class ShardBatch {
 
     constexpr int flags = 0;
     constexpr jspan_context* trace = nullptr;
-    librados::async_operate(ex, ioctx, object, &op, flags,
+    librados::async_operate(ex, ioctx, object, std::move(op), flags,
                             trace, std::move(completion));
   }
 
