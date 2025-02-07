@@ -203,6 +203,17 @@ using rgw_bucket_snap_id = uint64_t;
 
 #define RGW_BUCKET_NO_SNAP (rgw_bucket_snap_id)-1
 
+static inline bool cmp_snap_lt(rgw_bucket_snap_id s1,
+                          rgw_bucket_snap_id s2) {
+  if (s1 == RGW_BUCKET_NO_SNAP) {
+    return s2 != s1;
+  }
+  if (s2 == RGW_BUCKET_NO_SNAP) {
+    return false;
+  }
+  return s1 < s2;
+}
+
 struct rgw_bucket_dir_entry_meta {
   RGWObjCategory category = RGWObjCategory::None;
   uint64_t size = 0;
@@ -538,6 +549,19 @@ struct rgw_bucket_dir_entry {
       return RGW_BUCKET_NO_SNAP;
     }
     return snap_info->removed_at;
+  }
+  bool exists_at_snap(rgw_bucket_snap_id check_snap_id) const {
+    if (check_snap_id == RGW_BUCKET_NO_SNAP) {
+      return (removed_at_snap() == RGW_BUCKET_NO_SNAP);
+    }
+    if (cmp_snap_lt(check_snap_id, meta.snap_id)) {
+      /* we were created at a later snapshot than the checked one */
+      return false;
+    }
+
+    auto removed_at = removed_at_snap();
+    return (removed_at == RGW_BUCKET_NO_SNAP ||
+            cmp_snap_lt(check_snap_id, removed_at));
   }
   rgw_bucket_dirent_snap_info& set_snap_info() {
     if (!snap_info) {
