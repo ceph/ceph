@@ -1,0 +1,378 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: mgr_data
+  type: str
+  level: advanced
+  desc: Filesystem path to the ceph-mgr data directory, used to contain keyring.
+  fmt_desc: Path to load daemon data (such as keyring)
+  default: /var/lib/ceph/mgr/$cluster-$id
+  services:
+  - mgr
+  flags:
+  - no_mon_update
+- name: mgr_pool
+  type: bool
+  level: dev
+  desc: Allow use/creation of .mgr pool.
+  default: true
+  services:
+  - mgr
+  flags:
+  - startup
+- name: mgr_stats_period
+  type: int
+  level: basic
+  desc: Period in seconds of OSD/MDS stats reports to manager
+  long_desc: Use this setting to control the granularity of time series data collection
+    from daemons.  Adjust upwards if the manager CPU load is too high, or if you simply
+    do not require the most up to date performance counter data.
+  default: 5
+  services:
+  - mgr
+  - common
+- name: mgr_client_bytes
+  type: size
+  level: dev
+  default: 128_M
+  services:
+  - mgr
+- name: mgr_client_messages
+  type: uint
+  level: dev
+  default: 512
+  services:
+  - mgr
+- name: mgr_osd_bytes
+  type: size
+  level: dev
+  default: 512_M
+  services:
+  - mgr
+- name: mgr_osd_messages
+  type: uint
+  level: dev
+  default: 8_K
+  services:
+  - mgr
+- name: mgr_mds_bytes
+  type: size
+  level: dev
+  default: 128_M
+  services:
+  - mgr
+- name: mgr_mds_messages
+  type: uint
+  level: dev
+  default: 128
+  services:
+  - mgr
+- name: mgr_mon_bytes
+  type: size
+  level: dev
+  default: 128_M
+  services:
+  - mgr
+- name: mgr_mon_messages
+  type: uint
+  level: dev
+  default: 128
+  services:
+  - mgr
+- name: mgr_service_beacon_grace
+  type: float
+  level: advanced
+  desc: Period in seconds from last beacon to manager dropping state about a monitored
+    service (RGW, rbd-mirror etc)
+  default: 1_min
+  services:
+  - mgr
+- name: mgr_debug_aggressive_pg_num_changes
+  type: bool
+  level: dev
+  desc: Bypass most throttling and safety checks in pg[p]_num controller
+  default: false
+  services:
+  - mgr
+- name: mgr_max_pg_num_change
+  type: int
+  level: advanced
+  desc: maximum change in pg_num
+  default: 128
+  services:
+  - mgr
+  with_legacy: true
+- name: mgr_max_pg_creating
+  type: uint
+  level: advanced
+  desc: bound on max creating pgs when acting to create more pgs
+  default: 1024
+  services:
+  - mgr
+- name: mgr_module_path
+  type: str
+  level: advanced
+  desc: Filesystem path to manager modules.
+  fmt_desc: Path to load modules from
+  default: @CEPH_INSTALL_DATADIR@/mgr
+  services:
+  - mgr
+- name: mgr_standby_modules
+  type: bool
+  default: true
+  level: advanced
+  desc: Start modules in standby (redirect) mode when mgr is standby
+  long_desc: By default, the standby modules will answer incoming requests with a
+    HTTP redirect to the active manager, allowing users to point their browser at any
+    mgr node and find their way to an active mgr.  However, this mode is problematic
+    when using a load balancer because (1) the redirect locations are usually private
+    IPs and (2) the load balancer can't identify which mgr is the right one to send
+    traffic to. If a load balancer is being used, set this to false.
+- name: mgr_disabled_modules
+  type: str
+  level: advanced
+  desc: List of manager modules never get loaded
+  long_desc: A comma delimited list of module names. This list is read by manager
+    when it starts. By default, manager loads all modules found in specified 'mgr_module_path',
+    and it starts the enabled ones as instructed. The modules in this list will not
+    be loaded at all.
+  default: @mgr_disabled_modules@
+  services:
+  - mgr
+  see_also:
+  - mgr_module_path
+  flags:
+  - startup
+- name: mgr_initial_modules
+  type: str
+  level: basic
+  desc: List of manager modules to enable when the cluster is first started
+  long_desc: This list of module names is read by the monitor when the cluster is
+    first started after installation, to populate the list of enabled manager modules.  Subsequent
+    updates are done using the 'mgr module [enable|disable]' commands.  List may be
+    comma or space separated.
+  default: iostat nfs
+  services:
+  - mon
+  - common
+  flags:
+  - no_mon_update
+  - cluster_create
+- name: cephadm_path
+  type: str
+  level: advanced
+  desc: Path to cephadm utility
+  default: /usr/sbin/cephadm
+  services:
+  - mgr
+- name: mon_delta_reset_interval
+  type: float
+  level: advanced
+  desc: window duration for rate calculations in 'ceph status'
+  fmt_desc: Seconds of inactivity before we reset the PG delta to 0. We keep
+    track of the delta of the used space of each pool, so, for
+    example, it would be easier for us to understand the progress of
+    recovery or the performance of cache tier. But if there's no
+    activity reported for a certain pool, we just reset the history of
+    deltas of that pool.
+  default: 10
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_stat_smooth_intervals
+  type: uint
+  level: advanced
+  desc: number of PGMaps stats over which we calc the average read/write throughput
+    of the whole cluster
+  fmt_desc: Ceph will smooth statistics over the last ``N`` PG maps.
+  default: 6
+  services:
+  - mgr
+  min: 1
+- name: mon_pool_quota_warn_threshold
+  type: int
+  level: advanced
+  desc: percent of quota at which to issue warnings
+  default: 0
+  services:
+  - mgr
+- name: mon_pool_quota_crit_threshold
+  type: int
+  level: advanced
+  desc: percent of quota at which to issue errors
+  default: 0
+  services:
+  - mgr
+- name: mon_cache_target_full_warn_ratio
+  type: float
+  level: advanced
+  desc: issue CACHE_POOL_NEAR_FULL health warning when cache pool utilization exceeds
+    this ratio of usable space
+  fmt_desc: Position between pool's ``cache_target_full`` and ``target_max_object``
+    where we start warning
+  default: 0.66
+  services:
+  - mgr
+  flags:
+  - no_mon_update
+  - cluster_create
+  with_legacy: true
+- name: mon_pg_check_down_all_threshold
+  type: float
+  level: advanced
+  desc: threshold of down osds after which we check all pgs
+  fmt_desc: Percentage threshold of ``down`` OSDs above which we check all PGs
+    for stale ones.
+  default: 0.5
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_pg_stuck_threshold
+  type: int
+  level: advanced
+  desc: number of seconds after which pgs can be considered stuck inactive, unclean,
+    etc
+  long_desc: see doc/control.rst under dump_stuck for more info
+  fmt_desc: Number of seconds after which PGs can be considered as
+    being stuck.
+  default: 1_min
+  services:
+  - mgr
+- name: mon_pg_warn_min_per_osd
+  type: uint
+  level: advanced
+  desc: minimal number PGs per (in) osd before we warn the admin
+  fmt_desc: Raise ``HEALTH_WARN`` if the average number
+    of PGs per ``in`` OSD is under this number. A non-positive number
+    disables this.
+  default: 0
+  services:
+  - mgr
+- name: mon_pg_warn_max_object_skew
+  type: float
+  level: advanced
+  desc: max skew few average in objects per pg
+  fmt_desc: Raise ``HEALTH_WARN`` if the average RADOS object count per PG
+    of any pool is greater than ``mon_pg_warn_max_object_skew`` times
+    the average RADOS object count per PG of all pools. Zero or a non-positive
+    number disables this. Note that this option applies to ``ceph-mgr`` daemons.
+  default: 10
+  services:
+  - mgr
+- name: mon_pg_warn_min_objects
+  type: int
+  level: advanced
+  desc: 'do not warn below this object #'
+  fmt_desc: Do not warn if the total number of RADOS objects in cluster is below
+    this number
+  default: 10000
+  services:
+  - mgr
+- name: mon_pg_warn_min_pool_objects
+  type: int
+  level: advanced
+  desc: 'do not warn on pools below this object #'
+  fmt_desc: Do not warn on pools whose RADOS object count is below this number
+  default: 1000
+  services:
+  - mgr
+- name: mon_warn_on_misplaced
+  type: bool
+  level: advanced
+  desc: Issue a health warning if there are misplaced objects
+  default: false
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_warn_on_pool_no_app
+  type: bool
+  level: dev
+  desc: issue POOL_APP_NOT_ENABLED health warning if pool has not application enabled
+  default: true
+  services:
+  - mgr
+- name: mon_warn_on_pool_no_app_grace
+  type: secs
+  level: dev
+  desc: time after which POOL_APP_NOT_ENABLED health warning is issued
+  default: 5_min
+  services:
+  - mgr
+  see_also:
+  - mon_warn_on_pool_no_app
+- name: mon_warn_on_too_few_osds
+  type: bool
+  level: advanced
+  desc: Issue a health warning if there are fewer OSDs than osd_pool_default_size
+  default: true
+  services:
+  - mgr
+- name: mon_target_pg_per_osd
+  type: uint
+  level: advanced
+  desc: Automated PG management creates this many PGs per OSD
+  long_desc: When creating pools, the automated PG management logic will attempt to
+    reach this target.  In some circumstances, it may exceed this target, up to the
+    ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
+    created if the cluster is not yet fully utilised
+  default: 100
+  min: 1
+# min pgs per osd for reweight-by-pg command
+- name: mon_reweight_min_pgs_per_osd
+  type: uint
+  level: advanced
+  default: 10
+  services:
+  - mgr
+  with_legacy: true
+# min bytes per osd for reweight-by-utilization command
+- name: mon_reweight_min_bytes_per_osd
+  type: size
+  level: advanced
+  default: 100_M
+  services:
+  - mgr
+  with_legacy: true
+# max osds to change per reweight-by-* command
+- name: mon_reweight_max_osds
+  type: int
+  level: advanced
+  default: 4
+  services:
+  - mgr
+  with_legacy: true
+- name: mon_reweight_max_change
+  type: float
+  level: advanced
+  default: 0.05
+  services:
+  - mgr
+  with_legacy: true
+- name: mgr_stats_threshold
+  type: int
+  level: advanced
+  desc: Lowest perfcounter priority collected by mgr
+  long_desc: Daemons only set perf counter data to the manager daemon if the counter
+    has a priority higher than this.
+  default: 5
+  min: 0
+  max: 11
+- name: mgr_tick_period
+  type: secs
+  level: advanced
+  desc: Period in seconds of beacon messages to monitor
+  fmt_desc: How many seconds between mgr beacons to monitors, and other
+    periodic checks.
+  default: 2
+  services:
+  - mgr
+  - mon
+- name: mon_osd_err_op_age_ratio
+  type: float
+  level: advanced
+  desc: issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)
+  default: 128
+  services:
+  - mgr
+  with_legacy: true

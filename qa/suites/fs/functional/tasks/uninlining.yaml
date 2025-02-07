@@ -1,0 +1,26 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug mgr: 20
+        debug ms: 1
+        debug finisher: 20
+        debug client: 20
+      mds:
+        # to force replication without waiting for hit ratio to ramp up
+        # this helps with quicker testing against replicas
+        mds_bal_replicate_threshold: 1
+    log-whitelist:
+      - OSD full dropping all updates
+      - OSD near full
+      - pausewr flag
+      - failsafe engaged, dropping updates
+      - failsafe disengaged, no longer dropping
+      - is full \(reached quota
+      - POOL_FULL
+      - POOL_BACKFILLFULL
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_uninlining
