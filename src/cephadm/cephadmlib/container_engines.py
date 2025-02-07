@@ -415,3 +415,18 @@ def parsed_container_image_stats(
         ctx, image_name, container_path=container_path
     )
     return _parse_container_image_stats(image_name, out, err, code)
+
+
+def normalize_container_id(i: str) -> str:
+    # docker adds the sha256: prefix, but AFAICS both
+    # docker (18.09.7 in bionic at least) and podman
+    # both always use sha256, so leave off the prefix
+    # for consistency.
+    # ---
+    # (JJM) This is not a good idea and cephadm should move away from stripping
+    # the hash-type prefix. This is there so that docker/OCI can eventually
+    # move hash types if need be. Removing it breaks hash agility!
+    prefix = 'sha256:'
+    if i.startswith(prefix):
+        i = i[len(prefix) :]
+    return i

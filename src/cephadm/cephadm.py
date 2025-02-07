@@ -89,6 +89,7 @@ from cephadmlib.container_engines import (
     Podman,
     check_container_engine,
     find_container_engine,
+    normalize_container_id,
     parsed_container_cpu_perc,
     parsed_container_image_stats,
     parsed_container_mem_usage,
@@ -273,18 +274,6 @@ def generate_password():
     # type: () -> str
     return ''.join(random.choice(string.ascii_lowercase + string.digits)
                    for i in range(10))
-
-
-def normalize_container_id(i):
-    # type: (str) -> str
-    # docker adds the sha256: prefix, but AFAICS both
-    # docker (18.09.7 in bionic at least) and podman
-    # both always use sha256, so leave off the prefix
-    # for consistency.
-    prefix = 'sha256:'
-    if i.startswith(prefix):
-        i = i[len(prefix):]
-    return i
 
 
 def make_fsid():
