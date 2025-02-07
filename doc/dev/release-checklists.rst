@@ -73,6 +73,8 @@ Compatsets
 Mon
 ---
 
+- [x] src/tools/monmaptool.cc: bump min_mon_release to X for created (new) clusters
+- [x] src/test/cli/monmaptool/8.t: update output for monmaptool to X
 - [x] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
 - [x] qa/standalone/mon/misc bump up `jqfilter='.monmap.features.persistent | length == N'` to `N+1`
 - [x] mon/MgrMonitor.cc adjust `always_on_modules`
