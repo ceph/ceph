@@ -18,6 +18,7 @@ overrides:
       - do not have an application enabled
       - is down
       - TELEMETRY_CHANGED
+      - pg .*? is .*?degraded.*?, acting
 tasks:
 - install:
     branch: squid
