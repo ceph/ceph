@@ -32,3 +32,6 @@ overrides:
       - nodeep-scrub
       - is down
       - osds down
+      - pg .*? is .*?degraded.*?, acting
+      - pg .*? is stuck inactive for .*?m, current state .*?degraded.*?, last acting
+      - pg degraded
