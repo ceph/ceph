@@ -159,7 +159,7 @@ describe('NvmeofService', () => {
       const mockNamespaceObj = {
         rbd_image_name: 'nvme_ns_image:12345678',
         rbd_pool: 'rbd',
-        size: 1024,
+        rbd_image_size: 1024,
         gw_group: mockGroupName
       };
       service.createNamespace(mockNQN, mockNamespaceObj).subscribe();

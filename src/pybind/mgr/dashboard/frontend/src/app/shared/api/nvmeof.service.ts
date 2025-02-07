@@ -7,29 +7,29 @@ import { catchError, mapTo } from 'rxjs/operators';
 
 export const MAX_NAMESPACE = 1024;
 
-export interface ListenerRequest {
+type NvmeofRequest = {
   gw_group: string;
+};
+
+export type ListenerRequest = NvmeofRequest & {
   host_name: string;
   traddr: string;
   trsvcid: number;
-}
+};
 
-export interface NamespaceCreateRequest {
+export type NamespaceCreateRequest = NvmeofRequest & {
   rbd_image_name: string;
   rbd_pool: string;
-  size: number;
-  gw_group: string;
-}
+  rbd_image_size?: number;
+};
 
-export interface NamespaceEditRequest {
+export type NamespaceUpdateRequest = NvmeofRequest & {
   rbd_image_size: number;
-  gw_group: string;
-}
+};
 
-export interface InitiatorRequest {
+export type InitiatorRequest = NvmeofRequest & {
   host_nqn: string;
-  gw_group: string;
-}
+};
 
 const API_PATH = 'api/nvmeof';
 const UI_API_PATH = 'ui-api/nvmeof';
@@ -144,7 +144,7 @@ export class NvmeofService {
     });
   }
 
-  updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceEditRequest) {
+  updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceUpdateRequest) {
     return this.http.patch(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`, request, {
       observe: 'response'
     });
