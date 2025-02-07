@@ -2519,16 +2519,32 @@ void remove_interim_snapshots(IoCtx& group_ioctx,
 
   std::vector<C_SaferCond*> on_finishes(image_ctxs->size(), nullptr);
   for (size_t i = 0; i < image_ctxs->size(); ++i) {
-    if (group_snap->snaps[i].snap_id == CEPH_NOSNAP) {
+    auto snap_id = group_snap->snaps[i].snap_id;
+    if (snap_id == CEPH_NOSNAP) {
       continue;
     }
-    ldout(cct, 20) << "removing individual snapshot: "
-                   << group_snap->snaps[i].snap_id << dendl;
 
     ImageCtx *ictx = (*image_ctxs)[i];
+    ldout(cct, 20) << "image: " << ictx->id
+                   << " removing individual snapshot: "
+                   << group_snap->snaps[i].snap_id << dendl;
+
+    cls::rbd::SnapshotNamespace snap_namespace;
+    std::string snap_name;
+    {
+      std::shared_lock image_locker{ictx->image_lock};
+      auto snap_info = ictx->get_snap_info(snap_id);
+      if (snap_info == nullptr) {
+	ldout(cct, 20) << "failed to find image snapshot. image_id: "
+                       << ictx->id << " snap_id:" << snap_id << dendl;
+        continue;
+      }
+      snap_namespace = snap_info->snap_namespace;
+      snap_name = snap_info->name;
+    }
     C_SaferCond* on_finish = new C_SaferCond;
-    ictx->operations->snap_remove(ictx->snap_namespace,
-                                  ictx->snap_name.c_str(),
+    ictx->operations->snap_remove(snap_namespace,
+                                  snap_name.c_str(),
                                   on_finish);
     on_finishes[i] = on_finish;
   }
@@ -2539,6 +2555,7 @@ void remove_interim_snapshots(IoCtx& group_ioctx,
     }
     r = on_finishes[i]->wait();
     delete on_finishes[i];
+    on_finishes[i] = nullptr;
     // if previous attempts to remove this snapshot failed then the image's snapshot may not exist
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "failed cleaning up image snapshot: "
