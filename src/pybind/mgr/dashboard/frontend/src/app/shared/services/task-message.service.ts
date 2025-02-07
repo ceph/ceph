@@ -5,6 +5,7 @@ import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { ImageSpec } from '../models/image-spec';
 import { Task } from '../models/task';
+import { PluralizePipe } from '../pipes/pluralize.pipe';
 
 export class TaskMessageOperation {
   running: string;
@@ -62,6 +63,8 @@ export class TaskMessageService {
       return {};
     }
   );
+
+  pluralize = new PluralizePipe().transform;
 
   commonOperations = {
     create: new TaskMessageOperation($localize`Creating`, $localize`create`, $localize`Created`),
@@ -537,15 +540,18 @@ export class TaskMessageService {
     return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
   }
 
-  nvmeofNamespace(metadata: any) {
+  nvmeofNamespace(metadata: { nqn: string; nsCount?: number; nsid?: string }) {
     if (metadata?.nsid) {
       return $localize`namespace ${metadata.nsid} for subsystem '${metadata.nqn}'`;
     }
-    return $localize`namespace for subsystem '${metadata.nqn}'`;
+    return $localize`${metadata.nsCount} ${this.pluralize(
+      'namespace',
+      metadata.nsCount
+    )} for subsystem '${metadata.nqn}'`;
   }
 
-  nvmeofInitiator(metadata: any) {
-    return $localize`initiator${metadata?.plural ? 's' : ''} for subsystem ${metadata.nqn}`;
+  nvmeofInitiator(metadata: { plural: number; nqn: string }) {
+    return $localize`${this.pluralize('initiator', metadata.plural)} for subsystem ${metadata.nqn}`;
   }
 
   nfs(metadata: any) {
