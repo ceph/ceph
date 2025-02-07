@@ -700,9 +700,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
-      if (entry.removed_at_snap() != RGW_BUCKET_NO_SNAP &&
-          (op.max_snap == RGW_BUCKET_NO_SNAP ||
-           op.max_snap >= entry.removed_at_snap())) {
+      if (!entry.exists_at_snap(op.max_snap)) {
         continue;
       }
 
@@ -1706,16 +1704,15 @@ CLS_LOG(0, "%s() instance_entry.removed_at=%d", __func__, (int)instance_entry.re
     return instance_entry.is_delete_marker();
   }
 
-  int find_next_key(cls_rgw_obj_key *next_key, rgw_bucket_snap_id *next_snap_id, bool *found) {
-    string list_idx;
-    /* this instance has a previous list entry, remove that entry */
-    get_list_index_key(instance_entry, &list_idx);
-    /* this is the current head, need to update! */
+  int read_next_entry(const string& idx,
+                      bool *found, string *next_idx,
+                      cls_rgw_obj_key *next_key, rgw_bucket_dir_entry *next_entry,
+                      rgw_bucket_snap_id *next_snap_id) {
     map<string, bufferlist> keys;
     bool more;
     string filter = key.name; /* list key starts with key name, filter it to avoid a case where we cross to
                                  different namespace */
-    int ret = cls_cxx_map_get_vals(hctx, list_idx, filter, 1, &keys, &more);
+    int ret = cls_cxx_map_get_vals(hctx, idx, filter, 1, &keys, &more);
     if (ret < 0) {
       return ret;
     }
@@ -1725,22 +1722,56 @@ CLS_LOG(0, "%s() instance_entry.removed_at=%d", __func__, (int)instance_entry.re
       return 0;
     }
 
-    rgw_bucket_dir_entry next_entry;
-
     auto last = keys.rbegin();
     try {
       auto iter = last->second.cbegin();
-      decode(next_entry, iter);
+      decode(*next_entry, iter);
     } catch (ceph::buffer::error& err) {
       CLS_LOG(0, "ERROR; failed to decode entry: %s", last->first.c_str());
       return -EIO;
     }
 
-    *found = (key.name == next_entry.key.name);
+    *found = (key.name == next_entry->key.name);
     if (*found) {
-      *next_key = next_entry.key;
-      *next_snap_id = next_entry.meta.snap_id;
+      *next_idx = last->first;
+      *next_key = next_entry->key;
+      *next_snap_id = next_entry->meta.snap_id;
     }
+
+    return 0;
+  }
+
+  int find_next_key(rgw_bucket_snap_id snap_id,
+                    cls_rgw_obj_key *next_key, rgw_bucket_snap_id *next_snap_id, bool *found) {
+    string list_idx;
+    /* this instance has a previous list entry, remove that entry */
+    get_list_index_key(instance_entry, &list_idx);
+
+    rgw_bucket_dir_entry next_entry;
+
+    bool exists;
+
+    do {
+      int ret = read_next_entry(list_idx, found, &list_idx,
+                                next_key, &next_entry,
+                                next_snap_id);
+      if (ret < 0) {
+        return ret;
+      }
+
+      if (!*found) {
+        return 0;
+      }
+
+      exists = next_entry.exists_at_snap(snap_id);
+      if (exists) {
+        return 0;
+      }
+      CLS_LOG(20, "%s: skipping entry: key=%s (snap=%d), does not exist at snap=%d", __func__, 
+              escape_str(next_key->to_string()).c_str(), (int)next_key->snap_id, (int)snap_id);
+    } while (!exists);
+
+    /* shouldn't reach here really */
 
     return 0;
   }
@@ -2329,7 +2360,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     cls_rgw_obj_key next_key;
     bool found = false;
     rgw_bucket_snap_id next_snap_id;
-    ret = obj.find_next_key(&next_key, &next_snap_id, &found);
+    ret = obj.find_next_key(op.snap_id, &next_key, &next_snap_id, &found);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
       return ret;
