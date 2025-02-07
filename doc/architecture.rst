@@ -436,7 +436,7 @@ the greater cluster provides several benefits:
    bad sectors on drives that are not detectable with light scrubs. See `Data
    Scrubbing`_ for details on configuring scrubbing.
 
-#. **Replication:** Data replication involves a collaboration between Ceph
+#. **Replication:** Data replication involves collaboration between Ceph
    Clients and Ceph OSD Daemons. Ceph OSD Daemons use the CRUSH algorithm to
    determine the storage location of object replicas. Ceph clients use the
    CRUSH algorithm to determine the storage location of an object, then the
@@ -445,11 +445,11 @@ the greater cluster provides several benefits:
 
    After identifying the target placement group, the client writes the object
    to the identified placement group's primary OSD. The primary OSD then
-   consults its own copy of the CRUSH map to identify secondary and tertiary
-   OSDS, replicates the object to the placement groups in those secondary and
-   tertiary OSDs, confirms that the object was stored successfully in the
-   secondary and tertiary OSDs, and reports to the client that the object
-   was stored successfully.
+   consults its own copy of the CRUSH map to identify secondary
+   OSDS, replicates the object to the placement groups in those secondary
+   OSDs, confirms that the object was stored successfully in the
+   secondary OSDs, and reports to the client that the object
+   was stored successfully.  We call these replication operations ``subops``.
 
 .. ditaa::
 
@@ -471,13 +471,13 @@ the greater cluster provides several benefits:
        |  +------+   +------+  |
        |  | Ack (4)  Ack (5)|  |
        v  *                 *  v
- +---------------+   +---------------+
- | Secondary OSD |   | Tertiary OSD  |
- |               |   |               |
- +---------------+   +---------------+
+ +---------------+   +----------------+
+ | Secondary OSD |   | Secondary OSD  |
+ |               |   |                |
+ +---------------+   +----------------+
 
-By performing this act of data replication, Ceph OSD Daemons relieve Ceph
-clients of the burden of replicating data.
+By performing this data replication, Ceph OSD Daemons relieve Ceph
+clients and their network interfaces of the burden of replicating data.
 
 Dynamic Cluster Management
 --------------------------
