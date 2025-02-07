@@ -465,6 +465,10 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_tags(bucket_name, tags)
 
+    def _get_lifecycle_progress(self):
+        rgw_client = RgwClient.admin_instance()
+        return rgw_client.get_lifecycle_progress()
+
     def _get_lifecycle(self, bucket_name: str, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_lifecycle(bucket_name)
@@ -561,7 +565,7 @@ class RgwBucket(RgwRESTController):
         result['acl'] = self._get_acl(bucket_name, daemon_name, owner)
         result['replication'] = self._get_replication(bucket_name, owner, daemon_name)
         result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, owner)
-
+        result['lifecycle_progress'] = self._get_lifecycle_progress()
         # Append the locking configuration.
         locking = self._get_locking(owner, daemon_name, bucket_name)
         result.update(locking)
@@ -705,6 +709,18 @@ class RgwBucket(RgwRESTController):
     @allow_empty_body
     def get_encryption_config(self, daemon_name=None, owner=None):
         return CephService.get_encryption_config(daemon_name)
+
+    @RESTController.Collection(method='PUT', path='/lifecycle')
+    @allow_empty_body
+    def set_lifecycle_policy(self, bucket_name: str = '', lifecycle: str = '', daemon_name=None,
+                             owner=None):
+        if lifecycle == '{}':
+            return self._delete_lifecycle(bucket_name, daemon_name, owner)
+        return self._set_lifecycle(bucket_name, lifecycle, daemon_name, owner)
+
+    @RESTController.Collection(method='GET', path='/lifecycle')
+    def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None):
+        return self._get_lifecycle(bucket_name, daemon_name, owner)
 
 
 @UIRouter('/rgw/bucket', Scope.RGW)
