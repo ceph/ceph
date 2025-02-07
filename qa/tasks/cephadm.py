@@ -882,6 +882,15 @@ def ceph_bootstrap(ctx, config):
         yield
 
     finally:
+        log.info('Disabling cephadm mgr module')
+        _shell(
+            ctx,
+            cluster_name,
+            bootstrap_remote,
+            ['ceph', 'mgr', 'module', 'disable', 'cephadm'],
+            check_status=False  # can fail if bootstrap failed and mask errors
+        )
+
         log.info('Cleaning up testdir ceph.* files...')
         ctx.cluster.run(args=[
             'rm', '-f',
