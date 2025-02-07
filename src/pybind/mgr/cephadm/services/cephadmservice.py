@@ -1283,14 +1283,10 @@ class RgwService(CephService):
         self.mgr.trigger_connect_dashboard_rgw()
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        config, deps = super().generate_config(daemon_spec)
-        rgw_spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        ssl_cert = getattr(rgw_spec, 'rgw_frontend_ssl_certificate', None)
-        if isinstance(ssl_cert, list):
-            ssl_cert = '\n'.join(ssl_cert)
-        if ssl_cert:
-            deps.append(str(utils.md5_hash(ssl_cert)))
-        return config, deps
+        svc_spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        config, parent_deps = super().generate_config(daemon_spec)
+        rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
+        return config, rgw_deps
 
 
 @register_cephadm_service
