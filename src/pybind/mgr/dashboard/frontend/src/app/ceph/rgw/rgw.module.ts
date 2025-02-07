@@ -76,10 +76,13 @@ import {
   InputModule,
   CheckboxModule,
   TreeviewModule,
+  RadioModule,
   SelectModule,
   NumberModule,
   TabsModule,
-  AccordionModule
+  AccordionModule,
+  TagModule,
+  TooltipModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -87,6 +90,8 @@ import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-
 import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
 import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
+import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
+import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
 
 @NgModule({
   imports: [
@@ -120,7 +125,12 @@ import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-stora
     NumberModule,
     TabsModule,
     IconModule,
-    SelectModule
+    SelectModule,
+    RadioModule,
+    SelectModule,
+    NumberModule,
+    TagModule,
+    TooltipModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -178,7 +188,9 @@ import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-stora
     RgwUserAccountsDetailsComponent,
     RgwStorageClassListComponent,
     RgwStorageClassDetailsComponent,
-    RgwStorageClassFormComponent
+    RgwStorageClassFormComponent,
+    RgwBucketTieringFormComponent,
+    RgwBucketLifecycleListComponent
   ],
   providers: [TitleCasePipe]
 })

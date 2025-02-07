@@ -4,14 +4,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import {
-  StorageClass,
-  CLOUD_TIER,
-  ZoneGroup,
-  TierTarget,
-  Target,
-  ZoneGroupDetails
-} from '../models/rgw-storage-class.model';
+import { StorageClass, ZoneGroupDetails } from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -23,6 +16,7 @@ import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.servi
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
+import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 
 import { Router } from '@angular/router';
 
@@ -105,18 +99,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
-
-          const tierObj = data.zonegroups.flatMap((zoneGroup: ZoneGroup) =>
-            zoneGroup.placement_targets
-              .filter((target: Target) => target.tier_targets)
-              .flatMap((target: Target) =>
-                target.tier_targets
-                  .filter((tierTarget: TierTarget) => tierTarget.val.tier_type === CLOUD_TIER)
-                  .map((tierTarget: TierTarget) => {
-                    return this.getTierTargets(tierTarget, zoneGroup.name, target.name);
-                  })
-              )
-          );
+          const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           this.storageClassList.push(...tierObj);
           resolve();
         },
@@ -125,16 +108,6 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         }
       );
     });
-  }
-
-  getTierTargets(tierTarget: TierTarget, zoneGroup: string, targetName: string) {
-    if (tierTarget.val.tier_type !== CLOUD_TIER) return null;
-    return {
-      zonegroup_name: zoneGroup,
-      placement_target: targetName,
-      storage_class: tierTarget.val.storage_class,
-      ...tierTarget.val.s3
-    };
   }
 
   removeStorageClassModal() {
