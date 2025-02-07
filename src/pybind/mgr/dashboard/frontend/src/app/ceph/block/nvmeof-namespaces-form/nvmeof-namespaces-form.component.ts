@@ -18,9 +18,10 @@ import { Pool } from '../../pool/pool';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { Observable } from 'rxjs';
+import { forkJoin, Observable } from 'rxjs';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { HttpResponse } from '@angular/common/http';
 
 @Component({
   selector: 'cd-nvmeof-namespaces-form',
@@ -42,6 +43,10 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   currentBytes: number;
   invalidSizeError: boolean;
   group: string;
+  MAX_NAMESPACE_CREATE: number = 5;
+  MIN_NAMESPACE_CREATE: number = 1;
+  requiredInvalidText: string = $localize`This field is required`;
+  nsCountInvalidText: string = $localize`The namespace count should be between 1 and 5`;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -96,6 +101,9 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.poolService.getList().subscribe((resp: Pool[]) => {
       this.rbdPools = resp.filter(this.rbdService.isRBDPool);
     });
+    if (this.rbdPools?.length) {
+      this.nsForm.get('pool').setValue(this.rbdPools[0].pool_name);
+    }
   }
 
   ngOnInit() {
@@ -109,52 +117,52 @@ export class NvmeofNamespacesFormComponent implements OnInit {
 
   createForm() {
     this.nsForm = new CdFormGroup({
-      image: new UntypedFormControl(`nvme_ns_image:${Date.now()}`, {
-        validators: [Validators.required, Validators.pattern(/^[^@/]+?$/)]
-      }),
       pool: new UntypedFormControl(null, {
         validators: [Validators.required]
       }),
       image_size: new UntypedFormControl(1, [CdValidators.number(false), Validators.min(1)]),
-      unit: new UntypedFormControl(this.units[2])
+      unit: new UntypedFormControl(this.units[2]),
+      nsCount: new UntypedFormControl(this.MAX_NAMESPACE_CREATE, [
+        Validators.required,
+        Validators.max(this.MAX_NAMESPACE_CREATE),
+        Validators.min(this.MIN_NAMESPACE_CREATE)
+      ])
     });
   }
 
-  updateRequest(rbdImageSize: number): NamespaceUpdateRequest {
+  buildUpdateRequest(rbdImageSize: number): Observable<HttpResponse<Object>> {
     const request: NamespaceUpdateRequest = {
       gw_group: this.group,
       rbd_image_size: rbdImageSize
     };
-    return request;
+    return this.nvmeofService.updateNamespace(
+      this.subsystemNQN,
+      this.nsid,
+      request as NamespaceUpdateRequest
+    );
   }
 
-  createRequest(rbdImageSize: number): NamespaceCreateRequest {
-    const image = this.nsForm.getValue('image');
+  randomString() {
+    return Math.random().toString(36).substring(2);
+  }
+
+  buildCreateRequest(rbdImageSize: number, nsCount: number): Observable<HttpResponse<Object>>[] {
     const pool = this.nsForm.getValue('pool');
-    const request: NamespaceCreateRequest = {
-      gw_group: this.group,
-      rbd_image_name: image,
-      rbd_pool: pool
-    };
-    if (rbdImageSize) {
-      request['rbd_image_size'] = rbdImageSize;
-    }
-    return request;
-  }
+    const requests: Observable<HttpResponse<Object>>[] = [];
 
-  buildRequest() {
-    const image_size = this.nsForm.getValue('image_size');
-    let rbdImageSize: number = null;
-    if (image_size) {
-      const image_size_unit = this.nsForm.getValue('unit');
-      const value: number = this.formatterService.toBytes(image_size + image_size_unit);
-      rbdImageSize = value;
+    for (let i = 1; i <= nsCount; i++) {
+      const request: NamespaceCreateRequest = {
+        gw_group: this.group,
+        rbd_image_name: `nvme_${pool}_${this.group}_${this.randomString()}`,
+        rbd_pool: pool
+      };
+      if (rbdImageSize) {
+        request['rbd_image_size'] = rbdImageSize;
+      }
+      requests.push(this.nvmeofService.createNamespace(this.subsystemNQN, request));
     }
-    if (this.edit) {
-      return this.updateRequest(rbdImageSize);
-    } else {
-      return this.createRequest(rbdImageSize);
-    }
+
+    return requests;
   }
 
   validateSize() {
@@ -175,26 +183,31 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       this.invalidSizeError = false;
       const component = this;
       const taskUrl: string = `nvmeof/namespace/${this.edit ? URLVerbs.EDIT : URLVerbs.CREATE}`;
-      const request: NamespaceCreateRequest | NamespaceUpdateRequest = this.buildRequest();
-      let action: Observable<any>;
+      const image_size = this.nsForm.getValue('image_size');
+      const nsCount = this.nsForm.getValue('nsCount');
+      let action: Observable<HttpResponse<Object>>;
+      let rbdImageSize: number = null;
 
+      if (image_size) {
+        const image_size_unit = this.nsForm.getValue('unit');
+        const value: number = this.formatterService.toBytes(image_size + image_size_unit);
+        rbdImageSize = value;
+      }
       if (this.edit) {
         action = this.taskWrapperService.wrapTaskAroundCall({
           task: new FinishedTask(taskUrl, {
             nqn: this.subsystemNQN,
             nsid: this.nsid
           }),
-          call: this.nvmeofService.updateNamespace(this.subsystemNQN, this.nsid, request)
+          call: this.buildUpdateRequest(rbdImageSize)
         });
       } else {
         action = this.taskWrapperService.wrapTaskAroundCall({
           task: new FinishedTask(taskUrl, {
-            nqn: this.subsystemNQN
+            nqn: this.subsystemNQN,
+            nsCount
           }),
-          call: this.nvmeofService.createNamespace(
-            this.subsystemNQN,
-            request as NamespaceCreateRequest
-          )
+          call: forkJoin(this.buildCreateRequest(rbdImageSize, nsCount))
         });
       }
 
