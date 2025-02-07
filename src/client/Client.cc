@@ -5524,7 +5524,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, const MConstRef<
 	      ceph_seq_cmp(tcap.seq, m->peer.issue_seq) < 0) {
 	    tcap.cap_id = m->peer.cap_id;
 	    tcap.seq = m->peer.issue_seq - 1;
-	    tcap.issue_seq = tcap.issue_seq;
+	    tcap.issue_seq = m->peer.issue_seq - 1;
 	    tcap.issued |= cap.issued;
 	    tcap.implemented |= cap.issued;
 	    if (&cap == in->auth_cap)

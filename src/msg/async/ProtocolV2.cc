@@ -251,11 +251,11 @@ void ProtocolV2::reset_recv_state() {
     // `write_event()` unlocks it just before calling `write_message()`.
     // `submit_to()` here is NOT blocking.
     connection->center->submit_to(connection->center->get_id(), [this] {
-      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto and compression handlers"
-                    << dendl;
       // Possibly unnecessary. See the comment in `deactivate_existing`.
       std::lock_guard<std::mutex> l(connection->lock);
       std::lock_guard<std::mutex> wl(connection->write_lock);
+      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto and compression handlers"
+                    << dendl;
       reset_security();
       reset_compression();
     }, /* always_async = */true);
@@ -440,7 +440,7 @@ void ProtocolV2::send_message(Message *m) {
     is_prepared = false;
   }
 
-  std::lock_guard<std::mutex> l(connection->write_lock);
+  std::unique_lock l{connection->write_lock};
   // "features" changes will change the payload encoding
   if (can_fast_prepare && (!can_write || connection->get_features() != f)) {
     // ensure the correctness of message encoding
@@ -464,6 +464,11 @@ void ProtocolV2::send_message(Message *m) {
                    << dendl;
     if (((!replacing && can_write) || state == STANDBY) && !write_in_progress) {
       write_in_progress = true;
+
+      /* unlock the mutex now because dispatch_event_external() may
+         block waiting for another mutex */
+      l.unlock();
+
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
@@ -471,9 +476,14 @@ void ProtocolV2::send_message(Message *m) {
 
 void ProtocolV2::send_keepalive() {
   ldout(cct, 10) << __func__ << dendl;
-  std::lock_guard<std::mutex> l(connection->write_lock);
+  std::unique_lock l{connection->write_lock};
   if (state != CLOSED) {
     keepalive = true;
+
+    /* unlock the mutex now because dispatch_event_external() may
+       block waiting for another mutex */
+    l.unlock();
+
     connection->center->dispatch_event_external(connection->write_handler);
   }
 }
@@ -1643,8 +1653,8 @@ CtPtr ProtocolV2::handle_keepalive2(ceph::bufferlist &payload)
 
   ldout(cct, 30) << __func__ << " got KEEPALIVE2 tag ..." << dendl;
 
-  connection->write_lock.lock();
   auto keepalive_ack_frame = KeepAliveFrameAck::Encode(keepalive_frame.timestamp());
+  connection->write_lock.lock();
   if (!append_frame(keepalive_ack_frame)) {
     connection->write_lock.unlock();
     return _fault();
