@@ -194,6 +194,8 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append("--pids-limit=-1")
     if ctx.map_user:
         cmd.append("--user=0")
+    if ctx.cli.env_file:
+        cmd.append(f"--env-file={ctx.cli.env_file.absolute()}")
     if workdir:
         cmd.append(f"--workdir={workdir}")
     cwd = pathlib.Path(".").absolute()
@@ -858,6 +860,11 @@ def parse_cli(build_step_names):
         action="append",
         choices=build_step_names,
         help="Execute the target build step(s)",
+    )
+    parser.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        help="Use this environment file when building",
     )
     parser.add_argument(
         "--dry-run",
