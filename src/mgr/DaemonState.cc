@@ -406,6 +406,7 @@ void DaemonPerfCounters::update(const MMgrReport& report)
     // multiple sessions from daemons with the same name, and one
     // session clearing stats created by another on open.
     if (instances_it == instances.end()) {
+      dout(20) << "DaemonPerfCounter::update t_path" << t_path << dendl;
       instances_it = instances.insert({t_path, t.type}).first;
     }
     uint64_t val = 0;

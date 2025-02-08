@@ -2227,6 +2227,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     continue
 
                 schemas = self.get_perf_schema(service['type'], service['id'])
+                print("-----perf-schemas-------")
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas: {}'.format(schemas))
+                self.log.debug('perf-schemas json: {}'.format(json.dumps(schemas)))
                 if not schemas:
                     self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
