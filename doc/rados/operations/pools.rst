@@ -7,10 +7,11 @@ Pools are logical partitions that are used to store objects.
 
 Pools provide:
 
-- **Resilience**: It is possible to set the number of OSDs that are allowed to
-  fail without any data being lost. If your cluster uses replicated pools, the
-  number of OSDs that can fail without data loss is equal to the number of
-  replicas.
+- **Resilience**: It is possible to plan for the number of OSDs that may
+  fail in parallel without data being unavailable or lost. If your cluster
+  uses replicated pools, the number of OSDs that can fail in parallel without
+  data loss is one less than the number of replicas, and the number that can
+  fail without data becoming unavailable is usually two.
   
   For example: a typical configuration stores an object and two replicas
   (copies) of each RADOS object (that is: ``size = 3``), but you can configure
@@ -229,8 +230,8 @@ pool by running the following command.:
 Setting Pool Quotas
 ===================
 
-To set pool quotas for the maximum number of bytes and/or the maximum number of
-RADOS objects per pool, run the following command:
+To set quotas for the maximum number of bytes or the maximum number of
+RADOS objects per pool, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -242,7 +243,8 @@ For example:
 
    ceph osd pool set-quota data max_objects 10000
 
-To remove a quota, set its value to ``0``.
+To remove a quota, set its value to ``0``.  Note that you may set a quota only
+for bytes or only for RADOS objects, or you can set both.
 
 
 Deleting a Pool
