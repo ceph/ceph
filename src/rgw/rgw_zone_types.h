@@ -542,6 +542,42 @@ struct RGWZoneGroupPlacementTierS3 {
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
 
+enum GlacierRestoreTierType : uint8_t {
+  Standard = 0,
+  Expedited = 1,
+};
+
+struct RGWZoneGroupTierS3Glacier {
+#define DEFAULT_GLACIER_RESTORE_DAYS 1
+  uint64_t glacier_restore_days = DEFAULT_GLACIER_RESTORE_DAYS;
+  GlacierRestoreTierType glacier_restore_tier_type{Standard};
+
+  int update_params(const JSONFormattable& config);
+  int clear_params(const JSONFormattable& config);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(glacier_restore_days, bl);
+    encode(glacier_restore_tier_type, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(glacier_restore_days, bl);
+    decode(glacier_restore_tier_type, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWZoneGroupTierS3Glacier*>& o) {
+    o.push_back(new RGWZoneGroupTierS3Glacier);
+    o.back()->glacier_restore_days = 2;
+    o.back()->glacier_restore_tier_type = GlacierRestoreTierType::Expedited;
+  }
+};
+WRITE_CLASS_ENCODER(RGWZoneGroupTierS3Glacier)
+
 struct RGWZoneGroupPlacementTier {
 #define DEFAULT_READ_THROUGH_RESTORE_DAYS 1
 
@@ -555,20 +591,27 @@ struct RGWZoneGroupPlacementTier {
 
   bool allow_read_through = false;
   uint64_t read_through_restore_days = 1;
+  std::string restore_storage_class = RGW_STORAGE_CLASS_STANDARD;
+
+  RGWZoneGroupTierS3Glacier s3_glacier;
 
   int update_params(const JSONFormattable& config);
   int clear_params(const JSONFormattable& config);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(tier_type, bl);
     encode(storage_class, bl);
     encode(retain_head_object, bl);
-    if (tier_type == "cloud-s3") {
+    if (is_tier_type_s3()) {
       encode(t.s3, bl);
     }
     encode(allow_read_through, bl);
     encode(read_through_restore_days, bl);
+    encode(restore_storage_class, bl);
+    if (is_tier_type_s3_glacier()) {
+      encode(s3_glacier, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
@@ -588,13 +631,27 @@ struct RGWZoneGroupPlacementTier {
         decode(t.s3, bl);
       }
     } else if (struct_v >= 3) {
-      if (tier_type == "cloud-s3") {
+      if (is_tier_type_s3()) {
         decode(t.s3, bl);
       }
       decode(allow_read_through, bl);
       decode(read_through_restore_days, bl);
     }
+    if (struct_v >= 4) {
+      decode(restore_storage_class, bl);
+      if (is_tier_type_s3_glacier()) {
+        decode(s3_glacier, bl);
+      }
+    }
     DECODE_FINISH(bl);
+  }
+
+  bool is_tier_type_s3() const {
+    return (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier");
+  }
+
+  bool is_tier_type_s3_glacier() const {
+    return (tier_type == "cloud-s3-glacier");
   }
 
   void dump(Formatter *f) const;
@@ -604,6 +661,10 @@ struct RGWZoneGroupPlacementTier {
     o.push_back(new RGWZoneGroupPlacementTier);
     o.back()->tier_type = "cloud-s3";
     o.back()->storage_class = "STANDARD";
+    o.back()->allow_read_through = false;
+    o.back()->restore_storage_class = "STANDARD";
+    o.back()->s3_glacier.glacier_restore_days = 2;
+    o.back()->s3_glacier.glacier_restore_tier_type = GlacierRestoreTierType::Expedited;
   }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTier)
