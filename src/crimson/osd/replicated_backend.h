@@ -44,8 +44,13 @@ private:
   const pg_shard_t whoami;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
-    pending_on_t(size_t pending, const eversion_t& at_version)
-      : pending{static_cast<unsigned>(pending)}, at_version(at_version)
+    pending_on_t(
+      size_t pending,
+      const eversion_t& at_version,
+      const eversion_t& last_complete)
+      : pending{static_cast<unsigned>(pending)},
+	at_version(at_version),
+	last_complete(last_complete)
     {}
     unsigned pending;
     // The order of pending_txns' at_version must be the same as their
@@ -54,6 +59,7 @@ private:
     // way, client requests at_version must be updated synchorously/simultaneously
     // with ceph_tid_t.
     const eversion_t at_version;
+    const eversion_t last_complete;
     crimson::osd::acked_peers_t acked_peers;
     seastar::shared_promise<> all_committed;
   };
