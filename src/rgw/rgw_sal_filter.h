@@ -29,8 +29,11 @@ public:
   virtual ~FilterPlacementTier() = default;
 
   virtual const std::string& get_tier_type() override { return next->get_tier_type(); }
+  virtual bool is_tier_type_s3() { return next->is_tier_type_s3(); }
   virtual const std::string& get_storage_class() override { return next->get_storage_class(); }
   virtual bool retain_head_object() override { return next->retain_head_object(); }
+  virtual bool allow_read_through() { return next->allow_read_through(); }
+  virtual uint64_t get_read_through_restore_days() { return next->get_read_through_restore_days(); }
 
   /* Internal to Filters */
   PlacementTier* get_next() { return next.get(); }
