@@ -222,4 +222,16 @@ private:
   friend MURef<T> crimson::make_message(Args&&... args);
 };
 
+class LabeledPerfCounterType
+{
+public:
+  std::vector<std::pair<std::string, std::string>> label_pairs;
+  std::vector<PerfCounterType> counters;
+
+  //TODO: Naveen: encode, decode and dump functions
+
+
+
+};
+
 #endif

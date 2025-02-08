@@ -324,7 +324,9 @@ void MgrClient::_send_report()
   auto report = make_message<MMgrReport>();
   auto pcc = cct->get_perfcounters_collection();
 
-  pcc->with_counters([this, report](
+  std::map<string, std::vector<LabeledPerfCounterType>> labeled_perf_counters;
+
+  pcc->with_counters([this, report, labeled_perf_counters](
         const PerfCountersCollectionImpl::CounterMap &by_path)
   {
     // Helper for checking whether a counter should be included
@@ -333,10 +335,10 @@ void MgrClient::_send_report()
         const PerfCounters &perf_counters)
     {
       // FIXME: We don't send labeled perf counters to the mgr currently.
-      auto labels = ceph::perf_counters::key_labels(perf_counters.get_name());
-      if (labels.begin() != labels.end()) {
-        return false;
-      }
+      // auto labels = ceph::perf_counters::key_labels(perf_counters.get_name());
+      // if (labels.begin() != labels.end()) {
+      //   return false;
+      // }
 
       return perf_counters.get_adjusted_priority(ctr.prio) >= (int)stats_threshold;
     };
@@ -364,6 +366,28 @@ void MgrClient::_send_report()
       auto& data = *(i.second.data);
       auto& perf_counters = *(i.second.perf_counters);
 
+      /*
+        perf_counter path: osd_scrub_dp_ec^@level^@deep^@pooltype^@ec^@.num_scrubs_started
+        perf_counter data.name: num_scrubs_started
+        perf_counters: osd_scrub_dp_ec^@level^@deep^@pooltype^@ec^@
+
+        "osd_scrub_dp_ec": [
+        {
+            "labels": {
+                "level": "deep",
+                "pooltype": "ec"
+            },
+            "counters": {
+                "num_scrubs_started": {} --> PerfCounterType,
+                "num_scrubs_past_reservation": {}
+
+      */
+
+      ldout(cct, 20) << "perf_counter path: " << path << dendl;
+      ldout(cct, 20) << "perf_counter data.name: " << data.name << dendl;
+      ldout(cct, 20) << "perf_counters: " << perf_counters.get_name() << dendl;
+      ldout(cct, 20) << "perf_counters key_name " << ceph::perf_counters::key_name(perf_counters.get_name()) << dendl;
+
       // Find counters that still exist, but are no longer permitted by
       // stats_threshold
       if (!include_counter(data, perf_counters)) {
@@ -372,6 +396,8 @@ void MgrClient::_send_report()
         }
         continue;
       }
+
+      std::string_view counter_name = ceph::perf_counters::key_name(perf_counters.get_name());
 
       if (session->declared.count(path) == 0) {
         ldout(cct, 20) << " declare " << path << dendl;
@@ -386,6 +412,9 @@ void MgrClient::_send_report()
         type.type = data.type;
         type.priority = perf_counters.get_adjusted_priority(data.prio);
         type.unit = data.unit;
+
+        // TODO: Naveen: This update of report needs to be outside the loop.
+        // TODO: Update delcate_types to now take a map
         report->declare_types.push_back(std::move(type));
         session->declared.insert(path);
       }

@@ -963,15 +963,19 @@ PyObject* ActivePyModules::get_perf_schema_python(
         f.open_object_section(key.c_str());
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
+          dout(20) << __func__ << "get_perf_schema_python counter_name " << counter_name << dendl;
           f.open_object_section(counter_name.c_str());
           auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
           if (!type.nick.empty()) {
             f.dump_string("nick", type.nick);
+            dout(20) << __func__ << "get_perf_schema_python counter_name nick " << type.nick << dendl;
           }
           f.dump_unsigned("type", type.type);
+          dout(20) << __func__ << "get_perf_schema_python counter_name type " << type.type << dendl;
           f.dump_unsigned("priority", type.priority);
           f.dump_unsigned("units", type.unit);
+          dout(20) << __func__ << "get_perf_schema_python counter_name unit " << type.unit << dendl;
           f.close_section();
         }
         f.close_section();
