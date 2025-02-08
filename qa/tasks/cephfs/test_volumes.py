@@ -677,6 +677,99 @@ class TestVolumeCreate(TestVolumesHelper):
         # clean up
         self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
 
+    def test_volume_create_with_both_pool_names(self):
+        '''
+        Test that "ceph fs volume create" command accepts metadata pool name
+        and data pool name as arguments and uses these pools to create a new
+        volume.
+        '''
+        v = self._gen_vol_name()
+        meta = 'meta4521'
+        data = 'data4521'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.run_ceph_cmd(f'fs volume create {v} --data-pool {data} '
+                          f'--meta-pool {data}')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'metadata pool: {meta}')
+                self.assertIn(f'datadata pool: [{data} ]')
+
+    def test_volume_create_pass_data_pool_name(self):
+        '''
+        Test that "ceph fs volume create" command runs successfully when data
+        pool name is passed and metadata pool name is not passed to the
+        command. Also test that the created volume uses the data pool passed by
+        user and creates a new metadata pool for the volume to use.
+        '''
+        v = self._gen_vol_name()
+        data = 'data4521'
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.run_ceph_cmd(f'fs volume create {v} --data-pool {data} ')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'datadata pool: [{data} ]')
+
+    def test_volume_create_pass_meta_pool_name(self):
+        '''
+        Test that when only metadata pool name is passed to "ceph fs volume
+        create" command, the volume is created using the passed metadata pool
+        name and data pool for this volume is created automatically.
+        '''
+        v = self._gen_vol_name()
+        meta = 'meta4521'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'fs volume create {v} --meta-pool {meta}')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'metadata pool: {meta}')
+
+    def test_volume_create_pass_nonempty_pool_name(self):
+        '''
+        Test that when pool names passed to the command "ceph fs volume create"
+        are of pools that are not empty, the command aborts with an appropriate
+        error number and error message.
+        '''
+        self.fs.getinfo(refresh=True)
+        meta = self.fs.metadata_pool_name
+        data = self.fs.get_data_pool_name()
+
+        # make pool non-empty
+        self.mount_a.write_file(path='file1', data='somedata')
+
+        # so that pools of this FS can be reused
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs rm {self.fs.name} --yes-i-really-mean-it')
+        output = self.get_ceph_cmd_stdout('fs ls').lower().strip()
+
+        try:
+            # ensure fs was deleted but pools remain undeleted
+            self.assertEqual(output, 'no filesystems enabled')
+            output = self.get_ceph_cmd_stdout('osd pool ls')
+            self.assertIn(meta, output)
+            self.assertIn(data, output)
+
+            # actual test...
+            self.negtest_ceph_cmd(f'fs volume create somevol --meta-pool {meta} '
+                                  f'--data-pool {data}',
+                                  retval=errno.EINVAL,
+                                  errmsgs=('already contains some objects. use '
+                                           'an empty pool instead'))
+        # regardless of how this test goes, ensure that these leftover pools
+        # are deleted. else, they might mess up the teardown or setup code
+        # somehow.
+        finally:
+            self.run_ceph_cmd(f'osd pool rm {meta} {meta} '
+                               '--yes-i-really-really-mean-it')
+            self.run_ceph_cmd(f'osd pool rm {data} {data} '
+                               '--yes-i-really-really-mean-it')
+
 class TestRenameCmd(TestVolumesHelper):
 
     def test_volume_rename(self):
