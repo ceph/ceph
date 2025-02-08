@@ -22,6 +22,8 @@ struct RGWLCCloudTierCtx {
   rgw::sal::Driver *driver;
   RGWBucketInfo& bucket_info;
   std::string storage_class;
+  std::string restore_storage_class;
+  std::string tier_type;
 
   rgw::sal::Object *obj;
 
