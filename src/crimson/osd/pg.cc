@@ -890,9 +890,7 @@ void PG::enqueue_delete_for_backfill(
   backfill_state->enqueue_standalone_delete(obj, v, peers);
 }
 
-PG::interruptible_future<
-  std::tuple<PG::interruptible_future<>,
-             PG::interruptible_future<>>>
+PG::interruptible_future<PG::rep_op_fut_t>
 PG::submit_transaction(
   ObjectContextRef&& obc,
   ObjectContextRef&& new_clone,
@@ -901,10 +899,11 @@ PG::submit_transaction(
   std::vector<pg_log_entry_t>&& log_entries)
 {
   if (__builtin_expect(stopping, false)) {
-    co_return std::make_tuple(
+    return interruptor::make_ready_future<rep_op_fut_t>(
+      std::make_tuple(
         interruptor::make_interruptible(seastar::make_exception_future<>(
           crimson::common::system_shutdown_exception())),
-        interruptor::now());
+        interruptor::now()));
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
@@ -921,7 +920,7 @@ PG::submit_transaction(
     projected_log.add(entry);
   }
 
-  auto [submitted, all_completed] = co_await backend->submit_transaction(
+  return backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
       obc->obs.oi.soid,
       std::move(new_clone),
@@ -930,16 +929,6 @@ PG::submit_transaction(
       peering_state.get_last_peering_reset(),
       map_epoch,
       std::move(log_entries));
-  co_return std::make_tuple(
-    std::move(submitted),
-    all_completed.then_interruptible(
-      [this, last_complete=peering_state.get_info().last_complete, at_version]
-      (auto acked_peers) {
-      logger().debug("{} acked_peers: {}", __func__, acked_peers);
-      peering_state.complete_write(at_version, last_complete);
-      return seastar::now();
-    })
-  );
 }
 
 PG::interruptible_future<> PG::repair_object(

@@ -92,7 +92,11 @@ ReplicatedBackend::submit_transaction(
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
-    pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
+    pending_trans.try_emplace(
+      tid,
+      pg_shards.size(),
+      osd_op_p.at_version,
+      pg.get_last_complete()).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
@@ -162,6 +166,7 @@ ReplicatedBackend::submit_transaction(
       assert(0 == "impossible");
     }
     if (--peers->pending == 0) {
+      pg.complete_write(peers->at_version, peers->last_complete);
       peers->all_committed.set_value();
       peers->all_committed = {};
       return seastar::now();
@@ -181,8 +186,7 @@ ReplicatedBackend::submit_transaction(
     if (!to_push_delete.empty()) {
       pg.enqueue_delete_for_backfill(hoid, {}, to_push_delete);
     }
-    return seastar::make_ready_future<
-      crimson::osd::acked_peers_t>(std::move(acked_peers));
+    return seastar::now();
   });
 
   auto sends_complete = seastar::when_all_succeed(
@@ -213,6 +217,7 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
     if (peer.shard == reply.from) {
       peer.last_complete_ondisk = reply.get_last_complete_ondisk();
       if (--peers.pending == 0) {
+	pg.complete_write(peers.at_version, peers.last_complete);
         peers.all_committed.set_value();
         peers.all_committed = {};
       }
