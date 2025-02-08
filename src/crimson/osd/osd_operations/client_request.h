@@ -94,8 +94,7 @@ public:
       CommonOBCPipeline::Process::BlockingEvent,
       scrub::PGScrubber::BlockingEvent,
       CommonOBCPipeline::WaitRepop::BlockingEvent,
-      CommonOBCPipeline::SendReply::BlockingEvent,
-      CompletionEvent
+      CommonOBCPipeline::SendReply::BlockingEvent
       > pg_tracking_events;
 
     template <class BlockingEventT>
