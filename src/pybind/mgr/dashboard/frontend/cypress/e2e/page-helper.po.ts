@@ -13,17 +13,19 @@ export abstract class PageHelper {
    */
   static restrictTo(page: string): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
-      const fn: Function = descriptor.value;
-      descriptor.value = function (...args: any) {
-        cy.location('hash').should((url) => {
-          expect(url).to.eq(
-            page,
-            `Method ${target.constructor.name}::${propertyKey} is supposed to be ` +
-              `run on path "${page}", but was run on URL "${url}"`
-          );
-        });
-        fn.apply(this, args);
-      };
+      if (descriptor) {
+        const fn: Function = descriptor.value;
+        descriptor.value = function (...args: any) {
+          cy.location('hash').should((url) => {
+            expect(url).to.eq(
+              page,
+              `Method ${target.constructor.name}::${propertyKey} is supposed to be ` +
+                `run on path "${page}", but was run on URL "${url}"`
+            );
+          });
+          fn.apply(this, args);
+        };
+      }
     };
   }
 
