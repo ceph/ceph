@@ -312,6 +312,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
     r = load_subclass_of("MgrModule", &pClass);
     if (r) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
+      Py_EndInterpreter(pMyThreadState.ts);
       return r;
     }
 
@@ -320,6 +321,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       derr << "Missing or invalid COMMANDS attribute in module '"
           << module_name << "'" << dendl;
       error_string = "Missing or invalid COMMANDS attribute";
+      Py_EndInterpreter(pMyThreadState.ts);
       return r;
     }
 
@@ -329,6 +331,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       derr << "Missing or invalid MODULE_OPTIONS attribute in module '"
           << module_name << "'" << dendl;
       error_string = "Missing or invalid MODULE_OPTIONS attribute";
+      Py_EndInterpreter(pMyThreadState.ts);
       return r;
     }
 
@@ -708,6 +711,8 @@ PyModule::~PyModule()
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
+    Py_EndInterpreter(pMyThreadState.ts);
+    pMyThreadState.ts = nullptr;
   }
 }
 
