@@ -667,6 +667,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
     error_string = peek_pyerror();
     derr << "Module not found: '" << module_name << "'" << dendl;
     derr << handle_pyerror(true, module_name, "PyModule::load_subclass_of") << dendl;
+    Py_DECREF(mgr_module_type);
     return -ENOENT;
   }
   auto locals = PyModule_GetDict(plugin_module);
