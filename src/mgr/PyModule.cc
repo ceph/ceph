@@ -708,6 +708,8 @@ PyModule::~PyModule()
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
+    Py_EndInterpreter(pMyThreadState.ts);
+    pMyThreadState.ts = nullptr;
   }
 }
 
