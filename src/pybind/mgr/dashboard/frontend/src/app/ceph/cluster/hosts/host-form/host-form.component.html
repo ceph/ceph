@@ -1,7 +1,6 @@
 <cds-modal size="md"
            [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
+           [hasScrollingContent]="true">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
         i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
@@ -14,12 +13,10 @@
     <div cdsModalContent>
       <!-- Hostname -->
       <div class="form-item">
-        <cds-text-label label="Hostname"
-                        for="hostname"
-                        cdRequiredField="Hostname"
+        <cds-text-label for="hostname"
                         [invalid]="!hostForm.controls.hostname.valid && hostForm.controls.hostname.dirty"
-                        [invalidText]="hostnameError"
-                        i18n>Hostname
+                        [invalidText]="hostnameError">
+          <ng-container i18n>Hostname (required)</ng-container>
           <input cdsText
                  type="text"
                  placeholder="mon-123"
@@ -27,6 +24,7 @@
                  name="hostname"
                  formControlName="hostname"
                  autofocus
+                 [invalid]="!hostForm.controls.hostname.valid && hostForm.controls.hostname.dirty"
                  (keyup)="checkHostNameValue()">
         </cds-text-label>
         <ng-template #hostnameError>
@@ -41,10 +39,13 @@
         </ng-template>
         <cd-help-text>
           To add multiple hosts at once, you can enter:
-          <ul>
-            <li>a comma-separated list of hostnames <samp>(e.g.: example-01,example-02,example-03)</samp>,</li>
-            <li>a range expression <samp>(e.g.: example-[01-03].ceph)</samp>,</li>
-            <li>a comma separated range expression <samp>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</samp></li>
+          <ul cdsList>
+            <li cdsListItem
+                i18n>a comma-separated list of hostnames <b>(e.g.: example-01,example-02,example-03)</b>,</li>
+            <li cdsListItem
+                i18n>a range expression <b>(e.g.: example-[01-03].ceph)</b>,</li>
+            <li cdsListItem
+                i18n>a comma separated range expression <b>(e.g.: example-[01-05].lab.com,example2-[1-4].lab.com,example3-[001-006].lab.com)</b></li>
           </ul>
         </cd-help-text>
       </div>
