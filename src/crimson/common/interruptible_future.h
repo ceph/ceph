@@ -1403,9 +1403,8 @@ public:
       auto f = seastar::futurize_invoke(decorated_func, *begin++);
       if (!f.available() || f.failed()) {
 	if (!s) {
-	  using itraits = std::iterator_traits<Iterator>;
 	  auto n = (seastar::internal::iterator_range_estimate_vector_capacity(
-		begin, end, typename itraits::iterator_category()) + 1);
+		begin, end) + 1);
 	  s = new parallel_for_each_state<InterruptCond, ResultType>(n);
 	}
 	s->add_future(std::move(f));

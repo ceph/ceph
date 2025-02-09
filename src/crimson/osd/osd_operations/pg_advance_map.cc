@@ -10,6 +10,7 @@
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
+#include <boost/iterator/counting_iterator.hpp>
 #include "osd/PeeringState.h"
 
 namespace {

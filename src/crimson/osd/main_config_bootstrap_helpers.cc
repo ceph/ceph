@@ -11,6 +11,7 @@
 #include <seastar/util/closeable.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
+#include <seastar/core/app-template.hh>
 
 #include "common/ceph_argparse.h"
 #include "common/config_tracker.h"
