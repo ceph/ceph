@@ -84,6 +84,7 @@ class Config:
     user_sources: List[str] = dataclasses.field(default_factory=list)
     custom_dns: List[str] = dataclasses.field(default_factory=list)
     smb_port: int = 0
+    ctdb_port: int = 0
     ceph_config_entity: str = 'client.admin'
     vhostname: str = ''
     metrics_image: str = ''
@@ -404,6 +405,7 @@ class SMB(ContainerDaemonForm):
         self._cached_layout: Optional[ContainerLayout] = None
         self._rank_info = context_getters.fetch_rank_info(ctx) or (-1, -1)
         self.smb_port = 445
+        self.ctdb_port = 4379
         self.metrics_port = 9922
         self._network_mapper = _NetworkMapper(ctx)
         logger.debug('Created SMB ContainerDaemonForm instance')
@@ -491,6 +493,7 @@ class SMB(ContainerDaemonForm):
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
             smb_port=self.smb_port,
+            ctdb_port=self.ctdb_port,
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
             metrics_image=metrics_image,
@@ -719,6 +722,10 @@ class SMB(ContainerDaemonForm):
     ) -> None:
         if not any(ep.port == self.smb_port for ep in endpoints):
             endpoints.append(EndPoint('0.0.0.0', self.smb_port))
+        if self._cfg.clustered and not any(
+            ep.port == self.ctdb_port for ep in endpoints
+        ):
+            endpoints.append(EndPoint('0.0.0.0', self.ctdb_port))
         if self.metrics_port > 0:
             if not any(ep.port == self.metrics_port for ep in endpoints):
                 endpoints.append(EndPoint('0.0.0.0', self.metrics_port))
