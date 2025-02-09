@@ -1,6 +1,8 @@
 """
 Thrasher base class
 """
+
+
 class Thrasher(object):
 
     def __init__(self):
@@ -13,3 +15,6 @@ class Thrasher(object):
 
     def set_thrasher_exception(self, e):
         self._exception = e
+
+    def stop(self):
+        raise NotImplementedError("Subclasses didn't implement this method.")
