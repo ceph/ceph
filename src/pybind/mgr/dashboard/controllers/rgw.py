@@ -1182,6 +1182,13 @@ class RgwZonegroup(RESTController):
         result = multisite_instance.get_zonegroup(zonegroup_name)
         return result
 
+    @Endpoint('DELETE', path='storage-class')
+    @DeletePermission
+    def remove_storage_class(self, placement_id: str, storage_class: str):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.delete_placement_targets(placement_id, storage_class)
+        return result
+
     @Endpoint()
     @ReadPermission
     def get_all_zonegroups_info(self):
