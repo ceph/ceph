@@ -6,14 +6,14 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { BaseModal } from 'carbon-components-angular';
 import { CdValidators } from '../../forms/cd-validators';
-import { DeletionImpact } from '../../enum/critical-confirmation-modal-impact.enum';
+import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-deletion-modal',
-  templateUrl: './critical-confirmation-modal.component.html',
-  styleUrls: ['./critical-confirmation-modal.component.scss']
+  templateUrl: './delete-confirmation-modal.component.html',
+  styleUrls: ['./delete-confirmation-modal.component.scss']
 })
-export class CriticalConfirmationModalComponent extends BaseModal implements OnInit {
+export class DeleteConfirmationModalComponent extends BaseModal implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })
   submitButton: SubmitButtonComponent;
   deletionForm: CdFormGroup;
@@ -40,7 +40,7 @@ export class CriticalConfirmationModalComponent extends BaseModal implements OnI
   ) {
     super();
     this.actionDescription = actionDescription || 'delete';
-    this.impact = this.impact || DeletionImpact.normal;
+    this.impact = this.impact || DeletionImpact.medium;
   }
 
   ngOnInit() {
@@ -50,7 +50,7 @@ export class CriticalConfirmationModalComponent extends BaseModal implements OnI
         validators: [
           CdValidators.composeIf(
             {
-              impact: DeletionImpact.normal
+              impact: DeletionImpact.medium
             },
             [Validators.requiredTrue]
           )
@@ -73,7 +73,7 @@ export class CriticalConfirmationModalComponent extends BaseModal implements OnI
   }
 
   matchResourceName(control: AbstractControl): ValidationErrors | null {
-    if (this.itemNames && control.value != this.itemNames[0]) {
+    if (this.itemNames && control.value !== String(this.itemNames?.[0])) {
       return { matchResource: true };
     }
     return null;

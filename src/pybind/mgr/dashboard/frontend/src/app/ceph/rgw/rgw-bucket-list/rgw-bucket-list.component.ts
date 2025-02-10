@@ -6,7 +6,7 @@ import { switchMap } from 'rxjs/operators';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -23,7 +23,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Bucket } from '../models/rgw-bucket';
-import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'rgw/bucket';
 
@@ -154,7 +154,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
 
   deleteAction() {
     const itemNames = this.selection.selected.map((bucket: any) => bucket['bid']);
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`bucket`,
       impact: DeletionImpact.high,
       itemNames: itemNames,

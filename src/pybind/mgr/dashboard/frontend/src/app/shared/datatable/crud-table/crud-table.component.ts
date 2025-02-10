@@ -14,7 +14,7 @@ import { FinishedTask } from '../../models/finished-task';
 import { Permission, Permissions } from '../../models/permissions';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { TaskWrapperService } from '../../services/task-wrapper.service';
-import { CriticalConfirmationModalComponent } from '../../components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '../../components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ModalCdsService } from '../../services/modal-cds.service';
 import { BaseModal } from 'carbon-components-angular';
 
@@ -119,7 +119,7 @@ export class CRUDTableComponent implements OnInit {
 
   delete() {
     const selectedKey = this.selection.first()[this.meta.columnKey];
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`${this.meta.resource}`,
       itemNames: [selectedKey],
       submitAction: () => {

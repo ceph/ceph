@@ -27,7 +27,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { FormControl } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdForm } from '~/app/shared/forms/cd-form';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
@@ -35,7 +35,7 @@ import { HealthService } from '~/app/shared/api/health.service';
 import _ from 'lodash';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
-import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -246,7 +246,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     });
     this.errorMessage = '';
     this.selectedName = this.selection.first().name;
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       impact: DeletionImpact.high,
       actionDescription: 'remove',
       itemNames: [this.selectedName],
