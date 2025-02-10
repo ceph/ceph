@@ -1,0 +1,40 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.x
+  - client.0
+
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+      - \(POOL_APP_NOT_ENABLED\)
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+      - \(MON_DOWN\)
+      - \(PG_AVAILABILITY\)
+      - \(SLOW_OPS\)
+- cephfs_test_runner:
+    modules:
+      - tasks.mon_connection_score
