@@ -22,7 +22,6 @@
 #include "librbd/api/Namespace.h"
 #include "librbd/api/Utils.h"
 #include "librbd/group/ListSnapshotsRequest.h"
-#include "librbd/group/UnlinkPeerGroupRequest.h"
 #include "librbd/mirror/DemoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -37,6 +36,7 @@
 #include "librbd/mirror/snapshot/GroupCreatePrimaryRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
@@ -581,6 +581,47 @@ struct C_GroupGetInfo : public Context {
     }
 
     on_finish->complete(0);
+  }
+};
+
+template <typename I>
+struct C_GroupSnapshotCreate : public Context {
+  IoCtx group_ioctx;
+  std::string group_name;
+  uint64_t flags;
+  std::string *group_snap_id;
+  Context *on_finish;
+
+  cls::rbd::MirrorGroup mirror_group;
+  mirror::PromotionState promotion_state;
+
+  C_GroupSnapshotCreate(IoCtx& group_ioctx, const std::string group_name,
+                        uint64_t snap_create_flags,
+                        std::string *group_snap_id,
+                        Context *on_finish)
+    : group_ioctx(group_ioctx), group_name(group_name),
+      flags(snap_create_flags), group_snap_id(group_snap_id),
+      on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    if (r < 0 && r != -ENOENT) {
+      on_finish->complete(r);
+      return;
+    }
+
+    if(mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED ||
+       mirror_group.mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      CephContext *cct = (CephContext *)group_ioctx.cct();
+      lderr(cct) << "snapshot based mirroring is not enabled for "
+                 << group_name << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+
+    auto req = mirror::snapshot::GroupCreatePrimaryRequest<I>::create(
+        group_ioctx, group_name, flags, group_snap_id, on_finish);
+    req->send();
   }
 };
 
@@ -1526,12 +1567,26 @@ int Mirror<I>::remote_namespace_set(librados::IoCtx& io_ctx,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
 
+  std::string local_namespace = io_ctx.get_namespace();
+
+  if (local_namespace.empty() && !remote_namespace.empty()) {
+    lderr(cct) << "cannot mirror the default namespace to a "
+               << "non-default namespace." << dendl;
+    return -EINVAL;
+  }
+
+  if (!local_namespace.empty() && remote_namespace.empty()) {
+    lderr(cct) << "cannot mirror a non-default namespace to the default "
+               << "namespace." << dendl;
+    return -EINVAL;
+  }
+
   int r = cls_client::mirror_remote_namespace_set(&io_ctx, remote_namespace);
   if (r < 0) {
     lderr(cct) << "failed to set remote mirror namespace: "
                << cpp_strerror(r) << dendl;
     return r;
-  } 
+  }
   return 0;
 }
 
@@ -2383,6 +2438,7 @@ int prepare_group_images(IoCtx& group_ioctx,
                          cls::rbd::GroupSnapshot *group_snap,
                          std::vector<uint64_t> &quiesce_requests,
                          cls::rbd::MirrorSnapshotState state,
+                         std::set<std::string> *mirror_peer_uuids,
                          uint32_t flags) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << dendl;
@@ -2404,15 +2460,14 @@ int prepare_group_images(IoCtx& group_ioctx,
   }
   group_ioctx.set_namespace(ns);
 
-  std::set<std::string> mirror_peer_uuids;
   for (auto &peer : peers) {
     if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
       continue;
     }
-    mirror_peer_uuids.insert(peer.uuid);
+    mirror_peer_uuids->insert(peer.uuid);
   }
 
-  if (mirror_peer_uuids.empty()) {
+  if (mirror_peer_uuids->empty()) {
     lderr(cct) << "no mirror tx peers configured for the pool" << dendl;
     return -EINVAL;
   }
@@ -2422,7 +2477,7 @@ int prepare_group_images(IoCtx& group_ioctx,
   }
 
   group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-                                     state, mirror_peer_uuids, {}, {}};
+                                     state, *mirror_peer_uuids, {}, {}};
 
   for (auto image_ctx: *image_ctxs) {
     group_snap->snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -2719,9 +2774,11 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
+  std::set<std::string> mirror_peer_uuids;
   r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
+                           &mirror_peer_uuids,
                            flags);
   if (r != 0) {
     return r;
@@ -3135,10 +3192,11 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
+  std::set<std::string> mirror_peer_uuids;
   r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
-                           flags);
+                           &mirror_peer_uuids, flags);
   if (r != 0) {
     return r;
   }
@@ -3186,7 +3244,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                              &group_snap, quiesce_requests,
                              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                             flags);
+                             &mirror_peer_uuids, flags);
     if (r != 0) {
       return r;
     }
@@ -3228,8 +3286,8 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
 
   if (!ret_code) {
     C_SaferCond cond;
-    auto req = group::UnlinkPeerGroupRequest<I>::create(
-        group_ioctx, group_id, &image_ctxs, &cond);
+    auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
+        group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
     req->send();
     cond.wait();
   }
@@ -3297,10 +3355,11 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
+  std::set<std::string> mirror_peer_uuids;
   r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                           flags);
+                           &mirror_peer_uuids, flags);
   if (r != 0) {
     return r;
   }
@@ -3348,7 +3407,7 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                              &group_snap, quiesce_requests,
                              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                             flags);
+                             &mirror_peer_uuids, flags);
     if (r != 0) {
       return r;
     }
@@ -3391,8 +3450,8 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
 
   if (!ret_code) {
     C_SaferCond cond;
-    auto req = group::UnlinkPeerGroupRequest<I>::create(
-        group_ioctx, group_id, &image_ctxs, &cond);
+    auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
+        group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
     req->send();
     cond.wait();
   }
@@ -3488,8 +3547,20 @@ void Mirror<I>::group_snapshot_create(IoCtx& group_ioctx,
 		 << ", group_name=" << group_name
 		 << ", flags=" << flags << dendl;
 
-  auto req = mirror::snapshot::GroupCreatePrimaryRequest<I>::create(
-    group_ioctx, group_name, flags, snap_id, on_finish);
+  uint64_t snap_create_flags = 0;
+  int r = librbd::util::snap_create_flags_api_to_internal(cct, flags,
+                                                          &snap_create_flags);
+  if (r < 0) {
+    on_finish->complete(r);
+    return;
+  }
+  auto ctx = new C_GroupSnapshotCreate<I>(group_ioctx, group_name,
+                                       snap_create_flags,
+                                       snap_id,
+                                       on_finish);
+
+  auto req = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, group_name, &ctx->mirror_group, &ctx->promotion_state, ctx);
   req->send();
 }
 
@@ -3553,10 +3624,11 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
+  std::set<std::string> mirror_peer_uuids;
   r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
-                           flags);
+                           &mirror_peer_uuids, flags);
   if (r != 0) {
     return r;
   }
@@ -3631,8 +3703,8 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
 
   if (!ret_code) {
     C_SaferCond cond;
-    auto req = group::UnlinkPeerGroupRequest<I>::create(
-        group_ioctx, group_id, &image_ctxs, &cond);
+    auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
+        group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
     req->send();
     cond.wait();
   }
@@ -3679,10 +3751,11 @@ int Mirror<I>::group_image_remove(IoCtx &group_ioctx,
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
+  std::set<std::string> mirror_peer_uuids;
   int r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                                &group_snap, quiesce_requests,
                                cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
-                               flags);
+                               &mirror_peer_uuids, flags);
   if (r != 0) {
     return r;
   }
@@ -3777,8 +3850,8 @@ int Mirror<I>::group_image_remove(IoCtx &group_ioctx,
 
   if (!ret_code) {
     C_SaferCond cond;
-    auto req = group::UnlinkPeerGroupRequest<I>::create(
-        group_ioctx, group_id, &image_ctxs, &cond);
+    auto req = mirror::snapshot::GroupUnlinkPeerRequest<I>::create(
+        group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
     req->send();
     cond.wait();
   }
