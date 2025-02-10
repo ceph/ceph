@@ -11,7 +11,6 @@ import { Observable, of } from 'rxjs';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -27,6 +26,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, modalServiceShow, PermissionHelper } from '~/testing/unit-test-helper';
 import { CephfsDirectoriesComponent } from './cephfs-directories.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 
 describe('CephfsDirectoriesComponent', () => {
   let component: CephfsDirectoriesComponent;
@@ -370,7 +370,7 @@ describe('CephfsDirectoriesComponent', () => {
       declarations: [CephfsDirectoriesComponent],
       providers: [NgbActiveModal]
     },
-    [CriticalConfirmationModalComponent, FormModalComponent, ConfirmationModalComponent]
+    [DeleteConfirmationModalComponent, FormModalComponent, ConfirmationModalComponent]
   );
 
   beforeEach(() => {
@@ -713,7 +713,7 @@ describe('CephfsDirectoriesComponent', () => {
     expect(tableActions).toEqual({
       'create,update,delete': {
         actions: ['Create', 'Delete'],
-        primary: { multiple: 'Delete', executing: 'Delete', single: 'Delete', no: 'Create' }
+        primary: { multiple: 'Create', executing: 'Delete', single: 'Delete', no: 'Create' }
       },
       'create,update': {
         actions: ['Create'],
@@ -721,7 +721,7 @@ describe('CephfsDirectoriesComponent', () => {
       },
       'create,delete': {
         actions: ['Create', 'Delete'],
-        primary: { multiple: 'Delete', executing: 'Delete', single: 'Delete', no: 'Create' }
+        primary: { multiple: 'Create', executing: 'Delete', single: 'Delete', no: 'Create' }
       },
       create: {
         actions: ['Create'],

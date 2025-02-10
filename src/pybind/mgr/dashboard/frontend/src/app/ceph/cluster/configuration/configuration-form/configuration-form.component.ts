@@ -13,8 +13,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 
 const RGW = 'rgw';
 
@@ -158,7 +158,7 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
   }
 
   openCriticalConfirmModal() {
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       buttonText: $localize`Force Edit`,
       actionDescription: $localize`force edit`,
       itemDescription: $localize`configuration`,

@@ -1,21 +1,20 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { UntypedFormControl, Validators } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, ValidationErrors, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
-import { BaseModal } from 'carbon-components-angular';
 import { CdValidators } from '../../forms/cd-validators';
-import { DeletionImpact } from '../../enum/critical-confirmation-modal-impact.enum';
+import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-deletion-modal',
-  templateUrl: './critical-confirmation-modal.component.html',
-  styleUrls: ['./critical-confirmation-modal.component.scss']
+  templateUrl: './delete-confirmation-modal.component.html',
+  styleUrls: ['./delete-confirmation-modal.component.scss']
 })
-export class CriticalConfirmationModalComponent implements OnInit {
+export class DeleteConfirmationModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;
@@ -33,7 +32,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   childFormGroupTemplate: TemplateRef<any>;
   impact: DeletionImpact;
   constructor(public activeModal: NgbActiveModal) {
-    this.impact = this.impact || DeletionImpact.normal;
+    this.impact = this.impact || DeletionImpact.medium;
   }
 
   ngOnInit() {
@@ -43,7 +42,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
         validators: [
           CdValidators.composeIf(
             {
-              impact: DeletionImpact.normal
+              impact: DeletionImpact.medium
             },
             [Validators.requiredTrue]
           )
@@ -66,7 +65,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   }
 
   matchResourceName(control: AbstractControl): ValidationErrors | null {
-    if (this.itemNames && control.value != this.itemNames[0]) {
+    if (this.itemNames && control.value !== String(this.itemNames?.[0])) {
       return { matchResource: true };
     }
     return null;
