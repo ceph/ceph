@@ -672,12 +672,28 @@ void Replayer<I>::create_mirror_snapshot(
 
   auto requests_it = m_create_snap_requests.find(group_snap_id);
   if (requests_it == m_create_snap_requests.end()) {
+    int r;
+    std::set<std::string> mirror_peer_uuids;
+    if (snap_state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) {
+      std::vector<cls::rbd::MirrorPeer> mirror_peers;
+      r = librbd::cls_client::mirror_peer_list(&m_local_io_ctx, &mirror_peers);
+      if (r < 0) {
+        derr << "failed to list peers: " << cpp_strerror(r) << dendl;
+      }
+
+      for (auto &peer : mirror_peers) {
+        if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
+          continue;
+        }
+        mirror_peer_uuids.insert(peer.uuid);
+      }
+    }
     requests_it = m_create_snap_requests.insert(
         {group_snap_id, {}}).first;
     cls::rbd::GroupSnapshot local_snap =
       {group_snap_id,
        cls::rbd::GroupSnapshotNamespaceMirror{
-         snap_state, {}, m_remote_mirror_uuid, group_snap_id},
+         snap_state, mirror_peer_uuids, m_remote_mirror_uuid, group_snap_id},
        {}, cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
     local_snap.name = prepare_non_primary_mirror_snap_name(m_global_group_id,
         group_snap_id);
@@ -688,10 +704,9 @@ void Replayer<I>::create_mirror_snapshot(
         handle_create_mirror_snapshot(r, group_snap_id, on_finish);
       }));
 
-
     librados::ObjectWriteOperation op;
     librbd::cls_client::group_snap_set(&op, local_snap);
-    int r = m_local_io_ctx.aio_operate(
+    r = m_local_io_ctx.aio_operate(
         librbd::util::group_header_name(m_local_group_id), comp, &op);
     ceph_assert(r == 0);
     locker.unlock();
