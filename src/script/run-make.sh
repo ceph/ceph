@@ -54,6 +54,16 @@ function prepare() {
         which_pkg="debianutils"
     fi
 
+    if in_jenkins; then
+        if ! type clang-16 > /dev/null 2>&1 ; then
+            ci_debug "Getting clang-16"
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            $DRY_RUN sudo ./llvm.sh 16
+            rm llvm.sh
+        fi
+    fi
+
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
         INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
