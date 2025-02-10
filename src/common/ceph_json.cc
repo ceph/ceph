@@ -1,10 +1,11 @@
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
-#include <boost/algorithm/string.hpp>
+#include <include/types.h>
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
-#include <include/types.h>
+#include <boost/algorithm/string.hpp>
+#include <boost/container/flat_map.hpp>
 
 /* Enable boost.json's header-only mode:
 	(see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
@@ -44,7 +45,7 @@ void JSONObj::handle_value(boost::json::value v)
   if (auto op = v.if_object()) {
 	for (const auto& kvp : *op) {
 		auto child = std::make_unique<JSONObj>(this, kvp.key(), kvp.value());
-		children.insert(std::pair { kvp.key(), std::move(child) });
+		children.emplace(std::pair { kvp.key(), std::move(child) });
 	 }
 
 	return;
@@ -53,7 +54,7 @@ void JSONObj::handle_value(boost::json::value v)
  if (auto ap = v.if_array()) {
 	for (const auto& kvp : *ap) {
 		auto child = std::make_unique<JSONObj>(this, "", kvp);
-		children.insert(std::pair { child->get_name(), std::move(child) });
+		children.emplace(std::pair { child->get_name(), std::move(child) });
 	 }
  }
 

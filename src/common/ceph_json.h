@@ -111,7 +111,7 @@ concept json_val_seq = requires
 
 class JSONObjIter final {
 
-  using map_iter_t = std::map<std::string, std::unique_ptr<JSONObj>, std::less<>>::iterator;
+  using map_iter_t = boost::container::flat_map<std::string, std::unique_ptr<JSONObj>, std::less<>>::iterator;
 
   map_iter_t cur;
   map_iter_t last;
@@ -147,10 +147,6 @@ class JSONObj
 {
   JSONObj *parent = nullptr;
 
-protected:
-  using children_multimap_t = std::multimap<std::string, std::unique_ptr<JSONObj>, std::less<>>;
-  using children_multimap_value_type = typename children_multimap_t::value_type;
-
 public:
   struct data_val {
     std::string str;
@@ -171,8 +167,8 @@ protected:
 
   bool data_quoted{false};
 
-  children_multimap_t children;
-  std::map<std::string, data_val, std::less<>> attr_map;
+  boost::container::flat_multimap<std::string, std::unique_ptr<JSONObj>, std::less<>> children;
+  boost::container::flat_map<std::string, data_val, std::less<>> attr_map;
 
   void handle_value(boost::json::value v);
 
@@ -640,7 +636,7 @@ public:
   };
 
 private:
-  std::map<std::type_index, HandlerBase *> handlers;
+  boost::container::flat_map<std::type_index, HandlerBase *> handlers;
 
 public:
   void register_type(HandlerBase *h) {
