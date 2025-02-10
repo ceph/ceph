@@ -13427,6 +13427,8 @@ paths:
                 master:
                   default: false
                   type: boolean
+                realm_id:
+                  type: string
                 secret_key:
                   type: string
                 zone_endpoints:
@@ -13582,6 +13584,11 @@ paths:
         schema:
           type: string
       - in: query
+        name: realm_id
+        required: true
+        schema:
+          type: string
+      - in: query
         name: delete_pools
         required: true
         schema:
@@ -13687,6 +13694,8 @@ paths:
                 placement_target:
                   default: ''
                   type: string
+                realm_id:
+                  type: string
                 secret_key:
                   default: ''
                   type: string
@@ -13700,6 +13709,7 @@ paths:
                   type: string
               required:
               - new_zone_name
+              - realm_id
               - zonegroup_name
               type: object
       responses:
@@ -13820,6 +13830,11 @@ paths:
       parameters:
       - in: path
         name: zonegroup_name
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: realm_id
         required: true
         schema:
           type: string
