@@ -201,7 +201,7 @@ class SMBShare(RESTController):
             'smb',
             'show',
             [f'{self._resource}.{cluster_id}' if cluster_id else self._resource])
-        return res['resources'] if 'resources' in res else res
+        return res['resources'] if 'resources' in res else [res]
 
     @raise_on_failure
     @DeletePermission
