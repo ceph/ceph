@@ -146,6 +146,7 @@
                 "Bucket":{
                     "shape":"BucketName",
                     "documentation":"<p>Name of the bucket to delete the notifications configuration from.</p>",
+                    "contextParam":{"name":"Bucket"},
                     "location":"uri",
                     "locationName":"Bucket"
                 },
@@ -164,6 +165,7 @@
                 "Bucket":{
                     "shape":"BucketName",
                     "documentation":"<p>Name of the bucket to flush its logging objects.</p>",
+                    "contextParam":{"name":"Bucket"},
                     "location":"uri",
                     "locationName":"Bucket"
                 }
