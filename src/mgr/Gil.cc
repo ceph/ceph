@@ -14,11 +14,14 @@
 
 
 #include "Python.h"
-
+#include "mgr/mgr_perf_counters.h"
 #include "common/debug.h"
+
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
+
+
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
@@ -31,11 +34,18 @@ SafeThreadState::SafeThreadState(PyThreadState *ts_)
   thread = pthread_self();
 }
 
+
 Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
 {
   // Acquire the GIL, set the current thread state
+  auto start = std::chrono::high_resolution_clock::now();
   PyEval_RestoreThread(pThreadState.ts);
-  dout(25) << "GIL acquired for thread state " << pThreadState.ts << dendl;
+  auto wait_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::high_resolution_clock::now() - start);
+  dout(25) << "GIL acquired for thread state " << pThreadState.ts << " in "
+           << wait_duration.count() << "ns" << dendl;
+
+  perfcounter->tinc(l_mgr_gil_acquisition_avg, wait_duration);
 
   //
   // If called from a separate OS thread (i.e. a thread not created

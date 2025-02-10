@@ -15,6 +15,8 @@ int mgr_perf_start(CephContext *cct)
   plb.add_u64_counter(l_mgr_cache_hit, "cache_hit", "Cache hits");
   plb.add_u64_counter(l_mgr_cache_miss, "cache_miss", "Cache miss");
 
+  plb.add_time_avg(l_mgr_gil_acquisition_avg, "gil_acquisition_avg", "Average time to acquire GIL");
+
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
   return 0;
