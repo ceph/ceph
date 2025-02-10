@@ -481,7 +481,22 @@ def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -
         logger.warning(f'Trying to get container info using invalid daemon name {daemon_filter}')
         return None
     if by_name:
-        matching_daemons = _get_matching_daemons_by_name(ctx, daemon_filter)
+        # NOTE: we are not passing detail=False to this list_daemons call
+        # as we want the container_image name in the case where we are
+        # doing this by name and this is skipped when detail=False
+        matching_daemons = list_daemons(ctx, daemon_name=daemon_filter)
+        if len(matching_daemons) > 1:
+            logger.warning(f'Found multiple daemons sharing same name: {daemon_filter}')
+            # Take the first daemon we find that is actually running, or just the
+            # first in the list if none are running
+            matched_daemon = None
+            for d in matching_daemons:
+                if 'state' in d and d['state'] == 'running':
+                    matched_daemon = d
+                    break
+            if not matched_daemon:
+                matched_daemon = matching_daemons[0]
+            matching_daemons = [matched_daemon]
     else:
         # NOTE: we are passing detail=False here as in this case where we are not
         # doing it by_name, we really only need the names of the daemons. Additionally,
@@ -512,26 +527,6 @@ def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -
             if cinfo:
                 return cinfo
     return None
-
-
-def _get_matching_daemons_by_name(ctx: CephadmContext, daemon_filter: str) -> List[Dict[str, str]]:
-    # NOTE: we are not passing detail=False to this list_daemons call
-    # as we want the container_image name in the case where we are
-    # doing this by name and this is skipped when detail=False
-    matching_daemons = list_daemons(ctx, daemon_name=daemon_filter)
-    if len(matching_daemons) > 1:
-        logger.warning(f'Found multiple daemons sharing same name: {daemon_filter}')
-        # Take the first daemon we find that is actually running, or just the
-        # first in the list if none are running
-        matched_daemon = None
-        for d in matching_daemons:
-            if 'state' in d and d['state'] == 'running':
-                matched_daemon = d
-                break
-        if not matched_daemon:
-            matched_daemon = matching_daemons[0]
-        matching_daemons = [matched_daemon]
-    return matching_daemons
 
 
 def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional[str]:
