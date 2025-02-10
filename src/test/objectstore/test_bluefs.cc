@@ -11,6 +11,9 @@
 #include <thread>
 #include <stack>
 #include <gtest/gtest.h>
+#include <unistd.h>
+#include <csignal>
+#include <atomic>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -27,6 +30,12 @@ using namespace std;
 #define SKIP_JENKINS() \
   if (getenv("JENKINS_HOME") != nullptr) GTEST_SKIP_("test disabled on jenkins");
 
+void signalHandler(int sig) {
+    while (true) {
+        std::cout << "signalHandler: " << sig << std::endl;
+        sleep(60);
+    }
+}
 
 std::unique_ptr<char[]> gen_buffer(uint64_t size)
 {
@@ -98,6 +107,7 @@ TEST(BlueFS, mkfs) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   uuid_d fsid;
+  std::signal(SIGBUS, signalHandler);
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
