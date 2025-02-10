@@ -1041,7 +1041,7 @@ This procedure assumes the existence of two hosts: ``ceph01`` and ``ceph04``.
 - ``ceph04`` is the host with the recently reinstalled operating system.
 
 #. Install ``cephadm`` and ``podman`` on the host. The command for installing
-   these utilties will depend upon the operating system of the host.
+   these utilities will depend upon the operating system of the host.
 
 #. Retrieve the public key.
 
@@ -1049,9 +1049,9 @@ This procedure assumes the existence of two hosts: ``ceph01`` and ``ceph04``.
       
       ceph cephadm get-pub-key > ceph.pub
 
-#. Copy the key to the freshly reinstalled host:
+#. Copy the key (from ``ceph01``) to the freshly reinstalled host (``ceph04``):
 
-   .. prompt:: bash ceph04#
+   .. prompt:: bash ceph01#
 
       ssh-copy-id -f -i ceph.pub root@<hostname>
 
@@ -1111,7 +1111,7 @@ This procedure assumes the existence of two hosts: ``ceph01`` and ``ceph04``.
 
    .. prompt:: bash #
 
-      ceph cephadm osd activate <ceph04>
+      ceph cephadm osd activate ceph04
 
    This command causes ``cephadm`` to scan all existing disks for OSDs. This
    command will make ``cephadm`` deploy any missing daemons to the host
