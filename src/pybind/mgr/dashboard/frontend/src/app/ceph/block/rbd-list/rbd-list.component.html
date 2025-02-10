@@ -55,7 +55,7 @@
 <ng-template #ScheduleTpl
              let-value="data.value"
              let-row="data.row">
-  <span *ngIf="value.length === 3"
+  <span *ngIf="value?.length === 3"
         class="badge badge-info">{{ value[2] | cdDate  }}</span>
 </ng-template>
 
