@@ -1017,6 +1017,121 @@ This enables distributed subtree partitioning policy for the "csi" subvolume
 group. This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
+Normalization and Case Sensitivity
+----------------------------------
+
+The subvolumegroup and subvolume interefaces have a porcelain layer API to
+manipulate the ``ceph.dir.charmap`` configurations (see also :ref:`charmap`).
+
+
+Configuring the charmap
+~~~~~~~~~~~~~~~~~~~~~~~
+
+To configure the charmap, for a subvolumegroup:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap set <vol_name> <group_name> <setting> <value>
+
+Or for a subvolume:
+
+.. prompt:: bash #
+
+    ceph fs subvolume charmap set <vol_name> <subvol> <--group_name=name> <setting> <value>
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap set vol csi normalization nfd
+
+outputs:
+
+::
+
+    {"casesensitive":true,"normalization":"nfd","encoding":"utf8"}
+
+
+Reading the charmap
+~~~~~~~~~~~~~~~~~~~
+
+To read the configuration, for a subvolumegroup:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap get <vol_name> <group_name> <setting>
+
+Or for a subvolume:
+
+.. prompt:: bash #
+
+    ceph fs subvolume charmap get <vol_name> <subvol> <--group_name=name> <setting>
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolume charmap get vol subvol --group_name=csi casesensitive
+
+::
+
+    0
+
+To read the full ``charmap``, for a subvolumegroup:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap get <vol_name> <group_name>
+
+Or for a subvolume:
+
+.. prompt:: bash #
+
+    ceph fs subvolume charmap get <vol_name> <subvol> <--group_name=name>
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap get vol csi
+
+outputs:
+
+::
+
+    {"casesensitive":false,"normalization":"nfd","encoding":"utf8"}
+
+
+Removing the charmap
+~~~~~~~~~~~~~~~~~~~~
+
+To remove the configuration, for a subvolumegroup:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap rm <vol_name> <group_name
+
+Or for a subvolume:
+
+.. prompt:: bash #
+
+    ceph fs subvolume charmap rm <vol_name> <subvol> <--group_name=name>
+
+For example:
+
+.. prompt:: bash #
+
+    ceph fs subvolumegroup charmap rm vol csi
+
+outputs:
+
+::
+
+    {}
+
+.. note:: A charmap can only be removed when a subvolumegroup or subvolume is empty.
+
+
 Subvolume quiesce
 -----------------
 
