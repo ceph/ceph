@@ -3,7 +3,7 @@
 import os
 import logging
 
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Optional, Dict, Any
 
 from .call_wrappers import call_throws, call, CallVerbosity
 from .context import CephadmContext
@@ -302,3 +302,116 @@ def parsed_container_cpu_perc(
         ctx, container_path=container_path, verbosity=verbosity
     )
     return _parse_cpu_perc(code, out)
+
+
+class ContainerInfo:
+    def __init__(
+        self,
+        container_id: str,
+        image_name: str,
+        image_id: str,
+        start: str,
+        version: str,
+    ) -> None:
+        self.container_id = container_id
+        self.image_name = image_name
+        self.image_id = image_id
+        self.start = start
+        self.version = version
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ContainerInfo):
+            return NotImplemented
+        return (
+            self.container_id == other.container_id
+            and self.image_name == other.image_name
+            and self.image_id == other.image_id
+            and self.start == other.start
+            and self.version == other.version
+        )
+
+
+def _container_stats(
+    ctx: CephadmContext,
+    container_name: str,
+    *,
+    container_path: str,
+) -> Tuple[str, str, int]:
+    """returns container id, image name, image id, created time, and ceph version if available"""
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = '', '', -1
+    cmd = [
+        container_path,
+        'inspect',
+        '--format',
+        '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+        container_name,
+    ]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
+    return out, err, code
+
+
+def _parse_container_stats(
+    out: str, err: str, code: int
+) -> Optional[ContainerInfo]:
+    if code != 0:
+        return None
+    # container_id, image_name, image_id, start, version
+    return ContainerInfo(*list(out.strip().split(',')))
+
+
+def parsed_container_stats(
+    ctx: CephadmContext,
+    container_name: str,
+    *,
+    container_path: str,
+) -> Optional[ContainerInfo]:
+    out, err, code = _container_stats(
+        ctx, container_name, container_path=container_path
+    )
+    return _parse_container_stats(out, err, code)
+
+
+def _container_image_stats(
+    ctx: CephadmContext, image_name: str, *, container_path: str = ''
+) -> Tuple[str, str, int]:
+    """returns image id, created time, and ceph version if available"""
+    container_path = container_path or ctx.container_engine.path
+    cmd = [
+        container_path,
+        'image',
+        'inspect',
+        '--format',
+        '{{.Id}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+        image_name,
+    ]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
+    return out, err, code
+
+
+def _parse_container_image_stats(
+    image_name: str,
+    out: str,
+    err: str,
+    code: int,
+) -> Optional[ContainerInfo]:
+    if code != 0:
+        return None
+    (image_id, start, version) = out.strip().split(',')
+    # keep in mind, the daemon container is not running, so no container id here
+    return ContainerInfo(
+        container_id='',
+        image_name=image_name,
+        image_id=image_id,
+        start=start,
+        version=version,
+    )
+
+
+def parsed_container_image_stats(
+    ctx: CephadmContext, image_name: str, *, container_path: str = ''
+) -> Optional[ContainerInfo]:
+    out, err, code = _container_image_stats(
+        ctx, image_name, container_path=container_path
+    )
+    return _parse_container_image_stats(image_name, out, err, code)

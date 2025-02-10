@@ -85,11 +85,13 @@ from cephadmlib.call_wrappers import (
     concurrent_tasks,
 )
 from cephadmlib.container_engines import (
+    ContainerInfo,
     Podman,
     check_container_engine,
     find_container_engine,
-    parsed_container_mem_usage,
     parsed_container_cpu_perc,
+    parsed_container_image_stats,
+    parsed_container_mem_usage,
     pull_command,
     registry_login,
 )
@@ -146,8 +148,9 @@ from cephadmlib.container_types import (
     InitContainer,
     SidecarContainer,
     extract_uid_gid,
-    is_container_running,
+    get_container_stats,
     get_mgr_images,
+    is_container_running,
 )
 from cephadmlib.decorators import (
     deprecated_command,
@@ -196,30 +199,6 @@ FuncT = TypeVar('FuncT', bound=Callable)
 
 logger = logging.getLogger()
 
-
-##################################
-
-
-class ContainerInfo:
-    def __init__(self, container_id: str,
-                 image_name: str,
-                 image_id: str,
-                 start: str,
-                 version: str) -> None:
-        self.container_id = container_id
-        self.image_name = image_name
-        self.image_id = image_id
-        self.start = start
-        self.version = version
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, ContainerInfo):
-            return NotImplemented
-        return (self.container_id == other.container_id
-                and self.image_name == other.image_name
-                and self.image_id == other.image_id
-                and self.start == other.start
-                and self.version == other.version)
 
 ##################################
 
@@ -522,22 +501,16 @@ def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -
             # container will not help us. If we have the image name from the list_daemons output
             # we can try that.
             image_name = matching_daemons[0]['container_image_name']
-            out, _, code = get_container_stats_by_image_name(ctx, ctx.container_engine.path, image_name)
-            if not code:
-                # keep in mind, the daemon container is not running, so no container id here
-                (image_id, start, version) = out.strip().split(',')
-                return ContainerInfo(
-                    container_id='',
-                    image_name=image_name,
-                    image_id=image_id,
-                    start=start,
-                    version=version)
+            cinfo = parsed_container_image_stats(ctx, image_name)
+            if cinfo:
+                return cinfo
         else:
             d_type, d_id = matching_daemons[0]['name'].split('.', 1)
-            out, _, code = get_container_stats(ctx, ctx.container_engine.path, ctx.fsid, d_type, d_id)
-            if not code:
-                (container_id, image_name, image_id, start, version) = out.strip().split(',')
-                return ContainerInfo(container_id, image_name, image_id, start, version)
+            cinfo = get_container_stats(
+                ctx, DaemonIdentity(ctx.fsid, d_type, d_id)
+            )
+            if cinfo:
+                return cinfo
     return None
 
 
@@ -3513,10 +3486,17 @@ def list_daemons(
                         version = None
                         start_stamp = None
 
-                        out, err, code = get_container_stats(ctx, container_path, fsid, daemon_type, daemon_id)
-                        if not code:
-                            (container_id, image_name, image_id, start,
-                             version) = out.strip().split(',')
+                        cinfo = get_container_stats(
+                            ctx,
+                            DaemonIdentity(fsid, daemon_type, daemon_id),
+                            container_path=container_path
+                        )
+                        if cinfo:
+                            container_id = cinfo.container_id
+                            image_name = cinfo.image_name
+                            image_id = cinfo.image_id
+                            start = cinfo.start
+                            version = cinfo.version
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
@@ -3659,36 +3639,6 @@ def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
             continue
         return d
     raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
-
-
-def get_container_stats(ctx: CephadmContext, container_path: str, fsid: str, daemon_type: str, daemon_id: str) -> Tuple[str, str, int]:
-    """returns container id, image name, image id, created time, and ceph version if available"""
-    c = CephContainer.for_daemon(
-        ctx, DaemonIdentity(fsid, daemon_type, daemon_id), 'bash'
-    )
-    out, err, code = '', '', -1
-    for name in (c.cname, c.old_cname):
-        cmd = [
-            container_path, 'inspect',
-            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
-            name
-        ]
-        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
-        if not code:
-            break
-    return out, err, code
-
-
-def get_container_stats_by_image_name(ctx: CephadmContext, container_path: str, image_name: str) -> Tuple[str, str, int]:
-    """returns image id, created time, and ceph version if available"""
-    out, err, code = '', '', -1
-    cmd = [
-        container_path, 'image', 'inspect',
-        '--format', '{{.Id}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
-        image_name
-    ]
-    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
-    return out, err, code
 
 ##################################
 
