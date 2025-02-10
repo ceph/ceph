@@ -33,9 +33,8 @@
         </ng-template>
         <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
         <div class="form-item">
-          <ng-container *ngIf="impact == impactEnum.normal; else highImpactDeletion">
+          <ng-container *ngIf="impact == impactEnum.medium; else highImpactDeletion">
             <cds-checkbox id="confirmation"
-                          name="confirmation"
                           formControlName="confirmation"
                           autofocus
                           [required]="true"
@@ -44,16 +43,18 @@
           </ng-container>
           <ng-template #highImpactDeletion>
             <cds-text-label label="Resource Name"
-                            for="resource_name"
+                            labelInputID="resource_name"
                             cdRequiredField="Resource Name"
                             [invalid]="!deletionForm.controls.confirmInput.valid && deletionForm.controls.confirmInput.dirty"
                             [invalidText]="ResourceError"
-                            i18n>Resource Name
+                            i18n
+                            i18n-label>Resource Name
               <input cdsText
                      type="text"
                      placeholder="Enter resource name to delete"
                      id="resource_name"
-                     formControlName="confirmInput"/>
+                     formControlName="confirmInput"
+                     i18n-placeholder/>
             </cds-text-label>
             <ng-template #ResourceError>
               <span *ngIf="deletionForm.showError('confirmInput', formDir, 'required')"

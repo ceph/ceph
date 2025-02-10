@@ -14,7 +14,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Router } from '@angular/router';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Observable, Subscriber, forkJoin as observableForkJoin } from 'rxjs';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -175,7 +175,7 @@ export class RgwUserAccountsComponent extends ListWithDetails implements OnInit 
 
   deleteAction() {
     const account_name = this.selection.first().name;
-    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Account`,
       itemNames: [account_name],
       submitActionObservable: () => {

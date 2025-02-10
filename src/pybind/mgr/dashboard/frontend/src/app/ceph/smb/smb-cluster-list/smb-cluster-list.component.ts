@@ -21,7 +21,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { SMBCluster } from '../smb.model';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
@@ -109,7 +109,7 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   removeSMBClusterModal() {
     const cluster_id = this.selection.first().cluster_id;
 
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Cluster`,
       itemNames: [cluster_id],
       actionDescription: $localize`remove`,

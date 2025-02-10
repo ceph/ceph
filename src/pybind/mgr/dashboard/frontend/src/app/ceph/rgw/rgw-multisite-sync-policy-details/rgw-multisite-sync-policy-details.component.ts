@@ -8,7 +8,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Observable, Subscriber, forkJoin as observableForkJoin } from 'rxjs';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -244,7 +244,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       selection = this.dirFlowSelection;
     }
     const flowIds = selection.selected.map((flow: any) => flow.id);
-    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: selection.hasSingleSelection ? $localize`Flow` : $localize`Flows`,
       itemNames: flowIds,
       bodyTemplate: this.deleteTpl,
@@ -309,7 +309,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
   deletePipe() {
     this.resourceType = MultisiteResourceType.pipe;
     const pipeIds = this.pipeSelection.selected.map((pipe: any) => pipe.id);
-    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: this.pipeSelection.hasSingleSelection ? $localize`Pipe` : $localize`Pipes`,
       itemNames: pipeIds,
       bodyTemplate: this.deleteTpl,

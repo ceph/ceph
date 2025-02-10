@@ -7,7 +7,7 @@ import { delay } from 'rxjs/operators';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -30,7 +30,6 @@ import { ServiceFormComponent } from './service-form/service-form.component';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
 
 const BASE_URL = 'services';
 
@@ -276,8 +275,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
   deleteAction() {
     const service = this.selection.first();
-    this.cdsModalService.show(CriticalConfirmationModalComponent, {
-      impact: DeletionImpact.high,
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Service`,
       itemNames: [service.service_name],
       actionDescription: 'delete',

@@ -11,7 +11,7 @@ import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -41,7 +41,7 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Osd } from '~/app/shared/models/osd.model';
-import { DeletionImpact } from '~/app/shared/enum/critical-confirmation-modal-impact.enum';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'osd';
 
@@ -583,7 +583,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   ): void {
     check(this.getSelectedOsdIds()).subscribe((result) => {
       const osdIds = this.getSelectedOsdIds();
-      this.cdsModalService.show(CriticalConfirmationModalComponent, {
+      this.cdsModalService.show(DeleteConfirmationModalComponent, {
         impact: DeletionImpact.high,
         itemNames: osdIds,
         actionDescription: actionDescription,
