@@ -54,7 +54,7 @@ describe('RgwBucketListComponent', () => {
     expect(tableActions).toEqual({
       'create,update,delete': {
         actions: ['Create', 'Edit', 'Delete'],
-        primary: { multiple: 'Delete', executing: 'Edit', single: 'Edit', no: 'Create' }
+        primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
         actions: ['Create', 'Edit'],
@@ -62,7 +62,7 @@ describe('RgwBucketListComponent', () => {
       },
       'create,delete': {
         actions: ['Create', 'Delete'],
-        primary: { multiple: 'Delete', executing: 'Create', single: 'Create', no: 'Create' }
+        primary: { multiple: 'Create', executing: 'Delete', single: 'Delete', no: 'Create' }
       },
       create: {
         actions: ['Create'],
@@ -70,7 +70,7 @@ describe('RgwBucketListComponent', () => {
       },
       'update,delete': {
         actions: ['Edit', 'Delete'],
-        primary: { multiple: 'Delete', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
         actions: ['Edit'],

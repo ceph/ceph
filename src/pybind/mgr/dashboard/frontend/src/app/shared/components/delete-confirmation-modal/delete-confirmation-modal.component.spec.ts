@@ -10,8 +10,8 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
-import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
-import { DeletionImpact } from '../../enum/critical-confirmation-modal-impact.enum';
+import { DeleteConfirmationModalComponent } from './delete-confirmation-modal.component';
+import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
 @NgModule({})
 export class MockModule {}
@@ -48,14 +48,14 @@ class MockComponent {
   constructor(public modalService: ModalService) {}
 
   openCtrlDriven() {
-    this.ctrlRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.ctrlRef = this.modalService.show(DeleteConfirmationModalComponent, {
       submitAction: this.fakeDeleteController.bind(this),
       bodyTemplate: this.ctrlDescription
     });
   }
 
   openModalDriven() {
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       submitActionObservable: this.fakeDelete(),
       bodyTemplate: this.modalDescription
     });
@@ -84,16 +84,16 @@ class MockComponent {
   }
 }
 
-describe('CriticalConfirmationModalComponent', () => {
+describe('DeleteConfirmationModalComponent', () => {
   let mockComponent: MockComponent;
-  let component: CriticalConfirmationModalComponent;
+  let component: DeleteConfirmationModalComponent;
   let mockFixture: ComponentFixture<MockComponent>;
 
   configureTestBed(
     {
       declarations: [
         MockComponent,
-        CriticalConfirmationModalComponent,
+        DeleteConfirmationModalComponent,
         LoadingPanelComponent,
         AlertPanelComponent
       ],
@@ -101,14 +101,14 @@ describe('CriticalConfirmationModalComponent', () => {
       imports: [ReactiveFormsModule, MockModule, DirectivesModule, NgbModalModule],
       providers: [NgbActiveModal]
     },
-    [CriticalConfirmationModalComponent]
+    [DeleteConfirmationModalComponent]
   );
 
   beforeEach(() => {
     mockFixture = TestBed.createComponent(MockComponent);
     mockComponent = mockFixture.componentInstance;
     spyOn(mockComponent.modalService, 'show').and.callFake((_modalComp, config) => {
-      const data = modalServiceShow(CriticalConfirmationModalComponent, config);
+      const data = modalServiceShow(DeleteConfirmationModalComponent, config);
       component = data.componentInstance;
       return data;
     });
@@ -142,7 +142,7 @@ describe('CriticalConfirmationModalComponent', () => {
   });
 
   describe('component functions', () => {
-    const changeValue = (formControl: string, value: any) => {
+    const changeValue = (formControl: string, value: string | boolean) => {
       const ctrl = component.deletionForm.get(formControl);
       ctrl.setValue(value);
       ctrl.markAsDirty();
@@ -169,7 +169,7 @@ describe('CriticalConfirmationModalComponent', () => {
       beforeEach(() => {
         component.deletionForm.reset();
         const ctrl = component.deletionForm.get('impact');
-        ctrl.setValue(DeletionImpact.normal);
+        ctrl.setValue(DeletionImpact.medium);
         ctrl.markAsDirty();
         ctrl.updateValueAndValidity();
         component.deletionForm.get('confirmation').updateValueAndValidity();

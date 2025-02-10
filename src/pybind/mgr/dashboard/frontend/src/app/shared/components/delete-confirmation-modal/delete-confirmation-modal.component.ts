@@ -7,14 +7,14 @@ import { Observable } from 'rxjs';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { CdValidators } from '../../forms/cd-validators';
-import { DeletionImpact } from '../../enum/critical-confirmation-modal-impact.enum';
+import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-deletion-modal',
-  templateUrl: './critical-confirmation-modal.component.html',
-  styleUrls: ['./critical-confirmation-modal.component.scss']
+  templateUrl: './delete-confirmation-modal.component.html',
+  styleUrls: ['./delete-confirmation-modal.component.scss']
 })
-export class CriticalConfirmationModalComponent implements OnInit {
+export class DeleteConfirmationModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;
@@ -32,7 +32,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   childFormGroupTemplate: TemplateRef<any>;
   impact: DeletionImpact;
   constructor(public activeModal: NgbActiveModal) {
-    this.impact = this.impact || DeletionImpact.normal;
+    this.impact = this.impact || DeletionImpact.medium;
   }
 
   ngOnInit() {
@@ -42,7 +42,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
         validators: [
           CdValidators.composeIf(
             {
-              impact: DeletionImpact.normal
+              impact: DeletionImpact.medium
             },
             [Validators.requiredTrue]
           )
