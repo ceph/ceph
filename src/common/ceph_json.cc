@@ -64,7 +64,7 @@ vector<string> JSONObj::get_array_elements()
 {
  vector<string> elements;
 
- if(!data.is_array())
+ if (!data.is_array())
   return elements;
 
  std::ranges::for_each(data.as_array(), [&elements](const auto& i) {
@@ -77,7 +77,7 @@ vector<string> JSONObj::get_array_elements()
 // parse the complete internal json_buffer
 bool JSONParser::parse()
 {
-  if(!parse_json(json_buffer, data))
+  if (!parse_json(json_buffer, data))
    return false;
 
   handle_value(data);
@@ -88,7 +88,7 @@ bool JSONParser::parse()
 // parse the internal json_buffer up to len
 bool JSONParser::parse(int len)
 {
-  if(!parse_json(std::string_view { std::begin(json_buffer), len + std::begin(json_buffer) }, data))
+  if (!parse_json(std::string_view { std::begin(json_buffer), len + std::begin(json_buffer) }, data))
    return false;
 
   handle_value(data);
@@ -100,10 +100,10 @@ bool JSONParser::parse(int len)
 bool JSONParser::parse(std::string_view json_string_view) 
 {
   // The original implementation checked this, I'm not sure we have to but we're doing it for now:
-  if(json_string_view.empty())
+  if (json_string_view.empty())
    return false;
 
-  if(!parse_json(json_string_view, data))
+  if (!parse_json(json_string_view, data))
    return false;
 
   // recursively evaluate the result:
@@ -138,7 +138,7 @@ bool JSONParser::parse(const char *file_name)
  std::error_code ec;
  data = boost::json::parse(is, ec);
 
- if(ec)
+ if (ec)
   return false;
 
  handle_value(data);
@@ -199,7 +199,7 @@ static int parse_entity(const string& s, vector<field_entity> *result)
     if (!index_str.empty()) {
 
 	int x;
-	if(auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
+	if (auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
          result->emplace_back(field_entity(x));
         else
 	 throw std::invalid_argument(fmt::format("{}", index_str));

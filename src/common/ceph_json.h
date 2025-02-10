@@ -131,7 +131,7 @@ public:
 	last = _end;
   }
 
-  void operator++() { if(cur != last) ++cur; }
+  void operator++() { if (cur != last) ++cur; }
 
   // IMPORTANT: The returned pointer is intended as NON-OWNING (i.e. JSONObjIter 
   // is responsible for it):
@@ -227,7 +227,7 @@ public:
   JSONObj *get_parent() const noexcept { return parent; };
 
   bool get_attr(std::string_view name, data_val& attr) {
-	if(auto i = attr_map.find(name); end(attr_map) != i)
+	if (auto i = attr_map.find(name); end(attr_map) != i)
 	 return (attr = i->second), true;
 
 	return false;
@@ -367,13 +367,13 @@ inline void decode_json_obj(bool& val, JSONObj *obj)
 {
  std::string_view sv(obj->get_data());
 
- if(boost::iequals(sv, "true"))
+ if (boost::iequals(sv, "true"))
   {
 	val = true;
 	return;
   }
 
- if(boost::iequals(sv, "false"))
+ if (boost::iequals(sv, "false"))
   {
 	val = false;
 	return;
@@ -1031,7 +1031,7 @@ public:
   bool exists(size_t index) const noexcept		{ return (index < arr.size()); }
 
   bool find(const std::string& name, std::string *val) const noexcept {
-	if(auto i = obj.find(name); end(obj) != i)
+	if (auto i = obj.find(name); end(obj) != i)
 	 return (*val = i->second.val()), true;	
 
 	return false;
@@ -1085,7 +1085,7 @@ WRITE_CLASS_ENCODER(JSONFormattable)
 static inline JSONFormattable default_formattable;
 
 inline JSONFormattable& JSONFormattable::operator[](const std::string& name) {
-	if(const auto i = obj.find(name); end(obj) != i)
+	if (const auto i = obj.find(name); end(obj) != i)
 	 return i->second;
 	
 	return default_formattable;
