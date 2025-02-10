@@ -27,13 +27,13 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class GroupCreatePrimaryRequest {
 public:
   static GroupCreatePrimaryRequest *create(librados::IoCtx& group_ioctx,
-                                    const std::string& group_name,
-                                    uint32_t flags, std::string *snap_id,
-                                    Context *on_finish) {
+                                           const std::string& group_name,
+                                           uint64_t flags, std::string *snap_id,
+                                           Context *on_finish) {
     return new GroupCreatePrimaryRequest(group_ioctx, group_name, flags,
                                          snap_id, on_finish);
   }
-
+// TODO: Allow demoted flag?
   GroupCreatePrimaryRequest(librados::IoCtx& group_ioctx,
                      const std::string& group_name,
                      uint32_t flags, std::string *snap_id,
@@ -59,13 +59,31 @@ private:
    * GET LAST MIRROR SNAPSHOT STATE
    *    |
    *    v
-   * PREPARE GROUP IMAGES
+   * LIST_GROUP_IMAGES
    *    |
-   *    |                 (on error)
-   * CREATE IMAGE SNAPS . . . . . . . REMOVE INCOMPLETE GROUP SNAP
-   *    |                                  .
-   *    v                                  .
-   * NOTIFY UNQUIESCE < . . . . . . . . .  .
+   *    v
+   * OPEN_IMAGES
+   *    |
+   *    v
+   * SET_GROUP_INCOMPLETE_SNAP
+   *    |
+   *    v
+   * NOTIFY_QUIESCE (optional)
+   *    |
+   *    v
+   * ACQUIRE_IMAGE_EXCLUSIVE_LOCKS
+   *    |
+   *    v
+   * CREATE IMAGE SNAPS
+   *    |
+   *    v
+   * SET_GROUP_COMPLETE_SNAP
+   *    |
+   *    v
+   * RELEASE_IMAGE_EXCLUSIVE_LOCKS
+   *    |
+   *    v
+   * NOTIFY UNQUIESCE
    *    |
    *    v
    * UNLINK PEER GROUP
@@ -81,7 +99,7 @@ private:
 
   librados::IoCtx m_group_ioctx;
   const std::string m_group_name;
-  const uint32_t m_flags;
+  const uint64_t m_flags;
   std::string *m_snap_id;
   Context *m_on_finish;
 
@@ -95,7 +113,14 @@ private:
   std::vector<ImageCtx *> m_image_ctxs;
   std::vector<uint64_t> m_quiesce_requests;
   std::vector<uint64_t> m_image_snap_ids;
+  std::set<std::string> m_mirror_peer_uuids;
+  librados::IoCtx m_default_ns_ioctx;
+  uint64_t m_internal_flags;
   int m_ret_code=0;
+  cls::rbd::GroupImageSpec m_start_after;
+  std::vector<cls::rbd::GroupImageStatus> m_images;
+  NoOpProgressContext m_prog_ctx;
+  bool m_release_locks = false;
 
   void get_group_id();
   void handle_get_group_id(int r);
@@ -107,9 +132,6 @@ private:
   void handle_get_last_mirror_snapshot_state(int r);
 
   void generate_group_snap();
-
-  void prepare_group_images();
-  void handle_prepare_group_images(int r);
 
   void create_image_snaps();
   void handle_create_image_snaps(int r);
@@ -123,11 +145,37 @@ private:
   void close_images();
   void handle_close_images(int r);
 
-  void finish(int r);
+  void get_mirror_peer_list();
+  void handle_get_mirror_peer_list(int r);
+
+  void list_group_images();
+  void handle_list_group_images(int r);
+
+  void open_group_images();
+  void handle_open_group_images(int r);
+
+  void set_snap_metadata();
+  void handle_set_snap_metadata(int r);
+
+  void notify_quiesce();
+  void handle_notify_quiesce(int r);
+
+  void acquire_image_exclusive_locks();
+  void handle_acquire_image_exclusive_locks(int r);
+
+  void release_image_exclusive_locks();
+  void handle_release_image_exclusive_locks(int r);
+
 
   // cleanup
   void remove_incomplete_group_snap();
   void handle_remove_incomplete_group_snap(int r);
+
+  void remove_snap_metadata();
+  void handle_remove_snap_metadata(int r);
+
+  void finish(int r);
+
 };
 
 } // namespace snapshot
