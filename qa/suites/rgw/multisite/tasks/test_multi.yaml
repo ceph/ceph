@@ -15,4 +15,3 @@ tasks:
 - rgw-multisite-tests:
     config:
       reconfigure_delay: 90
-      tenant: testx
