@@ -541,7 +541,20 @@ void KernelDevice::_aio_stop()
   if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
+
+    IOContext wakeup_ctx(cct, nullptr, false);
+    bufferlist bl;
+    aio_read(0, block_size, &bl, &wakeup_ctx);
+    aio_submit(&wakeup_ctx);
+
     aio_thread.join();
+
+    if (cct->_conf->bdev_debug_aio) {
+      for (auto& i: wakeup_ctx.running_aios) {
+	debug_aio_unlink(i);
+      }
+    }
+
     aio_stop = false;
     io_queue->shutdown();
   }
