@@ -22,9 +22,6 @@
 #include <typeinfo>
 #include <type_traits>
 
-#include <boost/smart_ptr/shared_ptr.hpp>
-#include <boost/smart_ptr/make_shared.hpp>
-
 namespace ceph {
 
 namespace _any {
@@ -83,7 +80,7 @@ inline void op_func(const op o, void* p) noexcept {
 }
 using func_t = void (*)(const op, void* p) noexcept;
 
-// The base class 
+// The base class
 // --------------
 //
 // The `storage_t` parameter gives the type of the value that manages
@@ -210,9 +207,9 @@ private:
 
 protected:
 
-  // We hold the storage, even if the superclass class manipulates it,
-  // so that its default initialization comes soon enough for us to
-  // use it in our constructors.
+  // We hold the storage, even if the subclass manipulates it, so that
+  // its default initialization comes soon enough for us to use it in
+  // our constructors.
   //
   storage_t storage;
 
@@ -642,8 +639,8 @@ inline unique_any make_unique_any(std::initializer_list<U> i, Args&& ...args) {
 // This is both copyable *and* movable. In case you need that sort of
 // thing. It seemed a reasonable completion.
 //
-class shared_any : public _any::base<shared_any, boost::shared_ptr<std::byte[]>> {
-  using base = _any::base<shared_any, boost::shared_ptr<std::byte[]>>;
+class shared_any : public _any::base<shared_any, std::shared_ptr<std::byte[]>> {
+  using base = _any::base<shared_any, std::shared_ptr<std::byte[]>>;
   friend base;
 
   using base::storage;
@@ -652,10 +649,7 @@ class shared_any : public _any::base<shared_any, boost::shared_ptr<std::byte[]>>
   // -----------------------
   //
   // Our storage is a single chunk of RAM allocated from the
-  // heap. This time it's owned by a `boost::shared_ptr` so we can use
-  // `boost::make_shared_noinit`. (This lets us get the optimization
-  // that allocates array and control block in one without wasting
-  // time on `memset`.)
+  // heap.
   //
   static constexpr std::size_t capacity = _any::dynamic;
   void* ptr() const noexcept {
@@ -663,7 +657,7 @@ class shared_any : public _any::base<shared_any, boost::shared_ptr<std::byte[]>>
   }
 
   void* alloc_storage(std::size_t n) {
-    storage = boost::make_shared_noinit<std::byte[]>(n);
+    storage = std::make_shared_for_overwrite<std::byte[]>(n);
     return ptr();
   }
 
