@@ -16,7 +16,7 @@ Pools provide:
   For example: a typical configuration stores three replicas
   (copies) of each RADOS object (that is: ``size = 3``), but you can configure
   the number of replicas on a per-pool basis. For `erasure-coded pools
-  <../erasure-code>`_, resilience is defined as the number of coding chunks
+  <../erasure-code>`_, resilience is defined as the number of coding (aka parity) chunks 
   (for example, ``m = 2`` in the default erasure code profile).
 
 - **Placement Groups**: The :ref:`autoscaler <pg-autoscaler>` sets the number
@@ -434,7 +434,7 @@ You may set values for the following keys:
 
 .. describe:: crush_rule
    
-   :Description: Sets the CRUSH rule that Ceph uses to map the pool's PDADOS objects to appropriate OSDs.
+   :Description: Sets the CRUSH rule that Ceph uses to map the pool's RADOS objects to appropriate OSDs.
    :Type: String
 
 .. _allow_ec_overwrites:
