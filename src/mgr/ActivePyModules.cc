@@ -18,6 +18,7 @@
 
 #include <rocksdb/version.h>
 
+#include "common/perf_counters_key.h"
 #include "common/errno.h"
 #include "include/stringify.h"
 
@@ -44,6 +45,8 @@
 
 using std::pair;
 using std::string;
+using std::vector;
+using std::string_view;
 using namespace std::literals;
 
 ActivePyModules::ActivePyModules(
@@ -963,22 +966,160 @@ PyObject* ActivePyModules::get_perf_schema_python(
         f.open_object_section(key.c_str());
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
-          dout(20) << __func__ << "get_perf_schema_python counter_name " << counter_name << dendl;
           f.open_object_section(counter_name.c_str());
           auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
           if (!type.nick.empty()) {
             f.dump_string("nick", type.nick);
-            dout(20) << __func__ << "get_perf_schema_python counter_name nick " << type.nick << dendl;
           }
           f.dump_unsigned("type", type.type);
-          dout(20) << __func__ << "get_perf_schema_python counter_name type " << type.type << dendl;
           f.dump_unsigned("priority", type.priority);
           f.dump_unsigned("units", type.unit);
-          dout(20) << __func__ << "get_perf_schema_python counter_name unit " << type.unit << dendl;
           f.close_section();
         }
         f.close_section();
+      });
+    }
+  } else {
+    dout(4) << __func__ << ": No daemon state found for "
+              << svc_type << "." << svc_id << ")" << dendl;
+  }
+  return f.get();
+}
+
+PyObject* ActivePyModules::get_perf_schema_labeled_python(
+    const std::string &svc_type,
+    const std::string &svc_id)
+{
+  without_gil_t no_gil;
+  std::lock_guard l(lock);
+
+  DaemonStateCollection daemons;
+
+  if (svc_type == "") {
+    daemons = daemon_state.get_all();
+  } else if (svc_id.empty()) {
+    daemons = daemon_state.get_by_service(svc_type);
+  } else {
+    auto key = DaemonKey{svc_type, svc_id};
+    // so that the below can be a loop in all cases
+    auto got = daemon_state.get(key);
+    if (got != nullptr) {
+      daemons[key] = got;
+    }
+  }
+
+  auto f = with_gil(no_gil, [&] {
+    return PyFormatter();
+  });
+  if (!daemons.empty()) {
+    for (auto& [key, state] : daemons) {
+      std::lock_guard l(state->lock);
+      with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
+        string_view prev_key_name;
+        vector<pair<string_view,string_view>> prev_key_labels;
+
+        // Main object section
+        f.open_object_section(key.c_str());
+
+        for (auto ctr_inst_iter : state->perf_counters.instances) {
+          // counter_name "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+          const auto &counter_name_with_labels = ctr_inst_iter.first;
+          // PerfCounterType?
+          auto type = state->perf_counters.types[counter_name_with_labels];
+          
+          // "osd_scrub_sh_repl"
+          string_view key_name = ceph::perf_counters::key_name(counter_name_with_labels)
+          
+          // create a vector of labels i.e [(level, shallow), (pooltype, replicated)]
+          vector<pair<string_view,string_view>> key_labels;
+          for (auto label : ceph::perf_counters::key_labels(counter_name_with_labels)) {
+            if (!label.first.empty()){
+              key_labels.push_back(label);
+            }
+          }
+
+          // TODO: naveen: Add counter_name to PerfCounterType when building in MgrClient.
+          // We loose the ability to extract the name here
+          // "successful_scrubs_elapsed"
+          string_view counter_name = type.counter_name;
+
+          if (prev_key_name != key_name) {
+            // close previous set of counters
+            if (!prev_key_name.empty()){
+              f.close_section(); // counters
+              f.close_section(); // close label counter object section
+              f.close_section(); // close array section
+            }
+            prev_key_name = key_name;
+            prev_key_lables = key_labels;
+
+            f.open_array_section(key_name);
+            
+            f.open_object_section(""); // should be enclosed by array
+          
+            f.open_object_section("labels");
+            for (auto label: key_labels){
+              f.dump_string(label.first, label.second);
+            }
+            f.close_section(); //labels
+
+            f.open_object_section("counters");
+            f.open_object_section(counter_name);
+            f.dump_string("description", type.description);
+            if (!type.nick.empty()) {
+              f.dump_string("nick", type.nick);
+            }
+            f.dump_unsigned("type", type.type);
+            f.dump_unsigned("priority", type.priority);
+            f.dump_unsigned("units", type.unit);
+            f.close_section();//counter_name section
+
+          }
+
+          if (prev_key_name == key_name && prev_labels == labels) {
+            f.open_object_section(counter_name);
+            f.dump_string("description", type.description);
+            if (!type.nick.empty()) {
+              f.dump_string("nick", type.nick);
+            }
+            f.dump_unsigned("type", type.type);
+            f.dump_unsigned("priority", type.priority);
+            f.dump_unsigned("units", type.unit);
+            f.close_section();//counter_name section
+
+          }
+
+          if (prev_key_name == key_name && prev_labels != labels) {
+            // close previous counter section of metric
+            f.close_section(); // counters
+            f.close_section(); // close label counter object section
+
+            f.open_object_section(""); // should be enclosed by array
+          
+            f.open_object_section("labels");
+            for (auto label: key_labels){
+              f.dump_string(label.first, label.second);
+            }
+            f.close_section(); //labels
+
+            f.open_object_section("counters");
+            f.open_object_section(counter_name);
+            f.dump_string("description", type.description);
+            if (!type.nick.empty()) {
+              f.dump_string("nick", type.nick);
+            }
+            f.dump_unsigned("type", type.type);
+            f.dump_unsigned("priority", type.priority);
+            f.dump_unsigned("units", type.unit);
+            f.close_section();//counter_name section
+
+          }
+        }
+
+        f.close_section(); // counters
+        f.close_section(); // close label counter object section
+        f.close_section(); // close array section
       });
     }
   } else {
