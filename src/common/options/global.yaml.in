@@ -5103,7 +5103,7 @@ options:
   type: bool
   level: advanced
   desc: Random selection of write path mode
-  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected.
+  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected on each mount.
   default: false
   see_also:
   - bluestore_write_v2
@@ -6705,6 +6705,19 @@ options:
   see_also:
   - bluestore_extent_map_shard_max_size
   - bluestore_extent_map_shard_target_size
+  - bluestore_debug_onode_segmentation_random
+  with_legacy: false
+- name: bluestore_debug_onode_segmentation_random
+  type: bool
+  level: dev
+  desc: Random selection of onode segmentation
+  long_desc: For testing purposes. On each mount 50% roll decides whether to use
+    bluestore_onode_segment_size or set it to 0 (disable).
+  default: false
+  see_also:
+  - bluestore_onode_segment_size
+  flags:
+  - startup
   with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
