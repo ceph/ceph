@@ -55,6 +55,62 @@ static int32_t proxy_link_prepare(struct sockaddr_un *addr, const char *path)
 	return sd;
 }
 
+static int32_t proxy_link_read(proxy_link_t *link, int32_t sd, void *buffer,
+			       int32_t size)
+{
+	ssize_t len;
+
+	while (size > 0) {
+		len = read(sd, buffer, size);
+		if (len < 0) {
+			if (errno == EINTR) {
+				if (link->stop(link)) {
+					return -EINTR;
+				}
+				continue;
+			}
+			return proxy_log(LOG_ERR, errno,
+					 "Failed to read from socket");
+		}
+		if (len == 0) {
+			return proxy_log(LOG_ERR, EPIPE, "Partial read");
+		}
+
+		buffer += len;
+		size -= len;
+	}
+
+	return 0;
+}
+
+static int32_t proxy_link_write(proxy_link_t *link, int32_t sd, void *buffer,
+				int32_t size)
+{
+	ssize_t len;
+
+	while (size > 0) {
+		len = write(sd, buffer, size);
+		if (len < 0) {
+			if (errno == EINTR) {
+				if (link->stop(link)) {
+					return -EINTR;
+				}
+				continue;
+			}
+			return proxy_log(LOG_ERR, errno,
+					 "Failed to write to socket");
+		}
+		if (len == 0) {
+			return proxy_log(LOG_ERR, EPIPE, "Partial write");
+		}
+
+		buffer += len;
+		size -= len;
+	}
+
+	return 0;
+}
+
 int32_t proxy_link_client(proxy_link_t *link, const char *path,
 			  proxy_link_stop_t stop)
 {
@@ -147,59 +203,6 @@ done:
 	close(link->sd);
 
 	return err;
-}
-
-int32_t proxy_link_read(proxy_link_t *link, int32_t sd, void *buffer,
-			int32_t size)
-{
-	ssize_t len;
-
-	do {
-		len = read(sd, buffer, size);
-		if (len < 0) {
-			if (errno == EINTR) {
-				if (link->stop(link)) {
-					return -EINTR;
-				}
-				continue;
-			}
-			return proxy_log(LOG_ERR, errno,
-					 "Failed to read from socket");
-		}
-	} while (len < 0);
-
-	return len;
-}
-
-int32_t proxy_link_write(proxy_link_t *link, int32_t sd, void *buffer,
-			 int32_t size)
-{
-	ssize_t len;
-	int32_t total;
-
-	total = size;
-	while (total > 0) {
-		len = write(sd, buffer, total);
-		if (len < 0) {
-			if (errno == EINTR) {
-				if (link->stop(link)) {
-					return -EINTR;
-				}
-				continue;
-			}
-			return proxy_log(LOG_ERR, errno,
-					 "Failed to write to socket");
-		}
-		if (len == 0) {
-			return proxy_log(LOG_ERR, ENOBUFS,
-					 "No data written to socket");
-		}
-
-		buffer += len;
-		total -= len;
-	}
-
-	return size;
 }
 
 int32_t proxy_link_send(int32_t sd, struct iovec *iov, int32_t count)

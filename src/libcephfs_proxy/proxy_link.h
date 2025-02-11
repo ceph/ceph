@@ -40,12 +40,6 @@ void proxy_link_close(proxy_link_t *link);
 int32_t proxy_link_server(proxy_link_t *link, const char *path,
 			  proxy_link_start_t start, proxy_link_stop_t stop);
 
-int32_t proxy_link_read(proxy_link_t *link, int32_t sd, void *buffer,
-			int32_t size);
-
-int32_t proxy_link_write(proxy_link_t *link, int32_t sd, void *buffer,
-			 int32_t size);
-
 int32_t proxy_link_send(int32_t sd, struct iovec *iov, int32_t count);
 
 int32_t proxy_link_recv(int32_t sd, struct iovec *iov, int32_t count);
