@@ -391,6 +391,12 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
   uint64_t size = snap_info_it->second.size;
   m_snap_namespace = snap_info_it->second.snap_namespace;
+  auto ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+      &m_snap_namespace);
+  if (ns != nullptr) {
+    ns->group_pool = m_dst_image_ctx->group_spec.pool_id;
+    ns->group_id = m_dst_image_ctx->group_spec.group_id;
+  }
   cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap = 0;
   if (!m_flatten && snap_info_it->second.parent.spec.pool_id != -1) {
