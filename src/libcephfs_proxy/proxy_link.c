@@ -8,6 +8,14 @@
 #include "proxy_helpers.h"
 #include "proxy_log.h"
 
+#define DEFINE_VERSION(_num) [_num] = NEG_VERSION_SIZE(_num)
+
+static uint32_t negotiation_sizes[PROXY_LINK_NEGOTIATE_VERSION + 1] = {
+	DEFINE_VERSION(1)
+
+	/* NEG_VERSION: Add newly defined versions above this comment. */
+};
+
 static int32_t iov_length(struct iovec *iov, int32_t count)
 {
 	int32_t len;
@@ -220,6 +228,73 @@ int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 	memcpy(ctrl, CMSG_DATA(cmsg), clen);
 
 	return len;
+}
+
+static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
+					 proxy_link_negotiate_t *neg)
+{
+	char buffer[128];
+	void *ptr;
+	uint32_t size, len;
+	int32_t err;
+
+	memset(neg, 0, sizeof(proxy_link_negotiate_t));
+
+	ptr = neg;
+
+	err = proxy_link_read(link, sd, ptr, sizeof(neg->v0));
+	if (err < 0) {
+		return err;
+	}
+
+	ptr += sizeof(neg->v0);
+	size = neg->v0.size;
+
+	/* Version 0 is only used to represent legacy peers that don't use any
+	 * negotiation requests. */
+	if (neg->v0.version == 0) {
+		return proxy_log(LOG_ERR, EINVAL, "Invalid negotiate version");
+	}
+
+	/* Ignore data from future versions. */
+	if (neg->v0.version > PROXY_LINK_NEGOTIATE_VERSION) {
+		neg->v0.version = PROXY_LINK_NEGOTIATE_VERSION;
+		neg->v0.size = NEG_VERSION_SIZE(PROXY_LINK_NEGOTIATE_VERSION);
+	}
+
+	if (negotiation_sizes[neg->v0.version] != neg->v0.size) {
+		return proxy_log(LOG_ERR, EINVAL,
+				 "Negotiation structure doesn't have the "
+				 "expected size");
+	}
+
+	if (neg->v0.version < neg->v0.min_version) {
+		return proxy_log(LOG_ERR, ENOTSUP,
+				 "Negotiation requires an unsupported version");
+	}
+
+	/* Read remaining negotiation data. */
+	err = proxy_link_read(link, sd, ptr, neg->v0.size - sizeof(neg->v0));
+	if (err < 0) {
+		return err;
+	}
+
+	/* Ignore any additional data belonging to unsupported negotiation
+	 * structures. */
+	size -= neg->v0.size;
+	while (size > 0) {
+		len = sizeof(buffer);
+		if (len > size) {
+			len = size;
+		}
+		err = proxy_link_read(link, sd, buffer, len);
+		if (err < 0) {
+			return err;
+		}
+		size -= len;
+	}
+
+	return 0;
 }
 
 int32_t proxy_link_client(proxy_link_t *link, const char *path,
