@@ -1070,8 +1070,6 @@ void Replayer<I>::regular_snapshot_complete(
         return;
       }
 
-      auto image_snap_name = ".group." + std::to_string(image.spec.pool_id) +
-        "_" + m_remote_group_id + "_" + remote_group_snap_id;
       // stored in reverse order
       for (auto snap_id : snapc.snaps) {
         cls::rbd::SnapshotInfo snap_info;
@@ -1085,7 +1083,9 @@ void Replayer<I>::regular_snapshot_complete(
         }
 
         // extract { pool_id, snap_id, image_id }
-        if (snap_info.name == image_snap_name) {
+        auto ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+            &snap_info.snapshot_namespace);
+        if (ns != nullptr && ns->group_snapshot_id == remote_group_snap_id) {
           image_snap_complete = true;
           cls::rbd::ImageSnapshotSpec snap_spec;
           snap_spec.pool = image.spec.pool_id;
