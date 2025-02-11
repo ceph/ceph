@@ -3189,8 +3189,26 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
-    def cert_store_cert_ls(self) -> Dict[str, Any]:
-        return self.cert_mgr.cert_ls()
+    def cert_store_cert_ls(self, show_details: bool = False) -> Dict[str, Any]:
+        return self.cert_mgr.cert_ls(show_details)
+
+    @handle_orch_error
+    def cert_store_entity_ls(self) -> Dict[str, Dict[str, List[str]]]:
+        return self.cert_mgr.get_entities()
+
+    @handle_orch_error
+    def cert_store_reload(self) -> str:
+        self.cert_mgr.load()
+        return "OK"
+
+    @handle_orch_error
+    def cert_store_cert_check(self) -> List[str]:
+        report = []
+        _, certs_with_issues = self.cert_mgr.check_services_certificates(fix_issues=False)
+        for cert_info in certs_with_issues:
+            if not cert_info.is_operationally_valid():
+                report.append(cert_info.get_status_description())
+        return report
 
     @handle_orch_error
     def cert_store_key_ls(self) -> Dict[str, Any]:
@@ -3199,32 +3217,105 @@ Then run the following:
     @handle_orch_error
     def cert_store_get_cert(
         self,
-        entity: str,
+        cert_name: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> str:
-        cert = self.cert_mgr.get_cert(entity, service_name or '', hostname or '')
+        cert = self.cert_mgr.get_cert(cert_name, service_name or '', hostname or '')
         if not cert:
             if no_exception_when_missing:
                 return ''
-            raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
+            raise OrchSecretNotFound(entity=cert_name, service_name=service_name, hostname=hostname)
         return cert
 
     @handle_orch_error
     def cert_store_get_key(
         self,
-        entity: str,
+        key_name: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> str:
-        key = self.cert_mgr.get_key(entity, service_name or '', hostname or '')
+        key = self.cert_mgr.get_key(key_name, service_name or '', hostname or '')
         if not key:
             if no_exception_when_missing:
                 return ''
-            raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
+            raise OrchSecretNotFound(entity=key_name, service_name=service_name, hostname=hostname)
         return key
+
+    @handle_orch_error
+    def cert_store_set_pair(
+        self,
+        cert: str,
+        key: str,
+        entity: str,
+        cert_name: str = "",
+        service_name: str = "",
+        hostname: str = "",
+        force: bool = False
+    ) -> str:
+
+        if entity not in self.cert_mgr.list_entities():
+            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch certmgr entity ls' to list valid entities.")
+
+        # Check the certificate validity status
+        target = service_name or hostname
+        cert_info = self.cert_mgr.check_certificate_state(entity, target, cert, key)
+        if not force and not cert_info.is_operationally_valid():
+            raise OrchestratorError(cert_info.get_status_description())
+
+        # Obtain the certificate name (from entity)
+        cert_names = self.cert_mgr.list_entity_known_certificates(entity)
+        if len(cert_names) == 1:
+            cert_name = cert_names[0]
+        elif len(cert_names) > 1 and not cert_name:
+            raise OrchestratorError(f"Entity '{entity}' has many certificates, please use --cert-name argument to specify which one from the list: {cert_names}")
+
+        # Check the certificate scope
+        scope_errors = {
+            TLSObjectScope.HOST: "Certificate is bound to a host. Please specify the host using --hostname.",
+            TLSObjectScope.SERVICE: "Certificate is bound to a service. Please specify the service using --service-name.",
+            TLSObjectScope.UNKNOWN: f"Unknown certificate '{cert_name}'. Use 'ceph orch certmgr cert ls' to list supported certificates.",
+        }
+        scope = self.cert_mgr.get_cert_scope(cert_name)
+        if (scope == TLSObjectScope.HOST and not hostname) or (scope == TLSObjectScope.SERVICE and not service_name):
+            raise OrchestratorError(scope_errors[scope])
+
+        key_name = cert_name.replace('_cert', '_key')
+        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, True)
+        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        return "Certificate/key pair set correctly"
+
+    @handle_orch_error
+    def cert_store_set_cert(
+        self,
+        cert: str,
+        cert_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> str:
+
+        try:
+            days_to_expiration = verify_cacrt_content(cert)
+            if days_to_expiration < self.certificate_renewal_threshold_days:
+                raise OrchestratorError(f'Error: Certificate is about to expire (Remaining days: {days_to_expiration})')
+        except ServerConfigException as e:
+            raise OrchestratorError(f'Error: Invalid certificate for {cert_name}: {e}')
+
+        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, True)
+        return f'Certificate for {cert_name} set correctly'
+
+    @handle_orch_error
+    def cert_store_set_key(
+        self,
+        key: str,
+        key_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> str:
+        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        return f'Key for {key_name} set correctly'
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:

@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any
 import logging
-import copy
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, ServerConfigException
@@ -216,47 +215,75 @@ class CertMgr:
     def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.key_store.rm_tlsobject(key_name, service_name, host)
 
-    def cert_ls(self) -> Dict[str, Union[bool, Dict[str, Dict[str, bool]]]]:
-        ls: Dict = copy.deepcopy(self.cert_store.get_tlsobjects())
-        for k, v in ls.items():
-            if isinstance(v, dict):
-                tmp: Dict[str, Any] = {key: get_certificate_info(cast(Cert, v[key]).cert) for key in v if isinstance(v[key], Cert)}
-                ls[k] = tmp if tmp else {}
-            elif isinstance(v, Cert):
-                ls[k] = get_certificate_info(cast(Cert, v).cert) if bool(v) else False
+    def cert_ls(self, include_datails: bool = False) -> Dict:
+        cert_objects: List = self.cert_store.list_tlsobjects()
+        ls: Dict = {}
+        for cert_name, cert_obj, target in cert_objects:
+            cert_extended_info = get_certificate_info(cert_obj.cert, include_datails)
+            cert_scope = self.get_cert_scope(cert_name)
+            if cert_name not in ls:
+                ls[cert_name] = {'scope': str(cert_scope), 'certificates': {}}
+            if cert_scope == TLSObjectScope.GLOBAL:
+                ls[cert_name]['certificates'] = cert_extended_info
+            else:
+                ls[cert_name]['certificates'][target] = cert_extended_info
+
         return ls
 
-    def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict = copy.deepcopy(self.key_store.get_tlsobjects())
-        if self.CEPHADM_ROOT_CA_KEY in ls:
-            del ls[self.CEPHADM_ROOT_CA_KEY]
-        for k, v in ls.items():
-            if isinstance(v, dict) and v:
-                tmp: Dict[str, Any] = {key: get_private_key_info(cast(PrivKey, v[key]).key) for key in v if v[key]}
-                ls[k] = tmp if tmp else {}
-            elif isinstance(v, PrivKey):
-                ls[k] = get_private_key_info(cast(PrivKey, v).key)
+    def key_ls(self) -> Dict:
+        key_objects: List = self.key_store.list_tlsobjects()
+        ls: Dict = {}
+        for key_name, key_obj, target in key_objects:
+            priv_key_info = get_private_key_info(key_obj.key)
+            key_scope = self.get_key_scope(key_name)
+            if key_name not in ls:
+                ls[key_name] = {'scope': str(key_scope), 'keys': {}}
+            if key_scope == TLSObjectScope.GLOBAL:
+                ls[key_name]['keys'] = priv_key_info
+            else:
+                ls[key_name]['keys'].update({target: priv_key_info})
+
+        # we don't want this key to be leaked
+        del ls[self.CEPHADM_ROOT_CA_KEY]
+
         return ls
 
     def list_entity_known_certificates(self, entity: str) -> List[str]:
-        return [cert_name for cert_name, service in self.cert_to_service.items() if service == entity]
+        """
+        Retrieves all certificates associated with a given entity.
 
-    def entity_ls(self, get_scope: bool = False) -> List[Union[str, Tuple[str, str]]]:
-        if get_scope:
-            return [(entity, self.determine_scope(entity)) for entity in set(self.cert_to_service.values())]
-        else:
-            return list(self.cert_to_service.values())
+        :param entity: The entity name.
+        :return: A list of certificate names, or None if the entity is not found.
+        """
+        for scope, entities in self.entities.items():
+            if entity in entities:
+                return entities[entity]['certs']  # Return certs for the entity
+        return []
 
-    def determine_scope(self, entity: str) -> str:
-        for cert, service in self.cert_to_service.items():
-            if service == entity:
-                if cert in self.known_certs[TLSObjectScope.SERVICE]:
-                    return TLSObjectScope.SERVICE.value
-                elif cert in self.known_certs[TLSObjectScope.HOST]:
-                    return TLSObjectScope.HOST.value
-                elif cert in self.known_certs[TLSObjectScope.GLOBAL]:
-                    return TLSObjectScope.GLOBAL.value
-        return TLSObjectScope.UNKNOWN.value
+    def get_entities(self, get_scope: bool = False) -> Dict[str, Any]:
+        return {f'{scope}': entities for scope, entities in self.entities.items()}
+
+    def list_entities(self) -> List[str]:
+        """
+        Retrieves a list of all registered entities across all scopes.
+        :return: A list of entity names.
+        """
+        entities: List[str] = []
+        for scope_entities in self.entities.values():
+            entities.extend(scope_entities.keys())
+        return entities
+
+    def get_cert_scope(self, cert_name: str) -> TLSObjectScope:
+        for scope, certificates in self.known_certs.items():
+            if cert_name in certificates:
+                return scope
+        return TLSObjectScope.UNKNOWN
+
+    def get_key_scope(self, key_name: str) -> TLSObjectScope:
+        for scope, keys in self.known_keys.items():
+            if key_name in keys:
+                return scope
+        return TLSObjectScope.UNKNOWN
 
     def _notify_certificates_health_status(self, problematic_certificates: List[CertInfo]) -> None:
 
@@ -372,7 +399,7 @@ class CertMgr:
                 service_name, host = self.cert_store.determine_tlsobject_target(cert_name, target)
                 key = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name=service_name, host=host))
                 return key
-            except TLSObjectException as e:
+            except TLSObjectException:
                 return None
 
         # Filter non-empty entries skipping cephadm root CA cetificate

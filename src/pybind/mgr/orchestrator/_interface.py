@@ -560,7 +560,16 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def cert_store_cert_ls(self) -> OrchResult[Dict[str, Any]]:
+    def cert_store_cert_ls(self, show_details: bool = False) -> OrchResult[Dict[str, Any]]:
+        raise NotImplementedError()
+
+    def cert_store_entity_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
+        raise NotImplementedError()
+
+    def cert_store_reload(self) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_cert_check(self) -> OrchResult[List[str]]:
         raise NotImplementedError()
 
     def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
@@ -568,7 +577,7 @@ class Orchestrator(object):
 
     def cert_store_get_cert(
         self,
-        entity: str,
+        cert_name: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
@@ -577,10 +586,40 @@ class Orchestrator(object):
 
     def cert_store_get_key(
         self,
-        entity: str,
+        key_name: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_set_pair(
+        self,
+        cert: str,
+        key: str,
+        entity: str,
+        cert_name: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        force: Optional[bool] = False
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_set_cert(
+        self,
+        cert: str,
+        cert_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_set_key(
+        self,
+        key: str,
+        key_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
