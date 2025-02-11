@@ -7,5 +7,6 @@ tasks:
         - nvmeof/fio_test.sh --random_devices 200
     env:
       RBD_POOL: mypool
+      NVMEOF_GROUP: mygroup0
       IOSTAT_INTERVAL: '10'
       RUNTIME: '1800'
