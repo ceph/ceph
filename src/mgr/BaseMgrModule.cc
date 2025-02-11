@@ -677,6 +677,19 @@ get_perf_schema(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+get_perf_schema_labeled(BaseMgrModule *self, PyObject *args)
+{
+  char *type_str = nullptr;
+  char *svc_id = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:get_perf_schema_labeled", &type_str,
+                                                    &svc_id)) {
+    return nullptr;
+  }
+
+  return self->py_modules->get_perf_schema_labeled_python(type_str, svc_id);
+}
+
+static PyObject*
 ceph_get_rocksdb_version(BaseMgrModule *self)
 {
   return self->py_modules->get_rocksdb_version();
@@ -1481,6 +1494,9 @@ PyMethodDef BaseMgrModule_methods[] = {
     "Get the latest performance counter"},
 
   {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
+    "Get the performance counter schema"},
+
+  {"_ceph_get_perf_schema_labeled", (PyCFunction)get_perf_schema_labeled, METH_VARARGS,
     "Get the performance counter schema"},
 
   {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version, METH_NOARGS,

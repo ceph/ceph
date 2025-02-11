@@ -1639,6 +1639,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: list of dicts describing the counters requested
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
+    
+    @API.expose
+    def get_perf_schema_labeled(self,
+                        svc_type: str,
+                        svc_name: str) -> Dict[str,
+                                               Dict[str, Dict[str, Union[str, int]]]]:
+        """
+        Called by the plugin to fetch perf counter schema info.
+        svc_name can be nullptr, as can svc_type, in which case
+        they are wildcards
+
+        :param str svc_type:
+        :param str svc_name:
+        :return: list of dicts describing the counters requested
+        """
+        return self._ceph_get_perf_schema_labeled(svc_type, svc_name)
 
     def get_rocksdb_version(self) -> str:
         """
@@ -2227,7 +2243,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     continue
 
                 schemas = self.get_perf_schema(service['type'], service['id'])
-                print("-----perf-schemas-------")
                 self.log.debug('services: {}'.format(service))
                 self.log.debug('perf-schemas: {}'.format(schemas))
                 self.log.debug('perf-schemas json: {}'.format(json.dumps(schemas)))
@@ -2236,6 +2251,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         service['type'], service['id']
                     ))
                     continue
+                
+                labeled_schemas = self.get_perf_schema_labeled(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas-labeled: {}'.format(labeled_schemas))
+                self.log.debug('perf-schemas-labeled json: {}'.format(json.dumps(labeled_schemas)))
+
 
                 # Value is returned in a potentially-multi-service format,
                 # get just the service we're asking about
