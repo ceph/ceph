@@ -109,6 +109,10 @@ int32_t proxy_link_ctrl_send(int32_t sd, void *data, int32_t size, int32_t type,
 int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 			     void *ctrl, int32_t *ctrl_size);
 
+int32_t proxy_link_handshake_server(proxy_link_t *link, int32_t sd,
+				    proxy_link_negotiate_t *neg,
+				    proxy_link_negotiate_cbk_t cbk);
+
 int32_t proxy_link_handshake_client(proxy_link_t *link, int32_t sd,
 				    proxy_link_negotiate_t *neg,
 				    proxy_link_negotiate_cbk_t cbk);

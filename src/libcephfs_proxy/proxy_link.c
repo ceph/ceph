@@ -405,6 +405,62 @@ static int32_t proxy_link_negotiate_client(proxy_link_t *link, int32_t sd,
 	return 0;
 }
 
+static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
+					   proxy_link_negotiate_t *neg,
+					   proxy_link_negotiate_cbk_t cbk)
+{
+	proxy_link_negotiate_t remote;
+	int32_t err, version;
+
+	version = proxy_link_negotiate_read(link, sd, &remote);
+	if (version < 0) {
+		return version;
+	}
+
+	err = proxy_link_negotiate_check(neg, &remote, cbk);
+	if (err < 0) {
+		return err;
+	}
+
+	err = proxy_link_write(link, sd, neg, neg->v0.size);
+	if (err < 0) {
+		return err;
+	}
+
+	if (remote.v0.version > 0) {
+		/* Read finally enabled features from client. */
+		err = proxy_link_read(link, sd, &neg->v1.enabled,
+				      sizeof(neg->v1.enabled));
+		if (err < 0) {
+			return err;
+		}
+
+		if ((neg->v1.enabled & ~neg->v1.supported) != 0) {
+			return proxy_log(LOG_ERR, EINVAL,
+					 "The client tried to enable an "
+					 "unsupported feature");
+		}
+
+		if ((neg->v1.required & ~neg->v1.enabled) != 0) {
+			return proxy_log(LOG_ERR, EINVAL,
+					 "The client tried to disable a "
+					 "required feature");
+		}
+	}
+
+	/* NEG_VERSION: Implement any required handling for new negotiate
+	 *              extensions. */
+
+	if (cbk != NULL) {
+		err = cbk(neg);
+		if (err < 0) {
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 int32_t proxy_link_handshake_client(proxy_link_t *link, int32_t sd,
 				    proxy_link_negotiate_t *neg,
 				    proxy_link_negotiate_cbk_t cbk)
@@ -462,6 +518,71 @@ int32_t proxy_link_handshake_client(proxy_link_t *link, int32_t sd,
 	/* The server supports negotiation. Let's do it. */
 
 	return proxy_link_negotiate_client(link, sd, neg, cbk);
+}
+
+int32_t proxy_link_handshake_server(proxy_link_t *link, int32_t sd,
+				    proxy_link_negotiate_t *neg,
+				    proxy_link_negotiate_cbk_t cbk)
+{
+	proxy_link_negotiate_t legacy;
+	proxy_version_t version;
+	uint32_t id;
+	int32_t err, size, dummy;
+
+	/* To make negotiation backward compatible, we try to receive the same
+	 * data that the previous version was sending, so if the client is still
+	 * running the old version, we will get the correct message and accept
+	 * the connection. In this case we'll disable all features and return
+	 * the old version.
+	 *
+	 * We'll check if the first message contains ancilliary data. If so, it
+	 * means that the client understands negotiation, so we'll reply with
+	 * the new version and start the negotiation procedure.
+	 */
+
+	dummy = -1;
+	size = sizeof(dummy);
+	err = proxy_link_ctrl_recv(sd, &id, sizeof(id), SCM_RIGHTS, &dummy,
+				   &size);
+	if (err < 0) {
+		return err;
+	}
+
+	/* If the client has passed a file descriptor, just close it. We don't
+	 * need it for anything, only to know that it supports negotiation. */
+	if (size > 0) {
+		close(dummy);
+	}
+
+	if (id != LIBCEPHFS_LIB_CLIENT) {
+		return proxy_log(LOG_ERR, EINVAL, "Unsupported client id");
+	}
+
+	if (size == 0) {
+		proxy_link_negotiate_init_v0(&legacy, 0, 0);
+
+		err = proxy_link_negotiate_check(neg, &legacy, cbk);
+		if (err < 0) {
+			return err;
+		}
+
+		version.major = LIBCEPHFSD_MAJOR;
+		version.minor = LIBCEPHFSD_MINOR;
+
+		return proxy_link_write(link, sd, &version, sizeof(version));
+	}
+
+	version.major = LIBCEPHFSD_MAJOR;
+	version.minor = LIBCEPHFSD_MINOR_NEG;
+
+	err = proxy_link_write(link, sd, &version, sizeof(version));
+	if (err < 0) {
+		return err;
+	}
+
+	/* The client supports negotiation. Let's do it. */
+
+	return proxy_link_negotiate_server(link, sd, neg, cbk);
 }
 
 int32_t proxy_link_client(proxy_link_t *link, const char *path,
