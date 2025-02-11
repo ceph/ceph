@@ -1108,6 +1108,7 @@ class RgwService(CephService):
                 custom_san_list=spec.zonegroup_hostnames
             )
             pem = ''.join([key, cert])
+            self.mgr.cert_mgr.save_cert('rgw_frontend_ssl_cert', pem, service_name=spec.service_name())
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{daemon_spec.name()}',
