@@ -6,6 +6,9 @@ overrides:
       deb:
         - fio
 tasks:
+  - exec:
+      host.a:
+        - pip3 install pyyaml
   - cephfs_test_runner:
       modules:
         - tasks.cephfs.test_nfs
