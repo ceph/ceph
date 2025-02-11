@@ -17,6 +17,8 @@
 
 #include "MgrSession.h"
 #include "include/stringify.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/debug.h"
 #include "common/Formatter.h"
 
 #define dout_context g_ceph_context
