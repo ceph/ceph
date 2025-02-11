@@ -1,0 +1,32 @@
+ARG DISTRO
+
+FROM scratch as bootstrap
+ARG CEPH_CTR_SRC=/usr/local/src/ceph
+COPY \
+    src/script/lib-build.sh \
+    src/script/run-make.sh \
+    ${CEPH_CTR_SRC}/src/script/
+COPY debian ${CEPH_CTR_SRC}/debian
+COPY \
+    ceph.spec.in \
+    do_cmake.sh \
+    install-deps.sh \
+    run-make-check.sh \
+    src/script/buildcontainer-setup.sh \
+    ${CEPH_CTR_SRC}
+
+
+FROM $DISTRO
+ENV FOR_MAKE_CHECK=1
+ARG DISTRO
+ARG CEPH_CTR_SRC=/usr/local/src/ceph
+ARG CLEAN_DNF=yes
+ARG CEPH_BRANCH=main
+COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
+# Note that we do not use ENV for the following. This is because we do not
+# want them permamently stored in the container's layer.
+RUN DISTRO=$DISTRO \
+    CEPH_BRANCH=$CEPH_BRANCH \
+    CLEAN_DNF=$CLEAN_DNF \
+    CEPH_CTR_SRC=${CEPH_CTR_SRC} \
+    bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
