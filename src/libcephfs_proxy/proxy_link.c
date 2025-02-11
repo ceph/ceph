@@ -111,6 +111,117 @@ static int32_t proxy_link_write(proxy_link_t *link, int32_t sd, void *buffer,
 	return 0;
 }
 
+int32_t proxy_link_ctrl_send(int32_t sd, void *data, int32_t size, int32_t type,
+			     void *ctrl, int32_t ctrl_size)
+{
+	char buffer[CMSG_SPACE(ctrl_size)];
+	struct msghdr msg;
+	struct iovec iov;
+	struct cmsghdr *cmsg;
+	ssize_t len;
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+
+	iov.iov_base = data;
+	iov.iov_len = size;
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	cmsg = (struct cmsghdr *)buffer;
+	cmsg->cmsg_len = CMSG_LEN(ctrl_size);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = type;
+	memcpy(CMSG_DATA(cmsg), ctrl, ctrl_size);
+	msg.msg_control = buffer;
+	msg.msg_controllen = sizeof(buffer);
+
+	msg.msg_flags = 0;
+
+	len = sendmsg(sd, &msg, MSG_NOSIGNAL);
+	if (len < 0) {
+		return proxy_log(LOG_ERR, errno,
+				 "Failed to send a control message");
+	}
+
+	if (len != size) {
+		return proxy_log(LOG_ERR, 0,
+				 "Control message not sent completely");
+	}
+
+	return 0;
+}
+
+int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
+			     void *ctrl, int32_t *ctrl_size)
+{
+	char buffer[CMSG_SPACE(*ctrl_size)];
+	struct msghdr msg;
+	struct iovec iov;
+	struct cmsghdr *cmsg;
+	ssize_t len;
+	int32_t clen;
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+
+	iov.iov_base = data;
+	iov.iov_len = size;
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	msg.msg_control = buffer;
+	msg.msg_controllen = sizeof(buffer);
+
+	msg.msg_flags = 0;
+
+	len = recvmsg(sd, &msg, MSG_NOSIGNAL | MSG_CMSG_CLOEXEC);
+	if (len < 0) {
+		return proxy_log(LOG_ERR, errno,
+				 "Failed to received a control message");
+	}
+
+	if (len != size) {
+		return proxy_log(LOG_ERR, 0,
+				 "Message data not received completely");
+	}
+
+	if ((msg.msg_flags & MSG_CTRUNC) != 0) {
+		return proxy_log(LOG_ERR, ENOSPC,
+				 "Message data is larger than expected");
+	}
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	if (cmsg == NULL) {
+		*ctrl_size = 0;
+		return len;
+	}
+
+	if (cmsg->cmsg_level != SOL_SOCKET) {
+		return proxy_log(LOG_ERR, EINVAL,
+				 "Unexpected control message level");
+	}
+
+	if (cmsg->cmsg_type != type) {
+		return proxy_log(LOG_ERR, EINVAL,
+				 "Unexpected control message type");
+	}
+
+	clen = cmsg->cmsg_len - CMSG_LEN(0);
+	if (clen != *ctrl_size) {
+		return proxy_log(LOG_ERR, EINVAL,
+				 "Unexpected control message size");
+	}
+
+	if (CMSG_NXTHDR(&msg, cmsg) != NULL) {
+		return proxy_log(LOG_ERR, EINVAL, "Too many control messages");
+	}
+
+	memcpy(ctrl, CMSG_DATA(cmsg), clen);
+
+	return len;
+}
+
 int32_t proxy_link_client(proxy_link_t *link, const char *path,
 			  proxy_link_stop_t stop)
 {

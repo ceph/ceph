@@ -58,4 +58,10 @@ int32_t proxy_link_request(int32_t sd, int32_t op, struct iovec *req_iov,
 			   int32_t req_count, struct iovec *ans_iov,
 			   int32_t ans_count);
 
+int32_t proxy_link_ctrl_send(int32_t sd, void *data, int32_t size, int32_t type,
+			     void *ctrl, int32_t ctrl_size);
+
+int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
+			     void *ctrl, int32_t *ctrl_size);
+
 #endif
