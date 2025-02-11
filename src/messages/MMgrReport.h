@@ -84,7 +84,7 @@ public:
     f->dump_string("path", path);
     f->dump_string("description", description);
     f->dump_string("nick", nick);
-    f->dump_string("counter_name", counter_name)
+    f->dump_string("counter_name", counter_name);
     f->dump_int("type", type);
     f->dump_int("priority", priority);
     f->dump_int("unit", unit);
