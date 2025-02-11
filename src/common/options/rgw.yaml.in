@@ -85,13 +85,16 @@ options:
   type: size
   level: advanced
   desc: The maximum RGW chunk size.
-  long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
-    accessing data objects. RGW read and write operations will never request more than
-    this amount in a single request. This also defines the RGW head object size, as
-    head operations need to be atomic, and anything larger than this would require
-    more than a single operation. When RGW objects are written to the default
-    storage class, up to this amount of payload data will be stored alongside
-    metadata in the head object.
+  long_desc: The chunk size is the size of requests that RGW sends to
+    OSDs when accessing RADOS objects. RGW read and write operations will never
+    request more than this amount in a single request. This also defines the RGW
+    HEAD object size, as head operations need to be atomic, and anything larger
+    than this would require more than a single operation. When RGW objects are
+    written to the default storage class, up to this amount of payload data will
+    be stored alongside metadata in the head object.  Note that when writing
+    an RGW object to a non-default storage class the HEAD RADOS object is always
+    stored in the default storage class' pool but no inlining of payload data
+    is performed.
   default: 4_M
   services:
   - rgw

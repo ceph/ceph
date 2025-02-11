@@ -104,7 +104,7 @@ The zone placement configuration can be queried with:
 Adding a Placement Target
 -------------------------
 
-To create a new placement target named ``temporary``, start by adding it to
+To create a new placement target named ``temporary``, add it to
 the zonegroup:
 
 ::
@@ -124,7 +124,7 @@ Then provide the zone placement info for that target:
         --index-pool default.rgw.temporary.index \
         --data-extra-pool default.rgw.temporary.non-ec
 
-.. note:: With default placement target settings, RGW stores an object's first data chunk in the RADOS "head" object along
+.. note:: With default placement target settings, RGW stores an object's first data chunk in the RADOS `HEAD` object along
           with XATTR metadata. The `--placement-inline-data=false` flag may be passed with the `zone placement add` or
           `zone placement modify` commands to change this behavior for new objects stored on the target.
           When data is stored inline (default), it may provide an advantage for read/write workloads since the first chunk of
@@ -132,7 +132,9 @@ Then provide the zone placement info for that target:
           target that does not store data inline can provide a performance benefit for RGW client delete requests when
           the BlueStore DB is located on faster storage than bucket data since it eliminates the need to access
           slower devices synchronously while processing the client request. In that case, data associated with the deleted
-          objects is removed asynchronously in the background by garbage collection.                                          
+          objects is removed asynchronously in the background by garbage collection. Note that inlining is only ever performed
+          when writing to the default storage class.  Inlining is *never* performed when writing to a non-default
+	  storage class.
 
 .. _adding_a_storage_class:
 
