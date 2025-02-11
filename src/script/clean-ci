@@ -19,11 +19,13 @@ function eprintf {
 
 
 function delete_refs {
-    if [[ DRY_RUN -eq 0 ]]; then
-        eprintf 'Deleting refs: %s' "$*"
-        git push --quiet "$CEPH_CI" --delete "$@"
-    else
-        eprintf 'Would delete refs: %s' "$*"
+    if [[ ${#TO_DELETE[@]} -gt 0 ]]; then
+        if [[ DRY_RUN -eq 0 ]]; then
+            eprintf 'Deleting refs: %s' "$*"
+            git push --quiet "$REMOTE" --delete "$@"
+        else
+            eprintf 'Would delete refs: %s' "$*"
+        fi
     fi
 }
 
