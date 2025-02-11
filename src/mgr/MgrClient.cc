@@ -402,8 +402,10 @@ void MgrClient::_send_report()
 
       if (session->declared.count(path) == 0) {
         ldout(cct, 20) << " declare " << path << dendl;
+        // TODO: naveen: Add data.name to PerfCounterType. We will use this to know the counter name for the path
         PerfCounterType type;
         type.path = path;
+        type.counter_name = data.name;
         if (data.description) {
           type.description = data.description;
         }
