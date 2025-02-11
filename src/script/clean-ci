@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# clean-ci [--dry-run] [--since="relative date"]
+# clean-ci [--dry-run] [--since="relative date"] [--remote=remote]
 #
 # Cleanup the ceph-ci.git repository branch list by deleting any branch with a
 # HEAD commit date older than (by default) 3 months.
 
 set -e
 
-CEPH_CI=git@github.com:ceph/ceph-ci.git
+CEPH_CI=https://github.com/ceph/ceph-ci.git
+REMOTE=git@github.com:ceph/ceph-ci.git
 DRY_RUN=0
 SINCE="3 months ago"
 
@@ -19,11 +20,13 @@ function eprintf {
 
 
 function delete_refs {
-    if [[ DRY_RUN -eq 0 ]]; then
-        eprintf 'Deleting refs: %s' "$*"
-        git push --quiet "$CEPH_CI" --delete "$@"
-    else
-        eprintf 'Would delete refs: %s' "$*"
+    if [[ ${#TO_DELETE[@]} -gt 0 ]]; then
+        if [[ DRY_RUN -eq 0 ]]; then
+            eprintf 'Deleting refs: %s' "$*"
+            git push --quiet "$REMOTE" --delete "$@"
+        else
+            eprintf 'Would delete refs: %s' "$*"
+        fi
     fi
 }
 
@@ -35,7 +38,7 @@ function iterate_ci {
     # Fetch the refs, shallow
     printf '%s' "$REFS" | \
         cut -f2 | \
-        git fetch --quiet --depth=1 --refetch --filter=blob:none --stdin "$CEPH_CI"
+        git fetch --quiet --depth=1 --refetch --filter=blob:none --stdin "$REMOTE"
 
     declare -a TO_DELETE
 
@@ -70,12 +73,14 @@ function iterate_ci {
 }
 
 function main {
-    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,dry-run,since:' -- "$@")
+    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,dry-run,since:,remote:' -- "$@")
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help)
-                printf '%s: [--dry-run] [--since=<relative time>]\n' "$0"
+                printf '%s: [--dry-run] [--since=<relative date>] [--remote=<remote>]\n' "$0"
+                printf '\t--since=<relative date> is the same as in date(3) --date switch\n'
+                printf '\t--remote=<remote> is the remote name for ceph-ci to fetch/push to, by default: %s\n' "$REMOTE"
                 exit 0
                 ;;
             --dry-run)
@@ -84,6 +89,10 @@ function main {
                 ;;
             --since)
                 SINCE="$2"
+                shift 2
+                ;;
+            --remote)
+                REMOTE="$2"
                 shift 2
                 ;;
             --)
