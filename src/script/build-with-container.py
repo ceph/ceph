@@ -155,6 +155,28 @@ class DistroKind(StrEnum):
     def from_alias(cls, value):
         return cls.aliases()[value]
 
+    @classmethod
+    def aliases(cls):
+        return {
+            str(cls.CENTOS10): cls.CENTOS10,
+            "centos10stream": cls.CENTOS10,
+            str(cls.CENTOS8): cls.CENTOS8,
+            str(cls.CENTOS9): cls.CENTOS9,
+            "centos9stream": cls.CENTOS9,
+            str(cls.FEDORA41): cls.FEDORA41,
+            "fc41": cls.FEDORA41,
+            str(cls.UBUNTU2204): cls.UBUNTU2204,
+            "ubuntu-jammy": cls.UBUNTU2204,
+            "jammy": cls.UBUNTU2204,
+            str(cls.UBUNTU2404): cls.UBUNTU2404,
+            "ubuntu-noble": cls.UBUNTU2404,
+            "noble": cls.UBUNTU2404,
+        }
+
+    @classmethod
+    def from_alias(cls, value):
+        return cls.aliases()[value]
+
 
 class DefaultImage(StrEnum):
     CENTOS10 = "quay.io/centos/centos:stream10"
