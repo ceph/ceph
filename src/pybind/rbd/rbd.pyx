@@ -481,12 +481,9 @@ cdef class Completion(object):
 
         :returns: True if the operation is completed
         """
-        if self.image:
-            with nogil:
-                ret = rbd_aio_is_complete(self.rbd_comp)
-        else:
-            with nogil:
-                ret = rbd_aio_is_complete_group_completion(self.rbd_comp)
+        with nogil:
+            ret = rbd_aio_is_complete(self.rbd_comp)
+
         return ret == 1
 
     def wait_for_complete_and_cb(self):
@@ -499,12 +496,8 @@ cdef class Completion(object):
         any exceptions in the callbacks are handled, as an exception internal
         to this module may have occurred.
         """
-        if self.image:
-            with nogil:
-                rbd_aio_wait_for_complete(self.rbd_comp)
-        else:
-            with nogil:
-                rbd_aio_wait_for_complete_group_completion(self.rbd_comp)
+        with nogil:
+            rbd_aio_wait_for_complete(self.rbd_comp)
 
         if self.exc_info:
             raise self.exc_info[0], self.exc_info[1], self.exc_info[2]
@@ -517,12 +510,9 @@ cdef class Completion(object):
 
         :returns: int - return value of the operation
         """
-        if self.image:
-            with nogil:
-                ret = rbd_aio_get_return_value(self.rbd_comp)
-        else:
-            with nogil:
-                ret = rbd_aio_get_return_value_group_completion(self.rbd_comp)
+        with nogil:
+            ret = rbd_aio_get_return_value(self.rbd_comp)
+
         return ret
 
     def __dealloc__(self):
@@ -534,14 +524,9 @@ cdef class Completion(object):
         ref.Py_XDECREF(self.buf)
         self.buf = NULL
         if self.rbd_comp != NULL:
-            if self.image:
-                with nogil:
-                    rbd_aio_release(self.rbd_comp)
-                    self.rbd_comp = NULL
-            else:
-                with nogil:
-                    rbd_aio_release_group_completion(self.rbd_comp)
-                    self.rbd_comp = NULL
+            with nogil:
+                rbd_aio_release(self.rbd_comp)
+                self.rbd_comp = NULL
 
     cdef void _complete(self):
         try:
@@ -2823,14 +2808,15 @@ cdef class Group(object):
         """
 
         completion_obj = Completion(None, oncomplete)
+
         cdef:
             PyObject* p_completion_obj= <PyObject*>completion_obj
             rbd_completion_t completion
 
         with nogil:
-            ret = rbd_aio_create_group_completion(p_completion_obj,
-                                                  __aio_complete_cb,
-                                                  &completion)
+            ret = rbd_aio_create_completion(p_completion_obj,
+                                            __aio_complete_cb,
+                                            &completion)
         if ret < 0:
             raise make_ex(ret, "error getting a completion")
 

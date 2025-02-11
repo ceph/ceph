@@ -741,15 +741,6 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
                           char *keys, size_t *key_len, char *values,
                           size_t *vals_len)
-
-    int rbd_aio_create_group_completion(void *cb_arg,
-                                        rbd_callback_t complete_cb,
-                                        rbd_completion_t *c)
-    int rbd_aio_is_complete_group_completion(rbd_completion_t c)
-    int rbd_aio_wait_for_complete_group_completion(rbd_completion_t c)
-    ssize_t rbd_aio_get_return_value_group_completion(rbd_completion_t c)
-    void rbd_aio_release_group_completion(rbd_completion_t c)
-
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
