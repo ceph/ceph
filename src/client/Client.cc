@@ -11601,12 +11601,6 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   auto effective_size = in->effective_size();
 
-  // trim read based on file size?
-  if (off >= in->effective_size())
-    return 0;
-  if (len == 0)
-    return 0;
-
   auto target_len = std::min(len, effective_size - off);
   uint64_t read_start;
   uint64_t read_len;
@@ -11645,7 +11639,6 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
       left -= r;
       pbl->claim_append(tbl);
     }
-    auto effective_size = (fscrypt_denc ? in->effective_size() : in->size);
 
     // short read?
     if (r >= 0 && r < wanted) {
@@ -12485,9 +12478,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       filer_iofinish.reset(new C_OnFinisher(new C_Lock_Client_Finisher(this, iofinish.get()), &objecter_finisher));
     }
 
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-
-    enc_mgr->read_modify_write(iofinish.get());
+    enc_mgr->read_modify_write(filer_iofinish.get());
 
     if (onfinish) {
       // handle non-blocking caller (onfinish != nullptr), we can now safely
