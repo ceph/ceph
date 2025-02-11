@@ -29,10 +29,10 @@ ReplicatedRecoveryBackend::recover_object(
   // always add_recovering(soid) before recover_object(soid)
   assert(is_recovering(soid));
   // start tracking the recovery of soid
-  return maybe_pull_missing_obj(soid, need).then_interruptible([this, soid, need] {
-    logger().debug("recover_object: loading obc: {}", soid);
+  return maybe_pull_missing_obj(soid, need).then_interruptible([FNAME, this, soid, need] {
+    DEBUGDPP("loading obc: {}", pg, soid);
     return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
-      [this, soid, need](auto head, auto obc) {
+      [FNAME, this, soid, need](auto head, auto obc) {
       if (!obc->obs.exists) {
         // XXX: this recovery must be triggered by backfills and the corresponding
         //      object must have been deleted by some client request after the object
@@ -42,16 +42,15 @@ ReplicatedRecoveryBackend::recover_object(
         //      added for this object by the client request that deleted it.
         return interruptor::now();
       }
-      logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
+      DEBUGDPP("loaded obc: {}", pg, obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
       recovery_waiter.obc = obc;
       recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(head, soid, need);
     }, false).handle_error_interruptible(
-      crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
+      crimson::osd::PG::load_obc_ertr::all_same_way([FNAME, this, soid](auto& code) {
       // TODO: may need eio handling?
-      logger().error("recover_object saw error code {}, ignoring object {}",
-                     code, soid);
+      ERRORDPP("saw error code {}, ignoring object {}", pg, code, soid);
       return seastar::now();
     }));
   });
