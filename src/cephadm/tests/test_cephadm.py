@@ -39,6 +39,13 @@ def get_ceph_conf(
         mon_host = {mon_host}
 '''
 
+def _container_info(*args, **kwargs):
+    """Wrapper function for creating container info instances."""
+    import cephadmlib.container_engines
+
+    return cephadmlib.container_engines.ContainerInfo(*args, **kwargs)
+
+
 @contextlib.contextmanager
 def bootstrap_test_ctx(*args, **kwargs):
     with with_cephadm_ctx(*args, **kwargs) as ctx:
@@ -607,7 +614,7 @@ class TestCephAdm(object):
         ctx.container_engine = mock_podman()
 
         # make sure the right image is selected when container is found
-        cinfo = _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+        cinfo = _container_info('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '514e6a882f6e74806a5856468489eeff8d7106095557578da96935e4d0ba4d9d',
                                  '2022-04-19 13:45:20.97146228 +0000 UTC',
@@ -652,7 +659,7 @@ class TestCephAdm(object):
                 ],
                 ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
                  ),
-                _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                _container_info('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
                                  '2022-04-19 13:45:20.97146228 +0000 UTC',
@@ -668,7 +675,7 @@ class TestCephAdm(object):
                 ],
                 ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
                  ),
-                _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                _container_info('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
                                  '2022-04-19 13:45:20.97146228 +0000 UTC',
@@ -684,7 +691,7 @@ class TestCephAdm(object):
                 ],
                 ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
                  ),
-                _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
+                _container_info('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
                                  '2022-04-19 13:45:20.97146228 +0000 UTC',
@@ -813,7 +820,7 @@ class TestCephAdm(object):
             ValueError
         )
         cinfo = (
-            _cephadm.ContainerInfo(*container_stats)
+            _container_info(*container_stats)
             if container_stats
             else None
         )
@@ -884,7 +891,7 @@ class TestCephAdm(object):
         _daemons.side_effect = _dms
         _current_daemons[:] = [down_osd_json]
 
-        expected_container_info = _cephadm.ContainerInfo(
+        expected_container_info = _container_info(
             container_id='',
             image_name='quay.io/adk3798/ceph@sha256:7da0af22ce45aac97dff00125af590506d8e36ab97d78e5175149643562bfb0b',
             image_id='a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318',
@@ -904,10 +911,10 @@ class TestCephAdm(object):
         # than it partially being taken from the list_daemons output
         up_osd_json = copy.deepcopy(down_osd_json)
         up_osd_json['state'] = 'running'
-        _get_stats.return_value = _cephadm.ContainerInfo('container_id', 'image_name','image_id','the_past','')
+        _get_stats.return_value = _container_info('container_id', 'image_name','image_id','the_past','')
         _current_daemons[:] = [down_osd_json, up_osd_json]
 
-        expected_container_info = _cephadm.ContainerInfo(
+        expected_container_info = _container_info(
             container_id='container_id',
             image_name='image_name',
             image_id='image_id',
