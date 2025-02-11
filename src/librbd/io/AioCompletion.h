@@ -56,6 +56,9 @@ struct AioCompletion {
   coarse_mono_time start_time;
   aio_type_t aio_type = AIO_TYPE_NONE;
 
+  std::unique_ptr<librados::IoCtx> m_group_ioctx;
+  std::shared_ptr<AsioEngine> m_group_asio_engine;
+
   ReadResult read_result;
 
   AsyncOperation async_op;
@@ -122,6 +125,7 @@ struct AioCompletion {
   void unblock(CephContext* cct);
 
   void init_time(ImageCtx *i, aio_type_t t);
+  void init_time(std::unique_ptr<librados::IoCtx> group_ioctx);
   void start_op();
   void fail(int r);
 
