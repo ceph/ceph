@@ -9,6 +9,46 @@
 
 #define PROXY_LINK_DISCONNECTED { NULL, -1 }
 
+/* To define newer versions of the negotiate structure, look for comments
+ * starting with "NEG_VERSION" and do the appropriate changes in each place. */
+
+/* NEG_VERSION: Update this value to the latest implemented version. */
+#define PROXY_LINK_NEGOTIATE_VERSION 1
+
+/* Version 0 structure will be used to handle legacy clients that don't support
+ * negotiation. */
+typedef struct _proxy_link_negotiate_v0 {
+	/* Size of the entire structure. Don't use sizeof() to compute it, use
+	 * NEG_VERSION_SIZE() to avoid alignement issues. */
+	uint16_t size;
+
+	/* Version of the negotiation structure. */
+	uint16_t version;
+
+	/* Minimum version that the peer needs to support to proceed. */
+	uint16_t min_version;
+
+	/* Reserved. Must be 0. */
+	uint16_t flags;
+} proxy_link_negotiate_v0_t;
+
+typedef struct _proxy_link_negotiate_v1 {
+	uint32_t supported;
+	uint32_t required;
+	uint32_t enabled;
+} proxy_link_negotiate_v1_t;
+
+/* NEG_VERSION: Add typedefs for new negotiate extensions above this comment. */
+
+struct _proxy_link_negotiate {
+	proxy_link_negotiate_v0_t v0;
+	proxy_link_negotiate_v1_t v1;
+
+	/* NEG_VERSION: Add newly defined typedefs above this comment. */
+};
+
+typedef int32_t (*proxy_link_negotiate_cbk_t)(proxy_link_negotiate_t *);
+
 struct _proxy_link {
 	proxy_link_stop_t stop;
 	int32_t sd;
@@ -26,6 +66,11 @@ typedef struct _proxy_link_ans {
 	int32_t result;
 	uint32_t data_len;
 } proxy_link_ans_t;
+
+#define NEG_VERSION_SIZE_1(_ver) \
+	(offset_of(proxy_link_negotiate_t, v##_ver) + \
+	 sizeof(proxy_link_negotiate_v##_ver##_t))
+#define NEG_VERSION_SIZE(_ver) NEG_VERSION_SIZE_1(_ver)
 
 static inline bool proxy_link_is_connected(proxy_link_t *link)
 {
