@@ -24,11 +24,6 @@
 #include "../rados/librados.hpp"
 #include "librbd.h"
 
-#include <atomic>
-#include <condition_variable>
-
-#include "../librbd/AsioEngine.h"
-
 #if __GNUC__ >= 4
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -306,51 +301,6 @@ public:
     void release();
   };
 
-  // This must be dynamically allocated with new, and
-  // must be released with release().
-  // Do not use delete.
-  struct AioGroupCompletion {
-    typedef enum {
-      AIO_STATE_PENDING = 0,
-      AIO_STATE_COMPLETE,
-    } aio_state_t;
-    std::atomic<aio_state_t> m_state{AIO_STATE_PENDING};
-
-    void *m_complete_arg = nullptr;
-    callback_t m_complete_cb = nullptr;
-    std::atomic<ssize_t> m_rval{0};
-    std::atomic<uint32_t> m_ref{1};
-    std::atomic<bool> m_released{false};
-    IoCtx m_ioctx;
-    std::shared_ptr<AsioEngine> m_asio_engine;
-
-    mutable std::mutex m_lock;
-    std::condition_variable m_cond;
-
-    AioGroupCompletion(void *cb_arg, callback_t complete_cb);
-
-    ssize_t get_return_value();
-    void notify_complete();
-    void release();
-    void complete();
-    bool is_complete();
-    void fail(int r);
-    int wait_for_complete();
-    void init(IoCtx& ioctx);
-    void put() {
-      uint32_t previous_ref = m_ref--;
-      ceph_assert(previous_ref > 0);
-
-      if (previous_ref == 1) {
-        delete this;
-      }
-    }
-    void get() {
-      ceph_assert(m_ref > 0);
-      ++m_ref;
-    }
-  };
-
   void version(int *major, int *minor, int *extra);
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
@@ -586,7 +536,7 @@ public:
                                    uint32_t flags, std::string *snap_id);
   int aio_mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
                                        uint32_t flags, std::string *snap_id,
-                                       RBD::AioGroupCompletion *c);
+                                       RBD::AioCompletion *c);
   int mirror_group_get_info(IoCtx& io_ctx, const char *group_name,
                             mirror_group_info_t *mirror_group_info,
                             size_t info_size);
@@ -597,7 +547,7 @@ public:
                                    std::string *instance_id);
   int aio_mirror_group_get_info(IoCtx& io_ctx, const char *group_name,
                                 mirror_group_info_t *mirror_group_info,
-                                size_t info_size, RBD::AioGroupCompletion *c);
+                                size_t info_size, RBD::AioCompletion *c);
 
   int namespace_create(IoCtx& ioctx, const char *namespace_name);
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
