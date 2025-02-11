@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { SmbClusterTabsComponent } from './smb-cluster-tabs.component';
-import { RESOURCE_TYPE, SMBCluster } from '../smb.model';
+import { CLUSTER_RESOURCE, SMBCluster } from '../smb.model';
 import { By } from '@angular/platform-browser';
 
 describe('SmbClusterTabsComponent', () => {
@@ -32,7 +32,7 @@ describe('SmbClusterTabsComponent', () => {
 
   const selectedSmbCluster = (clusterId: string) => {
     const smbCluster: SMBCluster = {
-      resource_type: RESOURCE_TYPE,
+      resource_type: CLUSTER_RESOURCE,
       cluster_id: clusterId,
       auth_mode: 'user'
     };
