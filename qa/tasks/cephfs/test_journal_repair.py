@@ -450,3 +450,28 @@ class TestJournalRepair(CephFSTestCase):
             raise RuntimeError("Expected journal import to fail")
         finally:
             self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
+
+    def test_header_check_after_journal_recovery(self):
+        """
+        That the 'journal import' recognizes invalid headers post journal recovery and errors out.
+        """
+        # Create an invalid dump file which doesn't have 'object_size' header
+        fname = tempfile.NamedTemporaryFile(delete=False).name
+        self.mount_a.run_shell(["sudo", "sh", "-c", f'printf "Ceph mds0 journal dump\n\
+        start offset 4194304 (0x400000)\nlength 940 (0x3ac)\nwrite_pos 4194304 (0x400000)\n\
+        format 1\ntrimmed_pos 4194304 (0x400000)\nstripe_unit 4194304 (0x400000)\nstripe_count 1 (0x1)\n\
+        fsid 41334b86-2666-4269-a8ea-313bc073564c\n" > {fname}'], omit_sudo=False)
+        self.fs.fail()
+        try:
+            self.fs.journal_tool(["journal", "import", fname, "--force"], 0)
+        except CommandFailedError as e:
+            self.fs.set_joinable()
+            self.fs.wait_for_daemons()
+            if e.exitstatus != 234:
+                raise RuntimeError(f"Unexpected journal import error: {str(e)}")
+        else:
+            self.fs.set_joinable()
+            self.fs.wait_for_daemons()
+            raise RuntimeError("Expected journal import to fail")
+        finally:
+            self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
