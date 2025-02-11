@@ -1528,16 +1528,6 @@ CEPH_RBD_API int rbd_group_spec_list_cleanup(rbd_group_spec_t *groups,
                                              size_t group_spec_size,
                                              size_t num_groups);
 
-CEPH_RBD_API int rbd_aio_create_group_completion(void *cb_arg,
-                                                 rbd_callback_t complete_cb,
-                                                 rbd_completion_t *c);
-CEPH_RBD_API int rbd_aio_is_complete_group_completion(rbd_completion_t c);
-CEPH_RBD_API int rbd_aio_wait_for_complete_group_completion(
-    rbd_completion_t c);
-CEPH_RBD_API ssize_t rbd_aio_get_return_value_group_completion(
-    rbd_completion_t c);
-CEPH_RBD_API void rbd_aio_release_group_completion(rbd_completion_t c);
-
 /**
  * Register an image metadata change watcher.
  *

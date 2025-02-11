@@ -31,6 +31,12 @@
 namespace librbd {
 namespace io {
 
+AioCompletion::~AioCompletion() {
+  if (aio_type == AIO_TYPE_GROUP) {
+    delete asio_engine;
+  }
+}
+
 int AioCompletion::wait_for_complete() {
   tracepoint(librbd, aio_wait_for_complete_enter, this);
   completed.wait(false, std::memory_order_acquire);
@@ -39,8 +45,14 @@ int AioCompletion::wait_for_complete() {
 }
 
 void AioCompletion::finalize() {
-  ceph_assert(ictx != nullptr);
-  CephContext *cct = ictx->cct;
+  ceph_assert((ictx != nullptr) ^ group_ioctx.is_valid());
+
+  CephContext* cct;
+  if (ictx != nullptr) {
+    cct = ictx->cct;
+  } else {
+    cct = reinterpret_cast<CephContext *>(group_ioctx.cct());
+  }
 
   // finalize any pending error results since we won't be
   // atomically incrementing rval anymore
@@ -57,13 +69,13 @@ void AioCompletion::finalize() {
 }
 
 void AioCompletion::complete() {
-  ceph_assert(ictx != nullptr);
+  ceph_assert((ictx != nullptr) ^ group_ioctx.is_valid());
 
   ssize_t r = rval;
   if ((aio_type == AIO_TYPE_CLOSE) || (aio_type == AIO_TYPE_OPEN && r < 0)) {
     ictx = nullptr;
     external_callback = false;
-  } else {
+  } else if (aio_type != AIO_TYPE_GROUP) {
     CephContext *cct = ictx->cct;
 
     tracepoint(librbd, aio_complete_enter, this, r);
@@ -111,6 +123,16 @@ void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
     ictx = i;
     aio_type = t;
     start_time = coarse_mono_clock::now();
+    asio_engine = ictx->asio_engine.get();
+  }
+}
+
+void AioCompletion::init_time(librados::IoCtx& group_ioctx_ref) {
+  if (!group_ioctx.is_valid()) {
+    group_ioctx = group_ioctx_ref;
+    aio_type = AIO_TYPE_GROUP;
+    start_time = coarse_mono_clock::now();
+    asio_engine = new AsioEngine(group_ioctx);
   }
 }
 
@@ -134,7 +156,7 @@ void AioCompletion::queue_complete() {
   add_request();
 
   // ensure completion fires in clean lock context
-  boost::asio::post(ictx->asio_engine->get_api_strand(), [this]() {
+  boost::asio::post(asio_engine->get_api_strand(), [this]() {
       complete_request(0);
     });
 }
@@ -162,13 +184,16 @@ void AioCompletion::unblock(CephContext* cct) {
 
 void AioCompletion::fail(int r)
 {
-  ceph_assert(ictx != nullptr);
+  ceph_assert((ictx != nullptr) ^ group_ioctx.is_valid());
   ceph_assert(r < 0);
 
   bool queue_required = true;
   if (aio_type == AIO_TYPE_CLOSE || aio_type == AIO_TYPE_OPEN) {
     // executing from a safe context and the ImageCtx has been destructed
     queue_required = false;
+  } else if (aio_type == AIO_TYPE_GROUP) {
+    CephContext *cct = reinterpret_cast<CephContext *>(group_ioctx.cct());
+    lderr(cct) << cpp_strerror(r) << dendl;
   } else {
     CephContext *cct = ictx->cct;
     lderr(cct) << cpp_strerror(r) << dendl;
@@ -205,8 +230,14 @@ void AioCompletion::set_request_count(uint32_t count) {
 
 void AioCompletion::complete_request(ssize_t r)
 {
-  ceph_assert(ictx != nullptr);
-  CephContext *cct = ictx->cct;
+  ceph_assert((ictx != nullptr) ^ group_ioctx.is_valid());
+
+  CephContext* cct;
+  if (ictx != nullptr) {
+    cct = ictx->cct;
+  } else {
+    cct = reinterpret_cast<CephContext *>(group_ioctx.cct());
+  }
 
   if (r > 0) {
     rval += r;
@@ -249,7 +280,7 @@ void AioCompletion::complete_external_callback() {
 
   // ensure librbd external users never experience concurrent callbacks
   // from multiple librbd-internal threads.
-  boost::asio::dispatch(ictx->asio_engine->get_api_strand(), [this]() {
+  boost::asio::dispatch(asio_engine->get_api_strand(), [this]() {
       complete_cb(rbd_comp, complete_arg);
       mark_complete_and_notify();
       put();

@@ -22,6 +22,9 @@
 struct Context;
 
 namespace librbd {
+
+struct AsioEngine;
+
 namespace io {
 
 /**
@@ -55,6 +58,9 @@ struct AioCompletion {
   ImageCtx *ictx = nullptr;
   coarse_mono_time start_time;
   aio_type_t aio_type = AIO_TYPE_NONE;
+
+  librados::IoCtx group_ioctx;
+  AsioEngine* asio_engine = nullptr;
 
   ReadResult read_result;
 
@@ -102,8 +108,7 @@ struct AioCompletion {
   AioCompletion() {
   }
 
-  ~AioCompletion() {
-  }
+  ~AioCompletion();
 
   int wait_for_complete();
 
@@ -122,6 +127,7 @@ struct AioCompletion {
   void unblock(CephContext* cct);
 
   void init_time(ImageCtx *i, aio_type_t t);
+  void init_time(librados::IoCtx& group_ioctx_ref);
   void start_op();
   void fail(int r);
 
