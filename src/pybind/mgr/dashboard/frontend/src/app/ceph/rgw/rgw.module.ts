@@ -338,6 +338,11 @@ const routes: Routes = [
         path: URLVerbs.CREATE,
         component: RgwStorageClassFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class`,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },

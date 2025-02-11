@@ -27,7 +27,6 @@ import { Permission } from '~/app/shared/models/permissions';
 import { Router } from '@angular/router';
 
 const BASE_URL = 'rgw/tiering';
-
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
@@ -58,6 +57,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   ngOnInit() {
     this.columns = [
       {
+        name: $localize`Storage Class`,
+        prop: 'storage_class',
+        flexGrow: 2
+      },
+      {
         name: $localize`Zone Group`,
         prop: 'zonegroup_name',
         flexGrow: 2
@@ -65,11 +69,6 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       {
         name: $localize`Placement Target`,
         prop: 'placement_target',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Storage Class`,
-        prop: 'storage_class',
         flexGrow: 2
       },
       {
@@ -83,6 +82,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
+    const getStorageUri = () =>
+      this.selection.first() &&
+      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
+        this.selection.first().placement_target
+      )}/${encodeURI(this.selection.first().storage_class)}`;
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -90,6 +94,12 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         icon: Icons.add,
         click: () => this.router.navigate([this.urlBuilder.getCreate()]),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        routerLink: () => [`/rgw/tiering/edit/${getStorageUri()}`]
       },
       {
         name: this.actionLabels.REMOVE,

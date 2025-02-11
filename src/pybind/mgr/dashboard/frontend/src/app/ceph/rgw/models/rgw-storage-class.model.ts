@@ -9,6 +9,7 @@ export interface StorageClass {
   endpoint: string;
   region: string;
   placement_target: string;
+  zonegroup_name?: string;
 }
 
 export interface StorageClassDetails {
@@ -71,6 +72,7 @@ export interface S3Details {
   multipart_min_part_size: number;
   multipart_sync_threshold: number;
   host_style: boolean;
+  retain_head_object?: boolean;
 }
 
 export interface RequestModel {
@@ -81,7 +83,6 @@ export interface RequestModel {
 export interface PlacementTarget {
   tags: string[];
   placement_id: string;
-  storage_class: string;
   tier_type: typeof CLOUD_TIER;
   tier_config: {
     endpoint: string;
@@ -93,6 +94,9 @@ export interface PlacementTarget {
     multipart_sync_threshold: number;
     multipart_min_part_size: number;
   };
+  storage_class?: string;
+  name?: string;
+  tier_targets?: TierTarget[];
 }
 
 export const CLOUD_TIER = 'cloud-s3';
