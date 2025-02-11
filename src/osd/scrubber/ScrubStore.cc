@@ -15,31 +15,47 @@ using std::vector;
 using ceph::bufferlist;
 
 namespace {
+
+/// the 'to_str()' representation of an hobject, if created with the specific
+/// parameters, prefixed with 'prefix'.
+std::string virtual_hobject_w_prefix(std::string_view prefix,
+                                     const std::string& key,
+                                     snapid_t snap,
+                                     uint32_t hash,
+                                     int64_t pool)
+{
+  return fmt::format("{}_{}", prefix,
+                     hobject_t(object_t(), key, snap, hash, pool, "").to_str());
+}
+
+/// the 'to_str()' representation of an hobject, if created with the specific
+/// parameters, prefixed with 'prefix'.
+std::string virtual_hobject_w_prefix(std::string_view prefix,
+                                     const librados::object_id_t& oid,
+                                     uint32_t hash,
+                                     int64_t pool) {
+  return fmt::format("{}_{}", prefix,
+                     hobject_t(object_t{oid.name}, oid.locator, oid.snap, hash,
+                               pool, oid.nspace)
+                         .to_str());
+}
+
 string first_object_key(int64_t pool)
 {
-  auto hoid = hobject_t(object_t(), "", CEPH_NOSNAP, 0x00000000, pool, "");
-  hoid.build_hash_cache();
-  return "SCRUB_OBJ_" + hoid.to_str();
+  return virtual_hobject_w_prefix("SCRUB_OBJ", "", CEPH_NOSNAP, 0x00000000,
+                                  pool);
 }
 
 // the object_key should be unique across pools
 string to_object_key(int64_t pool, const librados::object_id_t& oid)
 {
-  auto hoid = hobject_t(object_t(oid.name),
-			oid.locator, // key
-			oid.snap,
-			0,		// hash
-			pool,
-			oid.nspace);
-  hoid.build_hash_cache();
-  return "SCRUB_OBJ_" + hoid.to_str();
+  return virtual_hobject_w_prefix("SCRUB_OBJ", oid, 0x00000000, pool);
 }
 
 string last_object_key(int64_t pool)
 {
-  auto hoid = hobject_t(object_t(), "", CEPH_NOSNAP, 0xffffffff, pool, "");
-  hoid.build_hash_cache();
-  return "SCRUB_OBJ_" + hoid.to_str();
+  return virtual_hobject_w_prefix("SCRUB_OBJ", "", CEPH_NOSNAP, 0xffffffff,
+                                  pool);
 }
 
 string first_snap_key(int64_t pool)
@@ -47,28 +63,17 @@ string first_snap_key(int64_t pool)
   // scrub object is per spg_t object, so we can misuse the hash (pg.seed) for
   // representing the minimal and maximum keys. and this relies on how
   // hobject_t::to_str() works: hex(pool).hex(revhash).
-  auto hoid = hobject_t(object_t(), "", 0, 0x00000000, pool, "");
-  hoid.build_hash_cache();
-  return "SCRUB_SS_" + hoid.to_str();
+  return virtual_hobject_w_prefix("SCRUB_SS", "", 0, 0x00000000, pool);
 }
 
 string to_snap_key(int64_t pool, const librados::object_id_t& oid)
 {
-  auto hoid = hobject_t(object_t(oid.name),
-			oid.locator, // key
-			oid.snap,
-			0x77777777, // hash
-			pool,
-			oid.nspace);
-  hoid.build_hash_cache();
-  return "SCRUB_SS_" + hoid.to_str();
+  return virtual_hobject_w_prefix("SCRUB_SS", oid, 0x77777777, pool);
 }
 
 string last_snap_key(int64_t pool)
 {
-  auto hoid = hobject_t(object_t(), "", 0, 0xffffffff, pool, "");
-  hoid.build_hash_cache();
-  return "SCRUB_SS_" + hoid.to_str();
+  return virtual_hobject_w_prefix("SCRUB_SS", "", 0, 0xffffffff, pool);
 }
 
 }  // namespace
