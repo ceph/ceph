@@ -403,7 +403,7 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, const RG
   maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   return CLSRGWIssueBucketIndexClean(index_pool,
 				     bucket_objs,
-				     cct->_conf->rgw_bucket_index_max_aio)();
+				     cct->_conf->rgw_clean_bucket_index_max_aio)();
 }
 
 int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
