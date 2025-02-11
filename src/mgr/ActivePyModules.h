@@ -101,6 +101,9 @@ public:
   PyObject *get_perf_schema_python(
      const std::string &svc_type,
      const std::string &svc_id);
+  PyObject *get_perf_schema_labeled_python(
+     const std::string &svc_type,
+     const std::string &svc_id);
   PyObject *get_rocksdb_version();
   PyObject *get_context();
   PyObject *get_osdmap();
