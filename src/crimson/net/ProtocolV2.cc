@@ -137,7 +137,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   conn.set_peer_name(_peer_name);
   conn.policy = messenger.get_policy(_peer_name.type());
   client_cookie = generate_client_cookie();
-  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_name={}, cc={}"
+  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_name={}, client_cookie=0x{:x}"
                 " policy(lossy={}, server={}, standby={}, resetcheck={})",
                 conn, _peer_addr, _peer_name, client_cookie,
                 conn.policy.lossy, conn.policy.server,
@@ -407,8 +407,8 @@ ProtocolV2::banner_exchange(bool is_connect)
   auto len_payload = static_cast<uint16_t>(banner_payload.length());
   encode(len_payload, bl, 0);
   bl.claim_append(banner_payload);
-  logger().debug("{} SEND({}) banner: len_payload={}, supported={}, "
-                 "required={}, banner=\"{}\"",
+  logger().debug("{} SEND({}) banner: len_payload={}, supported=0x{:x}, "
+                 "required=0x{:x}, banner=\"{}\"",
                  conn, bl.length(), len_payload,
                  CRIMSON_MSGR2_SUPPORTED_FEATURES,
                  CEPH_MSGR2_REQUIRED_FEATURES,
@@ -484,7 +484,7 @@ ProtocolV2::banner_exchange(bool is_connect)
       logger().warn("{} decode banner payload failed", conn);
       abort_in_fault();
     }
-    logger().debug("{} RECV({}) banner features: supported={} required={}",
+    logger().debug("{} RECV({}) banner features: supported=0x{:x} required=0x{:x}",
                    conn, bl.length(),
                    _peer_supported_features, _peer_required_features);
 
@@ -493,13 +493,13 @@ ProtocolV2::banner_exchange(bool is_connect)
     uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
     if ((required_features & _peer_supported_features) != required_features) {
       logger().error("{} peer does not support all required features"
-                     " required={} peer_supported={}",
+                     " required=0x{:x} peer_supported=0x{:x}",
                      conn, required_features, _peer_supported_features);
       ABORT_IN_CLOSE(is_connect);
     }
     if ((supported_features & _peer_required_features) != _peer_required_features) {
       logger().error("{} we do not support all peer required features"
-                     " peer_required={} supported={}",
+                     " peer_required=0x{:x} supported=0x{:x}",
                      conn, _peer_required_features, supported_features);
       ABORT_IN_CLOSE(is_connect);
     }
@@ -663,8 +663,8 @@ ProtocolV2::client_connect()
       client_cookie);
 
   logger().debug("{} WRITE ClientIdentFrame: addrs={}, target={}, gid={},"
-                 " gs={}, features_supported={}, features_required={},"
-                 " flags={}, cookie={}",
+                 " gs={}, features_supported=0x{:x}, features_required=0x{:x},"
+                 " flags=0x{:x}, client_cookie=0x{:x}",
                  conn, messenger.get_myaddrs(), conn.target_addr,
                  messenger.get_myname().num(), global_seq,
                  conn.policy.features_supported,
@@ -680,7 +680,7 @@ ProtocolV2::client_connect()
         ).then([this](auto payload) {
           // handle_ident_missing_features() logic
           auto ident_missing = IdentMissingFeaturesFrame::Decode(payload->back());
-          logger().warn("{} GOT IdentMissingFeaturesFrame: features={}"
+          logger().warn("{} GOT IdentMissingFeaturesFrame: features=0x{:x}"
                         " (client does not support all server features)",
                         conn, ident_missing.features());
           abort_in_fault();
@@ -713,8 +713,8 @@ ProtocolV2::client_connect()
           auto server_ident = ServerIdentFrame::Decode(payload->back());
           logger().debug("{} GOT ServerIdentFrame:"
                          " addrs={}, gid={}, gs={},"
-                         " features_supported={}, features_required={},"
-                         " flags={}, cookie={}",
+                         " features_supported=0x{:x}, features_required=0x{:x},"
+                         " flags=0x{:x}, server_cookie=0x{:x}",
                          conn,
                          server_ident.addrs(), server_ident.gid(),
                          server_ident.global_seq(),
@@ -751,7 +751,7 @@ ProtocolV2::client_connect()
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
-          logger().debug("{} UPDATE: features={}", conn, conn.get_features());
+          logger().debug("{} UPDATE: features=0x{:x}", conn, conn.get_features());
           peer_global_seq = server_ident.global_seq();
 
           bool lossy = server_ident.flags() & CEPH_MSG_CONNECT_LOSSY;
@@ -760,7 +760,7 @@ ProtocolV2::client_connect()
             conn.policy.lossy = lossy;
           }
           if (lossy && (connect_seq != 0 || server_cookie != 0)) {
-            logger().warn("{} UPDATE cs=0({}) sc=0({}) for lossy policy",
+            logger().warn("{} UPDATE cs=0(was {}) server_cookie=0x0(was 0x{:x}) for lossy policy",
                           conn, connect_seq, server_cookie);
             connect_seq = 0;
             server_cookie = 0;
@@ -786,8 +786,8 @@ ProtocolV2::client_reconnect()
                                           global_seq,
                                           connect_seq,
                                           io_states.in_seq);
-  logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie={},"
-                 " server_cookie={}, gs={}, cs={}, in_seq={}",
+  logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie=0x{:x},"
+                 " server_cookie=0x{:x}, gs={}, cs={}, in_seq={}",
                  conn, messenger.get_myaddrs(),
                  client_cookie, server_cookie,
                  global_seq, connect_seq, io_states.in_seq);
@@ -1000,7 +1000,7 @@ void ProtocolV2::execute_connecting()
         // there are 2 hops with dispatch_connect()
         crosscore.prepare_submit();
         logger().info("{} connected: gs={}, pgs={}, cs={}, "
-                      "client_cookie={}, server_cookie={}, {}, new_sid={}, "
+                      "client_cookie=0x{:x}, server_cookie=0x{:x}, {}, new_sid={}, "
                       "send {} IOHandler::dispatch_connect()",
                       conn, global_seq, peer_global_seq, connect_seq,
                       client_cookie, server_cookie, io_states,
@@ -1223,8 +1223,8 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
   ProtocolV2 *existing_proto = dynamic_cast<ProtocolV2*>(
       existing_conn->protocol.get());
   ceph_assert(existing_proto);
-  logger().debug("{}(gs={}, pgs={}, cs={}, cc={}, sc={}) connecting,"
-                 " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
+  logger().debug("{}(gs={}, pgs={}, cs={}, client_cookie=0x{:x}, server_cookie=0x{:x}) connecting,"
+                 " found existing {}(state={}, gs={}, pgs={}, cs={}, client_cookie=0x{:x}, server_cookie=0x{:x})",
                  conn, global_seq, peer_global_seq, connect_seq,
                  client_cookie, server_cookie,
                  fmt::ptr(existing_conn.get()), get_state_name(existing_proto->state),
@@ -1277,8 +1277,8 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
       // peer has reset and we're going to reuse the existing connection
       // by replacing the socket
       logger().warn("{} server_connect:"
-                    " found new session (cs={})"
-                    " when existing {} {} is with stale session (cs={}, ss={}),"
+                    " found new session (client_cookie=0x{:x})"
+                    " when existing {} {} is with stale session (client_cookie=0x{:x}, server_cookie=0x{:x}),"
                     " peer must have reset",
                     conn,
                     client_cookie,
@@ -1291,7 +1291,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
       // session establishment interrupted between client_ident and server_ident,
       // continuing...
       logger().warn("{} server_connect: found client session with existing {} {}"
-                    " matched (cs={}, ss={}), continuing session establishment",
+                    " matched (client_cookie=0x{:x}, e_server_cookie=0x{:x}), continuing session establishment",
                     conn,
                     get_state_name(existing_proto->state),
                     *existing_conn,
@@ -1305,7 +1305,8 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     if (existing_proto->client_cookie != client_cookie) {
       if (existing_conn->peer_wins()) {
         // acceptor (this connection, the peer) wins
-        logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
+        logger().warn("{} server_connect: connection race detected"
+                      " (client_cookie=0x{:x}, e_client_cookie=0x{:x}, server_cookie=0x0)"
                       " and win, reusing existing {} {}",
                       conn,
                       client_cookie,
@@ -1315,7 +1316,8 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
         return reuse_connection(existing_proto);
       } else {
         // acceptor (this connection, the peer) loses
-        logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
+        logger().warn("{} server_connect: connection race detected"
+                      " (client_cookie=0x{:x}, e_client_cookie=0x{:x}, server_cookie=0x0)"
                       " and lose to existing {}, ask client to wait",
                       conn, client_cookie, existing_proto->client_cookie, *existing_conn);
         return existing_conn->send_keepalive().then([this] {
@@ -1324,7 +1326,8 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
       }
     } else {
       logger().warn("{} server_connect: found client session with existing {} {}"
-                    " matched (cs={}, ss={}), continuing session establishment",
+                    " matched (client_cookie=0x{:x}, e_server_cookie=0x{:x}),"
+                    " continuing session establishment",
                     conn,
                     get_state_name(existing_proto->state),
                     *existing_conn,
@@ -1343,8 +1346,8 @@ ProtocolV2::server_connect()
     // handle_client_ident() logic
     auto client_ident = ClientIdentFrame::Decode(payload->back());
     logger().debug("{} GOT ClientIdentFrame: addrs={}, target={},"
-                   " gid={}, gs={}, features_supported={},"
-                   " features_required={}, flags={}, cookie={}",
+                   " gid={}, gs={}, features_supported=0x{:x},"
+                   " features_required=0x{:x}, flags=0x{:x}, client_cookie=0x{:x}",
                    conn, client_ident.addrs(), client_ident.target_addr(),
                    client_ident.gid(), client_ident.global_seq(),
                    client_ident.supported_features(),
@@ -1388,7 +1391,7 @@ ProtocolV2::server_connect()
       ~(uint64_t)client_ident.supported_features();
     if (feat_missing) {
       auto ident_missing_features = IdentMissingFeaturesFrame::Encode(feat_missing);
-      logger().warn("{} WRITE IdentMissingFeaturesFrame: features={} (peer missing)",
+      logger().warn("{} WRITE IdentMissingFeaturesFrame: features=0x{:x} (peer missing)",
                     conn, feat_missing);
       return frame_assembler->write_flush_frame(ident_missing_features
       ).then([] {
@@ -1397,7 +1400,7 @@ ProtocolV2::server_connect()
     }
     conn.set_features(client_ident.supported_features() &
                       conn.policy.features_supported);
-    logger().debug("{} UPDATE: features={}", conn, conn.get_features());
+    logger().debug("{} UPDATE: features=0x{:x}", conn, conn.get_features());
 
     peer_global_seq = client_ident.global_seq();
 
@@ -1480,8 +1483,8 @@ ProtocolV2::server_reconnect()
     // handle_reconnect() logic
     auto reconnect = ReconnectFrame::Decode(payload->back());
 
-    logger().debug("{} GOT ReconnectFrame: addrs={}, client_cookie={},"
-                   " server_cookie={}, gs={}, cs={}, msg_seq={}",
+    logger().debug("{} GOT ReconnectFrame: addrs={}, client_cookie=0x{:x},"
+                   " server_cookie=0x{:x}, gs={}, cs={}, msg_seq={}",
                    conn, reconnect.addrs(),
                    reconnect.client_cookie(), reconnect.server_cookie(),
                    reconnect.global_seq(), reconnect.connect_seq(),
@@ -1521,8 +1524,8 @@ ProtocolV2::server_reconnect()
     ProtocolV2 *existing_proto = dynamic_cast<ProtocolV2*>(
         existing_conn->protocol.get());
     ceph_assert(existing_proto);
-    logger().debug("{}(gs={}, pgs={}, cs={}, cc={}, sc={}) re-connecting,"
-                   " found existing {}(state={}, gs={}, pgs={}, cs={}, cc={}, sc={})",
+    logger().debug("{}(gs={}, pgs={}, cs={}, client_cookie=0x{:x}, server_cookie=0x{:x}) re-connecting,"
+                   " found existing {}(state={}, gs={}, pgs={}, cs={}, client_cookie=0x{:x}, server_cookie=0x{:x})",
                    conn, global_seq, peer_global_seq, reconnect.connect_seq(),
                    reconnect.client_cookie(), reconnect.server_cookie(),
                    fmt::ptr(existing_conn.get()),
@@ -1549,7 +1552,7 @@ ProtocolV2::server_reconnect()
     if (existing_proto->client_cookie != reconnect.client_cookie()) {
       logger().warn("{} server_reconnect:"
                     " client_cookie mismatch with existing connection {},"
-                    " cc={} rcc={}. I must have reset, reseting client.",
+                    " e_client_cookie=0x{:x} r_client_cookie=0x{:x}. I must have reset, reseting client.",
                     conn, *existing_conn,
                     existing_proto->client_cookie, reconnect.client_cookie());
       return send_reset(conn.policy.resetcheck);
@@ -1561,7 +1564,7 @@ ProtocolV2::server_reconnect()
       //   - connection fault
       //   - b reconnects to a with cookie X, connect_seq=1
       //   - a has cookie==0
-      logger().warn("{} server_reconnect: I was a client (cc={}) and didn't received the"
+      logger().warn("{} server_reconnect: I was a client (e_client_cookie=0x{:x}) and didn't received the"
                     " server_ident with existing connection {}."
                     " Asking peer to resume session establishment",
                     conn, existing_proto->client_cookie, *existing_conn);
@@ -1621,7 +1624,7 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   assert(is_socket_valid);
-  trigger_state(state_t::ACCEPTING, io_state_t::none);
+  trigger_state(state_t::ACCEPTING, io_state_t::delay);
   gate.dispatch_in_background("execute_accepting", conn, [this] {
     return seastar::futurize_invoke([this] {
 #ifdef UNIT_TESTS_BUILT
@@ -1756,7 +1759,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
   bool is_replace;
   if (existing_conn) {
     logger().info("{} start establishing: gs={}, pgs={}, cs={}, "
-                  "client_cookie={}, server_cookie={}, {}, new_sid={}, "
+                  "client_cookie=0x{:x}, server_cookie=0x{:x}, {}, new_sid={}, "
                   "close existing {}",
                   conn, global_seq, peer_global_seq, connect_seq,
                   client_cookie, server_cookie,
@@ -1776,7 +1779,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
     }
   } else {
     logger().info("{} start establishing: gs={}, pgs={}, cs={}, "
-                  "client_cookie={}, server_cookie={}, {}, new_sid={}, "
+                  "client_cookie=0x{:x}, server_cookie=0x{:x}, {}, new_sid={}, "
                   "no existing",
                   conn, global_seq, peer_global_seq, connect_seq,
                   client_cookie, server_cookie, io_states,
@@ -1877,8 +1880,8 @@ ProtocolV2::send_server_ident()
           server_cookie);
 
   logger().debug("{} WRITE ServerIdentFrame: addrs={}, gid={},"
-                 " gs={}, features_supported={}, features_required={},"
-                 " flags={}, cookie={}",
+                 " gs={}, features_supported=0x{:x}, features_required=0x{:x},"
+                 " flags=0x{:x}, server_cookie=0x{:x}",
                  conn, messenger.get_myaddrs(), messenger.get_myname().num(),
                  global_seq, conn.policy.features_supported,
                  conn.policy.features_required | msgr2_required,
@@ -1907,7 +1910,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   // mover.socket shouldn't be shutdown
 
   logger().info("{} start replacing ({}): pgs was {}, cs was {}, "
-                "client_cookie was {}, {}, new_sid={}",
+                "client_cookie was 0x{:x}, {}, new_sid={}",
                 conn, reconnect ? "reconnected" : "connected",
                 peer_global_seq, connect_seq, client_cookie,
                 io_states, mover.socket->get_shard_id());
@@ -2059,7 +2062,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       }
       logger().info("{} replaced ({}), going to ready: "
                     "gs={}, pgs={}, cs={}, "
-                    "client_cookie={}, server_cookie={}, {}",
+                    "client_cookie=0x{:x}, server_cookie=0x{:x}, {}",
                     conn, reconnect ? "reconnected" : "connected",
                     global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie, io_states);
@@ -2187,7 +2190,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
 void ProtocolV2::execute_server_wait()
 {
   ceph_assert_always(is_socket_valid);
-  trigger_state(state_t::SERVER_WAIT, io_state_t::none);
+  trigger_state(state_t::SERVER_WAIT, io_state_t::delay);
   gated_execute("execute_server_wait", conn, [this] {
     return frame_assembler->read_exactly(1
     ).then([this](auto bptr) {
