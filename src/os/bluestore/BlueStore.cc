@@ -4784,11 +4784,12 @@ void BlueStore::Onode::put()
 void BlueStore::Onode::decode_raw(
   BlueStore::Onode* on,
   const bufferlist& v,
-  BlueStore::ExtentMap::ExtentDecoder& edecoder)
+  BlueStore::ExtentMap::ExtentDecoder& edecoder,
+  bool use_onode_segmentation)
 {
   on->exists = true;
   auto p = v.front().begin_deep();
-  on->onode.decode(p);
+  on->onode.decode(p, use_onode_segmentation ? 0 : bluestore_onode_t::FLAG_DEBUG_FORCE_V2);
 
   // initialize extent_map
   edecoder.decode_spanning_blobs(p, on->c);
@@ -4807,14 +4808,15 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
   const ghobject_t& oid,
   const string& key,
   const bufferlist& v,
-  bool allow_empty)
+  bool allow_empty,
+  bool use_onode_segmentation)
 {
   ceph_assert(v.length() || allow_empty);
   Onode* on = new Onode(c.get(), oid, (const mempool::bluestore_cache_meta::string)(key));
 
   if (v.length()) {
     ExtentMap::ExtentDecoderFull edecoder(on->extent_map);
-    decode_raw(on, v, edecoder);
+    decode_raw(on, v, edecoder, use_onode_segmentation);
 
     for (auto& i : on->onode.attrs) {
       i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
@@ -5210,7 +5212,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
 
   // new object, load onode if available
-  on = Onode::create_decode(this, oid, key, v, true);
+  on = Onode::create_decode(this, oid, key, v, true, store->onode_segmentation);
   o.reset(on);
   return onode_space.add_onode(oid, o);
 }
@@ -9392,9 +9394,15 @@ int BlueStore::_mount()
   }
   use_write_v2 = cct->_conf.get_val<bool>("bluestore_write_v2");
   if (cct->_conf.get_val<bool>("bluestore_write_v2_random")) {
-    srand(time(NULL));
+    srand(time(NULL) * 11 + 3);
     use_write_v2 = rand() % 2;
     cct->_conf.set_val("bluestore_write_v2", std::to_string(use_write_v2));
+  }
+  onode_segmentation = cct->_conf.get_val<bool>("bluestore_onode_segmentation");
+  if (cct->_conf.get_val<bool>("bluestore_onode_segmentation_random")) {
+    srand(time(NULL) * 13 + 5);
+    onode_segmentation = rand() % 2;
+    cct->_conf.set_val("bluestore_onode_segmentation_random", std::to_string(onode_segmentation));
   }
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
@@ -9739,7 +9747,7 @@ void BlueStore::_fsck_foreach_shared_blob(
 	       << dendl;
 
       OnodeRef o;
-      o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
+      o.reset(Onode::create_decode(c, oid, it->key(), it->value(), false, onode_segmentation));
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 
       _dump_onode<30>(cct, *o);
@@ -9895,7 +9903,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 
   dout(10) << __func__ << "  " << oid << dendl;
   OnodeRef o;
-  o.reset(Onode::create_decode(c, oid, key, value));
+  o.reset(Onode::create_decode(c, oid, key, value, false, onode_segmentation));
   ++num_objects;
   ++pool_fsck_stat->num_objects;
   num_spanning_blobs += o->extent_map.spanning_blob_map.size();
@@ -11283,7 +11291,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 		  << " obj:" << oid << dendl;
 
         OnodeRef o;
-        o.reset(Onode::create_decode(c, oid, it->key(), it->value()));
+        o.reset(Onode::create_decode(c, oid, it->key(), it->value(), false, onode_segmentation));
 	o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 	mempool::bluestore_fsck::set<BlobRef> blobs;
 
@@ -19169,7 +19177,8 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
 
   // bound encode
   size_t bound = 0;
-  denc(o->onode, bound);
+  uint64_t flag = onode_segmentation ? 0 : bluestore_onode_t::FLAG_DEBUG_FORCE_V2;
+  denc(o->onode, bound, flag);
   o->extent_map.bound_encode_spanning_blobs(bound);
   if (o->onode.extent_map_shards.empty()) {
     denc(o->extent_map.inline_bl, bound);
@@ -19180,7 +19189,7 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
   unsigned onode_part, blob_part, extent_part;
   {
     auto p = bl.get_contiguous_appender(bound, true);
-    denc(o->onode, p);
+    denc(o->onode, p, flag);
     onode_part = p.get_logical_offset();
     o->extent_map.encode_spanning_blobs(p);
     blob_part = p.get_logical_offset() - onode_part;
@@ -20602,7 +20611,8 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
       Onode dummy_on(cct);
       Onode::decode_raw(&dummy_on,
         it->value(),
-        edecoder);
+        edecoder,
+        onode_segmentation);
       ++stats.onode_count;
     } else {
       uint32_t offset;

@@ -1392,14 +1392,16 @@ public:
     static void decode_raw(
       BlueStore::Onode* on,
       const bufferlist& v,
-      ExtentMap::ExtentDecoder& dencoder);
+      ExtentMap::ExtentDecoder& dencoder,
+      bool use_onode_segmentation);
 
     static Onode* create_decode(
       CollectionRef c,
       const ghobject_t& oid,
       const std::string& key,
       const ceph::buffer::list& v,
-      bool allow_empty = false);
+      bool allow_empty,
+      bool use_onode_segmentation);
 
     void dump(ceph::Formatter* f) const;
 
@@ -2463,6 +2465,8 @@ private:
 		"not enough bits for min_alloc_size");
   bool elastic_shared_blobs = false; ///< use smart ExtentMap::dup to reduce shared blob count
   bool use_write_v2 = false; ///< use new write path
+  bool onode_segmentation = false; ///< When true, force onode_bluestore_t v2, otherwise v3 is used.
+                                   /// It means that onode segmentation is off. Critical for efficient testing.
 
   enum {
     // Please preserve the order since it's DB persistent
