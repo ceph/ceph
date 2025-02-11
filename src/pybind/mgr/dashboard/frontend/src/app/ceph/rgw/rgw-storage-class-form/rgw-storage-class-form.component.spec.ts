@@ -56,7 +56,7 @@ describe('RgwStorageClassFormComponent', () => {
   });
 
   it('on zonegroup changes', () => {
-    component.zoneGroupDeatils = {
+    component.zoneGroupDetails = {
       default_zonegroup: 'zonegroup1',
       name: 'zonegrp1',
       zonegroups: [
