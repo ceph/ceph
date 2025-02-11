@@ -52,8 +52,6 @@ export const PLACEMENT = {
   label: 'label'
 };
 
-export const RESOURCE_TYPE = 'ceph.smb.cluster';
-
 export interface SMBShare {
   cluster_id: string;
   share_id: string;
@@ -79,3 +77,42 @@ interface SMBShareLoginControl {
   access: 'read' | 'read-write' | 'none' | 'admin';
   category?: 'user' | 'group';
 }
+
+export interface SMBJoinAuth {
+  resource_type: string;
+  auth_id: string;
+  intent: Intent;
+  auth: Auth;
+  linked_to_cluster?: string;
+}
+
+export interface SMBUsersGroups {
+  resource_type: string;
+  users_groups_id: string;
+  intent: Intent;
+  values: Value;
+  linked_to_cluster?: string;
+}
+
+interface Auth {
+  username: string;
+  password: string;
+}
+
+interface User {
+  name: string;
+  password: string;
+}
+
+interface Group {
+  name: string;
+}
+
+interface Value {
+  users: User[];
+  groups: Group[];
+}
+
+type Intent = 'present' | 'removed';
+
+export const CLUSTER_RESOURCE = 'ceph.smb.cluster';

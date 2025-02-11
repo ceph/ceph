@@ -1,0 +1,28 @@
+<ng-container *ngIf="usersGroups$ | async as usersGroups">
+  <cd-table
+    [data]="usersGroups"
+    columnMode="flex"
+    [columns]="columns"
+    selectionType="single"
+    [hasDetails]="true"
+    (setExpandedRow)="setExpandedRow($event)"
+    (fetchData)="loadUsersGroups()"
+>
+  <cd-smb-usersgroups-details
+    *cdTableDetail
+    [selection]="expandedRow"
+  ></cd-smb-usersgroups-details>
+</cd-table>
+</ng-container>
+
+<ng-template
+  #groupsNamesTpl
+  let-row="data.row"
+>
+  <cds-tag
+    *ngFor="let group of row?.values.groups"
+    size="md"
+  >
+    {{ group.name }}
+  </cds-tag>
+</ng-template>
