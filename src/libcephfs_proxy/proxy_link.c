@@ -8,6 +8,11 @@
 #include "proxy_helpers.h"
 #include "proxy_log.h"
 
+typedef struct _proxy_version {
+	uint16_t major;
+	uint16_t minor;
+} proxy_version_t;
+
 #define DEFINE_VERSION(_num) [_num] = NEG_VERSION_SIZE(_num)
 
 static uint32_t negotiation_sizes[PROXY_LINK_NEGOTIATE_VERSION + 1] = {
@@ -295,6 +300,168 @@ static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
 	}
 
 	return 0;
+}
+
+static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
+					  proxy_link_negotiate_t *remote,
+					  proxy_link_negotiate_cbk_t cbk)
+{
+	uint32_t supported, enabled;
+	int32_t err;
+
+	if (local->v0.version > remote->v0.version) {
+		local->v0.version = remote->v0.version;
+		local->v0.size = remote->v0.size;
+	}
+
+	if (remote->v0.version == 0) {
+		/* Legacy peer. If we require any feature, the peer won't
+		 * support it, so we can't continue */
+		if (local->v1.required != 0) {
+			return proxy_log(LOG_ERR, ENOTSUP,
+					 "The peer doesn't support any "
+					 "features");
+		}
+
+		/* The peer is running the old version, but it is compatible
+		 * with us, so everything is fine and the connection can be
+		 * completed successfully with all features disabled. */
+
+		local->v1.enabled = 0;
+
+		proxy_log(LOG_INFO, 0,
+			  "Connected to legacy peer. No features enabled");
+
+		goto validate;
+	}
+
+	supported = local->v1.supported & remote->v1.supported;
+	local->v1.supported = supported;
+
+	if ((local->v1.required & ~supported) != 0) {
+		return proxy_log(LOG_ERR, ENOTSUP,
+				 "Required features are not supported by the "
+				 "peer");
+	}
+	if ((remote->v1.required & ~supported) != 0) {
+		return proxy_log(LOG_ERR, ENOTSUP,
+				 "The peer requires some features that are "
+				 "not supported");
+	}
+
+	/* For now just combine the desired features from each side. In the
+	 * future, if there are two features to implement the same, they may
+	 * be chosen here and enable just one of them. */
+
+	enabled = (local->v1.enabled | remote->v1.enabled) & supported;
+	local->v1.enabled = enabled;
+
+	/* NEG_VERSION: Implement handling of negotiate extensions. */
+
+validate:
+	if (cbk != NULL) {
+		err = cbk(local);
+		if (err < 0) {
+			return err;
+		}
+	}
+
+	return 0;
+}
+
+static int32_t proxy_link_negotiate_client(proxy_link_t *link, int32_t sd,
+					   proxy_link_negotiate_t *neg,
+					   proxy_link_negotiate_cbk_t cbk)
+{
+	proxy_link_negotiate_t remote;
+	int32_t err;
+
+	err = proxy_link_write(link, sd, neg, neg->v0.size);
+	if (err < 0) {
+		return err;
+	}
+
+	err = proxy_link_negotiate_read(link, sd, &remote);
+	if (err < 0) {
+		return err;
+	}
+
+	err = proxy_link_negotiate_check(neg, &remote, cbk);
+	if (err < 0) {
+		return err;
+	}
+
+	if (remote.v0.version == 0) {
+		return 0;
+	}
+
+	/* For version 1 and higher, send the agreed enabled features. */
+	err =  proxy_link_write(link, sd, &neg->v1.enabled,
+				sizeof(neg->v1.enabled));
+	if (err < 0) {
+		return err;
+	}
+
+	return 0;
+}
+
+int32_t proxy_link_handshake_client(proxy_link_t *link, int32_t sd,
+				    proxy_link_negotiate_t *neg,
+				    proxy_link_negotiate_cbk_t cbk)
+{
+	proxy_link_negotiate_t legacy;
+	proxy_version_t version;
+	uint32_t id;
+	int32_t err;
+
+	/* To make negotiation backward compatible, we send the same data that
+	 * the previous version was sending, so if the server is still running
+	 * the old version it will get the correct message and accept the
+	 * connection.
+	 *
+	 * We use ancillary data to tell the server that further negotiation
+	 * will happen. If the server runs the old version, it will ignore
+	 * this data and return the normal answer, containing an old version
+	 * number. If the server supports negotiation, it will answer with the
+	 * new version number.
+	 */
+
+	id = LIBCEPHFS_LIB_CLIENT;
+
+	err = proxy_link_ctrl_send(sd, &id, sizeof(id), SCM_RIGHTS, &sd,
+				   sizeof(sd));
+	if (err < 0) {
+		return err;
+	}
+
+	err = proxy_link_read(link, sd, &version, sizeof(version));
+	if (err < 0) {
+		return proxy_log(LOG_ERR, -err,
+				 "Failed to get initial answer from server");
+	}
+
+	if (version.major != LIBCEPHFSD_MAJOR) {
+		return proxy_log(LOG_ERR, ENOTSUP,
+				 "Unsupported major version received from "
+				 "server");
+	}
+
+	if (version.minor == LIBCEPHFSD_MINOR) {
+		/* The server doesn't support negotiation. */
+		proxy_link_negotiate_init_v0(&legacy, 0, 0);
+
+		return proxy_link_negotiate_check(neg, &legacy, cbk);
+	}
+
+	if (version.minor != LIBCEPHFSD_MINOR_NEG) {
+		return proxy_log(LOG_ERR, ENOTSUP,
+				 "Unsupported minor version recevied from "
+				 "server");
+	}
+
+	/* The server supports negotiation. Let's do it. */
+
+	return proxy_link_negotiate_client(link, sd, neg, cbk);
 }
 
 int32_t proxy_link_client(proxy_link_t *link, const char *path,

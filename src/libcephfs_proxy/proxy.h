@@ -9,7 +9,11 @@
 #include <stdbool.h>
 
 #define LIBCEPHFSD_MAJOR 0
+
+// Legacy version without negotiation support
 #define LIBCEPHFSD_MINOR 2
+// Current version with negotiation support
+#define LIBCEPHFSD_MINOR_NEG 3
 
 #define LIBCEPHFS_LIB_CLIENT 0xe3e5f0e8 // 'ceph' xor 0x80808080
 
