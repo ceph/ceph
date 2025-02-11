@@ -565,6 +565,10 @@ namespace ceph {
        * data chunk and the coding parity chunks.
        */
       FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION = 1<<4,
+      /* This plugin requires sub-chunks (at the time of writing this was only
+       * clay). Other plugins will not process the overhead of stub sub-chunks.
+       */
+      FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS = 1<<5,
     };
     static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
@@ -573,6 +577,7 @@ namespace ceph {
       case FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION: return "zeroinout";
       case FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION: return "zeropadding";
       case FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION: return "paritydelta";
+      case FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS: return "requiresubchunks";
       default: return "???";
       }
     }
