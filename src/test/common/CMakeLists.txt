@@ -114,6 +114,13 @@ add_executable(unittest_shared_cache
 add_ceph_unittest(unittest_shared_cache)
 target_link_libraries(unittest_shared_cache global)
 
+# unittest_web_cache
+add_executable(unittest_web_cache
+  test_web_cache.cc
+  )
+add_ceph_unittest(unittest_web_cache)
+target_link_libraries(unittest_web_cache ceph-common)
+
 # unittest_sloppy_crc_map
 add_executable(unittest_sloppy_crc_map
   test_sloppy_crc_map.cc
