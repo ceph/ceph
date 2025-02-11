@@ -25,6 +25,11 @@
 #define container_of(_ptr, _type, _field) \
 	((_type *)((uintptr_t)(_ptr) - offset_of(_type, _field)))
 
+enum {
+	/* Mask of all supported/known features. */
+	PROXY_FEAT_ALL = 0x00000000
+};
+
 struct _list;
 typedef struct _list list_t;
 

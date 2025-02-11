@@ -72,6 +72,28 @@ typedef struct _proxy_link_ans {
 	 sizeof(proxy_link_negotiate_v##_ver##_t))
 #define NEG_VERSION_SIZE(_ver) NEG_VERSION_SIZE_1(_ver)
 
+#define proxy_link_negotiate_init_v0(_neg, _ver, _min) \
+	do { \
+		(_neg)->v0.size = NEG_VERSION_SIZE(_ver); \
+		(_neg)->v0.version = (_ver); \
+		(_neg)->v0.min_version = (_min); \
+		(_neg)->v0.flags = 0; \
+	} while (0)
+
+/* NEG_VERSION: Add new arguments and initialize the link->neg.vX with them. */
+static inline void proxy_link_negotiate_init(proxy_link_negotiate_t *neg,
+					     uint32_t min_version,
+					     uint32_t supported,
+					     uint32_t required,
+					     uint32_t enabled)
+{
+	proxy_link_negotiate_init_v0(neg, PROXY_LINK_NEGOTIATE_VERSION,
+				     min_version);
+	neg->v1.supported = supported;
+	neg->v1.required = required;
+	neg->v1.enabled = enabled;
+}
+
 static inline bool proxy_link_is_connected(proxy_link_t *link)
 {
 	return link->sd >= 0;
