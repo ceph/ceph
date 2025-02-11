@@ -786,10 +786,32 @@ class TestCephAdm(object):
         output,
         funkypatch,
     ):
+        import cephadmlib.listing
+        import cephadmlib.daemon_identity
+
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeef'
         ctx.container_engine = mock_podman()
-        funkypatch.patch('cephadm.list_daemons').return_value = daemon_list
+
+        def _dms(*args, **kwargs):
+            for val in daemon_list:
+                yield cephadmlib.listing.DaemonEntry(
+                    cephadmlib.daemon_identity.DaemonIdentity.from_name(
+                        val['fsid'], val['name']
+                    ),
+                    val,
+                    '',
+                )
+
+        funkypatch.patch('cephadmlib.listing.daemons').side_effect = _dms
+        funkypatch.patch('cephadmlib.systemd.check_unit').return_value = (
+            True,
+            'running' if container_stats else 'stopped',
+            '',
+        )
+        funkypatch.patch('cephadmlib.call_wrappers.call').side_effect = (
+            ValueError
+        )
         cinfo = (
             _cephadm.ContainerInfo(*container_stats)
             if container_stats
@@ -803,9 +825,18 @@ class TestCephAdm(object):
         )
 
     def test_get_container_info_daemon_down(self, funkypatch):
+        import cephadmlib.listing
+        import cephadmlib.daemon_identity
+        funkypatch.patch('cephadmlib.systemd.check_unit').return_value = (True, 'stopped', '')
+        funkypatch.patch('cephadmlib.call_wrappers.call').side_effect = ValueError
         _get_stats_by_name = funkypatch.patch('cephadmlib.container_engines.parsed_container_image_stats')
         _get_stats = funkypatch.patch('cephadmlib.container_types.get_container_stats')
-        _list_daemons = funkypatch.patch('cephadm.list_daemons')
+        _daemons = funkypatch.patch('cephadmlib.listing.daemons')
+
+        class FakeUpdater(cephadmlib.listing.NoOpDaemonStatusUpdater):
+            def __init__(self, *args, **kwargs):
+                pass
+        funkypatch.patch('cephadmlib.listing_updaters.CoreStatusUpdater', dest=FakeUpdater)
 
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '5e39c134-dfc5-11ee-a344-5254000ee071'
@@ -844,7 +875,14 @@ class TestCephAdm(object):
                 "deployed": "2024-03-11T17:37:23.520061Z",
                 "configured": "2024-03-11T17:37:28.494075Z"
         }
-        _list_daemons.return_value = [down_osd_json]
+
+        _current_daemons = []
+        def _dms(*args, **kwargs):
+            for d in _current_daemons:
+                ident = cephadmlib.daemon_identity.DaemonIdentity.from_name(d['fsid'], d['name'])
+                yield cephadmlib.listing.DaemonEntry(ident, d, '')
+        _daemons.side_effect = _dms
+        _current_daemons[:] = [down_osd_json]
 
         expected_container_info = _cephadm.ContainerInfo(
             container_id='',
@@ -867,7 +905,7 @@ class TestCephAdm(object):
         up_osd_json = copy.deepcopy(down_osd_json)
         up_osd_json['state'] = 'running'
         _get_stats.return_value = _cephadm.ContainerInfo('container_id', 'image_name','image_id','the_past','')
-        _list_daemons.return_value = [down_osd_json, up_osd_json]
+        _current_daemons[:] = [down_osd_json, up_osd_json]
 
         expected_container_info = _cephadm.ContainerInfo(
             container_id='container_id',
