@@ -1160,8 +1160,11 @@ struct bluestore_onode_t {
 	       FLAG_PERPG_OMAP);
   }
 
-  DENC(bluestore_onode_t, v, p) {
-    DENC_START(3, 1, p);
+  template<typename T, typename P>
+  friend std::enable_if_t<std::is_same_v<T, bluestore_onode_t> ||
+                          std::is_same_v<T, const bluestore_onode_t>>
+  _denc_friend(T& v, P& p, __u8& struct_v)
+  {
     denc_varint(v.nid, p);
     denc_varint(v.size, p);
     denc(v.attrs, p);
@@ -1176,13 +1179,49 @@ struct bluestore_onode_t {
     if (struct_v >= 3) {
       denc(v.segment_size, p);
     }
+  }
+
+  enum {
+    FLAG_DEBUG_FORCE_V2 = 1, // debug runtime flag to test transistions v2 <-> v3
+  };
+
+  // 1. This BlueStore understands v3, and encodes in it by default.
+  // 2. If ordered, we encode v2, skipping `segment_size`.
+  // 3. When decoding v3 but forced to v2 compatibility, we clear segment_size.
+  DENC_HELPERS
+  void bound_encode(size_t& p, uint64_t features) const {
+    __u8 struct_v_to_use = 3;
+    if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
+      struct_v_to_use = 2;
+    }
+    DENC_START(struct_v_to_use, 1, p);
+    _denc_friend(*this, p, struct_v_to_use);
     DENC_FINISH(p);
   }
+  void encode(::ceph::buffer::list::contiguous_appender& p, uint64_t features) const {
+    __u8 struct_v_to_use = 3;
+    if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
+      struct_v_to_use = 2;
+    }
+    DENC_START(struct_v_to_use, 1, p);
+    DENC_DUMP_PRE(Type);
+    _denc_friend(*this, p, struct_v_to_use);
+    DENC_FINISH(p);
+  }
+  void decode(::ceph::buffer::ptr::const_iterator& p, uint64_t features = 0) {
+    DENC_START(3, 1, p);
+    _denc_friend(*this, p, struct_v); //decode what is
+    if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
+      this->segment_size = 0;
+    }
+    DENC_FINISH(p);
+  }
+
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluestore_onode_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_onode_t::shard_info)
-WRITE_CLASS_DENC(bluestore_onode_t)
+WRITE_CLASS_DENC_FEATURED(bluestore_onode_t)
 
 std::ostream& operator<<(std::ostream& out, const bluestore_onode_t::shard_info& si);
 
