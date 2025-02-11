@@ -455,6 +455,19 @@ TEST_P(PluginTest,MinimumGranularity)
     EXPECT_EQ(erasure_code->get_minimum_granularity(), 1);
   }
 }
+TEST_P(PluginTest,SubChunkSupport)
+{
+  initialize();
+
+  /* If any configurations of the plugin support !=1 sub chunk, then sub-chunk
+   * support must be enabled.  Setting the flag unnecessarily is not-ideal, but
+   * is a performance penalty.
+   */
+  if (erasure_code->get_sub_chunk_count() != 1) {
+    ASSERT_TRUE((erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0);
+  }
+}
 INSTANTIATE_TEST_SUITE_P(
   PluginTests,
   PluginTest,
