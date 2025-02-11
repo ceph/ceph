@@ -5,10 +5,13 @@
 #define CEPH_MGRCAP_H
 
 #include <iosfwd>
+#include <map>
+#include <string>
 
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/entity_name.h"
+#include "msg/msg_types.h" // for struct entity_addr_t
 
 static const __u8 MGR_CAP_R     = (1 << 1);      // read
 static const __u8 MGR_CAP_W     = (1 << 2);      // write

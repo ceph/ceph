@@ -16,25 +16,25 @@
 
 #include "PyModuleRegistry.h"
 
+#include <map>
 #include <set>
 #include <string>
-#include <boost/variant.hpp>
 
 #include "common/ceph_mutex.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
-
-#include <msg/Messenger.h>
-#include <mon/MonClient.h>
+#include "common/TrackedOp.h" // for class OpTracker
+#include "include/utime.h"
 
 #include "ServiceMap.h"
-#include "MgrSession.h"
-#include "DaemonState.h"
 #include "MetricCollector.h"
 #include "OSDPerfMetricCollector.h"
 #include "MDSPerfMetricCollector.h"
-#include "MgrOpRequest.h"
 
+#include <boost/scoped_ptr.hpp>
+
+class DaemonStateIndex;
+class Messenger;
 class MMgrReport;
 class MMgrOpen;
 class MMgrUpdate;
@@ -42,7 +42,9 @@ class MMgrClose;
 class MMonMgrReport;
 class MCommand;
 class MMgrCommand;
+class MgrSession;
 struct MonCommand;
+class MonClient;
 class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
