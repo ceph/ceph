@@ -15,7 +15,15 @@ from ceph.utils import with_units_to_int, bytes_to_human
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
 from nfs.ganesha_conf import GaneshaConfParser, Export
-from nfs.qos_conf import RawBlock, QOS, QOSType, QOSParams, QOS_REQ_PARAMS, QOSBandwidthControl
+from nfs.qos_conf import (
+    RawBlock,
+    QOS,
+    QOSType,
+    QOSParams,
+    QOS_REQ_BW_PARAMS,
+    QOSBandwidthControl,
+    QOSOpsControl,
+    QOS_REQ_OPS_PARAMS)
 from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
@@ -174,7 +182,8 @@ QOS_BLOCK {
         "max_client_write_bw": "3.0MB",
         "max_export_read_bw": "2.0MB",
         "max_export_write_bw": "1.0MB",
-        "qos_type": "PerShare_PerClient"
+        "qos_type": "PerShare_PerClient",
+        "enable_iops_control": False
     }
 
     qos_export_dict = {
@@ -184,7 +193,8 @@ QOS_BLOCK {
         "max_client_read_bw": "4.0MB",
         "max_client_write_bw": "3.0MB",
         "max_export_read_bw": "2.0MB",
-        "max_export_write_bw": "1.0MB"
+        "max_export_write_bw": "1.0MB",
+        "enable_iops_control": False
     }
 
     class RObject(object):
@@ -1355,7 +1365,7 @@ NFS_CORE_PARAM {
         qos = QOS.from_qos_block(blocks[0], True)
         assert qos.to_dict() == qos_dict
 
-    def _do_test_cluster_qos(self, qos_type, combined_bw_ctrl, params, positive_tc):
+    def _do_test_cluster_qos_bw(self, qos_type, combined_bw_ctrl, params, positive_tc):
         nfs_mod = Module('nfs', '', '')
         cluster = NFSCluster(nfs_mod)
         try:
@@ -1364,14 +1374,16 @@ NFS_CORE_PARAM {
         except Exception:
             if not positive_tc:
                 return
+        if not positive_tc:
+            raise Exception("This TC was supposed to fail")
         out = cluster.get_cluster_qos(self.cluster_id)
-        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": combined_bw_ctrl, "qos_type": qos_type.name}
+        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": combined_bw_ctrl, "qos_type": qos_type.name, "enable_iops_control": False}
         for key in params:
             expected_out[QOSParams[key].value] = bytes_to_human(with_units_to_int(params[key]))
         assert out == expected_out
         cluster.disable_cluster_qos_bw(self.cluster_id)
         out = cluster.get_cluster_qos(self.cluster_id)
-        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False}
+        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}
 
     @pytest.mark.parametrize("qos_type, combined_bw_ctrl, params, positive_tc", [
         (QOSType['PerShare'], False, {'export_writebw': '100MB', 'export_readbw': '200MB'}, True),
@@ -1392,10 +1404,10 @@ NFS_CORE_PARAM {
         (QOSType['PerClient'], True, {'client_rw_bw': '200MB', 'export_rw_bw': '100MB'}, False),
         (QOSType['PerShare_PerClient'], True, {'export_rw_bw': '100MB'}, False)
         ])
-    def test_cluster_qos(self, qos_type, combined_bw_ctrl, params, positive_tc):
-        self._do_mock_test(self._do_test_cluster_qos, qos_type, combined_bw_ctrl, params, positive_tc)
+    def test_cluster_qos_bw(self, qos_type, combined_bw_ctrl, params, positive_tc):
+        self._do_mock_test(self._do_test_cluster_qos_bw, qos_type, combined_bw_ctrl, params, positive_tc)
 
-    def _do_test_export_qos(self, qos_type, clust_combined_bw_ctrl, clust_params, export_combined_bw_ctrl, export_params):
+    def _do_test_export_qos_bw(self, qos_type, clust_combined_bw_ctrl, clust_params, export_combined_bw_ctrl, export_params):
         nfs_mod = Module('nfs', '', '')
         cluster = NFSCluster(nfs_mod)
         export_mgr = ExportMgr(nfs_mod)
@@ -1404,7 +1416,7 @@ NFS_CORE_PARAM {
             bw_obj = QOSBandwidthControl(True, export_combined_bw_ctrl, **export_params)
             export_mgr.enable_export_qos_bw(self.cluster_id, '/cephfs_a/', bw_obj)
         except Exception as e:
-            assert str(e) == 'To configure bandwidth control for export, you must first enable bandwidth control at the cluster level.'
+            assert str(e) == 'To configure bandwidth control for export, you must first enable bandwidth control at the cluster level for foo.'
         bw_obj = QOSBandwidthControl(True, clust_combined_bw_ctrl, **clust_params)
         cluster.enable_cluster_qos_bw(self.cluster_id, qos_type, bw_obj)
 
@@ -1414,9 +1426,9 @@ NFS_CORE_PARAM {
             export_mgr.enable_export_qos_bw(self.cluster_id, '/cephfs_a/', bw_obj)
         except Exception:
             if export_combined_bw_ctrl:
-                req = QOS_REQ_PARAMS['combined_bw_enabled'][qos_type.name]
+                req = QOS_REQ_BW_PARAMS['combined_bw_enabled'][qos_type.name]
             else:
-                req = QOS_REQ_PARAMS['combined_bw_enabled'][qos_type.name]
+                req = QOS_REQ_BW_PARAMS['combined_bw_disabled'][qos_type.name]
             if sorted(export_params.keys()) != sorted(req):
                 return
             if qos_type.name == 'PerClient':
@@ -1447,10 +1459,215 @@ NFS_CORE_PARAM {
         (True, {'client_rw_bw': '200MB'}),
         (True, {'export_rw_bw': '100MB', 'client_rw_bw': '200MB'})
         ])
-    def test_export_qos(self, qos_type, clust_combined_bw_ctrl, clust_params,
+    def test_export_qos_bw(self, qos_type, clust_combined_bw_ctrl, clust_params,
                         export_combined_bw_ctrl, export_params):
-        self._do_mock_test(self._do_test_export_qos, qos_type, clust_combined_bw_ctrl,
+        self._do_mock_test(self._do_test_export_qos_bw, qos_type, clust_combined_bw_ctrl,
                            clust_params, export_combined_bw_ctrl, export_params)
+
+    def _do_test_cluster_qos_ops(self, qos_type, params, positive_tc):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        try:
+            ops_obj = QOSOpsControl(True, **params)
+            cluster.enable_cluster_qos_ops(self.cluster_id, qos_type, ops_obj)
+        except Exception:
+            if not positive_tc:
+                return
+        if not positive_tc:
+            raise Exception("This TC was supposed to fail")
+        out = cluster.get_cluster_qos(self.cluster_id)
+        expected_out = {"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "qos_type": qos_type.name, "enable_iops_control": True}
+        for key in params:
+            expected_out[QOSParams[key].value] = params[key]
+        assert out == expected_out
+        cluster.disable_cluster_qos_ops(self.cluster_id)
+        out = cluster.get_cluster_qos(self.cluster_id)
+        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}
+
+    @pytest.mark.parametrize("qos_type, params, positive_tc", [
+        (QOSType['PerShare'], {'max_export_iops': 10000}, True),
+        (QOSType['PerClient'], {'max_client_iops': 20000}, True),
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 40000}, True),
+        # negative testing
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 1000}, False),
+        (QOSType['PerShare'], {'max_client_iops': 10000}, False),
+        (QOSType['PerShare'], {}, False),
+        (QOSType['PerClient'], {'max_export_iops': 2000, 'max_client_iops': 1000}, False),
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 10}, False)
+        ])
+    def test_cluster_qos_ops(self, qos_type, params, positive_tc):
+        self._do_mock_test(self._do_test_cluster_qos_ops, qos_type, params, positive_tc)
+
+    def _do_test_export_qos_ops(self, qos_type, clust_params, export_params):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        export_mgr = ExportMgr(nfs_mod)
+        # try enabling export level qos before enabling cluster level qos
+        try:
+            ops_obj = QOSOpsControl(True, **export_params)
+            export_mgr.enable_export_qos_ops(self.cluster_id, '/cephfs_a/', ops_obj)
+        except Exception as e:
+            assert str(e) == 'To configure IOPS control for export, you must first enable IOPS control at the cluster level foo.'
+        ops_obj = QOSOpsControl(True, **clust_params)
+        cluster.enable_cluster_qos_ops(self.cluster_id, qos_type, ops_obj)
+
+        # set export qos
+        try:
+            ops_obj = QOSOpsControl(True, **export_params)
+            export_mgr.enable_export_qos_ops(self.cluster_id, '/cephfs_a/', ops_obj)
+        except Exception:
+            req = QOS_REQ_OPS_PARAMS[qos_type.name]
+            if sorted(export_params.keys()) != sorted(req):
+                return
+            if qos_type.name == 'PerClient':
+                return
+        out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
+        expected_out = {"enable_iops_control": True, "enable_qos": True}
+        for key in export_params:
+            expected_out[QOSParams[key].value] = export_params[key]
+        assert out == expected_out
+        export_mgr.disable_export_qos_ops(self.cluster_id, '/cephfs_a/')
+        out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
+        assert out == {"enable_iops_control": False, "enable_qos": False}
+
+    @pytest.mark.parametrize("qos_type, clust_params", [
+        (QOSType['PerShare'], {'max_export_iops': 10000}),
+        (QOSType['PerClient'], {'max_client_iops': 20000}),
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 40000})
+        ])
+    @pytest.mark.parametrize("export_params", [
+        ({'max_export_iops': 10000}),
+        ({'max_client_iops': 20000}),
+        ({'max_export_iops': 3000, 'max_client_iops': 40000})
+        ])
+    def test_export_qos_ops(self, qos_type, clust_params, export_params):
+        self._do_mock_test(self._do_test_export_qos_ops, qos_type, clust_params, export_params)
+
+    def _do_test_cluster_qos_bw_ops(self, bw_qos_type, bw_params, ops_qos_type, ops_params, positive_tc):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        try:
+            bw_obj = QOSBandwidthControl(True, combined_bw_ctrl=False, **bw_params)
+            cluster.enable_cluster_qos_bw(self.cluster_id, bw_qos_type, bw_obj)
+            ops_obj = QOSOpsControl(True, **ops_params)
+            cluster.enable_cluster_qos_ops(self.cluster_id, ops_qos_type, ops_obj)
+        except Exception:
+            if not positive_tc:
+                return
+        if not positive_tc:
+            raise Exception("This TC passed but it was supposed to fail")
+        out = cluster.get_cluster_qos(self.cluster_id)
+        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": False, "qos_type": ops_qos_type.name, "enable_iops_control": True}
+        bw_out = {}
+        ops_out = {}
+        for key in bw_params:
+            bw_out[QOSParams[key].value] = bytes_to_human(with_units_to_int(bw_params[key]))
+        for key in ops_params:
+            ops_out[QOSParams[key].value] = ops_params[key]
+        expected_out.update(bw_out)
+        expected_out.update(ops_out)
+        assert out == expected_out
+        # disable bandwidth control
+        cluster.disable_cluster_qos_bw(self.cluster_id)
+        out = cluster.get_cluster_qos(self.cluster_id)
+        ops_out.update({"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "enable_iops_control": True, "qos_type": ops_qos_type.name})
+        assert out == ops_out
+        # disable ops control
+        cluster.disable_cluster_qos_ops(self.cluster_id)
+        out = cluster.get_cluster_qos(self.cluster_id)
+        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}
+
+    @pytest.mark.parametrize("bw_qos_type, bw_params, ops_qos_type, ops_params, positive_tc", [
+        # positive TCs
+        (QOSType['PerShare'], {'export_writebw': '100MB', 'export_readbw': '200MB'}, 
+         QOSType['PerShare'], {'max_export_iops': 10000}, True),
+        (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'},
+         QOSType['PerClient'], {'max_client_iops': 20000}, True),
+        (QOSType['PerShare_PerClient'],
+         {'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'},
+         QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 40000}, True),
+        # negative TCs
+        (QOSType['PerShare'], {'export_writebw': '100MB', 'export_readbw': '200MB'}, QOSType['PerClient'], {}, False),
+        (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'}, QOSType['PerShare'], {}, False),
+        (QOSType['PerShare_PerClient'], {'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, QOSType['PerClient'], {'max_client_iops': 20000}, False),
+        ])
+    def test_cluster_qos_bw_ops(self, bw_qos_type, bw_params, ops_qos_type, ops_params, positive_tc):
+        self._do_mock_test(self._do_test_cluster_qos_bw_ops, bw_qos_type, bw_params, ops_qos_type, ops_params, positive_tc)
+
+    def _do_test_export_qos_bw_ops(self, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+        export_mgr = ExportMgr(nfs_mod)
+        # enable cluster level bandwidth conrtol and try to enable ops control for export
+        bw_obj = QOSBandwidthControl(True, combined_bw_ctrl=False, **clust_bw_params)
+        cluster.enable_cluster_qos_bw(self.cluster_id, qos_type, bw_obj)
+        try:
+            ops_obj = QOSOpsControl(True, **export_ops_params)
+            export_mgr.enable_export_qos_ops(self.cluster_id, '/cephfs_a/', ops_obj)
+        except Exception:
+            pass
+        cluster.disable_cluster_qos_bw(self.cluster_id)
+        # enable ops control for cluster and try to enable bw control for export
+        ops_obj = QOSOpsControl(True, **clust_ops_params)
+        cluster.enable_cluster_qos_ops(self.cluster_id, qos_type, ops_obj)
+        try:
+            bw_obj = QOSBandwidthControl(True, combined_bw_ctrl=False, **export_bw_params)
+            export_mgr.enable_export_qos_bw(self.cluster_id, '/cephfs_a/', bw_obj)
+        except Exception:
+            pass
+        # enbale both and verify export get
+        bw_obj = QOSBandwidthControl(True, combined_bw_ctrl=False, **clust_bw_params)
+        cluster.enable_cluster_qos_bw(self.cluster_id, qos_type, bw_obj)
+        try:
+            bw_obj = QOSBandwidthControl(True, combined_bw_ctrl=False, **export_bw_params)
+            export_mgr.enable_export_qos_bw(self.cluster_id, '/cephfs_a/', bw_obj)
+            ops_obj = QOSOpsControl(True, **export_ops_params)
+            export_mgr.enable_export_qos_ops(self.cluster_id, '/cephfs_a/', ops_obj)
+        except Exception:
+            req = QOS_REQ_BW_PARAMS['combined_bw_disabled'][qos_type.name]
+            if sorted(export_bw_params.keys()) != sorted(req):
+                return
+            if qos_type.name == 'PerClient':
+                return
+            req = QOS_REQ_OPS_PARAMS[qos_type.name]
+            if sorted(export_ops_params.keys()) != sorted(req):
+                return
+        out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
+        expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": False, "enable_iops_control": True}
+        bw_out = {}
+        ops_out = {}
+        for key in export_bw_params:
+            bw_out[QOSParams[key].value] = bytes_to_human(with_units_to_int(export_bw_params[key]))
+        for key in export_ops_params:
+            ops_out[QOSParams[key].value] = export_ops_params[key]
+        expected_out.update(bw_out)
+        expected_out.update(ops_out)
+        assert out == expected_out
+        # disable bandwidth control of export
+        export_mgr.disable_export_qos_bw(self.cluster_id, '/cephfs_a/')
+        out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
+        ops_out.update({"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "enable_iops_control": True})
+        assert out == ops_out
+        # disable ops control of export
+        export_mgr.disable_export_qos_ops(self.cluster_id, '/cephfs_a/')
+        out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
+        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}
+
+    @pytest.mark.parametrize("qos_type, clust_bw_params, clust_ops_params", [
+        # positive TCs
+        (QOSType['PerShare'], {'export_writebw': '100MB', 'export_readbw': '200MB'}, {'max_export_iops': 10000}),
+        (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_client_iops': 20000}),
+        (QOSType['PerShare_PerClient'],
+         {'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_export_iops': 3000, 'max_client_iops': 40000})
+    ])
+    @pytest.mark.parametrize("export_bw_params, export_ops_params", [
+        ({'export_writebw': '100MB', 'export_readbw': '200MB'}, {'max_export_iops': 10000}),
+        ({'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_client_iops': 20000}),
+        ({'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_export_iops': 3000, 'max_client_iops': 40000})
+        ])
+    def test_export_qos_bw_ops(self, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params):
+        self._do_mock_test(self._do_test_export_qos_bw_ops, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params)
+
 
 @pytest.mark.parametrize(
     "path,expected",
