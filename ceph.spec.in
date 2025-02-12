@@ -1544,7 +1544,7 @@ cmake .. \
     -DWITH_SYSTEM_QATZIP:BOOL=ON \
 %endif
 %if 0%{with seastar}
-    -DWITH_SEASTAR:BOOL=ON \
+    -DWITH_CRIMSON:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
     -DWITH_GRAFANA:BOOL=ON \

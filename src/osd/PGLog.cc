@@ -1070,7 +1070,7 @@ void PGLog::rebuild_missing_set_with_deletes(
   set_missing_may_contain_deletes();
 }
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 
 namespace {
   struct FuturizedShardStoreLogReader {
