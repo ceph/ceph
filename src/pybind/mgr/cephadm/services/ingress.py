@@ -22,6 +22,10 @@ class IngressService(CephService):
     TYPE = 'ingress'
     MAX_KEEPALIVED_PASS_LEN = 8
 
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
+
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
