@@ -376,12 +376,7 @@ struct lookup_slow_ghobject : public action_on_object_t {
 	 i != _objects.end();
 	 ++i) {
       f->open_array_section("object");
-      coll_t coll;
-      ghobject_t ghobj;
-      ceph::signedspan first_seek_time;
-      ceph::signedspan last_seek_time;
-      ceph::signedspan total_time;
-      std::tie(coll, ghobj, first_seek_time, last_seek_time, total_time) = *i;
+      auto [coll, ghobj, first_seek_time, last_seek_time, total_time] = *i;
 
       spg_t pgid;
       bool is_pg = coll.is_pg(&pgid);
