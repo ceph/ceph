@@ -299,7 +299,7 @@ void PerfCounters::tset(int idx, utime_t amt)
 
 void PerfCounters::tset(int idx, ceph::timespan amt)
 {
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   if (!m_cct->_conf->perf)
     return;
 #endif
