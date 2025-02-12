@@ -208,7 +208,8 @@ void PGBackend::rollback(
       PGBackend *pg) : hoid(hoid), pg(pg) {}
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
-      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, pg->get_parent()->whoami_shard().shard);
+      int s = static_cast<int>(pg->get_parent()->whoami_shard().shard);
+      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, s);
       pg->rollback_append(hoid, shard_size, &temp);
       temp.append(t);
       temp.swap(t);

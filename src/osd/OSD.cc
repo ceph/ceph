@@ -6567,10 +6567,12 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       return;
     }
 
-    int64_t shardid = cmd_getval_or<int64_t>(cmdmap, "shardid", shard_id_t::NO_SHARD);
+    int64_t shardid64 = cmd_getval_or<int64_t>(cmdmap, "shardid", static_cast<int64_t>(shard_id_t::NO_SHARD));
+    shard_id_t shardid = shard_id_t(static_cast<int8_t>(shardid64));
+
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
-    ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
-    spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
+    ghobject_t gobj(obj, ghobject_t::NO_GEN, shardid);
+    spg_t pgid(curmap->raw_pg_to_pg(rawpg), shardid);
     if (curmap->pg_is_ec(rawpg)) {
         if ((command != "injectdataerr") &&
 	    (command != "injectmdataerr") &&

@@ -230,8 +230,8 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
       continue;
     }
     if (!missing.is_missing(hoid)) {
-      ceph_assert(!have.count(i->shard));
-      have.insert(i->shard);
+      ceph_assert(!have.count(static_cast<int>(i->shard)));
+      have.insert(static_cast<int>(i->shard));
       ceph_assert(!shards.count(i->shard));
       shards.insert(make_pair(i->shard, *i));
     }
@@ -244,7 +244,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
 	 ++i) {
       if (error_shards.find(*i) != error_shards.end())
 	continue;
-      if (have.count(i->shard)) {
+      if (have.count(static_cast<int>(i->shard))) {
 	ceph_assert(shards.count(i->shard));
 	continue;
       }
@@ -254,7 +254,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
       const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
       if (hoid < info.last_backfill &&
 	  !missing.is_missing(hoid)) {
-	have.insert(i->shard);
+	have.insert(static_cast<int>(i->shard));
 	shards.insert(make_pair(i->shard, *i));
       }
     }
@@ -272,7 +272,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
 	}
 	if (error_shards.find(*i) != error_shards.end())
 	  continue;
-	have.insert(i->shard);
+	have.insert(static_cast<int>(i->shard));
 	shards.insert(make_pair(i->shard, *i));
       }
     }
@@ -535,7 +535,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
 	     res.returned.front().get<2>().begin();
 	   j != res.returned.front().get<2>().end();
 	   ++j) {
-	to_decode[j->first.shard] = std::move(j->second);
+	to_decode[static_cast<int>(j->first.shard)] = std::move(j->second);
       }
       dout(20) << __func__ << " going to decode: "
                << " wanted_to_read=" << wanted_to_read
@@ -669,7 +669,7 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
   set<int> already_read;
   const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
   for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
-    already_read.insert(i->shard);
+    already_read.insert(static_cast<int>(i->shard));
   dout(10) << __func__ << " have/error shards=" << already_read << dendl;
   map<pg_shard_t, vector<pair<int, int>>> shards;
   int r = get_remaining_shards(hoid, already_read, rop.want_to_read[hoid],
