@@ -546,29 +546,34 @@ class PrometheusService(CephadmService):
 
         # build service discovery end-point
         security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
-        port = self.mgr.service_discovery_port
-        mgr_addr = wrap_ipv6(self.mgr.get_mgr_ip())
-
-        protocol = 'https' if security_enabled else 'http'
-        self.mgr.get_mgmt_gw_internal_endpoint()
         if mgmt_gw_enabled:
-            service_discovery_url_prefix = f'{self.mgr.get_mgmt_gw_internal_endpoint()}'
+            service_discovery_url_prefixes = [f'{self.mgr.get_mgmt_gw_internal_endpoint()}']
         else:
-            service_discovery_url_prefix = f'{protocol}://{mgr_addr}:{port}'
-        srv_end_point = f'{service_discovery_url_prefix}/sd/prometheus/sd-config?'
+            port = self.mgr.service_discovery_port
+            protocol = 'https' if security_enabled else 'http'
+            mgr_ips = self.mgr.get_mgr_ips()
+            service_discovery_url_prefixes = [f'{protocol}://{wrap_ipv6(ip)}:{port}' for ip in mgr_ips]
 
-        node_exporter_cnt = len(self.mgr.cache.get_daemons_by_service('node-exporter'))
-        alertmgr_cnt = len(self.mgr.cache.get_daemons_by_service('alertmanager'))
-        haproxy_cnt = len(self.mgr.cache.get_daemons_by_type('ingress'))
-        node_exporter_sd_url = f'{srv_end_point}service=node-exporter' if node_exporter_cnt > 0 else None
-        alertmanager_sd_url = f'{srv_end_point}service=alertmanager' if alertmgr_cnt > 0 else None
-        haproxy_sd_url = f'{srv_end_point}service=haproxy' if haproxy_cnt > 0 else None
-        mgr_prometheus_sd_url = f'{srv_end_point}service=mgr-prometheus'  # always included
-        ceph_exporter_sd_url = f'{srv_end_point}service=ceph-exporter'  # always included
-        nvmeof_sd_url = f'{srv_end_point}service=nvmeof'  # always included
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
-        nfs_sd_url = f'{srv_end_point}service=nfs'  # always included
-        smb_sd_url = f'{srv_end_point}service=smb'  # always included
+        job_names = {'mgr-prometheus': 'ceph',
+                     'node-exporter': 'node',
+                     'ingress': 'haproxy'}
+        services = [
+            'mgr-prometheus',
+            'alertmanager',
+            'node-exporter',
+            'ceph-exporter',
+            'ingress',
+            'nvmeof',
+            'nfs',
+            'smb'
+        ]
+        service_urls = {
+            service: [f'{prefix}/sd/prometheus/sd-config?service={service}' for prefix in service_discovery_url_prefixes]
+            for service in services
+            if service == 'mgr-prometheus'
+            or bool(self.mgr.cache.get_daemons_by_service(service))
+            or bool(self.mgr.cache.get_daemons_by_type(service))
+        }
 
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
@@ -587,21 +592,15 @@ class PrometheusService(CephadmService):
         # generate the prometheus configuration
         context = {
             'alertmanager_url_prefix': '/alertmanager' if mgmt_gw_enabled else '/',
+            'security_enabled': security_enabled,
             'alertmanager_web_user': alertmanager_user,
             'alertmanager_web_password': alertmanager_password,
-            'security_enabled': security_enabled,
             'service_discovery_username': self.mgr.http_server.service_discovery.username,
             'service_discovery_password': self.mgr.http_server.service_discovery.password,
-            'mgr_prometheus_sd_url': mgr_prometheus_sd_url,
-            'node_exporter_sd_url': node_exporter_sd_url,
-            'alertmanager_sd_url': alertmanager_sd_url,
-            'haproxy_sd_url': haproxy_sd_url,
-            'ceph_exporter_sd_url': ceph_exporter_sd_url,
-            'nvmeof_sd_url': nvmeof_sd_url,
+            'job_names': job_names,
+            'service_urls': service_urls,
             'external_prometheus_targets': targets,
             'cluster_fsid': FSID,
-            'nfs_sd_url': nfs_sd_url,
-            'smb_sd_url': smb_sd_url,
             'clusters_credentials': cluster_credentials,
             'federate_path': federate_path
         }
@@ -686,15 +685,7 @@ class PrometheusService(CephadmService):
         deps.append(str(port))
         deps.append(str(mgr.service_discovery_port))
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
-        security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
-
-        if not mgmt_gw_enabled:
-            # add an explicit dependency on the active manager. This will force to
-            # re-deploy prometheus if the mgr has changed (due to a fail-over i.e).
-            # when mgmt_gw is enabled there's no need for such dep as mgmt-gw wil
-            # route to the active mgr automatically
-            deps.append(mgr.get_active_mgr().name())
-
+        security_enabled, _, _ = mgr._get_security_config()
         if security_enabled:
             alertmanager_user, alertmanager_password = mgr._get_alertmanager_credentials()
             prometheus_user, prometheus_password = mgr._get_prometheus_credentials()
@@ -703,16 +694,15 @@ class PrometheusService(CephadmService):
             if alertmanager_user and alertmanager_password:
                 deps.append(f'{utils.md5_hash(alertmanager_user + alertmanager_password)}')
 
-        # add a dependency since url_prefix depends on the existence of mgmt-gateway
-        deps += [d.name() for d in mgr.cache.get_daemons_by_service('mgmt-gateway')]
-        # add a dependency since enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
-        deps += [d.name() for d in mgr.cache.get_daemons_by_service('oauth2-proxy')]
-
-        # add dependency on ceph-exporter daemons
-        deps += [d.name() for d in mgr.cache.get_daemons_by_service('ceph-exporter')]
-        deps += [s for s in ['node-exporter', 'alertmanager'] if mgr.cache.get_daemons_by_service(s)]
-        if len(mgr.cache.get_daemons_by_type('ingress')) > 0:
-            deps.append('ingress')
+        # Adding other services as deps (with corresponding justification):
+        # ceph-exporter: scraping target
+        # node-exporter: scraping target
+        # ingress      : scraping target
+        # alert-manager: part of prometheus configuration
+        # mgmt-gateway : since url_prefix depends on the existence of mgmt-gateway
+        # oauth2-proxy : enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
+        for svc in ['mgmt-gateway', 'oauth2-proxy', 'alertmanager', 'node-exporter', 'ceph-exporter', 'ingress']:
+            deps += f'{svc}_configured:{bool(mgr.cache.get_daemons_by_service(svc))}'
 
         return sorted(deps)
 

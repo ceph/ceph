@@ -943,7 +943,7 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ips", lambda _: ['::1'])
     def test_prometheus_config_security_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1), rgw_frontend_type='beast')
@@ -1024,18 +1024,6 @@ class TestMonitoring:
                     honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
-
-                  - job_name: 'nvmeof'
-                    http_sd_configs:
-                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
-
-                  - job_name: 'nfs'
-                    http_sd_configs:
-                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nfs
-
-                  - job_name: 'smb'
-                    http_sd_configs:
-                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=smb
 
                 """).lstrip()
 
