@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
 #include "include/stringify.h"
 #include "msg/Messenger.h"
