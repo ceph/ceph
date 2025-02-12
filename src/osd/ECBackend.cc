@@ -374,13 +374,13 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   for (set<shard_id_t>::iterator i = op.missing_on_shards.begin();
        i != op.missing_on_shards.end();
        ++i) {
-    target[*i] = &(op.returned_data[*i]);
+    target[static_cast<int>(*i)] = &(op.returned_data[static_cast<int>(*i)]);
   }
   map<int, bufferlist> from;
   for(map<pg_shard_t, bufferlist>::iterator i = to_read.get<2>().begin();
       i != to_read.get<2>().end();
       ++i) {
-    from[i->first.shard] = std::move(i->second);
+    from[static_cast<int>(i->first.shard)] = std::move(i->second);
   }
   dout(10) << __func__ << ": " << from << dendl;
   int r;
@@ -635,12 +635,12 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       for (set<pg_shard_t>::iterator mi = op.missing_on.begin();
 	   mi != op.missing_on.end();
 	   ++mi) {
-	ceph_assert(op.returned_data.count(mi->shard));
+	ceph_assert(op.returned_data.count(static_cast<int>(mi->shard)));
 	m->pushes[*mi].push_back(PushOp());
 	PushOp &pop = m->pushes[*mi].back();
 	pop.soid = op.hoid;
 	pop.version = op.v;
-	pop.data = op.returned_data[mi->shard];
+	pop.data = op.returned_data[static_cast<int>(mi->shard)];
 	dout(10) << __func__ << ": before_progress=" << op.recovery_progress
 		 << ", after_progress=" << after_progress
 		 << ", pop.data.length()=" << pop.data.length()
@@ -1124,11 +1124,11 @@ void ECBackend::handle_sub_read(
 	  dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
 	  bufferhash h(-1);
 	  h << bl;
-	  if (h.digest() != hinfo->get_chunk_hash(shard)) {
+	  if (h.digest() != hinfo->get_chunk_hash(static_cast<int>(shard))) {
 	    get_parent()->clog_error() << "Bad hash for " << i->first << " digest 0x"
-				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec;
+				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(static_cast<int>(shard)) << dec;
 	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
-		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
+		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(static_cast<int>(shard)) << dec << dendl;
 	    r = -EIO;
 	    goto error;
 	  }
@@ -1305,7 +1305,7 @@ void ECBackend::handle_sub_read_reply(
           iter->second.returned.front().get<2>().begin();
         j != iter->second.returned.front().get<2>().end();
         ++j) {
-        have.insert(j->first.shard);
+        have.insert(static_cast<int>(j->first.shard));
         dout(20) << __func__ << " have shard=" << j->first.shard << dendl;
       }
       map<int, vector<pair<int, int>>> dummy_minimum;
@@ -1800,11 +1800,11 @@ int ECBackend::be_deep_scrub(
 	return 0;
       }
 
-      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+      if (hinfo->get_chunk_hash(static_cast<int>(get_parent()->whoami_shard().shard)) !=
 	  pos.data_hash.digest()) {
 	dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
 		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"
-		<< hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
+		<< hinfo->get_chunk_hash(static_cast<int>(get_parent()->whoami_shard().shard))
 		<< std::dec << dendl;
 	o.ec_hash_mismatch = true;
 	return 0;
