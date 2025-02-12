@@ -9851,17 +9851,6 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       dout(10) << " linkmerge and destdnl is referent. oldrefi " << *oldrefi << dendl;
       ceph_assert(straydn && oldrefi);  // moving referent inode to straydn.
 
-      // don't do nlink-- targeti as it's linkmerge, only remove referent inode from list
-      if (oldin->is_auth()) {
-	auto pi = oldin->project_inode(mdr);
-	pi.inode->version = oldin->pre_dirty();
-        auto ltpi = pi.inode.get();
-
-        // Remove referent inode from primary if destdnl exists and is referent
-        ltpi->remove_referent_ino(oldrefi->ino());
-        dout(20) << "_rename_prepare linkmerge - destdnl exists and is referent, referent_inodes "
-                 << std::hex << ltpi->get_referent_inodes() << "referent ino removed " << oldrefi->ino() << dendl;
-      }
       // link--, and move.
       if (destdn->is_auth()) {
 	auto pi= oldrefi->project_inode(mdr); //project_snaprealm
