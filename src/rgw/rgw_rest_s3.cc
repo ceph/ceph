@@ -1887,7 +1887,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
-      dump_time(s, "LastModified", iter->meta.mtime);
+      dump_time_exact_seconds(s, "LastModified", iter->meta.mtime);
       if (!iter->is_delete_marker()) {
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
@@ -1980,7 +1980,7 @@ void RGWListBucket_ObjStore_S3::send_response()
 	s->formatter->open_object_section("dummy");
       }
       dump_urlsafe(s ,encode_key, "Key", key.name);
-      dump_time(s, "LastModified", iter->meta.mtime);
+      dump_time_exact_seconds(s, "LastModified", iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
@@ -2054,7 +2054,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
-      dump_time(s, "LastModified", iter->meta.mtime);
+      dump_time_exact_seconds(s, "LastModified", iter->meta.mtime);
       if (!iter->is_delete_marker()) {
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
@@ -2124,7 +2124,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       rgw_obj_key key(iter->key);
       s->formatter->open_array_section("Contents");
       dump_urlsafe(s, encode_key, "Key", key.name);
-      dump_time(s, "LastModified", iter->meta.mtime);
+      dump_time_exact_seconds(s, "LastModified", iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
@@ -3764,7 +3764,7 @@ void RGWCopyObj_ObjStore_S3::send_response()
     send_partial_response(0);
 
   if (op_ret == 0) {
-    dump_time(s, "LastModified", mtime);
+    dump_time_exact_seconds(s, "LastModified", mtime);
     if (!etag.empty()) {
       s->formatter->dump_format("ETag", "\"%s\"",etag.c_str());
     }
@@ -4538,7 +4538,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
       rgw::sal::MultipartPart* part = iter->second.get();
       s->formatter->open_object_section("Part");
 
-      dump_time(s, "LastModified", part->get_mtime());
+      dump_time_exact_seconds(s, "LastModified", part->get_mtime());
 
       s->formatter->dump_unsigned("PartNumber", part->get_num());
       s->formatter->dump_format("ETag", "\"%s\"", part->get_etag().c_str());
