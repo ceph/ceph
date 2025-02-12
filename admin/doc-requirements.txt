@@ -1,4 +1,5 @@
-Sphinx == 5.0.2
+# RTD theme does not work with >= 7 https://github.com/readthedocs/readthedocs.org/issues/10279
+Sphinx < 7
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 git+https://github.com/vlasovskikh/funcparserlib.git
 breathe >= 4.20.0,!=4.33
@@ -10,11 +11,13 @@ pcpp
 prettytable
 sphinx-autodoc-typehints == 1.18.3
 sphinx-prompt
-sphinx_rtd_theme == 1.0.0
+sphinx_rtd_theme
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-mermaid
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
-mistune < 2.0.0
+# m2r2 replaces mistune https://github.com/CrossNox/m2r2?tab=readme-ov-file#m2r-the-original
+m2r2
 natsort
+docutils < 0.20
