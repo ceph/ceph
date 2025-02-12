@@ -153,6 +153,7 @@ class HostAssignment(object):
                  primary_daemon_type: Optional[str] = None,
                  per_host_daemon_type: Optional[str] = None,
                  rank_map: Optional[Dict[int, Dict[int, Optional[str]]]] = None,
+                 blocking_daemon_hosts: Optional[List[orchestrator.HostSpec]] = None,
                  ):
         assert spec
         self.spec = spec  # type: ServiceSpec
@@ -160,6 +161,7 @@ class HostAssignment(object):
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.unreachable_hosts: List[orchestrator.HostSpec] = unreachable_hosts
         self.draining_hosts: List[orchestrator.HostSpec] = draining_hosts
+        self.blocking_daemon_hosts: List[orchestrator.HostSpec] = blocking_daemon_hosts or []
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
@@ -333,10 +335,28 @@ class HostAssignment(object):
         existing = existing_active + existing_standby
 
         # build to_add
+        blocking_daemon_hostnames = [
+            h.hostname for h in self.blocking_daemon_hosts
+        ]
+        unreachable_hostnames = [
+            h.hostname for h in self.unreachable_hosts
+        ]
         if not count:
-            to_add = [dd for dd in others if dd.hostname not in [
-                h.hostname for h in self.unreachable_hosts]]
+            to_add = [
+                dd for dd in others if (
+                    dd.hostname not in blocking_daemon_hostnames
+                    and dd.hostname not in unreachable_hostnames
+                )
+            ]
         else:
+            if blocking_daemon_hostnames:
+                to_remove.extend([
+                    dd for dd in existing if dd.hostname in blocking_daemon_hostnames
+                ])
+                existing = [
+                    dd for dd in existing if dd.hostname not in blocking_daemon_hostnames
+                ]
+
             # The number of new slots that need to be selected in order to fulfill count
             need = count - len(existing)
 
@@ -356,7 +376,7 @@ class HostAssignment(object):
                 for dp in matching_dps:
                     if need <= 0:
                         break
-                    if dp.hostname in related_service_hosts and dp.hostname not in [h.hostname for h in self.unreachable_hosts]:
+                    if dp.hostname in related_service_hosts and dp.hostname not in unreachable_hostnames:
                         logger.debug(f'Preferring {dp.hostname} for service {self.service_name} as related daemons have been placed there')
                         to_add.append(dp)
                         need -= 1  # this is last use of need so it can work as a counter
@@ -370,7 +390,10 @@ class HostAssignment(object):
             for dp in others:
                 if need <= 0:
                     break
-                if dp.hostname not in [h.hostname for h in self.unreachable_hosts]:
+                if (
+                    dp.hostname not in unreachable_hostnames
+                    and dp.hostname not in blocking_daemon_hostnames
+                ):
                     to_add.append(dp)
                     need -= 1  # this is last use of need in this function so it can work as a counter
 
