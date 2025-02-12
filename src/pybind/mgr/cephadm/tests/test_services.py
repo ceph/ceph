@@ -2540,7 +2540,7 @@ class TestIngressService:
             '\n'
             'NFSv4 {\n'
             '        Delegations = false;\n'
-            "        RecoveryBackend = 'rados_cluster';\n"
+            '        RecoveryBackend = "rados_cluster";\n'
             '        Minor_Versions = 1, 2;\n'
             '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
             '}\n'
