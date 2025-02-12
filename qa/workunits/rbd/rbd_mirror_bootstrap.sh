@@ -62,12 +62,8 @@ testlog "TEST: verify rx-tx direction"
 rbd --cluster ${CLUSTER1} --pool ${PARENT_POOL} mirror pool info --format json | jq -e '.peers[0].direction == "rx-tx"'
 rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool info --format json | jq -e '.peers[0].direction == "rx-tx"'
 
-create_image ${CLUSTER1} ${PARENT_POOL} image1
-create_image ${CLUSTER2} ${PARENT_POOL} image2
-
-enable_mirror ${CLUSTER1} ${PARENT_POOL} image1
-enable_mirror ${CLUSTER2} ${PARENT_POOL} image2
-
+create_image_and_enable_mirror ${CLUSTER1} ${PARENT_POOL} image1
+create_image_and_enable_mirror ${CLUSTER2} ${PARENT_POOL} image2
 create_image_and_enable_mirror ${CLUSTER1} ${PARENT_POOL}/${NS1} image1
 create_image_and_enable_mirror ${CLUSTER2} ${PARENT_POOL}/${NS1} image2
 
