@@ -10209,6 +10209,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
     // processed after primary dentry.
     if (srcdnl->is_primary() && !srci->is_dir() && !destdn->is_auth())
       metablob->add_primary_dentry(srcdn, srci, true);
+    // TODO - if srcdnl->is_referent() - journal referent inode as remote dentry
     metablob->add_null_dentry(srcdn, true);
   } else
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
@@ -10966,12 +10967,24 @@ void Server::_commit_peer_rename(const MDRequestRef& mdr, int r,
 {
   dout(10) << "_commit_peer_rename " << *mdr << " r=" << r << dendl;
 
-  CInode *in = destdn->get_linkage()->get_inode();
-  // TODO : migrated_stray applies to referent inodes ?
+  CInode *in = nullptr;
+  /* TODO: This is definitely true for the case of renaming src referent dnl but
+   * is this valid in all cases ?
+   *   - the remote inode is never migrated, so we are good with below condition
+       - migrated_stray applies to referent inodes ? The stray migration rename
+         is never a referent link. It's always a primary link. So add an assert
+	 to validate it.
+   */
+  if (destdn->get_linkage()->is_referent())
+    in = destdn->get_linkage()->get_referent_inode();
+  else
+    in = destdn->get_linkage()->get_inode();
 
   inodeno_t migrated_stray;
-  if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray())
+  if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray()) {
+    ceph_assert(!destdn->get_linkage()->is_referent());
     migrated_stray = in->ino();
+  }
 
   MDSContext::vec finished;
   if (r == 0) {
