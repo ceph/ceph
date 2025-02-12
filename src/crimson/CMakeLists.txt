@@ -1,5 +1,5 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
-set(crimson_cflag_definitions "WITH_SEASTAR=1")
+set(crimson_cflag_definitions "WITH_CRIMSON=1")
 # disable concepts to address https://github.com/boostorg/asio/issues/312
 if((CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10) OR
    (CMAKE_CXX_COMPILER_ID STREQUAL Clang))

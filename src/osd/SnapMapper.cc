@@ -79,7 +79,7 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
   */
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/log.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
   template <typename ValuesT = void>
@@ -203,7 +203,7 @@ int OSDriver::get_next_or_current(
     return -ENOENT;
   }
 }
-#endif // WITH_SEASTAR
+#endif // WITH_CRIMSON
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
@@ -887,7 +887,7 @@ void SnapMapper::record_purged_snaps(
 }
 
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 bool SnapMapper::Scrubber::_parse_p()
 {
   if (!psit->valid()) {
@@ -991,7 +991,7 @@ void SnapMapper::Scrubber::run()
   psit = ObjectMap::ObjectMapIterator();
   mapit = ObjectMap::ObjectMapIterator();
 }
-#endif // !WITH_SEASTAR
+#endif // !WITH_CRIMSON
 
 
 // -------------------------------------
@@ -1017,7 +1017,7 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
     LEGACY_MAPPING_PREFIX;
 }
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 /* Octopus modified the SnapMapper key format from
  *
  *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
@@ -1108,4 +1108,4 @@ int SnapMapper::convert_legacy(
   }
   return 0;
 }
-#endif // !WITH_SEASTAR
+#endif // !WITH_CRIMSON
