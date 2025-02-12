@@ -528,6 +528,9 @@ export class TaskMessageService {
     ),
     'cephfs/smb/standalone/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbUsersgroups(metadata)
+    ),
+    'smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbCluster(metadata)
     )
   };
 

@@ -40,11 +40,12 @@ describe('SmbService', () => {
         resource_type: CLUSTER_RESOURCE,
         cluster_id: 'clusterUserTest',
         auth_mode: 'active-directory',
+        intent: 'present',
         domain_settings: {
           realm: 'DOMAIN1.SINK.TEST',
           join_sources: [
             {
-              source_type: 'resource',
+              sourceType: 'resource',
               ref: 'join1-admin'
             }
           ]

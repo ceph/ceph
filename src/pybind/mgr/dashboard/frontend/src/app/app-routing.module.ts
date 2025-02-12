@@ -461,6 +461,11 @@ const routes: Routes = [
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
               {
+                path: `${URLVerbs.EDIT}/:cluster_id`,
+                component: SmbClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
+              {
                 path: `ad/${URLVerbs.CREATE}`,
                 component: SmbJoinAuthFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }

@@ -8,8 +8,9 @@ export interface SMBCluster {
   user_group_settings?: JoinSource[];
   custom_dns?: string[];
   placement?: CephServicePlacement;
-  clustering?: typeof CLUSTERING;
+  clustering?: Clustering;
   public_addrs?: PublicAddress[];
+  count?: number;
 }
 
 export interface ClusterRequestModel {
@@ -45,7 +46,7 @@ export interface DomainSettings {
 }
 
 export interface JoinSource {
-  source_type?: string;
+  sourceType: string;
   ref: string;
 }
 
@@ -143,3 +144,5 @@ export const USERSGROUPS_RESOURCE = 'ceph.smb.usersgroups' as const;
 export const PROVIDER = 'samba-vfs';
 
 export const SHARE_URL = '/cephfs/smb/share/';
+
+type Clustering = 'default' | 'never' | 'always';
