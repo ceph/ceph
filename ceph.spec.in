@@ -91,7 +91,7 @@
 %bcond_with lua_packages
 %endif
 %endif
-%bcond_with seastar
+%bcond_with crimson
 %if 0%{?suse_version} || 0%{?openEuler}
 %bcond_with jaeger
 %else
@@ -150,7 +150,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{with seastar}
+%if 0%{with crimson}
 %{!?gts_version: %global gts_version 13}
 %else
 %if 0%{?rhel} == 8
@@ -325,7 +325,7 @@ BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
 BuildRequires:  lmdb-devel
-%if 0%{with seastar} || 0%{with jaeger}
+%if 0%{with crimson} || 0%{with jaeger}
 BuildRequires:  yaml-cpp-devel >= 0.6
 %endif
 %if 0%{with amqp_endpoint}
@@ -387,7 +387,7 @@ BuildRequires:  utf8proc-devel
 BuildRequires:  qatlib-devel
 BuildRequires:  qatzip-devel
 %endif
-%if 0%{with seastar}
+%if 0%{with crimson}
 BuildRequires:  c-ares-devel
 BuildRequires:  gnutls-devel
 BuildRequires:  hwloc-devel
@@ -514,7 +514,7 @@ BuildRequires:  redhat-rpm-config
 %if 0%{?openEuler}
 BuildRequires:  openEuler-rpm-config
 %endif
-%if 0%{with seastar}
+%if 0%{with crimson}
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:  cryptopp-devel
 %endif
@@ -943,7 +943,7 @@ Provides:	ceph-test:/usr/bin/ceph-osdomap-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	sudo
 Requires:	libstoragemgmt
-%if 0%{with seastar}
+%if 0%{with crimson}
 Requires:	protobuf
 %endif
 %if 0%{?weak_deps}
@@ -954,7 +954,7 @@ ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
-%if 0%{with seastar}
+%if 0%{with crimson}
 %package crimson-osd
 Summary:	Ceph Object Storage Daemon (crimson)
 %if 0%{?suse_version}
@@ -1431,7 +1431,7 @@ export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
 export LDFLAGS="$RPM_LD_FLAGS"
 
-%if 0%{with seastar}
+%if 0%{with crimson}
 # seastar uses longjmp() to implement coroutine. and this annoys longjmp_chk()
 export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 # remove from CFLAGS too because it causes the arrow submodule to fail with:
@@ -1543,7 +1543,7 @@ cmake .. \
     -DWITH_SYSTEM_QATLIB:BOOL=ON \
     -DWITH_SYSTEM_QATZIP:BOOL=ON \
 %endif
-%if 0%{with seastar}
+%if 0%{with crimson}
     -DWITH_CRIMSON:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
@@ -1591,7 +1591,7 @@ pushd %{_vpath_builddir}
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
 popd
 
-%if 0%{with seastar}
+%if 0%{with crimson}
 # package crimson-osd with the name of ceph-osd
 install -m 0755 %{buildroot}%{_bindir}/crimson-osd %{buildroot}%{_bindir}/ceph-osd
 %endif
@@ -2364,7 +2364,7 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
-%if 0%{with seastar}
+%if 0%{with crimson}
 %files crimson-osd
 %{_bindir}/crimson-osd
 %endif
@@ -2614,7 +2614,7 @@ fi
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-dedup-tool
 %{_bindir}/ceph-dedup-daemon
-%if 0%{with seastar}
+%if 0%{with crimson}
 %{_bindir}/crimson-store-nbd
 %endif
 %{_mandir}/man8/ceph-debugpack.8*
