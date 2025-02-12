@@ -2599,14 +2599,13 @@ get_newest_group_snapshot_id()
     # TODO - have seen this next cmd fail with rc=2 and an empty list
     # this should not happen, but if it does then retry as a temp workaround
     try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" &&
-      { _group_snap_id=$(xmlstarlet sel -t -v "//group_snaps/group_snap[state='complete' and position()=last()]/snapshot" "$CMD_STDOUT" | awk -F. '{print $NF}'); return; }
+      { _group_snap_id=$(xmlstarlet sel -t -v "//group_snaps/group_snap[state='complete' and position()=last()]/id" "$CMD_STDOUT" ); return; }
 
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
         echo -e "${RED}RETRYING COMMAND${NO_COLOUR}";
         sleep ${s}
         try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" && {
-          _group_snap_id=$(xmlstarlet sel -t -v "//group_snaps/group_snap[state='complete' and position()=last()]/snapshot" "$CMD_STDOUT" | awk -F. '{print $NF}'); return;
-        }
+          _group_snap_id=$(xmlstarlet sel -t -v "//group_snaps/group_snap[state='complete' and position()=last()]/id" "$CMD_STDOUT" ); return; }
     done
     fail "Failed to execute command"
     return 1
