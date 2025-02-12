@@ -1,5 +1,6 @@
 
 #include "RoleSelector.h"
+#include "common/strtol.h"
 
 int MDSRoleSelector::parse_rank(
     const FSMap &fsmap,

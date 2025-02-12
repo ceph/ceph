@@ -15,6 +15,7 @@
 #include <sstream>
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"

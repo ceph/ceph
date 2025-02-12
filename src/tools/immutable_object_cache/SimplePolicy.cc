@@ -4,6 +4,8 @@
 #include "common/debug.h"
 #include "SimplePolicy.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix
