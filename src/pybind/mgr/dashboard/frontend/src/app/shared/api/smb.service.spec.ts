@@ -40,7 +40,7 @@ describe('SmbService', () => {
           realm: 'DOMAIN1.SINK.TEST',
           join_sources: [
             {
-              source_type: 'resource',
+              sourceType: 'resource',
               ref: 'join1-admin'
             }
           ]

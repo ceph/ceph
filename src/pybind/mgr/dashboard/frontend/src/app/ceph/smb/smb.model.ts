@@ -8,8 +8,9 @@ export interface SMBCluster {
   user_group_settings?: JoinSource[];
   custom_dns?: string[];
   placement?: CephServicePlacement;
-  clustering?: typeof CLUSTERING;
+  clustering?: Clustering;
   public_addrs?: PublicAddress;
+  count?: number;
 }
 
 export interface ClusterRequestModel {
@@ -43,13 +44,15 @@ export interface DomainSettings {
   realm?: string;
   join_sources?: JoinSource[];
 }
+
+export interface JoinSource {
+  sourceType: string;
+  ref: string;
+}
+
 export interface PublicAddress {
   address: string;
   destination: string;
-}
-export interface JoinSource {
-  source_type: string;
-  ref: string;
 }
 
 export const CLUSTERING = {
@@ -136,6 +139,8 @@ interface Value {
 }
 
 type Intent = 'present' | 'removed';
+
+type Clustering = 'default' | 'never' | 'always';
 
 export const CLUSTER_RESOURCE = 'ceph.smb.cluster';
 
