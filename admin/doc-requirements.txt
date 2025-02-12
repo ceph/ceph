@@ -18,3 +18,4 @@ sphinxcontrib-openapi
 sphinxcontrib-seqdiag
 m2r2
 natsort
+docutils==0.21.2
