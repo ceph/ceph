@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
@@ -9,10 +9,11 @@ import {
   CLUSTERING,
   PLACEMENT,
   RESOURCE,
-  DomainSettings,
   JoinSource,
+  DomainSettings,
   CLUSTER_RESOURCE,
-  ClusterRequestModel
+  ClusterRequestModel,
+  SMBCluster
 } from '../smb.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -31,6 +32,7 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
+import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
 
 @Component({
   selector: 'cd-smb-cluster-form',
@@ -49,6 +51,9 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   resource: string;
   icons = Icons;
   domainSettingsObject: DomainSettings;
+  isEdit = false;
+  cluster_id: string;
+  clusterResponse: SMBCluster;
   modalData$!: Observable<DomainSettings>;
 
   constructor(
@@ -59,31 +64,74 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     private orchService: OrchestratorService,
     private modalService: ModalCdsService,
     private taskWrapperService: TaskWrapperService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     super();
+
     this.resource = $localize`Cluster`;
     this.modalData$ = this.smbService.modalData$;
   }
+
   ngOnInit() {
-    this.action = this.actionLabels.CREATE;
+    if (this.router.url.startsWith(`/cephfs/smb/${URLVerbs.EDIT}`)) {
+      this.isEdit = true;
+    }
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
       this.domainSettingsObject = data;
       this.smbForm.get('domain_settings').setValue(data?.realm);
     });
-    this.createForm();
 
-    this.hostsAndLabels$ = forkJoin({
-      hosts: this.hostService.getAllHosts(),
-      labels: this.hostService.getLabels()
-    }).pipe(
-      map(({ hosts, labels }) => ({
-        hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
-        labels: labels.map((label: string) => ({ content: label }))
-      }))
-    );
+    this.createForm();
+    if (this.isEdit) {
+      this.action = this.actionLabels.EDIT;
+      this.route.params.subscribe((params: { cluster_id: string }) => {
+        this.cluster_id = params.cluster_id;
+      });
+
+      this.smbService.getCluster(this.cluster_id).subscribe((res: SMBCluster) => {
+        this.clusterResponse = res;
+
+        const responseClustering = this.clusterResponse.clustering;
+        const clusteringValue =
+          typeof responseClustering === 'object'
+            ? Object.values(responseClustering).find((value) => value) || ''
+            : responseClustering || '';
+        const upperFirstPipe = new UpperFirstPipe();
+        const upperCaseCluster = upperFirstPipe.transform(clusteringValue);
+
+        const customDnsFormArray = <FormArray>this.smbForm.get('custom_dns');
+        const customDnsList = this.clusterResponse.custom_dns;
+
+        customDnsList.forEach((dns: string) => {
+          customDnsFormArray.push(new FormControl(dns));
+        });
+
+        if (this.clusterResponse.auth_mode == AUTHMODE.activeDirectory) {
+          this.domainSettingsObject = this.clusterResponse?.domain_settings;
+          this.smbForm.get('domain_settings').setValue(this.domainSettingsObject.realm);
+        } else {
+          this.smbForm.get('joinSources').setValue(this.clusterResponse.user_group_settings);
+        }
+        this.smbForm.get('cluster_id').setValue(this.clusterResponse.cluster_id);
+        this.smbForm.get('auth_mode').setValue(this.clusterResponse.auth_mode);
+        this.smbForm.get('clustering').setValue(upperCaseCluster);
+      });
+    } else {
+      this.action = this.actionLabels.CREATE;
+      this.hostsAndLabels$ = forkJoin({
+        hosts: this.hostService.getAllHosts(),
+        labels: this.hostService.getLabels()
+      }).pipe(
+        map(({ hosts, labels }) => ({
+          hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+          labels: labels.map((label: string) => ({ content: label }))
+        }))
+      );
+    }
     this.orchStatus$ = this.orchService.status();
     this.allClustering = Object.values(CLUSTERING);
+    this.loadingReady();
     this.onAuthModeChange();
   }
 
@@ -150,9 +198,17 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     } else if (authMode === AUTHMODE.User) {
       const control = new FormControl('', Validators.required);
       userGroupSettingsControl.push(control);
+      if (domainSettingsControl) {
+        domainSettingsControl.setValue('');
+        this.domainSettingsObject = { realm: '', join_sources: [] };
+      }
       domainSettingsControl.setErrors(null);
-      domainSettingsControl.clearValidators();
       userGroupSettingsControl.setValidators(Validators.required);
+
+      if (domainSettingsControl) {
+        domainSettingsControl.clearValidators();
+        domainSettingsControl.updateValueAndValidity();
+      }
     } else {
       if (userGroupSettingsControl) {
         userGroupSettingsControl.clearValidators();
@@ -166,27 +222,50 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     const domainSettingsControl = this.smbForm.get('domain_settings');
     const authMode = this.smbForm.get('auth_mode').value;
 
+    const values = this.smbForm.getRawValue();
+    const serviceSpec: object = {
+      placement: {}
+    };
+    switch (values['placement']) {
+      case PLACEMENT.host:
+        if (values['hosts'].length > 0) {
+          serviceSpec['placement']['hosts'] = this.selectedHosts;
+        }
+        break;
+      case PLACEMENT.label:
+        serviceSpec['placement']['label'] = this.selectedLabels;
+        break;
+    }
+
     // Domain Setting should be mandatory if authMode is "Active Directory"
     if (authMode === AUTHMODE.activeDirectory && !domainSettingsControl.value) {
       domainSettingsControl.setErrors({ required: true });
       this.smbForm.markAllAsTouched();
       return;
     }
-    const component = this;
+    if (this.isEdit) {
+      this.handleTaskRequest(URLVerbs.EDIT);
+    } else {
+      this.handleTaskRequest(URLVerbs.CREATE);
+    }
+  }
+
+  handleTaskRequest(urlVerb: string) {
     const requestModel = this.buildRequest();
     const BASE_URL = 'smb/cluster';
+    const component = this;
     const cluster_id = this.smbForm.get('cluster_id').value;
-    const taskUrl = `${BASE_URL}/${URLVerbs.CREATE}`;
+
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(taskUrl, { cluster_id }),
+        task: new FinishedTask(`${BASE_URL}/${urlVerb}`, { cluster_id }),
         call: this.smbService.createCluster(requestModel)
       })
       .subscribe({
         complete: () => {
           this.router.navigate([`cephfs/smb`]);
         },
-        error() {
+        error: () => {
           component.smbForm.setErrors({ cdSubmitButton: true });
         }
       });
@@ -199,11 +278,11 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       .filter((source: { ref: string }) => source.ref)
       .map((source: { ref: string }) => ({
         ref: source.ref,
-        source_type: RESOURCE.Resource
+        sourceType: RESOURCE.Resource
       }));
 
     const joinSourceObj = joinSources.map((source: JoinSource) => ({
-      source_type: RESOURCE.Resource,
+      sourceType: RESOURCE.Resource,
       ref: source.ref
     }));
 
@@ -272,14 +351,18 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   editDomainSettingsModal() {
-    this.modalService.show(SmbDomainSettingModalComponent, {
-      domainSettingsObject: this.domainSettingsObject
-    });
+    if (!this.isEdit) {
+      this.modalService.show(SmbDomainSettingModalComponent, {
+        domainSettingsObject: this.domainSettingsObject
+      });
+    }
   }
 
   deleteDomainSettingsModal() {
-    this.smbForm.get('domain_settings')?.setValue('');
-    this.domainSettingsObject = { realm: '', join_sources: [] };
+    if (!this.isEdit) {
+      this.smbForm.get('domain_settings')?.setValue('');
+      this.domainSettingsObject = { realm: '', join_sources: [] };
+    }
   }
 
   get joinSources() {

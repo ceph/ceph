@@ -403,10 +403,6 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
-    // smb
-    'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.smbCluster(metadata)
-    ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
       this.commonOperations.update,
@@ -497,6 +493,12 @@ export class TaskMessageService {
     ),
     'smb/share/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbShare(metadata)
+    ),
+    'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.smbCluster(metadata)
+    ),
+    'smb/cluster/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbCluster(metadata)
     )
   };
 
