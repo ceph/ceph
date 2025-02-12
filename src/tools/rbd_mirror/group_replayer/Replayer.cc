@@ -538,7 +538,9 @@ void Replayer<I>::scan_for_unsynced_group_snapshots() {
       }
       auto prev_remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
           &prev_remote_snap->snapshot_namespace);
-      if (prev_remote_snap_ns && prev_remote_snap_ns->is_demoted()) {
+      if (prev_remote_snap_ns &&
+          (prev_remote_snap_ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ||
+           prev_remote_snap_ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED)) {
         break;
       }
     }
