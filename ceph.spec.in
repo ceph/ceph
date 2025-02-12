@@ -694,6 +694,7 @@ Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel} >= 9
 Requires:       python%{python3_pkgversion}-grpcio
 Requires:       python%{python3_pkgversion}-grpcio-tools
+Requires:       python%{python3_pkgversion}-xmltodict
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
@@ -703,12 +704,14 @@ Recommends:     python%{python3_pkgversion}-saml
 %if 0%{?fedora} || 0%{?rhel} <= 8
 Recommends:     python%{python3_pkgversion}-grpcio
 Recommends:     python%{python3_pkgversion}-grpcio-tools
+Requires:       python%{python3_pkgversion}-xmltodict
 %endif
 %endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-Routes
+Requires:       python%{python3_pkgversion}-xmltodict
 Recommends:     python%{python3_pkgversion}-python3-saml
 %endif
 %description mgr-dashboard
