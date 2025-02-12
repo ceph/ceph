@@ -123,6 +123,7 @@ void BootstrapRequest<I>::send() {
     if (r < 0 && r != -ENOENT) {
       derr << "failed reading metadata: " << cpp_strerror(r) << dendl;
     } else if (r == 0) {
+      dout(10) << "local group resync requested" << dendl;
       *m_resync_requested = true;
     }
   }
