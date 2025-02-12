@@ -16,5 +16,5 @@ typed-ast
 sphinxcontrib-mermaid
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
-mistune < 2.0.0
+m2r2
 natsort
