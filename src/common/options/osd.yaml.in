@@ -543,15 +543,14 @@ options:
   - osd_scrub_reservation_timeout
   with_legacy: false
 # when a replica does not respond to scrub resource request
-# Note: disable by using a very large value
+# Note: disable by setting to 0
 - name: osd_scrub_reservation_timeout
   type: millisecs
   level: advanced
-  desc: Duration before aborting the scrub session
+  desc: Duration before issuing a warning
   long_desc: Waiting too long for some replicas to respond to
     scrub reservation requests.
   default: 5000
-  min: 2000
   see_also:
   - osd_scrub_slow_reservation_response
   with_legacy: false

@@ -134,8 +134,8 @@ class ReplicaReservations {
     ~no_reply_t();
     OSDService* m_osds;
     const ConfigProxy& m_conf;
-    ReplicaReservations& m_parent;
     std::string m_log_prfx;
+    PGRef m_pg;         ///< keep the PG alive for the duration of the timer
     Context* m_abort_callback{nullptr};
   };
 
@@ -600,6 +600,8 @@ class PgScrubber : public ScrubPgIF,
   {
     return m_pg->snap_mapper;
   }
+
+  PGRef get_pgref() final { return m_pg; }
 
   void log_cluster_warning(const std::string& warning) const final;
 

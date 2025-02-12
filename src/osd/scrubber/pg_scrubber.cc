@@ -862,8 +862,7 @@ Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
 	   << dendl;
   return std::make_unique<blocked_range_t>(m_osds,
 					   grace_period,
-					   *this,
-					   m_pg_id);
+					   *this);
 }
 
 /**
@@ -2838,19 +2837,30 @@ ReplicaReservations::no_reply_t::no_reply_t(
   std::string_view log_prfx)
     : m_osds{osds}
     , m_conf{conf}
-    , m_parent{parent}
     , m_log_prfx{log_prfx}
 {
   using namespace std::chrono;
   auto now_is = clock::now();
   auto timeout =
     conf.get_val<std::chrono::milliseconds>("osd_scrub_reservation_timeout");
+  if (timeout.count() == 0) {
+    // no timeout
+    return;
+  }
 
-  m_abort_callback = new LambdaContext([this, now_is]([[maybe_unused]] int r) {
-    // behave as if a REJECT was received
+  const auto start_epoch = parent.m_pg->get_osdmap_epoch();
+
+  m_abort_callback = new LambdaContext([this, now_is, pgr = PGRef(parent.m_pg),
+                                        start_epoch]([[maybe_unused]] int r) {
+    std::lock_guard l{*pgr};
+    if (pgr->get_same_interval_since() > start_epoch) {
+      return;
+    }
+    // notify - but do not act.
+    // We cannot easily access the ReplicaReservation object from here, as we
+    // cannot be sure it still exists.
     m_osds->clog->warn() << fmt::format(
-      "{} timeout on replica reservations (since {})", m_log_prfx, now_is);
-    m_parent.handle_no_reply_timeout();
+        "{} timeout on replica reservations (since {})", m_log_prfx, now_is);
   });
 
   std::lock_guard l(m_osds->sleep_lock);
@@ -2970,22 +2980,29 @@ ostream& operator<<(ostream& out, const MapsCollectionStatus& sf)
 
 blocked_range_t::blocked_range_t(OSDService* osds,
 				 ceph::timespan waittime,
-				 ScrubMachineListener& scrubber,
-				 spg_t pg_id)
+				 ScrubMachineListener& scrubber)
     : m_osds{osds}
     , m_scrubber{scrubber}
-    , m_pgid{pg_id}
 {
+  // keep the PG object alive for the duration of the timer
+  PGRef pg{m_scrubber.get_pgref()};
   auto now_is = std::chrono::system_clock::now();
-  m_callbk = new LambdaContext([this, now_is]([[maybe_unused]] int r) {
+  const auto start_epoch = pg->get_osdmap_epoch();
+
+  m_callbk = new LambdaContext([this, pg=std::move(pg), now_is, start_epoch]([[maybe_unused]] int r) {
+    std::lock_guard l{*pg};
+    if (pg->get_same_interval_since() > start_epoch) {
+      return;
+    }
+
     std::time_t now_c = std::chrono::system_clock::to_time_t(now_is);
     char buf[50];
     strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
     lgeneric_subdout(g_ceph_context, osd, 10)
-      << "PgScrubber: " << m_pgid
+      << "PgScrubber: " << pg->pg_id
       << " blocked on an object for too long (since " << buf << ")" << dendl;
     m_osds->clog->warn() << "osd." << m_osds->whoami
-			 << " PgScrubber: " << m_pgid
+			 << " PgScrubber: " << pg->pg_id
 			 << " blocked on an object for too long (since " << buf
 			 << ")";
 
