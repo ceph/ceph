@@ -14,7 +14,8 @@ sphinx_rtd_theme == 1.0.0
 Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-mermaid
-sphinxcontrib-openapi
+sphinxcontrib-openapi >= 0.8.0
 sphinxcontrib-seqdiag
 mistune >= 2.0.3
 natsort
+docutils<0.18
