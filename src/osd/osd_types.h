@@ -52,6 +52,7 @@
 #include "compressor/Compressor.h"
 #include "osd_perf_counters.h"
 #include "pg_features.h"
+#include "ECTypes.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -194,7 +195,7 @@ struct pg_shard_t {
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("osd", osd);
     if (shard != shard_id_t::NO_SHARD) {
-      f->dump_unsigned("shard", shard);
+      f->dump_unsigned("shard", static_cast<unsigned>(shard));
     }
   }
   static void generate_test_instances(std::list<pg_shard_t*>& o) {
@@ -608,7 +609,7 @@ struct spg_t {
   }
   void dump(ceph::Formatter *f) const {
     f->dump_stream("pgid") << pgid;
-    f->dump_unsigned("shard", shard);
+    f->dump_unsigned("shard", static_cast<unsigned>(shard));
   }
   static void generate_test_instances(std::list<spg_t*>& o) {
     o.push_back(new spg_t);
@@ -636,7 +637,9 @@ namespace std {
     size_t operator()( const spg_t& x ) const
       {
       static hash<uint32_t> H;
-      return H(hash<pg_t>()(x.pgid) ^ x.shard);
+      // Historically a "shard" was an int8_t, hence the unexpected cast in
+      // this XOR.
+      return H(hash<pg_t>()(x.pgid) ^ static_cast<int8_t>(x.shard));
     }
   };
 } // namespace std
