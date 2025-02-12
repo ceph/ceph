@@ -1078,6 +1078,7 @@ function try_known_milestones {
         pacific) mn="14" ;;
         quincy) mn="15" ;;
         reef) mn="16" ;;
+        squid) mn="17" ;;
     esac
     echo "$mn"
 }
