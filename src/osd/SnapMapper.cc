@@ -1015,20 +1015,19 @@ void SnapMapper::Scrubber::run()
       if (mapping.hoid.pool < pool ||
           mapping.snap < begin) {
         // ok
-        dout(20) << __func__ << " ok " << mapping.hoid
-                 << " snap " << mapping.snap
-                 << " precedes pool " << pool
-                 << " purged_snaps [" << begin << "," << end << ")" << dendl;
+        dout(20) << fmt::format(
+                      "{} ok {} snap {} precedes pool {} purged_snaps [{}, {})",
+                      __func__, mapping.hoid, mapping.snap, pool, begin, end)
+                 << dendl;
       } else {
         assert(mapping.snap >= begin);
         assert(mapping.snap < end);
         assert(mapping.hoid.pool == pool);
         // invalid
-        dout(10) << __func__ << " stray " << mapping.hoid
-                 << " snap " << mapping.snap
-                 << " in pool " << pool
-                 << " shard " << shard
-                 << " purged_snaps [" << begin << "," << end << ")" << dendl;
+        dout(10) << fmt::format(
+                      "{} stray {} snap {} in pool {} shard {} purged_snaps[{}, {})",
+                      __func__, mapping.hoid, mapping.snap, pool, shard, begin, end)
+                 << dendl;
         stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
           		   pool, mapping.snap, mapping.hoid.get_hash(),
           		   shard
