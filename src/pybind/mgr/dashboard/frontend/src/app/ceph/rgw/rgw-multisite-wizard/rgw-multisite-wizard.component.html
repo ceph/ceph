@@ -5,6 +5,7 @@
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
+        data-testid="rgw-multisite-wizard-header"
         i18n>Set up Multi-site Replication</h3>
   </cds-modal-header>
 
@@ -323,14 +324,16 @@
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Realm Name:</label>
-    <div class="cd-col-form-input mt-2 text-muted">
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="realmName">
       <b>{{ multisiteSetupForm.get('realmName').value }}</b>
     </div>
   </div>
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Zonegroup Name:</label>
-    <div class="cd-col-form-input mt-2 text-muted">
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="zonegroupName">
       <b>{{ multisiteSetupForm.get('zonegroupName').value }}</b>
     </div>
   </div>
@@ -344,7 +347,8 @@
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Zone Name:</label>
-    <div class="cd-col-form-input mt-2 text-muted">
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="zoneName">
       <b>{{ multisiteSetupForm.get('zoneName').value }}</b>
     </div>
   </div>
