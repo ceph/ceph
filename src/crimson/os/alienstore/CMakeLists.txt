@@ -68,6 +68,7 @@ if(WITH_LTTNG)
   add_dependencies(crimson-alienstore bluestore-tp)
 endif()
 
+# crimson-alienstore is not defined WITH_CRIMSON
 target_link_libraries(crimson-alienstore
   PRIVATE
     alien::cflags
