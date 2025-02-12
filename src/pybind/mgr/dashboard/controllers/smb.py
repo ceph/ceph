@@ -36,6 +36,10 @@ CLUSTER_SCHEMA = {
         "ref": (str, "Reference identifier for the user group resource")
     }], "User group settings for user auth mode"),
     "custom_dns": ([str], "List of custom DNS server addresses"),
+    "public_addrs": ([{
+        "address": (str, "This address will be assigned to one of the host's network devices"),
+        "destination": (str, "Defines where the system will assign the managed IPs.")
+    }], "Public Address"),
     "placement": ({
         "count": (int, "Number of instances to place")
     }, "Placement configuration for the resource")
