@@ -372,8 +372,8 @@
 /* Defined if UADK compress/decompress is supported */
 #cmakedefine HAVE_UADK
 
-/* Define if seastar is available. */
-#cmakedefine HAVE_SEASTAR
+/* Define if Crimson is enabled. */
+#cmakedefine WITH_CRIMSON
 
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
