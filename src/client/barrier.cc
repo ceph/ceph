@@ -119,7 +119,7 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
     std::unique_lock locker(lock);
 
     /* we commit outstanding writes--if none exist, we don't care */
-    if (outstanding_writes.size() == 0)
+    if (outstanding_writes.empty())
       return;
 
     boost::icl::interval_set<uint64_t> cvs;
@@ -174,7 +174,7 @@ void BarrierContext::complete(C_Block_Sync &cbs)
       /* signal waiters */
       barrier->cond.notify_all();
 	/* dispose cleared barrier */
-      if (barrier->write_list.size() == 0) {
+      if (barrier->write_list.empty()) {
 	BarrierList::iterator iter2 =
 	  BarrierList::s_iterator_to(*barrier);
 	active_commits.erase(iter2);
