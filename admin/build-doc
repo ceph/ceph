@@ -64,6 +64,7 @@ else
     BUILD_DOC=1 $vdir/bin/pip install --quiet \
          -r $TOPDIR/admin/doc-pybind.txt
     $vdir/bin/pip install --quiet --upgrade sphinx_mdinclude
+    $vdir/bin/pip show sphinxcontrib.openapi sphinx_mdinclude docutils
     md5sum \
         $TOPDIR/admin/doc-requirements.txt \
         $TOPDIR/admin/doc-python-common-requirements.txt \
