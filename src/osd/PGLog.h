@@ -1470,7 +1470,7 @@ public:
 	  decode(on_disk_rollback_info_trimmed_to, bp);
 	} else if (key == "may_include_deletes_in_missing") {
 	  missing.may_include_deletes = true;
-	} else if (key.substr(0, 7) == std::string("missing")) {
+	} else if (key.starts_with("missing")) {
 	  hobject_t oid;
 	  pg_missing_item item;
 	  decode(oid, bp);
@@ -1480,7 +1480,7 @@ public:
 	    ceph_assert(missing.may_include_deletes);
 	  }
 	  missing.add(oid, std::move(item));
-	} else if (key.substr(0, 4) == std::string("dup_")) {
+	} else if (key.starts_with("dup_")) {
 	  ++total_dups;
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
