@@ -24,7 +24,7 @@
 #include <list>
 #include <unordered_map>
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include <seastar/core/future.hh>
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/cyanstore/cyan_collection.h"
@@ -1675,7 +1675,7 @@ public:
 		       << " log.dups.size()=" << log.dups.size() << dendl;
   } // static read_log_and_missing
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   seastar::future<> read_log_and_missing_crimson(
     crimson::os::FuturizedStore::Shard &store,
     crimson::os::CollectionRef ch,

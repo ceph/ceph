@@ -256,7 +256,7 @@
 
 class Message : public RefCountedObject {
 public:
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   // In crimson, conn is independently maintained outside Message.
   using ConnectionRef = void*;
 #else
@@ -357,13 +357,13 @@ protected:
   }
 public:
   const ConnectionRef& get_connection() const {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     ceph_abort("In crimson, conn is independently maintained outside Message");
 #endif
     return connection;
   }
   void set_connection(ConnectionRef c) {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     // In crimson, conn is independently maintained outside Message.
     ceph_assert(c == nullptr);
 #endif
@@ -503,7 +503,7 @@ public:
     return entity_name_t(header.src);
   }
   entity_addr_t get_source_addr() const {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     ceph_abort("In crimson, conn is independently maintained outside Message");
 #else
     if (connection)
@@ -512,7 +512,7 @@ public:
     return entity_addr_t();
   }
   entity_addrvec_t get_source_addrs() const {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     ceph_abort("In crimson, conn is independently maintained outside Message");
 #else
     if (connection)
@@ -575,7 +575,7 @@ class SafeMessage : public Message {
 public:
   using Message::Message;
   bool is_a_client() const {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     ceph_abort("In crimson, conn is independently maintained outside Message");
 #else
     return get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT;

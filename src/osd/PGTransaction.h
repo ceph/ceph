@@ -19,7 +19,7 @@
 #include <optional>
 
 #include "common/hobject.h"
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "osd/osd_internal_types.h"
 #else
 #include "crimson/osd/object_context.h"

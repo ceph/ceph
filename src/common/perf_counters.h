@@ -305,7 +305,7 @@ private:
 
   int prio_adjust = 0;
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   const std::string m_lock_name;
   /** Protects m_data */
   ceph::mutex m_lock;

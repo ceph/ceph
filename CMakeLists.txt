@@ -705,8 +705,8 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
 
-option(WITH_SEASTAR "Build seastar components")
-set(HAVE_SEASTAR ${WITH_SEASTAR})
+option(WITH_CRIMSON "Build seastar components")
+set(HAVE_SEASTAR ${WITH_CRIMSON})
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
@@ -721,7 +721,7 @@ if(WITH_MGR)
   list(APPEND BOOST_COMPONENTS
     python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR})
 endif()
-if(WITH_SEASTAR)
+if(WITH_CRIMSON)
   list(APPEND BOOST_COMPONENTS timer)
 endif()
 
