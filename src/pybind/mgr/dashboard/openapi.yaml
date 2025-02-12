@@ -9041,6 +9041,7 @@ paths:
                   type: boolean
               required:
               - rbd_image_name
+              - rbd_image_size
               type: object
       responses:
         '201':

@@ -16,6 +16,7 @@ from typing import (
     Tuple,
     Union,
     cast,
+    get_type_hints
 )
 if TYPE_CHECKING:
     import sys
@@ -428,7 +429,17 @@ class CLICommand(object):
         f, extra_args = _extract_target_func(f)
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
-        arg_spec = full_argspec.annotations
+        arg_spec = get_type_hints(f)
+        arg_spec2 = full_argspec.annotations
+        if arg_spec != arg_spec2:
+            print('BOOM')
+            print(arg_spec)
+            print(arg_spec2)
+            print(f)
+            print(inspect.getsource(f))
+            print('^^^^^')
+            
+        arg_spec = full_argspec.annotations | get_type_hints(f)
         first_default = len(arg_spec)
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)
