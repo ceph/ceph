@@ -16,7 +16,9 @@
 #ifndef CEPH_MEXPORTCAPS_H
 #define CEPH_MEXPORTCAPS_H
 
+#include "mds/mdstypes.h" // for client_metadata_t
 #include "messages/MMDSOp.h"
+#include "include/fs_types.h" // for inodeno_t
 
 class MExportCaps final : public MMDSOp {
 private:
