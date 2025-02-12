@@ -63,6 +63,7 @@ else
               -r $TOPDIR/admin/doc-python-common-requirements.txt
     BUILD_DOC=1 $vdir/bin/pip install --quiet \
          -r $TOPDIR/admin/doc-pybind.txt
+    $vdir/bin/pip install --quiet --upgrade sphinx_mdinclude
     md5sum \
         $TOPDIR/admin/doc-requirements.txt \
         $TOPDIR/admin/doc-python-common-requirements.txt \
