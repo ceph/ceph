@@ -1,7 +1,7 @@
 from typing import Any
 
 from .cluster import NFSCluster
-from .qos_conf import QOSType, QOSParams, QOSBandwidthControl
+from .qos_conf import QOSType, QOSParams, QOSBandwidthControl, QOSOpsControl
 
 
 def export_dict_bw_checks(cluster_id: str,
@@ -18,10 +18,10 @@ def export_dict_bw_checks(cluster_id: str,
     if combined_bw_ctrl is None:
         combined_bw_ctrl = False
     if not qos_enable and enable_bw_ctrl:
-        raise Exception('To enable bandwidth control, qos_enable should be true.')
+        raise Exception('To enable bandwidth control, qos_enable and enable_bw_control should be true.')
     if not (isinstance(enable_bw_ctrl, bool) and isinstance(combined_bw_ctrl, bool)):
         raise Exception('Invalid values for the enable_bw_ctrl and combined_bw_ctrl parameters.')
-    # if qos is disabled, then bandwidths should not be set and no need to bandwidth checks
+    # if qos bandwidth control is disabled, then bandwidths should not be set and no need to bandwidth checks
     if not enable_bw_ctrl:
         if bandwith_param_exists:
             raise Exception('Bandwidths should not be passed when enable_bw_control is false.')
@@ -39,9 +39,31 @@ def export_dict_bw_checks(cluster_id: str,
     export_qos_bw_checks(cluster_id, mgr_obj, bw_obj)
 
 
-def export_dict_qos_checks(cluster_id: str,
+def export_dict_ops_checks(cluster_id: str,
                            mgr_obj: Any,
+                           qos_enable: bool,
                            qos_dict: dict) -> None:
+    enable_iops_ctrl = qos_dict.get(QOSParams.enable_iops_ctrl.value)
+    if enable_iops_ctrl is None:
+        return
+    if not isinstance(enable_iops_ctrl, bool):
+        raise Exception(f'Invalid values for the {QOSParams.enable_iops_ctrl.value} parameter')
+    ops_param_exists = any(key.endswith('iops') for key in qos_dict)
+    if not enable_iops_ctrl:
+        if ops_param_exists:
+            raise Exception(f'IOPS count parameters should not be passed when {QOSParams.enable_iops_ctrl.value} is false.')
+        return
+    if enable_iops_ctrl and not ops_param_exists:
+        raise Exception(f'IOPS count parameters should be set when {QOSParams.enable_iops_ctrl.value} is true.')
+    ops_obj = QOSOpsControl(enable_iops_ctrl,
+                            max_export_iops=qos_dict.get(QOSParams.max_export_iops.value, 0),
+                            max_client_iops=qos_dict.get(QOSParams.max_client_iops.value, 0))
+    export_qos_ops_checks(cluster_id, mgr_obj, ops_obj)
+
+
+def export_dict_qos_bw_ops_checks(cluster_id: str,
+                                  mgr_obj: Any,
+                                  qos_dict: dict) -> None:
     """Validate the qos block of dict passed to apply_export method"""
     qos_enable = qos_dict.get('enable_qos')
     if qos_enable is None:
@@ -49,19 +71,41 @@ def export_dict_qos_checks(cluster_id: str,
     if not isinstance(qos_enable, bool):
         raise Exception('Invalid value for the enable_qos parameter')
     export_dict_bw_checks(cluster_id, mgr_obj, qos_enable, qos_dict)
+    export_dict_ops_checks(cluster_id, mgr_obj, qos_enable, qos_dict)
 
 
 def export_qos_bw_checks(cluster_id: str,
                          mgr_obj: Any,
                          bw_obj: QOSBandwidthControl,
                          nfs_clust_obj: Any = None) -> None:
-    """check cluster level qos is enabled to enable export level qos and validate bandwidths"""
+    """check cluster level qos bandwidth control is enabled to enable export level qos
+    bandwidth control and validate bandwidths"""
     if not nfs_clust_obj:
         nfs_clust_obj = NFSCluster(mgr_obj)
     clust_qos_obj = nfs_clust_obj.get_cluster_qos_config(cluster_id)
-    if not clust_qos_obj or (clust_qos_obj and not (clust_qos_obj.enable_qos)):
-        raise Exception('To configure bandwidth control for export, you must first enable bandwidth control at the cluster level.')
+    if not clust_qos_obj or (clust_qos_obj and not (clust_qos_obj.enable_qos
+                                                    and clust_qos_obj.bw_obj
+                                                    and clust_qos_obj.bw_obj.enable_bw_ctrl)):
+        raise Exception(f'To configure bandwidth control for export, you must first enable bandwidth control at the cluster level for {cluster_id}.')
     if clust_qos_obj.qos_type:
         if clust_qos_obj.qos_type == QOSType.PerClient:
-            raise Exception('Export-level QoS bandwidth control cannot be enabled if the QoS type at the cluster level is set to PerClient.')
+            raise Exception(f'Export-level QoS bandwidth control cannot be enabled if the QoS type at the cluster {cluster_id} level is set to PerClient.')
         bw_obj.qos_bandwidth_checks(clust_qos_obj.qos_type)
+
+
+def export_qos_ops_checks(cluster_id: str,
+                          mgr_obj: Any,
+                          ops_obj: QOSOpsControl,
+                          nfs_clust_obj: Any = None) -> None:
+    """check cluster level qos IOPS is enabled to enable export level qos IOPS and validate IOPS count"""
+    if not nfs_clust_obj:
+        nfs_clust_obj = NFSCluster(mgr_obj)
+    clust_qos_obj = nfs_clust_obj.get_cluster_qos_config(cluster_id)
+    if not clust_qos_obj or (clust_qos_obj and not (clust_qos_obj.enable_qos
+                                                    and clust_qos_obj.ops_obj
+                                                    and clust_qos_obj.ops_obj.enable_iops_ctrl)):
+        raise Exception(f'To configure IOPS control for export, you must first enable IOPS control at the cluster level {cluster_id}.')
+    if clust_qos_obj.qos_type:
+        if clust_qos_obj.qos_type == QOSType.PerClient:
+            raise Exception(f'Export-level QoS IOPS control cannot be enabled if the QoS type at the cluster {cluster_id} level is set to PerClient.')
+        ops_obj.qos_ops_checks(clust_qos_obj.qos_type)
