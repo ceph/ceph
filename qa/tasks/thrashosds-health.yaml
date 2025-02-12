@@ -32,3 +32,4 @@ overrides:
       - nodeep-scrub
       - is down
       - osds down
+      - PG_BACKFILL_FULL
