@@ -39,6 +39,16 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
   return snap_it->first.second;
 }
 
+const std::string calc_ind_image_snap_name(uint64_t pool_id,
+                                           const std::string group_id,
+                                           const std::string snap_id)
+{
+  std::stringstream ind_snap_name_stream;
+  ind_snap_name_stream << ".group." << std::hex << pool_id << "_"
+                       << group_id << "_" << snap_id;
+  return ind_snap_name_stream.str();
+}
+
 } // anonymous namespace
 
 using librbd::util::create_context_callback;
@@ -396,6 +406,9 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   if (ns != nullptr) {
     ns->group_pool = m_dst_image_ctx->group_spec.pool_id;
     ns->group_id = m_dst_image_ctx->group_spec.group_id;
+    m_snap_name = calc_ind_image_snap_name(ns->group_pool,
+                                           ns->group_id,
+                                           ns->group_snapshot_id);
   }
   cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap = 0;
