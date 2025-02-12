@@ -10,6 +10,9 @@
     * use of tenant names instead of accounts in IAM policy documents,
     * interpretation of IAM policy without cross-account policy evaluation,
     * S3 API support for cross-tenant names such as `Bucket='tenant:bucketname'`
+* RGW: For compatibility with AWS S3, LastModified timestamps are now truncated
+  to the second. Note that during upgrade, users may observe these timestamps
+  moving backwards as a result.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
