@@ -2036,8 +2036,13 @@ cdef class LibCephFS(object):
         path = cstr(path, 'path')
         if not isinstance(flags, int):
             raise TypeError('flags must be a int')
-        if not isinstance(value, bytes):
-            raise TypeError('value must be a bytes')
+        if isinstance(value, bytes):
+            pass
+        elif isinstance(value, str):
+            value = value.encode('utf-8')
+        else:
+            raise TypeError(f'value must be a bytes. value = {value} '
+                            f'type(value) = {type(value)}')
 
         cdef:
             char *_path = path

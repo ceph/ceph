@@ -5,7 +5,6 @@ import errno
 import logging
 import hashlib
 from typing import Dict, Union
-from pathlib import Path
 
 import cephfs
 
@@ -14,6 +13,7 @@ from ..pin_util import pin
 from .subvolume_attrs import SubvolumeTypes
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
+from ...utils import verify_uuid, to_str
 from ...fs_util import get_ancestor_xattr
 from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
@@ -470,19 +470,79 @@ class SubvolumeBase(object):
         self.metadata_mgr.flush()
 
     def discover(self):
+        '''
+        Figure out subvolume version and UUUID return both.
+        v3 -> 3, v2 -> 2, v1 -> 1, legacy -> 0
+        '''
         log.debug("discovering subvolume "
                   "'{0}' [mode: {1}]".format(self.subvolname, "legacy"
                                              if self.legacy_mode else "new"))
+
+        basename = os.path.basename
+        dirname = os.path.dirname
+
         try:
             self.fs.stat(self.base_path)
             self.metadata_mgr.refresh()
             log.debug("loaded subvolume '{0}'".format(self.subvolname))
-            subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
+
+            base_path = to_str(self.base_path)
+            # trailing slash messes up basename/dirname results
+            if base_path[-1] == '/':
+                base_path = base_path[:-1]
+
+            sv_data_path = self.metadata_mgr.get_global_option('path')
+            # trailing slash messes up basename/dirname results
+            if sv_data_path[-1] == '/':
+                sv_data_path = sv_data_path[:-1]
+
+            if basename(sv_data_path) == 'mnt':
+                # disc = discovered
+                disc_version = 3
+                disc_uuid = basename(dirname(sv_data_path))
+                verify_uuid(disc_uuid)
+                sv_base_path = dirname(dirname(dirname(sv_data_path)))
+            elif dirname(sv_data_path) == base_path:
+                disc_version = 2
+                disc_uuid = basename(sv_data_path)
+                verify_uuid(disc_uuid)
+                sv_base_path = dirname(sv_data_path)
+            elif sv_data_path == base_path:
+                disc_version = 1 if not self.legacy_mode else 0
+                disc_uuid = None
+                sv_base_path = sv_data_path
+            else:
+                msg = (f'layout of subvol {self.name} did not match any known '
+                       f'version. base_path = {base_path} sv_data_path = '
+                       f'{sv_data_path}')
+                log.debug(msg)
+                assert False, msg
+
+            # TODO: after v3 upgrades are done, this "fabricated stuff" perhaps
+            # needs to removed...
+            #
             # subvolume with retained snapshots has empty path, don't mistake it for
             # fabricated metadata.
-            if (not self.legacy_mode and self.state != SubvolumeStates.STATE_RETAINED and
-                self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
+            if (not self.legacy_mode and
+                self.state != SubvolumeStates.STATE_RETAINED and
+                base_path != sv_base_path):
+                log.debug(f'base_path = {base_path}')
+                log.debug(f'sv_data_path = {sv_data_path}')
                 raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
+
+            msg = (f'invalid version for subvol {self.name}. disc_version = '
+                  f'{disc_version}')
+            log.debug(msg)
+            assert disc_version in (3, 2, 1, 0), msg
+
+            meta_version = int(self.metadata_mgr.get_global_option('version'))
+            msg = (f'for subvol {self.name}, discovered version did not match '
+                   'the version mentioned in the meta file. disc_version = '
+                   f'{disc_version}, meta_version = {meta_version}')
+            log.debug(msg)
+            assert disc_version == meta_version, msg
+
+            return disc_version, disc_uuid
         except MetadataMgrException as me:
             if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
                 log.warn(f'assuming legacy mode for subvol {self.name} since '
@@ -490,6 +550,7 @@ class SubvolumeBase(object):
                 self.legacy_mode = True
                 self.load_config()
                 self.discover()
+                return 1, None
             else:
                 raise
         except cephfs.Error as e:
@@ -505,7 +566,7 @@ class SubvolumeBase(object):
     def _trash_dir(self, path):
         create_trashcan(self.fs, self.vol_spec)
         with open_trashcan(self.fs, self.vol_spec) as trashcan:
-            trashcan.dump(path)
+            trashcan.dump(path, unique=True)
             log.info("subvolume path '{0}' moved to trashcan".format(path))
 
     def _link_dir(self, path, bname):
