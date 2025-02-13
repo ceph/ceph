@@ -73,6 +73,7 @@ import glob
 import logging
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -597,12 +598,15 @@ def bc_run_tests(ctx):
 def bc_make_source_rpm(ctx):
     """Build SPRMs."""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
+    if ctx.cli.ceph_version:
+        make_srpm_cmd = f"{make_srpm_cmd} {ctx.cli.ceph_version}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && ./make-srpm.sh",
+            make_srpm_cmd,
         ],
     )
     with ctx.user_command():
@@ -614,8 +618,21 @@ def bc_build_rpm(ctx):
     """Build RPMs from SRPM."""
     srpm_glob = "ceph*.src.rpm"
     if ctx.cli.rpm_match_sha:
-        head_sha = _git_current_sha(ctx)
-        srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        if not ctx.cli.ceph_version:
+            head_sha = _git_current_sha(ctx)
+            srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        else:
+            # Given a tarball with a name like
+            #   ceph-19.3.0-7462-g565e5c65.tar.bz2
+            # The SRPM name would be:
+            #   ceph-19.3.0-7462.g565e5c65.el9.src.rpm
+            # This regex replaces the second '-' with a '.'
+            srpm_version = re.sub(
+                r"(\d+\.\d+\.\d+-\d+)-(.*)",
+                r"\1.\2",
+                ctx.cli.ceph_version
+            )
+            srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
     paths = glob.glob(srpm_glob)
     if len(paths) > 1:
         raise RuntimeError(
@@ -852,6 +869,10 @@ def parse_cli(build_step_names):
             "Do not try to build RPM packages that match the SHA of the current"
             " git checkout. Use any source RPM available."
         ),
+    )
+    parser.add_argument(
+        "--ceph-version",
+        help="Rather than infer the Ceph version, use this value",
     )
     parser.add_argument(
         "--execute",
