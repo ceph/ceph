@@ -36,6 +36,6 @@ tasks:
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c,nvmeof.d
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c
     env:
-      SCALING_DELAYS: '120'
+      SCALING_DELAYS: '300'
       RBD_POOL: mypool
       NVMEOF_GROUP: mygroup0
