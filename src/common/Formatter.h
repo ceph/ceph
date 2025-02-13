@@ -328,7 +328,7 @@ private:
     void open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
-    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
+    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const;
     char to_lower_underscore(char c) const;
     std::string get_xml_name(std::string_view name) const;
 
@@ -376,7 +376,7 @@ private:
 
     int get_len() const override;
     void write_raw_data(const char *data) override;
-    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
+    void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const;
 
   private:
     template <class T>
