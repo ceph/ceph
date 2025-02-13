@@ -17,6 +17,7 @@ class PreV3Helper:
     '''
     Methods that help make v3 code compatible with and v2, v1 and v0.
     '''
+
     @property
     def base_path(self):
         return self.subvol_path
@@ -24,7 +25,6 @@ class PreV3Helper:
     @property
     def config_path(self):
         return self.meta_path
-
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -122,14 +122,12 @@ class SubvolumeV3(SubvolumeV2):
 
 
     def set_subvol_xattr(self):
-        # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
-        # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
         try:
             # MDS treats this as a noop for already marked subvolume
-            self.fs.setxattr(self.uuid_dir, 'ceph.dir.subvolume', b'1', 0)
-        except cephfs.InvalidValue:
+            self.fs.setxattr(self.get_incar_path(), 'ceph.dir.subvolume', b'1', 0)
+        except InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
-        except cephfs.Error as e:
+        except Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
     def create_or_update_meta_file(self, subvol_type):
@@ -139,11 +137,11 @@ class SubvolumeV3(SubvolumeV2):
 
     def _create(self, mode, attrs, subvol_type, auth=True):
         if not self.path_exists(self.group.path):
-            self.fs.mkdirs(self.group.path, self.vol_spec.DEFAULT_MODE)
-        self.fs.mkdirs(self.mnt_path, mode)
+            self.fs.mkdirs(self.group.path, self.spec.DEFAULT_MODE)
+        self.fs.mkdirs(self.get_incar_mnt_path(), mode)
 
         self.set_subvol_xattr()
-        self.set_attrs(self.mnt_path, attrs)
+        self.set_attrs(self.get_incar_mnt_path(), attrs)
 
         self.create_or_update_meta_file(subvol_type)
         if auth:

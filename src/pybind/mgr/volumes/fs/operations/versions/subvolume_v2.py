@@ -11,6 +11,7 @@ from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
 from .op_sm import SubvolumeOpSm
 from .subvolume_v1 import SubvolumeV1
 from ...exception import OpSmException, VolumeException, MetadataMgrException
+from ...utils import safe_join, gen_uuid
 from ...fs_util import listdir, create_base_dir
 from ..template import SubvolumeOpType
 
@@ -37,6 +38,12 @@ class SubvolumeV2(SubvolumeV1):
     snapshot retention feature
     """
     VERSION = 2
+
+    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        super(SubvolumeV2, self).__init__(mgr, fs, vol_spec, group, subvolname)
+
+        # in v2 context, mnt_path is same as uuid_dir.
+        self.mnt_path = safe_join(self.base_path, gen_uuid())
 
     @staticmethod
     def version():
@@ -140,9 +147,10 @@ class SubvolumeV2(SubvolumeV1):
 
     def _remove_data_dir_on_failure(self, retained):
         if retained:
-            log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
+            log.info('cleaning up subvolume incarnation with path: '
+                     f'{self.mnt_path.decode("utf-8")}')
             try:
-                self.fs.rmdir(subvol_path)
+                self.fs.rmdir(self.mnt_path)
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
         else:
@@ -164,7 +172,7 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
         # persist subvolume metadata
-        qpath = self.mnt_dir.decode('utf-8')
+        qpath = self.mnt_path.decode('utf-8')
         if self.retained:
             self._set_incarnation_metadata(subvol_type, qpath, initial_state)
             self.metadata_mgr.flush()
@@ -174,10 +182,10 @@ class SubvolumeV2(SubvolumeV1):
     def _create(self, mode, attrs, subvol_type, auth=True):
         # create group directory with default mode(0o755) if it doesn't exist.
         create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
-        self.fs.mkdirs(self.mnt_dir, mode)
+        self.fs.mkdirs(self.mnt_path, mode)
 
         self.set_subvol_xattr()
-        self.set_attrs(self.mnt_dir, attrs)
+        self.set_attrs(self.mnt_path, attrs)
 
         self.create_or_update_meta_file(subvol_type)
         if auth:
