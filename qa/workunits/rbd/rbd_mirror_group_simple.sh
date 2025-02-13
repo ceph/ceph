@@ -92,6 +92,10 @@ if [ -z "${RBD_IMAGE_FEATURES}" ]; then
   RBD_IMAGE_FEATURES=${features[${feature}]}
 fi
 
+if [ -n "${scenario_number}" ] && [ -z "${test_name}" ]; then
+  echo "Option -s requires -t to be specifed"; exit 1;
+fi
+
 echo "Repeat count: $repeat_count"
 echo "Scenario number: $scenario_number"
 echo "Test name: $test_name"
@@ -182,6 +186,58 @@ test_create_group_with_images_then_mirror()
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 }
 
+declare -a test_enable_mirroring_when_duplicate_group_exists_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 5)
+
+test_enable_mirroring_when_duplicate_group_exists_scenarios=1
+
+test_enable_mirroring_when_duplicate_group_exists()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+
+  group_create "${secondary_cluster}" "${pool}/${group}"
+  images_create "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${secondary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+  
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  check_daemon_running "${secondary_cluster}"
+exit 0
+# TODO finish this test - group should not be mirrored on secondary at this point. 
+# peer status when looking at status on primary should be "up+stopped"
+# could rename group on secondary without renaming images
+# or could delete group on secondary.
+# or rename group on primary?
+  # ceph --daemon mirror group status groupName
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" "${image_count}"
+  check_daemon_running "${secondary_cluster}"
+
+  # rbd mirror group status groupName
+  #sleep 10
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}"
+
+  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
+  fi
+
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+  check_daemon_running "${secondary_cluster}"
+
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
 # record the time taken to enable and sync for a group with increasing number of images.
 # Line item 13 in coding leftovers tab - should be near constant time after that is fixed
 declare -a test_group_enable_times_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}")
@@ -263,6 +319,112 @@ test_create_group_with_image_remove_then_repeat()
 
     check_daemon_running "${secondary_cluster}"
   done
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" 1
+}
+
+# create group with images and sync.  Restart daemon then recreate group on primary
+declare -a test_create_group_stop_daemon_then_recreate_1=("${CLUSTER2}" "${CLUSTER1}" 'no_stop')
+declare -a test_create_group_stop_daemon_then_recreate_2=("${CLUSTER2}" "${CLUSTER1}" 'stop_restart_before_recreate')
+declare -a test_create_group_stop_daemon_then_recreate_3=("${CLUSTER2}" "${CLUSTER1}" 'stop_restart_after_recreate')
+
+# TODO enable scenarios 2 and 3 when they pass
+test_create_group_stop_daemon_then_recreate_scenarios=1
+
+test_create_group_stop_daemon_then_recreate()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local scenario=$1 ; shift
+
+  local pool="${pool0}"
+  local group="${group0}"
+
+  testlog "test_create_group_stop_daemon_then_recreate"
+
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" 1
+  group_create "${primary_cluster}" "${pool}/${group}"
+
+  group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}0" 
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 1
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" 1
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 1
+
+  local key_count
+  count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+  test "${key_count}" = 1 || fail "unexpected key count:${key_count}"
+
+  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
+  fi
+
+  if [ "${scenario}" = 'no_stop' ]; then
+    # remove and recreate group without stopping daemon
+    group_remove "${primary_cluster}" "${pool}/${group}"
+    group_create "${primary_cluster}" "${pool}/${group}"
+    mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+    
+    wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 0
+    wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" 0
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 0
+
+    count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+    test "${key_count}" = 1 || fail "unexpected key count:${key_count}"
+  elif  [ "${scenario}" = 'stop_restart_before_recreate' ]; then
+    # restart daemon
+    echo "stopping daemon on secondary"
+    stop_mirrors "${secondary_cluster}"
+    sleep 5
+    echo "restarting daemon on secondary"
+    start_mirrors "${secondary_cluster}"
+
+    wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" 1
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 1
+
+    # remove and recreate group - expect 2 keys due to bug TODO
+    group_remove "${primary_cluster}" "${pool}/${group}"
+    group_create "${primary_cluster}" "${pool}/${group}"
+    mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+    
+    wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 0
+    wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" 0
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 0
+
+    count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+    test "${key_count}" = 2 || fail "unexpected key count:${key_count}"
+  elif  [ "${scenario}" = 'stop_restart_after_recreate' ]; then
+    echo "stopping daemon on secondary"
+    stop_mirrors "${secondary_cluster}"
+
+    group_remove "${primary_cluster}" "${pool}/${group}"
+    group_create "${primary_cluster}" "${pool}/${group}"
+    mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+    
+    echo "restarting daemon on secondary"
+    start_mirrors "${secondary_cluster}"
+
+    # TODO fails on next step - group is not present on secondary (restarting the daemon again will cause it to appear)
+    wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" 0
+    wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" 0
+    wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 0
+
+    count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+    test "${key_count}" = 2 || fail "unexpected key count:${key_count}"
+  fi
+
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+
+# Not sure what the expected count is here - have asked Nithya
+#  count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+#  test "${key_count}" = 2 || fail "unexpected key count:${key_count}"
+
+  check_daemon_running "${secondary_cluster}"
+
   group_remove "${primary_cluster}" "${pool}/${group}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
 
@@ -1227,10 +1389,10 @@ test_stopped_daemon()
     fi
   else
     mirror_group_disable "${primary_cluster}" "${pool}/${group}"
- #   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
     group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_name}" 
     mirror_group_enable "${primary_cluster}" "${pool}/${group}"
-  #  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" $(("${group_image_count}"+1))
+    # group on secondary cluster should still have the original number of images
+    wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${group_image_count}"
   fi
 
   get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
@@ -1238,7 +1400,7 @@ test_stopped_daemon()
 
   echo "starting daemon"
   start_mirrors "${secondary_cluster}"
-
+  # TODO often fails on next step - group is not present on secondary.
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" $(("${group_image_count}"+1))
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' $(("${group_image_count}"+1))
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group}"
@@ -1923,14 +2085,27 @@ test_force_promote()
     ##ERR: rc= 2
   test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 
 
+  # TODO remove - just capturing debug info
+  try_cmd "rbd --cluster ${primary_cluster} group snap list ${pool}/${group0}" || :
+  try_cmd "rbd --cluster ${secondary_cluster} group snap list ${pool}/${group0}" || :
+
   # force promote the group on the secondary - should rollback to the last complete snapshot
   local old_primary_cluster
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
+
+  # TODO remove - just capturing debug info
+  try_cmd "rbd --cluster ${primary_cluster} group snap list ${pool}/${group0}" || :
+  try_cmd "rbd --cluster ${secondary_cluster} group snap list ${pool}/${group0}" || :
+
   old_primary_cluster="${primary_cluster}"
   primary_cluster="${secondary_cluster}"
 
   mirror_group_demote "${old_primary_cluster}" "${pool}/${group0}"
   secondary_cluster="${old_primary_cluster}"
+
+  # TODO remove - just capturing debug info
+  try_cmd "rbd --cluster ${secondary_cluster} group snap list ${pool}/${group0}" || :
+  try_cmd "rbd --cluster ${primary_cluster} group snap list ${pool}/${group0}" || :
 
   # Check that the rollback reverted the state 
   if [ "${scenario}" = 'image_add' ]; then
@@ -2010,6 +2185,7 @@ test_force_promote_delete_group()
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}"
 
   # force promote the group on the secondary 
+  # TODO disable mirror daemon here - see slack thread https://ibm-systems-storage.slack.com/archives/C07J9Q2E268/p1739856204809159
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
   wait_for_group_replay_stopped ${secondary_cluster} ${pool}/${group0}
   wait_for_group_replay_stopped ${primary_cluster} ${pool}/${group0}
@@ -2020,22 +2196,36 @@ test_force_promote_delete_group()
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
 
   mirror_group_disable "${secondary_cluster}" "${pool}/${group0}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
 
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
 
+  # group still exists on original primary
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
+
   group_image_remove ${secondary_cluster} ${pool}/${group0} ${pool}/${image_prefix}0
+
+  wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
+  test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
+
   mirror_group_enable "${secondary_cluster}" "${pool}/${group0}"
+  test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
+  test_fields_in_group_info ${secondary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
+
+  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' 0
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+error' 0
+
+  # TODO - test normally fails on next line with missing images
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
+  wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
 
   group_remove "${secondary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
 
   # disable and re-enable on original primary
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
 
   # confirm that group is mirrored back to secondary
@@ -2336,11 +2526,13 @@ run_all_tests()
   run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_multiple_user_snapshot_whilst_stopped
   #run_test_all_scenarios test_create_group_with_image_remove_then_repeat
-  #run_test_all_scenarios test_enable_disable_repeat
-  #run_test_all_scenarios test_empty_group_omap_keys
+  run_test_all_scenarios test_enable_disable_repeat
+  run_test_all_scenarios test_empty_group_omap_keys
   #run_test_all_scenarios test_group_with_clone_image
-  run_test_all_scenarios test_multiple_user_snapshot_time
+  #run_test_all_scenarios test_multiple_user_snapshot_time
   #run_test_all_scenarios test_force_promote_delete_group
+  run_test_all_scenarios test_create_group_stop_daemon_then_recreate
+  #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
 }
 
 if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
