@@ -465,7 +465,6 @@ cdef class SnapDiffHandle2(object):
             raise make_ex(ret, "closesnapdiff2 failed")
 
 
-
 DEFAULT_ENCODING='utf-8'
 
 
@@ -571,15 +570,12 @@ def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
     """
     if opt and val is None:
         return None
-    if isinstance(val, bytes):
-        return val
-    else:
-        try:
-            v = val.encode(encoding)
-        except:
-            raise TypeError('%s must be encodeable as a bytearray' % name)
-        assert isinstance(v, bytes)
-        return v
+
+    val = encode(val, encoding=encoding)
+
+    assert isinstance(val, bytes), \
+        f'val = {val}, type(val) = {type(val)}'
+    return val
 
 def cstr_list(list_str, name, encoding="utf-8"):
     return [cstr(s, name) for s in list_str]
@@ -2116,7 +2112,7 @@ cdef class LibCephFS(object):
 
         return self.getxattr(path, name, size=size, follow_symlink=False)
 
-    def setxattr(self, path, name, value, flags, follow_symlink=True):
+    def setxattr(self, path, name, value, flags=0, follow_symlink=True):
         """
         Set an extended attribute on a file.
 
@@ -2128,10 +2124,10 @@ cdef class LibCephFS(object):
 
         name = cstr(name, 'name')
         path = cstr(path, 'path')
+        value = cstr(value, 'value')
+
         if not isinstance(flags, int):
             raise TypeError('flags must be a int')
-        if not isinstance(value, bytes):
-            raise TypeError('value must be a bytes')
 
         cdef:
             char *_path = path
@@ -2150,7 +2146,8 @@ cdef class LibCephFS(object):
                                     _value, _value_len, _flags)
 
         if ret < 0:
-            raise make_ex(ret, "error in setxattr")
+            raise make_ex(ret, f"error in setxattr(): path={path}, name={name},"
+                               f"value={value}, flags={flags}")
 
     def fsetxattr(self, fd, name, value, flags):
         """
