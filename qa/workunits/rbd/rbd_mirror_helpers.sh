@@ -831,11 +831,10 @@ test_image_replay_state()
     local pool=$2
     local image=$3
     local test_state=$4
-    local status_result
     local current_state=stopped
 
-    status_result=$(admin_daemons "${cluster}" rbd mirror status ${pool}/${image} | grep -i 'state') || return 1
-    echo "${status_result}" | grep -i 'Replaying' && current_state=started
+    admin_daemons "${cluster}" rbd mirror status ${pool}/${image} --format xml-pretty || { fail; return 1; }
+    test "Replaying" = "$($XMLSTARLET sel -t -v "//image_replayer/state" < "$CMD_STDOUT" )" && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
@@ -2543,7 +2542,6 @@ test_group_replay_state()
     local group_spec=$2
     local test_state=$3
     local image_count=$4
-    local status_result
     local current_state=stopped
     local actual_image_count
     local started_image_count
@@ -2556,6 +2554,31 @@ test_group_replay_state()
     if [ -n "${image_count}" ]; then
       actual_image_count=$($XMLSTARLET sel -t -v "count(//image_replayer/state)"  < "$CMD_STDOUT")
       started_image_count=$($XMLSTARLET sel -t -v "count(//image_replayer[state='Replaying'])" < "$CMD_STDOUT")
+      test "${image_count}" = "${actual_image_count}" ||  { fail; return 1; }
+
+      # If the group is started then check that all images are started too
+      test "${test_state}" = "started" || return 0
+      test "${image_count}" = "${started_image_count}" ||  { fail; return 1; }
+    fi
+}
+
+test_group_replay_state_cli()
+{
+    local cluster=$1
+    local group_spec=$2
+    local test_state=$3
+    local image_count=$4
+    local current_state=stopped
+    local actual_image_count
+    local started_image_count
+
+    # need to use "try" here because the command can fail if the group is not yet present on the remote cluster
+    try_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
+    $XMLSTARLET sel -Q -t -v "//group/state[contains(text(), ${test_state})]" "${CMD_STDOUT}" || { fail; return 1; }
+
+    if [ -n "${image_count}" ]; then
+      actual_image_count=$($XMLSTARLET sel -t -v "count(//group/images/image)"  < "$CMD_STDOUT")
+      started_image_count=$($XMLSTARLET sel -t -v "count(//group/images/image/status[contains(text(), ${test_state})])" < "$CMD_STDOUT")
       test "${image_count}" = "${actual_image_count}" ||  { fail; return 1; }
 
       # If the group is started then check that all images are started too
@@ -2589,12 +2612,17 @@ wait_for_group_replay_state()
     local group_spec=$2
     local state=$3
     local image_count=$4
+    local asok_query=$5
     local s
 
     # TODO: add a way to force rbd-mirror to update replayers
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
         sleep ${s}
-        test_group_replay_state "${cluster}" "${group_spec}" "${state}" "${image_count}" && return 0
+        if [ 'true' = "${asok_query}" ]; then
+            test_group_replay_state "${cluster}" "${group_spec}" "${state}" "${image_count}" && return 0
+        else
+            test_group_replay_state_cli "${cluster}" "${group_spec}" "${state}" "${image_count}" && return 0
+        fi
     done
     fail "Failed to reach expected state"
     return 1
@@ -2606,7 +2634,9 @@ wait_for_group_replay_started()
     local group_spec=$2
     local image_count=$3
 
-    wait_for_group_replay_state "${cluster}" "${group_spec}" 'started' "${image_count}"
+    # Query the state via daemon socket and also via the cli to confirm that they agree
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'started' "${image_count}" 'true'
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'replaying' "${image_count}" 'false'
 }
 
 wait_for_group_replay_stopped()
@@ -2614,8 +2644,10 @@ wait_for_group_replay_stopped()
     local cluster=$1
     local group_spec=$2
 
-    # image_count will be 0 if the group is stopped
-    wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0
+    # Image_count will be 0 if the group is stopped
+    # Query the state via daemon socket and also via the cli to confirm that they agree
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0 'true'
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0 'false'
 }
 
 get_newest_group_snapshot_id()
