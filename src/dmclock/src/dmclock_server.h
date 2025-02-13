@@ -1241,7 +1241,8 @@ namespace crimson {
 	if (erase_point > 0 || idle_point > 0) {
 	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
-	    if (erase_point &&
+	    if (!(i2->second->has_request()) &&
+		erase_point &&
 	        erased_num < erase_max &&
 	        i2->second->last_tick <= erase_point) {
 	      delete_from_heaps(i2->second);
