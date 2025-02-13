@@ -1,0 +1,17 @@
+# - Config file for the FooBar package
+# It defines the following variables
+#  DMCLOCK_INCLUDE_DIRS - include directories for FooBar
+#  DMCLOCK_LIBRARIES    - libraries to link against
+ 
+# Compute paths
+get_filename_component(DMCLOCK_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+set(DMCLOCK_INCLUDE_DIRS "${DMCLOCK_CMAKE_DIR}/src")
+# set(DMCLOCK_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
+ 
+# Our library dependencies (contains definitions for IMPORTED targets)
+if(NOT TARGET dmclock AND NOT dmclock_BINARY_DIR)
+  include("${DMCLOCK_CMAKE_DIR}/dmclock-targets.cmake")
+endif()
+ 
+# These are IMPORTED targets created by FooBarTargets.cmake
+set(DMCLOCK_LIBRARIES dmclock)
