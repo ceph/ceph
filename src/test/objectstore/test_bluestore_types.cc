@@ -1005,6 +1005,72 @@ TEST(Blob, split) {
     ASSERT_EQ(0x1000u, R.get_blob().get_extents().front().length);
     ASSERT_EQ(0x1000u, R.get_referenced_bytes());
   }
+  {
+    // Check if we prune 'invalid' tails for resulting blobs
+
+    BlueStore::Blob L(coll.get());
+    BlueStore::Blob R(coll.get());
+    size_t l1 = 0x1000;
+    size_t l2 = 0x2000;
+    size_t l3 = 0x1000;
+    size_t l4 = 0x4000;
+    size_t csum_order = 12;
+    int csum_type = Checksummer::CSUM_CRC32C;
+    size_t csum_chunk = (1u << csum_order);
+    size_t csum_val_size = Checksummer::get_csum_value_size(csum_type);
+    auto make_blob = [&](BlueStore::Blob* b) {
+      b->dirty_blob().allocated_test(bluestore_pextent_t(0x2000, l1));
+      b->dirty_blob().allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, l2));
+      b->dirty_blob().allocated_test(bluestore_pextent_t(0x12000, l3));
+      b->dirty_blob().allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, l4));
+      // csum block size = 1K, full blob length covered with csum
+      b->dirty_blob().init_csum(csum_type, csum_order, l1 + l2 + l3 + l4);
+      b->get_ref(coll.get(), 0, l1);
+      b->get_ref(coll.get(), l1 + l2, l3);
+      return b;
+    };
+    {
+      BlueStore::Blob L(coll.get());
+      BlueStore::Blob R(coll.get());
+      make_blob(&L);
+      L.split(coll.get(), l1, &R);
+
+      // L blob verification
+      ASSERT_EQ(l1, L.get_blob().get_logical_length());
+      ASSERT_EQ(l1 / csum_chunk * csum_val_size, L.get_blob().csum_data.length());
+      ASSERT_EQ(1u, L.get_blob().get_extents().size());
+      ASSERT_EQ(0x2000u, L.get_blob().get_extents().front().offset);
+      ASSERT_EQ(l1, L.get_blob().get_extents().front().length);
+      ASSERT_EQ(l1, L.get_referenced_bytes());
+      // R blob verification
+      ASSERT_EQ(l2 + l3, R.get_blob().get_logical_length());
+      ASSERT_EQ((l2 + l3) / csum_chunk * csum_val_size, R.get_blob().csum_data.length());
+      ASSERT_EQ(2u, R.get_blob().get_extents().size());
+      ASSERT_EQ(0x12000u, R.get_blob().get_extents().back().offset);
+      ASSERT_EQ(l3, R.get_blob().get_extents().back().length);
+      ASSERT_EQ(l3, R.get_referenced_bytes());
+    }
+    {
+      BlueStore::Blob L(coll.get());
+      BlueStore::Blob R(coll.get());
+      make_blob(&L);
+      L.split(coll.get(), l1 + l2, &R);
+      // L blob verification
+      ASSERT_EQ(l1, L.get_blob().get_logical_length());
+      ASSERT_EQ(l1 / csum_chunk * csum_val_size, L.get_blob().csum_data.length());
+      ASSERT_EQ(1u, L.get_blob().get_extents().size());
+      ASSERT_EQ(0x2000u, L.get_blob().get_extents().front().offset);
+      ASSERT_EQ(l1, L.get_blob().get_extents().front().length);
+      ASSERT_EQ(l1, L.get_referenced_bytes());
+      // R blob verification
+      ASSERT_EQ(l3, R.get_blob().get_logical_length());
+      ASSERT_EQ(l3 / csum_chunk * csum_val_size, R.get_blob().csum_data.length());
+      ASSERT_EQ(1u, R.get_blob().get_extents().size());
+      ASSERT_EQ(0x12000u, R.get_blob().get_extents().front().offset);
+      ASSERT_EQ(l3, R.get_blob().get_extents().front().length);
+      ASSERT_EQ(l3, R.get_referenced_bytes());
+    }
+  }
 }
 
 TEST(Blob, legacy_decode) {
@@ -1234,6 +1300,363 @@ TEST(ExtentMap, compress_extent_map) {
   em.extent_map.insert(*new BlueStore::Extent(700, 500, 100, b2));
   ASSERT_EQ(1, em.compress_extent_map(0, 1000));
   ASSERT_EQ(6u, em.extent_map.size());
+}
+
+TEST(ExtentMap, split_blob) {
+  BlueStore store(g_ceph_context, "", 4096);
+  BlueStore::OnodeCacheShard *oc =
+      BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
+  BlueStore::BufferCacheShard *bc =
+      BlueStore::BufferCacheShard::create(&store, "lru", NULL);
+
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
+  BlueStore::Onode onode(coll.get(), ghobject_t(), "");
+  size_t shard_size =
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size;
+  // csum block size = 1K, full blob length covered with csum
+  size_t csum_order = 12;
+  size_t csum_chunk = 1u << csum_order;
+  int csum_type = Checksummer::CSUM_CRC32C;
+  size_t csum_val_size = Checksummer::get_csum_value_size(csum_type);
+
+  auto make_blob = [&](uint64_t o1,
+                       uint64_t l1,
+                       uint64_t o2,
+                       uint64_t l2,
+                       uint64_t o3,
+                       uint64_t l3,
+                       uint64_t o4,
+                       uint64_t l4) {
+    BlueStore::BlobRef b1(coll->new_blob());
+    b1->dirty_blob().allocated_test(bluestore_pextent_t(o1, l1));
+    b1->dirty_blob().allocated_test(bluestore_pextent_t(o2, l2));
+    b1->dirty_blob().allocated_test(bluestore_pextent_t(o3, l3));
+    b1->dirty_blob().allocated_test(bluestore_pextent_t(o4, l4));
+    b1->dirty_blob().init_csum(csum_type, csum_order, l1 + l2 + l3 + l4);
+    return b1;
+  };
+  {
+    // Split at 0x1000:
+    // [0(0x2000)~0x1000, 0x1000(-1)~0x2000, 0x3000(0x7000)~0x3000, 0xa000(-1)~0x4000]
+    //   result is [0(0x2000)~0x1000]], [0(-1)~2000, 0x2000(0x7000)~0x3000]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = 0x2000;
+    uint64_t l1 = 0x1000;
+    uint64_t o2 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l2 = 0x2000;
+    uint64_t o3 = 0x7000;
+    uint64_t l3 = 0x3000;
+    uint64_t o4 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l4 = 0x4000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    // We deliberately span this extent over both valid and invalid
+    // pextents of the blob. Which rather shouldn't happen
+    // in real life.
+    em.set_lextent(coll, 0, 0, full_len, lb, nullptr);
+    auto rb = em.split_blob(lb, l1, l1);
+
+    ASSERT_EQ(l1, lb->get_blob().get_logical_length());
+    ASSERT_EQ(l1 / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
+    ASSERT_EQ(1u, lb->get_blob().get_extents().size());
+    ASSERT_EQ(o1, lb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l1, lb->get_blob().get_extents().back().length);
+    ASSERT_EQ(l1, lb->get_referenced_bytes());
+
+    ASSERT_TRUE(rb != nullptr);
+    ASSERT_EQ(l2 + l3, rb->get_blob().get_logical_length()); // tail(l4) was pruned
+    ASSERT_EQ((l2 + l3) / csum_chunk * csum_val_size, rb->get_blob().csum_data.length());
+    ASSERT_EQ(2u, rb->get_blob().get_extents().size());
+    ASSERT_EQ(l2 + l3, rb->get_referenced_bytes());
+
+    ASSERT_EQ(bluestore_pextent_t::INVALID_OFFSET  ,
+              rb->get_blob().get_extents().front().offset);
+    ASSERT_EQ(l2, rb->get_blob().get_extents().front().length);
+    ASSERT_EQ(o3, rb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l3, rb->get_blob().get_extents().back().length);
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    auto ex_it = em.seek_lextent(0);
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1, ex_it->logical_offset);
+    ASSERT_EQ(0, ex_it->blob_offset);
+    ASSERT_EQ(l2 + l3, ex_it->length);
+  }
+  {
+    // Split at 0x3000:
+    // [0(0x2000)~0x1000, -1~0x2000, 0x3000(0x7000)~0x3000, -1~0x4000],
+    //   result is [0(0x2000)~0x1000], [0(0x7000)~0x3000]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = 0x2000;
+    uint64_t l1 = 0x1000;
+    uint64_t o2 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l2 = 0x2000;
+    uint64_t o3 = 0x7000;
+    uint64_t l3 = 0x3000;
+    uint64_t o4 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l4 = 0x4000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    // We deliberately span this extent over both valid and invalid
+    // pextents of the blob. Which rather shouldn't happen
+    // in real life.
+    em.set_lextent(coll, 0, 0, full_len, lb, nullptr);
+    auto rb = em.split_blob(lb, l1 + l2, l1 + l2);
+
+    ASSERT_EQ(l1, lb->get_blob().get_logical_length()); // tail(l2) was pruned
+    ASSERT_EQ(l1 / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
+    ASSERT_EQ(1u, lb->get_blob().get_extents().size());
+    ASSERT_EQ(o1, lb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l1, lb->get_blob().get_extents().back().length);
+    ASSERT_EQ(l1, lb->get_referenced_bytes());
+
+    ASSERT_TRUE(rb != nullptr);
+    ASSERT_EQ(l3, rb->get_blob().get_logical_length()); // tail(l4) was pruned
+    ASSERT_EQ((l3) / csum_chunk * csum_val_size, rb->get_blob().csum_data.length());
+    ASSERT_EQ(1u, rb->get_blob().get_extents().size());
+
+    ASSERT_EQ(o3, rb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l3, rb->get_blob().get_extents().back().length);
+    ASSERT_EQ(l3, rb->get_referenced_bytes());
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    auto ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1 + l2, ex_it->logical_offset);
+    ASSERT_EQ(0, ex_it->blob_offset);
+    ASSERT_EQ(l3, ex_it->length);
+  }
+  {
+    // Split at 0x6000:
+    // [0(0x2000)~0x1000, -1~0x2000, 0x3000(0x7000)~0x3000], -1~0x4000,
+    //   result is  [0(0x2000)~0x1000, -1~0x2000, 0x3000(0x7000)~0x3000]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = 0x2000;
+    uint64_t l1 = 0x1000;
+    uint64_t o2 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l2 = 0x2000;
+    uint64_t o3 = 0x7000;
+    uint64_t l3 = 0x3000;
+    uint64_t o4 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l4 = 0x4000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    // We deliberately span this extent over both valid and the first(!)
+    // invalid  pextents of the blob. Which permits prunning the tail
+    // during the split
+    em.set_lextent(coll, 0, 0, full_len - l4, lb, nullptr);
+    auto rb = em.split_blob(lb, full_len - l4, full_len - l4);
+
+    ASSERT_EQ(full_len - l4, lb->get_blob().get_logical_length()); // tail(l4) was pruned
+    ASSERT_EQ((full_len - l4) / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
+    ASSERT_EQ(full_len - l4, lb->get_referenced_bytes());
+    ASSERT_EQ(3u, lb->get_blob().get_extents().size());
+    ASSERT_EQ(o1, lb->get_blob().get_extents().front().offset);
+    ASSERT_EQ(l1, lb->get_blob().get_extents().front().length);
+    ASSERT_EQ(o3, lb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l3, lb->get_blob().get_extents().back().length);
+
+    ASSERT_TRUE(rb == nullptr);
+
+    ASSERT_EQ(1u, em.extent_map.size());
+    auto ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1 + l2 + l3, ex_it->length);
+  }
+  {
+    // Split at 0x6000:
+    // [0(0x2000)~0x1000], -1~0x2000, [0x3000(0x7000)~0x3000], -1~0x4000,
+    //   result is [0(0x2000)~0x1000], -1~0x2000, [0x3000(0x7000)~0x3000]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = 0x2000;
+    uint64_t l1 = 0x1000;
+    uint64_t o2 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l2 = 0x2000;
+    uint64_t o3 = 0x7000;
+    uint64_t l3 = 0x3000;
+    uint64_t o4 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l4 = 0x4000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    em.set_lextent(coll, 0, 0, l1, lb, nullptr);
+    em.set_lextent(coll, l1 + l2, l1 + l2, l3, lb, nullptr);
+    auto rb = em.split_blob(lb, full_len - l4, full_len - 4);
+
+    ASSERT_EQ(full_len - l4, lb->get_blob().get_logical_length()); // tail(l4) was pruned
+    ASSERT_EQ((full_len - l4) / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
+    ASSERT_EQ(l1 + l3, lb->get_referenced_bytes());
+    ASSERT_EQ(3u, lb->get_blob().get_extents().size());
+    ASSERT_EQ(o1, lb->get_blob().get_extents().front().offset);
+    ASSERT_EQ(l1, lb->get_blob().get_extents().front().length);
+    ASSERT_EQ(o3, lb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l3, lb->get_blob().get_extents().back().length);
+
+    ASSERT_TRUE(rb == nullptr);
+
+    ASSERT_EQ(2u, em.extent_map.size());
+    auto ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(l1 + l2, ex_it->logical_offset);
+    ASSERT_EQ(l1 + l2, ex_it->blob_offset);
+    ASSERT_EQ(l3, ex_it->length);
+  }
+
+  {
+    // Split at 0x6000:
+    // [0(0x2000)~0x1000, -1~0x2000, 0x3000(0x7000)~0x3000] [0(-1)~0x4000]
+    //   result is [0(0x2000)~0x1000], -1~0x2000, 0x3000(0x7000)~0x3000]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = 0x2000;
+    uint64_t l1 = 0x1000;
+    uint64_t o2 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l2 = 0x2000;
+    uint64_t o3 = 0x7000;
+    uint64_t l3 = 0x3000;
+    uint64_t o4 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l4 = 0x4000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    em.set_lextent(coll, 0, 0, l1 + l2 + l3, lb, nullptr);
+    // We deliberately span the second extent over invalid  pextent.
+    // Which permits prunning the tail during the split
+    // and this extent removal
+    em.set_lextent(coll, full_len - l4, full_len - l4, l4, lb, nullptr);
+    auto rb = em.split_blob(lb, l1 + l2 + l3, l1 + l2 + l3);
+
+    ASSERT_EQ(l1 + l2 + l3, lb->get_blob().get_logical_length()); // tail(l4) was pruned
+    ASSERT_EQ((l1 + l2 + l3) / csum_chunk * csum_val_size, lb->get_blob().csum_data.length());
+    ASSERT_EQ(l1 + l2 + l3, lb->get_referenced_bytes());
+    ASSERT_EQ(3u, lb->get_blob().get_extents().size());
+    ASSERT_EQ(o1, lb->get_blob().get_extents().front().offset);
+    ASSERT_EQ(l1, lb->get_blob().get_extents().front().length);
+    ASSERT_EQ(o3, lb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l3, lb->get_blob().get_extents().back().length);
+
+    ASSERT_TRUE(rb == nullptr);
+
+    ASSERT_EQ(1u, em.extent_map.size());
+    auto ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(lb, ex_it->blob);
+    ASSERT_EQ(0u, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l1 + l2 + l3, ex_it->length);
+  }
+
+  {
+    // Split at 0x6000:
+    // [0(-1)~0x6000, 0x6000(0x2000)~0x3000, 0x9000(-1)~0x6000, 0xF000(0x7000)~0x1000],
+    //   result is [0(0x2000)~0x3000, -1~0x6000, 0x9000(0x7000)~0x1000]]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l1 = 0x6000;
+    uint64_t o2 = 0x2000;
+    uint64_t l2 = 0x3000;
+    uint64_t o3 = bluestore_pextent_t::INVALID_OFFSET;;
+    uint64_t l3 = 0x6000;
+    uint64_t o4 = 0x7000;
+    uint64_t l4 = 0x1000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    em.set_lextent(coll, l1, l1, full_len - l1, lb, nullptr);
+    auto rb = em.split_blob(lb, l1, l1);
+
+    ASSERT_TRUE(!lb->is_referenced());
+    ASSERT_TRUE(rb != nullptr);
+    ASSERT_EQ(l2 + l3 + l4, rb->get_blob().get_logical_length()); // head(l1) was pruned
+    ASSERT_EQ((l2 + l3 + l4) / csum_chunk * csum_val_size, rb->get_blob().csum_data.length());
+    ASSERT_EQ(3u, rb->get_blob().get_extents().size());
+    ASSERT_EQ(o2, rb->get_blob().get_extents().front().offset);
+    ASSERT_EQ(l2, rb->get_blob().get_extents().front().length);
+    ASSERT_EQ(o4, rb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l4, rb->get_blob().get_extents().back().length);
+    ASSERT_EQ(l2 + l3 + l4, rb->get_referenced_bytes());
+
+    auto ex_it = em.seek_lextent(0);
+
+    ASSERT_EQ(1u, em.extent_map.size());
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l2 + l3 + l4, ex_it->length);
+  }
+  {
+    // Split at 0x6000:
+    // [-1~0x6000, 0x6000(0x2000)~0x3000], (-1)~0x6000, [0xF000(0x7000)~0x1000],
+    //   result is [0(0x2000)~0x3000], -1~0x6000, [0x9000(0x7000)~0x1000]]
+    // (note: offsets above are in the following format: blob_offset(lba))
+    uint64_t o1 = bluestore_pextent_t::INVALID_OFFSET;
+    uint64_t l1 = 0x6000;
+    uint64_t o2 = 0x2000;
+    uint64_t l2 = 0x3000;
+    uint64_t o3 = bluestore_pextent_t::INVALID_OFFSET;;
+    uint64_t l3 = 0x6000;
+    uint64_t o4 = 0x7000;
+    uint64_t l4 = 0x1000;
+
+    BlueStore::ExtentMap em(&onode, shard_size);
+    BlueStore::BlobRef lb = make_blob(o1, l1, o2, l2, o3, l3, o4, l4);
+    size_t full_len = l1 + l2 + l3 + l4;
+    em.set_lextent(coll, l1, l1, l2, lb, nullptr);
+    em.set_lextent(coll, full_len - l4, full_len - l4, l4, lb, nullptr);
+    auto rb = em.split_blob(lb, l1, l1);
+
+    ASSERT_TRUE(!lb->is_referenced());
+    ASSERT_TRUE(rb != nullptr);
+    ASSERT_EQ(l2 + l3 + l4, rb->get_blob().get_logical_length()); // head(l1) was pruned
+    ASSERT_EQ((l2 + l3 + l4) / csum_chunk * csum_val_size, rb->get_blob().csum_data.length());
+    ASSERT_EQ(3u, rb->get_blob().get_extents().size());
+    ASSERT_EQ(o2, rb->get_blob().get_extents().front().offset);
+    ASSERT_EQ(l2, rb->get_blob().get_extents().front().length);
+    ASSERT_EQ(o4, rb->get_blob().get_extents().back().offset);
+    ASSERT_EQ(l4, rb->get_blob().get_extents().back().length);
+    ASSERT_EQ(l2 + l4, rb->get_referenced_bytes());
+
+    ASSERT_EQ(2u, em.extent_map.size());
+
+    auto ex_it = em.seek_lextent(0);
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1, ex_it->logical_offset);
+    ASSERT_EQ(0u, ex_it->blob_offset);
+    ASSERT_EQ(l2, ex_it->length);
+    ++ex_it;
+    ASSERT_EQ(rb, ex_it->blob);
+    ASSERT_EQ(l1 + l2 + l3, ex_it->logical_offset);
+    ASSERT_EQ(l2 + l3, ex_it->blob_offset);
+    ASSERT_EQ(l4, ex_it->length);
+  }
 }
 
 class BlueStoreFixture :
