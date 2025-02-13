@@ -217,8 +217,7 @@ ErasureCodeIsaDefault::apply_delta(const shard_id_map<bufferptr> &in,
             data[1] = const_cast<char*>(codingbuf.c_str());
             char * coding = const_cast<char*>(codingbuf.c_str());
             isa_xor(data, coding, blocksize, data_vectors);
-          }
-          else {
+          } else {
             unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(databuf.c_str()));
             unsigned char* coding = reinterpret_cast<unsigned char*>(const_cast<char*>(codingbuf.c_str()));
             ec_encode_data_update(blocksize, k, 1, static_cast<int>(datashard), encode_tbls + (32 * k * (static_cast<int>(codingshard) - k)), data, &coding);
@@ -429,14 +428,22 @@ int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
   err |= to_int("m", profile, &m, DEFAULT_M, ss);
   err |= sanity_check_k_m(k, m, ss);
 
+  if (m > MAX_M) {
+    *ss << "isa: m=" << m << " should be less/equal than " << MAX_M
+    << " : revert to m=" << MAX_M << std::endl;
+    m = MAX_M;
+    err = -EINVAL;
+  }
+
   if (matrixtype == kVandermonde) {
     // these are verified safe values evaluated using the
     // benchmarktool and 10*(combinatoric for maximum loss) random
     // full erasures
-    if (k > 32) {
+    if (k > MAX_K) {
       *ss << "Vandermonde: m=" << m
-        << " should be less/equal than 32 : revert to k=32" << std::endl;
-      k = 32;
+        << " should be less/equal than " << MAX_K
+        << " : revert to k=" << MAX_K << std::endl;
+      k = MAX_K;
       err = -EINVAL;
     }
 
