@@ -43,6 +43,7 @@ public:
   };
 
   static constexpr int MAX_K = 32;
+  static constexpr int MAX_M = 32;
 
   int k;
   int m;
