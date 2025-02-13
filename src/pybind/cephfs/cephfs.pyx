@@ -2104,7 +2104,7 @@ cdef class LibCephFS(object):
 
         return self.getxattr(path, name, size=size, follow_symlink=False)
 
-    def setxattr(self, path, name, value, flags, follow_symlink=True):
+    def setxattr(self, path, name, value, flags=0, follow_symlink=True):
         """
         Set an extended attribute on a file.
 
@@ -2116,10 +2116,10 @@ cdef class LibCephFS(object):
 
         name = cstr(name, 'name')
         path = cstr(path, 'path')
+        value = cstr(value, 'value')
+
         if not isinstance(flags, int):
             raise TypeError('flags must be a int')
-        if not isinstance(value, bytes):
-            raise TypeError('value must be a bytes')
 
         cdef:
             char *_path = path
@@ -2138,7 +2138,8 @@ cdef class LibCephFS(object):
                                     _value, _value_len, _flags)
 
         if ret < 0:
-            raise make_ex(ret, "error in setxattr")
+            raise make_ex(ret, f"error in setxattr(): path={path}, name={name},"
+                               f"value={value}, flags={flags}")
 
     def fsetxattr(self, fd, name, value, flags):
         """

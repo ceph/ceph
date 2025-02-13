@@ -1,11 +1,19 @@
+from errno import EINVAL, EAGAIN, ENOTEMPTY, ENOENT
+from os.path import basename
 from logging import getLogger
 from typing import Final
 
+from cephfs import Error, InvalidValue, ObjectNotFound
+
 from .subvolume_v2 import SubvolumeV2
+from .subvolume_attrs import SubvolumeTypes
 from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
-from ...utils import verify_uuid, safe_join, to_utf8b
-from ...fs_util import listdir, path_exists
+from .op_sm import SubvolumeOpSm
+from ..trash import create_trashcan, open_trashcan
+from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8b
+from ...fs_util import listdir, path_exists, listsnaps
+from ...exception import VolumeException, MetadataMgrException, OpSmException
 
 
 log = getLogger(__name__)
@@ -33,6 +41,9 @@ class SubvolHelper:
     def path_exists(self, path):
         return path_exists(self.fs, path)
 
+    def list_snaps(self, path):
+        return to_utf8b(listsnaps(self.fs, self.spec, path))
+
 
 class SubvolumeV3(SubvolHelper, SubvolumeV2):
     '''
@@ -54,9 +65,8 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
         self.group = group
 
         self.name = to_utf8b(name)
-        if uuid:
-            self.uuid = to_utf8b(uuid)
-            verify_uuid(self.uuid)
+        self.uuid = to_utf8b(uuid) if uuid else gen_uuid()
+        verify_uuid(self.uuid)
 
         self.cmode = None
         self.user_id = None
@@ -162,14 +172,194 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
     def get_incars(self):
         return self.list_dirs(self.incar_base_path)
 
+
+    # ----- methods for subvol creation, opening and removal -----
+
+
+    def stat_subvol_mnt_path(self):
+        try:
+            self.fs.stat(self.gen_mnt_path())
+        except ObjectNotFound:
+            # when subvol is present but it has no incars
+            self.fs.stat(self.base_path)
+
+    def mark_subvolume(self):
+        '''
+        Set vxattr ceph.dir.subvolume to 1 on the incar/UUID path.
+        '''
+        # if subvol has not incar ATM
+        if not self.path_exists(self.gen_incar_path()):
+            return
+
+        subvol_xattr = 'ceph.dir.subvolume'
+        try:
+            # MDS treats this as a no-op for already marked subvolume
+            self.fs.setxattr(self.gen_incar_path(), subvol_xattr, '1', 0)
+        except InvalidValue:
+            raise VolumeException(EINVAL, f'invalid value for "{subvol_xattr}"')
+        except Error as e:
+            raise VolumeException(exception=e)
+
+    def _cleanup_on_creation_failure(self, exc):
+        assert self.uuid and self.creating
+
+        try:
+            self.trash_incar_dir(self.uuid)
+            assert len(self.get_incars()) == 0
+            self.trash_base_dir()
+            #if self.path_exists(self.gen_meta_path()):
+            #    self.fs.unlink(self.gen_meta_path())
+        except Exception as e:
+            log.error('cleanup after failed subvol creation failure also '
+                      'failed')
+            raise VolumeException(exception=e)
+
+        log.info('cleanup after failed subvol creation passed, raising '
+                  'exception that cause subvol creation to fail...')
+        if isinstance(exc, VolumeException):
+            raise exc
+        elif isinstance(exc, MetadataMgrException):
+            raise VolumeException(EINVAL,
+                                  f'exception in subvolume metadata: {exc}')
+        elif isinstance(exc, Error):
+            raise VolumeException(exception=exc)
+        else:
+            assert False, 'unexpected exception'
+
+    def set_meta_symlink(self, old_uuid):
+        if old_uuid:
+            assert self.path_exists(self.gen_meta_path(old_uuid)), \
+                ('meta file for previous incar is missing, it is to be '
+                 f'created first. self.meta_path = {self.meta_path}')
+        else:
+            assert self.path_exists(self.gen_meta_path()), \
+                ('meta file for current incar is missing, it is to be '
+                 f'created first. self.meta_path = {self.meta_path}')
+
+        assert self.uuid in self.meta_file_name, \
+            (f'self.meta_file_name = {self.meta_file_name} '
+             f'self.uuid = {self.uuid}')
+
+        assert self.meta_file_name == basename(self.meta_path), \
+            (f'self.meta_file_name = {self.meta_file_name} '
+             f'self.meta_path = {self.meta_path}')
+
+        if self.path_exists(self.meta_symlink_path, follow_symlink=False):
+            self.fs.unlink(self.meta_symlink_path)
+        self.fs.symlink(self.meta_file_name, self.meta_symlink_path[1:])
+
+        if old_uuid:
+            log.debug(f'subvol {self.name}: meta link updated successfully')
+        else:
+            log.debug(f'subvol {self.name}: meta link set successfully')
+
+    def _write_meta_file(self, subvol_type):
+        assert self.creating
+
+        try:
+            initial_state = SubvolumeOpSm.get_init_state(subvol_type)
+        except OpSmException as e:
+            if subvol_type == SubvolumeTypes.TYPE_NORMAL:
+                raise VolumeException(EINVAL,
+                                      'subvol creation failed, exception that '
+                                      f'was raised: {e}')
+            if subvol_type == SubvolumeTypes.TYPE_CLONE:
+                raise VolumeException(EINVAL,
+                                      f'clone failed, exception raised: {e}')
+
+        if self.creating or len(self.get_incars()) == 1:
+            self.init_config(self.VERSION, subvol_type, self.gen_mnt_path(),
+                              initial_state)
+
+        else:
+            self._set_incarnation_metadata(subvol_type, self.gen_mnt_path(),
+                                           initial_state)
+
+    def _create_dir_layout(self, attrs):
+        assert self.creating
+
+        mode = attrs.pop('mode')
+        if not self.path_exists(self.group.path):
+            self.fs.mkdirs(self.group.path, self.spec.DEFAULT_MODE)
+        self.fs.mkdirs(self.gen_mnt_path(), mode)
+
+        self.mark_subvolume()
+        self.set_attrs(self.gen_mnt_path(), attrs)
+
+    def _create(self, attrs, subvol_type, write_auth_md):
+        assert self.creating
+
+        old_uuid = None
+        if self.uuid and self.path_exists(self.gen_retained_path()):
+            old_uuid = self.uuid
+            self.uuid = gen_uuid()
+        self._reset_basic_paths()
+        self._reset_md_attrs()
+
+        self._create_dir_layout(attrs)
+
+        self._write_meta_file(subvol_type)
+        self.set_meta_symlink(old_uuid)
+        if old_uuid:
+            self._reset_md_attrs()
+
+        if write_auth_md:
+            # Create the subvolume metadata file which manages auth-ids if it
+            # doesn't exist
+            self.auth_md.create_subvolume_metadata_file(self.group.name,
+                                                        self.name)
+        log.debug(f'subvol {self.name}: created successfully')
+
+    def create(self, attrs):
+        self.creating = True
+
+        try:
+            self._create(attrs, SubvolumeTypes.TYPE_NORMAL, write_auth_md=True)
+        except (VolumeException, MetadataMgrException, Error) as e:
+            self._cleanup_on_creation_failure(e)
+
+    def remove(self, should_retain_snaps=False):
+        if self.has_snap():
+            if not should_retain_snaps:
+                raise VolumeException(ENOTEMPTY,
+                                      f'subvolume {self.name} has snapshots')
+
+            self.retain_mnt_dir_content()
+        else:
+            if not (self.md and
+                    self.safe_to_remove_subvolume_clone(self.state)):
+                raise VolumeException(EAGAIN,
+                                      f'{self.name} clone in-progress, please '
+                                      'cancel the clone and retry')
+
+            if len(self.get_incars()) == 1:
+                self.trash_base_dir()
+
+            # Delete the volume meta file, if it's not already deleted
+            self.auth_md.delete_subvolume_metadata_file(self.group.name,
+                                                        self.name)
+
+    def trash_base_dir(self):
+        create_trashcan(self.fs, self.spec)
+
+        with open_trashcan(self.fs, self.spec) as trashcan:
+            # it's incorrect to call this method if there are more than one
+            # incars.
+            assert len(self.get_incars()) in (0, 1)
+            assert self.has_snap() is False
+            trashcan.dump(self.base_path)
+
+    def trash_incar_dir(self, uuid):
+        create_trashcan(self.fs, self.spec)
+        with open_trashcan(self.fs, self.spec) as trashcan:
+            trashcan.dump(self.gen_incar_path(uuid))
+
+
     # ==================================================================
     # Methods that makes code of this class compatible with SubvolumeV2,
     # SubvolumeV1 and SubvolumeBase.
     # ==================================================================
 
-    def __init__(self, fs, spec):
-        self.fs = fs
-        self.spec = spec
 
     @property
     def vol_spec(self):
@@ -202,3 +392,44 @@ class SubvolumeV3(SubvolHelper, SubvolumeV2):
         # since v3 does not have in-subvol ".trash" dir, this method must always
         # return False.
         return False
+
+    @property
+    def trash_dir(self):
+        raise RuntimeError('method trash_dir() shouldn\'t be called in '
+                           'subvol v3 codebase, since it doesn\'t have a '
+                           'in-subvol trash dir (which is named ".trash" in'
+                           'subvol v2)')
+
+    def create_trashcan(self):
+        raise RuntimeError('method create_trashcan() shouldn\'t be called in '
+                           'subvol v3 codebase, since it doesn\'t have a '
+                           'in-subvol trash dir (which is named ".trash" in'
+                           'subvol v2)')
+
+    def snapshot_base_path(self):
+        return self.gen_snap_base_path()
+
+    def snapshot_path(self, snap_name):
+        if snap_path := self.get_snap_path(snap_name):
+            return snap_path
+
+        raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+    def snapshot_data_path(self, snap_name):
+        if snap_data_path := self.get_snap_data_path(snap_name):
+            return snap_data_path
+
+        raise VolumeException(ENOENT, f'snap "{snap_name}" does not exist')
+
+    def list_snapshots(self):
+        '''
+        :return: list of snap names
+        :rtype: list of str
+        '''
+        return self.get_snap_names()
+
+    def create_snapshot(self, snap_name):
+        return self.create_snap(snap_name)
+
+    def remove_snapshot(self, snap_name, force=False):
+        return self.rm_snap(snap_name, force)
