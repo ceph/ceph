@@ -7,6 +7,7 @@
 #include <dbstore.h>
 #include <sqliteDB.h>
 #include "rgw_common.h"
+#include "common/Clock.h" // for ceph_clock_now()
 
 using namespace std;
 using DB = rgw::store::DB;

@@ -13,6 +13,7 @@
 #include "rgw_sal_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #include "common/ceph_json.h"
 

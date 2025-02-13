@@ -10,6 +10,7 @@
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
+#include "include/timegm.h"
 #include "include/types.h"
 #include "include/str_list.h"
 

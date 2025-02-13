@@ -3,6 +3,7 @@
 
 #include "include/Context.h"
 #include "common/ceph_json.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "rgw_coroutine.h"
 #include "rgw_asio_thread.h"
 
@@ -10,6 +11,8 @@
 #include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context

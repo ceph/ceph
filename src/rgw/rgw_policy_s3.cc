@@ -1,10 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "rgw_policy_s3.h"
+
 #include <errno.h>
 
 #include "common/ceph_json.h"
-#include "rgw_policy_s3.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "include/timegm.h"
 #include "rgw_common.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_cksum.h"

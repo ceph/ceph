@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "common/async/yield_context.h"
+#include "include/types.h" // for epoch_t
 #include "rgw_realm_reloader.h"
 #include "rgw_sal_fwd.h"
 
