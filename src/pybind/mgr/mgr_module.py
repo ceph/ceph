@@ -2251,6 +2251,92 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         service['type'], service['id']
                     ))
                     continue
+
+                # Value is returned in a potentially-multi-service format,
+                # get just the service we're asking about
+                svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
+                schema = schemas[svc_full_name]
+
+                # Populate latest values
+                for counter_path, counter_schema in schema.items():
+                    # self.log.debug("{0}: {1}".format(
+                    #     counter_path, json.dumps(counter_schema)
+                    # ))
+                    priority = counter_schema['priority']
+                    assert isinstance(priority, int)
+                    if priority < prio_limit:
+                        continue
+
+                    tp = counter_schema['type']
+                    assert isinstance(tp, int)
+                    counter_info = dict(counter_schema)
+                    # Also populate count for the long running avgs
+                    if tp & self.PERFCOUNTER_LONGRUNAVG:
+                        v, c = self.get_latest_avg(
+                            service['type'],
+                            service['id'],
+                            counter_path
+                        )
+                        counter_info['value'], counter_info['count'] = v, c
+                        result[svc_full_name][counter_path] = counter_info
+                    else:
+                        counter_info['value'] = self.get_latest(
+                            service['type'],
+                            service['id'],
+                            counter_path
+                        )
+
+                    result[svc_full_name][counter_path] = counter_info
+
+        self.log.debug("returning {0} counter".format(len(result)))
+
+        return result
+    
+    # TODO: naveen: fix comments and add a comment to say that people should use this API over the previous
+    @API.expose
+    @profile_method()
+    def get_labeled_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
+        """
+        Return the perf counters currently known to this ceph-mgr
+        instance, filtered by priority equal to or greater than `prio_limit`.
+
+        The result is a map of string to dict, associating services
+        (like "osd.123") with their counters.  The counter
+        dict for each service maps counter paths to a counter
+        info structure, which is the information from
+        the schema, plus an additional "value" member with the latest
+        value.
+        """
+
+        result = defaultdict(dict)  # type: Dict[str, dict]
+
+        for server in self.list_servers():
+            for service in cast(List[ServiceInfoT], server['services']):
+                if service['type'] not in services:
+                    continue
+
+                schemas = self.get_perf_schema(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas: {}'.format(schemas))
+                self.log.debug('perf-schemas json: {}'.format(json.dumps(schemas)))
+                if not schemas:
+                    self.log.warning("No perf counter schema for {0}.{1}".format(
+                        service['type'], service['id']
+                    ))
+                    continue
                 
                 labeled_schemas = self.get_perf_schema_labeled(service['type'], service['id'])
                 self.log.debug('services: {}'.format(service))
