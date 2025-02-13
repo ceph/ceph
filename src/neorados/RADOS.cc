@@ -28,6 +28,7 @@
 #include "common/common_init.h"
 #include "common/hobject.h"
 #include "common/EventTrace.h"
+#include "log/Log.h"
 
 #include "global/global_init.h"
 
