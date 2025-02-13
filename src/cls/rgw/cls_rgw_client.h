@@ -384,17 +384,20 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry);
-int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, const rgw_cls_bi_entry& entry);
-void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, const rgw_cls_bi_entry& entry);
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string& oid, rgw_cls_bi_entry entry);
+void cls_rgw_bi_put(librados::ObjectWriteOperation& op, rgw_cls_bi_entry entry);
 // Write the given array of index entries and update bucket stats accordingly.
 // If existing entries may be overwritten, pass check_existing=true to decrement
 // their stats first.
 void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             std::vector<rgw_cls_bi_entry> entries,
                             bool check_existing);
-int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
-                   const std::string& name, const std::string& marker, uint32_t max,
-                   std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
+void cls_rgw_bi_list(librados::ObjectReadOperation& op,
+                     std::string name, std::string marker,
+                     uint32_t max, bool reshardlog, bufferlist& bl);
+int cls_rgw_bi_list_decode(const bufferlist& bl,
+                           std::list<rgw_cls_bi_entry>& entries,
+                           bool& is_truncated);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
                             const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
@@ -665,15 +668,20 @@ void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op, cons
 /* resharding */
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
 			 const cls_rgw_reshard_entry& entry,
-			 const bool create_only);
-void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
-// these overloads which call io_ctx.operate() should not be called in the rgw.
-// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
-#ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const std::string& oid, std::string& marker, uint32_t max,
-                         std::list<cls_rgw_reshard_entry>& entries, bool* is_truncated);
-int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_reshard_entry& entry);
-#endif
+			 bool create_only);
+void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op,
+                            const cls_rgw_reshard_entry& entry);
+void cls_rgw_reshard_list(librados::ObjectReadOperation& op,
+                          std::string marker, uint32_t max,
+                          bufferlist& bl);
+int cls_rgw_reshard_list_decode(const bufferlist& bl,
+                                std::vector<cls_rgw_reshard_entry>& entries,
+                                bool* is_truncated);
+void cls_rgw_reshard_get(librados::ObjectReadOperation& op,
+                         std::string tenant, std::string bucket_name,
+                         bufferlist& bl);
+int cls_rgw_reshard_get_decode(const bufferlist& bl,
+                               cls_rgw_reshard_entry& entry);
 
 // If writes to the bucket index should be blocked during resharding, fail with
 // the given error code. RGWRados::guard_reshard() calls this in a loop to retry

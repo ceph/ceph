@@ -114,6 +114,10 @@ add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
 target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
 
+add_executable(unittest_rgw_reshard_writer test_rgw_reshard_writer.cc)
+add_ceph_unittest(unittest_rgw_reshard_writer)
+target_link_libraries(unittest_rgw_reshard_writer ${rgw_libs})
+
 set(test_rgw_a_src test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})
 target_link_libraries(test_rgw_a ${rgw_libs})

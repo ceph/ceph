@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <functional>
+#include <future>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
@@ -58,7 +59,6 @@ class RGWSyncLogTrimThread;
 class RGWSyncTraceManager;
 struct RGWZoneGroup;
 struct RGWZoneParams;
-class RGWReshard;
 class RGWReshardWait;
 namespace rgw { class SiteConfig; }
 
@@ -556,7 +556,8 @@ public:
    */
   std::string host_id;
 
-  RGWReshard* reshard{nullptr};
+  boost::asio::cancellation_signal reshard_cancel;
+  std::future<void> reshard_future;
   std::shared_ptr<RGWReshardWait> reshard_wait;
 
   virtual ~RGWRados() = default;
@@ -599,7 +600,8 @@ public:
   /** Initialize the RADOS instance and prepare to do other ops */
   int init_svc(bool raw, const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
   virtual int init_rados();
-  int init_complete(const DoutPrefixProvider *dpp, optional_yield y);
+  int init_complete(const DoutPrefixProvider *dpp, optional_yield y,
+                    boost::asio::io_context& io_context);
   void finalize();
 
   int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type, const std::map<std::string, std::string>& meta);
@@ -1544,7 +1546,6 @@ public:
   int bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent, optional_yield y);
   int bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_olh_entry *olh, optional_yield y);
   int bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry, optional_yield y);
-  void bi_put(librados::ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y);
   int bi_put(BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y);
   int bi_put(const DoutPrefixProvider *dpp, rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry, optional_yield y);
   int bi_list(const DoutPrefixProvider *dpp,
@@ -1555,10 +1556,9 @@ public:
 	      uint32_t max,
 	      std::list<rgw_cls_bi_entry> *entries,
 	      bool *is_truncated, bool reshardlog, optional_yield y);
-  int bi_list(BucketShard& bs, const std::string& filter_obj, const std::string& marker, uint32_t max, std::list<rgw_cls_bi_entry> *entries,
+  int bi_list(const DoutPrefixProvider *dpp,
+	      BucketShard& bs, const std::string& filter_obj, const std::string& marker, uint32_t max, std::list<rgw_cls_bi_entry> *entries,
               bool *is_truncated, bool reshardlog, optional_yield y);
-  int bi_list(const DoutPrefixProvider *dpp, rgw_bucket& bucket, const std::string& obj_name, const std::string& marker, uint32_t max,
-              std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog, optional_yield y);
   int bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs);
 
   int trim_reshard_log_entries(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);

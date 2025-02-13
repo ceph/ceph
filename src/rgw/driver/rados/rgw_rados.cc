@@ -1097,9 +1097,8 @@ void RGWRados::finalize()
   }
 
   if (run_reshard_thread) {
-    reshard->stop_processor();
+    rgwrados::reshard::stop(reshard_cancel, reshard_future);
   }
-  delete reshard;
   delete index_completion_manager;
 
   if (run_notification_thread) {
@@ -1184,7 +1183,8 @@ int RGWRados::update_service_map(const DoutPrefixProvider *dpp, std::map<std::st
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y,
+                            boost::asio::io_context& io_context)
 {
   int ret;
 
@@ -1347,13 +1347,13 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
 
   reshard_wait = std::make_shared<RGWReshardWait>();
 
-  reshard = new RGWReshard(this->driver);
-
   // disable reshard thread based on zone/zonegroup support
   run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
 
-  if (run_reshard_thread)  {
-    reshard->start_processor();
+  if (run_reshard_thread) {
+    // spawn a coroutine to process the reshard log
+    reshard_future = rgwrados::reshard::start(driver, io_context,
+                                              reshard_cancel);
   }
 
   index_completion_manager = new RGWIndexCompletionManager(this);
@@ -9576,12 +9576,6 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
   return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
 }
 
-void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)
-{
-  auto& ref = bs.bucket_obj;
-  cls_rgw_bi_put(op, ref.obj.oid, entry);
-}
-
 int RGWRados::bi_put(BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)
 {
   auto& ref = bs.bucket_obj;
@@ -9611,39 +9605,23 @@ int RGWRados::bi_put(const DoutPrefixProvider *dpp, rgw_bucket& bucket, rgw_obj&
   return bi_put(bs, entry, y);
 }
 
-int RGWRados::bi_list(const DoutPrefixProvider *dpp, rgw_bucket& bucket,
-		      const string& obj_name_filter, const string& marker, uint32_t max,
-		      list<rgw_cls_bi_entry> *entries, bool *is_truncated,
-		      bool reshardlog, optional_yield y)
+int RGWRados::bi_list(const DoutPrefixProvider *dpp,
+                      BucketShard& bs, const string& obj_name_filter, const string& marker, uint32_t max,
+		      list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog, optional_yield y)
 {
-  rgw_obj obj(bucket, obj_name_filter);
-  BucketShard bs(this);
-  int ret = bs.init(bucket, obj, nullptr /* no RGWBucketInfo */, dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 5) << "bs.init() returned ret=" << ret << dendl;
-    return ret;
-  }
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_bi_list(op, obj_name_filter, marker, max, reshardlog, bl);
 
   auto& ref = bs.bucket_obj;
-  ret = cls_rgw_bi_list(ref.ioctx, ref.obj.oid, obj_name_filter, marker, max, entries, is_truncated, reshardlog);
+  int ret = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, nullptr, y);
   if (ret == -ENOENT) {
     *is_truncated = false;
   }
   if (ret < 0)
     return ret;
 
-  return 0;
-}
-
-int RGWRados::bi_list(BucketShard& bs, const string& obj_name_filter, const string& marker, uint32_t max,
-		      list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog, optional_yield y)
-{
-  auto& ref = bs.bucket_obj;
-  int ret = cls_rgw_bi_list(ref.ioctx, ref.obj.oid, obj_name_filter, marker, max, entries, is_truncated, reshardlog);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return cls_rgw_bi_list_decode(bl, *entries, *is_truncated);
 }
 
 int RGWRados::bi_list(const DoutPrefixProvider *dpp,
@@ -9659,7 +9637,7 @@ int RGWRados::bi_list(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  return bi_list(bs, obj_name_filter, marker, max, entries, is_truncated, reshardlog, y);
+  return bi_list(dpp, bs, obj_name_filter, marker, max, entries, is_truncated, reshardlog, y);
 }
 
 int RGWRados::bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs)
