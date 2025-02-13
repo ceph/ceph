@@ -526,8 +526,15 @@ BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
+%if 0%{?rhel} >= 10
+# TODO - can this be simplified on other versions to use macros?
+BuildRequires: python-rpm-macros
+%global pathfix_py /usr/lib/rpm/redhat/pathfix.py
+%else
 %if 0%{?rhel} >= 8
 BuildRequires:  /usr/bin/pathfix.py
+%global pathfix_py /usr/bin/pathfix.py
+%endif
 %endif
 
 %description
@@ -1634,8 +1641,8 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
 %if 0%{?rhel} >= 8 || 0%{?openEuler}
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
+%{__python3} %{pathfix_py} -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
+%{__python3} %{pathfix_py} -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
 %endif
 
 #set up placeholder directories
