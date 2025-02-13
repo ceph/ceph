@@ -5,7 +5,6 @@ import errno
 import logging
 import hashlib
 from typing import Dict, Union
-from pathlib import Path
 
 import cephfs
 
@@ -14,7 +13,8 @@ from ..pin_util import pin
 from .subvolume_attrs import SubvolumeTypes
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
-from ...fs_util import get_ancestor_xattr
+from ...utils import verify_uuid, to_str
+from ...fs_util import get_ancestor_xattr, path_exists
 from ...exception import MetadataMgrException, VolumeException
 from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
@@ -40,6 +40,10 @@ class SubvolumeBase(object):
         self.name = name
         self.legacy_mode = legacy
         self.load_config()
+
+    @property
+    def md(self):
+        return self.metadata_mgr
 
     @property
     def subvolname(self):
@@ -473,43 +477,128 @@ class SubvolumeBase(object):
                                subvolume_path, subvolume_state.value)
         self.metadata_mgr.flush()
 
+    def _rediscover_in_legacy_mode(self):
+        '''
+        Initiate re-dicovering this subvolume in legacy mode.
+        '''
+        # if it's already legacy mode already, it must imply that this subvolume
+        # is being rediscovered once again. hence, abort.
+        if self.legacy_mode:
+            # subvolume with retained snapshots has empty path, don't mistake
+            # it for fabricated metadata.
+            msg = 'fabricated .meta'
+            log.debug(msg)
+            raise MetadataMgrException(-errno.ENOENT, msg)
+
+        self.legacy_mode = True
+        log.info(f'assuming legacy mode for discovery of subvol {self.name}')
+        if path_exists(self.fs, self.legacy_config_path):
+            self.load_config()
+            return self.discover()
+        else:
+            return None, None
+
+    def _get_subvol_uuid(self, disc_version, subvol_mnt_path):
+        basename = os.path.basename
+        dirname = os.path.dirname
+
+        if disc_version == 3:
+            disc_uuid = basename(dirname(subvol_mnt_path))
+        elif disc_version in (2, 1):
+            disc_uuid = basename(subvol_mnt_path)
+        else:
+            assert False, f'disc_version = {disc_version}'
+
+        verify_uuid(disc_uuid)
+        return disc_uuid
+
+    def _is_layout_known(self, subvol_mnt_path, disc_version):
+        basename = os.path.basename
+        dirname = os.path.dirname
+
+        if disc_version == 3:
+            disc_base_path = dirname(dirname(dirname(subvol_mnt_path)))
+        elif disc_version in (2, 1):
+            disc_base_path = dirname(subvol_mnt_path)
+        else:
+            assert False, f'disc_version = {disc_version}'
+
+        if (not self.legacy_mode and
+            to_str(self.base_path) != disc_base_path and
+            self.state != SubvolumeStates.STATE_RETAINED):
+            log.debug(f'layout of subvol {self.name} did not match any known '
+                      f'version.subvol_mnt_path = {subvol_mnt_path} '
+                      f'self.base_path = {self.base_path},'
+                      f'disc_base_path = {disc_base_path}')
+            return False
+        else:
+            return True
+
+    def _get_version(self, subvol_mnt_path):
+        subvol_version = int(self.md.get_global_option('version'))
+        log.debug(f'subvol version from meta = {subvol_version}')
+
+        if os.path.basename(subvol_mnt_path) == 'mnt':
+            disc_version = 3
+            if subvol_version == disc_version:
+                return subvol_version
+        elif os.path.dirname(subvol_mnt_path) == to_str(self.base_path):
+            disc_version = (2, 1)
+            if subvol_version in disc_version:
+                return subvol_version
+        else:
+            return None
+
+        msg = (f'for subvol {self.name}, discovered version did not match the '
+               f'version mentioned in the meta file. disc_version = '
+               f'{disc_version}, subvol_version = {subvol_version}')
+        log.error(msg)
+        assert False, msg
+
     def discover(self):
-        log.debug("discovering subvolume "
-                  "'{0}' [mode: {1}]".format(self.subvolname, "legacy"
-                                             if self.legacy_mode else "new"))
+        '''
+        Figure out the subvolume version and uuid and returns both.
+
+        :returns: a tuple.
+                    (False, False) -> subvol does not exist
+                    (None, None) -> subvol in legacy mode
+                    (int, str) -> subvol version and uuid
+                        version number implication -
+                            3 -> v3,
+                            2 ->v2,
+                            1 -> v1,
+                            0 -> legacy
+        '''
+        log.debug(f'discovering subvolume {self.name}, self.legacy_mode = '
+                  f'{self.legacy_mode}')
+
+        if not path_exists(self.fs, self.base_path):
+            return False, False
+        if not self.legacy_mode:
+            if not path_exists(self.fs, self.md.config_path):
+                return self._rediscover_in_legacy_mode()
+
+        self.md.refresh()
+        log.debug(f'loaded subvolume meta for {self.name}')
+        subvol_mnt_path = self.md.get_global_option('path')
+        log.debug(f'self.base_path = {self.base_path} subvol mnt path from '
+                  f'meta file = {subvol_mnt_path}')
+
         try:
-            self.fs.stat(self.base_path)
-            self.metadata_mgr.refresh()
-            log.debug("loaded subvolume '{0}'".format(self.subvolname))
-            subvolpath = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH)
-            # subvolume with retained snapshots has empty path, don't mistake it for
-            # fabricated metadata.
-            if (not self.legacy_mode and self.state != SubvolumeStates.STATE_RETAINED and
-                self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
-                raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
-        except MetadataMgrException as me:
-            if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
-                log.warn(f'assuming legacy mode for subvol {self.name} since '
-                         f'an exception has been caught: {me.errmsg}')
-                self.legacy_mode = True
-                self.load_config()
-                self.discover()
-            else:
-                raise
+            if disc_version := self._get_version(subvol_mnt_path):
+                if self._is_layout_known(subvol_mnt_path, disc_version):
+                    disc_uuid = self._get_subvol_uuid(disc_version,
+                                                      subvol_mnt_path)
+                    return disc_version, disc_uuid
+            return self._rediscover_in_legacy_mode()
         except cephfs.Error as e:
-            if e.args[0] == errno.ENOENT:
-                raise (VolumeException(-errno.ENOENT,
-                                       "subvolume '{0}' "
-                                       "does not exist"
-                                       .format(self.subvolname)))
             raise VolumeException(-e.args[0],
-                                  "error accessing subvolume '{0}'"
-                                  .format(self.subvolname))
+                                  f'error accessing subvolume "{self.name}"')
 
     def _trash_dir(self, path):
         create_trashcan(self.fs, self.vol_spec)
         with open_trashcan(self.fs, self.vol_spec) as trashcan:
-            trashcan.dump(path)
+            trashcan.dump(path, unique=True)
             log.info("subvolume path '{0}' moved to trashcan".format(path))
 
     def _link_dir(self, path, bname):
