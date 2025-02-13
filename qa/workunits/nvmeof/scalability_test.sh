@@ -16,10 +16,40 @@ status_checks() {
     expected_count=$1
 
     output=$(ceph nvme-gw show $POOL $GROUP) 
-    nvme_show=$(echo $output | grep -o '"AVAILABLE"' | wc -l)
-    if [ "$nvme_show" -ne "$expected_count" ]; then
-        return 1
+    # nvme_show=$(echo $output | grep -o '"AVAILABLE"' | wc -l)
+    # if [ "$nvme_show" -ne "$expected_count" ]; then
+    #    return 1
+    # fi
+    total_ns=$(echo $output | jq '.["num-namespaces"]')
+    total_gws=$(echo $output | jq '.["num gws"]')
+    expected_avg_ns=$((total_ns / total_gws))
+
+    if [ "$total_gws" -ne "$expected_count" ]; then
+       return 1
     fi
+    expected_ns_count=$(( $NVMEOF_NAMESPACES_COUNT * $NVMEOF_SUBSYSTEMS_COUNT )) 
+    if [ "$total_ns" -ne "$expected_ns_count" ]; then
+       return 1
+    fi
+
+    gateways=$(echo "$output" | jq -c '.["Created Gateways:"][]')
+
+    echo "$gateways" | while read -r gw; do
+        gw_id=$(echo "$gw" | jq -r '.["gw-id"]')
+        availability=$(echo "$gw" | jq -r '.["Availability"]')
+        num_namespaces=$(echo "$gw" | jq '.["num-namespaces"]')
+
+        if [[ "$availability" != "AVAILABLE" ]]; then
+            echo "Gateway $gw_id is not AVAILABLE."
+            exit 1
+        fi
+
+        diff=$((num_namespaces - expected_avg_ns))
+        if [[ $diff -lt -1 || $diff -gt 1 ]]; then
+            echo "Gateway $gw_id has num-namespaces ($num_namespaces), expected around $expected_ns. Indicates a problem in ns load-balancing."
+            exit 1
+        fi
+    done
 
     orch_ls=$(ceph orch ls)
     if ! echo "$orch_ls" | grep -q "$expected_count/$expected_count"; then
