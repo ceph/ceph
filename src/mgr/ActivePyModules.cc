@@ -1095,7 +1095,9 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
 
             f.open_object_section("counters");
             f.open_object_section(counter_name);
-            f.dump_string("description", type.description);
+            //f.dump_string("description", type.description);
+            f.dump_string("description", counter_name_with_labels);
+
             if (!type.nick.empty()) {
               f.dump_string("nick", type.nick);
             }
@@ -1110,7 +1112,9 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
 
           if (prev_key_name == key_name && prev_key_labels == key_labels) {
             f.open_object_section(counter_name);
-            f.dump_string("description", type.description);
+            //f.dump_string("description", type.description);
+            f.dump_string("description", counter_name_with_labels);
+
             if (!type.nick.empty()) {
               f.dump_string("nick", type.nick);
             }
@@ -1138,7 +1142,9 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
 
             f.open_object_section("counters");
             f.open_object_section(counter_name);
-            f.dump_string("description", type.description);
+            //f.dump_string("description", type.description);
+            f.dump_string("description", counter_name_with_labels);
+
             if (!type.nick.empty()) {
               f.dump_string("nick", type.nick);
             }
