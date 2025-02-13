@@ -111,6 +111,11 @@ int ErasureCode::sanity_check_k_m(int k, int m, ostream *ss)
     *ss << "m=" << m << " must be >= 1" << std::endl;
     return -EINVAL;
   }
+  int max_k_plus_m = std::numeric_limits<decltype(shard_id_t::id)>::max();
+  if (k+m > max_k_plus_m) {
+    *ss << "(k+m)=" << (k+m) << " must be <= " << max_k_plus_m << std::endl;
+    return -EINVAL;
+  }
   return 0;
 }
 
