@@ -5510,6 +5510,11 @@ options:
     repair are applied.
   default: false
   with_legacy: true
+- name: bluestore_debug_inject_parity_read
+  type: bool
+  level: dev
+  default: false
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_stats
   type: bool
   level: advanced
