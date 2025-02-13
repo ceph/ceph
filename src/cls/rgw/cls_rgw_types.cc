@@ -283,14 +283,14 @@ void rgw_bucket_snap_skip_entry::decode_json(JSONObj *obj) {
 void rgw_bucket_dirent_snap_info::dump(Formatter *f) const
 {
   encode_json("skip", skip, f);
-  encode_json("demoted_at", (int64_t)demoted_at, f);
   encode_json("removed_at", (int64_t)removed_at, f);
+  encode_json("current_flag_map", current_flag_map, f);
 }
 
 void rgw_bucket_dirent_snap_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("skip", skip, obj);
-  JSONDecoder::decode_json("demoted_at", demoted_at, obj);
   JSONDecoder::decode_json("removed_at", removed_at, obj);
+  JSONDecoder::decode_json("current_range_map", removed_at, obj);
 }
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
