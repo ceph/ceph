@@ -220,7 +220,7 @@ def create_base_dir(fs, path, mode):
             raise VolumeException(-e.args[0], e.args[1])
 
 
-def statx(fs, path, fields=None):
+def statx(fs, path, fields=None, follow_symlink=True):
     '''
     Convenient wrapper around libcephfs's statx().
 
@@ -228,16 +228,42 @@ def statx(fs, path, fields=None):
     :param fields: stat buffer fields to be fetched
     :returns: bool or list. list if fields were passed, otherwise bool
     '''
+    mask = 0
+    if fields:
+        if 'uid' in fields:
+            mask = cephfs.CEPH_STATX_UID
+        if 'gid' in fields:
+            mask = mask | cephfs.CEPH_STATX_GID
+        if 'mode' in fields:
+            mask = mask | cephfs.CEPH_STATX_MODE
+
     flags = 0
     flags = flags | cephfs.AT_STATX_SYNC_AS_STAT
+    if not follow_symlink:
+        flags = flags | cephfs.AT_SYMLINK_NOFOLLOW
 
-    return fs.statx(path, 0, flags)
+    # sxb = statx buffer
+    sxb = fs.statx(path, mask, flags)
+
+    if mask == 0:
+        # no fields were fetched, only presence was checked
+        return True
+
+    sxb_fields = []
+    if 'uid' in fields:
+        sxb_fields.append(int(sxb['uid']))
+    if 'gid' in fields:
+        sxb_fields.append(int(sxb['gid']))
+    if 'mode' in fields:
+        sxb_fields.append(int(sxb['mode']))
+
+    return sxb_fields
 
 
-def path_exists(fs, path):
+def path_exists(fs, path, follow_symlink=True):
     try:
         # prefer statx over stat has it passes much lesser data on n/w
-        statx(fs, path, None)
+        statx(fs, path, None, follow_symlink)
     except cephfs.PermissionError:
         raise
     except:

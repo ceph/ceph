@@ -47,6 +47,11 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     VERSION = 1
 
+    # TODO: probably redundant now
+    # for compatibility with v3
+    def has_snap(self):
+        return self.list_snapshots()
+
     @property
     def path(self):
         try:
