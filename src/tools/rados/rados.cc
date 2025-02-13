@@ -252,12 +252,12 @@ void usage(ostream& out)
 "        prefix output with date/time\n"
 "   --no-verify\n"
 "        do not verify contents of read objects\n"
-"   --write-object\n"
-"        write contents to the objects\n"
-"   --write-omap\n"
-"        write contents to the omap\n"
-"   --write-xattr\n"
-"        write contents to the extended attributes\n"
+"   --object | --write-object (deprecated)\n"
+"        read or write contents to the objects\n"
+"   --omap | --write-omap (deprecated)\n"
+"        read or write contents to the omap\n"
+"   --xattr | write-xattr (deprecated)\n"
+"        read or write contents to the extended attributes\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -4284,17 +4284,19 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)NULL)) {
       opts["output"] = val;
     } else if (ceph_argparse_flag(args, i, "--write-omap", (char*)NULL)) {
-      // write- prefixed dests are legacy
+      // write- prefixed dests are legacy and have been deprecated
       opts["dest-omap"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-object", (char*)NULL)) {
+      // write- prefixed dests are legacy and have been deprecated
       opts["dest-obj"] = "true";
     } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
+      // write- prefixed dests are legacy and have been deprecated
       opts["dest-xattr"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--read-omap", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--omap", (char*)NULL)) {
       opts["dest-omap"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--read-object", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--object", (char*)NULL)) {
       opts["dest-obj"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--read-xattr", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--xattr", (char*)NULL)) {
       opts["dest-xattr"] = "true";
     } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
       opts["with-clones"] = "true";
