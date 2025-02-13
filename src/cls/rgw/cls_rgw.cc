@@ -713,10 +713,13 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           continue;
         }
 
-        if (!entry.is_visible() &&
-            entry.demoted_at_snap() > op.max_snap) {
+        if (op.max_snap != RGW_BUCKET_NO_SNAP) {
           /* make it current as it was current during the requested snapshot */
-          entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+          if (entry.is_current_at_snap(op.max_snap)) {
+            entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+          } else {
+            entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;
+          }
         }
       }
 
@@ -1614,7 +1617,6 @@ public:
         return ret;
       }
     } else {
-CLS_LOG(0, "%s() instance_entry.removed_at=%d", __func__, (int)instance_entry.removed_at_snap());
       int ret = write_entries(0, 0, header);
       if (ret < 0) {
         CLS_LOG(0, "ERROR: %s(): write_entries() returned %d", __func__, ret);
@@ -1672,7 +1674,8 @@ CLS_LOG(0, "%s() instance_entry.removed_at=%d", __func__, (int)instance_entry.re
     return _write_entries(flags_set, flags_reset, header);
   }
 
-  int write(uint64_t epoch, bool current, rgw_bucket_dir_header& header) {
+  int write(uint64_t epoch, rgw_bucket_snap_id snap_id,
+            bool current_flag, rgw_bucket_dir_header& header) {
     if (instance_entry.versioned_epoch > 0) {
       CLS_LOG(20, "%s: instance_entry.versioned_epoch=%d epoch=%d", __func__, (int)instance_entry.versioned_epoch, (int)epoch);
       /* this instance has a previous list entry, remove that entry */
@@ -1682,21 +1685,32 @@ CLS_LOG(0, "%s() instance_entry.removed_at=%d", __func__, (int)instance_entry.re
       }
     }
 
-    uint64_t flags = rgw_bucket_dir_entry::FLAG_VER;
-    if (current) {
-      flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-    }
-
     instance_entry.versioned_epoch = epoch;
-    return write_entries(flags, 0, header);
-  }
 
-  int demote_current(rgw_bucket_snap_id demoted_at_snap, rgw_bucket_dir_header& header) {
     int ret = _validate_init();
     if (ret < 0) {
       return ret;
     }
-    instance_entry.set_snap_info().demoted_at = demoted_at_snap;
+
+    uint64_t flags = rgw_bucket_dir_entry::FLAG_VER;
+    if (current_flag) {
+      flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+    }
+    set_current(snap_id, current_flag);
+
+    return _write_entries(flags, 0, header);
+  }
+
+  void set_current(rgw_bucket_snap_id snap_id, bool current_flag) {
+    instance_entry.set_snap_info().set_current(snap_id, current_flag);
+  }
+
+  int demote_current(rgw_bucket_snap_id snap_id, rgw_bucket_dir_header& header) {
+    int ret = _validate_init();
+    if (ret < 0) {
+      return ret;
+    }
+    set_current(snap_id, false);
     return _write_entries(0, rgw_bucket_dir_entry::FLAG_CURRENT, header);
   }
 
@@ -1986,6 +2000,7 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
 
     if (demote_current) {
       entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;
+      entry.set_snap_info().set_current(demoted_at_snap, 0);
     }
 
     string new_idx;
@@ -2139,7 +2154,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   const uint64_t prev_epoch = olh.get_epoch();
 
   if (!olh.start_modify(op.olh_epoch)) {
-    ret = obj.write(op.olh_epoch, false, header);
+    ret = obj.write(op.olh_epoch, op.meta.snap_id, false, header);
     if (ret < 0) {
       return ret;
     }
@@ -2230,7 +2245,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* write the instance and list entries */
-  ret = obj.write(olh.get_epoch(), promote, header);
+  ret = obj.write(olh.get_epoch(), op.meta.snap_id, promote, header);
   if (ret < 0) {
     return ret;
   }
@@ -2368,7 +2383,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
     if (found) {
       BIVerObjEntry next(hctx, next_key);
-      ret = next.write(olh.get_epoch(), true, header);
+      ret = next.write(olh.get_epoch(), op.snap_id, true, header);
       if (ret < 0) {
         CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
         return ret;

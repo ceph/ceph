@@ -202,6 +202,7 @@ inline std::ostream& operator<<(std::ostream& out, RGWObjCategory c) {
 using rgw_bucket_snap_id = uint64_t;
 
 #define RGW_BUCKET_NO_SNAP (rgw_bucket_snap_id)-1
+#define RGW_BUCKET_MIN_SNAP (rgw_bucket_snap_id)0
 
 static inline bool cmp_snap_lt(rgw_bucket_snap_id s1,
                           rgw_bucket_snap_id s2) {
@@ -410,8 +411,8 @@ WRITE_CLASS_ENCODER(rgw_bucket_snap_skip_entry)
 
 struct rgw_bucket_dirent_snap_info {
   rgw_bucket_snap_skip_entry skip;
-  rgw_bucket_snap_id demoted_at = RGW_BUCKET_NO_SNAP;
   rgw_bucket_snap_id removed_at = RGW_BUCKET_NO_SNAP;
+  std::map<rgw_bucket_snap_id, bool> current_flag_map;
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -419,17 +420,30 @@ struct rgw_bucket_dirent_snap_info {
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     encode(skip, bl);
-    encode((uint64_t)demoted_at, bl);
-    encode((uint64_t)removed_at, bl);
+    encode(removed_at, bl);
+    encode(current_flag_map, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(skip, bl);
-    decode((uint64_t&)demoted_at, bl);
-    decode((uint64_t&)removed_at, bl);
+    decode(removed_at, bl);
+    decode(current_flag_map, bl);
     DECODE_FINISH(bl);
+  }
+
+  void set_current(rgw_bucket_snap_id snap_id, bool current) {
+    current_flag_map[snap_id] = current;
+  }
+
+  bool is_current(rgw_bucket_snap_id snap_id) {
+    auto iter = current_flag_map.upper_bound(snap_id);
+    if (iter == current_flag_map.begin()) {
+      return false;
+    }
+    --iter;
+    return iter->second;
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dirent_snap_info)
@@ -525,6 +539,10 @@ struct rgw_bucket_dir_entry {
     return (flags & rgw_bucket_dir_entry::FLAG_VER) == 0 ||
            (flags & test_flags) == test_flags;
   }
+  bool is_current_at_snap(rgw_bucket_snap_id snap_id) {
+    return (flags & rgw_bucket_dir_entry::FLAG_VER) == 0 ||
+      (snap_info && snap_info->is_current(snap_id));
+  }
   bool is_delete_marker() const {
     return (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) != 0;
   }
@@ -538,12 +556,6 @@ struct rgw_bucket_dir_entry {
     return flags & rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
   }
 
-  rgw_bucket_snap_id demoted_at_snap() const {
-    if (!snap_info) {
-      return RGW_BUCKET_NO_SNAP;
-    }
-    return snap_info->demoted_at;
-  }
   rgw_bucket_snap_id removed_at_snap() const {
     if (!snap_info) {
       return RGW_BUCKET_NO_SNAP;
