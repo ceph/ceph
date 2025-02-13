@@ -12,6 +12,10 @@ overrides:
     - \(PG_AVAILABILITY\)
     - \(PG_DEGRADED\)
     - CEPHADM_STRAY_DAEMON
+    - do not have an application enabled
+    - POOL_APP_NOT_ENABLED
+    - application not enabled
+    - or freeform for custom applications
     conf:
       client:
         debug ms: 1
