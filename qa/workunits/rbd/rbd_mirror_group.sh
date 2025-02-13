@@ -61,8 +61,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${group}"
   wait_for_group_not_present "${CLUSTER1}" "${POOL}" "${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_add ${CLUSTER2} ${POOL}/${group} ${POOL}/${image}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${group}"
   test_fields_in_group_info "${CLUSTER2}" "${POOL}/${group}" 'snapshot' 'enabled' 'true'
@@ -87,8 +85,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${group}"
   wait_for_group_not_present "${CLUSTER1}" "${POOL}" "${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_remove ${CLUSTER2} ${POOL}/${group} ${POOL}/${image}
   
   mirror_group_enable "${CLUSTER2}" "${POOL}/${group}"
@@ -108,8 +104,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${group}"
   wait_for_group_not_present "${CLUSTER1}" "${POOL}" "${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_add ${CLUSTER2} ${POOL}/${group} ${POOL}/${image}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${group}"
 fi
@@ -166,8 +160,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
   fi
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${group1}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_add ${CLUSTER2} ${POOL}/${group1} ${POOL}/${image1}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${group1}"
 fi
@@ -221,8 +213,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
   fi
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_add ${CLUSTER2} ${POOL}/${group} ${POOL}/${big_image}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${group}"
 fi
@@ -240,8 +230,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
   fi
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_remove ${CLUSTER2} ${POOL}/${group} ${POOL}/${big_image}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${group}"
 fi  
@@ -357,14 +345,25 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
   wait_for_group_present ${CLUSTER1} ${POOL} ${group} 0
   remove_image_retry ${CLUSTER1} ${POOL} ${image}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+  # need to stop the group replayer to ensure that it doesn't recreate the group
+  # as a secondary immediately after the local group is removed
+  test_fields_in_group_info "${CLUSTER1}" "${POOL}/${group}" 'snapshot' 'enabled' 'true'
+  admin_daemons ${CLUSTER1} rbd mirror group stop ${POOL}/${group}
   group_remove ${CLUSTER1} ${POOL}/${group}
   wait_for_group_not_present ${CLUSTER1} ${POOL} ${group}
 else
+  # need to stop the group replayer to ensure that it doesn't recreate the group
+  # as a secondary immediately after the local group is removed
+  test_fields_in_group_info "${CLUSTER1}" "${POOL}/${group}" 'snapshot' 'enabled' 'true'
+  admin_daemons ${CLUSTER1} rbd mirror group stop ${POOL}/${group}
   group_remove ${CLUSTER1} ${POOL}/${group}
   wait_for_group_not_present ${CLUSTER1} ${POOL} ${group}
   remove_image_retry ${CLUSTER1} ${POOL} ${image}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 fi
+admin_daemons ${CLUSTER1} rbd mirror group start ${POOL}/${group}
+wait_for_group_present ${CLUSTER1} ${POOL} ${group} 1
+test_fields_in_group_info "${CLUSTER1}" "${POOL}/${group}" 'snapshot' 'enabled' 'false'
 wait_for_group_present ${CLUSTER2} ${POOL} ${group} 1
 
 testlog "TEST: disable mirroring / delete non-primary group"
@@ -412,8 +411,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${NS1}/${group}"
   mirror_group_disable "${CLUSTER2}" "${POOL}/${NS2}/${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_add ${CLUSTER2} ${POOL}/${NS1}/${group} ${POOL}/${NS1}/${image}
   group_image_add ${CLUSTER2} ${POOL}/${NS2}/${group} ${POOL}/${NS2}/${image}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${NS1}/${group}"
@@ -441,8 +438,6 @@ if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
   fi
 else
   mirror_group_disable "${CLUSTER2}" "${POOL}/${NS1}/${group}"
-  echo "temp workaround - sleep 5" # TODO remove
-  sleep 5
   group_image_remove ${CLUSTER2} ${POOL}/${NS1}/${group} ${POOL}/${NS1}/${image}
   mirror_group_enable "${CLUSTER2}" "${POOL}/${NS1}/${group}"
 fi  
