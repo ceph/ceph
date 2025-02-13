@@ -89,7 +89,7 @@ OpSchedulerItem create_item(
   return OpSchedulerItem(
     std::make_unique<mClockSchedulerTest::MockDmclockItem>(
       std::forward<Args>(args)...),
-    12, 12,
+    12, 1,
     utime_t(), owner, e);
 }
 
