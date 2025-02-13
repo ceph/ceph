@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 
-try:
-    from typing import Any, Dict
-except ImportError:
-    pass
-
-
 def update_dict(data, update_data):
     # type: (Dict[Any, Any], Dict[Any, Any]) -> Dict[Any]
     """ Update a dictionary recursively.
