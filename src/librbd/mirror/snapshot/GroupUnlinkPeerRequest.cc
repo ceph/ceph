@@ -219,7 +219,7 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
 
   m_group_snap_id = group_snap.id;
 
-  C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
+  C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
   for (auto &snap : group_snap.snaps) {
     if (snap.snap_id == CEPH_NOSNAP) {
       continue;
