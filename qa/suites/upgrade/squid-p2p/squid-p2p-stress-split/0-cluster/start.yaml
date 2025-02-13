@@ -1,0 +1,33 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client-only node.
+   Use xfs beneath the osds.
+overrides:
+  ceph:
+    fs: xfs
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+      ### ref: https://tracker.ceph.com/issues/40251
+      #removed see ^ - failed to encode map
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
+      mon:
+        mon warn on osd down out interval zero: false
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+- - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+- - client.0
