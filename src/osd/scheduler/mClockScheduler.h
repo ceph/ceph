@@ -228,9 +228,37 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   void set_config_defaults_from_profile();
 
 public: 
-  mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
+  mClockScheduler(
+    CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, unsigned cutoff_priority,
-    MonClient *monc, bool init_perfcounter=true);
+    MonClient *monc,
+    bool init_perfcounter=true)
+    : cct(cct),
+      whoami(whoami),
+      num_shards(num_shards),
+      shard_id(shard_id),
+      is_rotational(is_rotational),
+      cutoff_priority(cutoff_priority),
+      monc(monc),
+      logger(nullptr),
+      scheduler(
+	std::bind(&mClockScheduler::ClientRegistry::get_info,
+		  &client_registry,
+		  std::placeholders::_1),
+	crimson::dmclock::AtLimit::Wait,
+	cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
+  {
+    cct->_conf.add_observer(this);
+    ceph_assert(num_shards > 0);
+    set_osd_capacity_params_from_config();
+    set_config_defaults_from_profile();
+    client_registry.update_from_config(
+      cct->_conf, osd_bandwidth_capacity_per_shard);
+
+    if (init_perfcounter) {
+      _init_logger();
+    }
+  }
   ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
