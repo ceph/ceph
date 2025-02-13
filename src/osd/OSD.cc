@@ -4404,6 +4404,21 @@ void OSD::final_init()
    "Inject a full disk (optional count times)");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
+    "injectparityread " \
+    "name=pool,type=CephString " \
+    "name=objname,type=CephObjectname ",
+    test_ops_hook,
+    "Tell the OSD to return the parity chunks along with the next read");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "injectclearparityread " \
+    "name=pool,type=CephString " \
+    "name=objname,type=CephObjectname ",
+    test_ops_hook,
+    "Clear a parity read inject");
+  ceph_assert(r == 0);
+
+  r = admin_socket->register_command(
     "bench " \
     "name=count,type=CephInt,req=false "    \
     "name=size,type=CephInt,req=false "		   \
@@ -6533,7 +6548,8 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       command == "truncobj" ||
       command == "injectmdataerr" || command == "injectdataerr" ||
       command == "injectecreaderr" || command == "injectecclearreaderr" ||
-      command == "injectecwriteerr" || command == "injectecclearwriteerr"
+      command == "injectecwriteerr" || command == "injectecclearwriteerr" ||
+      command == "injectparityread" || command == "injectclearparityread"
     ) {
     pg_t rawpg;
     int64_t pool;
@@ -6577,7 +6593,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 	    (command != "injectecreaderr") &&
 	    (command != "injectecclearreaderr") &&
 	    (command != "injectecwriteerr") &&
-	    (command != "injectecclearwriteerr")) {
+	    (command != "injectecclearwriteerr") &&
+            (command != "injectparityread") &&
+            (command != "injectclearparityread")) {
             ss << "Must not call on ec pool";
             return;
         }
@@ -6585,7 +6603,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         if ((command == "injectecreaderr") ||
 	    (command == "injecteclearreaderr") ||
 	    (command == "injectecwriteerr") ||
-	    (command == "injecteclearwriteerr")) {
+	    (command == "injecteclearwriteerr") ||
+            (command == "injectparityread") ||
+            (command == "injectclearparityread")) {
             ss << "Only supported on ec pool";
             return;
         }
@@ -6697,6 +6717,18 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       } else {
 	ss << "bluestore_debug_inject_read_err not enabled";
       }
+    } else if (command == "injectparityread") {
+      if (service->cct->_conf->bluestore_debug_inject_parity_read) {
+        ss << "injectparityread: " << ECInject::parity_read(obj);
+      } else {
+        ss << "bluestore_debug_inject_parity_read not enabled";
+      }
+    } else if (command == "injectclearparityread") {
+      if (service->cct->_conf->bluestore_debug_inject_parity_read) {
+        ss << "injectclearparityread: " << ECInject::clear_parity_read(obj);
+      } else {
+        ss << "bluestore_debug_inject_parity_read not enabled";
+      }
     }
     return;
   }
@@ -6734,6 +6766,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     service->set_injectfull(state, count);
     return;
   }
+
   ss << "Internal error - command=" << command;
 }
 
