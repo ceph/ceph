@@ -1,0 +1,13 @@
+<ng-template #popoverTpl>
+  <div [class]="class"
+       [innerHtml]="html">
+  </div>
+  <ng-content></ng-content>
+</ng-template>
+
+<cds-tooltip [description]="popoverTpl"
+             [autoAlign]="true">
+  <svg cdsIcon="information"
+       size="16"
+       title="info"></svg>
+</cds-tooltip>
