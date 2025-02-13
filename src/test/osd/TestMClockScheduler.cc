@@ -175,7 +175,7 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
   const unsigned NUM = 1000;
   for (unsigned i = 0; i < NUM; ++i) {
     for (auto &&c: {client1, client2, client3}) {
-      q.enqueue(create_item(i, c));
+      q.enqueue(create_item(i, c, op_scheduler_class::client));
       std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
   }
