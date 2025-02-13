@@ -228,9 +228,13 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   void set_config_defaults_from_profile();
 
 public: 
+  template<typename Rep, typename Per>
   mClockScheduler(
     CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, unsigned cutoff_priority,
+    std::chrono::duration<Rep,Per> idle_age,
+    std::chrono::duration<Rep,Per> erase_age,
+    std::chrono::duration<Rep,Per> check_time,
     MonClient *monc,
     bool init_perfcounter=true)
     : cct(cct),
@@ -245,6 +249,7 @@ public:
 	std::bind(&mClockScheduler::ClientRegistry::get_info,
 		  &client_registry,
 		  std::placeholders::_1),
+	idle_age, erase_age, check_time,
 	crimson::dmclock::AtLimit::Wait,
 	cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
   {
@@ -259,6 +264,17 @@ public:
       _init_logger();
     }
   }
+  mClockScheduler(
+    CephContext *cct, int whoami, uint32_t num_shards,
+    int shard_id, bool is_rotational, unsigned cutoff_priority,
+    MonClient *monc,
+    bool init_perfcounter=true) :
+    mClockScheduler(
+      cct, whoami, num_shards, shard_id, is_rotational, cutoff_priority,
+      crimson::dmclock::standard_idle_age,
+      crimson::dmclock::standard_erase_age,
+      crimson::dmclock::standard_check_time,
+      monc, init_perfcounter) {}
   ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
