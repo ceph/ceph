@@ -1018,6 +1018,7 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
       std::lock_guard l(state->lock);
       with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
         string_view prev_key_name;
+        string_view key_name;
         vector<pair<string_view,string_view>> prev_key_labels;
 
         // Main object section
@@ -1030,7 +1031,7 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
           auto type = state->perf_counters.types[counter_name_with_labels];
           
           // "osd_scrub_sh_repl"
-          string_view key_name = ceph::perf_counters::key_name(counter_name_with_labels)
+          
           
           // create a vector of labels i.e [(level, shallow), (pooltype, replicated)]
           vector<pair<string_view,string_view>> key_labels;
@@ -1038,6 +1039,31 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
             if (!label.first.empty()){
               key_labels.push_back(label);
             }
+          }
+
+          // key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+          string key_name_without_counter;
+          if (!key_labels.empty()){
+            // counter_name "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+            // key_name = osd_scrub_sh_repl
+            key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+            dout(20) << __func__ << " key_name: " << key_name << dendl;
+          } else {
+            // counter name "osd.stat_bytes"
+            // key_name = osd
+            dout(20) << __func__ << " counter_name_with_labels: " << counter_name_with_labels << dendl;
+
+            size_t pos = counter_name_with_labels.find('.');
+            dout(20) << __func__ << " delimiter pos: " << pos << dendl;
+
+
+            key_name_without_counter = counter_name_with_labels.substr(0, pos);
+            key_name = key_name_without_counter;
+            dout(20) << __func__ << " unlabelled key_name: " << key_name << dendl;
+
+            string x = counter_name_with_labels.substr(0, pos);
+            dout(20) << __func__ << " unlabelled key_name x: " << x << dendl;
+
           }
 
           // TODO: naveen: Add counter_name to PerfCounterType when building in MgrClient.
@@ -1053,9 +1079,11 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
               f.close_section(); // close array section
             }
             prev_key_name = key_name;
-            prev_key_lables = key_labels;
+            prev_key_labels = key_labels;
 
+            dout(20) << __func__ << " f.open_array_section(key_name) 1 " << key_name << dendl;
             f.open_array_section(key_name);
+            dout(20) << __func__ << " f.open_array_section(key_name) 2" << key_name << dendl;
             
             f.open_object_section(""); // should be enclosed by array
           
@@ -1076,9 +1104,11 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
             f.dump_unsigned("units", type.unit);
             f.close_section();//counter_name section
 
+            dout(20) << __func__ << " test 1 " << key_name << dendl;
+
           }
 
-          if (prev_key_name == key_name && prev_labels == labels) {
+          if (prev_key_name == key_name && prev_key_labels == key_labels) {
             f.open_object_section(counter_name);
             f.dump_string("description", type.description);
             if (!type.nick.empty()) {
@@ -1088,10 +1118,11 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
             f.dump_unsigned("priority", type.priority);
             f.dump_unsigned("units", type.unit);
             f.close_section();//counter_name section
+            dout(20) << __func__ << " test 2 " << key_name << dendl;
 
           }
 
-          if (prev_key_name == key_name && prev_labels != labels) {
+          if (prev_key_name == key_name && prev_key_labels != key_labels) {
             // close previous counter section of metric
             f.close_section(); // counters
             f.close_section(); // close label counter object section
@@ -1103,6 +1134,7 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
               f.dump_string(label.first, label.second);
             }
             f.close_section(); //labels
+            dout(20) << __func__ << " test 3 " << key_name << dendl;
 
             f.open_object_section("counters");
             f.open_object_section(counter_name);
@@ -1122,11 +1154,13 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
         f.close_section(); // close label counter object section
         f.close_section(); // close array section
       });
+      dout(20) << __func__ << " test 4 " << dendl;
     }
   } else {
     dout(4) << __func__ << ": No daemon state found for "
               << svc_type << "." << svc_id << ")" << dendl;
   }
+  dout(20) << __func__ << " test 5 " << dendl;
   return f.get();
 }
 
