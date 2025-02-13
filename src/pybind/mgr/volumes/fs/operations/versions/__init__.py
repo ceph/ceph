@@ -1,6 +1,7 @@
 import errno
 import logging
 import importlib
+from os.path import dirname, basename
 
 import cephfs
 
@@ -110,11 +111,24 @@ class SubvolumeLoader(object):
         try:
             subvolume.discover()
             self.upgrade_to_v2_subvolume(subvolume)
+
             version = int(subvolume.metadata_mgr.get_global_option('version'))
-            subvolume_version_object = self._get_subvolume_version(version)(mgr, fs, vol_spec, group, subvolname, legacy=subvolume.legacy_mode)
-            subvolume_version_object.metadata_mgr.refresh()
-            subvolume_version_object.clean_stale_snapshot_metadata()
-            return subvolume_version_object
+            subvol_class = self._get_subvolume_version(version)
+            if version <= 2:
+                subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
+                                          legacy=subvolume.legacy_mode)
+            elif version == 3:
+                subvol_data_path = subvolume.metadata_mgr.get_global_option('path')
+                uuid = basename(dirname(subvol_data_path))
+                subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
+                                          legacy=subvolume.legacy_mode,
+                                          uuid=uuid)
+            else:
+                raise RuntimeError('recevied unexpected subvol version')
+
+            subvol_obj.metadata_mgr.refresh()
+            subvol_obj.clean_stale_snapshot_metadata()
+            return subvol_obj
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT and upgrade:
                 self.upgrade_legacy_subvolume(fs, subvolume)

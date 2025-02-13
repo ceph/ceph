@@ -38,6 +38,12 @@ class SubvolumeV2(SubvolumeV1):
     """
     VERSION = 2
 
+    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        super(SubvolumeV2, self).__init__(mgr, fs, vol_spec, group, subvolname)
+
+        # in v2 context, mnt_dir is same as uuid_dir.
+        self.mnt_dir = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+
     @staticmethod
     def version():
         return SubvolumeV2.VERSION
@@ -140,9 +146,10 @@ class SubvolumeV2(SubvolumeV1):
 
     def _remove_data_dir_on_failure(self, retained):
         if retained:
-            log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
+            log.info('cleaning up subvolume incarnation with path: '
+                     f'{self.mnt_dir.decode("utf-8")}')
             try:
-                self.fs.rmdir(subvol_path)
+                self.fs.rmdir(self.mnt_dir)
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
         else:
