@@ -38,6 +38,10 @@ class SubvolumeV2(SubvolumeV1):
     """
     VERSION = 2
 
+    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        super(SubvolumeV2, self).__init__(mgr, fs, vol_spec, group, subvolname)
+        self.mnt_dir = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+
     @staticmethod
     def version():
         return SubvolumeV2.VERSION
@@ -140,9 +144,9 @@ class SubvolumeV2(SubvolumeV1):
 
     def _remove_data_dir_on_failure(self, retained):
         if retained:
-            log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
+            log.info(f'cleaning up subvolume incarnation with path: {self.mnt_dir.decode("utf-8")}')
             try:
-                self.fs.rmdir(subvol_path)
+                self.fs.rmdir(self.mnt_dir)
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
         else:
@@ -154,22 +158,43 @@ class SubvolumeV2(SubvolumeV1):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, qpath)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, initial_state.value)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
-        subvolume_type = SubvolumeTypes.TYPE_NORMAL
+    def create_or_update_meta_file(self, subvol_type):
         try:
-            initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
+            initial_state = SubvolumeOpSm.get_init_state(subvol_type)
         except OpSmException:
-            raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
+            if subvol_type == SubvolumeTypes.TYPE_NORMAL:
+                raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
+            if subvol_type == SubvolumeTypes.TYPE_CLONE:
+                raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
+        # persist subvolume metadata
+        qpath = self.mnt_dir.decode('utf-8')
+        if self.retained:
+            self._set_incarnation_metadata(subvol_type, qpath, initial_state)
+            self.metadata_mgr.flush()
+        else:
+            self.init_config(self.VERSION, subvol_type, qpath, initial_state)
+
+    def _create(self, mode, attrs, subvol_type, auth=True):
+        # create group directory with default mode(0o755) if it doesn't exist.
+        create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
+        self.fs.mkdirs(self.mnt_dir, mode)
+
+        self.set_subvol_xattr()
+        self.set_attrs(self.mnt_dir, attrs)
+
+        self.create_or_update_meta_file(subvol_type)
+        if auth:
+            # Create the subvolume metadata file which manages auth-ids if it doesn't exist
+            self.auth_mdata_mgr.create_subvolume_metadata_file(
+                self.group.groupname, self.subvolname)
+
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
         retained = self.retained
         if retained and self.has_pending_purges:
             raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
-        subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+
         try:
-            # create group directory with default mode(0o755) if it doesn't exist.
-            create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
-            self.fs.mkdirs(subvol_path, mode)
-            self.set_subvol_xattr()
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -181,18 +206,7 @@ class SubvolumeV2(SubvolumeV1):
                 'casesensitive': casesensitive,
                 'enctag': enctag,
             }
-            self.set_attrs(subvol_path, attrs)
-
-            # persist subvolume metadata
-            qpath = subvol_path.decode('utf-8')
-            if retained:
-                self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
-                self.metadata_mgr.flush()
-            else:
-                self.init_config(SubvolumeV2.VERSION, subvolume_type, qpath, initial_state)
-
-            # Create the subvolume metadata file which manages auth-ids if it doesn't exist
-            self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, self.subvolname)
+            self._create(mode, attrs, SubvolumeTypes.TYPE_NORMAL)
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 self._remove_data_dir_on_failure(retained)
@@ -207,16 +221,9 @@ class SubvolumeV2(SubvolumeV1):
             raise e
 
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
-        subvolume_type = SubvolumeTypes.TYPE_CLONE
-        try:
-            initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException:
-            raise VolumeException(-errno.EINVAL, "clone failed: internal error")
-
         retained = self.retained
         if retained and self.has_pending_purges:
             raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
-        subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             # source snapshot attrs are used to create clone subvolume
             # attributes of subvolume's content though, are synced during the cloning process.
@@ -234,17 +241,8 @@ class SubvolumeV2(SubvolumeV1):
                 attrs["data_pool"] = pool
                 attrs["pool_namespace"] = None
 
-            # create directory and set attributes
-            self.fs.mkdirs(subvol_path, attrs.get("mode"))
-            self.set_subvol_xattr()
-            self.set_attrs(subvol_path, attrs)
-
-            # persist subvolume metadata and clone source
-            qpath = subvol_path.decode('utf-8')
-            if retained:
-                self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
-            else:
-                self.metadata_mgr.init(SubvolumeV2.VERSION, subvolume_type.value, qpath, initial_state.value)
+            self._create(attrs.get("mode"), attrs, SubvolumeTypes.TYPE_CLONE,
+                         auth=False)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
