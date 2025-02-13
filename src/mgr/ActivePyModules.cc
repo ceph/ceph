@@ -845,24 +845,40 @@ PyObject* ActivePyModules::with_perf_counters(
     std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path) const
+    const std::string &path,
+    const std::string &counter_name,
+    const std::string &sub_counter_name,
+    const vector<pair<string_view,string_view>> &labels) const
 {
   PyFormatter f;
-  f.open_array_section(path);
+
+  std::string resolved_path;
+  // if labels are not empty, construct the path
+  if (!labels.empty()){
+    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name, labels);
+    resolved_path = (counter_name_with_labels.append(".")).append(sub_counter_name);
+  }
+  else {
+    resolved_path = path;
+  }
+
+  // FIXME: Naveen: Is the resolved_path (i.e path with labels important here?), because open_array_section strips
+  // null values? I am thinking this is just a placeholder?
+  f.open_array_section(resolved_path);
   {
     without_gil_t no_gil;
     std::lock_guard l(lock);
     auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
     if (metadata) {
       std::lock_guard l2(metadata->lock);
-      if (metadata->perf_counters.instances.count(path)) {
-        auto counter_instance = metadata->perf_counters.instances.at(path);
-        auto counter_type = metadata->perf_counters.types.at(path);
+      if (metadata->perf_counters.instances.count(resolved_path)) {
+        auto counter_instance = metadata->perf_counters.instances.at(resolved_path);
+        auto counter_type = metadata->perf_counters.types.at(resolved_path);
         with_gil(no_gil, [&] {
           fct(counter_instance, counter_type, f);
         });
       } else {
-        dout(4) << "Missing counter: '" << path << "' ("
+        dout(4) << "Missing counter: '" << resolved_path << "' ("
 		<< svc_name << "." << svc_id << ")" << dendl;
         dout(20) << "Paths are:" << dendl;
         for (const auto &i : metadata->perf_counters.instances) {
@@ -907,13 +923,16 @@ PyObject* ActivePyModules::get_counter_python(
       }
     }
   };
-  return with_perf_counters(extract_counters, svc_name, svc_id, path);
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path, nullptr, nullptr, nullptr);
 }
 
 PyObject* ActivePyModules::get_latest_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path)
+    const std::string &path,
+    const std::string &counter_name,
+    const std::string &sub_counter_name,
+    const vector<pair<string_view,string_view>> &labels)
 {
   auto extract_latest_counters = [](
       PerfCounterInstance& counter_instance,
@@ -931,7 +950,7 @@ PyObject* ActivePyModules::get_latest_counter_python(
       f.dump_unsigned("v", datapoint.v);
     }
   };
-  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path);
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path, counter_name, sub_counter_name, labels);
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(

@@ -97,7 +97,10 @@ public:
   PyObject *get_latest_counter_python(
     const std::string &svc_type,
     const std::string &svc_id,
-    const std::string &path);
+    const std::string &path,
+    const std::string &counter_name,
+    const std::string &sub_counter_name,
+    const vector<pair<string_view,string_view>> &labels);
   PyObject *get_perf_schema_python(
      const std::string &svc_type,
      const std::string &svc_id);
@@ -115,7 +118,10 @@ public:
         PyFormatter& f)> fct,
       const std::string &svc_name,
       const std::string &svc_id,
-      const std::string &path) const;
+      const std::string &path,
+      const std::string &counter_name,
+      const std::string &sub_counter_name,
+      const vector<pair<string_view,string_view>> &labels) const;
 
   MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,

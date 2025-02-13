@@ -646,7 +646,7 @@ get_counter(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
   return self->py_modules->get_counter_python(
-      svc_name, svc_id, counter_path);
+      svc_name, svc_id, counter_path, nullptr, nullptr, nullptr);
 }
 
 static PyObject*
@@ -655,12 +655,15 @@ get_latest_counter(BaseMgrModule *self, PyObject *args)
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
+  char *counter_name = nullptr;
+  char *sub_counter_name = nullptr,
+  vector<pair<string_view,string_view>> *labels = nullptr,
   if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
   return self->py_modules->get_latest_counter_python(
-      svc_name, svc_id, counter_path);
+      svc_name, svc_id, counter_path, counter_name, sub_counter_name, labels);
 }
 
 static PyObject*

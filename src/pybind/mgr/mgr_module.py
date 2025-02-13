@@ -1690,7 +1690,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_latest_counter(self,
                            svc_type: str,
                            svc_name: str,
-                           path: str) -> Dict[str, Union[Tuple[float, int],
+                           path: str,
+                           counter_name: str,
+                           sub_counter_name: str,
+                           labels: List[(str, str)]) -> Dict[str, Union[Tuple[float, int],
                                                          Tuple[float, int, int]]]:
         """
         Called by the plugin to fetch only the newest performance counter data
@@ -1704,7 +1707,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             (timestamp, value, count) is returned.  This may be empty if no
             data is available.
         """
-        return self._ceph_get_latest_counter(svc_type, svc_name, path)
+        return self._ceph_get_latest_counter(svc_type, svc_name, path, counter_name, sub_counter_name, labels)
 
     @API.expose
     def list_servers(self) -> List[ServerInfoT]:
@@ -2191,19 +2194,30 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(OSDMap, self._ceph_get_osdmap())
 
+    # TODO: Naveen: have two different API's - one for labeled and another for unlabeled
     @API.expose
-    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
-        data = self.get_latest_counter(
-            daemon_type, daemon_name, counter)[counter]
+    def get_latest(self, daemon_type: str, daemon_name: str, counter: str, counter_name: str, sub_counter_name: str, labels: List[(str, str)]) -> int:
+        data = 0;
+        if (len(labels) != 0):
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter_name]
+        else:
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter]
         if data:
             return data[1]
         else:
             return 0
 
     @API.expose
-    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
-        data = self.get_latest_counter(
-            daemon_type, daemon_name, counter)[counter]
+    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str, counter_name: str, sub_counter_name: str, labels: List[(str, str)]) -> Tuple[int, int]:
+        data = 0;
+        if (len(labels) != 0):
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter_name]
+        else:
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter]
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
@@ -2284,7 +2298,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         v, c = self.get_latest_avg(
                             service['type'],
                             service['id'],
-                            counter_path
+                            counter_path,
+                            "",
+                            "",
+                            []
                         )
                         counter_info['value'], counter_info['count'] = v, c
                         result[svc_full_name][counter_path] = counter_info
@@ -2292,7 +2309,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         counter_info['value'] = self.get_latest(
                             service['type'],
                             service['id'],
-                            counter_path
+                            counter_path,
+                            "",
+                            "",
+                            []
                         )
 
                     result[svc_full_name][counter_path] = counter_info
@@ -2377,7 +2397,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         v, c = self.get_latest_avg(
                             service['type'],
                             service['id'],
-                            counter_path
+                            counter_path,
+                            "", # TODO: Naveen
+                            "",
+                            []
                         )
                         counter_info['value'], counter_info['count'] = v, c
                         result[svc_full_name][counter_path] = counter_info
@@ -2385,7 +2408,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         counter_info['value'] = self.get_latest(
                             service['type'],
                             service['id'],
-                            counter_path
+                            counter_path,
+                            "", #TODO: Naveen
+                            "",
+                            []
                         )
 
                     result[svc_full_name][counter_path] = counter_info
