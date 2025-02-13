@@ -44,6 +44,13 @@ namespace ba = boost::asio;
 namespace bs = boost::system;
 namespace R = neorados;
 
+// This is a bug in Boost. It's fixed in 1.87 and these pragmata can
+// be removed then.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
+
 std::string verstr(const std::tuple<uint32_t, uint32_t, uint32_t>& v)
 {
   const auto [maj, min, p] = v;
@@ -78,7 +85,6 @@ ba::awaitable<R::IOContext> lookup_pool(R::RADOS& r, const std::string& pname)
       ec, fmt::format("when looking up '{}'", pname));
   co_return R::IOContext(p);
 }
-
 
 ba::awaitable<void> lspools(R::RADOS& r, const std::vector<std::string>&)
 {
@@ -400,3 +406,5 @@ int main(int argc, char* argv[])
 
   return 0;
 }
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
