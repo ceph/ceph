@@ -143,8 +143,10 @@ class SubvolumeV2(SubvolumeV1):
 
         return os.path.join(snap_base_path, uuid_str)
 
-    def _remove_on_failure(self, retained):
+    def _cleanup_on_creation_failure(self):
         assert self.uuid
+
+        retained = self.retained
         uuid_path = to_str(safe_join(self.base_path, self.uuid))
         if retained:
             log.info(f'cleaning up, removing dir: {to_str(uuid_path)}')
@@ -160,28 +162,26 @@ class SubvolumeV2(SubvolumeV1):
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_TYPE, subvolume_type.value)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, qpath)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, initial_state.value)
+        self.metadata_mgr.flush()
 
-    def create_or_update_meta_file(self, subvol_data_path, subvol_type):
-        subvol_data_path = to_str(subvol_data_path)
-
+    def _write_meta_file(self, uuid_path, subvol_type):
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvol_type)
         except OpSmException:
-            if subvol_type == SubvolumeTypes.TYPE_NORMAL:
-                raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
-            if subvol_type == SubvolumeTypes.TYPE_CLONE:
-                raise VolumeException(-errno.EINVAL, "clone failed: internal error")
+            raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
         if self.retained:
-            self._set_incarnation_metadata(subvol_type, subvol_data_path,
+            self._set_incarnation_metadata(subvol_type, uuid_path,
                                            initial_state)
-            self.metadata_mgr.flush()
         else:
-            self.init_config(self.VERSION, subvol_type, subvol_data_path,
+            self.init_config(self.VERSION, subvol_type, uuid_path,
                              initial_state)
 
     def _create(self, mode, attrs, subvol_type, auth=True):
-        self.uuid is None
+        if self.retained and self.has_pending_purges:
+            raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
+
+        assert self.uuid is None
         self.uuid = gen_uuid()
         uuid_path = safe_join(self.base_path, self.uuid)
 
@@ -192,34 +192,18 @@ class SubvolumeV2(SubvolumeV1):
         self.mark_subvolume()
         self.set_attrs(uuid_path, attrs)
 
-        self.create_or_update_meta_file(subvol_type, uuid_path)
+        self._write_meta_file(subvol_type, uuid_path)
         if auth:
             # Create the subvolume metadata file which manages auth-ids if it doesn't exist
             self.auth_mdata_mgr.create_subvolume_metadata_file(
                 self.group.groupname, self.subvolname)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
-        retained = self.retained
-        if retained and self.has_pending_purges:
-            raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
-
+    def create(self, mode, attrs):
         try:
-            attrs = {
-                'uid': uid,
-                'gid': gid,
-                'data_pool': pool,
-                'pool_namespace': self.namespace if isolate_nspace else None,
-                'quota': size,
-                'earmark': earmark,
-                'normalization': normalization,
-                'casesensitive': casesensitive,
-                'enctag': enctag,
-            }
-
             self._create(mode, attrs, SubvolumeTypes.TYPE_NORMAL)
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
-                self._remove_on_failure(retained)
+                self._cleanup_on_creation_failure()
             except VolumeException as ve:
                 log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
 
@@ -231,8 +215,7 @@ class SubvolumeV2(SubvolumeV1):
             raise e
 
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
-        retained = self.retained
-        if retained and self.has_pending_purges:
+        if self.retained and self.has_pending_purges:
             raise VolumeException(-errno.EAGAIN, "asynchronous purge of subvolume in progress")
         try:
             # source snapshot attrs are used to create clone subvolume
@@ -257,7 +240,7 @@ class SubvolumeV2(SubvolumeV1):
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
-                self._remove_on_failure(retained)
+                self._cleanup_on_creation_failure()
             except VolumeException as ve:
                 log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
 
@@ -417,7 +400,7 @@ class SubvolumeV2(SubvolumeV1):
             self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
 
     def remove(self, retainsnaps=False, internal_cleanup=False):
-        if self.list_snapshots():
+        if self.has_snap():
             if not retainsnaps:
                 raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(self.subvolname))
             else:

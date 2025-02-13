@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 import cephfs
 
+from .volume import open_volume
 from .snapshot_util import mksnap, rmsnap
 from .charmap_util import charmap_get, charmap_set, charmap_rm
 from .pin_util import pin
@@ -373,3 +374,15 @@ def open_group_unique(fs, vol_spec, groupname, c_group, c_groupname):
     else:
         with open_group(fs, vol_spec, groupname) as group:
             yield group
+
+
+@contextmanager
+def open_grp_in_vol(vc, volname, grp_name):
+    """
+    open a subvolume group. This API is to be used as a context manager.
+
+    :return: yields a group object (subclass of GroupTemplate)
+    """
+    with open_volume(vc, volname) as fs:
+        with open_group(fs, vc.volspec, grp_name) as grp:
+            yield fs, grp

@@ -5,27 +5,18 @@ from .group import open_group
 from .template import SubvolumeOpType
 from .versions import loaded_subvolumes
 
-def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag):
+def create_subvol(mgr, fs, vol_spec, group, subvolname, mode, attrs):
     """
     create a subvolume (create a subvolume with the max known version).
 
     :param fs: ceph filesystem handle
     :param vol_spec: volume specification
     :param group: group object for the subvolume
-    :param size: In bytes, or None for no size limit
-    :param isolate_nspace: If true, use separate RADOS namespace for this subvolume
-    :param pool: the RADOS pool where the data objects of the subvolumes will be stored
     :param mode: the user permissions
-    :param uid: the user identifier
-    :param gid: the group identifier
-    :param earmark: metadata string to identify if subvolume is associated with nfs/smb
-    :param normalization: the unicode normalization form to use (nfd, nfc, nfkd or nfkc)
-    :param casesensitive: whether to make the subvolume case insensitive or not
-    :param enctag: metadata string to associate subvolume with an encryption tag
     :return: None
     """
     subvolume = loaded_subvolumes.get_subvolume_object_max(mgr, fs, vol_spec, group, subvolname)
-    subvolume.create(size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag)
+    subvolume.create(mode, attrs)
 
 
 def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):

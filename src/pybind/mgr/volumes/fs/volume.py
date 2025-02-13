@@ -4,6 +4,7 @@ import logging
 import mgr_util
 import inspect
 import functools
+from os.path import join
 from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
@@ -14,11 +15,11 @@ from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 
 from mgr_util import CephfsClient
 
-from .fs_util import listdir, has_subdir
+from .fs_util import listdir, has_subdir, path_exists
 from .stats_util import get_stats
 
 from .operations.group import open_group, create_group, remove_group, \
-    open_group_unique, set_group_attrs
+    open_group_unique, set_group_attrs, open_grp_in_vol
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count, get_mds_map
@@ -250,18 +251,9 @@ class VolumeClient(CephfsClient["Module"]):
 
     ### subvolume operations
 
-    def _create_subvolume(self, fs_handle, volname, group, subvolname, **kwargs):
-        size       = kwargs['size']
-        pool       = kwargs['pool_layout']
-        uid        = kwargs['uid']
-        gid        = kwargs['gid']
-        mode       = kwargs['mode']
-        isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark']
-        normalization = kwargs['normalization']
-        casesensitive = kwargs['casesensitive']
-        enctag = kwargs['enctag']
-
+    def _create_subvol_incar(self, subvol, mode, attrs, volname):
+        # TODO: incorporate
+        '''
         # inherit namespace isolation from group if not explicitly specified.
         # Every group directory has an explicit pool layout, so reading its
         # pool_namespace succeeds with an empty value when the group is not
@@ -276,12 +268,21 @@ class VolumeClient(CephfsClient["Module"]):
                 pass
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
-
-        oct_mode = octal_str_to_decimal_int(mode)
+        '''
 
         try:
-            create_subvol(
-                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark, normalization, casesensitive, enctag)
+            subvol.create(mode, attrs)
+        except VolumeException as e:
+            # kick the purge threads for async removal -- note that this
+            # assumes that the subvolume is moved to trashcan for cleanup on
+            # error.
+            self.purge_queue.queue_job(volname)
+            raise e
+
+    def _create_new_subvol(self, fs, grp, subvolname, mode, attrs, volname):
+        try:
+            create_subvol(self.mgr, fs, self.volspec, grp, subvolname, mode,
+                          attrs)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -299,38 +300,36 @@ class VolumeClient(CephfsClient["Module"]):
         uid        = kwargs['uid']
         gid        = kwargs['gid']
         mode       = kwargs['mode']
-        isolate_nspace = kwargs['namespace_isolated']
+        isolate_ns = kwargs['namespace_isolated']
         earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
         enctag    = kwargs['enctag']
 
+        op = SubvolumeOpType.CREATE
+        mode = octal_str_to_decimal_int(mode)
+        attrs = {'uid': uid, 'gid': gid, 'data_pool': pool,'quota': size,
+                 'earmark': earmark, 'enctag': enctag,
+                 'pool_namespace': isolate_ns,
+                 'normalization': normalization, 'casesensitive': casesensitive}
+
         try:
-            with open_volume(self, volname) as fs_handle:
-                with open_group(fs_handle, self.volspec, groupname) as group:
-                    try:
-                        with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CREATE) as subvolume:
-                            # idempotent creation -- valid. Attributes set is supported.
-                            attrs = {
-                                'uid': uid if uid else subvolume.uid,
-                                'gid': gid if gid else subvolume.gid,
-                                'mode': octal_str_to_decimal_int(mode),
-                                'data_pool': pool,
-                                'pool_namespace': subvolume.namespace if isolate_nspace else None,
-                                'quota': size,
-                                'earmark': earmark,
-                                'normalization': normalization,
-                                'casesensitive': casesensitive,
-                                'enctag': enctag,
-                            }
-                            subvolume.set_attrs(subvolume.path, attrs)
-                    except VolumeException as ve:
-                        if ve.errno == -errno.ENOENT:
-                            self._create_subvolume(fs_handle, volname, group, subvolname, **kwargs)
-                        else:
-                            raise
+            with open_grp_in_vol(self, volname, groupname) as (fs, grp):
+                subvol_base_path = join(self.volspec.VOL_BASE_PATH, grp.name,
+                                        subvolname)
+                if not path_exists(fs, subvol_base_path):
+                    self._create_new_subvol(fs, grp, subvolname, mode, attrs,
+                                            volname)
+                    return ret
+
+                with open_subvol_in_group(self.mgr, fs, self.volspec, groupname,
+                                          subvolname, op) as subvol:
+                    attrs['uid'] = uid if uid else subvol.uid
+                    attrs['gid'] = gid if gid else subvol.gid
+                    if not isolate_ns:
+                        attrs['pool_namespace'] = subvol.namespace
+                    self._create_subvol_incar(subvol, mode, attrs, volname)
         except VolumeException as ve:
-            # volume/group does not exist or subvolume creation failed
             ret = self.volume_exception_to_retval(ve)
         return ret
 
