@@ -489,6 +489,8 @@ else
                     $SUDO dnf -y module enable javapackages-tools
                 elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
                     $SUDO dnf config-manager --set-enabled crb
+                elif test $ID = centos -a $MAJOR_VERSION = 10 ; then
+                    $SUDO dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
