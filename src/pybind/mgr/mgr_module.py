@@ -2254,6 +2254,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         service['type'], service['id']
                     ))
                     continue
+                
+                labeled_schemas = self.get_perf_schema_labeled(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas-labeled: {}'.format(labeled_schemas))
+                self.log.debug('perf-schemas-labeled json: {}'.format(json.dumps(labeled_schemas)))
 
                 # Value is returned in a potentially-multi-service format,
                 # get just the service we're asking about
@@ -2292,6 +2297,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
                     result[svc_full_name][counter_path] = counter_info
 
+        self.log.debug('perf-schemas-labeled result json: {}'.format(json.dumps(result)))
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
