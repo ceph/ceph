@@ -65,6 +65,11 @@ class WebTokenEngine : public rgw::auth::Engine {
   void recurse_and_insert(const string& key, const jwt::claim& c, T& t) const;
   WebTokenEngine::token_t get_token_claims(const jwt::decoded_jwt& decoded) const;
 
+  int create_connection(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const;
+  std::string connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port = 443) const;
+  std::string get_top_level_domain_from_host(const DoutPrefixProvider* dpp, const std::string& hostname) const;
+  std::string extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const;
+
 public:
   WebTokenEngine(CephContext* const cct,
                     rgw::sal::Driver* driver,

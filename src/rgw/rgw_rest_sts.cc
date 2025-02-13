@@ -1,5 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
+
 #include <vector>
 #include <string>
 #include <array>
@@ -338,6 +343,186 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   return cert_url;
 }
 
+std::string
+WebTokenEngine::get_top_level_domain_from_host(const DoutPrefixProvider* dpp, const std::string& hostname) const
+{
+  std::string host = hostname;
+  //get top level domain only, removing https etc
+  auto pos = host.find("http://");
+  if (pos == std::string::npos) {
+    pos = host.find("https://");
+    if (pos != std::string::npos) {
+      host.erase(pos, 8);
+    } else {
+      pos = host.find("www.");
+      if (pos != std::string::npos) {
+        host.erase(pos, 4);
+      }
+    }
+  } else {
+    host.erase(pos, 7);
+  }
+
+  pos = host.find("/");
+  if (pos != std::string::npos) {
+    host.erase(pos, (host.length() - 1));
+  }
+
+  ldpp_dout(dpp, 20) << "Top level domain name of the host is: " << host << dendl;
+  return host;
+}
+
+int
+WebTokenEngine::create_connection(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const
+{
+  struct hostent* host = gethostbyname(hostname.c_str());
+  if (!host) {
+    ldpp_dout(dpp, 0) << "gethostbyname failed for host: " << hostname << dendl;
+    return -1;
+  }
+
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  memcpy(&addr.sin_addr, host->h_addr, host->h_length);
+
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  if (sock < 0) {
+    ldpp_dout(dpp, 0) << "creation of socket failed: " << sock << dendl;
+    return -1;
+  }
+
+  int ret = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+  if (ret != 0) {
+    ldpp_dout(dpp, 0) << "connection to socket failed: " << ret << dendl;
+    close(sock);
+    return -1;
+  }
+
+  return sock;
+}
+
+std::string
+WebTokenEngine::extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const
+{
+  const std::string BEGIN_MARKER = "-----BEGIN CERTIFICATE-----";
+  const std::string END_MARKER = "-----END CERTIFICATE-----";
+
+  // Find the last occurrence of BEGIN marker
+  size_t begin_pos = pem_chain.rfind(BEGIN_MARKER);
+  if (begin_pos == std::string::npos) {
+    ldpp_dout(dpp, 0) << "No BEGIN marker found in certificate chain" << dendl;
+    throw std::runtime_error("No BEGIN marker found in certificate chain");
+  }
+
+  // Find the END marker that comes after the last BEGIN marker
+  size_t end_pos = pem_chain.find(END_MARKER, begin_pos);
+  if (end_pos == std::string::npos) {
+    ldpp_dout(dpp, 0) << "No matching END marker found after last BEGIN marker" << dendl;
+    throw std::runtime_error("No matching END marker found after last BEGIN marker");
+  }
+
+  // Calculate the start and length of the complete certificate (including markers)
+  size_t cert_length = (end_pos + END_MARKER.length()) - begin_pos;
+
+  // Extract the complete certificate
+  std::string last_cert = pem_chain.substr(begin_pos, cert_length);
+
+  return last_cert;
+}
+
+std::string
+WebTokenEngine::connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const
+{
+  // Create SSL context
+  SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
+  if (!ctx) {
+      ldpp_dout(dpp, 0) << "Failed to create SSL context" << dendl;
+      throw -EINVAL;
+  }
+
+  // Create SSL connection
+  SSL* ssl = SSL_new(ctx);
+  if (!ssl) {
+      ldpp_dout(dpp, 0) << "Failed to create SSL object" << dendl;
+      SSL_CTX_free(ctx);
+      throw -EINVAL;
+  }
+
+  // Create socket and connect
+  int sock = create_connection(dpp, hostname, port);
+  if (sock < 0) {
+    SSL_CTX_free(ctx);
+    ldpp_dout(dpp, 0) << "Failed to connect to host: " << hostname << " port: " << port << dendl;
+    throw std::runtime_error("Failed to connect to host");
+  }
+
+  SSL_set_fd(ssl, sock);
+
+  // Set SNI hostname
+  SSL_set_tlsext_host_name(ssl, hostname.c_str());
+
+  // Perform handshake
+  if (SSL_connect(ssl) != 1) {
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
+    close(sock);
+    ldpp_dout(dpp, 0) << "SSL handshake failed" << dendl;
+    throw std::runtime_error("SSL handshake failed");
+  }
+
+  std::string chain_pem;
+
+  // Get the peer certificate (server's certificate)
+  X509* cert = SSL_get_peer_certificate(ssl);
+  if (!cert) {
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
+    close(sock);
+    ldpp_dout(dpp, 0) << "No certificate was presented" << dendl;
+    throw std::runtime_error("No certificate was presented");
+  }
+
+  // Get the chain
+  STACK_OF(X509)* chain = SSL_get_peer_cert_chain(ssl);
+  if (!chain) {
+    X509_free(cert);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
+    close(sock);
+    ldpp_dout(dpp, 0) << "Failed to get certificate chain" << dendl;
+    throw std::runtime_error("Failed to get certificate chain");
+  }
+
+  // Create BIO for PEM output
+  BIO* bio = BIO_new(BIO_s_mem());
+
+  // Write the server's certificate first
+  PEM_write_bio_X509(bio, cert);
+  X509_free(cert);
+
+  // Write the rest of the chain
+  int chain_length = sk_X509_num(chain);
+  for (int i = 0; i < chain_length; i++) {
+    X509* chain_cert = sk_X509_value(chain, i);
+    PEM_write_bio_X509(bio, chain_cert);
+  }
+
+  // Get the PEM data
+  char* pem_data;
+  long pem_size = BIO_get_mem_data(bio, &pem_data);
+  chain_pem = std::string(pem_data, pem_size);
+
+  // Cleanup
+  BIO_free(bio);
+  SSL_free(ssl);  // This also frees the chain
+  SSL_CTX_free(ctx);
+  close(sock);
+
+  return chain_pem;
+}
+
 void
 WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const
 {
@@ -504,6 +689,20 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
                 if (JSONDecoder::decode_json("n", n, &k_parser) && JSONDecoder::decode_json("e", e, &k_parser)) {
                   if (skip == true) {
                     continue;
+                  }
+                  //Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
+                  //and the same must be installed as part of create oidc provide in rgw
+                  //this can be made common to all types of keys(x5c, n&e), making thumbprint validation similar to
+                  //AWS
+                  std::string hostname = get_top_level_domain_from_host(dpp, cert_url);
+                  //connect to host and get back cert chain from it
+                  std::string cert_chain = connect_to_host_get_cert_chain(dpp, hostname, 443);
+
+                  std::string cert = extract_last_certificate(dpp, cert_chain);
+                  ldpp_dout(dpp, 20) << "last cert: " << cert << dendl;
+                  if (!is_cert_valid(thumbprints, cert)) {
+                    ldpp_dout(dpp, 20) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
+                    throw -EINVAL;
                   }
                   validate_signature_using_n_e(dpp, decoded, algorithm, n, e);
                   return;
@@ -723,7 +922,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   aud = s->info.args.get("aud");
 
   if (roleArn.empty() || roleSessionName.empty() || sub.empty() || aud.empty()) {
-    ldpp_dout(this, 0) << "ERROR: one of role arn or role session name or token is empty" << dendl;
+    ldpp_dout(this, 0) << "ERROR: one of role arn or role session name or sub or aud is empty" << dendl;
     return -EINVAL;
   }
 
