@@ -846,9 +846,9 @@ PyObject* ActivePyModules::with_perf_counters(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path,
-    const std::string &counter_name,
-    const std::string &sub_counter_name,
-    const vector<pair<string_view,string_view>> &labels) const
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels) const
 {
   PyFormatter f;
 
@@ -923,16 +923,16 @@ PyObject* ActivePyModules::get_counter_python(
       }
     }
   };
-  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path, nullptr, nullptr, nullptr);
+  return with_perf_counters(extract_counters, svc_name, svc_id, path, nullptr, nullptr, {});
 }
 
 PyObject* ActivePyModules::get_latest_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path,
-    const std::string &counter_name,
-    const std::string &sub_counter_name,
-    const vector<pair<string_view,string_view>> &labels)
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels)
 {
   auto extract_latest_counters = [](
       PerfCounterInstance& counter_instance,
@@ -1037,7 +1037,7 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
       with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
         string_view prev_key_name;
         string_view key_name;
-        vector<pair<string_view,string_view>> prev_key_labels;
+        std::vector<std::pair<std::string_view,std::string_view>> prev_key_labels;
 
         // Main object section
         f.open_object_section(key.c_str());
@@ -1052,7 +1052,7 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
           
           
           // create a vector of labels i.e [(level, shallow), (pooltype, replicated)]
-          vector<pair<string_view,string_view>> key_labels;
+          std::vector<std::pair<std::string_view,std::string_view>> key_labels;
           for (auto label : ceph::perf_counters::key_labels(counter_name_with_labels)) {
             if (!label.first.empty()){
               key_labels.push_back(label);

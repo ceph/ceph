@@ -98,9 +98,9 @@ public:
     const std::string &svc_type,
     const std::string &svc_id,
     const std::string &path,
-    const std::string &counter_name,
-    const std::string &sub_counter_name,
-    const vector<pair<string_view,string_view>> &labels);
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels);
   PyObject *get_perf_schema_python(
      const std::string &svc_type,
      const std::string &svc_id);
@@ -119,9 +119,9 @@ public:
       const std::string &svc_name,
       const std::string &svc_id,
       const std::string &path,
-      const std::string &counter_name,
-      const std::string &sub_counter_name,
-      const vector<pair<string_view,string_view>> &labels) const;
+      const std::string_view &counter_name,
+      const std::string_view &sub_counter_name,
+      const std::vector<std::pair<std::string_view,std::string_view>> &labels) const;
 
   MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,
