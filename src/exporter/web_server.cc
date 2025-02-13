@@ -48,12 +48,14 @@ protected:
 
   // Common request processing logic
   void process_request() {
+    std::cout << "Hello, World!" << std::endl;
     response_.version(request_.version());
     response_.keep_alive(request_.keep_alive());
 
     switch (request_.method()) {
     case http::verb::get:
       response_.result(http::status::ok);
+      std::cout << "Hello, World in switch case!" << std::endl;
       create_response();
       break;
 
@@ -67,16 +69,51 @@ protected:
     write_response();
   }
 
+  std::map<std::string, std::string> parse_query_string(const std::string& query) {
+    std::map<std::string, std::string> params;
+    std::istringstream query_stream(query);
+    std::string key_value;
+
+    while (std::getline(query_stream, key_value, '&')) { // Split on '&'
+        size_t pos = key_value.find('=');
+        if (pos != std::string::npos) {
+            std::string key = key_value.substr(0, pos);
+            std::string value = key_value.substr(pos + 1);
+            params[key] = value;
+        }
+    }
+    return params;
+  }
+
+  std::string extract_query_string(const std::string& url) {
+    size_t pos = url.find('?');  // Find start of query string
+    if (pos != std::string::npos) {
+        return url.substr(pos + 1);  // Extract everything after '?'
+    }
+    return "";  // No query string found
+  }
+
   // Construct a response message based on the request target
   void create_response() {
+    std::cout << "Hello, World create_response!" << std::endl;
+    std::cout << "requested string: " << request_.target() << std::endl;
     if (request_.target() == "/") {
         response_.result(http::status::moved_permanently);
         response_.set(http::field::location, "/metrics");
-    } else if (request_.target() == "/metrics") {
+    } else if ((request_.target() == "/metrics") || (request_.target().compare(0, std::string("/metrics?").size(), "/metrics?") == 0)) {
+      std::cout << "request string: " << request_.target() << std::endl;
       response_.set(http::field::content_type, "text/plain; charset=utf-8");
-      DaemonMetricCollector &collector = collector_instance();
-      std::string metrics = collector.get_metrics();
-      response_.body() = metrics;
+
+      auto filters = parse_query_string(extract_query_string(request_.target()));
+      auto is_only = (filters.find("exclude_perf_counter_prefix") != filters.end());
+      auto is_exclude = (filters.find("only_perf_counter_prefix") != filters.end());
+      if (is_only && is_exclude) {
+        response_.body() = "Please pass either exclude_perf_counter_prefix or only_perf_counter_prefix and not both";
+      } else {
+        DaemonMetricCollector &collector = collector_instance();
+        std::string metrics = collector.get_metrics(filters);
+        response_.body() = metrics;
+      }
     } else {
       response_.result(http::status::method_not_allowed);
       response_.set(http::field::content_type, "text/plain");

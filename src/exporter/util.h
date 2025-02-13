@@ -1,6 +1,7 @@
 #include "common/hostname.h"
 #include <chrono>
 #include <string_view>
+#include <vector>
 
 class BlockTimer {
  public:
@@ -20,3 +21,5 @@ class BlockTimer {
 std::string read_file_to_string(std::string path);
 
 void promethize(std::string &name);
+
+std::vector<std::string> split_regexes(std::string regexes);

@@ -36,7 +36,7 @@ typedef std::map<std::string, std::string> labels_t;
 class DaemonMetricCollector {
 public:
   void main();
-  std::string get_metrics();
+  std::string get_metrics(std::map<std::string, std::string> filters);
   labels_t get_extra_labels(std::string daemon_name);
   void dump_asok_metrics(bool sort_metrics, int64_t counter_prio,
                          bool sockClientsPing, std::string &dump_response,
@@ -90,22 +90,22 @@ public:
 class MetricsBuilder {
 public:
   virtual ~MetricsBuilder() = default;
-  virtual std::string dump() = 0;
+  std::string dump();
   virtual void add(std::string value, std::string name, std::string description,
                    std::string mtype, labels_t labels) = 0;
+  std::string filtered_dump(std::map<std::string, std::string> filters);
 
 protected:
   std::string out;
+  std::map<std::string, Metric> metrics;
 };
 
 class OrderedMetricsBuilder : public MetricsBuilder {
-private:
-  std::map<std::string, Metric> metrics;
-
 public:
   std::string dump();
   void add(std::string value, std::string name, std::string description,
            std::string mtype, labels_t labels);
+  void filtered_dump(std::map<std::string, std::string> filters);
 };
 
 class UnorderedMetricsBuilder : public MetricsBuilder {
@@ -113,6 +113,7 @@ public:
   std::string dump();
   void add(std::string value, std::string name, std::string description,
            std::string mtype, labels_t labels);
+  void filtered_dump(std::map<std::string, std::string> filters);
 };
 
 DaemonMetricCollector &collector_instance();
