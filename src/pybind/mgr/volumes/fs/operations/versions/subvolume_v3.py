@@ -1,7 +1,13 @@
+import errno
+from os.path import basename, join
 from logging import getLogger
 from uuid import uuid4
 
+import cephfs
+
 from .subvolume_v2 import SubvolumeV2
+from ...exception import VolumeException
+from ...fs_util import listdir, create_base_dir
 
 
 log = getLogger(__name__)
@@ -96,3 +102,55 @@ class SubvolumeV3(SubvolumeV2):
     @staticmethod
     def version():
         return SubvolumeV3.VERSION
+
+    @property
+    def base_path(self):
+        return self.subvol_dir
+
+    @property
+    def config_path(self):
+        '''
+        Path to meta file for current incarnation of the subvolume.
+
+        NOTE: overriding method from class SubvolumeBase, since meta file's name
+        now contains UUID in it and in class SubvolumeBase UUID can't be
+        accessed.
+        '''
+        return self.meta
+
+
+    # following methods either help or do subvolume creation and opening/discovery
+
+
+    def set_subvol_xattr(self):
+        # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
+        # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
+        try:
+            # MDS treats this as a noop for already marked subvolume
+            self.fs.setxattr(self.uuid_dir, 'ceph.dir.subvolume', b'1', 0)
+        except cephfs.InvalidValue:
+            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def _create_v3_layout(self, mode):
+        create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
+        self.fs.mkdirs(self.mnt_dir, mode)
+
+    def create_or_update_meta_file(self, subvol_type):
+        super(SubvolumeV3, self).create_or_update_meta_file(subvol_type)
+
+        self.fs.symlink(basename(self.meta), self.current_meta)
+
+    def _create(self, mode, attrs, subvol_type, auth=True):
+        self._create_v3_layout(mode)
+
+        self.set_subvol_xattr()
+        self.set_attrs(self.mnt_dir, attrs)
+
+        self.create_or_update_meta_file(subvol_type)
+        if auth:
+            # Create the subvolume metadata file which manages auth-ids if it
+            # doesn't exist
+            self.auth_mdata_mgr.create_subvolume_metadata_file(
+                self.group.groupname, self.subvolname)
