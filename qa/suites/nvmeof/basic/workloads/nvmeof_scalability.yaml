@@ -32,9 +32,10 @@ tasks:
     timeout: 30m
     clients:
       client.0:
+        - nvmeof/fio_test.sh
+      client.3:
         - nvmeof/scalability_test.sh nvmeof.a,nvmeof.b
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c,nvmeof.d
     env:
       SCALING_DELAYS: '300'
-      RBD_POOL: mypool
-      NVMEOF_GROUP: mygroup0
+      RUNTIME: '1200'
