@@ -8,6 +8,7 @@ from .subvolume_base import SubvolumeBase
 from .subvolume_attrs import SubvolumeTypes
 from .subvolume_v1 import SubvolumeV1
 from .subvolume_v2 import SubvolumeV2
+from .subvolume_v3 import SubvolumeV3
 from .metadata_manager import MetadataManager
 from .op_sm import SubvolumeOpSm
 from ..template import SubvolumeOpType
@@ -40,7 +41,7 @@ class SubvolumeLoader(object):
             raise VolumeException(-errno.EINVAL, "no subvolume version available")
         log.info("max subvolume version is v{0}".format(self.max_version))
 
-    def _get_subvolume_version(self, version):
+    def _get_subvolume_class(self, version):
         try:
             return self.versions[version]
         except KeyError:
@@ -104,19 +105,32 @@ class SubvolumeLoader(object):
         # legacy is only upgradable to v1
         subvolume.init_config(SubvolumeV1.version(), subvolume_type, qpath, initial_state)
 
-    def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname, upgrade=True):
-        subvolume = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
+    def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname,
+                             upgrade=True):
+        base_subvol = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
+
         try:
-            subvolume.discover()
-            self.upgrade_to_v2_subvolume(subvolume)
-            version = int(subvolume.metadata_mgr.get_global_option('version'))
-            subvolume_version_object = self._get_subvolume_version(version)(mgr, fs, vol_spec, group, subvolname, legacy=subvolume.legacy_mode)
-            subvolume_version_object.metadata_mgr.refresh()
-            subvolume_version_object.clean_stale_snapshot_metadata()
-            return subvolume_version_object
+            # disc = discovered
+            disc_version, disc_uuid = base_subvol.discover()
+
+            if disc_version <= 2:
+                self.upgrade_to_v2_subvolume(base_subvol)
+                subvol_class = self._get_subvolume_class(disc_version)
+                subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
+                                          legacy=base_subvol.legacy_mode)
+            elif disc_version == 3:
+                subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
+                                         disc_uuid)
+            else:
+                assert False, \
+                        f'invalid version. disc_version = {disc_version}'
+
+            subvol_obj.metadata_mgr.refresh()
+            subvol_obj.clean_stale_snapshot_metadata()
+            return subvol_obj
         except MetadataMgrException as me:
             if me.errno == -errno.ENOENT and upgrade:
-                self.upgrade_legacy_subvolume(fs, subvolume)
+                self.upgrade_legacy_subvolume(fs, base_subvol)
                 return self.get_subvolume_object(mgr, fs, vol_spec, group, subvolname, upgrade=False)
             else:
                 # log the actual error and generalize error string returned to user

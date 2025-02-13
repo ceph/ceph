@@ -5,10 +5,13 @@ from logging import getLogger
 from cephfs import Error, InvalidValue
 
 from .subvolume_v2 import SubvolumeV2
+from .subvolume_attrs import SubvolumeStates
 from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
-from ...utils import verify_uuid, safe_join, to_utf8
+from ..trash import create_trashcan, open_trashcan
+from ...utils import gen_uuid, verify_uuid, safe_join, to_utf8, to_str
 from ...fs_util import listdir, path_exists
+from ...exception import VolumeException
 
 
 log = getLogger(__name__)
@@ -43,6 +46,27 @@ class PreV3Helper:
     @property
     def config_path(self):
         return self.meta_path
+
+    @property
+    def trash_dir(self):
+        raise RuntimeError('method trash_dir() shouldn\'t be called in '
+                           'subvol v3 codebase, since it doesn\'t have a '
+                           'in-subvol trash dir (which is named ".trash" in'
+                           'subvol v2)')
+
+    def create_trashcan(self):
+        raise RuntimeError('method create_trashcan() shouldn\'t be called in '
+                           'subvol v3 codebase, since it doesn\'t have a '
+                           'in-subvol trash dir (which is named ".trash" in'
+                           'subvol v2)')
+
+    # TODO: base dir should be deleted in subvol v3 too when no snaps are
+    # retained on any incarnation, right?
+    def trash_base_dir(self):
+        # code under _trash_subvol_path can be move here technically but this
+        # extra layer of call has been added to indicate that in subvol v3
+        # terms
+        self.trash_subvol_dir()
 
 
 class SubvolHelper:
@@ -154,3 +178,93 @@ class SubvolumeV3(SubvolumeV2):
 
     def get_v3_incars(self):
         return self.list_dirs(self.roots_path)
+
+
+    # ----- methods for subvol creation and opening/discovery -----
+
+
+    def _remove_on_failure(self, retained):
+        # current incarnation path
+        curr_incar_path = self.get_incar_path()
+
+        if not retained:
+            log.info(f'removing subvol: {self.name}')
+            self.remove(internal_cleanup=True)
+
+        try:
+            log.info(f'removing subvol incar path: {to_str(curr_incar_path)}')
+            self.fs.rmdir(curr_incar_path)
+        except Error as e:
+            raise VolumeException(e)
+
+    def mark_subvolume(self):
+        '''
+        Set vxattr ceph.dir.subvolume to 1 on the incar/UUID path.
+        '''
+        xattr = 'ceph.dir.subvolume'
+        try:
+            # MDS treats this as a no-op for already marked subvolume
+            self.fs.setxattr(self.get_incar_path(), xattr, '1', 0)
+        except InvalidValue:
+            raise VolumeException(EINVAL, f'invalid value for "{xattr}"')
+        except Error as e:
+            raise VolumeException(e)
+
+    def set_meta_symlink(self):
+        if not self.path_exists(self.meta_path):
+            assert False, \
+                (f'meta file for current incar is missing, it is to be created '
+                 f'first. self.meta_path = {self.meta_path}')
+
+        assert self.uuid in self.meta_file_name, \
+            (f'self.meta_file_name = {self.meta_file_name} '
+             f'self.uuid = {self.uuid}')
+
+        assert self.meta_file_name == basename(self.meta_path), \
+            (f'self.meta_file_name = {self.meta_file_name} '
+             f'self.meta_path = {self.meta_path}')
+
+        if self.path_exists(self.meta_symlink_path, follow_symlink=False):
+            self.fs.unlink(self.meta_symlink_path)
+        self.fs.symlink(self.meta_file_name, self.meta_symlink_path[1:])
+
+    def create_or_update_meta_file(self, subvol_type):
+        SubvolumeV2.create_or_update_meta_file(self, subvol_type)
+
+        self.set_meta_symlink()
+
+    def _create(self, mode, attrs, subvol_type, auth=True):
+        assert self.uuid is None
+        self.uuid = gen_uuid()
+        self._define_basic_paths()
+        self._define_md_attrs()
+
+        if not self.path_exists(self.group.path):
+            self.fs.mkdirs(self.group.path, self.spec.DEFAULT_MODE)
+        self.fs.mkdirs(self.get_incar_mnt_path(), mode)
+
+        self.mark_subvolume()
+        self.set_attrs(self.get_incar_mnt_path(), attrs)
+
+        self.create_or_update_meta_file(subvol_type)
+        if auth:
+            # Create the subvolume metadata file which manages auth-ids if it
+            # doesn't exist
+            self.auth_md.create_subvolume_metadata_file(self.group.name,
+                                                        self.name)
+
+
+    # ----- methods for subvol removal -----
+
+
+    def trash_subvol_dir(self):
+        create_trashcan(self.fs, self.spec)
+
+        with open_trashcan(self.fs, self.spec) as trashcan:
+            trashcan.dump(self.subvol_path)
+
+    @property
+    def has_pending_purges(self):
+        # since there is not in-subvol ".trash" dir in subvol v3, this method
+        # should always return False
+        return False

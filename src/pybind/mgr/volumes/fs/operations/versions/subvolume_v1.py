@@ -30,7 +30,18 @@ from ..clone_index import open_clone_index, create_clone_index
 log = logging.getLogger(__name__)
 
 
-class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
+class V3Compat:
+    '''
+    Contains stuff that is overriden code in v3 subvol class, which in turn
+    allows max code reuse.
+    '''
+
+    def has_snaps(self):
+        # will be updated in subsequent commits.
+        return False
+
+
+class SubvolumeV1(SubvolumeBase, SubvolumeTemplate, V3Compat):
     """
     Version 1 subvolumes creates a subvolume with path as follows,
         volumes/<group-name>/<subvolume-name>/<uuid>/
