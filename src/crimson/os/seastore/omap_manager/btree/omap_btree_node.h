@@ -52,7 +52,8 @@ struct OMapNode : LogicalChildNode {
   explicit OMapNode(ceph::bufferptr &&ptr) : LogicalChildNode(std::move(ptr)) {}
   explicit OMapNode(extent_len_t length) : LogicalChildNode(length) {}
   OMapNode(const OMapNode &other)
-  : LogicalChildNode(other) {}
+  : LogicalChildNode(other),
+    root(other.root) {}
 
   using get_value_iertr = base_iertr;
   using get_value_ret = OMapManager::omap_get_value_ret;
@@ -109,6 +110,12 @@ struct OMapNode : LogicalChildNode {
   virtual uint32_t get_node_size() = 0;
 
   virtual ~OMapNode() = default;
+
+  bool is_btree_root() const { return root; }
+  void unset_root() { root = false; }
+  void set_root() { root = true; }
+private:
+  bool root = false;
 };
 
 using OMapNodeRef = OMapNode::OMapNodeRef;
