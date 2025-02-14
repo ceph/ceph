@@ -328,12 +328,12 @@ void PeerReplayer::shutdown() {
   m_remote_cluster.reset();
 }
 
-void PeerReplayer::add_directory(string_view dir_root) {
-  dout(20) << ": dir_root=" << dir_root << dendl;
+void PeerReplayer::add_directory(string_view dir_root, string_view sync_from_snapshot) {
+  dout(20) << ": dir_root=" << dir_root << ", sync_from_snapshot=" << sync_from_snapshot << dendl;
 
   std::scoped_lock locker(m_lock);
   m_directories.emplace_back(dir_root);
-  m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
+  m_snap_sync_stats.emplace(dir_root, SnapSyncStat(sync_from_snapshot));
   m_cond.notify_all();
 }
 
@@ -485,6 +485,19 @@ void PeerReplayer::unlock_directory(const std::string &dir_root, const DirRegist
   dout(10) << ": dir_root=" << dir_root << " unlocked" << dendl;
 }
 
+int PeerReplayer::get_snap_id(const std::string &dir_root, const std::string& snap_name) {
+  snap_info info;
+  auto snap_dir = snapshot_dir_path(m_cct, dir_root);
+  auto snap_path = snapshot_path(snap_dir, snap_name);
+  int r = ceph_get_snap_info(m_local_mount, snap_path.c_str(), &info);
+  if (r < 0) {
+    derr << ": failed to fetch " << snap_name << ", snap info for snap_path=" << snap_path
+	 << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return info.id;
+}
+
 int PeerReplayer::build_snap_map(const std::string &dir_root,
                                  std::map<uint64_t, std::string> *snap_map, bool is_remote) {
   auto snap_dir = snapshot_dir_path(m_cct, dir_root);
@@ -515,6 +528,17 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     }
 
     entry = ceph_readdir(mnt, dirp);
+  }
+
+  uint64_t snap_id_in = 0;
+  std::string snap_name = m_snap_sync_stats.at(dir_root).sync_from_snapshot;
+  if (!is_remote && !snap_name.empty()) {
+    r = get_snap_id(dir_root, snap_name);
+    if (r < 0) {
+      derr << ": defaulting to first snapshot for syncing" << dendl;
+    } else {
+      snap_id_in = r;
+    }
   }
 
   int rv = 0;
@@ -556,7 +580,9 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     if (rv != 0) {
       break;
     }
-    snap_map->emplace(snap_id, snap);
+    if (snap_id >= snap_id_in) {
+      snap_map->emplace(snap_id, snap);
+    }
   }
 
   r = ceph_closedir(mnt, dirp);
