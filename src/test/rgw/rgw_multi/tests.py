@@ -42,12 +42,18 @@ class Config:
 # implementations of these interfaces by calling init_multi()
 realm = None
 user = None
+non_account_user = None
+non_account_alt_user = None
 config = None
-def init_multi(_realm, _user, _config=None):
+def init_multi(_realm, _user, _non_account_user, _non_account_alt_user, _config=None):
     global realm
     realm = _realm
     global user
     user = _user
+    global non_account_user
+    non_account_user = _non_account_user
+    global non_account_alt_user
+    non_account_alt_user = _non_account_alt_user
     global config
     config = _config or Config()
     realm_meta_checkpoint(realm)
@@ -468,17 +474,31 @@ class ZonegroupConns:
     def __init__(self, zonegroup):
         self.zonegroup = zonegroup
         self.zones = []
+        self.non_account_zones = []
+        self.non_account_alt_zones = []
         self.ro_zones = []
+        self.non_account_ro_zones = []
+        self.non_account_alt_ro_zones = []
         self.rw_zones = []
+        self.non_account_rw_zones = []
+        self.non_account_alt_rw_zones = []
         self.master_zone = None
 
         for z in zonegroup.zones:
             zone_conn = z.get_conn(user.credentials)
+            non_account_zone_conn = z.get_conn(non_account_user.credentials)
+            non_account_alt_zone_conn = z.get_conn(non_account_alt_user.credentials)
             self.zones.append(zone_conn)
+            self.non_account_zones.append(non_account_zone_conn)
+            self.non_account_alt_zones.append(non_account_alt_zone_conn)
             if z.is_read_only():
                 self.ro_zones.append(zone_conn)
+                self.non_account_ro_zones.append(non_account_zone_conn)
+                self.non_account_alt_ro_zones.append(non_account_alt_zone_conn)
             else:
                 self.rw_zones.append(zone_conn)
+                self.non_account_rw_zones.append(non_account_zone_conn)
+                self.non_account_alt_rw_zones.append(non_account_alt_zone_conn)
 
             if z == zonegroup.master_zone:
                 self.master_zone = zone_conn
