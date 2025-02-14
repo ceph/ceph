@@ -1894,8 +1894,9 @@ class MgmtGatewaySpec(ServiceSpec):
         self.ssl_protocols = ssl_protocols
         #: List of supported secure SSL ciphers. Changing this list may reduce system security.
         self.ssl_ciphers = ssl_ciphers
-        self.enable_health_check_endpoint = enable_health_check_endpoint
+        #: Virtual IP address used for the management gateway in a high availability setup.
         self.virtual_ip = virtual_ip
+        self.enable_health_check_endpoint = enable_health_check_endpoint
 
     def get_port_start(self) -> List[int]:
         ports = []
