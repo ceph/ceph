@@ -196,6 +196,8 @@ class IngressService(CephService):
             server_opts.append("send-proxy-v2")
         logger.debug("enabled default server opts: %r", server_opts)
         ip = '[::]' if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '[::]'
+        v4v6_flag = "v4v6" if ip == "[::]" else ""
+
         frontend_port = daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port
         if ip != '[::]' and frontend_port:
             daemon_spec.port_ips = {str(frontend_port): ip}
@@ -214,6 +216,7 @@ class IngressService(CephService):
                 'local_host_ip': host_ip,
                 'default_server_opts': server_opts,
                 'health_check_interval': spec.health_check_interval or '2s',
+                'v4v6_flag': v4v6_flag,
             }
         )
         config_files = {
