@@ -103,6 +103,12 @@ class DistroKind(StrEnum):
         return {cls.CENTOS8, cls.CENTOS9, cls.CENTOS10, cls.FEDORA41}
 
     @classmethod
+    def uses_rpmbuild(cls):
+        # right now this is the same as uses_dnf, but perhaps not always
+        # let's be specific in our interface
+        return cls.uses_dnf()  # but lazy in the implementation
+
+    @classmethod
     def aliases(cls):
         return {
             str(cls.CENTOS10): cls.CENTOS10,
@@ -231,6 +237,7 @@ class Steps(StrEnum):
     SOURCE_RPM = "source-rpm"
     RPM = "rpm"
     DEBS = "debs"
+    PACKAGES = "packages"
     INTERACTIVE = "interactive"
 
 
@@ -598,6 +605,15 @@ def bc_make_debs(ctx):
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
+
+
+@Builder.set(Steps.PACKAGES)
+def bc_make_packages(ctx):
+    """Build some sort of distro packages - chooses target based on distro."""
+    if ctx.cli.distro in DistroKind.uses_rpmbuild():
+        ctx.build.wants(Steps.RPM, ctx)
+    else:
+        ctx.build.wants(Steps.DEBS, ctx)
 
 
 @Builder.set(Steps.CUSTOM)
