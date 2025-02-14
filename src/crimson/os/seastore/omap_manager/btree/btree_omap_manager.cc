@@ -25,6 +25,7 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
   return tm.alloc_non_data_extent<OMapLeafNode>(t, hint, OMAP_LEAF_BLOCK_SIZE)
     .si_then([hint, &t](auto&& root_extent) {
       root_extent->set_size(0);
+      root_extent->set_root();
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
@@ -43,7 +44,12 @@ BtreeOMapManager::get_omap_root(omap_context_t oc, const omap_root_t &omap_root)
 {
   assert(omap_root.get_location() != L_ADDR_NULL);
   laddr_t laddr = omap_root.get_location();
-  return omap_load_extent(oc, laddr, omap_root.get_depth());
+  return omap_load_extent(
+    oc, laddr, omap_root.get_depth()
+  ).si_then([](auto extent) {
+    extent->set_root();
+    return extent;
+  });
 }
 
 BtreeOMapManager::handle_root_split_ret
@@ -60,8 +66,11 @@ BtreeOMapManager::handle_root_split(
     auto [left, right, pivot] = *(mresult.split_tuple);
     omap_node_meta_t meta{omap_root.depth + 1};
     nroot->set_meta(meta);
+    nroot->set_root();
+    left->unset_root();
     nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr(),
                                 "", nroot->maybe_get_delta_buffer());
+    right->unset_root();
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
     omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint);
@@ -83,6 +92,10 @@ BtreeOMapManager::handle_root_merge(
   LOG_PREFIX(BtreeOMapManager::handle_root_merge);
   DEBUGT("{}", oc.t, omap_root);
   auto root = *(mresult.need_merge);
+  assert(mresult.maybe_new_root);
+  auto new_root = *(mresult.maybe_new_root);
+  new_root->set_root();
+  root->unset_root();
   auto iter = root->cast<OMapInnerNode>()->iter_begin();
   omap_root.update(
     iter->get_val(),

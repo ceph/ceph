@@ -127,6 +127,7 @@ OMapInnerNode::get_value(
   auto laddr = child_pt->get_val();
   return omap_load_extent(oc, laddr, get_meta().depth - 1).si_then(
     [oc, &key] (auto extent) {
+    ceph_assert(!extent->is_btree_root());
     return extent->get_value(oc, key);
   }).finally([ref = OMapNodeRef(this)] {});
 }
@@ -144,6 +145,7 @@ OMapInnerNode::insert(
   auto laddr = child_pt->get_val();
   return omap_load_extent(oc, laddr, get_meta().depth - 1).si_then(
     [oc, &key, &value] (auto extent) {
+    ceph_assert(!extent->is_btree_root());
     return extent->insert(oc, key, value);
   }).si_then([this, oc, child_pt] (auto mresult) {
     if (mresult.status == mutation_status_t::SUCCESS) {
@@ -168,6 +170,7 @@ OMapInnerNode::rm_key(omap_context_t oc, const std::string &key)
   auto laddr = child_pt->get_val();
   return omap_load_extent(oc, laddr, get_meta().depth - 1).si_then(
     [this, oc, &key, child_pt] (auto extent) {
+    ceph_assert(!extent->is_btree_root());
     return extent->rm_key(oc, key)
       .si_then([this, oc, child_pt, extent = std::move(extent)] (auto mresult) {
       switch (mresult.status) {
@@ -246,6 +249,7 @@ OMapInnerNode::list(
           oc, laddr,
           get_meta().depth - 1
         ).si_then([&, config, oc](auto &&extent) {
+	  ceph_assert(!extent->is_btree_root());
 	  return seastar::do_with(
 	    iter == fiter ? first : std::optional<std::string>(std::nullopt),
 	    iter == liter - 1 ? last : std::optional<std::string>(std::nullopt),
@@ -307,6 +311,7 @@ OMapInnerNode::clear(omap_context_t oc)
     if (ndepth > 1) {
       return omap_load_extent(oc, laddr, ndepth
       ).si_then([oc](auto &&extent) {
+	ceph_assert(!extent->is_btree_root());
 	return extent->clear(oc);
       }).si_then([oc, laddr] {
 	return dec_ref(oc, laddr);
@@ -402,6 +407,7 @@ OMapInnerNode::merge_entry(
   auto donor_iter = is_left ? iter - 1 : iter + 1;
   return omap_load_extent(oc, donor_iter->get_val(), get_meta().depth - 1
   ).si_then([=, this](auto &&donor) mutable {
+    ceph_assert(!donor->is_btree_root());
     LOG_PREFIX(OMapInnerNode::merge_entry);
     auto [l, r] = is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
@@ -423,13 +429,16 @@ OMapInnerNode::merge_entry(
         //retire extent
         std::vector<laddr_t> dec_laddrs {l->get_laddr(), r->get_laddr()};
         return dec_ref(oc, dec_laddrs
-	).si_then([this, oc] {
+	).si_then([this, oc, r=std::move(replacement)] {
 	  --(oc.t.get_omap_tree_stats().extents_num_delta);
           if (extent_is_below_min()) {
             return merge_entry_ret(
                    interruptible::ready_future_marker{},
-                   mutation_result_t(mutation_status_t::NEED_MERGE,
-		     std::nullopt, this));
+		   is_btree_root()
+		    ? mutation_result_t(mutation_status_t::NEED_MERGE,
+					std::nullopt, this, r)
+		    : mutation_result_t(mutation_status_t::NEED_MERGE,
+					std::nullopt, this));
           } else {
             return merge_entry_ret(
                    interruptible::ready_future_marker{},
