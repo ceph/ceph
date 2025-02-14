@@ -63,11 +63,11 @@ OMapInnerNode::make_split_insert(
   return make_split_children(oc).si_then([=] (auto tuple) {
     auto [left, right, pivot] = tuple;
     if (pivot > key) {
-      auto liter = left->iter_idx(iter.get_index());
+      auto liter = left->iter_idx(iter.get_offset());
       left->journal_inner_insert(liter, laddr, key,
                                  left->maybe_get_delta_buffer());
     } else {  //right
-      auto riter = right->iter_idx(iter.get_index() - left->get_node_size());
+      auto riter = right->iter_idx(iter.get_offset() - left->get_node_size());
       right->journal_inner_insert(riter, laddr, key,
                                   right->maybe_get_delta_buffer());
     }
@@ -90,7 +90,7 @@ OMapInnerNode::handle_split(
   DEBUGT("this: {}",  oc.t, *this);
   if (!is_mutable()) {
     auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
-    auto mut_iter = mut->iter_idx(iter.get_index());
+    auto mut_iter = mut->iter_idx(iter.get_offset());
     return mut->handle_split(oc, mut_iter, mresult);
   }
   auto [left, right, pivot] = *(mresult.split_tuple);
@@ -396,7 +396,7 @@ OMapInnerNode::merge_entry(
   DEBUGT("{}, parent: {}", oc.t, *entry, *this);
   if (!is_mutable()) {
     auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
-    auto mut_iter = mut->iter_idx(iter->get_index());
+    auto mut_iter = mut->iter_idx(iter->get_offset());
     return mut->merge_entry(oc, mut_iter, entry);
   }
   auto is_left = (iter + 1) == iter_cend();
@@ -563,20 +563,20 @@ OMapLeafNode::insert(
       if (replace_pt != iter_end()) {
         ++(oc.t.get_omap_tree_stats().num_updates);
         if (key < pivot) {  //left
-          auto mut_iter = left->iter_idx(replace_pt->get_index());
+          auto mut_iter = left->iter_idx(replace_pt->get_offset());
           left->journal_leaf_update(mut_iter, key, value, left->maybe_get_delta_buffer());
         } else if (key >= pivot) { //right
-          auto mut_iter = right->iter_idx(replace_pt->get_index() - left->get_node_size());
+          auto mut_iter = right->iter_idx(replace_pt->get_offset() - left->get_node_size());
           right->journal_leaf_update(mut_iter, key, value, right->maybe_get_delta_buffer());
         }
       } else {
         ++(oc.t.get_omap_tree_stats().num_inserts);
         auto insert_pt = string_lower_bound(key);
         if (key < pivot) {  //left
-          auto mut_iter = left->iter_idx(insert_pt->get_index());
+          auto mut_iter = left->iter_idx(insert_pt->get_offset());
           left->journal_leaf_insert(mut_iter, key, value, left->maybe_get_delta_buffer());
         } else {
-          auto mut_iter = right->iter_idx(insert_pt->get_index() - left->get_node_size());
+          auto mut_iter = right->iter_idx(insert_pt->get_offset() - left->get_node_size());
           right->journal_leaf_insert(mut_iter, key, value, right->maybe_get_delta_buffer());
         }
       }
