@@ -26,6 +26,7 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
   return tm.alloc_non_data_extent<OMapLeafNode>(t, hint, get_leaf_size(type))
     .si_then([hint, &t, type](auto&& root_extent) {
       root_extent->set_size(0);
+      root_extent->set_root();
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
@@ -44,7 +45,12 @@ BtreeOMapManager::get_omap_root(omap_context_t oc, const omap_root_t &omap_root)
 {
   assert(omap_root.get_location() != L_ADDR_NULL);
   laddr_t laddr = omap_root.get_location();
-  return omap_load_extent(oc, laddr, omap_root.get_depth());
+  return omap_load_extent(
+    oc, laddr, omap_root.get_depth()
+  ).si_then([](auto extent) {
+    extent->set_root();
+    return extent;
+  });
 }
 
 BtreeOMapManager::handle_root_split_ret
@@ -61,8 +67,11 @@ BtreeOMapManager::handle_root_split(
     auto [left, right, pivot] = *(mresult.split_tuple);
     omap_node_meta_t meta{omap_root.depth + 1};
     nroot->set_meta(meta);
+    nroot->set_root();
+    left->unset_root();
     nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr(),
                                 "", nroot->maybe_get_delta_buffer());
+    right->unset_root();
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
     omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint,
@@ -84,8 +93,9 @@ BtreeOMapManager::handle_root_merge(
 {
   LOG_PREFIX(BtreeOMapManager::handle_root_merge);
   DEBUGT("{}", oc.t, omap_root);
-  auto root = *(mresult.need_merge);
-  auto iter = root->cast<OMapInnerNode>()->iter_begin();
+  auto old_root = *(mresult.need_merge);
+  ceph_assert(!old_root->is_btree_root());
+  auto iter = old_root->cast<OMapInnerNode>()->iter_begin();
   omap_root.update(
     iter->get_val(),
     omap_root.depth -= 1,
@@ -93,7 +103,7 @@ BtreeOMapManager::handle_root_merge(
     omap_root.get_type());
   oc.t.get_omap_tree_stats().depth = omap_root.depth;
   oc.t.get_omap_tree_stats().extents_num_delta--;
-  return oc.tm.remove(oc.t, root->get_laddr()
+  return oc.tm.remove(oc.t, old_root->get_laddr()
   ).si_then([](auto &&ret) -> handle_root_merge_ret {
     return seastar::now();
   }).handle_error_interruptible(

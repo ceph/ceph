@@ -260,7 +260,6 @@ struct OMapLeafNode
 
   std::pair<internal_iterator_t, internal_iterator_t>
   get_leaf_entries(std::string &key);
-
 };
 using OMapLeafNodeRef = OMapLeafNode::OMapLeafNodeRef;
 
