@@ -1694,6 +1694,15 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         return out
 
+    # If realm list is empty restart RGW daemons else update the period.
+    def handle_rgw_realm(self):
+        rgw_realm_list = self.list_realms()
+        if len(rgw_realm_list['realms']) < 1:
+            rgw_service_manager = RgwServiceManager()
+            rgw_service_manager.restart_rgw_daemons_and_set_credentials()
+        else:
+            self.update_period()
+
     def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
         for placement_target in placement_targets:
@@ -1759,6 +1768,26 @@ class RgwMultisite:
                 except SubprocessError as error:
                     raise DashboardException(error, http_status_code=500, component='rgw')
                 self.update_period()
+
+    def delete_placement_targets(self, placement_id: str, storage_class: str):
+        rgw_zonegroup_delete_cmd = ['zonegroup', 'placement', 'rm',
+                                    '--placement-id', placement_id,
+                                    '--storage-class', storage_class]
+
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_delete_cmd)
+            if exit_code > 0:
+                raise DashboardException(
+                    e=err,
+                    msg=(f'Unable to delete placement {placement_id} '
+                         f'with storage-class {storage_class}'),
+                    http_status_code=500,
+                    component='rgw'
+                )
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        self.handle_rgw_realm()
 
     # pylint: disable=W0102
     def edit_zonegroup(self, realm_name: str, zonegroup_name: str, new_zonegroup_name: str,
