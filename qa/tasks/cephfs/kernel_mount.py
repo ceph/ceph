@@ -389,4 +389,7 @@ echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
                 return 0
         return int(re.findall(r'read.*', buf)[0].split()[1])
 
+    def get_snap_dir_name(self):
+        return self.client_config.get('snapdirname', '.snap')
+
 KernelMount = KernelMountBase

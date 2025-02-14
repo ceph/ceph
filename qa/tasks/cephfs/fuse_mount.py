@@ -533,4 +533,7 @@ print(_find_admin_socket("{client_name}"))
     def get_op_read_count(self):
         return self.admin_socket(['perf', 'dump', 'objecter'])['objecter']['osdop_read']
 
+    def get_snap_dir_name(self):
+        return self.client_config.get('client_snapdir', '.snap')
+
 FuseMount = FuseMountBase
