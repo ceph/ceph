@@ -284,7 +284,10 @@ class Context:
         return f"{base}:{self.target_tag()}"
 
     def target_tag(self):
-        if self.cli.tag:
+        suffix = ""
+        if self.cli.tag and self.cli.tag.startswith("+"):
+            suffix = f".{self.cli.tag[1:]}"
+        elif self.cli.tag:
             return self.cli.tag
         branch = self.cli.current_branch
         if not branch:
@@ -292,7 +295,7 @@ class Context:
                 branch = _git_current_branch(self).replace("/", "-")
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
-        return f"{branch}.{self.cli.distro}"
+        return f"{branch}.{self.cli.distro}{suffix}"
 
     def base_branch(self):
         # because git truly is the *stupid* content tracker there's not a
@@ -301,7 +304,7 @@ class Context:
         # container bootstrap we default to `main` even when that's not true.
         # One can explicltly set the base branch on the command line to invoke
         # customizations (that don't yet exist) or invalidate image caching.
-        return self.cli.base_branch or 'main'
+        return self.cli.base_branch or "main"
 
     @property
     def from_image(self):
@@ -678,7 +681,8 @@ def parse_cli(build_step_names):
     parser.add_argument(
         "--tag",
         "-t",
-        help="Specify a container tag",
+        help="Specify a container tag. Append to the auto generated tag"
+        " by prefixing the supplied value with the plus (+) character",
     )
     parser.add_argument(
         "--base-branch",
