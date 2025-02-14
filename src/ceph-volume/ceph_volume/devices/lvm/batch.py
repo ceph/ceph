@@ -597,46 +597,48 @@ class Batch(object):
             return {k: str(v) for k, v in self._get_osd_plan().items()}
 
 def get_physical_osds(devices: List[device.Device], args: argparse.Namespace) -> List[Batch.OSD]:
-    '''
-    Goes through passed physical devices and assigns OSDs
-    '''
-    data_slots = args.osds_per_device
-    if args.data_slots:
-        data_slots = max(args.data_slots, args.osds_per_device)
-    #rel_data_size = args.data_allocate_fraction / data_slots
-    #mlogger.debug('relative data size: {}'.format(rel_data_size))
+    """
+    Goes through passed physical devices and assigns OSDs.
+    """
+    data_slots = max(args.data_slots, args.osds_per_device) if args.data_slots else args.osds_per_device
     ret = []
+
     for dev in devices:
+        if not dev.available_lvm:
+            continue
+
+        total_dev_size = dev.vg_size[0]
+        dev_size = total_dev_size
         rel_data_size = args.data_allocate_fraction / data_slots
-        if dev.available_lvm:
-            total_dev_size = dev.vg_size[0]
-            dev_size = dev.vg_size[0]
 
-            if args.has_block_db_size_without_db_devices:
-                all_db_space = args.block_db_size * data_slots
-                dev_size -= all_db_space.b.as_int()
+        if args.has_block_db_size_without_db_devices:
+            all_db_space = args.block_db_size * data_slots
+            dev_size -= all_db_space.b.as_int()
 
-            abs_size = disk.Size(b=int(dev_size * rel_data_size))
-            mlogger.error(f'{dev_size} {abs_size} {rel_data_size}')
+        abs_size = disk.Size(b=int(dev_size * rel_data_size))
 
-            if args.has_block_db_size_without_db_devices:
-                rel_data_size = abs_size / disk.Size(b=total_dev_size)
+        if args.has_block_db_size_without_db_devices:
+            rel_data_size = abs_size / disk.Size(b=total_dev_size)
 
-            free_size = dev.vg_free[0]
-            for _ in range(args.osds_per_device):
-                if abs_size > free_size:
-                    break
-                free_size -= abs_size.b
-                osd_id = None
-                if args.osd_ids:
-                    osd_id = args.osd_ids.pop()
-                ret.append(Batch.OSD(dev.path,
-                                     rel_data_size,
-                                     abs_size,
-                                     args.osds_per_device,
-                                     osd_id,
-                                     'dmcrypt' if args.dmcrypt else None,
-                                     dev.symlink))
+        free_size = dev.vg_free[0]
+
+        for _ in range(args.osds_per_device):
+            if abs_size.b > free_size:
+                break
+
+            free_size -= abs_size.b
+            osd_id = args.osd_ids.pop() if args.osd_ids else None
+
+            ret.append(Batch.OSD(
+                dev.path,
+                rel_data_size,
+                abs_size,
+                args.osds_per_device,
+                osd_id,
+                'dmcrypt' if args.dmcrypt else None,
+                dev.symlink
+            ))
+
     return ret
 
 def get_lvm_osds(lvs: List[device.Device], args: argparse.Namespace) -> List[Batch.OSD]:
