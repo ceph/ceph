@@ -34,7 +34,8 @@ public:
   void shutdown();
 
   // add a directory to mirror queue
-  void add_directory(std::string_view dir_root);
+  void add_directory(std::string_view dir_root, bool sync_latest_snapshot,
+                     std::string_view sync_from_snapshot);
 
   // remove a directory from queue
   void remove_directory(std::string_view dir_root);
@@ -242,19 +243,42 @@ private:
   };
 
   struct SnapSyncStat {
-    uint64_t nr_failures = 0; // number of consecutive failures
+    uint64_t nr_failures; // number of consecutive failures
     boost::optional<monotime> last_failed; // lat failed timestamp
     boost::optional<std::string> last_failed_reason;
-    bool failed = false; // hit upper cap for consecutive failures
+    bool failed; // hit upper cap for consecutive failures
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
-    uint64_t synced_snap_count = 0;
-    uint64_t deleted_snap_count = 0;
-    uint64_t renamed_snap_count = 0;
-    monotime last_synced = clock::zero();
+    uint64_t synced_snap_count;
+    uint64_t deleted_snap_count;
+    uint64_t renamed_snap_count;
+    monotime last_synced;
     boost::optional<double> last_sync_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
-    uint64_t sync_bytes = 0; //sync bytes counter, independently for each directory sync.
+    uint64_t sync_bytes; //sync bytes counter, independently for each directory sync.
+
+    SnapSyncStat() {
+      nr_failures = 0;
+      failed = false;
+      synced_snap_count = 0;
+      deleted_snap_count = 0;
+      renamed_snap_count = 0;
+      last_synced = clock::zero();
+      sync_bytes = 0;
+    }
+  };
+
+  struct SnapSyncFrom {
+    bool sync_latest_snapshot;
+    std::string sync_from_snapshot;
+    SnapSyncFrom() {
+      sync_latest_snapshot = false;
+      sync_from_snapshot = "";
+    }
+    SnapSyncFrom(bool sl, const std::string_view& sf) {
+      sync_latest_snapshot = sl;
+      sync_from_snapshot = sf;
+    }
   };
 
   void _inc_failed_count(const std::string &dir_root) {
@@ -365,7 +389,7 @@ private:
   Peer m_peer;
   // probably need to be encapsulated when supporting cancelations
   std::map<std::string, DirRegistry> m_registered;
-  std::vector<std::string> m_directories;
+  std::map<std::string, SnapSyncFrom> m_directories;
   std::map<std::string, SnapSyncStat> m_snap_sync_stats;
   MountRef m_local_mount;
   ServiceDaemon *m_service_daemon;
@@ -396,6 +420,7 @@ private:
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
                      bool is_remote=false);
 
+  int get_snap_id(const std::string &dir_root, const std::string& snap_name);
   int propagate_snap_deletes(const std::string &dir_root, const std::set<std::string> &snaps);
   int propagate_snap_renames(const std::string &dir_root,
                              const std::set<std::pair<std::string,std::string>> &snaps);

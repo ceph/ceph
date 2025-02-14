@@ -371,8 +371,11 @@ void FSMirror::handle_shutdown_instance_watcher(int r) {
   }
 }
 
-void FSMirror::handle_acquire_directory(string_view dir_path) {
-  dout(5) << ": dir_path=" << dir_path << dendl;
+void FSMirror::handle_acquire_directory(string_view dir_path,
+                                        bool sync_latest_snapshot,
+                                        string_view sync_from_snapshot) {
+  dout(5) << ": dir_path=" << dir_path << ", sync_latest_snapshot=" << sync_latest_snapshot
+          << ", sync_from_snapshot=" << sync_from_snapshot << dendl;
 
   {
     std::scoped_lock locker(m_lock);
@@ -382,7 +385,7 @@ void FSMirror::handle_acquire_directory(string_view dir_path) {
 
     for (auto &[peer, peer_replayer] : m_peer_replayers) {
       dout(10) << ": peer=" << peer << dendl;
-      peer_replayer->add_directory(dir_path);
+      peer_replayer->add_directory(dir_path, sync_latest_snapshot, sync_from_snapshot);
     }
   }
   if (m_perf_counters) {

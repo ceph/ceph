@@ -174,11 +174,14 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
     m_local_cluster(local_cluster),
     m_filesystem(filesystem),
     m_peer(peer),
-    m_directories(directories.begin(), directories.end()),
     m_local_mount(mount),
     m_service_daemon(service_daemon),
     m_asok_hook(new PeerReplayerAdminSocketHook(cct, filesystem, peer, this)),
     m_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::" + stringify(peer.uuid))) {
+  std::for_each(directories.begin(), directories.end(), [this](const auto& dir_root) {
+    m_directories[dir_root] = SnapSyncFrom();
+  });
+
   // reset sync stats sent via service daemon
   m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
                                                  SERVICE_DAEMON_FAILED_DIR_COUNT_KEY, (uint64_t)0);
@@ -228,10 +231,12 @@ PeerReplayer::~PeerReplayer() {
 }
 
 int PeerReplayer::init() {
-  dout(20) << ": initial dir list=[" << m_directories << "]" << dendl;
+  std::string str_list = ": initial dir list=[";
   for (auto &dir_root : m_directories) {
-    m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
+    m_snap_sync_stats.emplace(dir_root.first, SnapSyncStat());
+    str_list += dir_root.first + " ";
   }
+  dout(20) << str_list <<  "]" << dendl;
 
   auto &remote_client = m_peer.remote.client_name;
   auto &remote_cluster = m_peer.remote.cluster_name;
@@ -322,11 +327,13 @@ void PeerReplayer::shutdown() {
   m_remote_cluster.reset();
 }
 
-void PeerReplayer::add_directory(string_view dir_root) {
-  dout(20) << ": dir_root=" << dir_root << dendl;
+void PeerReplayer::add_directory(string_view dir_root, bool sync_latest_snapshot,
+				 string_view sync_from_snapshot) {
+  dout(20) << ": dir_root=" << dir_root << ", sync_latest_snapshot=" << sync_latest_snapshot
+           << ", sync_from_snapshot=" << sync_from_snapshot << dendl;
 
   std::scoped_lock locker(m_lock);
-  m_directories.emplace_back(dir_root);
+  m_directories[std::string(dir_root)] = SnapSyncFrom(sync_latest_snapshot, sync_from_snapshot);
   m_snap_sync_stats.emplace(dir_root, SnapSyncStat());
   m_cond.notify_all();
 }
@@ -336,7 +343,7 @@ void PeerReplayer::remove_directory(string_view dir_root) {
   auto _dir_root = std::string(dir_root);
 
   std::scoped_lock locker(m_lock);
-  auto it = std::find(m_directories.begin(), m_directories.end(), _dir_root);
+  auto it = m_directories.find(_dir_root);
   if (it != m_directories.end()) {
     m_directories.erase(it);
   }
@@ -359,20 +366,19 @@ boost::optional<std::string> PeerReplayer::pick_directory() {
 
   boost::optional<std::string> candidate;
   for (auto &dir_root : m_directories) {
-    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root.first);
     if (sync_stat.failed) {
       std::chrono::duration<double> d = now - *sync_stat.last_failed;
       if (d.count() < retry_timo) {
         continue;
       }
     }
-    if (!m_registered.count(dir_root)) {
-      candidate = dir_root;
+    if (!m_registered.count(dir_root.first)) {
+      candidate = dir_root.first;
       break;
     }
   }
 
-  std::rotate(m_directories.begin(), m_directories.begin() + 1, m_directories.end());
   return candidate;
 }
 
@@ -401,7 +407,7 @@ void PeerReplayer::unregister_directory(const std::string &dir_root) {
 
   unlock_directory(it->first, it->second);
   m_registered.erase(it);
-  if (std::find(m_directories.begin(), m_directories.end(), dir_root) == m_directories.end()) {
+  if (m_directories.find(dir_root) == m_directories.end()) {
     m_snap_sync_stats.erase(dir_root);
   }
 }
@@ -480,6 +486,19 @@ void PeerReplayer::unlock_directory(const std::string &dir_root, const DirRegist
   dout(10) << ": dir_root=" << dir_root << " unlocked" << dendl;
 }
 
+int PeerReplayer::get_snap_id(const std::string &dir_root, const std::string& snap_name) {
+  snap_info info;
+  auto snap_dir = snapshot_dir_path(m_cct, dir_root);
+  auto snap_path = snapshot_path(snap_dir, snap_name);
+  int r = ceph_get_snap_info(m_local_mount, snap_path.c_str(), &info);
+  if (r < 0) {
+    derr << ": failed to fetch " << snap_name << ", snap info for snap_path=" << snap_path
+	 << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return info.id;
+}
+
 int PeerReplayer::build_snap_map(const std::string &dir_root,
                                  std::map<uint64_t, std::string> *snap_map, bool is_remote) {
   auto snap_dir = snapshot_dir_path(m_cct, dir_root);
@@ -500,6 +519,7 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     return r;
   }
 
+  auto sync_stat = m_snap_sync_stats.at(dir_root);
   std::set<std::string> snaps;
   auto entry = ceph_readdir(mnt, dirp);
   while (entry != NULL) {
@@ -510,6 +530,17 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     }
 
     entry = ceph_readdir(mnt, dirp);
+  }
+
+  uint64_t snap_id_in = 0;
+  std::string snap_name = m_directories.at(dir_root).sync_from_snapshot;
+  if (!is_remote && !snap_name.empty()) {
+    r = get_snap_id(dir_root, snap_name);
+    if (r < 0) {
+      derr << ": defaulting to first snapshot for syncing" << dendl;
+    } else {
+      snap_id_in = r;
+    }
   }
 
   int rv = 0;
@@ -551,7 +582,21 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     if (rv != 0) {
       break;
     }
-    snap_map->emplace(snap_id, snap);
+    if (snap_id >= snap_id_in) {
+      snap_map->emplace(snap_id, snap);
+    }
+  }
+
+  if (!is_remote && m_directories.at(dir_root).sync_latest_snapshot) {
+    // Now we know the highest snap_id object emplaced.
+    // Reset the snap_map to the highest snap_id element.
+    if (!sync_stat.current_syncing_snap) { // skip if there's a sync in progress
+      auto it = snap_map->rbegin();
+      auto sid = it->first;
+      auto sname = it->second;
+      snap_map->clear();
+      snap_map->emplace(sid, sname);
+    }
   }
 
   r = ceph_closedir(mnt, dirp);
@@ -1956,10 +2001,12 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
   }
 
-  r = propagate_snap_deletes(dir_root, snaps_deleted);
-  if (r < 0) {
-    derr << ": failed to propgate deleted snapshots" << dendl;
-    return r;
+  if (!m_directories.at(dir_root).sync_latest_snapshot) {
+    r = propagate_snap_deletes(dir_root, snaps_deleted);
+    if (r < 0) {
+      derr << ": failed to propgate deleted snapshots" << dendl;
+      return r;
+    }
   }
 
   r = propagate_snap_renames(dir_root, snaps_renamed);
