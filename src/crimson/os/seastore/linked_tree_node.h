@@ -149,7 +149,11 @@ private:
   friend class TreeRootLinker;
 };
 
-// The link from the ChildNodes to the ParentNodes
+// The sharable linker from the ChildNodes to the same ParentNode
+//
+// The indirection of child.parent_tracker.parent is necessary
+// because otherwise we'll need to update every child's parent
+// upon commiting a mutated extent.
 template <typename ParentT>
 class parent_tracker_t
   : public boost::intrusive_ref_counter<
@@ -400,6 +404,10 @@ protected:
     : children(capacity, nullptr) {}
   ParentNode(const ParentNode &rhs)
     : children(rhs.children.capacity(), nullptr) {}
+  void sync_children_capacity() {
+    auto &me = down_cast();
+    maybe_expand_children(me.get_size());
+  }
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
     ceph_assert(down_cast().is_stable());
     ceph_assert(dest->is_pending());
@@ -1000,6 +1008,9 @@ protected:
   void on_replace_prior() {
     take_parent_from_prior();
   }
+  // destroy() is allowed to be skipped for the pending extents,
+  // because they will be destroyed altogether with their parents
+  // upon transaction invalidation.
   void destroy() {
     assert(!down_cast().is_btree_root());
     assert(this->has_parent_tracker());

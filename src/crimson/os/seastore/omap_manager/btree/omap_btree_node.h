@@ -15,6 +15,9 @@
 
 namespace crimson::os::seastore::omap_manager{
 
+const std::string BEGIN_KEY = "";
+const std::string END_KEY(64, (char)(-1));
+
 struct omap_context_t {
   TransactionManager &tm;
   Transaction &t;
@@ -52,7 +55,10 @@ struct OMapNode : LogicalChildNode {
   explicit OMapNode(ceph::bufferptr &&ptr) : LogicalChildNode(std::move(ptr)) {}
   explicit OMapNode(extent_len_t length) : LogicalChildNode(length) {}
   OMapNode(const OMapNode &other)
-  : LogicalChildNode(other) {}
+  : LogicalChildNode(other),
+    root(other.root),
+    begin(other.begin),
+    end(other.end) {}
 
   using get_value_iertr = base_iertr;
   using get_value_ret = OMapManager::omap_get_value_ret;
@@ -109,13 +115,33 @@ struct OMapNode : LogicalChildNode {
   virtual uint32_t get_node_size() = 0;
 
   virtual ~OMapNode() = default;
+
+  void init_range(std::string begin, std::string end) {
+    if (!this->end.empty()) {
+      // this is a duplicated init.
+      assert(end == this->end);
+      return;
+    }
+    if (begin == BEGIN_KEY && end == END_KEY) {
+      root = true;
+    }
+    this->begin = std::move(begin);
+    this->end = std::move(end);
+  }
+  const std::string &get_begin() const {
+    return begin;
+  }
+  const std::string &get_end() const {
+    return end;
+  }
+  bool is_btree_root() const { return root; }
+private:
+  bool root = false;
+  std::string begin;
+  std::string end;
 };
 
 using OMapNodeRef = OMapNode::OMapNodeRef;
-
-using omap_load_extent_iertr = OMapNode::base_iertr;
-omap_load_extent_iertr::future<OMapNodeRef>
-omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth);
 
 }
 
