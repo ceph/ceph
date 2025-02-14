@@ -664,16 +664,18 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   }
 
   //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
-  RGWStorageStats stats;
-  ceph::real_time last_synced;
-  ceph::real_time last_updated;
-  int ret = driver->load_stats(dpp, null_yield, federated_user, stats,
-                               last_synced, last_updated);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
+  federated_user.ns = "";
+  constexpr bool need_stats = false;
+  const std::string marker; // empty
+  constexpr uint32_t max_items = 1;
+  rgw::sal::BucketList buckets;
+  auto ret = driver->list_buckets(dpp, federated_user, federated_user.tenant, marker, marker,
+                             max_items, need_stats, buckets, null_yield);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: list buckets for the user returned error " << ret << dendl;
     return;
   }
-  if (ret == -ENOENT) { /* in case of ENOENT, which means user doesnt have buckets */
+  if (buckets.buckets.empty()) { /* no buckets */
     //In this case user will be created in oidc namespace
     ldpp_dout(dpp, 5) << "NOTICE: incoming user has no buckets " << federated_user << dendl;
     federated_user.ns = "oidc";
