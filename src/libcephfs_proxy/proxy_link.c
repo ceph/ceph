@@ -731,7 +731,11 @@ int32_t proxy_link_recv(int32_t sd, struct iovec *iov, int32_t count)
 					 "Failed to receive data");
 		}
 		if (len == 0) {
-			return proxy_log(LOG_ERR, ENODATA, "Partial read");
+			if (total > 0) {
+				return proxy_log(LOG_ERR, EPIPE,
+						 "Partial read");
+			}
+			return 0;
 		}
 		total += len;
 
@@ -773,7 +777,7 @@ int32_t proxy_link_req_recv(int32_t sd, struct iovec *iov, int32_t count)
 	len = iov->iov_len;
 	iov->iov_len = sizeof(proxy_link_req_t);
 	err = proxy_link_recv(sd, iov, 1);
-	if (err < 0) {
+	if (err <= 0) {
 		return err;
 	}
 	total = err;
@@ -813,7 +817,10 @@ int32_t proxy_link_req_recv(int32_t sd, struct iovec *iov, int32_t count)
 	}
 
 	err = proxy_link_recv(sd, iov, count);
-	if (err < 0) {
+	if (err <= 0) {
+		if (err == 0) {
+			return proxy_log(LOG_ERR, EPIPE, "Partial read");
+		}
 		return err;
 	}
 
@@ -843,7 +850,12 @@ int32_t proxy_link_ans_recv(int32_t sd, struct iovec *iov, int32_t count)
 	len = iov->iov_len;
 	iov->iov_len = sizeof(proxy_link_ans_t);
 	err = proxy_link_recv(sd, iov, 1);
-	if (err < 0) {
+	if (err <= 0) {
+		if (err == 0) {
+			return proxy_log(LOG_ERR, EPIPE,
+					 "Connection closed while waiting for "
+					 "an answer");
+		}
 		return err;
 	}
 	total = err;
@@ -876,7 +888,10 @@ int32_t proxy_link_ans_recv(int32_t sd, struct iovec *iov, int32_t count)
 	}
 
 	err = proxy_link_recv(sd, iov, count);
-	if (err < 0) {
+	if (err <= 0) {
+		if (err == 0) {
+			return proxy_log(LOG_ERR, EPIPE, "Partial read");
+		}
 		return err;
 	}
 

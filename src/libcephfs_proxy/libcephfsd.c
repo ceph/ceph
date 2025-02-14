@@ -1627,28 +1627,32 @@ static void serve_binary(proxy_client_t *client)
 		req_iov[1].iov_len = size;
 
 		err = proxy_link_req_recv(client->sd, req_iov, 2);
-		if (err > 0) {
-			if (req.header.op >= LIBCEPHFSD_OP_TOTAL_OPS) {
-				err = send_error(client, -ENOSYS);
-			} else if (libcephfsd_handlers[req.header.op] == NULL) {
-				err = send_error(client, -EOPNOTSUPP);
-			} else {
-				err = libcephfsd_handlers[req.header.op](
-					client, &req, req_iov[1].iov_base,
-					req.header.data_len);
-			}
+		if (err <= 0) {
+			break;
+		}
+
+		if (req.header.op >= LIBCEPHFSD_OP_TOTAL_OPS) {
+			err = send_error(client, -ENOSYS);
+		} else if (libcephfsd_handlers[req.header.op] == NULL) {
+			err = send_error(client, -EOPNOTSUPP);
+		} else {
+			err = libcephfsd_handlers[req.header.op](
+				client, &req, req_iov[1].iov_base,
+				req.header.data_len);
+		}
+		if (err < 0) {
+			break;
 		}
 
 		if (req_iov[1].iov_base != buffer) {
 			/* Free the buffer if it was temporarily allocated. */
 			proxy_free(req_iov[1].iov_base);
 		}
-
-		if (err < 0) {
-			break;
-		}
 	}
 
+	if (req_iov[1].iov_base != buffer) {
+		proxy_free(req_iov[1].iov_base);
+	}
 	proxy_free(buffer);
 }
 
