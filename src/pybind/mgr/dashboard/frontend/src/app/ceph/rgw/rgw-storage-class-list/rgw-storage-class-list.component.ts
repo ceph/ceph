@@ -13,6 +13,15 @@ import {
   Target,
   ZoneGroupDetails
 } from '../models/rgw-storage-class.model';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { Permission } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-rgw-storage-class-list',
@@ -22,11 +31,20 @@ import {
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[];
   selection = new CdTableSelection();
+  permission: Permission;
   tableActions: CdTableAction[];
   storageClassList: StorageClass[] = [];
 
-  constructor(private rgwZonegroupService: RgwZonegroupService) {
+  constructor(
+    private rgwZonegroupService: RgwZonegroupService,
+    public actionLabels: ActionLabelsI18n,
+    private cdsModalService: ModalCdsService,
+    private taskWrapper: TaskWrapperService,
+    private authStorageService: AuthStorageService,
+    private rgwStorageClassService: RgwStorageClassService
+  ) {
     super();
+    this.permission = this.authStorageService.getPermissions().rgw;
   }
 
   ngOnInit() {
@@ -55,6 +73,14 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         name: $localize`Target Endpoint`,
         prop: 'endpoint',
         flexGrow: 2
+      }
+    ];
+    this.tableActions = [
+      {
+        name: this.actionLabels.REMOVE,
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeStorageClassModal()
       }
     ];
   }
@@ -94,6 +120,24 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       storage_class: tierTarget.val.storage_class,
       ...tierTarget.val.s3
     };
+  }
+
+  removeStorageClassModal() {
+    const storage_class = this.selection.first().storage_class;
+    const placement_target = this.selection.first().placement_target;
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`Tiering Storage Class`,
+      itemNames: [storage_class],
+      actionDescription: 'remove',
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('rgw/zonegroup/storage-class', {
+            placement_target: placement_target,
+            storage_class: storage_class
+          }),
+          call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
+        })
+    });
   }
 
   updateSelection(selection: CdTableSelection) {
