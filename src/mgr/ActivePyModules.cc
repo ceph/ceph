@@ -855,11 +855,22 @@ PyObject* ActivePyModules::with_perf_counters(
   std::string resolved_path;
   // if labels are not empty, construct the path
   if (!labels.empty()){
-    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name, labels);
+
+    // Convert the vector to an array of label_pair
+    // FIXME: Naveen: Arrays take constant integral expression. I can't use labels.size() to declare the array size here
+    // https://stackoverflow.com/questions/2923272/how-to-convert-vector-to-array/40031309#comment31156323_2923295
+    // Check, if declaring a size of 100 for labels enough? 
+    ceph::perf_counters::label_pair labels_array[100];
+    std::copy(labels.begin(), labels.end(), labels_array);
+
+    // Call key_create with the labels_array
+    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name, std::move(labels_array));
     resolved_path = (counter_name_with_labels.append(".")).append(sub_counter_name);
+    dout(20) << "with_perf_counters labels resolved_path" << resolved_path << dendl;
   }
   else {
     resolved_path = path;
+    dout(20) << "with_perf_counters without labels resolved_path" << resolved_path << dendl;
   }
 
   // FIXME: Naveen: Is the resolved_path (i.e path with labels important here?), because open_array_section strips
@@ -923,7 +934,7 @@ PyObject* ActivePyModules::get_counter_python(
       }
     }
   };
-  return with_perf_counters(extract_counters, svc_name, svc_id, path, nullptr, nullptr, {});
+  return with_perf_counters(extract_counters, svc_name, svc_id, path, "", "", {});
 }
 
 PyObject* ActivePyModules::get_latest_counter_python(
@@ -1113,8 +1124,8 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
 
             f.open_object_section("counters");
             f.open_object_section(counter_name);
-            //f.dump_string("description", type.description);
-            f.dump_string("description", counter_name_with_labels);
+            f.dump_string("description", type.description);
+            // f.dump_string_raw("description", std::string(counter_name_with_labels).data());
 
             if (!type.nick.empty()) {
               f.dump_string("nick", type.nick);

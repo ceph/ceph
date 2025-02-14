@@ -2205,6 +2205,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             data = self.get_latest_counter(
                 daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter]
         if data:
+            self.log.debug('get_latest: counter: {0}, counter_name: {1}, data {2}'.format(counter, counter_name, data[1]))
             return data[1]
         else:
             return 0
@@ -2221,6 +2222,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
+            self.log.debug('get_latest: counter: {0}, counter_name: {1}, data {2}'.format(counter, counter_name, data))
             return value, count
         else:
             return 0, 0
