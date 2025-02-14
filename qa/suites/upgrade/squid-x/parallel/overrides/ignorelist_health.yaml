@@ -1,0 +1,20 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
+      - \(OSD_SLOW_PING_TIME
+      - reached quota
+      - overall HEALTH_
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(POOL_FULL\)
+      - \(SMALLER_PGP_NUM\)
+      - \(SLOW_OPS\)
+      - \(CACHE_POOL_NEAR_FULL\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
+      - \(OBJECT_MISPLACED\)
+      - slow request
+      - \(MON_DOWN\)
+      - noscrub
+      - nodeep-scrub
