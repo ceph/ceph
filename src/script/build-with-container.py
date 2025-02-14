@@ -319,6 +319,15 @@ class Context:
         # customizations (that don't yet exist) or invalidate image caching.
         return self.cli.base_branch or "main"
 
+    def base_branch(self):
+        # because git truly is the *stupid* content tracker there's not a
+        # simple way to detect base branch. In BWC the base branch is really
+        # only here for an optional 2nd level of customization in the build
+        # container bootstrap we default to `main` even when that's not true.
+        # One can explicltly set the base branch on the command line to invoke
+        # customizations (that don't yet exist) or invalidate image caching.
+        return self.cli.base_branch or 'main'
+
     @property
     def from_image(self):
         if self.cli.base_image:
@@ -740,6 +749,10 @@ def parse_cli(build_step_names):
         "-t",
         help="Specify a container tag. Append to the auto generated tag"
         " by prefixing the supplied value with the plus (+) character",
+    )
+    parser.add_argument(
+        "--base-branch",
+        help="Specify a base branch name",
     )
     parser.add_argument(
         "--base-branch",
