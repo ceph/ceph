@@ -1094,8 +1094,12 @@ class TestSnapSchedulesSnapdir(TestSnapSchedulesHelper):
 
 
 class TestSnapSchedulesFetchForeignConfig(TestSnapSchedulesHelper):
+    def _get_seconds_until_minutes_pass(self, minutes):
+        now = int(time.time())
+        return (((now // 60) + minutes) * 60) - now
+
     def test_fetch_for_mds_max_snaps_per_dir(self):
-        """Test the correctness of snap directory name"""
+        """Test fetching of config mds_max_snaps_per_dir from the mds."""
         dir_path = TestSnapSchedulesHelper.TEST_DIRECTORY
         sdn = self.get_snap_dir_name()
 
@@ -1106,7 +1110,8 @@ class TestSnapSchedulesFetchForeignConfig(TestSnapSchedulesHelper):
 
         self.config_set('mds', 'mds_max_snaps_per_dir', 10)
 
-        time.sleep(11*60)  # wait for 9 snaps to be retained
+        sleep_duration = self._get_seconds_until_minutes_pass(11)
+        time.sleep(sleep_duration + 10)  # wait for 9 snaps to be retained
 
         snap_path = f"{dir_path}/{sdn}"
         snapshots = self.mount_a.ls(path=snap_path)
@@ -1116,7 +1121,8 @@ class TestSnapSchedulesFetchForeignConfig(TestSnapSchedulesHelper):
 
         self.config_set('mds', 'mds_max_snaps_per_dir', 8)
 
-        time.sleep(1*60 + 10)  # wait for max_snaps_per_dir limit to be breached
+        sleep_duration = self._get_seconds_until_minutes_pass(1)
+        time.sleep(sleep_duration + 10)  # wait for max_snaps_per_dir limit to be breached
 
         snap_path = f"{dir_path}/{sdn}"
         snapshots = self.mount_a.ls(path=snap_path)
@@ -1126,7 +1132,8 @@ class TestSnapSchedulesFetchForeignConfig(TestSnapSchedulesHelper):
 
         self.config_set('mds', 'mds_max_snaps_per_dir', 10)
 
-        time.sleep(2*60 + 10)  # wait for more snaps to be created
+        sleep_duration = self._get_seconds_until_minutes_pass(2)
+        time.sleep(sleep_duration + 10)  # wait for more snaps to be created
 
         snap_path = f"{dir_path}/{sdn}"
         snapshots = self.mount_a.ls(path=snap_path)
