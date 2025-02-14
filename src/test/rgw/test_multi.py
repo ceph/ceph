@@ -246,7 +246,8 @@ def init(parse_args):
     admin_user = multisite.User('zone.user')
 
     user_creds = gen_credentials()
-    user = multisite.User('tester', tenant=args.tenant, account='RGW11111111111111111')
+    user = multisite.User('tester', tenant=args.tenant)
+
 
     realm = multisite.Realm('r')
     if bootstrap:
@@ -382,9 +383,6 @@ def init(parse_args):
                     arg += admin_creds.credential_args()
                     admin_user.create(zone, arg)
                     # create test account/user
-                    arg = ['--account-id', user.account]
-                    arg += zone.zone_args()
-                    cluster.admin(['account', 'create'] + arg)
                     arg = ['--display-name', 'TestUser']
                     arg += user_creds.credential_args()
                     user.create(zone, arg)
