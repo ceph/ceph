@@ -16,6 +16,8 @@
 
 namespace crimson::os::seastore::omap_manager {
 
+extent_len_t get_leaf_size(omap_type_t type);
+
 /**
  * OMapInnerNode
  *
@@ -28,20 +30,86 @@ namespace crimson::os::seastore::omap_manager {
 
 struct OMapInnerNode
   : OMapNode,
-    StringKVInnerNodeLayout {
+    StringKVInnerNodeLayout,
+    ParentNode<OMapInnerNode, std::string>,
+    ChildNode<OMapInnerNode, OMapInnerNode, std::string> {
   using OMapInnerNodeRef = TCachedExtentRef<OMapInnerNode>;
-  using internal_iterator_t = const_iterator;
+  using internal_const_iterator_t = const_iterator;
+  using internal_iterator_t = iterator;
+  using parent_node_t = ParentNode<OMapInnerNode, std::string>;
+  using base_child_t = BaseChildNode<OMapInnerNode, std::string>;
+  using child_node_t = ChildNode<OMapInnerNode, OMapInnerNode, std::string>;
+  static constexpr uint32_t CHILD_VEC_UNIT = 128;
 
   explicit OMapInnerNode(ceph::bufferptr &&ptr)
-    : OMapNode(std::move(ptr)) {
-    this->set_layout_buf(this->get_bptr().c_str());
+    : OMapNode(std::move(ptr)),
+      StringKVInnerNodeLayout(get_bptr().c_str()),
+      parent_node_t(0) {
+    this->parent_node_t::sync_children_capacity();
   }
   // Must be identical with OMapInnerNode(ptr) after on_fully_loaded()
   explicit OMapInnerNode(extent_len_t length)
-    : OMapNode(length) {}
+    : OMapNode(length),
+      StringKVInnerNodeLayout(nullptr),
+      parent_node_t(0) {}
   OMapInnerNode(const OMapInnerNode &rhs)
-    : OMapNode(rhs) {
-    this->set_layout_buf(this->get_bptr().c_str());
+    : OMapNode(rhs),
+      StringKVInnerNodeLayout(get_bptr().c_str()),
+      parent_node_t(0) {
+    this->parent_node_t::sync_children_capacity();
+  }
+
+  iterator begin() {
+    return iter_begin();
+  }
+
+  iterator end() {
+    return iter_end();
+  }
+
+  void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
+    auto &ext = static_cast<OMapInnerNode&>(extent);
+    this->parent_node_t::on_rewrite(t, ext);
+    auto &other = static_cast<OMapInnerNode&>(extent);
+    this->init_range(other.get_begin(), other.get_end());
+    this->sync_children_capacity();
+  }
+
+  void prepare_commit() final {
+    this->parent_node_t::prepare_commit();
+    if (is_rewrite() && !is_btree_root()) {
+      auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
+      if (prior.base_child_t::has_parent_tracker()) {
+	// unlike fixed-kv nodes, rewriting child nodes of the omap tree
+	// won't affect parent nodes, so we have to manually take prior
+	// instances' parent trackers here.
+	this->child_node_t::take_parent_from_prior();
+      }
+    }
+  }
+
+  void do_on_replace_prior() final {
+    this->parent_node_t::on_replace_prior();
+    if (!this->is_btree_root()) {
+      auto &prior = *get_prior_instance()->template cast<OMapInnerNode>();
+      assert(prior.base_child_t::has_parent_tracker());
+      this->child_node_t::on_replace_prior();
+    }
+  }
+
+  void on_invalidated(Transaction &t) final {
+    this->child_node_t::on_invalidated();
+  }
+
+  void on_initial_write() final {
+    if (this->is_btree_root()) {
+      //TODO: should involve RootChildNode
+      this->child_node_t::reset_parent_tracker();
+    }
+  }
+
+  btreenode_pos_t get_node_split_pivot() const {
+    return this->get_split_pivot().get_offset();
   }
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
@@ -56,6 +124,10 @@ struct OMapInnerNode
 
   void on_fully_loaded() final {
     this->set_layout_buf(this->get_bptr().c_str());
+  }
+
+  void on_clean_read() final {
+    this->sync_children_capacity();
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
@@ -101,19 +173,19 @@ struct OMapInnerNode
   using make_split_insert_iertr = base_iertr; 
   using make_split_insert_ret = make_split_insert_iertr::future<mutation_result_t>;
   make_split_insert_ret make_split_insert(
-    omap_context_t oc, internal_iterator_t iter,
-    std::string key, laddr_t laddr);
+    omap_context_t oc, internal_const_iterator_t iter,
+    std::string key, OMapNodeRef &node);
 
   using merge_entry_iertr = base_iertr;
   using merge_entry_ret = merge_entry_iertr::future<mutation_result_t>;
   merge_entry_ret merge_entry(
     omap_context_t oc,
-    internal_iterator_t iter, OMapNodeRef entry);
+    internal_const_iterator_t iter, OMapNodeRef entry);
 
   using handle_split_iertr = base_iertr;
   using handle_split_ret = handle_split_iertr::future<mutation_result_t>;
   handle_split_ret handle_split(
-    omap_context_t oc, internal_iterator_t iter,
+    omap_context_t oc, internal_const_iterator_t iter,
     mutation_result_t mresult);
 
   std::ostream &print_detail_l(std::ostream &out) const final;
@@ -138,9 +210,43 @@ struct OMapInnerNode
     auto bptr = bl.cbegin();
     decode(buffer, bptr);
     buffer.replay(*this);
+    this->parent_node_t::sync_children_capacity();
   }
 
-  internal_iterator_t get_containing_child(const std::string &key);
+  internal_const_iterator_t get_containing_child(const std::string &key);
+
+  internal_iterator_t lower_bound(const std::string &key) {
+    return string_lower_bound(key);
+  }
+
+  internal_iterator_t upper_bound(const std::string &key) {
+    return string_upper_bound(key);
+  }
+
+  bool is_in_range(const std::string &key) const {
+    return get_begin() <= key && get_end() > key;
+  }
+
+  ~OMapInnerNode() {
+    if (this->is_valid()
+	&& !this->is_pending()
+	&& !this->is_btree_root()
+	&& this->base_child_t::has_parent_tracker()) {
+      this->child_node_t::destroy();
+    }
+  }
+private:
+  using get_child_node_iertr = OMapNode::base_iertr;
+  using get_child_node_ret = get_child_node_iertr::future<OMapNodeRef>;
+  get_child_node_ret get_child_node(
+    omap_context_t oc,
+    internal_const_iterator_t child_pt);
+
+  get_child_node_ret get_child_node(omap_context_t oc, const std::string &key) {
+    auto child_pt = get_containing_child(key);
+    assert(child_pt != iter_cend());
+    return get_child_node(oc, child_pt);
+  }
 };
 using OMapInnerNodeRef = OMapInnerNode::OMapInnerNodeRef;
 
@@ -156,10 +262,51 @@ using OMapInnerNodeRef = OMapInnerNode::OMapInnerNodeRef;
 
 struct OMapLeafNode
   : OMapNode,
-    StringKVLeafNodeLayout {
-
+    StringKVLeafNodeLayout,
+    ChildNode<OMapInnerNode, OMapLeafNode, std::string> {
   using OMapLeafNodeRef = TCachedExtentRef<OMapLeafNode>;
-  using internal_iterator_t = const_iterator;
+  using internal_const_iterator_t = const_iterator;
+  using base_child_t = BaseChildNode<OMapInnerNode, std::string>;
+  using child_node_t = ChildNode<OMapInnerNode, OMapLeafNode, std::string>;
+
+  void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
+    auto &other = static_cast<OMapInnerNode&>(extent);
+    this->init_range(other.get_begin(), other.get_end());
+  }
+
+  void on_invalidated(Transaction &t) final {
+    this->child_node_t::on_invalidated();
+  }
+
+  void prepare_commit() final {
+    if (is_rewrite() && !is_btree_root()) {
+      auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
+      if (prior.base_child_t::has_parent_tracker()) {
+	// unlike fixed-kv nodes, rewriting child nodes of the omap tree
+	// won't affect parent nodes, so we have to manually take prior
+	// instances' parent trackers here.
+	this->child_node_t::take_parent_from_prior();
+      }
+    }
+  }
+
+  void do_on_replace_prior() final {
+    ceph_assert(!this->is_rewrite());
+    if (!this->is_btree_root()) {
+      auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
+      assert(prior.base_child_t::has_parent_tracker());
+      this->child_node_t::on_replace_prior();
+    }
+  }
+
+  ~OMapLeafNode() {
+    if (this->is_valid()
+	&& !this->is_pending()
+	&& !this->is_btree_root()
+	&& this->base_child_t::has_parent_tracker()) {
+      this->child_node_t::destroy();
+    }
+  }
 
   explicit OMapLeafNode(ceph::bufferptr &&ptr)
     : OMapNode(std::move(ptr)) {
@@ -256,13 +403,57 @@ struct OMapLeafNode
     buffer.replay(*this);
   }
 
+  btreenode_pos_t get_node_split_pivot() const {
+    return this->get_split_pivot().get_offset();
+  }
+
   std::ostream &print_detail_l(std::ostream &out) const final;
 
-  std::pair<internal_iterator_t, internal_iterator_t>
+  std::pair<internal_const_iterator_t, internal_const_iterator_t>
   get_leaf_entries(std::string &key);
-
 };
 using OMapLeafNodeRef = OMapLeafNode::OMapLeafNodeRef;
+
+using omap_load_extent_iertr = OMapNode::base_iertr;
+template <typename T>
+requires std::is_same_v<OMapInnerNode, T> || std::is_same_v<OMapLeafNode, T>
+omap_load_extent_iertr::future<TCachedExtentRef<T>>
+omap_load_extent(
+  omap_context_t oc,
+  laddr_t laddr,
+  depth_t depth,
+  std::string begin,
+  std::string end,
+  std::optional<child_pos_t<OMapInnerNode>> chp = std::nullopt)
+{
+  LOG_PREFIX(omap_load_extent);
+  assert(end <= END_KEY);
+  auto size = std::is_same_v<OMapInnerNode, T>
+    ? OMAP_INNER_BLOCK_SIZE : get_leaf_size(oc.type);
+  return oc.tm.read_extent<T>(
+    oc.t, laddr, size,
+    [begin=std::move(begin), end=std::move(end), FNAME,
+    oc, chp=std::move(chp)](T &extent) mutable {
+      extent.init_range(std::move(begin), std::move(end));
+      if (extent.T::base_child_t::is_parent_valid()
+	  || extent.is_btree_root()) {
+	return;
+      }
+      assert(chp);
+      SUBDEBUGT(seastore_omap, "linking {} to {}",
+	oc.t, extent, *chp->get_parent());
+      chp->link_child(&extent);
+    }
+  ).handle_error_interruptible(
+    omap_load_extent_iertr::pass_further{},
+    crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
+  ).si_then([](auto maybe_indirect_extent) {
+    assert(!maybe_indirect_extent.is_indirect());
+    assert(!maybe_indirect_extent.is_clone);
+    return seastar::make_ready_future<TCachedExtentRef<T>>(
+	std::move(maybe_indirect_extent.extent));
+  });
+}
 
 std::ostream &operator<<(std::ostream &out, const omap_inner_key_t &rhs);
 std::ostream &operator<<(std::ostream &out, const omap_leaf_key_t &rhs);

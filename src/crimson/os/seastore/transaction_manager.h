@@ -931,6 +931,10 @@ public:
     return epm->get_stat();
   }
 
+  ExtentTransViewRetriever& get_etvr() {
+    return *cache;
+  }
+
   ~TransactionManager();
 
 private:

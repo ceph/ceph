@@ -1388,11 +1388,14 @@ public:
   template <typename... T>
   LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
 
-  void on_rewrite(Transaction&, CachedExtent &extent, extent_len_t off) final {
+  void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr((lextent.get_laddr() + off).checked_to_laddr());
+    do_on_rewrite(t, lextent);
   }
+
+  virtual void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) {}
 
   bool has_laddr() const {
     return laddr != L_ADDR_NULL;
