@@ -178,6 +178,12 @@ class DistroKind(StrEnum):
         return cls.aliases()[value]
 
     @classmethod
+    def uses_rpmbuild(cls):
+        # right now this is the same as uses_dnf, but perhaps not always
+        # let's be specific in our interface
+        return cls.uses_dnf()  # but lazy in the implementation
+
+    @classmethod
     def aliases(cls):
         return {
             str(cls.CENTOS10): cls.CENTOS10,
