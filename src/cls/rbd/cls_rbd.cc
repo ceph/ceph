@@ -5986,7 +5986,23 @@ int group_status_set(cls_method_context_t hctx, const string &global_group_id,
   ondisk_status.up = false;
   ondisk_status.last_update = ceph_clock_now();
 
-  int r = cls_get_request_origin(hctx, &ondisk_status.origin);
+  std::string group_id;
+  int r = group_get_group_id(hctx, global_group_id, &group_id);
+  if (r < 0) {
+    return 0;
+  }
+
+  cls::rbd::MirrorGroup group;
+  r = group_get(hctx, group_id, &group);
+  if (r < 0) {
+    return 0;
+  }
+
+  if (group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
+    return 0;
+  }
+
+  r = cls_get_request_origin(hctx, &ondisk_status.origin);
   ceph_assert(r == 0);
 
   bufferlist bl;
