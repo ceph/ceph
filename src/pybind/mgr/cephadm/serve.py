@@ -1193,8 +1193,11 @@ class CephadmServe:
         for daemon_type, daemon_descs in daemons_post.items():
             run_post = False
             for d in daemon_descs:
-                if d.name() in self.mgr.requires_post_actions:
-                    self.mgr.requires_post_actions.remove(d.name())
+                if d.pending_daemon_config:
+                    assert d.hostname is not None
+                    cache_dd = self.mgr.cache.get_daemon(d.name(), d.hostname)
+                    cache_dd.update_pending_daemon_config(False)
+                    self.mgr.cache.save_host(d.hostname)
                     run_post = True
             if run_post:
                 service_registry.get_service(daemon_type_to_service(
@@ -1466,9 +1469,10 @@ class CephadmServe:
                         # just created
                         sd = daemon_spec.to_daemon_description(
                             DaemonDescriptionStatus.starting, 'starting')
-                        self.mgr.cache.add_daemon(daemon_spec.host, sd)
+                        # If daemon requires post action, then mark pending_daemon_config as true
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
-                            self.mgr.requires_post_actions.add(daemon_spec.name())
+                            sd.update_pending_daemon_config(True)
+                        self.mgr.cache.add_daemon(daemon_spec.host, sd)
                     self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
 
                 if daemon_spec.daemon_type != 'agent':
