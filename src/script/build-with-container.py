@@ -282,9 +282,9 @@ class Context:
     @property
     def dnf_cache_dir(self):
         if self.cli.dnf_cache_path and self.distro_cache_name:
-            return (
-                pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
-            )
+            path = pathlib.Path(self.cli.dnf_cache_path)/ self.distro_cache_name
+            path = path.expanduser()
+            return path.resolve()
         return None
 
     @property
