@@ -17,7 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
-from cephadm.tlsobject_store import TLSObjectScope
+from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -3316,6 +3316,36 @@ Then run the following:
     ) -> str:
         self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
         return f'Key for {key_name} set correctly'
+
+    @handle_orch_error
+    def cert_store_rm_cert(
+        self,
+        cert_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> str:
+
+        try:
+            self.cert_mgr.rm_cert(cert_name, service_name, hostname)
+            return f'Certificate for {cert_name} removed correctly'
+        except TLSObjectException:
+            raise OrchestratorError("Cannot delete the certificate. Please use 'ceph orch certmgr cert ls' to list available certificates. \n"
+                                    "Note: for certificates with host/service scope use --service-name or --hostname to specify the target.")
+
+    @handle_orch_error
+    def cert_store_rm_key(
+        self,
+        key_name: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+    ) -> str:
+
+        try:
+            self.cert_mgr.rm_key(key_name, service_name, hostname)
+            return f'Key for {key_name} removed correctly'
+        except TLSObjectException:
+            raise OrchestratorError("Cannot delete the key. Please use 'ceph orch certmgr key ls' to list available keys. \n"
+                                    "Note: for keys with host/service scope use --service-name or --hostname to specify the target.")
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:

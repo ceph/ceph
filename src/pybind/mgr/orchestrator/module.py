@@ -1318,6 +1318,42 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
 
+    @_cli_write_command('orch certmgr cert rm')
+    def _cert_store_rm_cert(
+        self,
+        cert_name: str,
+        _end_positional_: int = 0,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+
+        completion = self.cert_store_rm_cert(
+            cert_name,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch certmgr key rm')
+    def _cert_store_rm_key(
+        self,
+        key_name: str,
+        _end_positional_: int = 0,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+
+        completion = self.cert_store_rm_key(
+            key_name,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
     def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
 
         _username = username

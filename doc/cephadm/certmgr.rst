@@ -229,6 +229,32 @@ To update or set a new private key:
 
 This command allows administrators to provide new private keys for services.
 
+Removing a Certificate
+======================
+
+To remove an existing certificate:
+
+.. prompt:: bash #
+
+   ceph orch certmgr cert rm <certificate_name> [--service_name <value>] [--hostname <value>]
+
+**Note:** For certificates with host or service scope, use the `--service-name` or `--hostname` option to specify the target.
+
+``<certificate_name>`` must be a valid certificate name. Use ``ceph orch certmgr cert ls`` to list supported certificates.
+
+Removing a Private Key
+======================
+
+To remove an existing private key:
+
+.. prompt:: bash #
+
+   ceph orch certmgr key rm <key-name> [--service_name <value>] [--hostname <value>]
+
+**Note:** For keys with host or service scope, use the `--service-name` or `--hostname` option to specify the target.
+
+``<key_name>`` must be a valid key name. Use ``ceph orch certmgr key ls`` to list supported keys.
+
 Generating Certificates
 =======================
 
