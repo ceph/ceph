@@ -286,10 +286,12 @@ class Context:
     def target_tag(self):
         if self.cli.tag:
             return self.cli.tag
-        try:
-            branch = _git_current_branch(self).replace("/", "-")
-        except subprocess.CalledProcessError:
-            branch = "UNKNOWN"
+        branch = self.cli.current_branch
+        if not branch:
+            try:
+                branch = _git_current_branch(self).replace("/", "-")
+            except subprocess.CalledProcessError:
+                branch = "UNKNOWN"
         return f"{branch}.{self.cli.distro}"
 
     @property
@@ -667,6 +669,10 @@ def parse_cli(build_step_names):
         "--tag",
         "-t",
         help="Specify a container tag",
+    )
+    parser.add_argument(
+        "--current-branch",
+        help="Manually specify the current branch name",
     )
     parser.add_argument(
         "--image-repo",
