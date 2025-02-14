@@ -875,23 +875,43 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test'):
+            spec = ServiceSpec(service_type='grafana', placement=PlacementSpec(host_pattern='*'))
+            with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
+                c = cephadm_module.apply([spec])
+                assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
 
-                # Make sure, _check_daemons does a redeploy due to monmap change:
-                cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
-                    'modified': datetime_to_str(datetime_now()),
-                    'fsid': 'foobar',
-                })
-                cephadm_module.notify('mon_map', None)
-                cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {
-                    'modules': ['dashboard']
-                })
+                specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
+                assert spec in specs
 
-                with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
-                    CephadmServe(cephadm_module)._check_daemons()
-                    _mon_cmd.assert_any_call(
-                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://host_fqdn:3000'},
-                        None)
+                CephadmServe(cephadm_module)._apply_all_services()
+                _mon_cmd.assert_any_call(
+                    {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://host_fqdn:3000'}, None)
+                _mon_cmd.assert_any_call(
+                    {'prefix': 'dashboard set-grafana-api-ssl-verify', 'value': 'false'}, None)
+
+        with with_host(cephadm_module, 'test'):
+            spec = ServiceSpec(service_type='prometheus', placement=PlacementSpec(host_pattern='*'))
+            with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
+                c = cephadm_module.apply([spec])
+                assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+
+                specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
+                assert spec in specs
+                CephadmServe(cephadm_module)._apply_all_services()
+                _mon_cmd.assert_any_call(
+                    {'prefix': 'dashboard set-prometheus-api-host', 'value': 'http://host_fqdn:9095'}, None)
+
+        with with_host(cephadm_module, 'test'):
+            spec = ServiceSpec(service_type='alertmanager', placement=PlacementSpec(host_pattern='*'))
+            with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
+                c = cephadm_module.apply([spec])
+                assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+
+                specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
+                assert spec in specs
+                CephadmServe(cephadm_module)._apply_all_services()
+                _mon_cmd.assert_any_call(
+                    {'prefix': 'dashboard set-alertmanager-api-host', 'value': 'http://host_fqdn:9093'}, None)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1.2.3.4')
@@ -901,57 +921,10 @@ class TestCephadm(object):
             with with_host(cephadm_module, 'test2'):
                 with with_service(cephadm_module, IscsiServiceSpec(service_id='foobar', pool='pool', placement=PlacementSpec(host_pattern='*')), CephadmOrchestrator.apply_iscsi, 'test'):
 
-                    CephadmServe(cephadm_module)._apply_all_services()
+                    with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
+                        CephadmServe(cephadm_module)._apply_all_services()
+                        _mon_cmd.assert_any_call({'prefix': 'dashboard iscsi-gateway-list'}, None)
                     assert len(cephadm_module.cache.get_daemons_by_type('iscsi')) == 2
-
-                    # get a daemons from postaction list (ARRGH sets!!)
-                    tempset = cephadm_module.requires_post_actions.copy()
-                    tempdaemon1 = tempset.pop()
-                    tempdaemon2 = tempset.pop()
-
-                    # make sure post actions has 2 daemons in it
-                    assert len(cephadm_module.requires_post_actions) == 2
-
-                    # replicate a host cache that is not in sync when check_daemons is called
-                    tempdd1 = cephadm_module.cache.get_daemon(tempdaemon1)
-                    tempdd2 = cephadm_module.cache.get_daemon(tempdaemon2)
-                    host = 'test1'
-                    if 'test1' not in tempdaemon1:
-                        host = 'test2'
-                    cephadm_module.cache.rm_daemon(host, tempdaemon1)
-
-                    # Make sure, _check_daemons does a redeploy due to monmap change:
-                    cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
-                        'modified': datetime_to_str(datetime_now()),
-                        'fsid': 'foobar',
-                    })
-                    cephadm_module.notify('mon_map', None)
-                    cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {
-                        'modules': ['dashboard']
-                    })
-
-                    with mock.patch("cephadm.module.IscsiService.config_dashboard") as _cfg_db:
-                        CephadmServe(cephadm_module)._check_daemons()
-                        _cfg_db.assert_called_once_with([tempdd2])
-
-                        # post actions still has the other daemon in it and will run next _check_daemons
-                        assert len(cephadm_module.requires_post_actions) == 1
-
-                        # post actions was missed for a daemon
-                        assert tempdaemon1 in cephadm_module.requires_post_actions
-
-                        # put the daemon back in the cache
-                        cephadm_module.cache.add_daemon(host, tempdd1)
-
-                        _cfg_db.reset_mock()
-                        # replicate serve loop running again
-                        CephadmServe(cephadm_module)._check_daemons()
-
-                        # post actions should have been called again
-                        _cfg_db.asset_called()
-
-                        # post actions is now empty
-                        assert len(cephadm_module.requires_post_actions) == 0
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_mon_add(self, cephadm_module):
