@@ -12,7 +12,9 @@
  * 
  */
 
+#include "Monitor.h"
 
+#include <iomanip> // for std::setw()
 #include <iterator>
 #include <sstream>
 #include <tuple>
@@ -26,11 +28,11 @@
 #include "json_spirit/json_spirit_reader.h"
 #include "json_spirit/json_spirit_writer.h"
 
-#include "Monitor.h"
 #include "common/version.h"
 #include "common/blkdev.h"
 #include "common/cmdparse.h"
 #include "common/signal.h"
+#include "crush/CrushWrapper.h"
 
 #include "osd/OSDMap.h"
 
@@ -93,6 +95,12 @@
 #include "perfglue/heap_profiler.h"
 
 #include "auth/none/AuthNoneClientHandler.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

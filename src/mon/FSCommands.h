@@ -19,11 +19,14 @@
 #include "Monitor.h"
 #include "CommandHandler.h"
 
-#include "osd/OSDMap.h"
-#include "mds/FSMap.h"
-
+#include <iosfwd>
+#include <memory>
 #include <string>
-#include <ostream>
+#include <variant>
+
+class Filesystem;
+class FSMap;
+class OSDMap;
 
 class FileSystemCommandHandler : protected CommandHandler
 {

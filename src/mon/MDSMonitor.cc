@@ -39,6 +39,7 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
 #include "Session.h"
 
