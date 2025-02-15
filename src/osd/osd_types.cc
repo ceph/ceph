@@ -3718,7 +3718,7 @@ void pg_notify_t::encode(ceph::buffer::list &bl) const
 
 void pg_notify_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(3, bl);
+  DECODE_START(4, bl);
   decode(query_epoch, bl);
   decode(epoch_sent, bl);
   decode(info, bl);
