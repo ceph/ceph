@@ -209,12 +209,14 @@ private:
   int m_last_r = 0;
 
   Context *m_on_start_finish = nullptr;
+  std::list<Context *> m_on_stop_contexts;
   Context *m_on_stop_finish = nullptr;
   bool m_stop_requested = false;
   bool m_resync_requested = false;
   bool m_restart_requested = false;
   bool m_manual_stop = false;
   bool m_finished = false;
+
 
   AdminSocketHook *m_asok_hook = nullptr;
 
@@ -254,11 +256,12 @@ private:
     return (m_state == STATE_REPLAYING);
   }
 
+  void on_stop_replay(int r = 0, const std::string &desc = "");
   void bootstrap_group();
   void handle_bootstrap_group(int r);
 
-  void create_group_replayer(Context *on_finish);
-  void handle_create_group_replayer(int r, Context *on_finish);
+  void create_group_replayer();
+  void handle_create_group_replayer(int r);
 
   void start_image_replayers();
   void handle_start_image_replayers(int r);
@@ -267,6 +270,7 @@ private:
   bool finish_start_if_interrupted(ceph::mutex &lock);
   void finish_start(int r, const std::string &desc);
 
+/*
   void stop_group_replayer();
   void handle_stop_group_replayer(int r);
 
@@ -274,7 +278,7 @@ private:
                            Context *on_finish);
   void stop_image_replayers();
   void handle_stop_image_replayers(int r);
-
+*/
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
@@ -283,6 +287,9 @@ private:
                                       const std::string &desc);
   void wait_for_ops();
   void handle_wait_for_ops(int r);
+
+  void shut_down(int r);
+  void handle_shut_down(int r);
 };
 
 } // namespace mirror
