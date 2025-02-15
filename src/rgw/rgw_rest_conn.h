@@ -17,7 +17,7 @@ template<class T>
 inline int parse_decode_json(T& t, bufferlist& bl)
 {
   JSONParser p;
-  if (!p.parse(bl)) {
+  if (!p.parse(bl.c_str(), bl.length())) {
     return -EINVAL;
   }
 
