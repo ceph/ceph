@@ -60,13 +60,13 @@ public:
   {
     Command::wait();
 
-    if (r == 0) {
-      boost::system::error_code ec;
+    if (0 != r) {
+      return;
+    }
 
-      json_result = boost::json::parse(outbl.to_str(), ec);
-
-      if(ec)
-       r = -EINVAL;
+    boost::system::error_code ec;
+    if (json_result = boost::json::parse(outbl.to_str(), ec); ec) {
+	r = -EINVAL;
     }
   }
 };

@@ -1,3 +1,18 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2025 International Business Machines Corp.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+*/
+
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
@@ -8,12 +23,13 @@
 #include <boost/container/flat_map.hpp>
 
 /* Enable boost.json's header-only mode:
-	(see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
+        (see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
 #include <boost/json/src.hpp>
 
 #include <memory>
 #include <string>
 #include <fstream>
+#include <exception>
 
 using std::ifstream;
 using std::ostream;
@@ -43,19 +59,19 @@ ostream& operator<<(ostream &out, const JSONObj &obj) {
 void JSONObj::handle_value(boost::json::value v)
 {
   if (auto op = v.if_object()) {
-	for (const auto& kvp : *op) {
-		auto child = std::make_unique<JSONObj>(this, kvp.key(), kvp.value());
-		children.emplace(std::pair { kvp.key(), std::move(child) });
-	 }
+      for (const auto& kvp : *op) {
+        auto child = std::make_unique<JSONObj>(this, kvp.key(), kvp.value());
+        children.emplace(std::pair { kvp.key(), std::move(child) });
+      }
 
-	return;
+      return;
   }
 
  if (auto ap = v.if_array()) {
-	for (const auto& kvp : *ap) {
-		auto child = std::make_unique<JSONObj>(this, "", kvp);
-		children.emplace(std::pair { child->get_name(), std::move(child) });
-	 }
+      for (const auto& kvp : *ap) {
+        auto child = std::make_unique<JSONObj>(this, "", kvp);
+        children.emplace(std::pair { child->get_name(), std::move(child) });
+      }
  }
 
  // unknown type is not-an-error
@@ -69,7 +85,7 @@ vector<string> JSONObj::get_array_elements()
   return elements;
 
  std::ranges::for_each(data.as_array(), [&elements](const auto& i) {
- 	elements.emplace_back(boost::json::serialize(i));
+   elements.emplace_back(boost::json::serialize(i));
  });
 
   return elements;
@@ -114,8 +130,8 @@ bool JSONParser::parse(std::string_view json_string_view)
    return true;
 
   if (data.is_string()) {
-   val.set(data.as_string(), true);
-   return true;
+    val.set(data.as_string(), true);
+    return true;
   } 
 
   // For any other kind of value:
@@ -125,16 +141,19 @@ bool JSONParser::parse(std::string_view json_string_view)
   if (s.size() == static_cast<uint64_t>(json_string_view.length())) { 
     val.set(s, false);
     return true;
-   }
+  }
 
   // Could not parse and convert:
   return false; 
 }
 
-// parse a supplied ifstream:
-bool JSONParser::parse(const char *file_name)
+bool JSONParser::parse_file(const std::filesystem::path file_name)
 {
  ifstream is(file_name);
+
+ if (!is.is_open()) {
+  throw std::runtime_error(fmt::format("unable to open \"{}\"", file_name.string()));
+ }
 
  std::error_code ec;
  data = boost::json::parse(is, ec);
@@ -151,7 +170,7 @@ bool JSONParser::parse(const char *file_name)
 
 bool JSONFormattable::val_bool() const {
   return (boost::iequals(value.str, "true") ||
-	  boost::iequals(value.str, "1") ||
+          boost::iequals(value.str, "1") ||
           boost::iequals(value.str, "on") ||
           boost::iequals(value.str, "yes"));
 }
@@ -199,11 +218,11 @@ static int parse_entity(const string& s, vector<field_entity> *result)
 
     if (!index_str.empty()) {
 
-	int x;
-	if (auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
+        int x;
+        if (auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
          result->emplace_back(field_entity(x));
         else
-	 throw std::invalid_argument(fmt::format("{}", index_str));
+         throw std::invalid_argument(fmt::format("{}", index_str));
 
     } else {
       field_entity f;
