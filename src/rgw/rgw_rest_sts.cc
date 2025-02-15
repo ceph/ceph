@@ -326,7 +326,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   ldpp_dout(dpp, 20) << "JSON Response is: " << openidc_resp.c_str() << dendl;
 
   JSONParser parser;
-  if (parser.parse(openidc_resp)) {
+  if (parser.parse(openidc_resp.c_str(), openidc_resp.length())) {
     JSONObj::data_val val;
     if (parser.get_data("jwks_uri", &val)) {
       cert_url = val.str.c_str();
@@ -612,7 +612,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
 =======
 */
     JSONParser parser;
-    if (parser.parse(cert_resp)) {
+    if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
       JSONObj::data_val val;
       if (parser.get_data("keys", &val)) {
         if (val.str[0] == '[') {

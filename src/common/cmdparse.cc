@@ -20,7 +20,9 @@
 #include "common/strtol.h"
 #include "include/ceph_assert.h"	// boost clobbers this
 #include "include/types.h" // for operator<<(std::vector)
+
 #include "json_spirit/json_spirit.h"
+#include "common/ceph_json.h"
 
 #include <ostream>
 #include <sstream>
@@ -321,15 +323,17 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
   json_spirit::mValue v;
 
   string fullcmd;
+
   // First, join all cmd strings
   for (auto& c : cmd)
     fullcmd += c;
 
   try {
     if (!json_spirit::read(fullcmd, v))
-      throw std::runtime_error("unparseable JSON " + fullcmd);
+      throw std::runtime_error("JFW unparseable JSON: |" + fullcmd + '|');
+
     if (v.type() != json_spirit::obj_type)
-      throw std::runtime_error("not JSON object " + fullcmd);
+      throw std::runtime_error("JFW not JSON object " + fullcmd);
 
     // allocate new mObject (map) to return
     // make sure all contents are simple types (not arrays or objects)
@@ -345,7 +349,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 
       case json_spirit::obj_type:
       default:
-	throw std::runtime_error("JSON array/object not allowed " + fullcmd);
+	throw std::runtime_error("JFW JSON array/object not allowed " + fullcmd);
         break;
 
       case json_spirit::array_type:
@@ -362,7 +366,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 	    vector<string> outv;
 	    for (const auto& sv : spvals) {
 	      if (sv.type() != json_spirit::str_type) {
-		throw std::runtime_error("Can't handle arrays of multiple types");
+		throw std::runtime_error("JFW Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_str());
 	    }
@@ -371,7 +375,7 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 	    vector<int64_t> outv;
 	    for (const auto& sv : spvals) {
 	      if (spvals.front().type() != json_spirit::int_type) {
-		throw std::runtime_error("Can't handle arrays of multiple types");
+		throw std::runtime_error("JFW Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_int64());
 	    }
@@ -380,13 +384,13 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
 	    vector<double> outv;
 	    for (const auto& sv : spvals) {
 	      if (spvals.front().type() != json_spirit::real_type) {
-		throw std::runtime_error("Can't handle arrays of multiple types");
+		throw std::runtime_error("JFW Can't handle arrays of multiple types");
 	      }
 	      outv.push_back(sv.get_real());
 	    }
 	    (*mapp)[it->first] = std::move(outv);
 	  } else {
-	    throw std::runtime_error("Can't handle arrays of types other than "
+	    throw std::runtime_error("JFW Can't handle arrays of types other than "
 				     "int, string, or double");
 	  }
 	}

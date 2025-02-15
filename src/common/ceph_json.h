@@ -1,3 +1,18 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2025 International Business Machines Corp.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+*/
+
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
@@ -9,6 +24,7 @@
 #include <string>
 
 #include <iostream>
+#include <filesystem>
 
 #include <ranges>
 #include <concepts>
@@ -32,8 +48,7 @@
 #include <include/types.h>
 #include <include/ceph_fs.h>
 
-#include "include/buffer.h"
-
+#include "common/strtol.h"
 #include "common/ceph_time.h"
 
 #include <fmt/format.h>
@@ -65,7 +80,6 @@ concept json_integer = requires
 {
  requires std::is_integral_v<T>;
  requires !std::is_same_v<T, bool>;
-
  requires !is_any_of<T, char, char8_t, char16_t, char32_t, wchar_t>();
 };
 
@@ -185,6 +199,22 @@ protected:
 	return ec ? false : true;
   }
 
+  static bool parse_json_maybe_throw_JFW(std::string_view input, boost::json::value& data_out)
+  {
+	std::error_code ec;
+
+	data_out = boost::json::parse(input, ec, boost::json::storage_ptr(), 
+				     { .allow_invalid_utf8 = true });
+
+if(ec)
+throw std::runtime_error(fmt::format("JFW: parse_json(): {}; against INPUT (len = {}; char@len = dec :\n---\n{}\n---", 
+  input.size(), (int)input[input.size()],
+ec.message(), input));
+
+	return ec ? false : true;
+  }
+
+
 public:
   JSONObj() = default;
 
@@ -283,10 +313,15 @@ public:
 	       : false;
   }
 
-  bool parse(ceph::buffer::list& bl) { return parse(std::string_view { bl.c_str(), bl.length() }); }
+bool parse_maybe_throw_JFW(std::string_view json_string_view); // JFW
 
-  // operate on a data file:
-  bool parse(const char *file_name);
+  bool parse_JFW(const char *buf_, int len) {
+ 	return buf_ ? 
+	        parse_maybe_throw_JFW(std::string_view { buf_, static_cast<std::string_view::size_type>(len) }) 
+	       : false;
+  }
+
+  [[deprecated("this may not be reliable")]] bool parse_file(const std::filesystem::path file_name); 
 
 public:
   const char *get_json() const noexcept{ return json_buffer.c_str(); }
@@ -301,7 +336,7 @@ public:
   JSONParser parser;
 
   JSONDecoder(ceph::buffer::list& bl) {
-    if (!parser.parse(bl))
+    if (!parser.parse(bl.c_str(), bl.length()))
       throw JSONDecoder::err("failed to parse JSON input");
   }
 
@@ -322,24 +357,15 @@ public:
 };
 
 template <typename IntegerT>
-requires ceph_json::detail::json_signed_integer<IntegerT> ||
-         ceph_json::detail::json_unsigned_integer<IntegerT>
+requires ceph_json::detail::json_integer<IntegerT> 
 void decode_json_obj(IntegerT& val, JSONObj *obj)
-try
 {
- if constexpr (ceph_json::detail::json_signed_integer<IntegerT>)
-  val = stol(obj->get_data());
+ auto r = ceph::parse<IntegerT>(obj->get_data());
 
- if constexpr (ceph_json::detail::json_unsigned_integer<IntegerT>)
-  val = stoul(obj->get_data());
-}
-catch(const std::out_of_range& e)
-{
- throw JSONDecoder::err(fmt::format("failed to parse number: {}", e.what()));
-}
-catch(const std::invalid_argument& e)
-{
- throw JSONDecoder::err(fmt::format("failed to parse number: {}", e.what()));
+ if(!r)
+  throw JSONDecoder::err(fmt::format("failed to parse number from JSON"));
+
+ val = *r;
 }
 
 template<class T>
