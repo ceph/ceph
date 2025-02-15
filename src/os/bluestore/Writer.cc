@@ -452,10 +452,16 @@ inline void BlueStore::Writer::_blob_put_data_subau_allocate(
   ceph_assert(bblob.get_logical_length() >= in_blob_end);
   uint32_t in_blob_alloc_offset = p2align(in_blob_offset, au_size);
   uint32_t in_blob_alloc_end = p2roundup(in_blob_end, au_size);
-  _blob_put_data(blob, in_blob_offset, disk_data);
   PExtentVector blob_allocs;
   _get_disk_space(in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
   bblob.allocated(in_blob_alloc_offset, in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
+  if(in_blob_offset > in_blob_alloc_offset) {
+    bblob.add_unused(in_blob_alloc_offset, in_blob_offset - in_blob_alloc_offset, chunk_size);
+  }
+  if (in_blob_end < in_blob_alloc_end) {
+        bblob.add_unused(in_blob_end, in_blob_alloc_end - in_blob_end, chunk_size);
+  }
+  _blob_put_data(blob, in_blob_offset, disk_data);
   PExtentVector& disk_extents = blob_allocs;
   _crop_allocs_to_io(disk_extents, in_blob_offset - in_blob_alloc_offset,
     in_blob_alloc_end - in_blob_offset - disk_data.length());
@@ -488,18 +494,36 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   uint32_t blob_length = p2roundup(in_blob_offset + data_length, min_alloc_size);
   uint32_t tracked_unit = min_alloc_size;
   uint32_t csum_length_mask = in_blob_offset | data_length; //to find 2^n common denominator
-  uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
-    std::min<uint32_t>(wctx->csum_order, std::countr_zero(csum_length_mask));
+  uint32_t csum_order;
+  if ((unsigned int)std::countr_zero(csum_length_mask) < wctx->csum_order &&
+      wctx->target_blob_size <= (1u << std::countr_zero(csum_length_mask))* sizeof(bluestore_blob_t::unused_t) * 8) {
+    csum_order = std::countr_zero(csum_length_mask);
+  } else {
+    csum_order = wctx->csum_order;
+  }
   if (wctx->csum_type != Checksummer::CSUM_NONE) {
+    uint64_t b_off = in_blob_offset;
+    bstore->_pad_zeros(&disk_data, &b_off, 1u << csum_order);
+    in_blob_offset = b_off;
     bblob.init_csum(wctx->csum_type, csum_order, blob_length);
     bblob.calc_csum(in_blob_offset, disk_data);
     tracked_unit = std::max(1u << csum_order, min_alloc_size);
   }
-  ceph_assert(wctx->target_blob_size <= bblob.get_chunk_size(block_size) * sizeof(bluestore_blob_t::unused_t) * 8);
+  uint32_t chunk_size = bblob.get_chunk_size(block_size);
+  ceph_assert(wctx->target_blob_size <= chunk_size * sizeof(bluestore_blob_t::unused_t) * 8);
   blob->dirty_blob_use_tracker().init(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length - alloc_offset, blob_allocs);
   bblob.allocated(alloc_offset, blob_length - alloc_offset, blob_allocs);
+
+  if(in_blob_offset > alloc_offset) {
+    bblob.add_unused(alloc_offset, in_blob_offset - alloc_offset, chunk_size);
+  }
+  auto in_blob_end = in_blob_offset + data_length;
+  if (in_blob_end < blob_length) {
+    bblob.add_unused(in_blob_end, blob_length - in_blob_end, chunk_size);
+  }
+  bblob.mark_used(in_blob_offset, in_blob_end - in_blob_offset, chunk_size);
   //^sets also logical_length = blob_length
   dout(25) << __func__ << " @0x" << std::hex << in_blob_offset
     << "~" << disk_data.length()
