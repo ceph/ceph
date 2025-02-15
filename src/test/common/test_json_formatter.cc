@@ -155,7 +155,7 @@ TEST(formatter, parse_types) {
 
   buffer::list bl;
   bl.append(outstring);
-  EXPECT_TRUE(parser.parse(bl));
+  EXPECT_TRUE(parser.parse(bl.c_str(), bl.length()));
   
   JSONObj *pgstat_obj = parser.find_obj("pg_stats");
   EXPECT_TRUE(pgstat_obj);
@@ -167,7 +167,7 @@ TEST(formatter, parse_types) {
   buffer::list bl;
   bl.append(json_input);
 
-  ASSERT_TRUE(parser.parse(bl));
+  ASSERT_TRUE(parser.parse(bl.c_str(), bl.length()));
 
   JSONObjIter oi = parser.find_first();
 

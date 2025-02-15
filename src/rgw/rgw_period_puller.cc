@@ -46,7 +46,7 @@ int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::str
   }
 
   JSONParser parser;
-  r = parser.parse(data);
+  r = parser.parse(data.c_str(), data.length());
   if (r < 0) {
     ldpp_dout(dpp, -1) << "request failed: " << cpp_strerror(-r) << dendl;
     return r;
