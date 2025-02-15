@@ -6639,7 +6639,7 @@ int BlueStore::_read_bdev_label(
     decode(expected_crc, p);
   }
   catch (ceph::buffer::error& e) {
-    derr << __func__ << " " << path.c_str() << " data at " << std::hex << disk_position
+    derr << __func__ << " " << path.c_str() << " data at 0x" << std::hex << disk_position
       << std::dec << ", " << "unable to decode label " << dendl;
     return -ENOENT;
   }
@@ -8899,6 +8899,10 @@ int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
 
 int BlueStore::expand_devices(ostream& out)
 {
+  // let's open in read-only mode first to be able to recover
+  // from the out-of-space state at DB/shared volume(s)
+  // Opening in R/W mode might cause extra space allocation
+  // which is effectively a show stopper for volume expansion then.
   int r = _open_db_and_around(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
@@ -8938,32 +8942,36 @@ int BlueStore::expand_devices(ostream& out)
       << size0 << " to 0x" << size << std::dec << std::endl;
     _write_out_fm_meta(size);
     if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
+      out << bluefs_layout.shared_bdev
           << " : size label updated to " << size
           << std::endl;
-      }
-      if (bdev_label_multi) {
-        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-        for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
-            bdev_label_valid_locations.push_back(loc);
+      bdev_label.size = size;
+
+      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      for (uint64_t loc : bdev_label_positions) {
+        if ((loc >= size0) && (loc + lsize <= size)) {
+          bdev_label_valid_locations.push_back(loc);
+          if (!bdev_label_multi) {
+            break;
           }
         }
-        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
       }
+      _write_bdev_label(cct, bdev,
+         get_device_path(bluefs_layout.shared_bdev),
+         bdev_label, bdev_label_valid_locations);
     }
     _close_db_and_around();
 
-    // mount in read/write to sync expansion changes
-    if (bdev_label_multi) {
-      // We need not do fsck, because we can be broken - size is increased,
-      // but we might not have labels set.
-      cct->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
-    }
+    // FIXME minor: try to get rid off the following mount 
+    // when possible, it looks like we don't really need it
+    //
+    // Mount in read/write to sync expansion changes
+    //
     r = _mount();
     ceph_assert(r == 0);
     if (fm && fm->is_null_manager()) {
+      // FIXME: move this stuff to fm's init phase when possible.
+      //
       // we grow the allocation range, must reflect it in the allocation file
       alloc->init_add_free(size0, size - size0);
       need_to_destage_allocation_file = true;
