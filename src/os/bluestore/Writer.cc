@@ -358,7 +358,8 @@ inline void BlueStore::Writer::_blob_put_data(
     // calc_csum has fallback for csum == NONE, but is not inlined
     bblob.calc_csum(in_blob_offset, disk_data);
   }
-  bblob.mark_used(in_blob_offset, in_blob_end - in_blob_offset);
+  uint32_t chunk_size = bblob.get_chunk_size(bstore->block_size);
+  bblob.mark_used(in_blob_offset, in_blob_end - in_blob_offset, chunk_size);
   // do not update ref, we do not know how much of the data is actually used
 }
 
@@ -494,6 +495,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
     bblob.calc_csum(in_blob_offset, disk_data);
     tracked_unit = std::max(1u << csum_order, min_alloc_size);
   }
+  ceph_assert(wctx->target_blob_size <= bblob.get_chunk_size(block_size) * sizeof(bluestore_blob_t::unused_t) * 8);
   blob->dirty_blob_use_tracker().init(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length - alloc_offset, blob_allocs);
@@ -534,13 +536,14 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
     bblob.calc_csum(0, disk_data);
     tracked_unit = std::max(1u << csum_order, min_alloc_size);
   }
-  //std::cout << "blob_length=" << blob_length << std::endl;
+  ceph_assert(wctx->target_blob_size <= bblob.get_chunk_size(bstore->block_size) * sizeof(bluestore_blob_t::unused_t) * 8);
   blob->dirty_blob_use_tracker().init_and_ref(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length, blob_allocs);
   _schedule_io(blob_allocs, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
-  bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
+  uint32_t chunk_size = bblob.get_chunk_size(bstore->block_size);
+  bblob.mark_used(0, blob_length, chunk_size); //todo - optimize; this obviously clears it
   return blob;
 }
 

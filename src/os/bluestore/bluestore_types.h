@@ -501,7 +501,7 @@ public:
 
   uint32_t flags = 0;                 ///< FLAG_*
 
-  typedef uint16_t unused_t;
+  typedef uint64_t unused_t;
   unused_t unused = 0;     ///< portion that has never been written to (bitmap)
 
   uint8_t csum_type = Checksummer::CSUM_NONE;      ///< CSUM_*
@@ -693,7 +693,7 @@ public:
   }
 
   /// return true if the logical range has never been used
-  bool is_unused(uint64_t offset, uint64_t length) const {
+  bool is_unused(uint64_t offset, uint64_t length, uint32_t chunk_size) const {
     if (!has_unused()) {
       return false;
     }
@@ -701,7 +701,7 @@ public:
     uint64_t blob_len = get_logical_length();
     ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
     ceph_assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+    ceph_assert(blob_len <= (sizeof(unused)*8) * chunk_size);
     uint64_t start = offset / chunk_size;
     uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
     auto i = start;
@@ -712,12 +712,12 @@ public:
   }
 
   /// mark a range that has never been used
-  void add_unused(uint64_t offset, uint64_t length) {
+  void add_unused(uint64_t offset, uint64_t length, uint32_t chunk_size) {
     ceph_assert(!is_compressed());
     uint64_t blob_len = get_logical_length();
     ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
     ceph_assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+    ceph_assert(blob_len <= (sizeof(unused)*8) * chunk_size);
     uint64_t start = round_up_to(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
     for (auto i = start; i < end; ++i) {
@@ -729,13 +729,13 @@ public:
   }
 
   /// indicate that a range has (now) been used.
-  void mark_used(uint64_t offset, uint64_t length) {
+  void mark_used(uint64_t offset, uint64_t length, uint32_t chunk_size) {
     if (has_unused()) {
       ceph_assert(!is_compressed());
       uint64_t blob_len = get_logical_length();
       ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
       ceph_assert(offset + length <= blob_len);
-      uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+      ceph_assert(blob_len <= (sizeof(unused)*8) * chunk_size);
       uint64_t start = offset / chunk_size;
       uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
       for (auto i = start; i < end; ++i) {
@@ -749,7 +749,16 @@ public:
   /// todo implement me!
   unused_t get_unused_mask(uint32_t offset, uint32_t length, uint32_t chunk_size) {
     if (has_unused()) {
-      return 0;
+      ceph_assert(!is_compressed());
+      uint64_t blob_len = get_logical_length();
+      ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
+      ceph_assert(offset + length <= blob_len);
+      ceph_assert(blob_len <= (sizeof(unused)*8) * chunk_size);
+      uint64_t start = offset / chunk_size;
+      uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
+      unused_t mask = ((1u << (end - start + 1)) - 1) << start;
+      unused_t extracted_mask = (unused & mask) >> start;
+      return extracted_mask;
     } else {
       return 0;
     }

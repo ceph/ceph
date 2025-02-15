@@ -2386,6 +2386,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
 
   // make sure target_blob_size isn't less than current blob len
   target_blob_size = std::max(blen, target_blob_size);
+  ceph_assert(target_blob_size <= sizeof(bluestore_blob_t::unused_t) * 8 * get_blob().get_chunk_size(1u<<12));
 
   if (b_offset >= blen) {
     // new data totally stands out of the existing blob
@@ -9820,7 +9821,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
       uint64_t blob_len = blob.get_logical_length();
       ceph_assert((blob_len % (sizeof(*pu) * 8)) == 0);
       ceph_assert(l.blob_offset + l.length <= blob_len);
-      uint64_t chunk_size = blob_len / (sizeof(*pu) * 8);
+      uint32_t chunk_size = blob.get_chunk_size(block_size);
       uint64_t start = l.blob_offset / chunk_size;
       uint64_t end =
         round_up_to(l.blob_offset + l.length, chunk_size) / chunk_size;
@@ -10534,8 +10535,7 @@ void BlueStore::_fsck_check_objects(
             ++errors;
           }
           if (blob.has_csum()) {
-            uint64_t blob_len = blob.get_logical_length();
-            uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused) * 8);
+            uint64_t unused_chunk_size = blob.get_chunk_size(block_size);;
             unsigned csum_count = blob.get_csum_count();
             unsigned csum_chunk_size = blob.get_csum_chunk_size();
             for (unsigned p = 0; p < csum_count; ++p) {
@@ -16157,7 +16157,7 @@ void BlueStore::_do_write_small(
         // direct write into unused blocks of an existing mutable blob?
         if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
             b->get_blob().get_ondisk_length() >= b_off + b_len &&
-            b->get_blob().is_unused(b_off, b_len) &&
+            b->get_blob().is_unused(b_off, b_len, b->get_blob().get_chunk_size(block_size)) &&
             b->get_blob().is_allocated(b_off, b_len)) {
           _buffer_cache_write(txc, o, offset, bl,
                               wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
@@ -16194,7 +16194,8 @@ void BlueStore::_do_write_small(
           Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
 						 b,
 						 &wctx->old_extents);
-	  b->dirty_blob().mark_used(le->blob_offset, le->length);
+	  uint32_t chunk_size = b->dirty_blob().get_chunk_size(block_size);
+	  b->dirty_blob().mark_used(le->blob_offset, le->length, chunk_size);
 
 	  txc->statfs_delta.stored() += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
@@ -16276,7 +16277,8 @@ void BlueStore::_do_write_small(
 
           Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
 						 b, &wctx->old_extents);
-          b->dirty_blob().mark_used(le->blob_offset, le->length);
+          uint32_t chunk_size = b->dirty_blob().get_chunk_size(block_size);
+          b->dirty_blob().mark_used(le->blob_offset, le->length, chunk_size);
           txc->statfs_delta.stored() += le->length;
           dout(20) << __func__ << "  lex " << *le << dendl;
           return;
@@ -16426,10 +16428,12 @@ void BlueStore::_do_write_small(
   // Zero detection -- small block
   if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
     // new blob.
+    uint64_t chunk_size = wctx->csum_type != Checksummer::CSUM_NONE ? 1u << wctx->csum_order : block_size;
+    uint64_t align_size = std::min(chunk_size, min_alloc_size);
     BlobRef b = c->new_blob();
-    _pad_zeros(&bl, &b_off0, block_size);
+    _pad_zeros(&bl, &b_off0, align_size);
     wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-	min_alloc_size != block_size, // use 'unused' bitmap when alloc granularity
+	min_alloc_size != chunk_size, // use 'unused' bitmap when alloc granularity
                                       // doesn't match disk one only
 	true);
   } else { // if (bl.is_zero())
@@ -16551,7 +16555,8 @@ void BlueStore::_do_write_big_apply_deferred(
 
   // in fact this is a no-op for big writes but left here to maintain
   // uniformity and avoid missing after some refactor.
-  b0->dirty_blob().mark_used(le->blob_offset, le->length);
+  uint32_t chunk_size = b0->dirty_blob().get_chunk_size(block_size);
+  b0->dirty_blob().mark_used(le->blob_offset, le->length, chunk_size);
   txc->statfs_delta.stored() += le->length;
 
   if (!g_conf()->bluestore_debug_omit_block_device_write) {
@@ -16967,6 +16972,7 @@ int BlueStore::_do_alloc_write(
       final_length = wi.compressed_bl.length();
       csum_length = final_length;
       unsigned csum_order = std::countr_zero(csum_length);
+      ceph_assert(wctx->target_blob_size <= ((1 << csum_order) * sizeof(bluestore_blob_t::unused_t) * 8));
       l = &wi.compressed_bl;
       dblob.set_compressed(wi.blob_length, wi.compressed_len);
       if (csum != Checksummer::CSUM_NONE) {
@@ -16988,10 +16994,11 @@ int BlueStore::_do_alloc_write(
         // hrm, maybe we could do better here, but let's not bother.
         dout(20) << __func__ << " forcing csum_order to block_size_order "
                 << block_size_order << dendl;
-	csum_order = block_size_order;
+	csum_order = wctx->csum_type != Checksummer::CSUM_NONE ? wctx->csum_order : block_size_order;
       } else {
         csum_order = std::min<unsigned>(wctx->csum_order, std::countr_zero(l->length()));
       }
+      ceph_assert(wctx->target_blob_size <= ((1 << csum_order) * sizeof(bluestore_blob_t::unused_t) * 8));
       // try to align blob with max_blob_size to improve
       // its reuse ratio, e.g. in case of reverse write
       uint32_t suggested_boff =
@@ -17016,6 +17023,7 @@ int BlueStore::_do_alloc_write(
       }
     }
 
+    ceph_assert(wctx->target_blob_size <= sizeof(bluestore_blob_t::unused_t) * 8 * (dblob.get_chunk_size(block_size)));
     PExtentVector extents;
     int64_t left = final_length;
     auto prefer_deferred_size_snapshot = prefer_deferred_size.load();
@@ -17051,11 +17059,11 @@ int BlueStore::_do_alloc_write(
       ceph_assert(!dblob.is_compressed());
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
-        dblob.add_unused(0, b_off);
+        dblob.add_unused(0, b_off, dblob.get_chunk_size(block_size));
       }
       uint64_t llen = dblob.get_logical_length();
       if (b_end < llen) {
-        dblob.add_unused(b_end, llen - b_end);
+        dblob.add_unused(b_end, llen - b_end, dblob.get_chunk_size(block_size));
       }
     }
 
@@ -17064,7 +17072,8 @@ int BlueStore::_do_alloc_write(
                                            wi.length0,
                                            wi.b,
                                            nullptr);
-    wi.b->dirty_blob().mark_used(le->blob_offset, le->length);
+    uint32_t chunk_size = wi.b->dirty_blob().get_chunk_size(block_size);
+    wi.b->dirty_blob().mark_used(le->blob_offset, le->length, chunk_size);
     txc->statfs_delta.stored() += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
     bufferlist without_pad;
@@ -17317,12 +17326,23 @@ void BlueStore::_choose_write_options(
     wctx->target_blob_size = max_bsize;
   }
 
+  if (wctx->target_blob_size <  min_alloc_size ) {
+    wctx->target_blob_size =  min_alloc_size;
+  }
   // set the min blob size floor at 2x the min_alloc_size, or else we
   // won't be able to allocate a smaller extent for the compressed
   // data.
   if (wctx->compress &&
       wctx->target_blob_size < min_alloc_size * 2) {
     wctx->target_blob_size = min_alloc_size * 2;
+  }
+  ceph_assert((wctx->target_blob_size & (wctx->target_blob_size -1)) == 0);  //target_blob_size should be 2^n;
+  ceph_assert((min_alloc_size & (min_alloc_size - 1)) == 0);                 //min_alloc_size should be 2^n;
+  if (wctx->target_blob_size >
+      (1u << wctx->csum_order) * sizeof(bluestore_blob_t::unused_t) * 8) {
+    wctx->csum_order =(unsigned)std::countr_zero(
+		       wctx->target_blob_size/(sizeof(bluestore_blob_t::unused_t) * 8));
+    ceph_assert((1u << wctx->csum_order) % block_size == 0);     //chunk_size should be multiple of 4K
   }
 
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
