@@ -21,12 +21,15 @@
 
 #include "common/config_fwd.h"
 #include "common/ceph_releases.h"
+#include "include/uuid.h" // for uuid_d
 
-#include "include/err.h"
-#include "include/types.h"
+#include "mon/mon_types.h" // for mon_feature_t
 
-#include "mon/mon_types.h"
-#include "msg/Message.h"
+#include <iosfwd>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
 
 class health_check_map_t;
 
