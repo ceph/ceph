@@ -6900,6 +6900,26 @@ int BlueStore::_check_main_bdev_label()
   return 0;
 }
 
+int BlueStore::read_bdev_label_at_pos(
+  CephContext* cct,
+  const std::string &bdev_path,
+  uint64_t disk_position,
+  bluestore_bdev_label_t *label)
+{
+  unique_ptr<BlockDevice> bdev(BlockDevice::create(
+    cct, bdev_path, nullptr, nullptr, nullptr, nullptr));
+  if (!bdev) {
+    return -EIO;
+  }
+  bdev->set_no_exclusive_lock();
+  int r = bdev->open(bdev_path);
+  if (r < 0)
+    return r;
+  r = _read_bdev_label(cct, bdev.get(), bdev_path, label, disk_position);
+  bdev->close();
+  return r;
+}
+
 int BlueStore::read_bdev_label(
   CephContext* cct,
   const std::string &path,
