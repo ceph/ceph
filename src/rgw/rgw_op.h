@@ -158,7 +158,7 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 
   JSONParser parser;
 
-  if (!parser.parse(data)) {
+  if (!parser.parse(data.c_str(), data.length())) {
     return -EINVAL;
   }
 

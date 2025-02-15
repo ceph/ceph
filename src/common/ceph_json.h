@@ -32,8 +32,6 @@
 #include <include/types.h>
 #include <include/ceph_fs.h>
 
-#include "include/buffer.h"
-
 #include "common/ceph_time.h"
 
 #include <fmt/format.h>
@@ -284,8 +282,6 @@ public:
 	       : false;
   }
 
-  bool parse(ceph::buffer::list& bl) { return parse(std::string_view { bl.c_str(), bl.length() }); }
-
   // operate on a data file:
   bool parse(const char *file_name);
 
@@ -302,7 +298,7 @@ public:
   JSONParser parser;
 
   JSONDecoder(ceph::buffer::list& bl) {
-    if (!parser.parse(bl))
+    if (!parser.parse(bl.c_str(), bl.length()))
       throw JSONDecoder::err("failed to parse JSON input");
   }
 

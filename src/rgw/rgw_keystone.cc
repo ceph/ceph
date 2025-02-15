@@ -285,7 +285,7 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
                          ceph::bufferlist& bl)
 {
   JSONParser parser;
-  if (! parser.parse(bl)) {
+  if (! parser.parse(bl.c_str(), bl.length())) {
     ldpp_dout(dpp, 0) << "Keystone token parse error: malformed json" << dendl;
     return -EINVAL;
   }
