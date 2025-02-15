@@ -889,11 +889,14 @@ def ceph_bootstrap(ctx, config):
         )
 
         # clean up /etc/ceph
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        ctx.cluster.run(
+            args=[
+                'sudo', 'rm', '-f',
+                '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+            ],
+            check_status=False,  # rm-cluster above should have cleaned these up
+        )
 
 
 @contextlib.contextmanager
