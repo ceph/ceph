@@ -159,7 +159,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  if (jp && !jp->parse(outdata)) {
+  if (jp && !jp->parse(outdata.c_str(), outdata.length())) {
     ldpp_dout(dpp, 0) << "failed parsing response from master zonegroup" << dendl;
     return -EINVAL;
   }
