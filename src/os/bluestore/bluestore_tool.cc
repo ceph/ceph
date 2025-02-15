@@ -750,13 +750,19 @@ int main(int argc, char **argv)
     for (auto& i : devs) {
       jf.open_object_section(i.c_str());
       bluestore_bdev_label_t label;
-      int r = BlueStore::read_bdev_label(cct.get(), i, &label);
+      std::vector<uint64_t> valid_positions;
+      int r = BlueStore::read_bdev_label(cct.get(), i, &label, &valid_positions);
       if (r < 0) {
         cerr << "unable to read label for " << i << ": "
              << cpp_strerror(r) << std::endl;
       } else {
         any_success = true;
         label.dump(&jf);
+        jf.open_array_section("locations");
+        for (int64_t pos : valid_positions) {
+          jf.dump_format("", "0x%llx", pos);
+        }
+        jf.close_section();
       }
       jf.close_section();
     }
