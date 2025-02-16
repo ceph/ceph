@@ -18,7 +18,8 @@ log = logging.getLogger(__name__)
 class SubvolumeLoader(object):
     INVALID_VERSION = -1
 
-    SUPPORTED_MODULES = ['subvolume_v1.SubvolumeV1', 'subvolume_v2.SubvolumeV2']
+    SUPPORTED_MODULES = ['subvolume_v1.SubvolumeV1', 'subvolume_v2.SubvolumeV2',
+                         'subvolume_v3.SubvolumeV3']
 
     def __init__(self):
         self.max_version = SubvolumeLoader.INVALID_VERSION
