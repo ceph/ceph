@@ -1022,3 +1022,32 @@ touch pin/placeholder
 
         duration = (end - begin).total_seconds()
         self.assertLess(duration, (file_count * tick_period) * 0.25)
+    
+    def test_asok_dump_stray_command(self):
+        """
+        Test MDS asok dump stray command
+        """
+
+        LOW_LIMIT = 50
+        # need to create more folder to force fragmentation, creating more then needed
+        # to be on the safe side.
+        # we want to test the case when dumping stray folder must wait for the next dirfrag to be fetched
+        NUM_DIRS = LOW_LIMIT * 20
+        TOP_DIR = "topdir"
+        self.config_set("mds", "mds_bal_split_size", str(LOW_LIMIT))
+        self.assertEqual(self.config_get("mds", "mds_bal_split_size"), str(LOW_LIMIT), "LOW_LIMIT was not set on mds!")
+              
+        # create 2 level tree with enough folders to force the stray folder be fragmented
+        # total of NUM_DIRS subdirs will be created
+        self.mount_a.run_shell(f"mkdir -p {TOP_DIR}/subdir{{1..{NUM_DIRS}}}")  
+        # create snapshot
+        self.mount_a.run_shell(f"mkdir {TOP_DIR}/.snap/snap1")
+
+        # delete 2nd level dirs to generate strays
+        # don't wait, we want to dump stray dir while delete runs, to make it more interesting
+        self.mount_a.run_shell(f"rm -rf {TOP_DIR}/*", wait=False)
+
+        # wait for all deleted folders to become strays
+        self.wait_until_equal(
+        lambda: len(self.fs.rank_tell(["dump", "stray"])),
+        expect_val=NUM_DIRS, timeout=60, period=1)
