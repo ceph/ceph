@@ -206,7 +206,7 @@ public:
 
     ~Orderer() {
       LOG_PREFIX(ObjectContextLoader::~Orderer);
-      SUBDEBUG(osd, "releasing obc {}, {}", *(orderer_obc));
+      SUBDEBUG(osd, "releasing obc {}", *(orderer_obc));
     }
   };
 
