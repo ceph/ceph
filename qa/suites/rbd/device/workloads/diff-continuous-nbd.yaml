@@ -1,0 +1,14 @@
+overrides:
+  install:
+    ceph:
+      extra_packages:
+        - rbd-nbd
+    extra_system_packages:
+      - pv
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/diff_continuous.sh
+    env:
+      RBD_DEVICE_TYPE: "nbd"
