@@ -54,11 +54,11 @@ function prepare() {
         which_pkg="debianutils"
 
         if in_jenkins; then
-            if ! type clang-16 > /dev/null 2>&1 ; then
-                ci_debug "Getting clang-16"
+            if ! type clang-19 > /dev/null 2>&1 ; then
+                ci_debug "Getting clang-19"
                 wget https://download.ceph.com/qa/llvm.sh
                 chmod +x llvm.sh
-                $DRY_RUN sudo ./llvm.sh 16
+                $DRY_RUN sudo ./llvm.sh 19
                 rm llvm.sh
             fi
         fi
