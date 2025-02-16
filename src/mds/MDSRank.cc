@@ -3074,7 +3074,7 @@ void MDSRankDispatcher::handle_asok_command(
     dout(10) << "dump_stray start" <<  dendl;
     // the context is a wrapper for formatter to be used while scanning stray dir
     auto context = std::make_unique<MDCache::C_MDS_DumpStrayDirCtx>(mdcache, f,
-     [this, f, on_finish](int r) {
+     [this,on_finish](int r) {
       // completion callback, will be called when scan is done
       dout(10) << "dump_stray done" <<  dendl;
       bufferlist bl;
