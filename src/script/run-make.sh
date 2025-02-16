@@ -56,7 +56,7 @@ function prepare() {
         if in_jenkins; then
             if ! type clang-16 > /dev/null 2>&1 ; then
                 ci_debug "Getting clang-16"
-                wget https://apt.llvm.org/llvm.sh
+                wget https://download.ceph.com/qa/llvm.sh
                 chmod +x llvm.sh
                 $DRY_RUN sudo ./llvm.sh 16
                 rm llvm.sh
