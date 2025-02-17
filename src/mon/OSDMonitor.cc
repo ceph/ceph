@@ -5224,7 +5224,7 @@ void OSDMonitor::tick()
   }
 
   // expire blocklisted items?
-  for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blocklist.begin();
+  for (auto p = osdmap.blocklist.begin();
        p != osdmap.blocklist.end();
        ++p) {
     if (p->second < now) {
@@ -5992,7 +5992,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     if (f)
       f->open_array_section("blocklist");
 
-    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blocklist.begin();
+    for (auto p = osdmap.blocklist.begin();
 	 p != osdmap.blocklist.end();
 	 ++p) {
       if (f) {

@@ -11,6 +11,8 @@
 
 #include "include/ceph_assert.h"
 
+#include <unordered_map>
+
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
 #define BUFFER_MEMORY_WEIGHT CEPH_PAGE_SHIFT  // memory usage of BufferHead, count in (1<<n)
 				 /// while holding the lock
@@ -2463,12 +2465,12 @@ uint64_t ObjectCacher::release_all()
   ldout(cct, 10) << "release_all" << dendl;
   uint64_t unclean = 0;
 
-  vector<ceph::unordered_map<sobject_t, Object*> >::iterator i
+  vector<std::unordered_map<sobject_t, Object*> >::iterator i
     = objects.begin();
   while (i != objects.end()) {
-    ceph::unordered_map<sobject_t, Object*>::iterator p = i->begin();
+    auto p = i->begin();
     while (p != i->end()) {
-      ceph::unordered_map<sobject_t, Object*>::iterator n = p;
+      auto n = p;
       ++n;
 
       Object *ob = p->second;
@@ -2603,12 +2605,10 @@ void ObjectCacher::verify_stats() const
 
   loff_t clean = 0, zero = 0, dirty = 0, rx = 0, tx = 0, missing = 0,
     error = 0;
-  for (vector<ceph::unordered_map<sobject_t, Object*> >::const_iterator i
-	 = objects.begin();
+  for (auto i = objects.begin();
        i != objects.end();
        ++i) {
-    for (ceph::unordered_map<sobject_t, Object*>::const_iterator p
-	   = i->begin();
+    for (auto p = i->begin();
 	 p != i->end();
 	 ++p) {
       Object *ob = p->second;
