@@ -39,6 +39,7 @@
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/util.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/PriorityCache.h"

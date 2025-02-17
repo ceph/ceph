@@ -19,6 +19,8 @@
 #include "common/perf_counters_collection.h"
 #endif
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluefs
 #undef dout_prefix
