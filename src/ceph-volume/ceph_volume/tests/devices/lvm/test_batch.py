@@ -3,7 +3,7 @@ import json
 import random
 
 from argparse import ArgumentError, Namespace
-from mock import MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from ceph_volume.devices.lvm import batch
 from ceph_volume.util import arg_validators, disk, device
