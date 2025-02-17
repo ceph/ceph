@@ -110,7 +110,7 @@ general form of the command above:
 
    "3.64 TB"
 
-This means that the exact device size is 3.64 * 1000, or 3640GB.
+This means that the exact device size is 3.64 TB, or 3640GB.
 
 This procedure was developed by Frédéric Nass. See `this thread on the
 [ceph-users] mailing list
