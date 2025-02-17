@@ -13,6 +13,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <boost/algorithm/string.hpp>
+#include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
 #include "common/dout.h"
 
@@ -545,12 +547,13 @@ public:
   }
 
   // connect to a broker, or reuse an existing connection if already connected
-  bool connect(std::string& broker,
-          const std::string& url, 
-          bool use_ssl,
-          bool verify_ssl,
-          boost::optional<const std::string&> ca_location,
-          boost::optional<const std::string&> mechanism) {
+  bool connect(std::string& broker_list,
+               const std::string& url,
+               bool use_ssl,
+               bool verify_ssl,
+               boost::optional<const std::string&> ca_location,
+               boost::optional<const std::string&> mechanism,
+               boost::optional<const std::string&> brokers) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -558,7 +561,7 @@ public:
 
     std::string user;
     std::string password;
-    if (!parse_url_authority(url, broker, user, password)) {
+    if (!parse_url_authority(url, broker_list, user, password)) {
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: URL parsing failed" << dendl;
       return false;
@@ -572,8 +575,13 @@ public:
       return false;
     }
 
+    if (brokers.has_value()) {
+      broker_list.append(",");
+      broker_list.append(brokers.get());
+    }
+
     std::lock_guard lock(connections_lock);
-    const auto it = connections.find(broker);
+    const auto it = connections.find(broker_list);
     // note that ssl vs. non-ssl connection to the same host are two separate connections
     if (it != connections.end()) {
       // connection found - return even if non-ok
@@ -588,13 +596,13 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker, use_ssl, verify_ssl, ca_location, user, password, mechanism);
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
     }
     ++connection_count;
-    connections.emplace(broker, std::move(conn));
+    connections.emplace(broker_list, std::move(conn));
 
     ldout(cct, 10) << "Kafka connect: new connection is created. Total connections: " << connection_count << dendl;
     return true;
@@ -694,12 +702,17 @@ void shutdown() {
   s_manager = nullptr;
 }
 
-bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl,
-        boost::optional<const std::string&> ca_location,
-        boost::optional<const std::string&> mechanism) {
+bool connect(std::string& broker_list,
+             const std::string& url,
+             bool use_ssl,
+             bool verify_ssl,
+             boost::optional<const std::string&> ca_location,
+             boost::optional<const std::string&> mechanism,
+             boost::optional<const std::string&> brokers) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
-  return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism);
+  return s_manager->connect(broker_list, url, use_ssl, verify_ssl, ca_location,
+                            mechanism, brokers);
 }
 
 int publish(const std::string& conn_name,
