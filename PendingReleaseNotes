@@ -72,6 +72,10 @@
   headers only when the `read-stats` querystring is explicitly included in the
   API request.
 
+* erasure-code: The default plugin for new erasure coded pools has been changed
+  from Jerasure to ISA-L. ISA-L is recommended for new pools because the 
+  Jerasure library is no longer maintained.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
