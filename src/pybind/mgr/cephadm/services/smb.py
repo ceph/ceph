@@ -114,7 +114,10 @@ class SMBService(CephService):
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
-        return config_blobs, []
+
+        deps = []
+        deps.append(smb_spec.placement.count)
+        return config_blobs, deps
 
     def config_dashboard(
         self, daemon_descrs: List[DaemonDescription]
