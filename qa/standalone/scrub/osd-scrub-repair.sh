@@ -108,6 +108,30 @@ function TEST_corrupt_and_repair_replicated() {
 }
 
 #
+# Allow operator-initiated scrubs to be scheduled even when some recovering is still
+# undergoing on the same OSD
+#
+function TEST_allow_oper_initiated_scrub_during_recovery() {
+    local dir=$1
+    local -A cluster_conf=(
+        ['osds_num']="2"
+        ['pgs_in_pool']="4"
+        ['pool_name']="nopool"
+        ['pool_default_size']="2"
+        ['extras']="--osd_scrub_during_recovery=false \
+                    --osd_debug_pretend_recovery_active=true"
+    )
+
+    standard_scrub_cluster $dir cluster_conf
+    local poolname=rbd
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    add_something $dir $poolname || return 1
+    oper_scrub_and_schedule $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
+}
+
+#
 # Allow repair to be scheduled when some recovering is still undergoing on the same OSD
 #
 function TEST_allow_repair_during_recovery() {
@@ -117,10 +141,8 @@ function TEST_allow_repair_during_recovery() {
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 --osd_scrub_during_recovery=false \
-                   --osd_repair_during_recovery=true \
                    --osd_debug_pretend_recovery_active=true || return 1
     run_osd $dir 1 --osd_scrub_during_recovery=false \
-                   --osd_repair_during_recovery=true \
                    --osd_debug_pretend_recovery_active=true || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
@@ -132,23 +154,60 @@ function TEST_allow_repair_during_recovery() {
 #
 # Skip non-repair scrub correctly during recovery
 #
+# Note: forgoing the automatic creation of a pool in standard_scrub_cluster as
+#       the test requires a specific RBD pool.
 function TEST_skip_non_repair_during_recovery() {
     local dir=$1
-    local poolname=rbd
+    local -A cluster_conf=(
+        ['osds_num']="2"
+        ['pgs_in_pool']="4"
+        ['pool_name']="nopool"
+        ['pool_default_size']="2"
+        ['extras']="--osd_scrub_during_recovery=false --osd_debug_pretend_recovery_active=true"
+    )
 
-    run_mon $dir a --osd_pool_default_size=2 || return 1
-    run_mgr $dir x || return 1
-    run_osd $dir 0 --osd_scrub_during_recovery=false \
-                   --osd_repair_during_recovery=true \
-                   --osd_debug_pretend_recovery_active=true || return 1
-    run_osd $dir 1 --osd_scrub_during_recovery=false \
-                   --osd_repair_during_recovery=true \
-                   --osd_debug_pretend_recovery_active=true || return 1
+    standard_scrub_cluster $dir cluster_conf
+    local poolname=rbd
     create_rbd_pool || return 1
     wait_for_clean || return 1
 
     add_something $dir $poolname || return 1
     scrub_and_not_schedule $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
+}
+
+
+function oper_scrub_and_schedule() {
+    local dir=$1
+    local poolname=$2
+    local osd=$3
+
+    #
+    # 1) start an operator-initiated scrub
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    local last_scrub=$(get_last_scrub_stamp $pg)
+    ceph tell $pg scrub
+
+    #
+    # 2) Assure the scrub was executed
+    #
+    sleep 3
+    for ((i=0; i < 3; i++)); do
+        if test "$(get_last_scrub_stamp $pg)" '>' "$last_scrub" ; then
+            break
+        fi
+        if test "$(get_last_scrub_stamp $pg)" '==' "$last_scrub" ; then
+            return 1
+        fi
+        sleep 1
+    done
+
+    #
+    # 3) Access to the file must OK
+    #
+    objectstore_tool $dir $osd SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
 }
 
 function scrub_and_not_schedule() {
@@ -166,6 +225,7 @@ function scrub_and_not_schedule() {
     #
     # 2) Assure the scrub is not scheduled
     #
+    sleep 3
     for ((i=0; i < 3; i++)); do
         if test "$(get_last_scrub_stamp $pg)" '>' "$last_scrub" ; then
             return 1
@@ -218,9 +278,9 @@ function corrupt_and_repair_two() {
 
 #
 # 1) add an object
-# 2) remove the corresponding file from a designated OSD
+# 2) remove the corresponding object from a designated OSD
 # 3) repair the PG
-# 4) check that the file has been restored in the designated OSD
+# 4) check that the object has been restored in the designated OSD
 #
 function corrupt_and_repair_one() {
     local dir=$1

@@ -710,7 +710,7 @@ function wait_initial_scrubs() {
     tout=20
     while [ $tout -gt 0 ] ; do
       sleep 0.5
-      (( extr_dbg >= 2 )) && ceph pg dump pgs --format=json-pretty | \
+      (( extr_dbg >= 1 )) && ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
       not_done=$(ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})' | wc -l )
@@ -749,7 +749,7 @@ function TEST_abort_periodic_for_operator() {
     )
     local extr_dbg=1 # note: 3 and above leave some temp files around
 
-    standard_scrub_wpq_cluster "$dir" cluster_conf 3 || return 1
+    standard_scrub_wpq_cluster "$dir" cluster_conf 0 || return 1
     local poolid=${cluster_conf['pool_id']}
     local poolname=${cluster_conf['pool_name']}
     echo "Pool: $poolname : $poolid"
