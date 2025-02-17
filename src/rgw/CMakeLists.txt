@@ -150,76 +150,79 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc
-  driver/rados/account.cc
-  driver/rados/buckets.cc
   rgw_bucket_logging.cc
-  rgw_rest_bucket_logging.cc
-  driver/rados/cls_fifo_legacy.cc
-  driver/rados/group.cc
-  driver/rados/groups.cc
-  driver/rados/rgw_bucket.cc
-  driver/rados/rgw_bucket_sync.cc
-  driver/rados/rgw_cr_rados.cc
-  driver/rados/rgw_cr_tools.cc
-  driver/rados/rgw_d3n_datacache.cc
-  driver/rados/rgw_datalog.cc
-  driver/rados/rgw_datalog_notify.cc
-  driver/rados/rgw_data_sync.cc
-  driver/rados/rgw_etag_verifier.cc
-  driver/rados/rgw_gc.cc
-  driver/rados/rgw_gc_log.cc
-  driver/rados/rgw_lc_tier.cc
-  driver/rados/rgw_log_backing.cc
-  driver/rados/rgw_metadata.cc
-  driver/rados/rgw_notify.cc
-  driver/rados/rgw_obj_manifest.cc
-  driver/rados/rgw_object_expirer_core.cc
-  driver/rados/rgw_otp.cc
-  driver/rados/rgw_period.cc
-  driver/rados/rgw_pubsub_push.cc
-  driver/rados/rgw_putobj_processor.cc
-  driver/rados/rgw_rados.cc
-  driver/rados/rgw_reshard.cc
-  driver/rados/rgw_rest_bucket.cc
-  driver/rados/rgw_rest_log.cc
-  driver/rados/rgw_rest_realm.cc
-  driver/rados/rgw_rest_user.cc
-  driver/rados/rgw_sal_rados.cc
-  driver/rados/rgw_service.cc
-  driver/rados/rgw_sync.cc
-  driver/rados/rgw_sync_counters.cc
-  driver/rados/rgw_sync_error_repo.cc
-  driver/rados/rgw_sync_module.cc
-  driver/rados/rgw_sync_module_aws.cc
-  driver/rados/rgw_sync_module_es.cc
-  driver/rados/rgw_sync_module_es_rest.cc
-  driver/rados/rgw_sync_module_log.cc
-  driver/rados/rgw_sync_trace.cc
-  driver/rados/rgw_tools.cc
-  driver/rados/rgw_trim_bilog.cc
-  driver/rados/rgw_trim_datalog.cc
-  driver/rados/rgw_trim_mdlog.cc
-  driver/rados/rgw_user.cc
-  driver/rados/rgw_zone.cc
-  driver/rados/role.cc
-  driver/rados/roles.cc
-  driver/rados/sync_fairness.cc
-  driver/rados/topic.cc
-  driver/rados/topic_migration.cc
-  driver/rados/topics.cc
-  driver/rados/users.cc)
+  rgw_rest_bucket_logging.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
-  driver/json_config/store.cc
-  driver/rados/config/impl.cc
-  driver/rados/config/period.cc
-  driver/rados/config/period_config.cc
-  driver/rados/config/realm.cc
-  driver/rados/config/store.cc
-  driver/rados/config/zone.cc
-  driver/rados/config/zonegroup.cc)
+  driver/json_config/store.cc)
 
+if(WITH_RADOSGW_RADOS)
+  list(APPEND librgw_common_srcs
+          driver/rados/account.cc
+          driver/rados/buckets.cc
+          driver/rados/cls_fifo_legacy.cc
+          driver/rados/config/impl.cc
+          driver/rados/config/period.cc
+          driver/rados/config/period_config.cc
+          driver/rados/config/realm.cc
+          driver/rados/config/store.cc
+          driver/rados/config/zone.cc
+          driver/rados/config/zonegroup.cc
+          driver/rados/group.cc
+          driver/rados/groups.cc
+          driver/rados/rgw_bucket.cc
+          driver/rados/rgw_bucket_sync.cc
+          driver/rados/rgw_cr_rados.cc
+          driver/rados/rgw_cr_tools.cc
+          driver/rados/rgw_d3n_datacache.cc
+          driver/rados/rgw_data_sync.cc
+          driver/rados/rgw_datalog.cc
+          driver/rados/rgw_datalog_notify.cc
+          driver/rados/rgw_etag_verifier.cc
+          driver/rados/rgw_gc.cc
+          driver/rados/rgw_gc_log.cc
+          driver/rados/rgw_lc_tier.cc
+          driver/rados/rgw_log_backing.cc
+          driver/rados/rgw_metadata.cc
+          driver/rados/rgw_notify.cc
+          driver/rados/rgw_obj_manifest.cc
+          driver/rados/rgw_object_expirer_core.cc
+          driver/rados/rgw_otp.cc
+          driver/rados/rgw_period.cc
+          driver/rados/rgw_pubsub_push.cc
+          driver/rados/rgw_putobj_processor.cc
+          driver/rados/rgw_rados.cc
+          driver/rados/rgw_reshard.cc
+          driver/rados/rgw_rest_bucket.cc
+          driver/rados/rgw_rest_log.cc
+          driver/rados/rgw_rest_realm.cc
+          driver/rados/rgw_rest_user.cc
+          driver/rados/rgw_sal_rados.cc
+          driver/rados/rgw_service.cc
+          driver/rados/rgw_sync.cc
+          driver/rados/rgw_sync_counters.cc
+          driver/rados/rgw_sync_error_repo.cc
+          driver/rados/rgw_sync_module.cc
+          driver/rados/rgw_sync_module_aws.cc
+          driver/rados/rgw_sync_module_es.cc
+          driver/rados/rgw_sync_module_es_rest.cc
+          driver/rados/rgw_sync_module_log.cc
+          driver/rados/rgw_sync_trace.cc
+          driver/rados/rgw_tools.cc
+          driver/rados/rgw_trim_bilog.cc
+          driver/rados/rgw_trim_datalog.cc
+          driver/rados/rgw_trim_mdlog.cc
+          driver/rados/rgw_user.cc
+          driver/rados/rgw_zone.cc
+          driver/rados/role.cc
+          driver/rados/roles.cc
+          driver/rados/sync_fairness.cc
+          driver/rados/topic.cc
+          driver/rados/topic_migration.cc
+          driver/rados/topics.cc
+          driver/rados/users.cc)
+endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
