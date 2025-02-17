@@ -321,6 +321,8 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_REPAIR_INODESTATS: return "repair_inodestats";
 	case CEPH_MDS_OP_QUIESCE_PATH: return "quiesce_path";
 	case CEPH_MDS_OP_QUIESCE_INODE: return "quiesce_inode";
+	case CEPH_MDS_OP_LOCK_PATH: return "lock_path";
+	case CEPH_MDS_OP_UNINLINE_DATA: return "uninline_data";
 	}
 	return "???";
 }
