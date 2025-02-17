@@ -93,7 +93,7 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
   auto [commit_fut, reply] = co_await pg->handle_rep_op(req);
 
   // Transitions from OrderedExclusive->OrderedConcurrent cannot block
-  this->template enter_stage_sync(repop_pipeline(*pg).wait_commit);
+  this->enter_stage_sync(repop_pipeline(*pg).wait_commit);
 
   co_await std::move(commit_fut);
 
