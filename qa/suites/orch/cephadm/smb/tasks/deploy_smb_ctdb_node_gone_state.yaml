@@ -56,6 +56,8 @@ tasks:
 - cephadm.exec:
     host.a:
       - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.modusr1\")))[-1].name' > /tmp/svcname"
+      - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb listnodes > /tmp/ctdb_listnodes"
+      - cat /tmp/ctdb_listnodes
       - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
       - cat /tmp/ctdb_status
       - grep 'pnn:0 .*OK' /tmp/ctdb_status
