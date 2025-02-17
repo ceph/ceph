@@ -701,7 +701,15 @@ auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   s->info.args.append("sub", this->sub);
-  s->info.args.append("aud", this->aud);
+  //this is needed for AssumeRoleWithWebIdentityResponse
+  //but if aud is not present in the token, client id can be used
+  //from AWS docs - "The intended audience (also known as client ID) of the web identity token."
+  //https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+  if (this->aud.empty() && !this->client_id.empty()) {
+    s->info.args.append("aud", this->client_id);
+  } else {
+    s->info.args.append("aud", this->aud);
+  }
   s->info.args.append("provider_id", this->iss);
   s->info.args.append("client_id", this->client_id);
 
