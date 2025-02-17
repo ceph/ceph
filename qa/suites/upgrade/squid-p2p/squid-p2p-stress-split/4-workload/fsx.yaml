@@ -1,0 +1,8 @@
+meta:
+- desc: |
+   run basic fsx tests for rbd
+stress-tasks:
+- rbd_fsx:
+    clients: [client.0]
+    size: 134217728
+- print: "**** done rbd_fsx 4-workload"
