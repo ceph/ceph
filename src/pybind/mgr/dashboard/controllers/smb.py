@@ -84,7 +84,9 @@ SHARE_SCHEMA = {
     "cephfs": ({
         "volume": (str, "Name of the CephFS file system"),
         "path": (str, "Path within the CephFS file system"),
-        "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'")
+        "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'"),
+        "subvolumegroup": (str, "Subvolume Group in CephFS file system"),
+        "subvolume": (str, "Subvolume within the CephFS file system"),
     }, "Configuration for the CephFS share")
 }
 
@@ -122,6 +124,30 @@ USERSGROUPS_SCHEMA = {
 }
 
 LIST_USERSGROUPS_SCHEMA = [USERSGROUPS_SCHEMA]
+
+SHARE_SCHEMA_RESULTS = {
+    "results": ([{
+        "resource": ({
+            "resource_type": (str, "ceph.smb.share"),
+            "cluster_id": (str, "Unique identifier for the cluster"),
+            "share_id": (str, "Unique identifier for the share"),
+            "intent": (str, "Desired state of the resource, e.g., 'present' or 'removed'"),
+            "name": (str, "Name of the share"),
+            "readonly": (bool, "Indicates if the share is read-only"),
+            "browseable": (bool, "Indicates if the share is browseable"),
+            "cephfs": ({
+                "volume": (str, "Name of the CephFS file system"),
+                "path": (str, "Path within the CephFS file system"),
+                "subvolumegroup": (str, "Subvolume Group in CephFS file system"),
+                "subvolume": (str, "Subvolume within the CephFS file system"),
+                "provider": (str, "Provider of the CephFS share, e.g., 'samba-vfs'")
+            }, "Configuration for the CephFS share")
+        }, "Resource details"),
+        "state": (str, "State of the resource"),
+        "success": (bool, "Indicates whether the operation was successful")
+    }], "List of results with resource details"),
+    "success": (bool, "Overall success status of the operation")
+}
 
 
 def raise_on_failure(func):
@@ -237,6 +263,29 @@ class SMBShare(RESTController):
             'show',
             [f'{self._resource}.{cluster_id}' if cluster_id else self._resource])
         return res['resources'] if 'resources' in res else [res]
+
+    @raise_on_failure
+    @CreatePermission
+    @EndpointDoc("Create smb share",
+                 parameters={
+                     'share_resource': (str, 'share_resource')
+                 },
+                 responses={201: SHARE_SCHEMA_RESULTS})
+    def create(self, share_resource: Share) -> Simplified:
+        """
+        Create an smb share
+
+        :param share_resource: Dict share data
+        :return: Returns share resource.
+        :rtype: Dict[str, Any]
+        """
+        try:
+            return mgr.remote(
+                'smb',
+                'apply_resources',
+                json.dumps(share_resource)).to_simplified()
+        except RuntimeError as e:
+            raise DashboardException(e, component='smb')
 
     @raise_on_failure
     @DeletePermission

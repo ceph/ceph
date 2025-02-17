@@ -28,11 +28,13 @@ import { CommonModule } from '@angular/common';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterModule } from '@angular/router';
 import { NgModule } from '@angular/core';
+import { SmbShareFormComponent } from './smb-share-form/smb-share-form.component';
 
 import { SmbUsersgroupsListComponent } from './smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbTabsComponent } from './smb-tabs/smb-tabs.component';
 import { SmbJoinAuthListComponent } from './smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsDetailsComponent } from './smb-usersgroups-details/smb-usersgroups-details.component';
+import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 
 @NgModule({
   imports: [
@@ -71,8 +73,10 @@ import { SmbUsersgroupsDetailsComponent } from './smb-usersgroups-details/smb-us
     SmbUsersgroupsListComponent,
     SmbUsersgroupsDetailsComponent,
     SmbTabsComponent,
-    SmbJoinAuthListComponent
-  ]
+    SmbJoinAuthListComponent,
+    SmbShareFormComponent
+  ],
+  providers: [provideCharts(withDefaultRegisterables())]
 })
 export class SmbModule {
   constructor(private iconService: IconService) {

@@ -12,23 +12,44 @@ export interface SMBCluster {
   public_addrs?: PublicAddress;
 }
 
-export interface RequestModel {
+export interface ClusterRequestModel {
   cluster_resource: SMBCluster;
+}
+
+export interface ShareRequestModel {
+  share_resource: SMBShare;
+}
+
+interface SMBCephfs {
+  volume: string;
+  path: string;
+  subvolumegroup?: string;
+  subvolume?: string;
+  provider?: string;
+}
+
+interface SMBShareLoginControl {
+  name: string;
+  access: 'read' | 'read-write' | 'none' | 'admin';
+  category?: 'user' | 'group';
+}
+
+export interface Filesystem {
+  id: string;
+  name: string;
 }
 
 export interface DomainSettings {
   realm?: string;
   join_sources?: JoinSource[];
 }
-
-export interface JoinSource {
-  source_type: string;
-  ref: string;
-}
-
 export interface PublicAddress {
   address: string;
   destination: string;
+}
+export interface JoinSource {
+  source_type: string;
+  ref: string;
 }
 
 export const CLUSTERING = {
@@ -53,10 +74,11 @@ export const PLACEMENT = {
 };
 
 export interface SMBShare {
+  resource_type: string;
   cluster_id: string;
   share_id: string;
-  intent: string;
   cephfs: SMBCephfs;
+  intent?: string;
   name?: string;
   readonly?: boolean;
   browseable?: boolean;
@@ -116,3 +138,7 @@ interface Value {
 type Intent = 'present' | 'removed';
 
 export const CLUSTER_RESOURCE = 'ceph.smb.cluster';
+
+export const SHARE_RESOURCE = 'ceph.smb.share';
+
+export const PROVIDER = 'samba-vfs';
