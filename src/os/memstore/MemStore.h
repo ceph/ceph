@@ -18,9 +18,10 @@
 
 #include <atomic>
 #include <mutex>
+#include <unordered_map>
+
 #include <boost/intrusive_ptr.hpp>
 
-#include "include/unordered_map.h"
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "os/ObjectStore.h"
@@ -93,7 +94,7 @@ public:
     int bits = 0;
     CephContext *cct;
     bool use_page_set;
-    ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
+    std::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     std::map<ghobject_t, ObjectRef> object_map;        ///< for iteration
     std::map<std::string,ceph::buffer::ptr> xattr;
     /// for object_{map,hash}
@@ -186,7 +187,7 @@ private:
   class OmapIteratorImpl;
 
 
-  ceph::unordered_map<coll_t, CollectionRef> coll_map;
+  std::unordered_map<coll_t, CollectionRef> coll_map;
   /// rwlock to protect coll_map
   ceph::shared_mutex coll_lock{
     ceph::make_shared_mutex("MemStore::coll_lock")};

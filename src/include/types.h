@@ -46,9 +46,6 @@ extern "C" {
 #include <ostream>
 #include <iomanip>
 
-
-#include "include/unordered_map.h"
-
 #include "object.h"
 #include "intarith.h"
 
@@ -296,8 +293,8 @@ inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_
 /*
  * comparators for stl containers
  */
-// for ceph::unordered_map:
-//   ceph::unordered_map<const char*, long, hash<const char*>, eqstr> vals;
+// for std::unordered_map:
+//   std::unordered_map<const char*, long, hash<const char*>, eqstr> vals;
 struct eqstr
 {
   bool operator()(const char* s1, const char* s2) const

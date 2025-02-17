@@ -16,13 +16,13 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
-#include "include/unordered_map.h"
 
 #include <algorithm> // for std::for_each()
 #include <bitset>
 #include <map>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
@@ -41,12 +41,12 @@ struct lockdep_stopper_t {
 static pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
 static CephContext *g_lockdep_ceph_ctx = NULL;
 static lockdep_stopper_t lockdep_stopper;
-static ceph::unordered_map<std::string, int> lock_ids;
+static std::unordered_map<std::string, int> lock_ids;
 static std::map<int, std::string> lock_names;
 static std::map<int, int> lock_refs;
 static constexpr size_t MAX_LOCKS = 128 * 1024;   // increase me as needed
 static std::bitset<MAX_LOCKS> free_ids; // bit set = free
-static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
+static std::unordered_map<pthread_t, std::map<int, ceph::BackTrace*>> held;
 static constexpr size_t NR_LOCKS = 4096; // the initial number of locks
 static std::vector<std::bitset<MAX_LOCKS>> follows(NR_LOCKS); // follows[a][b] means b taken after a
 static std::vector<std::map<int,ceph::BackTrace *>> follows_bt(NR_LOCKS);
@@ -165,7 +165,7 @@ static int _lockdep_register(const char *name)
 
   if (!g_lockdep)
     return id;
-  ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
+  auto p = lock_ids.find(name);
   if (p == lock_ids.end()) {
     id = lockdep_get_free_id();
     if (id < 0) {

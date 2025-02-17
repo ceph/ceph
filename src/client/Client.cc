@@ -524,7 +524,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
   did.insert(in);
   if (in->dir) {
     ldout(cct, 1) << "  dir " << in->dir << " size " << in->dir->dentries.size() << dendl;
-    for (ceph::unordered_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
+    for (auto it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          ++it) {
       ldout(cct, 1) << "   " << in->ino << " dn " << it->first << " " << it->second << " ref " << it->second->ref << dendl;
@@ -552,9 +552,7 @@ void Client::dump_cache(Formatter *f)
     dump_inode(f, root.get(), did, true);
 
   // make a second pass to catch anything disconnected
-  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
-       it != inode_map.end();
-       ++it) {
+  for (auto it = inode_map.begin(); it != inode_map.end(); ++it) {
     if (did.count(it->second))
       continue;
     dump_inode(f, it->second, did, true);
@@ -1876,7 +1874,7 @@ int Client::verify_reply_trace(int r, MetaSession *session,
   bufferlist extra_bl;
   inodeno_t created_ino;
   bool got_created_ino = false;
-  ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
+  std::unordered_map<vinodeno_t, Inode*>::iterator p;
 
   extra_bl = reply->get_extra_bl();
   if (extra_bl.length() >= 8) {
@@ -2858,9 +2856,7 @@ void Client::_handle_full_flag(int64_t pool)
   // field with -ENOSPC as long as we're sure all the ops we cancelled were
   // affecting this pool, and all the objectsets we're purging were also
   // in this pool.
-  for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
-       i != inode_map.end(); ++i)
-  {
+  for (auto i = inode_map.begin(); i != inode_map.end(); ++i) {
     Inode *inode = i->second;
     if (inode->oset.dirty_or_tx
         && (pool == -1 || inode->layout.pool_id == pool)) {
@@ -3178,10 +3174,8 @@ void Client::send_reconnect(MetaSession *session)
   bool allow_multi = session->mds_features.test(CEPHFS_FEATURE_MULTI_RECONNECT);
 
   // i have an open session.
-  ceph::unordered_set<inodeno_t> did_snaprealm;
-  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
-       p != inode_map.end();
-       ++p) {
+  std::unordered_set<inodeno_t> did_snaprealm;
+  for (auto p = inode_map.begin(); p != inode_map.end(); ++p) {
     Inode *in = p->second;
     auto it = in->caps.find(mds);
     if (it != in->caps.end()) {
@@ -4726,7 +4720,7 @@ void Client::_invalidate_kernel_dcache()
 
   if (can_invalidate_dentries) {
     if (dentry_invalidate_cb && root->dir) {
-      for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+      for (auto p = root->dir->dentries.begin();
          p != root->dir->dentries.end();
          ++p) {
        if (p->second->inode)
@@ -10208,7 +10202,7 @@ int Client::_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode)
 
   int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
   if (r == 0 && inode != NULL) {
-    unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+    auto p = inode_map.find(vino);
     ceph_assert(p != inode_map.end());
     *inode = p->second;
     _ll_get(*inode);
@@ -13244,7 +13238,7 @@ int Client::ll_lookup_vino(
   ldout(cct, 3) << __func__ << " " << vino << dendl;
 
   // Check the cache first
-  unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+  auto p = inode_map.find(vino);
   if (p != inode_map.end()) {
     *inode = p->second;
     _ll_get(*inode);
@@ -13400,10 +13394,8 @@ void Client::_ll_drop_pins()
 {
   ldout(cct, 10) << __func__ << dendl;
   std::set<InodeRef> to_be_put; //this set will be deconstructed item by item when exit
-  ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
-  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
-       it != inode_map.end();
-       it = next) {
+  std::unordered_map<vinodeno_t, Inode*>::iterator next;
+  for (auto it = inode_map.begin(); it != inode_map.end(); it = next) {
     Inode *in = it->second;
     next = it;
     ++next;
@@ -13480,7 +13472,7 @@ Inode *Client::ll_get_inode(ino_t ino)
   std::scoped_lock lock(client_lock);
 
   vinodeno_t vino = _map_faked_ino(ino);
-  unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+  auto p = inode_map.find(vino);
   if (p == inode_map.end())
     return NULL;
   Inode *in = p->second;
@@ -13499,7 +13491,7 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
 
   std::scoped_lock lock(client_lock);
 
-  unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+  auto p = inode_map.find(vino);
   if (p == inode_map.end())
     return NULL;
   Inode *in = p->second;
