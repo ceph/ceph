@@ -9,35 +9,29 @@ static uint64_t total = 0;
 namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
-  dedup_table_t::dedup_table_t(uint32_t _entries_count, const DoutPrefixProvider* _dpp)
+  dedup_table_t::dedup_table_t(const DoutPrefixProvider* _dpp,
+			       uint8_t *p_slab,
+			       uint64_t slab_size)
   {
     dpp = _dpp;
-    entries_count = _entries_count;
-    hash_tab = new table_entry_t[entries_count];
-    ceph_assert(hash_tab);
-    reset();
+    memset(p_slab, 0, slab_size);
+    hash_tab = (table_entry_t*)p_slab;
+    entries_count = slab_size/sizeof(table_entry_t);
+    occupied_count = 0;
   }
 
   //---------------------------------------------------------------------------
   dedup_table_t::~dedup_table_t()
   {
-    if (hash_tab) {
-      delete [] hash_tab;
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  void dedup_table_t::reset()
-  {
-    char *p = (char*)hash_tab;
-    memset(p, 0, sizeof(table_entry_t)*entries_count);
+    entries_count  = 0;
     occupied_count = 0;
-    stat_counters_reset();
+    hash_tab       = nullptr;
   }
 
   //---------------------------------------------------------------------------
   void dedup_table_t::remove_singletons_and_redistribute_keys()
   {
+    ceph_assert(hash_tab);
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
 	continue;
@@ -86,20 +80,9 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::stat_counters_reset()
-  {
-    redistributed_count = 0;
-    redistributed_search_total = 0;
-    redistributed_search_max = 0;
-    redistributed_loopback = 0;
-    redistributed_perfect = 0;
-    redistributed_clear = 0;
-    redistributed_not_needed = 0;
-  }
-
-  //---------------------------------------------------------------------------
   uint32_t dedup_table_t::find_entry(const key_t *p_key)
   {
+    ceph_assert(hash_tab);
     uint64_t count = 1;
     uint32_t idx = p_key->hash() % entries_count;
 
@@ -117,6 +100,7 @@ namespace rgw::dedup {
   int dedup_table_t::add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 			       bool shared_manifest, bool valid_sha256)
   {
+    ceph_assert(hash_tab);
     if (occupied_count < entries_count) {
       occupied_count++;
     }
@@ -154,9 +138,25 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static void __attribute__ ((noinline))
+  report_bad_access(const DoutPrefixProvider* dpp, const char *caller)
+  {
+    ldpp_dout(dpp, 0) << "::ERR: " << caller
+		      << "() was called on uninitialized disk_block_array_t\n"
+		      << dendl;
+  }
+
+  //---------------------------------------------------------------------------
   int dedup_table_t::update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 				  bool shared_manifest, bool valid_sha256)
   {
+    ceph_assert(hash_tab);
+    // should never happen!
+    if (unlikely(entries_count == 0)) {
+      report_bad_access(dpp, __func__);
+      return -1;
+    }
+
     uint32_t idx = find_entry(p_key);
     ceph_assert(hash_tab[idx].key == *p_key);
     ceph_assert(hash_tab[idx].val.is_occupied());
@@ -180,6 +180,13 @@ namespace rgw::dedup {
 					      disk_block_id_t block_id,
 					      record_id_t rec_id)
   {
+    ceph_assert(hash_tab);
+    // should never happen!
+    if (unlikely(entries_count == 0)) {
+      report_bad_access(dpp, __func__);
+      return -1;
+    }
+
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
@@ -195,6 +202,13 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int dedup_table_t::get_val(const key_t *p_key, struct value_t *p_val /*OUT*/)
   {
+    ceph_assert(hash_tab);
+    // should never happen!
+    if (unlikely(entries_count == 0)) {
+      report_bad_access(dpp, __func__);
+      return -1;
+    }
+
     uint32_t idx = find_entry(p_key);
     const value_t &val = hash_tab[idx].val;
     if (!val.is_occupied()) {
@@ -208,6 +222,13 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int dedup_table_t::remove_objects_not_protected_by_md5(uint64_t max_allowed)
   {
+    ceph_assert(hash_tab);
+    // should never happen!
+    if (unlikely(entries_count == 0)) {
+      report_bad_access(dpp, __func__);
+      return -1;
+    }
+
     std::unique_ptr<std::vector<uint32_t>> buckets;
 #if 0
     if (!buckets) {
@@ -223,6 +244,7 @@ namespace rgw::dedup {
 				       uint64_t *p_duplicate_count,
 				       uint64_t *p_duplicate_bytes_approx)
   {
+    ceph_assert(hash_tab);
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
 	continue;
@@ -245,12 +267,6 @@ namespace rgw::dedup {
     }
   }
 
-  //---------------------------------------------------------------------------
-  void dedup_table_t::get_stats(uint32_t *p_entries_count, uint32_t *p_occupied_count)
-  {
-    *p_entries_count = entries_count;
-    *p_occupied_count = occupied_count;
-  }
 } // namespace rgw::dedup
 
 #if 0

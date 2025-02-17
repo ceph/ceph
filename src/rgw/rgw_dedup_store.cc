@@ -280,12 +280,57 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::fill_disk_record(disk_record_t          *p_rec,
-					   const rgw::sal::Bucket *p_bucket,
-					   const rgw::sal::Object *p_obj,
-					   const parsed_etag_t    *p_parsed_etag,
-					   const std::string      &obj_name,
-					   uint64_t                obj_size)
+  disk_block_seq_t::disk_block_seq_t()
+  {
+    deactivate();
+  }
+
+  //---------------------------------------------------------------------------
+  disk_block_seq_t::~disk_block_seq_t()
+  {
+    deactivate();
+  }
+
+  //---------------------------------------------------------------------------
+  void disk_block_seq_t::deactivate()
+  {
+    p_arr        = nullptr;
+    p_stats      = nullptr;
+    p_curr_block = nullptr;
+    dpp          = nullptr;
+    d_seq_number = 0;
+    d_worker_id  = NULL_WORK_SHARD;
+    d_md5_shard  = NULL_MD5_SHARD;
+  }
+
+  //---------------------------------------------------------------------------
+  void disk_block_seq_t::activate(const DoutPrefixProvider* dpp_in,
+				  disk_block_t *p_arr_in,
+				  work_shard_t worker_id,
+				  md5_shard_t md5_shard,
+				  worker_stats_t *p_stats_in)
+  {
+    dpp               = dpp_in;
+    p_arr             = p_arr_in;
+    d_worker_id       = worker_id;
+    d_md5_shard       = md5_shard;
+    p_stats           = p_stats_in;
+    d_seq_number      = 0;
+
+    ceph_assert(p_arr);
+
+    // TBD: get rid of this wasteful memset() call
+    // closing block/record properly should be enough
+    memset(p_arr, 0, sizeof(disk_block_t)*DISK_BLOCK_COUNT);
+    slab_reset();
+  }
+  //---------------------------------------------------------------------------
+  int disk_block_seq_t::fill_disk_record(disk_record_t          *p_rec,
+					 const rgw::sal::Bucket *p_bucket,
+					 const rgw::sal::Object *p_obj,
+					 const parsed_etag_t    *p_parsed_etag,
+					 const std::string      &obj_name,
+					 uint64_t                obj_size)
   {
     p_rec->s.md5_high        = p_parsed_etag->md5_high;
     p_rec->s.md5_low         = p_parsed_etag->md5_low;
@@ -519,7 +564,7 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int load_record(librados::IoCtx          *p_ioctx,
+  int load_record(librados::IoCtx          &ioctx,
 		  disk_record_t            *p_rec, /* OUT */
 		  disk_block_id_t           block_id,
 		  record_id_t               rec_id,
@@ -532,7 +577,7 @@ namespace rgw::dedup {
     int read_len = DISK_BLOCK_SIZE;
     int byte_offset = block_id.get_block_offset() * DISK_BLOCK_SIZE;
     bufferlist bl;
-    int ret = p_ioctx->read(oid, bl, read_len, byte_offset);
+    int ret = ioctx.read(oid, bl, read_len, byte_offset);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read block from "
 			<< oid << ", error is " << cpp_strerror(ret) << dendl;
@@ -576,7 +621,7 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int load_slab(librados::IoCtx *p_ioctx,
+  int load_slab(librados::IoCtx &ioctx,
 		bufferlist &bl,
 		md5_shard_t md5_shard,
 		work_shard_t worker_id,
@@ -586,24 +631,25 @@ namespace rgw::dedup {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
 
-    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
+    ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << (uint32_t)worker_id
 		       << ", md5_shard=" << (uint32_t)md5_shard
 		       << ", seq_number=" << seq_number
 		       << ":: oid=" << oid << dendl;
 
-    int ret = p_ioctx->read_full(oid, bl);
-    if (ret < 0) {
-      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed to read " << oid
-			<< ", error is " << cpp_strerror(ret) << dendl;
+    int ret = ioctx.read_full(oid, bl);
+    // TBD: probably should check (ret > 0)
+    if (ret >= 0) {
+      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     }
     else {
-      ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed to read " << oid
+			<< ", error is " << cpp_strerror(ret) << dendl;
     }
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int store_slab(librados::IoCtx *p_ioctx,
+  int store_slab(librados::IoCtx &ioctx,
 		 bufferlist &bl,
 		 md5_shard_t md5_shard,
 		 work_shard_t worker_id,
@@ -613,8 +659,12 @@ namespace rgw::dedup {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
     ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
-    int ret = p_ioctx->write_full(oid, bl);
-    if (ret < 0) {
+    // TBD: probably should check (ret == bl.length())
+    int ret = ioctx.write_full(oid, bl);
+    if (ret >= 0) {
+      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+    }
+    else {
       ldpp_dout(dpp, 1) << "ERROR: failed to write " << oid
 			<< " with: " << cpp_strerror(ret) << dendl;
     }
@@ -623,11 +673,11 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::flush(librados::IoCtx *p_ioctx)
+  int disk_block_seq_t::flush(librados::IoCtx &ioctx)
   {
-    unsigned len = (p_curr_block + 1 - d_arr) * sizeof(disk_block_t);
-    bufferlist bl = bufferlist::static_from_mem((char*)d_arr, len);
-    int ret = store_slab(p_ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
+    unsigned len = (p_curr_block + 1 - p_arr) * sizeof(disk_block_t);
+    bufferlist bl = bufferlist::static_from_mem((char*)p_arr, len);
+    int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
     // TBD: Can we recycle the buffers?
     // Need to make sure the call to rgw_put_system_obj was fully synchronous
 
@@ -639,32 +689,51 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::flush_disk_records(librados::IoCtx *p_ioctx)
+  static void __attribute__ ((noinline))
+  report_bad_access(const DoutPrefixProvider* dpp, const char *caller)
   {
+    ldpp_dout(dpp, 0) << "::ERR: " << caller
+		      << "() was called on uninitialized disk_block_seq_t\n"
+		      << dendl;
+  }
+
+  //---------------------------------------------------------------------------
+  int disk_block_seq_t::flush_disk_records(librados::IoCtx &ioctx)
+  {
+    if (unlikely(!p_arr)) {
+      report_bad_access(dpp, __func__);
+      return -1;
+    }
+
     ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
 		       << ", md5_shard=" << (uint32_t)d_md5_shard << dendl;
 
     // we need to force flush at the end of a cycle even if there was no work done
     // it is used as a signal to worker in the next step
-    if (p_curr_block == &d_arr[0] && p_curr_block->is_empty()) {
+    if (p_curr_block == &p_arr[0] && p_curr_block->is_empty()) {
       ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
     p_stats->egress_blocks++;
     p_curr_block->close_block(dpp, false);
 
-    int ret = flush(p_ioctx);
+    int ret = flush(ioctx);
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::add_record(librados::IoCtx        *p_ioctx,
-				     const rgw::sal::Bucket *p_bucket,
-				     const rgw::sal::Object *p_obj,
-				     const parsed_etag_t    *p_parsed_etag,
-				     const std::string      &obj_name,
-				     uint64_t                obj_size,
-				     record_info_t          *p_rec_info) // OUT-PARAM
+  int disk_block_seq_t::add_record(librados::IoCtx        &ioctx,
+				   const rgw::sal::Bucket *p_bucket,
+				   const rgw::sal::Object *p_obj,
+				   const parsed_etag_t    *p_parsed_etag,
+				   const std::string      &obj_name,
+				   uint64_t                obj_size,
+				   record_info_t          *p_rec_info) // OUT-PARAM
   {
+    if (unlikely(!p_arr)) {
+      report_bad_access(dpp, __func__);
+      return -1;
+    }
+
     ldpp_dout(dpp, 20) << __func__  << "::worker_id=" << (uint32_t)d_worker_id
 		       << ", md5_shard=" << (uint32_t)d_md5_shard
 		       << "::" << p_bucket->get_name() << "/" << obj_name << dendl;
@@ -698,7 +767,7 @@ namespace rgw::dedup {
     }
     else {
       ldpp_dout(dpp, 20)  << __func__ << "::calling flush()" << dendl;
-      ret = flush(p_ioctx);
+      ret = flush(ioctx);
       p_rec_info->rec_id = p_curr_block->add_record(&rec, dpp);
     }
 
@@ -706,4 +775,46 @@ namespace rgw::dedup {
     return ret;
   }
 
+  //---------------------------------------------------------------------------
+  disk_block_array_t::disk_block_array_t(const DoutPrefixProvider* dpp,
+					 uint8_t *raw_mem,
+					 uint64_t raw_mem_size,
+					 work_shard_t worker_id,
+					 worker_stats_t *p_worker_stats,
+					 work_shard_t num_work_shards,
+					 md5_shard_t num_md5_shards)
+  {
+    d_num_md5_shards = num_md5_shards;
+    d_worker_id = worker_id;
+    disk_block_t *p     = (disk_block_t *)raw_mem;
+    disk_block_t *p_end = (disk_block_t *)(raw_mem + raw_mem_size);
+
+    for (unsigned md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
+      ldpp_dout(dpp, 20) << __func__ << "::p=" << p << "::p_end=" << p_end << dendl;
+      if (p + DISK_BLOCK_COUNT <= p_end) {
+	d_disk_arr[md5_shard].activate(dpp, p, d_worker_id, md5_shard,
+				       p_worker_stats);
+	p += DISK_BLOCK_COUNT;
+      }
+      else {
+	ldpp_dout(dpp, 0) << __func__ << "::ERR: buffer overflow! "
+			  << "::md5_shard=" << md5_shard << "/" << d_num_md5_shards
+			  << "::raw_mem_size=" << raw_mem_size << dendl;
+	ldpp_dout(dpp, 0) << __func__
+			  << "::sizeof(disk_block_t)=" << sizeof(disk_block_t)
+			  << "::DISK_BLOCK_COUNT=" << DISK_BLOCK_COUNT << dendl;
+      }
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  void disk_block_array_t::flush_output_buffers(const DoutPrefixProvider* dpp,
+						librados::IoCtx &ioctx)
+  {
+    for (md5_shard_t md5_shard = 0; md5_shard < d_num_md5_shards; md5_shard++) {
+      ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id="
+			 << d_worker_id<< ", md5_shard=" << md5_shard << dendl;
+      d_disk_arr[md5_shard].flush_disk_records(ioctx);
+    }
+  }
 } // namespace rgw::dedup
