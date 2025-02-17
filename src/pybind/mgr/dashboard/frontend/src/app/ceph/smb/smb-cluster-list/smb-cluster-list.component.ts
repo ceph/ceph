@@ -54,14 +54,6 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().smb;
-    this.tableActions = [
-      {
-        permission: 'delete',
-        icon: Icons.destroy,
-        click: () => this.removeSMBClusterModal(),
-        name: this.actionLabels.REMOVE
-      }
-    ];
   }
 
   ngOnInit() {
@@ -85,6 +77,12 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
         routerLink: () => this.urlBuilder.getCreate(),
 
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeSMBClusterModal(),
+        name: this.actionLabels.REMOVE
       }
     ];
 

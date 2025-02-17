@@ -3,7 +3,9 @@ import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
 import {
+  ClusterRequestModel,
   DomainSettings,
+  ShareRequestModel,
   SMBCluster,
   SMBJoinAuth,
   SMBShare,
@@ -28,7 +30,7 @@ export class SmbService {
     return this.http.get<SMBCluster[]>(`${this.baseURL}/cluster`);
   }
 
-  createCluster(requestModel: any) {
+  createCluster(requestModel: ClusterRequestModel) {
     return this.http.post(`${this.baseURL}/cluster`, requestModel);
   }
 
@@ -48,5 +50,9 @@ export class SmbService {
 
   listUsersGroups(): Observable<SMBUsersGroups[]> {
     return this.http.get<SMBUsersGroups[]>(`${this.baseURL}/usersgroups`);
+  }
+
+  createShare(requestModel: ShareRequestModel) {
+    return this.http.post(`${this.baseURL}/share`, requestModel);
   }
 }
