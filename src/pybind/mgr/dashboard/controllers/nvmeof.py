@@ -2,6 +2,7 @@
 import logging
 from typing import Any, Dict, Optional
 
+import cherrypy
 from orchestrator import OrchestratorError
 
 from .. import mgr
@@ -366,7 +367,7 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @empty_response
+        @map_model(model.Namespace, first="namespaces")
         @handle_nvmeof_error
         def update(
             self,
@@ -380,34 +381,32 @@ else:
             w_mbytes_per_second: Optional[int] = None,
             gw_group: Optional[str] = None
         ):
+            contains_failure = False
+
             if rbd_image_size:
                 mib = 1024 * 1024
                 new_size_mib = int((rbd_image_size + mib - 1) / mib)
 
-                response = NVMeoFClient(gw_group=gw_group).stub.namespace_resize(
+                resp = NVMeoFClient(gw_group=gw_group).stub.namespace_resize(
                     NVMeoFClient.pb2.namespace_resize_req(
                         subsystem_nqn=nqn, nsid=int(nsid), new_size=new_size_mib
                     )
                 )
-                if response.status != 0:
-                    return response
+                if resp.status != 0:
+                    contains_failure = True
 
             if load_balancing_group:
-                response = NVMeoFClient().stub.namespace_change_load_balancing_group(
+                resp = NVMeoFClient().stub.namespace_change_load_balancing_group(
                     NVMeoFClient.pb2.namespace_change_load_balancing_group_req(
                         subsystem_nqn=nqn, nsid=int(nsid), anagrpid=load_balancing_group
                     )
                 )
-                if response.status != 0:
-                    return response
+                if resp.status != 0:
+                    contains_failure = True
 
-            if (
-                rw_ios_per_second
-                or rw_mbytes_per_second
-                or r_mbytes_per_second
-                or w_mbytes_per_second
-            ):
-                response = NVMeoFClient().stub.namespace_set_qos_limits(
+            if rw_ios_per_second or rw_mbytes_per_second or r_mbytes_per_second \
+               or w_mbytes_per_second:
+                resp = NVMeoFClient().stub.namespace_set_qos_limits(
                     NVMeoFClient.pb2.namespace_set_qos_req(
                         subsystem_nqn=nqn,
                         nsid=int(nsid),
@@ -417,9 +416,13 @@ else:
                         w_mbytes_per_second=w_mbytes_per_second,
                     )
                 )
-                if response.status != 0:
-                    return response
-
+                if resp.status != 0:
+                    contains_failure = True
+            response = NVMeoFClient(gw_group=gw_group).stub.list_namespaces(
+                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn, nsid=int(nsid))
+            )
+            if contains_failure:
+                cherrypy.response.status = 202
             return response
 
         @EndpointDoc(
