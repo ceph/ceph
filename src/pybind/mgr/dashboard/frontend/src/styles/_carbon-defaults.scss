@@ -12,7 +12,6 @@
   $theme: default.$theme,
   $fallback: compat.$g90,
   );
-
 /******************************************
   Component token overrides should go here
   ******************************************/
@@ -148,4 +147,8 @@ Code snippet
 ******************************************/
 .cds--snippet {
   width: fit-content;
+}
+
+.form-group-header {
+  @include type.type-style('heading-01');
 }

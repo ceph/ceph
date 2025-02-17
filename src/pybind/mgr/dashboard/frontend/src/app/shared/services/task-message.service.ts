@@ -407,6 +407,9 @@ export class TaskMessageService {
     'smb/cluster/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.smbCluster(metadata)
     ),
+    'rgw/topic/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.topic(metadata)
+    ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
       this.commonOperations.update,
@@ -494,6 +497,9 @@ export class TaskMessageService {
     // smb
     'smb/cluster/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbCluster(metadata)
+    ),
+    'rgw/topic/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.topic(metadata)
     )
   };
 
@@ -558,6 +564,9 @@ export class TaskMessageService {
     return $localize`SMB Cluster  '${metadata.cluster_id}'`;
   }
 
+  topic(metadata: any) {
+    return $localize`Topic  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }
