@@ -75,6 +75,9 @@ std::string to_string(CanSync value);
 /// Parse CanSync from a string. Unrecognized values default to Forbidden.
 CanSync parse_can_sync(std::string_view str);
 
+/// Set of cross-zonegroup replication peer ids. Wildcard "*" matches any peer.
+using SyncPeerSet = boost::container::flat_set<std::string, std::less<>>;
+
 } // namespace rgw
 
 struct RGWNameToId {

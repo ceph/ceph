@@ -237,6 +237,28 @@ struct RGWZoneParams {
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
+struct RGWCrossZoneGroup {
+  rgw::SyncPeerSet enable;
+  rgw::SyncPeerSet forbid;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(enable, bl);
+    encode(forbid, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(enable, bl);
+    decode(forbid, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter*) const;
+  void decode_json(JSONObj*);
+  static void generate_test_instances(std::list<RGWCrossZoneGroup*>&);
+};
+WRITE_CLASS_ENCODER(RGWCrossZoneGroup)
+
 struct RGWZoneGroup {
   std::string id;
   std::string name;
@@ -275,6 +297,13 @@ struct RGWZoneGroup {
   rgw::zone_features::set enabled_features;
   CephContext *cct{nullptr};
 
+  // Override the realm's default configuration to enable/disable
+  // cross-zonegroup replication to/from specific peer zonegroups.
+  RGWCrossZoneGroup cross_zonegroup_export;
+  RGWCrossZoneGroup cross_zonegroup_import;
+  /// Override the realm's default for same-zonegroup replication policy.
+  rgw::CanSync same_zonegroup = rgw::CanSync::Allowed;
+
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &_id, const std::string &_name):id(_id), name(_name) {}
   explicit RGWZoneGroup(const std::string &_name):name(_name) {}
@@ -292,7 +321,7 @@ struct RGWZoneGroup {
   bool is_master_zonegroup() const { return is_master;}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode(name, bl);
     encode(api_name, bl);
     encode(is_master, bl);
@@ -314,11 +343,14 @@ struct RGWZoneGroup {
     encode(realm_id, bl);
     encode(sync_policy, bl);
     encode(enabled_features, bl);
+    encode(cross_zonegroup_export, bl);
+    encode(cross_zonegroup_import, bl);
+    encode(same_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     decode(name, bl);
     decode(api_name, bl);
     decode(is_master, bl);
@@ -351,6 +383,11 @@ struct RGWZoneGroup {
     }
     if (struct_v >= 6) {
       decode(enabled_features, bl);
+    }
+    if (struct_v >= 7) {
+      decode(cross_zonegroup_export, bl);
+      decode(cross_zonegroup_import, bl);
+      decode(same_zonegroup, bl);
     }
     DECODE_FINISH(bl);
   }

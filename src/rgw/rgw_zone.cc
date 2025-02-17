@@ -113,6 +113,25 @@ rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
   return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
 }
 
+
+void RGWCrossZoneGroup::dump(Formatter *f) const
+{
+  encode_json("enable", enable, f);
+  encode_json("forbid", forbid, f);
+}
+void RGWCrossZoneGroup::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("enable", enable, obj);
+  JSONDecoder::decode_json("forbid", forbid, obj);
+}
+void RGWCrossZoneGroup::generate_test_instances(list<RGWCrossZoneGroup*>& o)
+{
+  o.push_back(new RGWCrossZoneGroup);
+  o.push_back(new RGWCrossZoneGroup);
+  o.back()->enable.insert("a");
+  o.back()->forbid.insert("b");
+}
+
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
@@ -136,6 +155,11 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
   JSONDecoder::decode_json("enabled_features", enabled_features, obj);
+  JSONDecoder::decode_json("cross_zonegroup_export", cross_zonegroup_export, obj);
+  JSONDecoder::decode_json("cross_zonegroup_import", cross_zonegroup_import, obj);
+  if (std::string str; JSONDecoder::decode_json("same_zonegroup", str, obj)) {
+    same_zonegroup = rgw::parse_can_sync(str);
+  }
 }
 
 void RGWZoneParams::decode_json(JSONObj *obj)
@@ -330,6 +354,9 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
   encode_json("enabled_features", enabled_features, f);
+  encode_json("cross_zonegroup_export", cross_zonegroup_export, f);
+  encode_json("cross_zonegroup_import", cross_zonegroup_import, f);
+  encode_json("same_zonegroup", to_string(same_zonegroup), f);
 }
 
 void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
