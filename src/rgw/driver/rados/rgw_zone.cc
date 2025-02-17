@@ -822,6 +822,74 @@ bool all_zonegroups_support(const SiteConfig& site, std::string_view feature)
     });
 }
 
+static bool in_sync_set(const SyncPeerSet& s, const std::string& id)
+{
+  return s.contains(id) || s.contains("*");
+}
+
+static CanSync can_sync(const RGWCrossZoneGroup& x, const std::string& id)
+{
+  if (in_sync_set(x.forbid, id)) {
+    return CanSync::Forbidden;
+  } else if (in_sync_set(x.enable, id)) {
+    return CanSync::Enabled;
+  }
+  return CanSync::Allowed;
+}
+
+// compose according to precedence, Forbidden > Enabled > Allowed
+static CanSync reduce_can_sync(CanSync lhs, CanSync rhs)
+{
+  // values are ordered by ascending precedence, so take the max()
+  using T = std::underlying_type_t<CanSync>;
+  return (static_cast<T>(lhs) > static_cast<T>(rhs)) ? lhs : rhs;
+}
+
+bool should_sync_from(const RGWRealm& realm,
+                      const RGWZoneGroup& dest,
+                      const RGWZoneGroup& source)
+{
+  if (dest.id == source.id) {
+    // must not be Forbidden, and must be Enabled by realm or zonegroup
+    return CanSync::Enabled == reduce_can_sync(realm.same_zonegroup,
+                                               dest.same_zonegroup);
+  }
+
+  // must not be Forbidden, and must be Enabled in at least one direction
+  const auto results = std::initializer_list<CanSync>{
+    realm.cross_zonegroup,
+    can_sync(dest.cross_zonegroup_import, source.id),
+    can_sync(source.cross_zonegroup_export, dest.id),
+  };
+  return CanSync::Enabled == std::reduce(results.begin(), results.end(),
+                                         CanSync::Allowed, reduce_can_sync);
+}
+
+bool should_sync_from(const SiteConfig& site,
+                      const RGWBucketInfo& dest,
+                      const RGWBucketInfo& source)
+{
+  const auto& realm = site.get_realm();
+  if (!realm) {
+    return false;
+  }
+  const auto& period = site.get_period();
+  if (!period) {
+    return false;
+  }
+  const auto& zgs = period->period_map.zonegroups;
+  auto s = zgs.find(source.zonegroup);
+  if (s == zgs.end()) {
+    return false; // unknown source zonegroup
+  }
+  auto d = zgs.find(dest.zonegroup);
+  if (d == zgs.end()) {
+    return false; // unknown destination zonegroup
+  }
+
+  return should_sync_from(*realm, d->second, s->second);
+}
+
 static int read_or_create_default_zone(const DoutPrefixProvider* dpp,
                                        optional_yield y,
                                        sal::ConfigStore* cfgstore,

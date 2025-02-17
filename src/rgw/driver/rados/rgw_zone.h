@@ -944,4 +944,15 @@ bool all_zonegroups_support(const SiteConfig& site, std::string_view feature);
 
 std::string gen_random_uuid();
 
+/// Test whether a destination zonegroup should sync from the given source
+/// zonegroup.
+bool should_sync_from(const RGWRealm& realm,
+                      const RGWZoneGroup& dest,
+                      const RGWZoneGroup& source);
+
+/// Test whether a destination bucket should sync from the given source bucket.
+bool should_sync_from(const SiteConfig& site,
+                      const RGWBucketInfo& dest,
+                      const RGWBucketInfo& source);
+
 } // namespace rgw
