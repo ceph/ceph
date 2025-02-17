@@ -1,7 +1,7 @@
 import pytest
 import stat
 from ceph_volume.util import disk
-from mock.mock import patch, Mock, MagicMock, mock_open
+from unittest.mock import patch, Mock, MagicMock, mock_open
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 

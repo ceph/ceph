@@ -1,7 +1,7 @@
 import os
 import pytest
 import argparse
-from mock.mock import patch, PropertyMock, create_autospec, Mock, MagicMock
+from unittest.mock import patch, PropertyMock, create_autospec, Mock, MagicMock
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util import device
