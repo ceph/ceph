@@ -5,10 +5,11 @@
 #define CEPH_LIBRBD_CACHE_OBJECT_CACHER_WRITEBACK_H
 
 #include "common/snap_types.h"
-#include "include/unordered_map.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
+
 #include <queue>
+#include <unordered_map>
 
 class Context;
 
@@ -69,7 +70,7 @@ private:
   ceph_tid_t m_tid;
   ceph::mutex& m_lock;
   librbd::ImageCtx *m_ictx;
-  ceph::unordered_map<std::string, std::queue<write_result_d*> > m_writes;
+  std::unordered_map<std::string, std::queue<write_result_d*>> m_writes;
   friend class C_OrderedWrite;
 };
 

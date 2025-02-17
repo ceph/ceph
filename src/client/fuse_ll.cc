@@ -46,6 +46,8 @@
 #include "fuse_ll.h"
 #include <fuse_lowlevel.h>
 
+#include <unordered_map>
+
 #define dout_context g_ceph_context
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
@@ -77,14 +79,14 @@
  * reserved for CEPH_SNAPDIR.
  */
 struct ceph_fuse_fake_inode_stag {
-  ceph::unordered_map<uint64_t,int> snap_stag_map;  // <snapid, stagid>
-  ceph::unordered_map<int, uint64_t> stag_snap_map; // <stagid, snapid>
+  std::unordered_map<uint64_t, int> snap_stag_map;  // <snapid, stagid>
+  std::unordered_map<int, uint64_t> stag_snap_map; // <stagid, snapid>
   int last_stag = 1;
 };
 
 using namespace std;
 
-static const ceph::unordered_map<int,int> cephfs_errno_to_system_errno = {
+static const std::unordered_map<int, int> cephfs_errno_to_system_errno = {
   {EBLOCKLISTED,    ESHUTDOWN},
   {EPERM,           EPERM},
   {ESTALE,          ESTALE},
@@ -182,7 +184,7 @@ public:
   ceph::mutex stag_lock = ceph::make_mutex("fuse_ll.cc stag_lock");
 
   // a map of <ceph ino, fino stag/snapid map>
-  ceph::unordered_map<uint64_t, struct ceph_fuse_fake_inode_stag> g_fino_maps;
+  std::unordered_map<uint64_t, struct ceph_fuse_fake_inode_stag> g_fino_maps;
 
   pthread_key_t fuse_req_key = 0;
   void set_fuse_req(fuse_req_t);
