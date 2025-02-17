@@ -39,7 +39,7 @@ static int set(const DoutPrefixProvider* dpp, optional_yield y,
 
   librados::ObjectWriteOperation op;
   ::cls_user_set_buckets(op, entries, add);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int add(const DoutPrefixProvider* dpp, optional_yield y,
@@ -74,7 +74,7 @@ int remove(const DoutPrefixProvider* dpp, optional_yield y,
 
   librados::ObjectWriteOperation op;
   ::cls_user_remove_bucket(op, clsbucket);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int list(const DoutPrefixProvider* dpp, optional_yield y,
@@ -104,7 +104,7 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
                            entries, &marker, &truncated, &rc);
 
     bufferlist bl;
-    int r = ref.operate(dpp, &op, &bl, y);
+    int r = ref.operate(dpp, std::move(op), &bl, y);
     if (r == -ENOENT) {
       listing.next_marker.clear();
       return 0;
@@ -166,7 +166,7 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
   ::cls_user_get_header(op, &header, nullptr);
 
   bufferlist bl;
-  r = ref.operate(dpp, &op, &bl, y);
+  r = ref.operate(dpp, std::move(op), &bl, y);
   if (r < 0 && r != -ENOENT) {
     return r;
   }
@@ -243,7 +243,7 @@ int reset_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
     encode(call, in);
     op.exec("user", "reset_user_stats2", in, &out, &rval);
-    r = ref.operate(dpp, &op, y, librados::OPERATION_RETURNVEC);
+    r = ref.operate(dpp, std::move(op), y, librados::OPERATION_RETURNVEC);
     if (r < 0) {
       return r;
     }
@@ -269,7 +269,7 @@ int complete_flush_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
   librados::ObjectWriteOperation op;
   ::cls_user_complete_stats_sync(op);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 } // namespace rgwrados::buckets
