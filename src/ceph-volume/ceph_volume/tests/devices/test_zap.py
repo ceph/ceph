@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume.devices import lvm
-from mock.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 
 class TestZap(object):

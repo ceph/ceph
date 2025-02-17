@@ -1,5 +1,5 @@
 import pytest
-from mock import patch, Mock, MagicMock, call
+from unittest.mock import patch, Mock, MagicMock, call
 from ceph_volume.objectstore.lvmbluestore import LvmBlueStore
 from ceph_volume.api.lvm import Volume
 from ceph_volume.util import system

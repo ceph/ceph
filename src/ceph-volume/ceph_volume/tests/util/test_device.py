@@ -4,7 +4,7 @@ import pytest
 from copy import deepcopy
 from ceph_volume.util import device
 from ceph_volume.api import lvm as api
-from mock.mock import patch, mock_open
+from unittest.mock import patch, mock_open
 
 
 class TestDevice(object):

@@ -3,7 +3,7 @@
 import pytest
 from ceph_volume.util.device import Devices
 from ceph_volume.util.lsmdisk import LSMDisk
-from mock.mock import patch
+from unittest.mock import patch
 import ceph_volume.util.lsmdisk as lsmdisk
 
 
