@@ -8879,19 +8879,25 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
-int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
+int BlueStore::_set_bdev_label_size(unsigned id, uint64_t size)
 {
-  bluestore_bdev_label_t label;
-  int r = _read_bdev_label(cct, bdev, path, &label);
-  if (r < 0) {
-    derr << "unable to read label for " << path << ": "
-          << cpp_strerror(r) << dendl;
-  } else {
-    label.size = size;
-    r = _write_bdev_label(cct, bdev, path, label);
+  ceph_assert(bluefs);
+  BlockDevice* my_bdev = bluefs->get_block_device(id);
+  int r = -1;
+  if (my_bdev != nullptr) {
+    string my_path = get_device_path(id);
+    bluestore_bdev_label_t label;
+    r = _read_bdev_label(cct, my_bdev, my_path, &label);
     if (r < 0) {
-      derr << "unable to write label for " << path << ": "
+      derr << "unable to read label for " << my_path << ": "
             << cpp_strerror(r) << dendl;
+    } else {
+      label.size = size;
+      r = _write_bdev_label(cct, my_bdev, my_path, label);
+      if (r < 0) {
+        derr << "unable to write label for " << my_path << ": "
+              << cpp_strerror(r) << dendl;
+      }
     }
   }
   return r;
@@ -8916,18 +8922,10 @@ int BlueStore::expand_devices(ostream& out)
       // no bdev
       continue;
     }
-
     out << devid
 	<<" : expanding " << " to 0x" << size << std::dec << std::endl;
-    string p = get_device_path(devid);
-    const char* path = p.c_str();
-    if (path == nullptr) {
-      derr << devid
-	    <<": can't find device path " << dendl;
-      continue;
-    }
     if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
+      if (_set_bdev_label_size(devid, size) >= 0) {
         out << devid
           << " : size label updated to " << size
           << std::endl;
