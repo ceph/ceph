@@ -699,6 +699,14 @@ void BootstrapRequest<I>::handle_get_local_mirror_group(int r) {
     return;
   }
 
+  if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+    derr << "group with same name exists: " << m_group_name
+         << " and is currently disabling" << dendl;
+    finish(-ERESTART); // The other group replayer might be removing the
+                       // group already, so wait and retry later.
+    return;
+  }
+
   dout(20) << m_local_mirror_group << dendl;
 
   list_local_group_snapshots();
