@@ -352,7 +352,7 @@ class NetworkStack {
     static constexpr int TASK_COMM_LEN = 16;
     char tp_name[TASK_COMM_LEN];
     sprintf(tp_name, "msgr-worker-%u", id);
-    ceph_pthread_setname(pthread_self(), tp_name);
+    ceph_pthread_setname(tp_name);
   }
 
  protected:

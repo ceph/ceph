@@ -24,6 +24,7 @@ namespace logging {
 class Entry {
 public:
   using time = log_time;
+  using thread_name_t = std::array<char, 16>;
 
   Entry() = delete;
   Entry(short pr, short sub) :
@@ -32,8 +33,7 @@ public:
     m_prio(pr),
     m_subsys(sub)
   {
-    strncpy(m_thread_name, Thread::get_thread_name().data(), 16);
-    m_thread_name[15] = '\0';
+    ceph_pthread_getname(m_thread_name.data(), m_thread_name.size());
   }
   Entry(const Entry &) = default;
   Entry& operator=(const Entry &) = default;
@@ -47,7 +47,7 @@ public:
   time m_stamp;
   pthread_t m_thread;
   short m_prio, m_subsys;
-  char m_thread_name[16];
+  thread_name_t m_thread_name{};
 
   static log_clock& clock() {
     static log_clock clock;

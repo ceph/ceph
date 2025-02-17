@@ -200,7 +200,7 @@ void QuiesceDbManager::update_membership(const QuiesceClusterMembership& new_mem
     // start the thread
     dout(5) << "starting the db mgr thread at epoch: " << new_membership.epoch << dendl;
     db_thread_should_exit = false;
-    quiesce_db_thread.create("quiesce_db_mgr");
+    quiesce_db_thread.create("mds-q-db");
   } else if (quiesce_db_thread.is_started()) {
     submit_condition.notify_all();
   }
