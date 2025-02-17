@@ -309,7 +309,7 @@ struct AggregateBlockingEvent {
 
     class TriggerContainer final : public TriggerI::TriggerContainerI {
       AggregateBlockingEvent& event;
-      typename decltype(event.events)::iterator iter;
+      typename std::list<T>::iterator iter;
       typename T::template Trigger<OpT> trigger;
 
       typename T::TriggerI &get_trigger() final {
