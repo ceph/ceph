@@ -72,6 +72,16 @@
   headers only when the `read-stats` querystring is explicitly included in the
   API request.
 
+* RADOS: The ceph df command reports incorrect MAX AVAIL for stretch mode pools when
+  CRUSH rules use multiple take steps for datacenters. PGMap::get_rule_avail
+  incorrectly calculates available space from only one datacenter.
+  As a workaround, define CRUSH rules with take default and choose firstn 0 type
+  datacenter. See https://tracker.ceph.com/issues/56650#note-6 for details.
+  Upgrading a cluster configured with a crush rule with multiple take steps
+  can lead to data shuffling, as the new crush changes may necessitate data
+  redistribution. In contrast, a stretch rule with a single-take configuration
+  will not cause any data movement during the upgrade process.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
