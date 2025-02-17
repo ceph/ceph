@@ -347,12 +347,21 @@ def lsblk_all(device: str = '',
     return result
 
 
-def is_device(dev):
+def is_device(dev: str) -> bool:
     """
-    Boolean to determine if a given device is a block device (**not**
-    a partition!)
+    Determines whether the given path corresponds to a block device (not a partition).
 
-    For example: /dev/sda would return True, but not /dev/sdc1
+    This function checks whether the provided device path represents a valid block device,
+    such as a physical disk (/dev/sda) or an allowed loop device, but excludes partitions
+    (/dev/sdc1). It performs several validation steps, including file existence, path format,
+    device type, and additional checks for loop devices if allowed.
+
+    Args:
+        dev (str): The path to the device (e.g., "/dev/sda").
+
+    Returns:
+        bool: True if the path corresponds to a valid block device (not a partition),
+              otherwise False.
     """
     if not os.path.exists(dev):
         return False
@@ -364,7 +373,7 @@ def is_device(dev):
 
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE in ['disk', 'mpath']
+        return TYPE in ['disk', 'mpath', 'loop']
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode) and not is_partition(dev)
