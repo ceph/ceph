@@ -6892,7 +6892,7 @@ int BlueStore::_check_main_bdev_label()
         ++valid_locations;
       }
     }
-    if (valid_locations != bdev_label_valid_locations.size()) {
+    if (valid_locations > bdev_label_valid_locations.size()) {
       derr << __func__ << " not all labels read properly" << dendl;
       return -EIO;
     }
