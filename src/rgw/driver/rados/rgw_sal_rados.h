@@ -893,7 +893,6 @@ protected:
 class MPRadosSerializer : public StoreMPSerializer {
   librados::IoCtx ioctx;
   ::rados::cls::lock::Lock lock;
-  librados::ObjectWriteOperation op;
 
 public:
   MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* store, RadosObject* obj, const std::string& lock_name);

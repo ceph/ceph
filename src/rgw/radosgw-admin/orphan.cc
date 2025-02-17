@@ -172,7 +172,7 @@ int RGWOrphanStore::store_entries(const DoutPrefixProvider *dpp, const string& o
   for (map<string, bufferlist>::const_iterator iter = entries.begin(); iter != entries.end(); ++iter) {
     ldpp_dout(dpp, 20) << " > " << iter->first << dendl;
   }
-  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, null_yield);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << dendl;
   }

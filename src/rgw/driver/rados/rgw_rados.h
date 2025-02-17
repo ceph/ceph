@@ -1350,8 +1350,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                    std::map<std::string, bufferlist> *attrs, bufferlist *first_chunk,
                    RGWObjVersionTracker *objv_tracker, optional_yield y);
 
-  int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op, optional_yield y);
-  int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op, optional_yield y);
+  int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation&& op, optional_yield y);
+  int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation&& op, optional_yield y);
 
   int guard_reshard(const DoutPrefixProvider *dpp,
                     BucketShard *bs,
@@ -1580,10 +1580,10 @@ public:
   std::tuple<int, std::optional<cls_rgw_obj_chain>> send_chain_to_gc(cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
   void delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
                           const std::string& tag, optional_yield y);
-  int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectWriteOperation *op, optional_yield y);
+  int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectWriteOperation&& op, optional_yield y);
   int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,
                      librados::ObjectWriteOperation *op);
-  int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectReadOperation *op, bufferlist *pbl, optional_yield y);
+  int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectReadOperation&& op, bufferlist *pbl, optional_yield y);
 
   int list_gc_objs(int *index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue);
   int process_gc(bool expired_only, optional_yield y);

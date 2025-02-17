@@ -802,7 +802,7 @@ static int is_versioned_instance_listable(const DoutPrefixProvider *dpp,
     cls_rgw_bucket_list_op(op, marker, key.name, empty_delim, 1000,
                            true, &result);
     bufferlist ibl;
-    int r = bs.bucket_obj.operate(dpp, &op, &ibl, y);
+    int r = bs.bucket_obj.operate(dpp, std::move(op), &ibl, y);
     if (r < 0) {
       return r;
     }

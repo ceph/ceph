@@ -129,7 +129,7 @@ public:
   int push(const DoutPrefixProvider *dpp, int index, entries&& items, optional_yield y) override {
     lr::ObjectWriteOperation op;
     cls_log_add(op, std::get<centries>(items), true);
-    auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oids[index], std::move(op), y);
     if (r < 0) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": failed to push to " << oids[index] << cpp_strerror(-r)
@@ -142,7 +142,7 @@ public:
 	   optional_yield y) override {
     lr::ObjectWriteOperation op;
     cls_log_add(op, utime_t(now), {}, key, bl);
-    auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oids[index], std::move(op), y);
     if (r < 0) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": failed to push to " << oids[index]
@@ -159,7 +159,7 @@ public:
     lr::ObjectReadOperation op;
     cls_log_list(op, {}, {}, std::string(marker.value_or("")),
 		 max_entries, log_entries, out_marker, truncated);
-    auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, nullptr, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oids[index], std::move(op), nullptr, y);
     if (r == -ENOENT) {
       *truncated = false;
       return 0;
@@ -193,7 +193,7 @@ public:
     cls_log_header header;
     lr::ObjectReadOperation op;
     cls_log_info(op, &header);
-    auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, nullptr, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oids[index], std::move(op), nullptr, y);
     if (r == -ENOENT) r = 0;
     if (r < 0) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -209,7 +209,7 @@ public:
 	   optional_yield y) override {
     lr::ObjectWriteOperation op;
     cls_log_trim(op, {}, {}, {}, std::string(marker));
-    auto r = rgw_rados_operate(dpp, ioctx, oids[index], &op, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oids[index], std::move(op), y);
     if (r == -ENOENT) r = -ENODATA;
     if (r < 0 && r != -ENODATA) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
@@ -241,7 +241,7 @@ public:
       std::string out_marker;
       bool truncated;
       cls_log_list(op, {}, {}, {}, 1, log_entries, &out_marker, &truncated);
-      auto r = rgw_rados_operate(dpp, ioctx, oids[shard], &op, nullptr, y);
+      auto r = rgw_rados_operate(dpp, ioctx, oids[shard], std::move(op), nullptr, y);
       if (r == -ENOENT) {
 	continue;
       }

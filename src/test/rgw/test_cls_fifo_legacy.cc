@@ -55,7 +55,7 @@ int fifo_create(const DoutPrefixProvider *dpp, R::IoCtx& ioctx,
   R::ObjectWriteOperation op;
   RCf::create_meta(&op, id, objv, oid_prefix, exclusive, max_part_size,
 		   max_entry_size);
-  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
 }
 }
 

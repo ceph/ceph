@@ -59,7 +59,7 @@ int ConfigImpl::read(const DoutPrefixProvider* dpp, optional_yield y,
     objv->prepare_op_for_read(&op);
   }
   op.read(0, 0, &bl, nullptr);
-  return rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
 }
 
 int ConfigImpl::write(const DoutPrefixProvider* dpp, optional_yield y,
@@ -84,7 +84,7 @@ int ConfigImpl::write(const DoutPrefixProvider* dpp, optional_yield y,
   }
   op.write_full(bl);
 
-  r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (r >= 0 && objv) {
     objv->apply_write();
   }
@@ -107,7 +107,7 @@ int ConfigImpl::remove(const DoutPrefixProvider* dpp, optional_yield y,
   }
   op.remove();
 
-  r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (r >= 0 && objv) {
     objv->apply_write();
   }

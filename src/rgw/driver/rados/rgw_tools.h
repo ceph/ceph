@@ -92,11 +92,11 @@ void rgw_filter_attrset(std::map<std::string, bufferlist>& unfiltered_attrset, c
 
 /// perform the rados operation, using the yield context when given
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      librados::ObjectReadOperation&& op, bufferlist* pbl,
                       optional_yield y, int flags = 0, const jspan_context* trace_info = nullptr,
                       version_t* pver = nullptr);
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectWriteOperation *op, optional_yield y,
+                      librados::ObjectWriteOperation&& op, optional_yield y,
 		      int flags = 0, const jspan_context* trace_info = nullptr,
                       version_t* pver = nullptr);
 int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
@@ -108,14 +108,14 @@ struct rgw_rados_ref {
   rgw_raw_obj obj;
 
 
-  int operate(const DoutPrefixProvider* dpp, librados::ObjectReadOperation* op,
+  int operate(const DoutPrefixProvider* dpp, librados::ObjectReadOperation&& op,
 	      bufferlist* pbl, optional_yield y, int flags = 0) {
-    return rgw_rados_operate(dpp, ioctx, obj.oid, op, pbl, y, flags);
+    return rgw_rados_operate(dpp, ioctx, obj.oid, std::move(op), pbl, y, flags);
   }
 
-  int operate(const DoutPrefixProvider* dpp, librados::ObjectWriteOperation* op,
+  int operate(const DoutPrefixProvider* dpp, librados::ObjectWriteOperation&& op,
 	      optional_yield y, int flags = 0) {
-    return rgw_rados_operate(dpp, ioctx, obj.oid, op, y, flags);
+    return rgw_rados_operate(dpp, ioctx, obj.oid, std::move(op), y, flags);
   }
 
   int aio_operate(librados::AioCompletion* c,
