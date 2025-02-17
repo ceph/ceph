@@ -8,7 +8,7 @@ global:
 rule_files:
   - /etc/prometheus/alerting/*
 
-{% if service_urls['alertmanager'] %}
+{% if 'alertmanager' in service_urls %}
 alerting:
   alertmanagers:
   {% if security_enabled %}
@@ -58,6 +58,8 @@ scrape_configs:
     scheme: https
     tls_config:
       ca_file: root_cert.pem
+      cert_file: prometheus.crt
+      key_file: prometheus.key
     {% endif %}
     honor_labels: true
     {% for url in urls %}
