@@ -6796,7 +6796,7 @@ int BlueStore::_read_multi_bdev_label(
     return -ENOENT;
   }
   done:
-  dout(10) << __func__ << " got " << *out_label << dendl;
+  dout(10) << __func__ << " got " << *out_label << " all_valid " << all_labels_valid << dendl;
   return all_labels_valid ? 0 : 1;
 }
 
@@ -6811,6 +6811,7 @@ void BlueStore::_main_bdev_label_try_reserve()
   ceph_assert(bdev_label_multi == true);
   vector<uint64_t> candidate_positions;
   vector<uint64_t> accepted_positions;
+  dout(20) << __func__ << " input " << bdev_label_valid_locations << dendl;
   uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
   for (uint64_t location : bdev_label_valid_locations) {
     if (location != BDEV_FIRST_LABEL_POSITION) {
@@ -6844,6 +6845,7 @@ void BlueStore::_main_bdev_label_try_reserve()
          << " occupied by BlueStore object or BlueFS file, disabling" << dendl;
     std::erase(bdev_label_valid_locations, candidate_positions[i]);
   }
+  dout(20) << __func__ << " result " << bdev_label_valid_locations << dendl;
 }
 
 void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
@@ -6939,7 +6941,9 @@ int BlueStore::_check_main_bdev_label()
       }
     }
     if (valid_locations > bdev_label_valid_locations.size()) {
-      derr << __func__ << " not all labels read properly" << dendl;
+      derr << __func__ << " not all labels read properly, "
+           << valid_locations << "!=" << bdev_label_valid_locations.size()
+           << dendl;
       return -EIO;
     }
   }
@@ -7775,6 +7779,14 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   r = _init_alloc();
   if (r < 0)
     goto out_fm;
+
+  if (has_null_manager() &&
+      before_expansion_bdev_size > 0 && before_expansion_bdev_size < bdev_label.size) {
+    // we grow the allocation range, must reflect it in the allocation file
+    alloc->init_add_free(before_expansion_bdev_size, bdev_label.size - before_expansion_bdev_size);
+    need_to_destage_allocation_file = true;
+  }
+  before_expansion_bdev_size = 0;
 
   if (bdev_label_multi) {
     _main_bdev_label_try_reserve();
@@ -9010,24 +9022,18 @@ int BlueStore::expand_devices(ostream& out)
     }
     _close_db_and_around();
 
-    // FIXME minor: try to get rid off the following mount 
-    // when possible, it looks like we don't really need it
     //
     // Mount in read/write to sync expansion changes
+    // and make sure everything is all right.
     //
-    r = _mount();
+    before_expansion_bdev_size = size0; //preserve orignal size to permit following
+                                        // _db_open_and_around() do some post-init stuff
+                                        // on opened allocator
+
+    r = _open_db_and_around(false);
     ceph_assert(r == 0);
-    if (fm && fm->is_null_manager()) {
-      // FIXME: move this stuff to fm's init phase when possible.
-      //
-      // we grow the allocation range, must reflect it in the allocation file
-      alloc->init_add_free(size0, size - size0);
-      need_to_destage_allocation_file = true;
-    }
-    umount();
-  } else {
-    _close_db_and_around();
   }
+  _close_db_and_around();
   return r;
 }
 
