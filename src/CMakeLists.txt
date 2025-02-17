@@ -168,7 +168,8 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     -Wno-gnu-designator
     -Wno-missing-braces
     -Wno-parentheses
-    -Wno-deprecated-register)
+    -Wno-deprecated-register
+    -Wno-vla-cxx-extension)
   if(FREEBSD)
     # Need to use the GNU binutils linker to get versioning right.
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
