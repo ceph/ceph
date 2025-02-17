@@ -57,6 +57,9 @@ typedef struct _proxy_link proxy_link_t;
 struct _proxy_link_negotiate;
 typedef struct _proxy_link_negotiate proxy_link_negotiate_t;
 
+struct _proxy_async;
+typedef struct _proxy_async proxy_async_t;
+
 typedef int32_t (*proxy_output_write_t)(proxy_output_t *);
 typedef int32_t (*proxy_output_full_t)(proxy_output_t *);
 

@@ -106,7 +106,17 @@ enum {
 	LIBCEPHFSD_OP_LL_RELEASEDIR,
 	LIBCEPHFSD_OP_MOUNT_PERMS,
 
+	/* Add more operations above this comment. */
+
 	LIBCEPHFSD_OP_TOTAL_OPS
+};
+
+enum {
+	LIBCEPHFSD_CBK_NULL = 0,
+
+	/* Add more callbacks above this comment. */
+
+	LIBCEPHFSD_CBK_TOTAL_OPS
 };
 
 #define CEPH_TYPE_REQ(_name, _fields...)                           \
@@ -337,5 +347,9 @@ typedef union _proxy_req {
 	proxy_ceph_ll_releasedir_req_t ll_releasedir;
 	proxy_ceph_mount_perms_req_t mount_perms;
 } proxy_req_t;
+
+typedef union _proxy_cbk {
+	proxy_link_req_t header;
+} proxy_cbk_t;
 
 #endif
