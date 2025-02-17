@@ -986,10 +986,23 @@ class Module(MgrModule):
             res[anon_host][anon_devid] = m
         return res
 
-    def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+    # def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
+    #     data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+    #     if data:
+    #         return data[-1][1]
+    #     else:
+    #         return 0
+    
+    def get_latest(self, daemon_type: str, daemon_name: str, counter: str, counter_name: str, sub_counter_name: str, labels: List[Tuple[str, str]]) -> int:
+        data = 0;
+        if (len(labels) != 0):
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter_name]
+        else:
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter]
         if data:
-            return data[-1][1]
+            return data[1]
         else:
             return 0
 
@@ -1204,22 +1217,22 @@ class Module(MgrModule):
                 rsnaps = 0
                 for gid, mds in fs['info'].items():
                     num_sessions += self.get_latest('mds', mds['name'],
-                                                    'mds_sessions.session_count')
+                                                    'mds_sessions.session_count', "", "", [])
                     cached_ino += self.get_latest('mds', mds['name'],
-                                                  'mds_mem.ino')
+                                                  'mds_mem.ino', "", "", [])
                     cached_dn += self.get_latest('mds', mds['name'],
-                                                 'mds_mem.dn')
+                                                 'mds_mem.dn', "", "", [])
                     cached_cap += self.get_latest('mds', mds['name'],
-                                                  'mds_mem.cap')
+                                                  'mds_mem.cap', "", "", [])
                     subtrees += self.get_latest('mds', mds['name'],
-                                                'mds.subtrees')
+                                                'mds.subtrees', "", "", [])
                     if mds['rank'] == 0:
                         rfiles = self.get_latest('mds', mds['name'],
-                                                 'mds.root_rfiles')
-                        rbytes = self.get_latest('mds', mds['name'],
-                                                 'mds.root_rbytes')
-                        rsnaps = self.get_latest('mds', mds['name'],
-                                                 'mds.root_rsnaps')
+                                                 'mds.root_rfiles', "", "", [])
+                        rbytes = self.get_latest('mds', mds['name', "", "", []],
+                                                 'mds.root_rbytes', "", "", [])
+                        rsnaps = self.get_latest('mds', mds['name', "", "", []],
+                                                 'mds.root_rsnaps', "", "", [])
                 report['fs']['filesystems'].append({  # type: ignore
                     'max_mds': fs['max_mds'],
                     'ever_allowed_features': fs['ever_allowed_features'],

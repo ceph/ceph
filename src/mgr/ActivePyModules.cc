@@ -842,6 +842,9 @@ void ActivePyModules::_refresh_config_map()
   }
 }
 
+// TODO: Naveen: A better idea: Create a C++ function which takes counter_name, sub_counter_name and labels
+// and creates the path. And then call this function from the python code to construct the path and then
+// send the path. This way, none of these functions would need changing
 PyObject* ActivePyModules::with_perf_counters(
     std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
@@ -856,6 +859,9 @@ PyObject* ActivePyModules::with_perf_counters(
   std::string resolved_path;
   // if labels are not empty, construct the path
   if (!labels.empty()){
+    // FIXME: This should ideally be the path, but since we can't construct the path with
+    // labels in Python, we will just use counter_name to fetch the value.
+    f.open_array_section(counter_name);
     // Convert the vector to an array of label_pair
     // FIXME: Naveen: Arrays take constant integral expression. I can't use labels.size() to declare the array size here
     // https://stackoverflow.com/questions/2923272/how-to-convert-vector-to-array/40031309#comment31156323_2923295
@@ -869,11 +875,11 @@ PyObject* ActivePyModules::with_perf_counters(
     dout(20) << "with_perf_counters labels resolved_path" << resolved_path << dendl;
   }
   else {
+    f.open_array_section(path);
     resolved_path = path;
     dout(20) << "with_perf_counters without labels resolved_path" << resolved_path << dendl;
   }
-
-  f.open_array_section(path);
+  
   {
     without_gil_t no_gil;
     std::lock_guard l(lock);
@@ -938,7 +944,10 @@ PyObject* ActivePyModules::get_counter_python(
 PyObject* ActivePyModules::get_latest_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path)
+    const std::string &path,
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels)
 {
   auto extract_latest_counters = [](
       PerfCounterInstance& counter_instance,
@@ -956,7 +965,7 @@ PyObject* ActivePyModules::get_latest_counter_python(
       f.dump_unsigned("v", datapoint.v);
     }
   };
-  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path, "", "", {});
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path, counter_name, sub_counter_name, labels);
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(

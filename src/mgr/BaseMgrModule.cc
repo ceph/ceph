@@ -655,12 +655,37 @@ get_latest_counter(BaseMgrModule *self, PyObject *args)
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
-                                                  &svc_id, &counter_path)) {
+  char *counter_name = nullptr;
+  char *sub_counter_name = nullptr;
+  PyObject *labels_list = NULL; //labels = [("level", "deep"), ("pooltype", "ec")]
+
+  if (!PyArg_ParseTuple(args, "sssssO:get_latest_counter", &svc_name,
+                                                  &svc_id, &counter_path, &counter_name, &sub_counter_name, &labels_list)) {
     return nullptr;
   }
+
+  if (!PyList_Check(labels_list)) {
+    derr << __func__ << " labels_list not a list" << dendl;
+    Py_RETURN_FALSE;
+  }
+
+  std::vector<std::pair<std::string_view, std::string_view>> labels;
+  for (int i = 0; i < PyList_Size(labels_list); ++i) {
+    // Get the tuple element of labels list ("level", "deep")
+    PyObject *label_key_value = PyList_GET_ITEM(labels_list, i);
+
+    char *label_key = nullptr;
+    char *label_value = nullptr;
+    if (!PyArg_ParseTuple(label_key_value, "ss:label_pair", &label_key, &label_value)) {
+      derr << __func__ << " list item " << i << " not a size 2 tuple" << dendl;
+      continue;
+    }
+
+    labels.push_back(std::make_pair(label_key, label_value));
+  }
+
   return self->py_modules->get_latest_counter_python(
-      svc_name, svc_id, counter_path);
+      svc_name, svc_id, counter_path, counter_name, sub_counter_name, labels);
 }
 
 static PyObject*
