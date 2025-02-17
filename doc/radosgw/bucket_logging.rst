@@ -116,11 +116,11 @@ For example:
 Standard
 ````````
 based on `AWS Logging Record Format`_.
-  
+
   - bucket owner (or dash if empty)
-  - bucket name (or dash if empty). in the format: ``[tenant:]<bucket name>``
-  - time
-  - remote IP (not supported, always a dash)
+  - bucket name (or dash if empty) in the format: ``[tenant:]<bucket name>``
+  - time in the following format: ``[day/month/year:hour:minute:second timezone]`` where "timezone" is in UTC offset
+  - client IP address (or dash if empty)
   - user or account (or dash if empty)
   - request ID
   - operation in the following format: ``WEBSITE/REST.<HTTP method>.<resource>``
@@ -131,16 +131,16 @@ based on `AWS Logging Record Format`_.
   - bytes sent (or dash if zero)
   - object size (or dash if zero)
   - total time (not supported, always a dash)
-  - turnaround time (not supported, always a dash)
-  - referrer (not supported, always a dash)
-  - user agent (not supported, always a dash)
+  - turnaround time in milliseconds
+  - referer (or dash if empty)
+  - user agent (or dash if empty) inside double quotes
   - version id (or dash if empty)
   - host id taken from "x-amz-id-2" (or dash if empty)
-  - signature version (not supported, always a dash)
-  - cipher suite (not supported, always a dash)
-  - authentication type (not supported, always a dash)
+  - signature version (or dash if empty)
+  - cipher suite (or dash if empty)
+  - authentication type (or dash if empty)
   - host header (or dash if empty)
-  - TLS version (not supported, always a dash)
+  - TLS version (or dash if empty)
   - access point ARN (not supported, always a dash)
   - ACL flag ("Yes" if the request is an ACL operation, otherwise dash)
 
