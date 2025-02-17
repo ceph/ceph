@@ -555,14 +555,13 @@ class PrometheusService(CephadmService):
             service_discovery_url_prefixes = [f'{protocol}://{wrap_ipv6(ip)}:{port}' for ip in mgr_ips]
 
         job_names = {'mgr-prometheus': 'ceph',
-                     'node-exporter': 'node',
-                     'ingress': 'haproxy'}
+                     'node-exporter': 'node'}
         services = [
             'mgr-prometheus',
             'alertmanager',
             'node-exporter',
+            'haproxy',
             'ceph-exporter',
-            'ingress',
             'nvmeof',
             'nfs',
             'smb'
@@ -572,7 +571,7 @@ class PrometheusService(CephadmService):
             for service in services
             if service == 'mgr-prometheus'
             or bool(self.mgr.cache.get_daemons_by_service(service))
-            or bool(self.mgr.cache.get_daemons_by_type(service))
+            or (service == 'haproxy' and bool(self.mgr.cache.get_daemons_by_type('ingress')))
         }
 
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()

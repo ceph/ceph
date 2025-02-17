@@ -1005,6 +1005,7 @@ class TestMonitoring:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
 
@@ -1013,6 +1014,7 @@ class TestMonitoring:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=haproxy
 
@@ -1024,6 +1026,7 @@ class TestMonitoring:
                     honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+
 
                 """).lstrip()
 
