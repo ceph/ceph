@@ -94,10 +94,10 @@ namespace rgw::dedup {
       dedup_flags_t   flags;
     } __attribute__((__packed__));
 
-    dedup_table_t(uint32_t entries_count, const DoutPrefixProvider* _dpp);
+    dedup_table_t(const DoutPrefixProvider* _dpp,
+		  uint8_t *p_slab,
+		  uint64_t slab_size);
     ~dedup_table_t();
-    void reset();
-    uint32_t find_entry(const key_t *p_key);
     int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 		  bool shared_manifest, bool has_sha256);
     int update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
@@ -114,57 +114,15 @@ namespace rgw::dedup {
 			  uint64_t *p_duplicate_count,
 			  uint64_t *p_duplicate_bytes_approx);
     void remove_singletons_and_redistribute_keys();
-    void get_stats(uint32_t *p_entries_count, uint32_t *p_occupied_count);
-    void stat_counters_reset();
-
+  private:
     // 28 Bytes unified entries
     struct table_entry_t {
       key_t key;
       value_t val;
     } __attribute__((__packed__));
 
-    struct Iterator
-    {
-      using iterator_category = std::forward_iterator_tag;
-      using difference_type   = std::ptrdiff_t;
-      using value_type        = table_entry_t;
-      using pointer           = table_entry_t*;
-      using reference         = table_entry_t&;
+    uint32_t find_entry(const key_t *p_key);
 
-      Iterator(pointer start, pointer end) : m_ptr(start), m_end(end) {
-	while (m_ptr != m_end && !m_ptr->val.is_occupied()) {
-	  m_ptr++;
-	}
-      }
-
-      reference operator*() const { return *m_ptr; }
-      pointer operator->() { return m_ptr; }
-      Iterator& operator++() {
-	do {
-	  m_ptr++;
-	} while (m_ptr != m_end && !m_ptr->val.is_occupied());
-	return *this;
-      }
-      Iterator operator++(int) {
-	Iterator tmp = *this;
-	++(*this);
-	return tmp;
-      }
-      friend bool operator== (const Iterator& a, const Iterator& b) {
-	return a.m_ptr == b.m_ptr;
-      };
-      friend bool operator!= (const Iterator& a, const Iterator& b) {
-	return a.m_ptr != b.m_ptr;
-      };
-
-    private:
-      pointer m_ptr;
-      pointer m_end;
-    };
-
-    Iterator begin() { return Iterator(hash_tab, hash_tab + entries_count); }
-    Iterator end()   { return Iterator(hash_tab + entries_count, hash_tab + entries_count); }
-  private:
     uint32_t       entries_count = 0;
     uint32_t       occupied_count = 0;
     table_entry_t *hash_tab = nullptr;

@@ -10,16 +10,15 @@ namespace rgw::dedup {
   static constexpr uint64_t HEAD_OBJ_SIZE = 4*1024*1024; // 4MB
   using work_shard_t   = uint16_t;
   using md5_shard_t    = uint16_t;
-#if 1
-  // REMOVE-ME
-  // temporary settings to help debug small systems
-  const work_shard_t MAX_WORK_SHARD = 4;
-  const md5_shard_t  MAX_MD5_SHARD  = 8;
-#else
+
+  // settings to help debug small systems
+  const work_shard_t MIN_WORK_SHARD = 2;
+  const md5_shard_t  MIN_MD5_SHARD  = 4;
+
   // Those are the correct values for production system
-  const work_shard_t MAX_WORK_SHARD = 128;
-  const md5_shard_t  MAX_MD5_SHARD  = 256;
-#endif
+  const work_shard_t MAX_WORK_SHARD = 255;
+  const md5_shard_t  MAX_MD5_SHARD  = 512;
+
   const work_shard_t NULL_WORK_SHARD = 0xFFFF;
   const md5_shard_t  NULL_MD5_SHARD  = 0xFFFF;
   const unsigned     NULL_SHARD      = 0xFFFF;

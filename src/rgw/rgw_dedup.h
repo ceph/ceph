@@ -49,7 +49,7 @@ namespace rgw::dedup {
   void encode(const control_t& ctl, ceph::bufferlist& bl);
   void decode(control_t& ctl, ceph::bufferlist::const_iterator& bl);
 
-  class disk_block_array_t;
+  class disk_block_seq_t;
   struct disk_record_t;
   struct key_t;
   //Interval between each execution of the script is set to 5 seconds
@@ -96,8 +96,7 @@ namespace rgw::dedup {
     void ack_notify(uint64_t notify_id, uint64_t cookie, int status);
     void run();
     int  setup(struct dedup_epoch_t*);
-    bool all_shards_completed(dedup_step_t step, uint64_t *p_total_ingressed);
-    void all_shards_barrier(dedup_step_t step, const char *stepname);
+    void work_shards_barrier(work_shard_t num_work_shards);
     void handle_pause_req(const char* caller);
     const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
@@ -108,54 +107,84 @@ namespace rgw::dedup {
     inline void check_and_update_md5_heartbeat(md5_shard_t md5_id,
 					       uint64_t load_count,
 					       uint64_t dedup_count);
-    int  ingress_bucket_idx_single_object(const rgw::sal::Bucket     *bucket,
+    int  ingress_bucket_idx_single_object(disk_block_array_t         &disk_arr,
+					  const rgw::sal::Bucket     *bucket,
 					  const rgw_bucket_dir_entry &entry,
 					  worker_stats_t             *p_worker_stats /*IN-OUT*/);
-    int  process_bucket_shards(const rgw::sal::Bucket *bucket,
+    int  process_bucket_shards(disk_block_array_t     &disk_arr,
+			       const rgw::sal::Bucket *bucket,
 			       std::map<int, string>  &oids,
 			       librados::IoCtx        &ioctx,
-			       work_shard_t           shard_id,
+			       work_shard_t            shard_id,
+			       work_shard_t            num_work_shards,
 			       worker_stats_t         *p_worker_stats /*IN-OUT*/);
-    int  ingress_bucket_objects_single_shard(const rgw_bucket &bucket_rec,
-					     work_shard_t      worker_id,
-					     worker_stats_t   *p_worker_stats /*IN-OUT*/);
+    int  ingress_bucket_objects_single_shard(disk_block_array_t &disk_arr,
+					     const rgw_bucket   &bucket_rec,
+					     work_shard_t        worker_id,
+					     work_shard_t        num_work_shards,
+					     worker_stats_t     *p_worker_stats /*IN-OUT*/);
     int  objects_ingress_single_work_shard(work_shard_t worker_id,
-					   worker_stats_t *p_worker_stats);
-    int  f_ingress_work_shard(unsigned shard_id);
-    int  f_dedup_md5_shard(unsigned shard_id);
-    int  process_all_shards(bool ingress_work_shards, int (Background::* func)(unsigned));
+					   work_shard_t num_work_shards,
+					   md5_shard_t num_md5_shards,
+					   worker_stats_t *p_worker_stats,
+					   uint8_t *raw_mem,
+					   uint64_t raw_mem_size);
+    int  f_ingress_work_shard(unsigned shard_id,
+			      uint8_t *raw_mem,
+			      uint64_t raw_mem_size,
+			      work_shard_t num_work_shards,
+			      md5_shard_t num_md5_shards);
+    int  f_dedup_md5_shard(unsigned shard_id,
+			   uint8_t *raw_mem,
+			   uint64_t raw_mem_size,
+			   work_shard_t num_work_shards,
+			   md5_shard_t num_md5_shards);
+    int  process_all_shards(bool ingress_work_shards,
+			    int (Background::* func)(unsigned, uint8_t*, uint64_t, work_shard_t, md5_shard_t),
+			    uint8_t *raw_mem,
+			    uint64_t raw_mem_size,
+			    work_shard_t num_work_shards,
+			    md5_shard_t num_md5_shards);
     int  read_bucket_stats(const rgw_bucket &bucket_rec,
 			   uint64_t     *p_num_obj,
 			   uint64_t     *p_size);
     int  collect_all_buckets_stats();
-    int  run_dedup_step(dedup_step_t step,
+    int  run_dedup_step(dedup_table_t *p_table,
+			dedup_step_t step,
 			md5_shard_t md5_shard,
 			work_shard_t work_shard,
-			uint32_t seq_count_arr[],
+			uint32_t *p_seq_count,
 			md5_stats_t *p_stats /* IN-OUT */,
-			disk_block_array_t *p_disk_block_arr);
+			disk_block_seq_t *p_disk_block_arr);
 
     int calc_object_sha256(const disk_record_t *p_rec, unsigned char *p_sha256);
-    void reduce_md5_collision_chances(uint64_t obj_count_in_shard);
-    int objects_dedup_single_md5_shard(md5_shard_t md5_shard,
-				       md5_stats_t *p_stats);
-    int add_disk_rec_from_bucket_idx(const rgw::sal::Bucket *p_bucket,
+    void reduce_md5_collision_chances(dedup_table_t *p_table,
+				      uint64_t obj_count_in_shard);
+    int objects_dedup_single_md5_shard(dedup_table_t *p_table,
+				       md5_shard_t md5_shard,
+				       md5_stats_t *p_stats,
+				       work_shard_t num_work_shards);
+    int add_disk_rec_from_bucket_idx(disk_block_array_t     &disk_arr,
+				     const rgw::sal::Bucket *p_bucket,
 				     const parsed_etag_t    *p_parsed_etag,
 				     const string           &obj_name,
 				     uint64_t                obj_size);
 
-    int read_object_attribute(const disk_record_t *p_rec,
+    int read_object_attribute(dedup_table_t       *p_table,
+			      const disk_record_t *p_rec,
 			      disk_block_id_t      block_id,
 			      record_id_t          rec_id,
 			      md5_shard_t          md5_shard,
 			      md5_stats_t         *p_stats /* IN-OUT */,
-			      disk_block_array_t  *p_disk);
-    int try_deduping_record(const disk_record_t *p_rec,
+			      disk_block_seq_t  *p_disk);
+    int try_deduping_record(dedup_table_t       *p_table,
+			    const disk_record_t *p_rec,
 			    disk_block_id_t      block_id,
 			    record_id_t          rec_id,
 			    md5_shard_t          md5_shard,
 			    md5_stats_t         *p_stats /* IN-OUT */);
-    int add_record_to_dedup_table(const struct disk_record_t *p_rec,
+    int add_record_to_dedup_table(dedup_table_t *p_table,
+				  const struct disk_record_t *p_rec,
 				  disk_block_id_t block_id,
 				  record_id_t rec_id);
     int inc_ref_count_by_manifest(const string   &ref_tag,
@@ -172,7 +201,7 @@ namespace rgw::dedup {
 		     bool                 is_shared_manifest_src,
 		     bool                 src_has_sha256);
 
-    int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count_arr[]);
+    int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
     void init_rados_access_handles();
 
     // private data members
@@ -183,10 +212,8 @@ namespace rgw::dedup {
     const DoutPrefix dp;
     const DoutPrefixProvider* const dpp;
     CephContext* const cct;
-    dedup_table_t d_table;
     cluster d_cluster;
-    disk_block_array_t *p_disk_arr[MAX_MD5_SHARD];
-    librados::IoCtx    *p_dedup_cluster_ioctx = nullptr;
+    librados::IoCtx d_dedup_cluster_ioctx;
     utime_t  d_heart_beat_last_update;
     unsigned d_heart_beat_max_elapsed_sec;
 
@@ -198,7 +225,6 @@ namespace rgw::dedup {
     uint64_t d_num_rados_objects_bytes = 0;
     // we don't benefit from deduping RGW objects smaller than head-object size
     uint32_t d_min_obj_size_for_dedup = (4ULL * 1024 * 1024);
-
     int  d_execute_interval;
     control_t d_ctl;
     uint64_t d_watch_handle = 0;

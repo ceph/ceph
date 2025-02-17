@@ -63,13 +63,12 @@ using namespace ::cls::cmpxattr;
 #include "rgw_perf_counters.h"
 #include "include/ceph_assert.h"
 
+//#define DEDUP_DYN_ALLOC
 static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 //#define dout_context cct
 //#undef dout_prefix
 //#define dout_prefix *_dout << "RGW_DEDUP:: "
 
-static constexpr uint64_t cost = 1; // 1 throttle unit per request
-static constexpr uint64_t id = 0; // ids unused
 namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
@@ -260,7 +259,7 @@ namespace rgw::dedup {
     rados = store->getRados();
     rados_handle = rados->get_rados_handle();
 
-    if (init_dedup_pool_ioctx(rados, dpp, p_dedup_cluster_ioctx) != 0) {
+    if (init_dedup_pool_ioctx(rados, dpp, d_dedup_cluster_ioctx) != 0) {
       return;
     }
   }
@@ -273,7 +272,6 @@ namespace rgw::dedup {
     dp(_cct, dout_subsys, "dedup background: "),
     dpp(&dp),
     cct(_cct),
-    d_table(16*1024*1024, dpp), // 16M entries per-shard
     d_cluster(dpp, cct),
     d_execute_interval(_execute_interval),
     d_watcher_ctx(this)
@@ -283,17 +281,8 @@ namespace rgw::dedup {
     // temp hack to allow processing small files
     d_min_obj_size_for_dedup = 1024;
 #endif
-    // TBD1: disk_block_array_t should be released after bucket-index scan
-    // TBD2: d_table should be dynamiclly allocated
-    // TBD3: disk_block_array_t and d_table should use the same memory-buffer
-    // TBD4: memory-buffer should be released after dedup is completed
-    for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-      // TBD: check allocation success
-      p_disk_arr[md5_shard] = new disk_block_array_t(dpp, md5_shard);
-    }
-    p_dedup_cluster_ioctx = new librados::IoCtx();
+
     init_rados_access_handles();
-    ceph_assert(p_dedup_cluster_ioctx);
 
     d_heart_beat_last_update = ceph_clock_now();
     d_heart_beat_max_elapsed_sec = 3;
@@ -304,14 +293,10 @@ namespace rgw::dedup {
   {
     // TBD:
     // Do we need to stop the runner thread first ???
-    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-      if (p_disk_arr[md5_shard]) {
-	delete p_disk_arr[md5_shard];
-      }
-    }
-    delete p_dedup_cluster_ioctx;
   }
 
+  static constexpr uint64_t cost = 1; // 1 throttle unit per request
+  static constexpr uint64_t id = 0; // ids unused
   //---------------------------------------------------------------------------
   [[maybe_unused]]static void show_ref_tags(const DoutPrefixProvider* dpp, std::string &oid, rgw_rados_ref &obj)
   {
@@ -484,16 +469,16 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::add_disk_rec_from_bucket_idx(const rgw::sal::Bucket *p_bucket,
+  int Background::add_disk_rec_from_bucket_idx(disk_block_array_t     &disk_arr,
+					       const rgw::sal::Bucket *p_bucket,
 					       const parsed_etag_t    *p_parsed_etag,
 					       const std::string      &obj_name,
 					       uint64_t                obj_size)
   {
-    md5_shard_t md5_shard = p_parsed_etag->md5_low % MAX_MD5_SHARD;
-    auto p_disk = p_disk_arr[md5_shard];
+    auto p_disk = disk_arr.get_shard_block_seq(p_parsed_etag->md5_low);
     if (p_disk) {
-      disk_block_array_t::record_info_t rec_info;
-      int ret = p_disk->add_record(p_dedup_cluster_ioctx, p_bucket, nullptr,
+      disk_block_seq_t::record_info_t rec_info;
+      int ret = p_disk->add_record(d_dedup_cluster_ioctx, p_bucket, nullptr,
 				   p_parsed_etag, obj_name, obj_size, &rec_info);
       if (unlikely(ret != 0)) {
 	return ret;
@@ -510,7 +495,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::add_record_to_dedup_table(const disk_record_t *p_rec,
+  int Background::add_record_to_dedup_table(dedup_table_t *p_table,
+					    const disk_record_t *p_rec,
 					    disk_block_id_t block_id,
 					    record_id_t rec_id)
   {
@@ -529,7 +515,7 @@ namespace rgw::dedup {
 		       << "::ETAG=" << std::hex << p_rec->s.md5_high
 		       << p_rec->s.md5_low << std::dec << dendl;
 
-    return d_table.add_entry(&key, block_id, rec_id, has_shared_manifest, has_valid_sha256);
+    return p_table->add_entry(&key, block_id, rec_id, has_shared_manifest, has_valid_sha256);
   }
 
   //---------------------------------------------------------------------------
@@ -799,12 +785,13 @@ namespace rgw::dedup {
   // We purged all entries not marked for-dedup (i.e. singleton bit is set) from the table
   //   so all entries left are sources of dedup with multiple copies.
   // Need to read attributes from the Head-Object and output them to a new SLAB
-  int Background::read_object_attribute(const disk_record_t *p_rec,
+  int Background::read_object_attribute(dedup_table_t       *p_table,
+					const disk_record_t *p_rec,
 					disk_block_id_t      old_block_id,
 					record_id_t          old_rec_id,
 					md5_shard_t          md5_shard,
 					md5_stats_t         *p_stats /* IN-OUT */,
-					disk_block_array_t  *p_disk)
+					disk_block_seq_t  *p_disk)
   {
     bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>();
     if (unlikely(should_print_debug)) {
@@ -815,7 +802,7 @@ namespace rgw::dedup {
     key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
 				p_rec->s.num_parts);
     dedup_table_t::value_t src_val;
-    int ret = d_table.get_val(&key_from_bucket_index, &src_val);
+    int ret = p_table->get_val(&key_from_bucket_index, &src_val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       p_stats->skipped_singleton++;
@@ -824,7 +811,7 @@ namespace rgw::dedup {
 			 << "/" << p_rec->obj_name << std::dec << dendl;
       return 0;
     }
-
+    ldpp_dout(dpp, 10) << __func__ << "::bucket_name=" << p_rec->bucket_name << dendl;
     rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
     unique_ptr<rgw::sal::Bucket> bucket;
     ret = driver->load_bucket(dpp, b, &bucket, null_yield);
@@ -882,8 +869,8 @@ namespace rgw::dedup {
 
     key_t key_from_obj(parsed_etag.md5_high, parsed_etag.md5_low, size_4k_units, parsed_etag.num_parts);
     if (key_from_obj == key_from_bucket_index) {
-      disk_block_array_t::record_info_t rec_info;
-      ret = p_disk->add_record(p_dedup_cluster_ioctx, bucket.get(), p_obj.get(), &parsed_etag,
+      disk_block_seq_t::record_info_t rec_info;
+      ret = p_disk->add_record(d_dedup_cluster_ioctx, bucket.get(), p_obj.get(), &parsed_etag,
 			       p_rec->obj_name, p_rec->s.obj_bytes_size, &rec_info);
       if (ret == 0) {
 	// set the disk_block_id_t to this unless the existing disk_block_id is marked as shared-manifest
@@ -892,8 +879,8 @@ namespace rgw::dedup {
 			   << p_rec->obj_name << " was written to block_idx="
 			   << rec_info.block_id << " rec_id=" << rec_info.rec_id
 			   << ", shared_manifest=" << rec_info.has_shared_manifest << dendl;
-	return d_table.update_entry(&key_from_bucket_index, rec_info.block_id, rec_info.rec_id,
-				    rec_info.has_shared_manifest, rec_info.has_valid_sha256);
+	return p_table->update_entry(&key_from_bucket_index, rec_info.block_id, rec_info.rec_id,
+				     rec_info.has_shared_manifest, rec_info.has_valid_sha256);
       }
       else {
 	ldpp_dout(dpp, 1)  << __func__ << "::ERROR: Failed p_disk->add_record()" << dendl;
@@ -918,7 +905,8 @@ namespace rgw::dedup {
   // we can withstand most errors moving to the next object
   // only report an error if we recived a stop scan request!
   //
-  int Background::try_deduping_record(const disk_record_t *p_tgt_rec,
+  int Background::try_deduping_record(dedup_table_t       *p_table,
+				      const disk_record_t *p_tgt_rec,
 				      disk_block_id_t      block_id,
 				      record_id_t          rec_id,
 				      md5_shard_t          md5_shard,
@@ -939,7 +927,7 @@ namespace rgw::dedup {
     key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, size_4k_units,
 	      p_tgt_rec->s.num_parts);
     dedup_table_t::value_t src_val;
-    int ret = d_table.get_val(&key, &src_val);
+    int ret = p_table->get_val(&key, &src_val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       // should never happened since we purged all singletons before
@@ -962,7 +950,7 @@ namespace rgw::dedup {
 
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec;
-    ret = load_record(p_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
+    ret = load_record(d_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
     if (unlikely(ret != 0)) {
       // we can withstand most errors moving to the next object
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed load_record("
@@ -1017,7 +1005,7 @@ namespace rgw::dedup {
       if (!src_val.has_shared_manifest()) {
 	p_stats->set_shared_manifest++;
 	// set the shared manifest flag in the dedup table
-	d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
+	p_table->set_shared_manifest_mode(&key, src_block_id, src_rec_id);
       }
       else {
 	ldpp_dout(dpp, 20) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
@@ -1045,7 +1033,7 @@ namespace rgw::dedup {
       disk_block_id_t block_id = entry.val.block_idx;
       record_id_t rec_id = entry.val.rec_id;
       disk_record_t rec;
-      int ret = load_record(p_dedup_cluster_ioctx, &rec, block_id, rec_id, md5_shard, &entry.key, dpp);
+      int ret = load_record(d_dedup_cluster_ioctx, &rec, block_id, rec_id, md5_shard, &entry.key, dpp);
       if (unlikely(ret != 0)) {
 	ldpp_dout(dpp, 1) << __func__ << "::Failed load_record()::"
 			  << rec.bucket_name << "/" << rec.obj_name << dendl;
@@ -1086,29 +1074,29 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::run_dedup_step(dedup_step_t step,
+  int Background::run_dedup_step(dedup_table_t *p_table,
+				 dedup_step_t step,
 				 md5_shard_t md5_shard,
 				 work_shard_t worker_id,
-				 uint32_t slab_count_arr[],
+				 uint32_t *p_slab_count,
 				 md5_stats_t *p_stats, /* IN-OUT */
-				 disk_block_array_t *p_disk_block_arr)
+				 disk_block_seq_t *p_disk_block_arr)
   {
     const int MAX_OBJ_LOAD_FAILURE = 3;
     const int MAX_BAD_BLOCKS = 3;
     bool      has_more = true;
     uint32_t  seq_number = 0;
     int       failure_count = 0;
-    ldpp_dout(dpp, 20) << __func__
-		       << dedup_step_name(step) << "::worker_id=" << (int)worker_id
-		       << ", md5_shard=" << (int)md5_shard << dendl;
-    slab_count_arr[worker_id] = 0;
+    ldpp_dout(dpp, 10) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
+		       << worker_id << ", md5_shard=" << md5_shard << dendl;
+    *p_slab_count = 0;
     while (has_more) {
       bufferlist bl;
-      int ret = load_slab(p_dedup_cluster_ioctx, bl, md5_shard, worker_id, seq_number, dpp);
+      int ret = load_slab(d_dedup_cluster_ioctx, bl, md5_shard, worker_id, seq_number, dpp);
       if (unlikely(ret < 0)) {
-	derr << __func__ << "::ERROR::Failed loading object!! md5_shard="
-	     << (uint32_t)md5_shard << ", worker_id=" << (uint32_t)worker_id
-	     << ", seq_number=" << seq_number << ", failure_count=" << failure_count << dendl;
+	derr << __func__ << "::ERR::Failed loading object!! md5_shard=" << md5_shard
+	     << ", worker_id=" << worker_id << ", seq_number=" << seq_number
+	     << ", failure_count=" << failure_count << dendl;
 	// skip to the next SLAB stopping after 3 bad objects
 	if (failure_count++ < MAX_OBJ_LOAD_FAILURE) {
 	  seq_number += DISK_BLOCK_COUNT;
@@ -1118,7 +1106,7 @@ namespace rgw::dedup {
 	  return -1;
 	}
       }
-      slab_count_arr[worker_id]++;
+      (*p_slab_count)++;
       failure_count = 0;
       unsigned slab_rec_count = 0;
       auto bl_itr = bl.cbegin();
@@ -1145,7 +1133,7 @@ namespace rgw::dedup {
 	  }
 
 	  if (p_header->rec_count == 0) {
-	    ldpp_dout(dpp, 20) << __func__ << "::Block #" << block_num
+	    ldpp_dout(dpp, 10) << __func__ << "::Block #" << block_num
 			       << " has an empty header, no more blocks" << dendl;
 	    has_more = false;
 	    break;
@@ -1156,16 +1144,16 @@ namespace rgw::dedup {
 	    // We deserialize the record inside the CTOR
 	    disk_record_t rec(p + offset);
 	    if (step == STEP_BUILD_TABLE) {
-	      add_record_to_dedup_table(&rec, disk_block_id, rec_id);
+	      add_record_to_dedup_table(p_table, &rec, disk_block_id, rec_id);
 	      p_stats->loaded_objects ++;
 	      slab_rec_count++;
 	    }
 	    else if (step == STEP_READ_ATTRIBUTES) {
-	      read_object_attribute(&rec, disk_block_id, rec_id, md5_shard, p_stats, p_disk_block_arr);
+	      read_object_attribute(p_table, &rec, disk_block_id, rec_id, md5_shard, p_stats, p_disk_block_arr);
 	      slab_rec_count++;
 	    }
 	    else if (step == STEP_REMOVE_DUPLICATES) {
-	      try_deduping_record(&rec, disk_block_id, rec_id, md5_shard, p_stats);
+	      try_deduping_record(p_table, &rec, disk_block_id, rec_id, md5_shard, p_stats);
 	      slab_rec_count++;
 	    }
 	    else {
@@ -1204,7 +1192,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::ingress_bucket_idx_single_object(const rgw::sal::Bucket     *p_bucket,
+  int Background::ingress_bucket_idx_single_object(disk_block_array_t         &disk_arr,
+						   const rgw::sal::Bucket     *p_bucket,
 						   const rgw_bucket_dir_entry &entry,
 						   worker_stats_t             *p_worker_stats /*IN-OUT*/)
   {
@@ -1257,7 +1246,7 @@ namespace rgw::dedup {
 	p_worker_stats->small_multipart_obj++;
       }
     }
-    return add_disk_rec_from_bucket_idx(p_bucket, &parsed_etag, entry.key.name, size);
+    return add_disk_rec_from_bucket_idx(disk_arr, p_bucket, &parsed_etag, entry.key.name, size);
   }
 
   //---------------------------------------------------------------------------
@@ -1270,7 +1259,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20) << __func__ << "::max_elapsed_sec="
 			 << d_heart_beat_max_elapsed_sec << dendl;
       d_heart_beat_last_update = now;
-      d_cluster.update_shard_token_heartbeat(p_dedup_cluster_ioctx, shard_id,
+      d_cluster.update_shard_token_heartbeat(d_dedup_cluster_ioctx, shard_id,
 					     count_a, count_b, prefix);
     }
   }
@@ -1313,10 +1302,12 @@ namespace rgw::dedup {
   // if (bucket_index_shard % work_id) == 0) -> read and process bucket_index_shard
   // else -> skip bucket_index_shard and don't read it
   //---------------------------------------------------------------------------
-  int Background::process_bucket_shards(const rgw::sal::Bucket *bucket,
+  int Background::process_bucket_shards(disk_block_array_t     &disk_arr,
+					const rgw::sal::Bucket *bucket,
 					std::map<int, string>  &oids,
 					librados::IoCtx        &ioctx,
 					work_shard_t            worker_id,
+					work_shard_t            num_work_shards,
 					worker_stats_t         *p_worker_stats /*IN-OUT*/)
   {
     const uint32_t num_shards = oids.size();
@@ -1346,7 +1337,7 @@ namespace rgw::dedup {
       if (unlikely(ret < 0)) {
 	ldpp_dout(dpp, 1) << __func__ << "::ERR: failed rgw_rados_operate() ret="
 			  << ret << "::" << cpp_strerror(-ret) << dendl;
-	current_shard = move_to_next_bucket_index_shard(dpp, current_shard, MAX_WORK_SHARD,
+	current_shard = move_to_next_bucket_index_shard(dpp, current_shard, num_work_shards,
 							bucket->get_name(), &marker);
 	continue;
       }
@@ -1362,7 +1353,7 @@ namespace rgw::dedup {
 	  continue;
 	}
 	marker = dirent.key;
-	ret = ingress_bucket_idx_single_object(bucket, dirent, p_worker_stats);
+	ret = ingress_bucket_idx_single_object(disk_arr, bucket, dirent, p_worker_stats);
       }
       // TBD: advance marker only once here!
       if (result.is_truncated) {
@@ -1370,7 +1361,7 @@ namespace rgw::dedup {
       }
       else {
 	// we reached the end of this shard -> move to the next shard
-	current_shard = move_to_next_bucket_index_shard(dpp, current_shard, MAX_WORK_SHARD,
+	current_shard = move_to_next_bucket_index_shard(dpp, current_shard, num_work_shards,
 							bucket->get_name(), &marker);
       }
     }
@@ -1381,9 +1372,11 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::ingress_bucket_objects_single_shard(const rgw_bucket &bucket_rec,
-						      work_shard_t      worker_id,
-						      worker_stats_t   *p_worker_stats /*IN-OUT*/)
+  int Background::ingress_bucket_objects_single_shard(disk_block_array_t &disk_arr,
+						      const rgw_bucket   &bucket_rec,
+						      work_shard_t       worker_id,
+						      work_shard_t       num_work_shards,
+						      worker_stats_t     *p_worker_stats /*IN-OUT*/)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
     int ret = driver->load_bucket(dpp, bucket_rec, &bucket, null_yield);
@@ -1415,7 +1408,8 @@ namespace rgw::dedup {
 						    idx_layout, &ioctx, &oids, nullptr);
     if (ret >= 0) {
       // process all the shards in this bucket owned by the worker_id
-      return process_bucket_shards(bucket.get(), oids, ioctx, worker_id, p_worker_stats);
+      return process_bucket_shards(disk_arr, bucket.get(), oids, ioctx, worker_id,
+				   num_work_shards, p_worker_stats);
     }
     else {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: open_bucket_index()  ret="
@@ -1443,12 +1437,14 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void Background::reduce_md5_collision_chances(uint64_t obj_count_in_shard)
+  void Background::reduce_md5_collision_chances(dedup_table_t *p_table,
+						uint64_t obj_count_in_shard)
   {
-    uint64_t max_protected_objects_per_shard = d_max_protected_objects / MAX_MD5_SHARD;
+#if 0
+    uint64_t max_protected_objects_per_shard = d_max_protected_objects / d_num_md5_shards;
 #if 1
     if (obj_count_in_shard > max_protected_objects_per_shard) {
-      d_table.remove_objects_not_protected_by_md5(max_protected_objects_per_shard);
+      p_table->remove_objects_not_protected_by_md5(max_protected_objects_per_shard);
     }
 #else
     // The chance for collison with a 128bit MD5 is 1/(2^64) for object sizes
@@ -1463,35 +1459,39 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 10) << __func__ << "::obj_count_ceiling=" << obj_count_ceiling << dendl;
       if (obj_count_ceiling > d_max_protected_objects) {
 	if (obj_count_in_shard > max_protected_objects_per_shard) {
-	  d_table.remove_objects_not_protected_by_md5(max_protected_objects_per_shard);
+	  p_table->remove_objects_not_protected_by_md5(max_protected_objects_per_shard);
 	}
       }
     }
 #endif
+#endif
   }
 
   //---------------------------------------------------------------------------
-  int Background::objects_dedup_single_md5_shard(md5_shard_t md5_shard,
-						 md5_stats_t *p_stats)
+  int Background::objects_dedup_single_md5_shard(dedup_table_t *p_table,
+						 md5_shard_t md5_shard,
+						 md5_stats_t *p_stats,
+						 work_shard_t num_work_shards)
   {
-    uint32_t slab_count_arr[MAX_WORK_SHARD];
+    uint32_t slab_count_arr[num_work_shards];
     // first load all etags to hashtable to find dedups
     // the entries come from bucket-index and got minimal info (etag, size)
-    for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-      run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, slab_count_arr, p_stats, nullptr);
+    for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
+      run_dedup_step(p_table, STEP_BUILD_TABLE, md5_shard, worker_id,
+		     slab_count_arr+worker_id, p_stats, nullptr);
       if (unlikely(d_ctl.should_stop())) {
 	ldpp_dout(dpp, 5) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
 	return -1;
       }
     }
-    d_table.count_duplicates(&p_stats->singleton_count, &p_stats->unique_count,
-			     &p_stats->duplicate_count, &p_stats->duplicated_blocks_bytes);
+    p_table->count_duplicates(&p_stats->singleton_count, &p_stats->unique_count,
+			      &p_stats->duplicate_count, &p_stats->duplicated_blocks_bytes);
     uint64_t obj_count_in_shard = (p_stats->singleton_count + p_stats->unique_count +
 				   p_stats->duplicate_count);
 #if 0
     md5_stats.duration = ceph_clock_now() - start_time;
     md5_stats.rados_bytes_before_dedup = d_num_rados_objects_bytes;
-    d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
+    d_cluster.mark_md5_shard_token_completed(d_dedup_cluster_ioctx, md5_shard, &md5_stats);
 #endif
 
     display_table_stat_counters(dpp, obj_count_in_shard, d_num_rados_objects_bytes, p_stats);
@@ -1499,48 +1499,50 @@ namespace rgw::dedup {
 #if 1
     d_ctl.show_dedup_type(dpp, "MD5 Loop");
     if (d_ctl.dedup_type != DEDUP_TYPE_FULL) {
-      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	remove_slabs(worker_id, md5_shard, slab_count_arr);
+      for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
+	remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
       return 0;
     }
 #endif
 
-    d_table.remove_singletons_and_redistribute_keys();
+    p_table->remove_singletons_and_redistribute_keys();
     // The SLABs holds minimal data set brought from the bucket-index
     // Objects participating in DEDUP need to read attributes from the Head-Object
-    // TBD  - find a better name than MAX_WORK_SHARD for the combined output
+    // TBD  - find a better name than num_work_shards for the combined output
     // TBD2 - worker_stats needs to be reflected, maybe move tham to MD5 stats??
     // (egress_slabs, egress_blocks, egress_records)
     {
-      disk_block_array_t disk_block_arr(dpp, md5_shard);
+      disk_block_seq_t disk_block_arr;
+      disk_block_t    arr[DISK_BLOCK_COUNT];
       worker_stats_t worker_stats;
-      disk_block_arr.set_worker_id(MAX_WORK_SHARD, &worker_stats);
-      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	run_dedup_step(STEP_READ_ATTRIBUTES, md5_shard, worker_id, slab_count_arr, p_stats, &disk_block_arr);
+      disk_block_arr.activate(dpp, arr, num_work_shards, md5_shard, &worker_stats);
+      for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
+	run_dedup_step(p_table, STEP_READ_ATTRIBUTES, md5_shard, worker_id,
+		       slab_count_arr+worker_id, p_stats, &disk_block_arr);
 	if (unlikely(d_ctl.should_stop())) {
 	  ldpp_dout(dpp, 1) << __func__ << "::STEP_READ_ATTRIBUTES::STOPPED\n" << dendl;
 	  return -1;
 	}
 	// we finished processing output SLAB from @worker_id -> remove them
-	remove_slabs(worker_id, md5_shard, slab_count_arr);
+	remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
-      disk_block_arr.flush_disk_records(p_dedup_cluster_ioctx);
+      disk_block_arr.flush_disk_records(d_dedup_cluster_ioctx);
       p_stats->valid_sha256_attrs   = worker_stats.valid_sha256;
       p_stats->invalid_sha256_attrs = worker_stats.invalid_sha256;
     }
 
 #if 1
     ldpp_dout(dpp, 10) << __func__ << "::STEP_REMOVE_DUPLICATES::started..." << dendl;
-    // TBD: skip this step when running in estimate mode
-    run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, MAX_WORK_SHARD, slab_count_arr, p_stats, nullptr);
+    uint32_t slab_count = 0;
+    run_dedup_step(p_table, STEP_REMOVE_DUPLICATES, md5_shard, num_work_shards, &slab_count, p_stats, nullptr);
     if (unlikely(d_ctl.should_stop())) {
       ldpp_dout(dpp, 5) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
       return -1;
     }
     ldpp_dout(dpp, 10) << __func__ << "::STEP_REMOVE_DUPLICATES::finished..." << dendl;
 #endif
-    remove_slabs(MAX_WORK_SHARD, md5_shard, slab_count_arr);
+    remove_slabs(num_work_shards, md5_shard, slab_count);
     return 0;
   }
 
@@ -1652,35 +1654,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void reset_output_buffers(disk_block_array_t *p_disk_arr[],
-				   work_shard_t worker_id,
-				   worker_stats_t *p_worker_stats)
-  {
-    // reset output buffers sorted by md5
-    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-      p_disk_arr[md5_shard]->set_worker_id(worker_id, p_worker_stats);
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  static void flush_output_buffers(const DoutPrefixProvider* const dpp,
-				   disk_block_array_t *p_disk_arr[],
-				   work_shard_t worker_id,
-				   unsigned max_md5_shard,
-				   librados::IoCtx *p_dedup_cluster_ioctx)
-  {
-    for (unsigned md5_shard = 0; md5_shard < max_md5_shard; md5_shard++) {
-      ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id="
-			 << worker_id<< ", md5_shard=" << (int) md5_shard << dendl;
-      p_disk_arr[md5_shard]->flush_disk_records(p_dedup_cluster_ioctx);
-    }
-  }
-
-  //---------------------------------------------------------------------------
   int Background::objects_ingress_single_work_shard(work_shard_t worker_id,
-						    worker_stats_t *p_worker_stats)
+						    work_shard_t num_work_shards,
+						    md5_shard_t num_md5_shards,
+						    worker_stats_t *p_worker_stats,
+						    uint8_t *raw_mem,
+						    uint64_t raw_mem_size)
   {
-    reset_output_buffers(p_disk_arr, worker_id, p_worker_stats);
+    disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
+				p_worker_stats, num_work_shards, num_md5_shards);
 
     int ret = 0;
     std::string section("bucket.instance");
@@ -1711,7 +1693,8 @@ namespace rgw::dedup {
 	    continue;
 	  }
 	  ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
-	  ret = ingress_bucket_objects_single_shard(bucket, worker_id, p_worker_stats);
+	  ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
+						    num_work_shards, p_worker_stats);
 	  if (unlikely(ret != 0)) {
 	    if (d_ctl.should_stop()) {
 	      driver->meta_list_keys_complete(handle);
@@ -1731,22 +1714,23 @@ namespace rgw::dedup {
 	break;
       }
     }
-
-    flush_output_buffers(dpp, p_disk_arr, worker_id, MAX_MD5_SHARD, p_dedup_cluster_ioctx);
+    ldpp_dout(dpp, 20) <<__func__ << "::flush_output_buffers() worker_id="
+		       << worker_id << dendl;
+    disk_arr.flush_output_buffers(dpp, d_dedup_cluster_ioctx);
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int Background::remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count_arr[])
+  int Background::remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count)
   {
     unsigned failure_count = 0;
 
-    for (uint32_t slab_id = 0; slab_id < slab_count_arr[worker_id]; slab_id++) {
+    for (uint32_t slab_id = 0; slab_id < slab_count; slab_id++) {
       uint32_t seq_number = disk_block_id_t::slab_id_to_seq_num(slab_id);
       disk_block_id_t block_id(worker_id, seq_number);
       std::string oid(block_id.get_slab_name(md5_shard));
       ldpp_dout(dpp, 10) << __func__ << "::calling ioctx->remove(" << oid << ")" << dendl;
-      int ret = p_dedup_cluster_ioctx->remove(oid);
+      int ret = d_dedup_cluster_ioctx.remove(oid);
       if (ret != 0) {
 	ldpp_dout(dpp, 0) << __func__ << "::ERR Failed ioctx->remove(" << oid << ")" << dendl;
 	failure_count++;
@@ -1757,14 +1741,20 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::f_ingress_work_shard(unsigned worker_id)
+  int Background::f_ingress_work_shard(unsigned worker_id,
+				       uint8_t *raw_mem,
+				       uint64_t raw_mem_size,
+				       work_shard_t num_work_shards,
+				       md5_shard_t num_md5_shards)
   {
+    ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id << dendl;
     utime_t start_time = ceph_clock_now();
     worker_stats_t worker_stats;
-    int ret = objects_ingress_single_work_shard(worker_id, &worker_stats);
+    int ret = objects_ingress_single_work_shard(worker_id, num_work_shards, num_md5_shards,
+						&worker_stats,raw_mem, raw_mem_size);
     if (ret == 0) {
       worker_stats.duration = ceph_clock_now() - start_time;
-      d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id,
+      d_cluster.mark_work_shard_token_completed(d_dedup_cluster_ioctx, worker_id,
 						&worker_stats);
       ldpp_dout(dpp, 10) << "stat counters [worker]:\n" << worker_stats << dendl;
       ldpp_dout(dpp, 10) << "Shard Process Duration   = "
@@ -1776,41 +1766,52 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::f_dedup_md5_shard(unsigned md5_shard)
+  int Background::f_dedup_md5_shard(unsigned md5_shard,
+				    uint8_t *raw_mem,
+				    uint64_t raw_mem_size,
+				    work_shard_t num_work_shards,
+				    md5_shard_t num_md5_shards)
   {
     utime_t start_time = ceph_clock_now();
     md5_stats_t md5_stats;
-    int ret = objects_dedup_single_md5_shard(md5_shard, &md5_stats);
+    //DEDUP_DYN_ALLOC
+    dedup_table_t table(dpp, raw_mem, raw_mem_size);
+    int ret = objects_dedup_single_md5_shard(&table, md5_shard, &md5_stats, num_work_shards);
     if (ret == 0) {
       md5_stats.duration = ceph_clock_now() - start_time;
       md5_stats.rados_bytes_before_dedup = d_num_rados_objects_bytes;
-      d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard,
+      d_cluster.mark_md5_shard_token_completed(d_dedup_cluster_ioctx, md5_shard,
 					       &md5_stats);
       ldpp_dout(dpp, 10) << "stat counters [md5]:\n" << md5_stats << dendl;
       ldpp_dout(dpp, 10) << "Shard Process Duration   = "
 			 << md5_stats.duration << dendl;
-      d_table.reset();
     }
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int Background::process_all_shards(bool ingress_work_shards, int (Background::*func)(unsigned))
+  int Background::process_all_shards(bool ingress_work_shards,
+				     int (Background::*func)(unsigned, uint8_t*, uint64_t, work_shard_t, md5_shard_t),
+				     uint8_t *raw_mem,
+				     uint64_t raw_mem_size,
+				     work_shard_t num_work_shards,
+				     md5_shard_t num_md5_shards)
   {
     while (true) {
       d_heart_beat_last_update = ceph_clock_now();
       uint16_t shard_id;
       if (ingress_work_shards) {
-	shard_id = d_cluster.get_next_work_shard_token(p_dedup_cluster_ioctx);
+	shard_id = d_cluster.get_next_work_shard_token(d_dedup_cluster_ioctx, num_work_shards);
       }
       else {
-	shard_id = d_cluster.get_next_md5_shard_token(p_dedup_cluster_ioctx);
+	shard_id = d_cluster.get_next_md5_shard_token(d_dedup_cluster_ioctx, num_md5_shards);
       }
 
       // start with a common error handler
       if (shard_id != NULL_SHARD) {
 	ldpp_dout(dpp, 10) << __func__ << "::Got shard_id=" << shard_id << dendl;
-	int ret = (this->*func)(shard_id);
+	int ret = (this->*func)(shard_id, raw_mem, raw_mem_size, num_work_shards,
+				num_md5_shards);
 	if (unlikely(ret != 0)) {
 	  if (d_ctl.should_stop()) {
 	    ldpp_dout(dpp, 5) << __func__ << "::stop execution" << dendl;
@@ -1865,20 +1866,46 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::setup(dedup_epoch_t *p_epoch)
   {
-    int ret = d_cluster.init(store, p_dedup_cluster_ioctx, p_epoch, false);
+    collect_pool_stats(dpp, rados, &d_num_rados_objects, &d_num_rados_objects_bytes);
+    collect_all_buckets_stats();
+    if (d_num_rados_objects > 0 && d_all_buckets_obj_count == 0) {
+      ldpp_dout(dpp, 5) << __func__ << "::All buckets are empty, but Rados has "
+			<< d_num_rados_objects << " objects!!" << dendl;
+    }
+
+#if 1
+    std::random_device rd;  // a seed source for the random number engine
+    std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+    std::uniform_int_distribution<> work_distrib(1, MAX_WORK_SHARD);
+    std::uniform_int_distribution<> md5_distrib(1, MAX_MD5_SHARD);
+
+    std::srand(std::time({}));
+    work_shard_t num_work_shards = work_distrib(gen);
+    md5_shard_t  num_md5_shards  = md5_distrib(gen);
+    while (num_work_shards == 0) {
+      num_work_shards = work_distrib(gen);
+    }
+    while (num_md5_shards == 0) {
+      num_md5_shards = md5_distrib(gen);
+    }
+    ldpp_dout(dpp, 10) << __func__ << "::RAND num_work_shards=" << num_work_shards
+		       << "::num_md5_shards=" << num_md5_shards << dendl;
+    int ret = d_cluster.init(store, d_dedup_cluster_ioctx, p_epoch, false,
+			     num_work_shards, num_md5_shards);
+#else
+    int ret = d_cluster.init(store, d_dedup_cluster_ioctx, p_epoch, false,
+			     MAXX_WORK_SHARD, MAXX_MD5_SHARD);
+#endif
     if (ret != 0) {
       derr << __func__ << "::ERR: failed cluster.init()" << dendl;
       return -1;
     }
 
-    d_table.reset();
-    collect_pool_stats(dpp, rados, &d_num_rados_objects, &d_num_rados_objects_bytes);
-    collect_all_buckets_stats();
-
-    if (d_num_rados_objects > 0 && d_all_buckets_obj_count == 0) {
-      ldpp_dout(dpp, 5) << "All buckets are empty, but Rados has "
-			<< d_num_rados_objects << " objects!!" << dendl;
-    }
+    ldpp_dout(dpp, 10) <<__func__ << "::" << *p_epoch << dendl;
+    d_ctl.dedup_type = p_epoch->dedup_type;
+    ceph_assert(d_ctl.dedup_type == DEDUP_TYPE_FULL ||
+		d_ctl.dedup_type == DEDUP_TYPE_DRY_RUN);
+    d_ctl.show_dedup_type(dpp, __func__);
 
     return 0;
   }
@@ -1886,7 +1913,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::watch_reload(const DoutPrefixProvider* dpp)
   {
-    if (!p_dedup_cluster_ioctx->is_valid()) {
+    if (!d_dedup_cluster_ioctx.is_valid()) {
       ldpp_dout(dpp, 1) << __func__
 			<< "::ERR: invalid pool handler (missing pool)" << dendl;
       return -ENOENT;
@@ -1894,7 +1921,7 @@ namespace rgw::dedup {
     const std::string & oid = DEDUP_WATCH_OBJ;
     // create the object to watch (object may already exist)
     bool exclusive = true;
-    int ret = p_dedup_cluster_ioctx->create(oid, exclusive);
+    int ret = d_dedup_cluster_ioctx.create(oid, exclusive);
     if (ret >= 0) {
       ldpp_dout(dpp, 5) << __func__ << "::" << oid << " was created!" << dendl;
     }
@@ -1907,7 +1934,7 @@ namespace rgw::dedup {
       return ret;
     }
 
-    ret = p_dedup_cluster_ioctx->watch2(oid, &d_watch_handle, &d_watcher_ctx);
+    ret = d_dedup_cluster_ioctx.watch2(oid, &d_watch_handle, &d_watcher_ctx);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed watch2() " << oid
 			<< ". error: " << cpp_strerror(ret) << dendl;
@@ -1926,12 +1953,12 @@ namespace rgw::dedup {
       return 0;
     }
 
-    if (!p_dedup_cluster_ioctx->is_valid()) {
+    if (!d_dedup_cluster_ioctx.is_valid()) {
       ldpp_dout(dpp, 1) << __func__
 			<< "::ERR: invalid pool handler (missing pool)" << dendl;
       return -ENOENT;
     }
-    const auto ret = p_dedup_cluster_ioctx->unwatch2(d_watch_handle);
+    const auto ret = d_dedup_cluster_ioctx.unwatch2(d_watch_handle);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << __func__ << "::ERR: failed unwatch2() " << DEDUP_WATCH_OBJ
 			<< ". error: " << cpp_strerror(ret) << dendl;
@@ -1945,7 +1972,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::ack_notify(uint64_t notify_id, uint64_t cookie, int status)
   {
-    if (!p_dedup_cluster_ioctx->is_valid()) {
+    if (!d_dedup_cluster_ioctx.is_valid()) {
       ldpp_dout(dpp, 1) << __func__
 			<< "::ERR: invalid pool handler (missing pool)" << dendl;
       return;
@@ -1954,7 +1981,7 @@ namespace rgw::dedup {
     bufferlist reply;
     ceph::encode(status, reply);
     encode(d_ctl, reply);
-    p_dedup_cluster_ioctx->notify_ack(DEDUP_WATCH_OBJ, notify_id, cookie, reply);
+    d_dedup_cluster_ioctx.notify_ack(DEDUP_WATCH_OBJ, notify_id, cookie, reply);
   }
 
   //---------------------------------------------------------------------------
@@ -2062,20 +2089,29 @@ namespace rgw::dedup {
   void Background::shutdown()
   {
     ldpp_dout(dpp, 1) <<__func__ << "::shutdown was called!!!\n" << dendl;
-    // use lock to prevent concurrent pause/resume requests
     std::unique_lock cond_lock(d_cond_mutex);
+    bool nested_call = false;
+    if (d_ctl.shutdown_req) {
+      // should never happen!
+      ldpp_dout(dpp, 1) <<__func__ << "::nested call" << dendl;
+      nested_call = true;
+    }
     d_ctl.shutdown_req = true;
     d_cond.notify_all();
     d_cond.wait(cond_lock, [this]{return d_ctl.shutdown_done;});
     cond_lock.unlock();
+    if (nested_call) {
+      ldpp_dout(dpp, 1) <<__func__ << "::nested call:: repeat notify" << dendl;
+      d_cond.notify_all();
+    }
 
     if (d_runner.joinable()) {
-      ldpp_dout(dpp, 10) <<__func__ << "::calling d_runner.join()" << dendl;
+      ldpp_dout(dpp, 5) <<__func__ << "::calling d_runner.join()" << dendl;
       d_runner.join();
-      ldpp_dout(dpp, 10) <<__func__ << "::finished d_runner.join()" << dendl;
+      ldpp_dout(dpp, 5) <<__func__ << "::finished d_runner.join()" << dendl;
     }
     else {
-      ldpp_dout(dpp, 10) <<__func__ << "::d_runner.joinable() == FALSE " << dendl;
+      ldpp_dout(dpp, 5) <<__func__ << "::d_runner.joinable() == FALSE " << dendl;
     }
 
     d_ctl.reset();
@@ -2084,21 +2120,29 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::pause()
   {
-    ldpp_dout(dpp, 10) <<  __func__ << "::entered" << dendl;
-    // use lock to prevent concurrent pause/resume requests
+    ldpp_dout(dpp, 5) <<  __func__ << "::request arrived" << dendl;
     std::unique_lock cond_lock(d_cond_mutex);
 
-    if (d_ctl.local_paused || d_ctl.shutdown_req) {
+    if (d_ctl.local_paused || d_ctl.shutdown_req || d_ctl.shutdown_done) {
       cond_lock.unlock();
       derr <<  __FILE__ << "::" <<__func__
 	   << "::background is already paused/stopped!!!" << dendl;
       return;
     }
 
-    ceph_assert(!d_ctl.local_pause_req);
+    bool nested_call = false;
+    if (d_ctl.local_pause_req) {
+      // should never happen!
+      ldpp_dout(dpp, 1) <<__func__ << "::nested call" << dendl;
+      nested_call = true;
+    }
     d_ctl.local_pause_req = true;
     d_cond.notify_all();
     d_cond.wait(cond_lock, [this]{return d_ctl.local_paused || d_ctl.shutdown_req;});
+    if (nested_call) {
+      ldpp_dout(dpp, 1) <<__func__ << "::nested call:: repeat notify" << dendl;
+      d_cond.notify_all();
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -2136,13 +2180,12 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 5) << __func__ << "::caller=" << caller << dendl;
     ldpp_dout(dpp, 5) << __func__ << "::" << d_ctl << dendl;
     while (d_ctl.local_pause_req || d_ctl.local_paused || d_ctl.remote_pause_req || d_ctl.remote_paused) {
-
+      std::unique_lock cond_lock(d_cond_mutex);
       if (d_ctl.should_stop()) {
 	ldpp_dout(dpp, 5) << __func__ << "::should_stop!" << dendl;
 	return;
       }
-      //ldpp_dout(dpp, 1) << __func__ << "::try to lock" << dendl;
-      std::unique_lock cond_lock(d_cond_mutex);
+
       if (d_ctl.local_pause_req) {
 	d_ctl.local_pause_req = false;
 	d_ctl.local_paused    = true;
@@ -2164,37 +2207,28 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 10) << __func__ << "::wait on d_ctl.remote_paused" << dendl;
 	d_cond.wait(cond_lock, [this]{return !d_ctl.remote_paused || d_ctl.should_stop() || d_ctl.local_pause_req;});
       }
-      cond_lock.unlock();
-      ldpp_dout(dpp, 10) << __func__ << "::after wait::" << d_ctl << dendl;
     } // while loop
 
     ldpp_dout(dpp, 5) << "Dedup background thread resumed!" << dendl;
   }
 
   //---------------------------------------------------------------------------
-  bool Background::all_shards_completed(dedup_step_t step, uint64_t *p_total_ingressed)
+  static bool all_shards_completed(cluster *p_cluster,
+				   librados::IoCtx &ioctx,
+				   work_shard_t num_work_shards,
+				   uint64_t *p_total_ingressed)
   {
-    if (step == STEP_BUCKET_INDEX_INGRESS) {
-      return d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx,
-						       p_total_ingressed);
-    }
-    else if (step == STEP_BUILD_TABLE) {
-      return d_cluster.all_md5_shard_tokens_completed(p_dedup_cluster_ioctx,
+    return p_cluster->all_work_shard_tokens_completed(ioctx, num_work_shards,
 						      p_total_ingressed);
-    }
-    else {
-      ceph_abort("illegal dedup_step");
-      return false;
-    }
   }
 
   //---------------------------------------------------------------------------
-  void Background::all_shards_barrier(dedup_step_t step, const char *stepname)
+  void Background::work_shards_barrier(work_shard_t num_work_shards)
   {
     // Wait for other worker to finish ingress step
     uint64_t total_ingressed = 0;
-    while (!all_shards_completed(step, &total_ingressed)) {
-      ldpp_dout(dpp, 10) << "Waiting for " << stepname << " step completion ttl="
+    while (!all_shards_completed(&d_cluster, d_dedup_cluster_ioctx, num_work_shards, &total_ingressed)) {
+      ldpp_dout(dpp, 10) << "Waiting for object ingress completion, ttl="
 			 << d_heart_beat_max_elapsed_sec << dendl;
       std::unique_lock cond_lock(d_cond_mutex);
       d_cond.wait(cond_lock, [this]{return d_ctl.should_stop() || d_ctl.should_pause();});
@@ -2206,8 +2240,7 @@ namespace rgw::dedup {
       }
     }
 
-    ldpp_dout(dpp, 10) << "\n\n==" << stepname
-		       << " step was completed on all shards! ("
+    ldpp_dout(dpp, 10) << "\n\n==Object Ingress step was completed on all shards! ("
 		       << total_ingressed << ")==\n" << dendl;
     if (unlikely(d_ctl.should_pause())) {
       handle_pause_req(__func__);
@@ -2217,10 +2250,11 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::run()
   {
+    const uint64_t SHARD_BUFFERING_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
     ldpp_dout(dpp, 20) <<__func__ << "::dedup::main loop" << dendl;
     dedup_epoch_t epoch;
     ldpp_dout(dpp, 20) << __func__ << "::calling d_cluster.init()" << dendl;
-    d_cluster.init(store, p_dedup_cluster_ioctx, &epoch, true);
+    d_cluster.init(store, d_dedup_cluster_ioctx, &epoch, true, 0, 0);
 
     while (!d_ctl.shutdown_req) {
       if (unlikely(d_ctl.should_pause())) {
@@ -2236,19 +2270,25 @@ namespace rgw::dedup {
 	  derr << "failed setup()" << dendl;
 	  return;
 	}
-	ldpp_dout(dpp, 10) <<__func__ << "::" << epoch << dendl;
-	d_ctl.dedup_type = epoch.dedup_type;
-	ceph_assert(d_ctl.dedup_type == DEDUP_TYPE_FULL || d_ctl.dedup_type == DEDUP_TYPE_DRY_RUN);
-	d_ctl.show_dedup_type(dpp, "setup()");
+	work_shard_t num_work_shards = epoch.num_work_shards;
+	md5_shard_t  num_md5_shards  = epoch.num_md5_shards;
+	const uint64_t RAW_MEM_SIZE = SHARD_BUFFERING_SIZE * num_md5_shards;
 
-	// TBD: should we alloc/free here?
-	// Maybe pre-allocate space for table and reuse for disk-slabs???
-	process_all_shards(true, &Background::f_ingress_work_shard);
+	// DEDUP_DYN_ALLOC - 16M entries per-shard
+	auto raw_mem = std::make_unique<uint8_t[]>(RAW_MEM_SIZE);
+	if (raw_mem == nullptr) {
+	  derr << "failed slab memory allocation - size=" << RAW_MEM_SIZE << dendl;
+	  return;
+	}
+
+	process_all_shards(true, &Background::f_ingress_work_shard, raw_mem.get(),
+			   RAW_MEM_SIZE, num_work_shards, num_md5_shards);
 	if (!d_ctl.should_stop()) {
-	  // Wait for other worker to finish ingress step
-	  all_shards_barrier(STEP_BUCKET_INDEX_INGRESS, "INGRESS");
+	  // Wait for all other workers to finish ingress step
+	  work_shards_barrier(num_work_shards);
 	  if (!d_ctl.should_stop()) {
-	    process_all_shards(false, &Background::f_dedup_md5_shard);
+	    process_all_shards(false, &Background::f_dedup_md5_shard, raw_mem.get(), RAW_MEM_SIZE,
+			       num_work_shards, num_md5_shards);
 	    ldpp_dout(dpp, 10) << "\n==DEDUP was completed on all shards! ==\n" << dendl;
 	  }
 	  else {

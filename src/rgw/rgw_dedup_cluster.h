@@ -12,7 +12,7 @@ namespace rgw::dedup {
   struct dedup_epoch_t;
   int   init_dedup_pool_ioctx(RGWRados                 *rados,
 			      const DoutPrefixProvider *dpp,
-			      librados::IoCtx          *p_ioctx);
+			      librados::IoCtx          &ioctx);
 
   class cluster{
   public:
@@ -48,22 +48,27 @@ namespace rgw::dedup {
 
     //==================================================================================
     cluster(const DoutPrefixProvider *_dpp, CephContext* const _cct);
-    int          init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx,
-		      struct dedup_epoch_t*, bool init_epoch);
+    int          init(rgw::sal::RadosStore *store,
+		      librados::IoCtx &ioctx,
+		      struct dedup_epoch_t*,
+		      bool init_epoch,
+		      work_shard_t num_work_shards,
+		      md5_shard_t num_md5_shards);
     bool         was_initialized() { return d_was_initialized; }
     utime_t      get_epoch_time() { return d_epoch_time; }
-    work_shard_t get_next_work_shard_token(librados::IoCtx *p_ioctx);
-    md5_shard_t  get_next_md5_shard_token(librados::IoCtx *p_ioctx);
+    work_shard_t get_next_work_shard_token(librados::IoCtx &ioctx,
+					   work_shard_t num_work_shards);
+    md5_shard_t  get_next_md5_shard_token(librados::IoCtx &ioctx,
+					  md5_shard_t num_md5_shards);
     static bool  can_start_new_scan(rgw::sal::RadosStore *store,
 				    const utime_t &epoch,
 				    const DoutPrefixProvider *dpp);
-    static bool  got_start_scan_req(librados::IoCtx *p_ioctx);
     static int   collect_all_shard_stats(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp);
     static int   dedup_control(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp, int urgent_msg);
     static int   dedup_restart_scan(rgw::sal::RadosStore *store, bool dry_run, const DoutPrefixProvider *dpp);
 
     //---------------------------------------------------------------------------
-    int mark_work_shard_token_completed(librados::IoCtx *p_ioctx,
+    int mark_work_shard_token_completed(librados::IoCtx &ioctx,
 					work_shard_t work_shard,
 					const worker_stats_t *p_stats)
     {
@@ -73,12 +78,12 @@ namespace rgw::dedup {
       d_completed_workers[work_shard] = TOKEN_STATE_COMPLETED;
       d_total_ingressed_obj += p_stats->ingress_obj;
 
-      return mark_shard_token_completed(p_ioctx, work_shard, p_stats->ingress_obj,
+      return mark_shard_token_completed(ioctx, work_shard, p_stats->ingress_obj,
 					WORKER_SHARD_PREFIX, bl);
     }
 
     //---------------------------------------------------------------------------
-    int mark_md5_shard_token_completed(librados::IoCtx *p_ioctx,
+    int mark_md5_shard_token_completed(librados::IoCtx &ioctx,
 				       md5_shard_t md5_shard,
 				       const md5_stats_t *p_stats)
     {
@@ -86,61 +91,62 @@ namespace rgw::dedup {
       encode(*p_stats, bl);
       d_num_completed_md5++;
       d_completed_md5[md5_shard] = TOKEN_STATE_COMPLETED;
-      return mark_shard_token_completed(p_ioctx, md5_shard, p_stats->loaded_objects,
+      return mark_shard_token_completed(ioctx, md5_shard, p_stats->loaded_objects,
 					MD5_SHARD_PREFIX, bl);
     }
 
-    int update_shard_token_heartbeat(librados::IoCtx *p_ioctx,
+    int update_shard_token_heartbeat(librados::IoCtx &ioctx,
 				     unsigned shard,
 				     uint64_t count_a,
 				     uint64_t count_b,
 				     const char *prefix);
 
     //---------------------------------------------------------------------------
-    bool all_work_shard_tokens_completed(librados::IoCtx *p_ioctx,
+    bool all_work_shard_tokens_completed(librados::IoCtx &ioctx,
+					 work_shard_t num_work_shards,
 					 uint64_t *p_total_ingressed)
     {
-      return all_shard_tokens_completed(p_ioctx,
-					MAX_WORK_SHARD,
+      return all_shard_tokens_completed(ioctx,
+					num_work_shards,
 					WORKER_SHARD_PREFIX,
 					&d_num_completed_workers,
 					d_completed_workers,
 					p_total_ingressed);
     }
-
+#if 0
     //---------------------------------------------------------------------------
-    bool all_md5_shard_tokens_completed(librados::IoCtx *p_ioctx,
+    bool all_md5_shard_tokens_completed(librados::IoCtx &ioctx,
 					uint64_t *p_total_ingressed)
     {
-      return all_shard_tokens_completed(p_ioctx,
+      return all_shard_tokens_completed(ioctx,
 					MAX_MD5_SHARD,
 					MD5_SHARD_PREFIX,
 					&d_num_completed_md5,
 					d_completed_md5,
 					p_total_ingressed);
     }
-
+#endif
   private:
     static constexpr unsigned TOKEN_STATE_PENDING   = 0x00;
     static constexpr unsigned TOKEN_STATE_TIMED_OUT = 0xDD;
     static constexpr unsigned TOKEN_STATE_COMPLETED = 0xFF;
 
     void reset();
-    bool all_shard_tokens_completed(librados::IoCtx *p_ioctx,
+    bool all_shard_tokens_completed(librados::IoCtx &ioctx,
 				    unsigned shards_count,
 				    const char *prefix,
 				    uint16_t *p_num_completed,
 				    uint8_t completed_arr[],
 				    uint64_t *p_total_ingressed);
-    int cleanup_prev_run(librados::IoCtx *p_ioctx);
-    int32_t get_next_shard_token(librados::IoCtx *p_ioctx,
+    int cleanup_prev_run(librados::IoCtx &ioctx);
+    int32_t get_next_shard_token(librados::IoCtx &ioctx,
 				 uint16_t start_shard,
 				 uint16_t max_count,
 				 const char *prefix);
-    int create_shard_tokens(librados::IoCtx *p_ioctx,
+    int create_shard_tokens(librados::IoCtx &ioctx,
 			    unsigned shards_count,
 			    const char *prefix);
-    int mark_shard_token_completed(librados::IoCtx *p_ioctx,
+    int mark_shard_token_completed(librados::IoCtx &ioctx,
 				   unsigned shard,
 				   uint64_t obj_count,
 				   const char *prefix,
