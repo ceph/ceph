@@ -1,0 +1,84 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      Create Namespace
+  </h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+
+    <form name="namespaceForm"
+          #formDir="ngForm"
+          [formGroup]="namespaceForm"
+          novalidate>
+
+    <!-- Pool -->
+    <div class="form-item">
+      <cds-select label="Pool"
+                  for="pool"
+                  formControlName="pool"
+                  name="pool"
+                  id="pool"
+                  [invalid]="namespaceForm.controls['pool'].invalid && (namespaceForm.controls['pool'].dirty)"
+                  [invalidText]="poolError"
+                  *ngIf="poolPermission.read"
+                  cdRequiredField="Pool"
+                  modal-primary-focus
+                  i18n>
+
+        <option *ngIf="pools === null"
+                [ngValue]="null">Loading...</option>
+        <option *ngIf="pools !== null && pools.length === 0"
+                [ngValue]="null">-- No rbd pools available --</option>
+        <option *ngIf="pools !== null && pools.length > 0"
+                [ngValue]="null">-- Select a pool --</option>
+        <option *ngFor="let pool of pools"
+                [value]="pool.pool_name">{{ pool.pool_name }}</option>
+      </cds-select>
+      <ng-template #poolError>
+        <span *ngIf="namespaceForm.showError('pool', formDir, 'required')"
+              class="invalid-feedback"
+              i18n>This field is required.</span>
+      </ng-template>
+    </div>
+
+    <!-- Name -->
+    <div class="form-item">
+      <cds-text-label label="Name"
+                      for="namespace"
+                      [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty)"
+                      [invalidText]="namespaceError"
+                      cdRequiredField="Namespace"
+                      i18n>Namespace
+        <input cdsText
+               type="text"
+               placeholder="Namespace name..."
+               id="namespace"
+               name="namespace"
+               formControlName="namespace"
+               [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty)"
+               autofocus>
+      </cds-text-label>
+      <ng-template #namespaceError>
+        <span *ngIf="namespaceForm.showError('namespace', formDir, 'required')"
+              class="invalid-feedback"
+              i18n>This field is required.</span>
+        <span *ngIf="namespaceForm.showError('namespace', formDir, 'namespaceExists')"
+              class="invalid-feedback"
+              i18n>The namespace already exists.</span>
+      </ng-template>
+    </div>
+
+
+    </form>
+  </section>
+  <cd-form-button-panel (submitActionEvent)="submit()"
+                        [form]="namespaceForm"
+                        [submitText]="actionLabels.CREATE"
+                        [modalForm]="true"></cd-form-button-panel>
+
+</cds-modal>
