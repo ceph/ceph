@@ -406,6 +406,77 @@ void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
   }
 }
 
+RGWRemoveCientIdFromOIDCProvider::RGWRemoveCientIdFromOIDCProvider()
+    : RGWRestOIDCProvider(rgw::IAM::iamRemoveClientIdFromOIDCProvider, RGW_CAP_WRITE)
+{
+}
+
+int RGWRemoveCientIdFromOIDCProvider::init_processing(optional_yield y)
+{
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+  } else {
+    account = s->user->get_tenant();
+  }
+  std::string provider_arn = s->info.args.get("OpenIDConnectProviderArn");
+  auto ret = validate_provider_arn(provider_arn, account,
+                               resource, url, s->err.message);
+  if (ret < 0) {
+    return ret;
+  }
+
+  client_id = s->info.args.get("ClientID");
+
+  if (client_id.empty()) {
+    s->err.message = "Missing required element ClientID";
+    ldpp_dout(this, 20) << "ERROR: ClientID is empty" << dendl;
+    return -EINVAL;
+  }
+
+  if (client_id.size() > MAX_OIDC_CLIENT_ID_LEN) {
+    s->err.message = "ClientID cannot exceed the maximum length of "
+        + std::to_string(MAX_OIDC_CLIENT_ID_LEN);
+    ldpp_dout(this, 20) << "ERROR: ClientID length exceeded " << MAX_OIDC_CLIENT_ID_LEN << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWRemoveCientIdFromOIDCProvider::execute(optional_yield y)
+{
+  RGWOIDCProviderInfo info;
+  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+
+  if (op_ret < 0) {
+    if (op_ret != -ENOENT && op_ret != -EINVAL) {
+      op_ret = ERR_INTERNAL_ERROR;
+    }
+    return;
+  }
+
+  auto position = std::find(info.client_ids.begin(), info.client_ids.end(), client_id);
+
+  if(position != info.client_ids.end()) {
+    info.client_ids.erase(position);
+    constexpr bool exclusive = false;
+    op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+  }
+
+  if (op_ret == 0) {
+    op_ret = 0;
+    s->formatter->open_object_section("RemoveClientIDFromOpenIDConnectProviderResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->open_object_section("RemoveClientIDFromOpenIDConnectProviderResponse");
+    dump_oidc_provider(info, s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
 RGWUpdateOIDCProviderThumbprint::RGWUpdateOIDCProviderThumbprint()
   : RGWRestOIDCProvider(rgw::IAM::iamUpdateOIDCProviderThumbprint, RGW_CAP_WRITE)
 {
