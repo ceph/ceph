@@ -437,7 +437,6 @@ struct RGWPeriodConfig
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
-class RGWRealm;
 class RGWPeriod;
 
 class RGWRealm
@@ -448,6 +447,11 @@ public:
 
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
+  /// Defaults for cross-zonegroup and same-zonegroup replication policy.
+  /// Unless Forbidden, individual zonegroups can override this behavior
+  /// to/from other zonegroups.
+  rgw::CanSync cross_zonegroup = rgw::CanSync::Enabled;
+  rgw::CanSync same_zonegroup = rgw::CanSync::Enabled;
 
 public:
   RGWRealm() {}
@@ -461,7 +465,7 @@ public:
   void clear_id() { id.clear(); }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     {
       // these used to be wrapped by RGWSystemMetaObj::encode(),
       // so the extra ENCODE_START/ENCODE_FINISH are preserved
@@ -472,11 +476,13 @@ public:
     }
     encode(current_period, bl);
     encode(epoch, bl);
+    encode(cross_zonegroup, bl);
+    encode(same_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     {
       // these used to be wrapped by RGWSystemMetaObj::decode(),
       // so the extra DECODE_START/DECODE_FINISH are preserved
@@ -487,6 +493,10 @@ public:
     }
     decode(current_period, bl);
     decode(epoch, bl);
+    if (struct_v >= 2) {
+      decode(cross_zonegroup, bl);
+      decode(same_zonegroup, bl);
+    }
     DECODE_FINISH(bl);
   }
 

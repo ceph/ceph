@@ -829,5 +829,28 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   return 0;
 }
 
-} // namespace rgw
+std::string to_string(CanSync value)
+{
+  switch (value) {
+    case CanSync::Allowed:
+      return "allowed";
+    case CanSync::Enabled:
+      return "enabled";
+    case CanSync::Forbidden:
+    default:
+      return "forbidden";
+  }
+}
 
+CanSync parse_can_sync(std::string_view str)
+{
+  if (str == "allowed") {
+    return CanSync::Allowed;
+  } else if (str == "enabled") {
+    return CanSync::Enabled;
+  } else { // unrecognized values default to Forbidden
+    return CanSync::Forbidden;
+  }
+}
+
+} // namespace rgw
