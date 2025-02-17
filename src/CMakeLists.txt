@@ -339,8 +339,11 @@ if(WITH_BREAKPAD)
   ExternalProject_Add(
     breakpad_project
     SOURCE_DIR "${breakpad_SOURCE_DIR}"
-    CONFIGURE_COMMAND
-    /bin/sh -cx "cd ${breakpad_SOURCE_DIR} && ./configure"
+    CONFIGURE_COMMAND cd "${breakpad_SOURCE_DIR}"
+        COMMAND "${breakpad_SOURCE_DIR}/configure"
+	    "CFLAGS=${CMAKE_C_FLAGS} -Wno-array-bounds  -Wno-maybe-uninitialized"
+	    "CXXFLAGS=${CMAKE_CXX_FLAGS} -Wno-array-bounds  -Wno-maybe-uninitialized"
+            "LDFLAGS=${CMAKE_EXE_LINKER_FLAGS} -Wno-array-bounds  -Wno-maybe-uninitialized"
     BUILD_COMMAND
     /bin/sh -cx "cd ${breakpad_SOURCE_DIR} && make"
     INSTALL_COMMAND ""
