@@ -1,5 +1,5 @@
 import pytest
-from mock.mock import patch
+from unittest.mock import patch
 from ceph_volume.api import lvm
 from ceph_volume.devices.lvm import deactivate
 
