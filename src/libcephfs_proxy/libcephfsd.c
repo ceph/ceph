@@ -13,6 +13,7 @@
 #include "proxy_log.h"
 #include "proxy_requests.h"
 #include "proxy_mount.h"
+#include "proxy_async.h"
 
 typedef struct _proxy_server {
 	proxy_link_t link;
@@ -22,6 +23,7 @@ typedef struct _proxy_server {
 typedef struct _proxy_client {
 	proxy_worker_t worker;
 	proxy_link_negotiate_t neg;
+	proxy_async_t async;
 	proxy_link_t *link;
 	proxy_random_t random;
 	void *buffer;
@@ -1675,10 +1677,20 @@ static void serve_connection(proxy_worker_t *worker)
 	err = proxy_link_handshake_server(client->link, client->sd,
 					  &client->neg,
 					  server_negotiation_check);
-	if (err >= 0) {
-		serve_binary(client);
+	if (err < 0) {
+		goto done;
 	}
 
+	if ((client->neg.v1.enabled & PROXY_FEAT_ASYNC_CBK) != 0) {
+		err = proxy_async_server(&client->async, client->sd);
+		if (err < 0) {
+			goto done;
+		}
+	}
+
+	serve_binary(client);
+
+done:
 	close(client->sd);
 }
 

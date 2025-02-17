@@ -26,8 +26,11 @@
 	((_type *)((uintptr_t)(_ptr) - offset_of(_type, _field)))
 
 enum {
+	/* Mask of all features requiring the asynchronous callback handling. */
+	PROXY_FEAT_ASYNC_CBK = 0x00000001,
+
 	/* Mask of all supported/known features. */
-	PROXY_FEAT_ALL = 0x00000000
+	PROXY_FEAT_ALL = 0x00000001
 };
 
 struct _list;

@@ -6,6 +6,7 @@
 #include "proxy_log.h"
 #include "proxy_helpers.h"
 #include "proxy_requests.h"
+#include "proxy_async.h"
 
 /* We override the definition of the ceph_mount_info structure to contain
  * internal proxy information. This is already a black box for libcephfs users,
@@ -13,6 +14,7 @@
 struct ceph_mount_info {
 	proxy_link_t link;
 	proxy_link_negotiate_t neg;
+	proxy_async_t async;
 	uint64_t cmount;
 };
 
@@ -178,7 +180,8 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	}
 	sd = err;
 
-	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0, 0);
+	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0,
+				  PROXY_FEAT_ASYNC_CBK);
 
 	err = proxy_link_handshake_client(&ceph_mount->link, sd,
 					  &ceph_mount->neg,
@@ -187,6 +190,13 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 		goto failed_link;
 	}
 
+	if ((ceph_mount->neg.v1.enabled & PROXY_FEAT_ASYNC_CBK) != 0) {
+		err = proxy_async_client(&ceph_mount->async, &ceph_mount->link,
+					 sd);
+		if (err < 0) {
+			goto failed_link;
+		}
+	}
 
 	CEPH_STR_ADD(req, id, id);
 
