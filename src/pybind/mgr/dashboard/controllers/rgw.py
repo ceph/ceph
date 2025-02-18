@@ -26,7 +26,7 @@ from . import APIDoc, APIRouter, BaseController, CreatePermission, \
 from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
     TableAction, Validator, VerticalContainer
 from ._version import APIVersion
-
+from ..model.rgw import VaultConfig, KmipConfig
 logger = logging.getLogger("controllers.rgw")
 
 RGW_SCHEMA = {
@@ -681,15 +681,9 @@ class RgwBucket(RgwRESTController):
         }, json_response=False)
 
     @RESTController.Collection(method='PUT', path='/setEncryptionConfig')
-    @allow_empty_body
-    def set_encryption_config(self, encryption_type=None, kms_provider=None, auth_method=None,
-                              secret_engine=None, secret_path='', namespace='', address=None,
-                              token=None, daemon_name=None, owner=None, ssl_cert=None,
-                              client_cert=None, client_key=None):
-        return self._set_encryption_config(encryption_type, kms_provider, auth_method,
-                                           secret_engine, secret_path, namespace,
-                                           address, token, daemon_name, owner, ssl_cert,
-                                           client_cert, client_key)
+    def set_encryption_config(self, encryption_type=None, kms_provider=None, config: Union[VaultConfig, KmipConfig] = None,
+                              daemon_name=None):
+        return CephService.set_encryption_config(encryption_type, kms_provider, config, daemon_name)
 
     @RESTController.Collection(method='GET', path='/getEncryption')
     @allow_empty_body
