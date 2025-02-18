@@ -81,6 +81,8 @@ public:
 
   void check_subs(bool type);
   void check_sub(Subscription *sub);
+ 
+  const NVMeofGwMap& get_map() const { return map; }
 
   std::map<NvmeGroupKey, std::map<NvmeGwId, utime_t>> gws_deleting_time;
 
