@@ -2189,7 +2189,8 @@ class CephManager:
                                      erasure_code_profile_name=None,
                                      erasure_code_crush_rule_name=None,
                                      min_size=None,
-                                     erasure_code_use_overwrites=False):
+                                     erasure_code_use_overwrites=False,
+                                     erasure_code_use_optimizations=False):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -2203,7 +2204,8 @@ class CephManager:
                 erasure_code_profile_name=erasure_code_profile_name,
                 erasure_code_crush_rule_name=erasure_code_crush_rule_name,
                 min_size=min_size,
-                erasure_code_use_overwrites=erasure_code_use_overwrites)
+                erasure_code_use_overwrites=erasure_code_use_overwrites,
+                erasure_code_use_optimizations=erasure_code_use_optimizations)
         return name
 
     @contextlib.contextmanager
@@ -2216,7 +2218,8 @@ class CephManager:
                     erasure_code_profile_name=None,
                     erasure_code_crush_rule_name=None,
                     min_size=None,
-                    erasure_code_use_overwrites=False):
+                    erasure_code_use_overwrites=False,
+                    erasure_code_use_optimizations=False):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -2226,6 +2229,7 @@ class CephManager:
         :param erasure_code_crush_rule_name: if set and !None create an
                                              erasure coded pool using the crush rule
         :param erasure_code_use_overwrites: if true, allow overwrites
+        :param erasure_code_use_optimizations: if true, use erasure code optimizations
         """
         with self.lock:
             assert isinstance(pool_name, str)
@@ -2254,6 +2258,12 @@ class CephManager:
                     'osd', 'pool', 'set', pool_name,
                     'allow_ec_overwrites',
                     'true')
+            if erasure_code_use_optimizations:
+                self.raw_cluster_cmd(
+                    'osd', 'pool', 'set', pool_name,
+                    'allow_ec_optimizations',
+                    'true')
+
             self.raw_cluster_cmd(
                 'osd', 'pool', 'application', 'enable',
                 pool_name, 'rados', '--yes-i-really-mean-it',

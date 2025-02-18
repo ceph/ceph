@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef EXTENT_CACHE_H
-#define EXTENT_CACHE_H
+#pragma once
 
 #include <map>
 #include <list>
@@ -485,5 +484,3 @@ public:
 };
 
 std::ostream &operator <<(std::ostream &lhs, const ExtentCache &cache);
-
-#endif

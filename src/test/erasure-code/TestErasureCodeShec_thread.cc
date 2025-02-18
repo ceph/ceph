@@ -103,8 +103,7 @@ void* thread1(void* pParam)
 
   //encode
   bufferlist in;
-  set<int> want_to_encode;
-  map<int, bufferlist> encoded;
+  shard_id_set want_to_encode;
 
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" //length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
@@ -114,7 +113,6 @@ void* thread1(void* pParam)
 
   //decode
   int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-  map<int, bufferlist> decoded;
   bufferlist out1, out2, usable;
 
   time(&start);
@@ -138,6 +136,9 @@ void* thread1(void* pParam)
     (*profile)["w"] = param->w;
     r = shec->init(*profile, &cerr);
 
+    shard_id_map<bufferlist> decoded(shec->get_chunk_count());
+    shard_id_map<bufferlist> encoded(shec->get_chunk_count());
+
     int i_k = std::atoi(param->k.c_str());
     int i_m = std::atoi(param->m.c_str());
     int i_c = std::atoi(param->c.c_str());
@@ -160,13 +161,13 @@ void* thread1(void* pParam)
 
     //encode
     for (unsigned int i = 0; i < shec->get_chunk_count(); i++) {
-      want_to_encode.insert(i);
+      want_to_encode.insert(shard_id_t(i));
     }
     r = shec->encode(want_to_encode, in, &encoded);
 
     EXPECT_EQ(0, r);
     EXPECT_EQ(shec->get_chunk_count(), encoded.size());
-    EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
+    EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[shard_id_t(0)].length());
 
     if (r != 0) {
       std::cout << "error in encode" << std::endl;
@@ -175,13 +176,13 @@ void* thread1(void* pParam)
     }
 
     //decode
-    r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2),
+    r = shec->_decode(shard_id_set(want_to_decode, want_to_decode + 2),
 		      encoded,
 		      &decoded);
 
     EXPECT_EQ(0, r);
     EXPECT_EQ(2u, decoded.size());
-    EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
+    EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[shard_id_t(0)].length());
 
     if (r != 0) {
       std::cout << "error in decode" << std::endl;
@@ -191,7 +192,7 @@ void* thread1(void* pParam)
 
     //out1 is "encoded"
     for (unsigned int i = 0; i < encoded.size(); i++) {
-      out1.append(encoded[i]);
+      out1.append(encoded[shard_id_t(i)]);
     }
     //out2 is "decoded"
     shec->decode_concat(encoded, &out2);

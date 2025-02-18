@@ -3,20 +3,18 @@
 
 #include "./scrub_backend.h"
 
-#include <algorithm>
-
 #include <fmt/ranges.h>
 
-#include "common/debug.h"
+#include <algorithm>
 
+#include "common/debug.h"
 #include "include/utime_fmt.h"
 #include "messages/MOSDRepScrubMap.h"
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
 #include "osd/PrimaryLogPG.h"
 #include "osd/osd_types_fmt.h"
-
 #include "pg_scrubber.h"
 
 using std::set;
@@ -68,6 +66,8 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
                [i_am](const pg_shard_t& shard) { return shard != i_am; });
 
   m_is_replicated = m_pool.info.is_replicated();
+  m_is_ec_overwrite_allowed = m_pool.info.allows_ecoverwrites();
+  m_is_optimised_ec = m_pool.info.allows_ecoptimizations();
   m_mode_desc =
     (m_repair ? "repair"sv
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
@@ -91,14 +91,16 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
 {
   m_formatted_id = m_pg_id.calc_name_sring();
   m_is_replicated = m_pool.info.is_replicated();
+  m_is_ec_overwrite_allowed = m_pool.info.allows_ecoverwrites();
+  m_is_optimised_ec = m_pool.info.allows_ecoptimizations();
   m_mode_desc =
     (m_repair ? "repair"sv
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
 }
 
-uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size) const
-{
-  return m_pg.logical_to_ondisk_size(logical_size);
+uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
+                                              int8_t shard_id) const {
+  return m_pg.logical_to_ondisk_size(logical_size, shard_id);
 }
 
 void ScrubBackend::update_repair_status(bool should_repair)
@@ -199,6 +201,9 @@ objs_fix_list_t ScrubBackend::scrub_compare_maps(
   // construct authoritative scrub map for type-specific scrubbing
 
   m_cleaned_meta_map.insert(my_map());
+  for (auto& [key, value] : m_cleaned_meta_map.objects) {
+    m_cleaned_meta_shard_lookup_map[key] = m_pg_whoami;
+  }
   merge_to_authoritative_set();
 
   // collect some omap statistics into m_omap_stats
@@ -297,8 +302,10 @@ void ScrubBackend::update_authoritative()
 
   for (const auto& [obj, peers] : this_chunk->authoritative) {
     m_cleaned_meta_map.objects.erase(obj);
-    m_cleaned_meta_map.objects.insert(
-      *(this_chunk->received_maps[peers.back()].objects.find(obj)));
+    auto cleaned_meta_object =
+        *(this_chunk->received_maps[peers.back()].objects.find(obj));
+    m_cleaned_meta_map.objects.insert(cleaned_meta_object);
+    m_cleaned_meta_shard_lookup_map[cleaned_meta_object.first] = peers.back();
   }
 }
 
@@ -654,8 +661,8 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
     }
   }
 
-  if (!m_is_replicated) {
-    auto k = smap_obj.attrs.find(ECUtil::get_hinfo_key());
+  if (!m_is_replicated && (!m_is_ec_overwrite_allowed || !m_is_optimised_ec)) {
+    auto k = smap_obj.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
     if (dup_error_cond(err,
                        false,
                        (k == smap_obj.attrs.end()),
@@ -664,7 +671,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        "candidate had a missing hinfo key"sv,
                        errstream)) {
       const bufferlist& hk_bl = k->second;
-      ECUtil::HashInfo hi;
+      ECLegacy::ECUtilL::HashInfo hi;
       try {
         auto bliter = hk_bl.cbegin();
         decode(hi, bliter);
@@ -722,12 +729,11 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
     }
   }
 
-  if (test_error_cond(smap_obj.size != logical_to_ondisk_size(oi.size),
-                      shard_info,
+  uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard.id);
+  if (test_error_cond(smap_obj.size != ondisk_size, shard_info,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
-
     errstream << sep(err) << "candidate size " << smap_obj.size << " info size "
-              << logical_to_ondisk_size(oi.size) << " mismatch";
+              << ondisk_size << " mismatch";
   }
 
   std::optional<uint32_t> digest;
@@ -1048,14 +1054,10 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
       // Compare
       stringstream ss;
       const auto& auth_object = auth_sel.auth->second.objects[ho];
-      const bool discrep_found = compare_obj_details(auth_sel.auth_shard,
-                                                     auth_object,
-                                                     auth_sel.auth_oi,
-                                                     smap.objects[ho],
-                                                     auth_sel.shard_map[srd],
-                                                     obj_result,
-                                                     ss,
-                                                     ho.has_snapset());
+      const bool discrep_found = compare_obj_details(
+          auth_sel.auth_shard, auth_object, auth_sel.auth_oi, srd,
+          smap.objects[ho], auth_sel.shard_map[srd], obj_result, ss,
+          ho.has_snapset());
 
       dout(20) << fmt::format(
 		    "{}: {}{} <{}:{}> shards: {} {} {}", __func__,
@@ -1151,15 +1153,12 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
 }
 
 // == PGBackend::be_compare_scrub_objects()
-bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
-                                       const ScrubMap::object& auth,
-                                       const object_info_t& auth_oi,
-                                       const ScrubMap::object& candidate,
-                                       shard_info_wrapper& shard_result,
-                                       inconsistent_obj_wrapper& obj_result,
-                                       stringstream& errstream,
-                                       bool has_snapset)
-{
+bool ScrubBackend::compare_obj_details(
+    pg_shard_t auth_shard, const ScrubMap::object& auth,
+    const object_info_t& auth_oi, pg_shard_t candidate_shard,
+    const ScrubMap::object& candidate, shard_info_wrapper& shard_result,
+    inconsistent_obj_wrapper& obj_result, stringstream& errstream,
+    bool has_snapset) {
   fmt::memory_buffer out;
   bool error{false};
 
@@ -1265,15 +1264,14 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   // ------------------------------------------------------------------------
 
-  if (!m_is_replicated) {
+  if (!m_is_replicated && (!m_is_ec_overwrite_allowed || !m_is_optimised_ec)) {
     if (!shard_result.has_hinfo_missing() &&
         !shard_result.has_hinfo_corrupted()) {
-
-      auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
+      auto can_hi = candidate.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
       ceph_assert(can_hi != candidate.attrs.end());
       const bufferlist& can_bl = can_hi->second;
 
-      auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
+      auto auth_hi = auth.attrs.find(ECLegacy::ECUtilL::get_hinfo_key());
       ceph_assert(auth_hi != auth.attrs.end());
       const bufferlist& auth_bl = auth_hi->second;
 
@@ -1289,25 +1287,19 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   // ------------------------------------------------------------------------
 
   // sizes:
-
-  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size);
+  uint64_t oi_size =
+      logical_to_ondisk_size(auth_oi.size, candidate_shard.shard.id);
   if (oi_size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
-                   "{}size {} != size {} from auth oi {}",
-                   sep(error),
-                   candidate.size,
-                   oi_size,
-                   auth_oi);
+                   "{}size {} != size {} from auth oi {}", sep(error),
+                   candidate.size, oi_size, auth_oi);
     shard_result.set_size_mismatch_info();
   }
 
-  if (auth.size != candidate.size) {
+  if (shard_result.size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
-                   "{}size {} != size {} from shard {}",
-                   sep(error),
-                   candidate.size,
-                   auth.size,
-                   auth_shard);
+                   "{}size {} != size {} from shard {}", sep(error),
+                   candidate.size, auth.size, auth_shard);
     obj_result.set_size_mismatch();
   }
 
@@ -1315,12 +1307,8 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   if (candidate.size > m_conf->osd_max_object_size &&
       !obj_result.has_size_too_large()) {
-
-    fmt::format_to(std::back_inserter(out),
-                   "{}size {} > {} is too large",
-                   sep(error),
-                   candidate.size,
-                   m_conf->osd_max_object_size);
+    fmt::format_to(std::back_inserter(out), "{}size {} > {} is too large",
+                   sep(error), candidate.size, m_conf->osd_max_object_size);
     obj_result.set_size_too_large();
   }
 
@@ -1467,12 +1455,13 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
     }
 
     if (oi) {
-      if (logical_to_ondisk_size(oi->size) != p->second.size) {
+      uint64_t ondisk_size = logical_to_ondisk_size(
+          oi->size, m_cleaned_meta_shard_lookup_map[p->first].shard.id);
+      if (ondisk_size != p->second.size) {
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
-                      << " : on disk size (" << p->second.size
-                      << ") does not match object info size (" << oi->size
-                      << ") adjusted for ondisk to ("
-                      << logical_to_ondisk_size(oi->size) << ")";
+                     << " : on disk size (" << p->second.size
+                     << ") does not match object info size (" << oi->size
+                     << ") adjusted for ondisk to (" << ondisk_size << ")";
         soid_error.set_size_mismatch();
         this_chunk->m_error_counts.shallow_errors++;
       }

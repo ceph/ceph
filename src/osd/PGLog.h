@@ -136,6 +136,9 @@ struct PGLog : DoutPrefixProvider {
     virtual void try_stash(
       const hobject_t &hoid,
       version_t v) = 0;
+    virtual void partialwrite(
+      pg_info_t *info,
+      const pg_log_entry_t &entry) = 0;
     virtual ~LogEntryHandler() {}
   };
   using LogEntryHandlerRef = std::unique_ptr<LogEntryHandler>;
@@ -239,18 +242,20 @@ public:
       return *this;
     }
 
-    void trim_rollback_info_to(eversion_t to, LogEntryHandler *h) {
+    void trim_rollback_info_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       advance_can_rollback_to(
 	to,
 	[&](pg_log_entry_t &entry) {
 	  h->trim(entry);
+	  h->partialwrite(info, entry);
 	});
     }
-    bool roll_forward_to(eversion_t to, LogEntryHandler *h) {
+    bool roll_forward_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       return advance_can_rollback_to(
 	to,
 	[&](pg_log_entry_t &entry) {
 	  h->rollforward(entry);
+	  h->partialwrite(info, entry);
 	});
     }
 
@@ -810,15 +815,17 @@ public:
 
   void trim(
     eversion_t trim_to,
-    pg_info_t &info,
+    pg_info_t& info,
     bool transaction_applied = true,
     bool async = false);
 
   void roll_forward_to(
     eversion_t roll_forward_to,
+    pg_info_t *info,
     LogEntryHandler *h) {
     if (log.roll_forward_to(
 	  roll_forward_to,
+	  info,
 	  h))
       dirty_log = true;
   }
@@ -827,9 +834,10 @@ public:
     return log.get_can_rollback_to();
   }
 
-  void roll_forward(LogEntryHandler *h) {
+  void roll_forward(pg_info_t *info, LogEntryHandler *h) {
     roll_forward_to(
       log.head,
+      info,
       h);
   }
 
@@ -839,8 +847,8 @@ public:
 
   //////////////////// get or std::set log & missing ////////////////////
 
-  void reset_backfill_claim_log(const pg_log_t &o, LogEntryHandler *h) {
-    log.trim_rollback_info_to(log.head, h);
+  void reset_backfill_claim_log(const pg_log_t &o, pg_info_t *info, LogEntryHandler *h) {
+    log.trim_rollback_info_to(log.head, info, h);
     log.claim_log_and_clear_rollback_info(o);
     missing.clear();
     mark_dirty_to(eversion_t::max());
@@ -1256,6 +1264,7 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     bool maintain_rollback,
     IndexedLog *log,
+    pg_info_t *info,
     missing_type &missing,
     LogEntryHandler *rollbacker,
     const DoutPrefixProvider *dpp) {
@@ -1295,12 +1304,14 @@ public:
   bool append_new_log_entries(
     const hobject_t &last_backfill,
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
+    pg_info_t *info,
     LogEntryHandler *rollbacker) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
       entries,
       true,
       &log,
+      info,
       missing,
       rollbacker,
       this);

@@ -18,7 +18,7 @@
 #include "include/interval_set.h"
 #include <initializer_list>
 
-template <typename K, typename V, typename S>
+template <typename K, typename V, typename S, template<typename, typename, typename ...> class C = std::map>
 /**
  * interval_map
  *
@@ -33,11 +33,11 @@ template <typename K, typename V, typename S>
  */
 class interval_map {
   S s;
-  using map = std::map<K, std::pair<K, V> >;
-  using mapiter = typename std::map<K, std::pair<K, V> >::iterator;
-  using cmapiter = typename std::map<K, std::pair<K, V> >::const_iterator;
-  map m;
-  std::pair<mapiter, mapiter> get_range(K off, K len) {
+  using Map = C<K, std::pair<K, V> >;
+  using Mapiter = typename C<K, std::pair<K, V> >::iterator;
+  using Cmapiter = typename C<K, std::pair<K, V> >::const_iterator;
+  Map m;
+  std::pair<Mapiter, Mapiter> get_range(K off, K len) {
     // fst is first iterator with end after off (may be end)
     auto fst = m.upper_bound(off);
     if (fst != m.begin())
@@ -49,7 +49,7 @@ class interval_map {
     auto lst = m.lower_bound(off + len);
     return std::make_pair(fst, lst);
   }
-  std::pair<cmapiter, cmapiter> get_range(K off, K len) const {
+  std::pair<Cmapiter, Cmapiter> get_range(K off, K len) const {
     // fst is first iterator with end after off (may be end)
     auto fst = get_range_fst(off);
 
@@ -57,7 +57,7 @@ class interval_map {
     auto lst = m.lower_bound(off + len);
     return std::make_pair(fst, lst);
   }
-  cmapiter get_range_fst(K off) const {
+  Cmapiter get_range_fst(K off) const {
     // fst is first iterator with end after off (may be end)
     auto fst = m.upper_bound(off);
     if (fst != m.begin())
@@ -67,7 +67,7 @@ class interval_map {
 
     return fst;
   }
-  void try_merge(mapiter niter) {
+  void try_merge(Mapiter niter) {
     if (niter != m.begin()) {
       auto prev = niter;
       prev--;
@@ -109,7 +109,7 @@ class interval_map {
   }
 public:
   interval_map() = default;
-  interval_map(std::initializer_list<typename map::value_type> l) {
+  interval_map(std::initializer_list<typename Map::value_type> l) {
     for (auto& v : l) {
       insert(v.first, v.second.first, v.second.second);
     }
@@ -202,17 +202,17 @@ public:
   bool empty() const {
     return m.empty();
   }
-  interval_set<K> get_interval_set() const {
-    interval_set<K> ret;
+  interval_set<K, C> get_interval_set() const {
+    interval_set<K, C> ret;
     for (auto &&i: *this) {
       ret.insert(i.get_off(), i.get_len());
     }
     return ret;
   }
   class const_iterator {
-    cmapiter it;
-    const_iterator(cmapiter &&it) : it(std::move(it)) {}
-    const_iterator(const cmapiter &it) : it(it) {}
+    Cmapiter it;
+    const_iterator(Cmapiter &&it) : it(std::move(it)) {}
+    const_iterator(const Cmapiter &it) : it(it) {}
 
     friend class interval_map;
   public:
@@ -318,8 +318,8 @@ public:
   }
 };
 
-template <typename K, typename V, typename S>
-std::ostream &operator<<(std::ostream &out, const interval_map<K, V, S> &m) {
+template <typename K, typename V, typename S, template<typename, typename, typename ...> class C = std::map>
+std::ostream &operator<<(std::ostream &out, const interval_map<K, V, S, C> &m) {
   return m.print(out);
 }
 

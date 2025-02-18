@@ -146,6 +146,21 @@ void RadosIo::applyIoOp(IoOp& op) {
       break;
     }
 
+    case OpType::Truncate: {
+      start_io();
+      uint64_t opSize = static_cast<TruncateOp&>(op).size;
+      auto op_info = std::make_shared<AsyncOpInfo<0>>();
+      librados::ObjectWriteOperation wop;
+      wop.truncate(opSize * block_size);
+      auto truncate_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, oid, std::move(wop), 0,
+                              nullptr, truncate_cb);
+      break;
+    }
+
     case OpType::Remove: {
       start_io();
       auto op_info = std::make_shared<AsyncOpInfo<0>>();
@@ -170,6 +185,8 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::Write2:
       [[fallthrough]];
     case OpType::Write3:
+      [[fallthrough]];
+    case OpType::Append:
       [[fallthrough]];
     case OpType::FailedWrite:
       [[fallthrough]];
@@ -295,6 +312,13 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       start_io();
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
       applyWriteOp(writeOp);
+      break;
+    }
+
+    case OpType::Append: {
+      start_io();
+      SingleAppendOp& appendOp = static_cast<SingleAppendOp&>(op);
+      applyWriteOp(appendOp);
       break;
     }
 

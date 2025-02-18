@@ -412,6 +412,12 @@ void RadosTestECPP::TearDown()
   ioctx.close();
 }
 
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::chrono::time_point<T>& result)
+{
+  return os << result.time_since_epoch().count();
+}
+
 void RadosTestECPP::set_allow_ec_overwrites()
 {
   ec_overwrites_set = true;

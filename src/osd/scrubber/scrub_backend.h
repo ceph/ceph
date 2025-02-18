@@ -358,6 +358,8 @@ class ScrubBackend {
   const spg_t m_pg_id;
   std::vector<pg_shard_t> m_acting_but_me;  // primary only
   bool m_is_replicated{true};
+  bool m_is_ec_overwrite_allowed{false};
+  bool m_is_optimised_ec{false};
   std::string_view m_mode_desc;
   std::string m_formatted_id;
   const PGPool& m_pool;
@@ -390,6 +392,7 @@ class ScrubBackend {
 
   /// Cleaned std::map pending snap metadata scrub
   ScrubMap m_cleaned_meta_map{};
+  std::map<hobject_t, pg_shard_t> m_cleaned_meta_shard_lookup_map{};
 
   /// a reference to the primary map
   ScrubMap& my_map();
@@ -427,14 +430,13 @@ class ScrubBackend {
                                       std::stringstream& errstream);
 
   // returns: true if a discrepancy was found
-  bool compare_obj_details(pg_shard_t auth_shard,
-                           const ScrubMap::object& auth,
+  bool compare_obj_details(pg_shard_t auth_shard, const ScrubMap::object& auth,
                            const object_info_t& auth_oi,
+                           pg_shard_t candidate_shard,
                            const ScrubMap::object& candidate,
                            shard_info_wrapper& shard_result,
                            inconsistent_obj_wrapper& obj_result,
-                           std::stringstream& errorstream,
-                           bool has_snapset);
+                           std::stringstream& errorstream, bool has_snapset);
 
   void repair_object(const hobject_t& soid,
                      const auth_peers_t& ok_peers,
@@ -516,7 +518,7 @@ class ScrubBackend {
     Scrub::SnapMapReaderI& snaps_getter);
 
   // accessing the PG backend for this translation service
-  uint64_t logical_to_ondisk_size(uint64_t logical_size) const;
+  uint64_t logical_to_ondisk_size(uint64_t logical_size, int8_t shard_id) const;
 };
 
 namespace fmt {

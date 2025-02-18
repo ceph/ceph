@@ -38,6 +38,7 @@
 #include "osd/scrubber/scrub_machine.h"
 #include "osd/scrubber/pg_scrubber.h"
 #include "osd/ECCommon.h"
+#include "osd/ECInject.h"
 
 #include "include/types.h"
 #include "include/compat.h"
@@ -5200,7 +5201,7 @@ PG* OSD::_make_pg(
   PG *pg;
   if (pi.type == pg_pool_t::TYPE_REPLICATED ||
       pi.type == pg_pool_t::TYPE_ERASURE)
-    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid);
+    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid, lookup_ec_extent_cache_lru(pgid));
   else
     ceph_abort();
   return pg;
@@ -5285,6 +5286,13 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
     service.logger->dec(l_osd_pg_stray);
 
   return true;
+}
+
+ECExtentCache::LRU &OSD::lookup_ec_extent_cache_lru(spg_t pgid) const
+{
+  uint32_t shard_index = pgid.hash_to_shard(num_shards);
+  auto sdata = shards[shard_index];
+  return sdata->ec_extent_cache_lru;
 }
 
 PGRef OSD::_lookup_pg(spg_t pgid)
@@ -6566,7 +6574,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       return;
     }
 
-    int64_t shardid = cmd_getval_or<int64_t>(cmdmap, "shardid", shard_id_t::NO_SHARD);
+    int64_t shardid = cmd_getval_or<int64_t>(cmdmap, "shardid", static_cast<int>(shard_id_t::NO_SHARD));
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
     ghobject_t gobj(obj, ghobject_t::NO_GEN, shard_id_t(uint8_t(shardid)));
     spg_t pgid(curmap->raw_pg_to_pg(rawpg), shard_id_t(shardid));
@@ -6669,14 +6677,14 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 	int64_t type = cmd_getval_or<int64_t>(cmdmap, "type", 0);
         int64_t when = cmd_getval_or<int64_t>(cmdmap, "when", 0);
         int64_t duration = cmd_getval_or<int64_t>(cmdmap, "duration", 1);
-	ss << ec_inject_read_error(gobj, type, when, duration);
+	ss << ECInject::read_error(gobj, type, when, duration);
       } else {
 	ss << "bluestore_debug_inject_read_err not enabled";
       }
     } else if (command == "injectecclearreaderr") {
       if (service->cct->_conf->bluestore_debug_inject_read_err) {
 	int64_t type = cmd_getval_or<int64_t>(cmdmap, "type", 0);
-	ss << ec_inject_clear_read_error(gobj, type);
+	ss << ECInject::clear_read_error(gobj, type);
       } else {
 	ss << "bluestore_debug_inject_read_err not enabled";
       }
@@ -6685,14 +6693,14 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 	int64_t type = cmd_getval_or<int64_t>(cmdmap, "type", 0);
 	int64_t when = cmd_getval_or<int64_t>(cmdmap, "when", 0);
         int64_t duration = cmd_getval_or<int64_t>(cmdmap, "duration", 1);
-	ss << ec_inject_write_error(gobj, type, when, duration);
+	ss << ECInject::write_error(gobj, type, when, duration);
       } else {
 	ss << "bluestore_debug_inject_read_err not enabled";
       }
     } else if (command == "injectecclearwriteerr") {
       if (service->cct->_conf->bluestore_debug_inject_read_err) {
 	int64_t type = cmd_getval_or<int64_t>(cmdmap, "type", 0);
-	ss << ec_inject_clear_write_error(gobj, type);
+	ss << ECInject::clear_write_error(gobj, type);
       } else {
 	ss << "bluestore_debug_inject_read_err not enabled";
       }
@@ -11021,7 +11029,8 @@ OSDShard::OSDShard(
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
       osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc)),
-    context_queue(sdata_wait_lock, sdata_cond)
+    context_queue(sdata_wait_lock, sdata_cond),
+    ec_extent_cache_lru(10*1024*1024)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
 }

@@ -132,7 +132,7 @@ struct formatter<spg_t> {
   template <typename FormatContext>
   auto format(const spg_t& spg, FormatContext& ctx) const
   {
-    if (shard_id_t::NO_SHARD == spg.shard.id) {
+    if (shard_id_t::NO_SHARD == spg.shard) {
       return fmt::format_to(ctx.out(), "{}", spg.pgid);
     } else {
       return fmt::format_to(ctx.out(), "{}s{}", spg.pgid, spg.shard.id);
