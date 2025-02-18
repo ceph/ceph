@@ -9,7 +9,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CephfsVolumeFormComponent } from '../cephfs-form/cephfs-form.component';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -61,7 +61,7 @@ describe('CephfsListComponent', () => {
     const callDeletion = () => {
       component.removeVolumeModal();
       expect(modalRef).toBeTruthy();
-      const deletion: CriticalConfirmationModalComponent = modalRef && modalRef.componentInstance;
+      const deletion: DeleteConfirmationModalComponent = modalRef && modalRef.componentInstance;
       deletion.submitActionObservable();
     };
 

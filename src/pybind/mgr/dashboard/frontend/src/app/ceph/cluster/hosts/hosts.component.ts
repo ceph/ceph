@@ -10,7 +10,7 @@ import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -34,6 +34,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { HostFormComponent } from './host-form/host-form.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'hosts';
 
@@ -469,7 +470,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
 
   deleteAction() {
     const hostname = this.selection.first().hostname;
-    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'Host',
       itemNames: [hostname],
       actionDescription: 'remove',

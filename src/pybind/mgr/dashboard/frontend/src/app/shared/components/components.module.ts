@@ -48,7 +48,7 @@ import { ColorClassFromTextPipe } from './cd-label/color-class-from-text.pipe';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
-import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from './delete-confirmation-modal/delete-confirmation-modal.component';
 import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
@@ -132,7 +132,7 @@ import InfoIcon from '@carbon/icons/es/information/16';
     LoadingPanelComponent,
     ModalComponent,
     NotificationsSidebarComponent,
-    CriticalConfirmationModalComponent,
+    DeleteConfirmationModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
     GrafanaComponent,

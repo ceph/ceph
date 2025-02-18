@@ -1,4 +1,4 @@
-import { Component, NgModule, TemplateRef, ViewChild } from '@angular/core';
+import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { NgForm, ReactiveFormsModule } from '@angular/forms';
 
@@ -8,9 +8,10 @@ import { DirectivesModule } from '~/app/shared/directives/directives.module';
 import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
-import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
-import { CheckboxModule, ModalService, PlaceholderService } from 'carbon-components-angular';
+import { DeleteConfirmationModalComponent } from './delete-confirmation-modal.component';
+import { ModalService, PlaceholderService } from 'carbon-components-angular';
 import { ModalCdsService } from '../../services/modal-cds.service';
+import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
 @NgModule({})
 export class MockModule {}
@@ -47,14 +48,14 @@ class MockComponent {
   constructor(public modalService: ModalCdsService) {}
 
   openCtrlDriven() {
-    this.ctrlRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.ctrlRef = this.modalService.show(DeleteConfirmationModalComponent, {
       submitAction: this.fakeDeleteController.bind(this),
       bodyTemplate: this.ctrlDescription
     });
   }
 
   openModalDriven() {
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       submitActionObservable: this.fakeDelete(),
       bodyTemplate: this.modalDescription
     });
@@ -83,25 +84,27 @@ class MockComponent {
   }
 }
 
-describe('CriticalConfirmationModalComponent', () => {
+describe('DeleteConfirmationModalComponent', () => {
   let mockComponent: MockComponent;
-  let component: CriticalConfirmationModalComponent;
+  let component: DeleteConfirmationModalComponent;
   let mockFixture: ComponentFixture<MockComponent>;
 
   configureTestBed({
     declarations: [
       MockComponent,
-      CriticalConfirmationModalComponent,
+      DeleteConfirmationModalComponent,
       LoadingPanelComponent,
       AlertPanelComponent
     ],
-    imports: [ReactiveFormsModule, MockModule, DirectivesModule, CheckboxModule],
+    schemas: [NO_ERRORS_SCHEMA],
+    imports: [ReactiveFormsModule, MockModule, DirectivesModule],
     providers: [
       ModalService,
       PlaceholderService,
       { provide: 'itemNames', useValue: [] },
       { provide: 'itemDescription', useValue: 'entry' },
-      { provide: 'actionDescription', useValue: 'delete' }
+      { provide: 'actionDescription', useValue: 'delete' },
+      { provide: 'impact', useValue: DeletionImpact.medium }
     ]
   });
 
@@ -109,7 +112,7 @@ describe('CriticalConfirmationModalComponent', () => {
     mockFixture = TestBed.createComponent(MockComponent);
     mockComponent = mockFixture.componentInstance;
     spyOn(mockComponent.modalService, 'show').and.callFake((_modalComp, config) => {
-      const data = modalServiceShow(CriticalConfirmationModalComponent, config);
+      const data = modalServiceShow(DeleteConfirmationModalComponent, config);
       component = data.componentInstance;
       return data;
     });
@@ -143,8 +146,8 @@ describe('CriticalConfirmationModalComponent', () => {
   });
 
   describe('component functions', () => {
-    const changeValue = (value: boolean) => {
-      const ctrl = component.deletionForm.get('confirmation');
+    const changeValue = (formControl: string, value: string | boolean) => {
+      const ctrl = component.deletionForm.get(formControl);
       ctrl.setValue(value);
       ctrl.markAsDirty();
       ctrl.updateValueAndValidity();
@@ -167,15 +170,54 @@ describe('CriticalConfirmationModalComponent', () => {
 
       beforeEach(() => {
         component.deletionForm.reset();
+        const ctrl = component.deletionForm.get('impact');
+        ctrl.setValue(DeletionImpact.medium);
+        ctrl.markAsDirty();
+        ctrl.updateValueAndValidity();
+        component.deletionForm.get('confirmation').updateValueAndValidity();
       });
 
       it('should test empty values', () => {
-        component.deletionForm.reset();
         testValidation(true, 'required', true);
-        component.deletionForm.reset();
-        changeValue(true);
-        changeValue(false);
+        changeValue('confirmation', true);
+        changeValue('confirmation', false);
         testValidation(true, 'required', true);
+      });
+    });
+
+    describe('validate confirmInput', () => {
+      const testValidation = (submitted: boolean, error: string, expected: boolean) => {
+        expect(
+          component.deletionForm.showError('confirmInput', <NgForm>{ submitted: submitted }, error)
+        ).toBe(expected);
+      };
+
+      beforeEach(() => {
+        component.deletionForm.reset();
+        const ctrl = component.deletionForm.get('impact');
+        ctrl.setValue(DeletionImpact.high);
+        ctrl.markAsDirty();
+        ctrl.updateValueAndValidity();
+        component.deletionForm.get('confirmInput').updateValueAndValidity();
+      });
+
+      it('should test empty values', () => {
+        testValidation(true, 'required', true);
+        changeValue('confirmInput', 'dummytext');
+        changeValue('confirmInput', '');
+        testValidation(true, 'required', true);
+      });
+
+      it('should give error, if entered resource name is wrong', () => {
+        component.itemNames = ['resource1'];
+        changeValue('confirmInput', 'dummytext');
+        testValidation(true, 'matchResource', true);
+      });
+
+      it('should give error, if entered resource name is correct', () => {
+        component.itemNames = ['resource1'];
+        changeValue('confirmInput', 'resource1');
+        testValidation(true, 'matchResource', false);
       });
     });
 
