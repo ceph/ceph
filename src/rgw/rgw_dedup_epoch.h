@@ -61,6 +61,7 @@ namespace rgw::dedup {
       out << "DEDUP_TYPE_FULL";
     }
     else {
+      // TBD: maybe only report error and bailout???
       ceph_abort("unexpected dedup_type");
     }
     out << "::serial=" << ep.serial;

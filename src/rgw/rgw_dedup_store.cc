@@ -280,6 +280,16 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  disk_block_seq_t::disk_block_seq_t(const DoutPrefixProvider* dpp_in,
+				     disk_block_t *p_arr_in,
+				     work_shard_t worker_id,
+				     md5_shard_t md5_shard,
+				     worker_stats_t *p_stats_in)
+  {
+    activate(dpp_in, p_arr_in, worker_id, md5_shard, p_stats_in);
+  }
+
+  //---------------------------------------------------------------------------
   disk_block_seq_t::disk_block_seq_t()
   {
     deactivate();
@@ -294,13 +304,13 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void disk_block_seq_t::deactivate()
   {
-    p_arr        = nullptr;
-    p_stats      = nullptr;
-    p_curr_block = nullptr;
     dpp          = nullptr;
-    d_seq_number = 0;
+    p_arr        = nullptr;
     d_worker_id  = NULL_WORK_SHARD;
     d_md5_shard  = NULL_MD5_SHARD;
+    p_stats      = nullptr;
+    p_curr_block = nullptr;
+    d_seq_number = 0;
   }
 
   //---------------------------------------------------------------------------
@@ -310,20 +320,20 @@ namespace rgw::dedup {
 				  md5_shard_t md5_shard,
 				  worker_stats_t *p_stats_in)
   {
-    dpp               = dpp_in;
-    p_arr             = p_arr_in;
-    d_worker_id       = worker_id;
-    d_md5_shard       = md5_shard;
-    p_stats           = p_stats_in;
-    d_seq_number      = 0;
-
-    ceph_assert(p_arr);
+    dpp          = dpp_in;
+    p_arr        = p_arr_in;
+    d_worker_id  = worker_id;
+    d_md5_shard  = md5_shard;
+    p_stats      = p_stats_in;
+    p_curr_block = nullptr;
+    d_seq_number = 0;
 
     // TBD: get rid of this wasteful memset() call
     // closing block/record properly should be enough
     memset(p_arr, 0, sizeof(disk_block_t)*DISK_BLOCK_COUNT);
     slab_reset();
   }
+
   //---------------------------------------------------------------------------
   int disk_block_seq_t::fill_disk_record(disk_record_t          *p_rec,
 					 const rgw::sal::Bucket *p_bucket,
@@ -631,7 +641,7 @@ namespace rgw::dedup {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
 
-    ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << (uint32_t)worker_id
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
 		       << ", md5_shard=" << (uint32_t)md5_shard
 		       << ", seq_number=" << seq_number
 		       << ":: oid=" << oid << dendl;
@@ -639,7 +649,7 @@ namespace rgw::dedup {
     int ret = ioctx.read_full(oid, bl);
     // TBD: probably should check (ret > 0)
     if (ret >= 0) {
-      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     }
     else {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed to read " << oid
@@ -658,11 +668,11 @@ namespace rgw::dedup {
   {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
-    ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     // TBD: probably should check (ret == bl.length())
     int ret = ioctx.write_full(oid, bl);
     if (ret >= 0) {
-      ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     }
     else {
       ldpp_dout(dpp, 1) << "ERROR: failed to write " << oid

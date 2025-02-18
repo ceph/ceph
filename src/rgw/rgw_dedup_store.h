@@ -210,8 +210,10 @@ namespace rgw::dedup {
 		 uint32_t seq_number,
 		 const DoutPrefixProvider* dpp);
 
+  class disk_block_array_t;
   class disk_block_seq_t
   {
+    friend class disk_block_array_t;
   public:
     struct record_info_t {
       disk_block_id_t block_id;
@@ -220,13 +222,13 @@ namespace rgw::dedup {
       bool            has_valid_sha256;
     };
 
-    disk_block_seq_t();
+    disk_block_seq_t(const DoutPrefixProvider* dpp_in,
+		     disk_block_t *p_arr_in,
+		     work_shard_t worker_id,
+		     md5_shard_t md5_shard,
+		     worker_stats_t *p_stats_in);
+
     ~disk_block_seq_t();
-    void activate(const DoutPrefixProvider* _dpp,
-		  disk_block_t *_p_arr,
-		  work_shard_t worker_id,
-		  md5_shard_t md5_shard,
-		  worker_stats_t *p_stats);
     int flush_disk_records(librados::IoCtx &ioctx);
     md5_shard_t get_md5_shard() { return d_md5_shard; }
     int add_record(librados::IoCtx        &ioctx,
@@ -238,6 +240,12 @@ namespace rgw::dedup {
 		   uint64_t                obj_size,
 		   record_info_t          *p_rec_info); // OUT-PARAM
   private:
+    disk_block_seq_t();
+    void activate(const DoutPrefixProvider* _dpp,
+		  disk_block_t *_p_arr,
+		  work_shard_t worker_id,
+		  md5_shard_t md5_shard,
+		  worker_stats_t *p_stats);
     void deactivate();
     inline const disk_block_t* last_block() { return &p_arr[DISK_BLOCK_COUNT-1]; }
     int flush(librados::IoCtx &ioctx);

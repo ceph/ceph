@@ -31,7 +31,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void dedup_table_t::remove_singletons_and_redistribute_keys()
   {
-    ceph_assert(hash_tab);
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
 	continue;
@@ -82,7 +81,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   uint32_t dedup_table_t::find_entry(const key_t *p_key)
   {
-    ceph_assert(hash_tab);
     uint64_t count = 1;
     uint32_t idx = p_key->hash() % entries_count;
 
@@ -100,7 +98,6 @@ namespace rgw::dedup {
   int dedup_table_t::add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 			       bool shared_manifest, bool valid_sha256)
   {
-    ceph_assert(hash_tab);
     if (occupied_count < entries_count) {
       occupied_count++;
     }
@@ -150,7 +147,6 @@ namespace rgw::dedup {
   int dedup_table_t::update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 				  bool shared_manifest, bool valid_sha256)
   {
-    ceph_assert(hash_tab);
     // should never happen!
     if (unlikely(entries_count == 0)) {
       report_bad_access(dpp, __func__);
@@ -160,6 +156,7 @@ namespace rgw::dedup {
     uint32_t idx = find_entry(p_key);
     ceph_assert(hash_tab[idx].key == *p_key);
     ceph_assert(hash_tab[idx].val.is_occupied());
+    // should only update non-singleton entries!
     ceph_assert(hash_tab[idx].val.count > 1);
 
     // need to overwrite the block_idx/rec_id from the first pass
@@ -180,7 +177,6 @@ namespace rgw::dedup {
 					      disk_block_id_t block_id,
 					      record_id_t rec_id)
   {
-    ceph_assert(hash_tab);
     // should never happen!
     if (unlikely(entries_count == 0)) {
       report_bad_access(dpp, __func__);
@@ -202,7 +198,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int dedup_table_t::get_val(const key_t *p_key, struct value_t *p_val /*OUT*/)
   {
-    ceph_assert(hash_tab);
     // should never happen!
     if (unlikely(entries_count == 0)) {
       report_bad_access(dpp, __func__);
@@ -222,7 +217,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int dedup_table_t::remove_objects_not_protected_by_md5(uint64_t max_allowed)
   {
-    ceph_assert(hash_tab);
     // should never happen!
     if (unlikely(entries_count == 0)) {
       report_bad_access(dpp, __func__);
@@ -244,7 +238,6 @@ namespace rgw::dedup {
 				       uint64_t *p_duplicate_count,
 				       uint64_t *p_duplicate_bytes_approx)
   {
-    ceph_assert(hash_tab);
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
 	continue;

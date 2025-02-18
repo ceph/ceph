@@ -248,20 +248,19 @@ namespace rgw::dedup {
   // rgw::dedup::Background
   //===========================================================================
   //---------------------------------------------------------------------------
-  void Background::init_rados_access_handles()
+  int Background::init_rados_access_handles()
   {
     store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
-      derr << "ERROR: command only works with RADOS back-ends" << dendl;
-      ceph_abort("Bad Rados driver");
+      ldpp_dout(dpp, 0) << "ERR: failed dynamic_cast to RadosStore" << dendl;
+      // this is the return code used in rgw_bucket.cc
+      return -ENOTSUP;
     }
 
     rados = store->getRados();
     rados_handle = rados->get_rados_handle();
 
-    if (init_dedup_pool_ioctx(rados, dpp, d_dedup_cluster_ioctx) != 0) {
-      return;
-    }
+    return init_dedup_pool_ioctx(rados, dpp, d_dedup_cluster_ioctx);
   }
 
   //---------------------------------------------------------------------------
@@ -272,7 +271,7 @@ namespace rgw::dedup {
     dp(_cct, dout_subsys, "dedup background: "),
     dpp(&dp),
     cct(_cct),
-    d_cluster(dpp, cct),
+    d_cluster(dpp, cct, driver),
     d_execute_interval(_execute_interval),
     d_watcher_ctx(this)
   {
@@ -282,8 +281,8 @@ namespace rgw::dedup {
     d_min_obj_size_for_dedup = 1024;
 #endif
 
+    // TBD: should we through an exception on failure
     init_rados_access_handles();
-
     d_heart_beat_last_update = ceph_clock_now();
     d_heart_beat_max_elapsed_sec = 3;
   }
@@ -1080,14 +1079,14 @@ namespace rgw::dedup {
 				 work_shard_t worker_id,
 				 uint32_t *p_slab_count,
 				 md5_stats_t *p_stats, /* IN-OUT */
-				 disk_block_seq_t *p_disk_block_arr)
+				 disk_block_seq_t *p_disk_block_seq)
   {
     const int MAX_OBJ_LOAD_FAILURE = 3;
     const int MAX_BAD_BLOCKS = 3;
     bool      has_more = true;
     uint32_t  seq_number = 0;
     int       failure_count = 0;
-    ldpp_dout(dpp, 10) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
+    ldpp_dout(dpp, 20) << __func__ << "::" << dedup_step_name(step) << "::worker_id="
 		       << worker_id << ", md5_shard=" << md5_shard << dendl;
     *p_slab_count = 0;
     while (has_more) {
@@ -1133,7 +1132,7 @@ namespace rgw::dedup {
 	  }
 
 	  if (p_header->rec_count == 0) {
-	    ldpp_dout(dpp, 10) << __func__ << "::Block #" << block_num
+	    ldpp_dout(dpp, 20) << __func__ << "::Block #" << block_num
 			       << " has an empty header, no more blocks" << dendl;
 	    has_more = false;
 	    break;
@@ -1149,7 +1148,7 @@ namespace rgw::dedup {
 	      slab_rec_count++;
 	    }
 	    else if (step == STEP_READ_ATTRIBUTES) {
-	      read_object_attribute(p_table, &rec, disk_block_id, rec_id, md5_shard, p_stats, p_disk_block_arr);
+	      read_object_attribute(p_table, &rec, disk_block_id, rec_id, md5_shard, p_stats, p_disk_block_seq);
 	      slab_rec_count++;
 	    }
 	    else if (step == STEP_REMOVE_DUPLICATES) {
@@ -1513,13 +1512,14 @@ namespace rgw::dedup {
     // TBD2 - worker_stats needs to be reflected, maybe move tham to MD5 stats??
     // (egress_slabs, egress_blocks, egress_records)
     {
-      disk_block_seq_t disk_block_arr;
-      disk_block_t    arr[DISK_BLOCK_COUNT];
+      disk_block_t arr[DISK_BLOCK_COUNT];
       worker_stats_t worker_stats;
-      disk_block_arr.activate(dpp, arr, num_work_shards, md5_shard, &worker_stats);
+      disk_block_seq_t disk_block_seq(dpp, arr, num_work_shards, md5_shard,
+				      &worker_stats);
+
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
 	run_dedup_step(p_table, STEP_READ_ATTRIBUTES, md5_shard, worker_id,
-		       slab_count_arr+worker_id, p_stats, &disk_block_arr);
+		       slab_count_arr+worker_id, p_stats, &disk_block_seq);
 	if (unlikely(d_ctl.should_stop())) {
 	  ldpp_dout(dpp, 1) << __func__ << "::STEP_READ_ATTRIBUTES::STOPPED\n" << dendl;
 	  return -1;
@@ -1527,7 +1527,7 @@ namespace rgw::dedup {
 	// we finished processing output SLAB from @worker_id -> remove them
 	remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
-      disk_block_arr.flush_disk_records(d_dedup_cluster_ioctx);
+      disk_block_seq.flush_disk_records(d_dedup_cluster_ioctx);
       p_stats->valid_sha256_attrs   = worker_stats.valid_sha256;
       p_stats->invalid_sha256_attrs = worker_stats.invalid_sha256;
     }
@@ -1729,7 +1729,7 @@ namespace rgw::dedup {
       uint32_t seq_number = disk_block_id_t::slab_id_to_seq_num(slab_id);
       disk_block_id_t block_id(worker_id, seq_number);
       std::string oid(block_id.get_slab_name(md5_shard));
-      ldpp_dout(dpp, 10) << __func__ << "::calling ioctx->remove(" << oid << ")" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::calling ioctx->remove(" << oid << ")" << dendl;
       int ret = d_dedup_cluster_ioctx.remove(oid);
       if (ret != 0) {
 	ldpp_dout(dpp, 0) << __func__ << "::ERR Failed ioctx->remove(" << oid << ")" << dendl;
@@ -1747,7 +1747,7 @@ namespace rgw::dedup {
 				       work_shard_t num_work_shards,
 				       md5_shard_t num_md5_shards)
   {
-    ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << worker_id << dendl;
     utime_t start_time = ceph_clock_now();
     worker_stats_t worker_stats;
     int ret = objects_ingress_single_work_shard(worker_id, num_work_shards, num_md5_shards,
@@ -1890,11 +1890,11 @@ namespace rgw::dedup {
     }
     ldpp_dout(dpp, 10) << __func__ << "::RAND num_work_shards=" << num_work_shards
 		       << "::num_md5_shards=" << num_md5_shards << dendl;
-    int ret = d_cluster.init(store, d_dedup_cluster_ioctx, p_epoch, false,
-			     num_work_shards, num_md5_shards);
+    int ret = d_cluster.reset(store, d_dedup_cluster_ioctx, p_epoch,
+			      num_work_shards, num_md5_shards);
 #else
-    int ret = d_cluster.init(store, d_dedup_cluster_ioctx, p_epoch, false,
-			     MAXX_WORK_SHARD, MAXX_MD5_SHARD);
+    int ret = d_cluster.reset(store, d_dedup_cluster_ioctx, p_epoch,
+			      MAXX_WORK_SHARD, MAXX_MD5_SHARD);
 #endif
     if (ret != 0) {
       derr << __func__ << "::ERR: failed cluster.init()" << dendl;
@@ -2252,9 +2252,6 @@ namespace rgw::dedup {
   {
     const uint64_t SHARD_BUFFERING_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
     ldpp_dout(dpp, 20) <<__func__ << "::dedup::main loop" << dendl;
-    dedup_epoch_t epoch;
-    ldpp_dout(dpp, 20) << __func__ << "::calling d_cluster.init()" << dendl;
-    d_cluster.init(store, d_dedup_cluster_ioctx, &epoch, true, 0, 0);
 
     while (!d_ctl.shutdown_req) {
       if (unlikely(d_ctl.should_pause())) {
@@ -2266,6 +2263,7 @@ namespace rgw::dedup {
       }
 
       if (d_ctl.dedup_exec) {
+	dedup_epoch_t epoch;
 	if (setup(&epoch) != 0) {
 	  derr << "failed setup()" << dendl;
 	  return;
@@ -2313,7 +2311,7 @@ namespace rgw::dedup {
       d_cond.wait(cond_lock, [this]{return d_ctl.remote_restart_req || d_ctl.should_stop() || d_ctl.should_pause();});
       if (!d_ctl.should_stop() && !d_ctl.should_pause()) {
 	// TBD: should we release lock here ???
-	if (d_cluster.can_start_new_scan(store, epoch.time, dpp)) {
+	if (d_cluster.can_start_new_scan(store)) {
 	  d_ctl.dedup_exec = true;
 	  d_ctl.remote_aborted = false;
 	  d_ctl.remote_paused = false;

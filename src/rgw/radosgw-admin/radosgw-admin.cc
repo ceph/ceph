@@ -9129,11 +9129,12 @@ next:
   }
 
   if (opt_cmd == OPT::DEDUP_STATS) {
-    std::cerr << "OPT::DEDUP_STATS" << std::endl;
+    std::cout << "OPT::DEDUP_STATS" << std::endl;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
-      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
-      ceph_abort("Bad Rados driver");
+      cerr << "ERROR: this command can only work when the cluster has a RADOS "
+	   << "backing store." << std::endl;
+      return EPERM;
     }
     rgw::dedup::cluster::collect_all_shard_stats(store, dpp());
   }
@@ -9152,18 +9153,20 @@ next:
 
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
-      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
-      ceph_abort("Bad Rados driver");
+      cerr << "ERROR: this command can only work when the cluster has a RADOS "
+	   << "backing store." << std::endl;
+      return EPERM;
     }
     rgw::dedup::cluster::dedup_control(store, dpp(), urgent_msg);
   }
 
   if (opt_cmd == OPT::DEDUP_RESTART_DRY || opt_cmd == OPT::DEDUP_RESTART) {
-    std::cerr << "OPT::DEDUP_RESTART" << std::endl;
+    std::cout << "OPT::DEDUP_RESTART" << std::endl;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
-      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
-      ceph_abort("Bad Rados driver");
+      cerr << "ERROR: this command can only work when the cluster has a RADOS "
+	   << "backing store." << std::endl;
+      return EPERM;
     }
     rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
   }
