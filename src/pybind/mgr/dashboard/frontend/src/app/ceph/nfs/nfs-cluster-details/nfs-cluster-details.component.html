@@ -1,0 +1,4 @@
+<ng-container *ngIf="!!selection">
+  <h4 i18n>{{ title | titlecase }}</h4>
+  <cd-nfs-list [clusterId]="selection.name"></cd-nfs-list>
+</ng-container>
