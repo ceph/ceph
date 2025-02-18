@@ -1424,8 +1424,9 @@ Usage:
 
     @_cli_write_command('orch osd rebuild')
     def _osd_rebuild(self,
-                     osd_id: str) -> HandleCommandResult:
-        completion = self.remove_osds(osd_id, zap=True, replace=True, no_destroy=False)
+                     osd_ids: List[str]) -> HandleCommandResult:
+        self.remove_osds(osd_ids, zap=True, replace=True, no_destroy=False)
+        completion = self.osd_rebuild(osd_ids)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

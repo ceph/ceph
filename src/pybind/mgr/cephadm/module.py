@@ -3864,6 +3864,108 @@ Then run the following:
 
         return "Scheduled to remove the following daemons from host '{}'\n{}".format(hostname, daemons_table)
 
+    @handle_orch_error
+    def osd_rebuild(self, osd_ids: List[str]) -> str:
+        """Rebuild the OSDs by retrieving the host information and LVM data for the given OSD IDs.
+        Args:
+            osd_ids (List[str]): A list of OSD IDs to rebuild.
+        Returns:
+            str: The output containing the LVM data for the corresponding hosts of the OSDs.
+        Raises:
+            OrchestratorError: If an OSD is a stray or if the corresponding host cannot be retrieved.
+        """
+        def get_children() -> Dict[str, Any]:
+            """Retrieve the OSD IDs grouped by host.
+            Returns:
+                Dict[str, Any]: A dictionary where each key is a host name, and the corresponding value
+                                 is a list of OSD IDs associated with that host.
+            """
+            result: Dict[str, Any] = {}
+            for node in osd_tree['nodes']:
+                if node['type'] == 'host':
+                    name: str = node['name']
+                    result[name] = [str(_id) for _id in node['children']]
+            return result
+        def get_host_from_osd_id(osd_id: str) -> str:
+            """Retrieve the host name associated with a given OSD ID.
+            Args:
+                osd_id (str): The OSD ID to search for in the OSD tree.
+            Returns:
+                str: The host name associated with the OSD ID, or an empty string if not found.
+            """
+            result: str = ''
+            for host, osds in get_children().items():
+                if osd_id in osds:
+                    result = host
+                    break
+            return result
+        def get_stray() -> List[str]:
+            """Retrieve the list of stray OSD IDs from the OSD tree.
+            Returns:
+                List[str]: A list of OSD IDs (as strings) that are marked as 'stray' in the OSD tree.
+            """
+            result: List[str] = []
+            for stray in osd_tree['stray']:
+                if stray['type'] == 'osd':
+                    result.append(str(stray['id']))
+            return result
+        def prepare_DriveGroupSpec(specs: dict[str, Any], host_name: str, osd_id: str) -> DriveGroupSpec:
+            list_drive_group_spec_bool_arg: List[str] = []
+            drive_group_spec = {
+                'data_devices': []
+            }  # type: Dict
+            spec = specs.get(osd_id)
+            if spec is not None:
+                if '=' in v:
+                    drv_grp_spec_arg, value = v.split('=')
+                    if drv_grp_spec_arg in ['data_devices',
+                                            'db_devices',
+                                            'wal_devices',
+                                            'journal_devices']:
+                        drive_group_spec[drv_grp_spec_arg] = []
+                        drive_group_spec[drv_grp_spec_arg].append(value)
+                    else:
+                        if value.lower() in ['true', 'false']:
+                            list_drive_group_spec_bool_arg.append(drv_grp_spec_arg)
+                            drive_group_spec[drv_grp_spec_arg] = value.lower() == "true"
+                        else:
+                            drive_group_spec[drv_grp_spec_arg] = value
+                elif drv_grp_spec_arg is not None:
+                    drive_group_spec[drv_grp_spec_arg].append(v)
+                else:
+                    drive_group_spec['data_devices'].append(v)
+                values.remove(v)
+
+            for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
+                drive_group_spec[dev_type] = DeviceSelection(
+                    paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
+
+            drive_group = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern=host_name),
+                method=method,
+                **drive_group_spec,
+            )
+
+            return drive_group_spec
+
+        out: str = ''
+        out: str = ''
+        ret, out, err = self.check_mon_command({
+                        'prefix': 'osd tree',
+                        'format': 'json'
+        })
+        osd_tree: Dict[str, Any] = json.loads(out)
+        for osd_id in osd_ids:
+            if osd_id in get_stray():
+                raise OrchestratorError(f'osd.{osd_id} is a stray daemon. Cannot get corresponding host.')
+            hostname = get_host_from_osd_id(osd_id)
+            if not hostname:
+                raise OrchestratorError(f'Unexpected error: cannot retrieve corresponding host for osd.{osd_id}')
+            self.ceph_volume.lvm_list.get_data(hostname)
+            dg = prepare_DriveGroupSpec(specs=self.ceph_volume.lvm_list.data, host_name=hostname, osd_id=osd_id)
+            self.create_osds(drive_group=dg)
+        return out
+
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()

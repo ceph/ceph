@@ -711,6 +711,11 @@ class Orchestrator(object):
         """ Get a preview for OSD deployments """
         raise NotImplementedError()
 
+    def osd_rebuild(self, osd_ids: List[str]) -> OrchResult[str]:
+        """Rebuild an OSD.
+        """
+        raise NotImplementedError()
+
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
                     replace_block: bool = False,
