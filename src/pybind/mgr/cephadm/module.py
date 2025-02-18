@@ -621,7 +621,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.template = TemplateMgr(self)
 
-        self.requires_post_actions: Set[str] = set()
+        self.requires_post_actions: Set[orchestrator.DaemonDescription] = set()
         self.need_connect_dashboard_rgw = False
 
         self.config_checker = CephadmConfigChecks(self)
