@@ -3723,10 +3723,12 @@ class TestSMB:
             'name': 'smb.tango.briskly',
             'image': '',
             'deploy_arguments': [],
-            'params': {},
+            'params': {
+                "tcp_ports": [445, 9922]
+            },
             'meta': {
                 'service_name': 'smb',
-                'ports': [],
+                'ports': [445, 9922],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,
@@ -3786,10 +3788,12 @@ class TestSMB:
             'name': 'smb.tango.briskly',
             'image': '',
             'deploy_arguments': [],
-            'params': {},
+            'params': {
+                'tcp_ports': [445, 9922]
+            },
             'meta': {
                 'service_name': 'smb',
-                'ports': [],
+                'ports': [445, 9922],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,
