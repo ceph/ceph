@@ -1,3 +1,5 @@
+#pragma once
+
 #include "IoSequence.h"
 
 namespace ceph {
@@ -6,7 +8,11 @@ class EcIoSequence : public IoSequence {
  public:
   virtual bool is_supported(Sequence sequence) const override;
   static std::unique_ptr<IoSequence> generate_sequence(
-      Sequence s, std::pair<int, int> obj_size_range, int k, int m, int seed);
+      Sequence s, std::pair<int, int> obj_size_range,
+      std::optional<std::pair<int, int>> km,
+      std::optional<std::pair<std::string_view, std::string_view>>
+          mappinglayers,
+      int seed);
 
  protected:
   bool setup_inject;
@@ -18,18 +24,33 @@ class EcIoSequence : public IoSequence {
 
   // Writes cannot be sent to injected on shard zero, so selections seperated
   // out
-  void select_random_data_shard_to_inject_read_error(int k, int m);
-  void select_random_data_shard_to_inject_write_error(int k, int m);
-  void select_random_shard_to_inject_read_error(int k, int m);
-  void select_random_shard_to_inject_write_error(int k, int m);
+  void select_random_data_shard_to_inject_read_error(
+      std::optional<std::pair<int, int>> km,
+      std::optional<std::pair<std::string_view, std::string_view>>
+          mappinglayers);
+  void select_random_data_shard_to_inject_write_error(
+      std::optional<std::pair<int, int>> km,
+      std::optional<std::pair<std::string_view, std::string_view>>
+          mappinglayers);
+  void select_random_shard_to_inject_read_error(
+      std::optional<std::pair<int, int>> km,
+      std::optional<std::pair<std::string_view, std::string_view>>
+          mappinglayers);
+  void select_random_shard_to_inject_write_error(
+      std::optional<std::pair<int, int>> km,
+      std::optional<std::pair<std::string_view, std::string_view>>
+          mappinglayers);
   void generate_random_read_inject_type();
   void generate_random_write_inject_type();
 };
 
 class ReadInjectSequence : public EcIoSequence {
  public:
-  ReadInjectSequence(std::pair<int, int> obj_size_range, int seed, Sequence s,
-                     int k, int m);
+  ReadInjectSequence(
+      std::pair<int, int> obj_size_range, int seed, Sequence s,
+      std::optional<std::pair<int, int>> km,
+      std::optional<std::pair<std::string_view, std::string_view>>
+          mappinglayers);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -38,12 +59,15 @@ class ReadInjectSequence : public EcIoSequence {
 
  private:
   std::unique_ptr<IoSequence> child_sequence;
-  std::unique_ptr<IoOp> nextOp;
+  std::unique_ptr<IoOp> next_op;
 };
 
 class Seq10 : public EcIoSequence {
  public:
-  Seq10(std::pair<int, int> obj_size_range, int seed, int k, int m);
+  Seq10(std::pair<int, int> obj_size_range, int seed,
+        std::optional<std::pair<int, int>> km,
+        std::optional<std::pair<std::string_view, std::string_view>>
+            mappinglayers);
 
   Sequence get_id() const override;
   std::string get_name() const override;
