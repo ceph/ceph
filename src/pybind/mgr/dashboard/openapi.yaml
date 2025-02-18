@@ -9020,6 +9020,10 @@ paths:
                   default: rbd
                   description: RBD pool name
                   type: string
+                trash_image:
+                  default: false
+                  description: Trash the RBD image when namespace is removed
+                  type: boolean
               required:
               - rbd_image_name
               type: object
@@ -9067,6 +9071,12 @@ paths:
         description: NVMeoF gateway group
         in: query
         name: gw_group
+        schema:
+          type: string
+      - default: false
+        description: Force remove the RBD image
+        in: query
+        name: force
         schema:
           type: string
       responses:
@@ -9171,6 +9181,10 @@ paths:
                 rw_mbytes_per_second:
                   description: Read/Write MB/s
                   type: integer
+                trash_image:
+                  default: false
+                  description: Trash RBD image after removing namespace
+                  type: boolean
                 w_mbytes_per_second:
                   description: Write MB/s
                   type: integer

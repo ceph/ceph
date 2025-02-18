@@ -340,6 +340,7 @@ else:
                 "rbd_pool": Param(str, "RBD pool name"),
                 "rbd_image_name": Param(str, "RBD image name"),
                 "create_image": Param(bool, "Create RBD image"),
+                "trash_image": Param(bool, "Trash the RBD image when namespace is removed"),
                 "rbd_image_size": Param(int, "RBD image size"),
                 "block_size": Param(int, "NVMeoF namespace block size"),
                 "load_balancing_group": Param(int, "Load balancing group"),
@@ -355,6 +356,7 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
+            trash_image: Optional[bool] = False,
             rbd_image_size: Optional[int] = 1024,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
@@ -367,6 +369,7 @@ else:
                     rbd_pool_name=rbd_pool,
                     block_size=block_size,
                     create_image=create_image,
+                    trash_image=trash_image,
                     size=rbd_image_size,
                     anagrpid=load_balancing_group,
                 )
@@ -384,6 +387,7 @@ else:
                 "r_mbytes_per_second": Param(int, "Read MB/s"),
                 "w_mbytes_per_second": Param(int, "Write MB/s"),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "trash_image": Param(bool, "Trash RBD image after removing namespace")
             },
         )
         @NvmeofCLICommand("nvmeof ns update")
@@ -399,7 +403,8 @@ else:
             rw_mbytes_per_second: Optional[int] = None,
             r_mbytes_per_second: Optional[int] = None,
             w_mbytes_per_second: Optional[int] = None,
-            gw_group: Optional[str] = None
+            gw_group: Optional[str] = None,
+            trash_image: Optional[bool] = False,
         ):
             contains_failure = False
 
@@ -438,9 +443,22 @@ else:
                 )
                 if resp.status != 0:
                     contains_failure = True
+
+            if trash_image:
+                response = NVMeoFClient().stub.namespace_set_rbd_trash_image(
+                    NVMeoFClient.pb2.namespace_set_rbd_trash_image_req(
+                        subsystem_nqn=nqn,
+                        nsid=int(nsid),
+                        trash_image=trash_image
+                    )
+                )
+                if response.status != 0:
+                    contains_failure = True
+
             response = NVMeoFClient(gw_group=gw_group).stub.list_namespaces(
                 NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn, nsid=int(nsid))
             )
+
             if contains_failure:
                 cherrypy.response.status = 202
             return response
@@ -451,14 +469,25 @@ else:
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
                 "nsid": Param(str, "NVMeoF Namespace ID"),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "force": Param(str, "Force remove the RBD image")
             },
         )
         @NvmeofCLICommand("nvmeof ns del")
         @empty_response
         @handle_nvmeof_error
-        def delete(self, nqn: str, nsid: str, gw_group: Optional[str] = None):
+        def delete(
+            self,
+            nqn: str,
+            nsid: str,
+            gw_group: Optional[str] = None,
+            force: Optional[bool] = False
+        ):
             return NVMeoFClient(gw_group=gw_group).stub.namespace_delete(
-                NVMeoFClient.pb2.namespace_delete_req(subsystem_nqn=nqn, nsid=int(nsid))
+                NVMeoFClient.pb2.namespace_delete_req(
+                    subsystem_nqn=nqn,
+                    nsid=int(nsid),
+                    i_am_sure=str_to_bool(force)
+                )
             )
 
     @APIRouter("/nvmeof/subsystem/{nqn}/host", Scope.NVME_OF)
