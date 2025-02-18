@@ -95,6 +95,15 @@ public:
       uint32_t op_flags = 0
       ) = 0; ///< @return <done, values> values.empty() only if done
 
+    virtual read_errorator::future<std::tuple<bool, omap_values_t>> log_get_values(
+      CollectionRef c,           ///< [in] collection
+      const ghobject_t &oid,     ///< [in] oid
+      const std::optional<std::string> &start ///< [in] start, empty for begin
+      ) {  ///< @return <done, values> values.empty() only if done
+      ceph_assert(0 == "log_get_values is unsupported");
+      return read_errorator::make_ready_future<omap_values_paged_t>();
+    }
+
     virtual get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,
       const ghobject_t& oid,
@@ -165,6 +174,10 @@ public:
       uint32_t op_flags = 0) = 0;
 
     virtual unsigned get_max_attr_name_length() const = 0;
+
+    virtual bool support_log_interfaces() {
+      return false;
+    }
   };
 
 public:
