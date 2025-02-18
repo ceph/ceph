@@ -60,6 +60,8 @@ class TestCephadmCLI(MgrTestCase):
         time.sleep(5)
         self._orch_cmd('daemon', 'start', 'osd.0')
         self.wait_for_health_clear(120)
+        # this sleep is to try and address https://tracker.ceph.com/issues/69526
+        time.sleep(5)
         self._orch_cmd('daemon', 'restart', 'osd.0')
 
     def test_device_ls_wide(self):
