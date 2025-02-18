@@ -12,6 +12,8 @@
  * 
  */
 
+#include "MDSMonitor.h"
+
 #include <regex>
 #include <sstream>
 #include <queue>
@@ -19,7 +21,6 @@
 #include <boost/range/adaptors.hpp>
 #include <boost/utility.hpp>
 
-#include "MDSMonitor.h"
 #include "FSCommands.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
@@ -41,6 +42,7 @@
 #include "include/stringify.h"
 #include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
+#include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*
 #include "Session.h"
 
 using namespace TOPNSPC::common;

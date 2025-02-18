@@ -12,12 +12,15 @@
  * 
  */
 
+#include "MDSMap.h"
+#include "mds/cephfs_features.h"
+
 #include <ostream>
 
 #include "common/debug.h"
+#include "common/Formatter.h"
+#include "common/StackStringStream.h"
 #include "mon/health_check.h"
-
-#include "MDSMap.h"
 
 using std::dec;
 using std::hex;
