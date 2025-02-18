@@ -514,7 +514,7 @@ endif(WITH_BLKIN)
 
 option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" ON)
 if(WITH_JAEGER)
-  set(HAVE_JAEGER FALSE)
+  set(HAVE_JAEGER TRUE)
 endif()
 
 #option for RGW
