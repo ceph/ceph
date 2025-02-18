@@ -16,6 +16,7 @@
 #define CEPH_MOSDPGSCAN_H
 
 #include "MOSDFastDispatchOp.h"
+#include "osd/recovery_types.h"
 
 class MOSDPGScan final : public MOSDFastDispatchOp {
 private:
@@ -24,13 +25,13 @@ private:
 
 public:
   enum {
-    OP_SCAN_GET_DIGEST = 1,      // just objects and versions
-    OP_SCAN_DIGEST = 2,          // result
+    OP_SCAN_GET_DIGEST = 1,        // just objects and versions
+    OP_SCAN_GET_DIGEST_REPLY = 2,  // populated BackfillInterval reply
   };
   const char *get_op_name(int o) const {
     switch (o) {
     case OP_SCAN_GET_DIGEST: return "get_digest";
-    case OP_SCAN_DIGEST: return "digest";
+    case OP_SCAN_GET_DIGEST_REPLY: return "get_digest_reply";
     default: return "???";
     }
   }
@@ -49,6 +50,11 @@ public:
   }
   spg_t get_spg() const override {
     return pgid;
+  }
+
+  BackfillInterval get_backfill_interval() const {
+    assert(op == OP_SCAN_GET_DIGEST_REPLY);
+    return BackfillInterval{begin, end, get_data()};
   }
 
   void decode_payload() override {
