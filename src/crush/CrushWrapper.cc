@@ -2411,7 +2411,19 @@ int CrushWrapper::add_multi_osd_per_failure_domain_rule_at(
       if (err)
 	*err << "unknown type " << failure_domain_name;
       return -EINVAL;
+    } else if (type == 0) {
+      if (err) {
+	*err << "cannot automatically create msr rule with leaf failure domain: "
+	     << failure_domain_name;
+      }
+      return -EINVAL;
     }
+  } else {
+    if (err) {
+      *err << "cannot automatically create msr rule without "
+	   << "failure domain specified";
+    }
+    return -EINVAL;
   }
   if (device_class.size()) {
     if (!class_exists(device_class)) {
