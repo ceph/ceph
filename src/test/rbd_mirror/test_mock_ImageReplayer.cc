@@ -177,6 +177,7 @@ struct MockReplayer : public Replayer {
   MOCK_CONST_METHOD0(is_resync_requested, bool());
   MOCK_CONST_METHOD0(get_error_code, int());
   MOCK_CONST_METHOD0(get_error_description, std::string());
+  MOCK_METHOD1(prune_snapshot, void(uint64_t snapshot_id));
 };
 
 template <>

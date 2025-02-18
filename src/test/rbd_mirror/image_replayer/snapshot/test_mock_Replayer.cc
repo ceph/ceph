@@ -158,15 +158,14 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   static CreateNonPrimaryRequest* s_instance;
   static CreateNonPrimaryRequest* create(MockTestImageCtx *image_ctx,
                                          bool demoted,
+                                         const std::string group_id,
+                                         const std::string group_snap_id,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
                                          const SnapSeqs& snap_seqs,
-                                         uint64_t local_group_pool_id,
-                                         const std::string &local_group_id,
-                                         const std::string &local_group_snap_id,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
-                                         Context *on_finish) {
+                                         Context *on_finish){
     ceph_assert(s_instance != nullptr);
     s_instance->demoted = demoted;
     s_instance->primary_mirror_uuid = primary_mirror_uuid;
