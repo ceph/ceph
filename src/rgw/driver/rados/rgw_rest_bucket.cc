@@ -216,36 +216,24 @@ public:
 
 void RGWOp_Bucket_Remove::execute(optional_yield y)
 {
-  std::string bucket_name;
-  bool delete_children;
-  std::unique_ptr<rgw::sal::Bucket> bucket;
+  std::string bucket_name, tenant;
+  bool delete_children, bypass_gc;
 
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
+  RESTArgs::get_string(s, "tenant", tenant, &tenant);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
+  RESTArgs::get_bool(s, "bypass-gc", false, &bypass_gc);
 
-  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    if (op_ret == -ENOENT) {
-      /* adjust error, we want to return with NoSuchBucket and not
-       * NoSuchKey */
-      op_ret = -ERR_NO_SUCH_BUCKET;
-    }
-    return;
-  }
+  RGWBucketAdminOpState op_state;
+  op_state.set_bucket_name(bucket_name);
+  op_state.set_tenant(tenant);
+  op_state.set_delete_children(delete_children);
 
-  op_ret = driver->load_bucket(s, rgw_bucket("", bucket_name),
-                               &bucket, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
-    if (op_ret == -ENOENT) {
-      op_ret = -ERR_NO_SUCH_BUCKET;
-    }
-    return;
-  }
+  // Check if the request is being forwarded by looking for the "rgwx-zonegroup" argument
+  // As this is an admin endpoint, checking by system_request is not sufficient
+  const bool is_forwarded = s->info.args.exists(RGW_SYS_PARAM_PREFIX "zonegroup");
 
-  op_ret = bucket->remove(s, delete_children, s->yield);
+  op_ret = RGWBucketAdminOp::remove_bucket(driver, *s->penv.site, op_state, y, s, bypass_gc, true, is_forwarded);
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
