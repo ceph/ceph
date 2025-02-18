@@ -231,7 +231,7 @@ struct DataStats {
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &p) {
-    DECODE_START(1, p);
+    DECODE_START(3, p);
     // we moved from having fields in kb to fields in byte
     if (struct_v > 2) {
       decode(fs_stats.byte_total, p);
