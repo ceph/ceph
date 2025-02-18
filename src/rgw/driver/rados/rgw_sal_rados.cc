@@ -201,8 +201,36 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
 		       << dendl;
     }
-  } else if (ret == -EEXIST || (ret == 0 && existed)) {
+  } else if (ret == -EEXIST) {
     ret = -ERR_BUCKET_EXISTS;
+  } else if (ret == 0) {
+    /* this is to handle the following race condition:
+     * a concurrent DELETE bucket request deletes the bucket entry point and
+     * unlinks it (if the bucket pre-exists) before it's linked in this
+     * bucket creation request. */
+
+    if (existed) {
+      ret = -ERR_BUCKET_EXISTS;
+    }
+
+    RGWBucketEntryPoint ep;
+    RGWObjVersionTracker objv_tracker;
+    int r = store->ctl()->bucket->read_bucket_entrypoint_info(info.bucket,
+                                                            &ep,
+                                                            y,
+                                                            dpp,
+                                                            RGWBucketCtl::Bucket::GetParams()
+                                                            .set_objv_tracker(&objv_tracker));
+    if (r == -ENOENT) {
+      ret = -ERR_NO_SUCH_BUCKET;
+
+      ldpp_dout(dpp, 5) << "WARNING: the bucket entry point has been deleted by a concurrent DELETE bucket request."
+                        << " Unlinking the bucket." << dendl;
+      r = unlink(dpp, params.owner, y);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
+      }
+    }
   }
 
   return ret;
