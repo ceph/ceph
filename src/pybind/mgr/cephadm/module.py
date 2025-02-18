@@ -2873,10 +2873,41 @@ Then run the following:
         """
         return [self._apply(spec) for spec in specs]
 
+    def validate_device(self, host_name: str, drive_group: DriveGroupSpec) -> str:
+        try:
+
+            if not drive_group.data_devices or not drive_group.data_devices.paths:
+                return "Error: No data devices specified."
+
+            if self.cache.is_host_unreachable(host_name):
+                return f"Host {host_name} is not reachable (it may be offline or in maintenance mode)."
+
+            host_cache = self.cache.devices.get(host_name, [])
+            if not host_cache:
+                return f"Error: No devices found for host {host_name}."
+
+            available_devices = {
+                dev.path: dev for dev in host_cache if dev.available
+            }
+            self.log.debug(f"Available devices: {host_name}: {list(available_devices)}")
+
+            for device in drive_group.data_devices.paths:
+                if device.path not in available_devices:
+                    return f"Error: Device {device.path} is not available for OSD creation."
+            return ""
+        except Exception as e:
+            return f"Error: {str(e)}"
+
     @handle_orch_error
     def create_osds(self, drive_group: DriveGroupSpec) -> str:
         hosts: List[HostSpec] = self.inventory.all_specs()
         filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
+        host_name = filtered_hosts[0]
+
+        validation_result = self.validate_device(host_name, drive_group)
+        if validation_result:
+            return validation_result
+
         if not filtered_hosts:
             return "Invalid 'host:device' spec: host not found in cluster. Please check 'ceph orch host ls' for available hosts"
         return self.osd_service.create_from_spec(drive_group)
