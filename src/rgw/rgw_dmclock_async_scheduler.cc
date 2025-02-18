@@ -5,6 +5,8 @@
 #include "rgw_dmclock_async_scheduler.h"
 #include "rgw_dmclock_scheduler.h"
 
+using namespace std::literals;
+
 namespace rgw::dmclock {
 
 AsyncScheduler::~AsyncScheduler()
@@ -15,15 +17,13 @@ AsyncScheduler::~AsyncScheduler()
   }
 }
 
-const char** AsyncScheduler::get_tracked_conf_keys() const
+std::vector<std::string> AsyncScheduler::get_tracked_keys() const noexcept
 {
   if (observer) {
-    return observer->get_tracked_conf_keys();
+    return observer->get_tracked_keys();
   }
-  static const char* keys[] = { "rgw_max_concurrent_requests", nullptr };
-  return keys;
+  return {"rgw_max_concurrent_requests"s};
 }
-
 void AsyncScheduler::handle_conf_change(const ConfigProxy& conf,
                                         const std::set<std::string>& changed)
 {
