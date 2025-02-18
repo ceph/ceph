@@ -24,7 +24,8 @@
 #include "include/int_types.h"
 #include "include/types.h"
 #include "include/fs_types.h"
-#include "include/unordered_map.h"
+
+#include <unordered_map>
 
 // We're only converting errors defined in errno.h, not standard Windows
 // system error codes that are usually retrievied using GetLastErrorCode().
@@ -599,7 +600,7 @@ std::string win32_lasterror_str()
   return win32_strerror(err);
 }
 
-static const ceph::unordered_map<int,NTSTATUS> cephfs_errno_to_ntstatus = {
+static const std::unordered_map<int,NTSTATUS> cephfs_errno_to_ntstatus = {
   {CEPHFS_EBLOCKLISTED,    STATUS_SYSTEM_SHUTDOWN},
   {CEPHFS_EPERM,           STATUS_ACCESS_DENIED},
   {CEPHFS_ESTALE,          STATUS_INVALID_HANDLE},

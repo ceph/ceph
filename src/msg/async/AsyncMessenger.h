@@ -19,12 +19,11 @@
 
 #include <map>
 #include <optional>
+#include <unordered_map>
 
 #include "include/types.h"
 #include "include/xlist.h"
 #include "include/spinlock.h"
-#include "include/unordered_map.h"
-#include "include/unordered_set.h"
 
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
@@ -271,7 +270,7 @@ private:
    * NOTE: a Asyncconnection* with state CLOSED may still be in the map but is considered
    * invalid and can be replaced by anyone holding the msgr lock
    */
-  ceph::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
+  std::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
 
   /**
    * list of connection are in the process of accepting

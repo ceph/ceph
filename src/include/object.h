@@ -27,7 +27,6 @@
 #include <fmt/format.h>
 
 #include "include/rados.h"
-#include "include/unordered_map.h"
 #include "common/Formatter.h"
 
 #include "hash.h"

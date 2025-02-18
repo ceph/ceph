@@ -18,7 +18,6 @@
 #include <fmt/format.h>
 
 #include "include/types.h" // for version_t
-#include "include/unordered_set.h"
 #include "include/utime.h"
 #include "include/utime_fmt.h"
 #include "msg/msg_fmt.h"
@@ -32,6 +31,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <unordered_set>
 
 namespace ceph {
   class Formatter;
@@ -161,7 +161,7 @@ struct LogSummary {
   // channel -> [(seq#, entry), ...]
   std::map<std::string,std::list<std::pair<uint64_t,LogEntry>>> tail_by_channel;
   uint64_t seq = 0;
-  ceph::unordered_set<LogEntryKey> keys;
+  std::unordered_set<LogEntryKey> keys;
 
   // ---- quincy+ ----
   LRUSet<LogEntryKey> recent_keys;

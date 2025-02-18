@@ -31,7 +31,6 @@ struct ThreadPool {
 #include <vector>
 
 #include "common/ceph_mutex.h"
-#include "include/unordered_map.h"
 #include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 #include "common/Thread.h"
@@ -556,8 +555,7 @@ protected:
     int result = 0;
     {
       std::lock_guard locker(m_lock);
-      ceph::unordered_map<Context *, int>::iterator it =
-        m_context_results.find(ctx);
+      auto it = m_context_results.find(ctx);
       if (it != m_context_results.end()) {
         result = it->second;
         m_context_results.erase(it);
@@ -567,7 +565,7 @@ protected:
   }
 private:
   ceph::mutex m_lock = ceph::make_mutex("ContextWQ::m_lock");
-  ceph::unordered_map<Context*, int> m_context_results;
+  std::unordered_map<Context*, int> m_context_results;
 };
 
 class ShardedThreadPool {

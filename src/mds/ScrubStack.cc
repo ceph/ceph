@@ -1156,7 +1156,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     bool any_finished = false;
     bool any_repaired = false;
     std::set<std::string> scrubbing_tags;
-    std::unordered_map<std::string, unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
+    std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
     std::unordered_map<_inodeno_t, std::string> paths;
     std::unordered_map<std::string, std::vector<uint64_t>> counters;
 
