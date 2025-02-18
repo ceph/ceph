@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { SmbService } from './smb.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { provideHttpClient } from '@angular/common/http';
+import { CLUSTER_RESOURCE } from '~/app/ceph/smb/smb.model';
 
 describe('SmbService', () => {
   let service: SmbService;
@@ -32,10 +33,9 @@ describe('SmbService', () => {
   it('should call create cluster', () => {
     const request = {
       cluster_resource: {
-        resource_type: 'ceph.smb.cluster',
+        resource_type: CLUSTER_RESOURCE,
         cluster_id: 'clusterUserTest',
         auth_mode: 'active-directory',
-        intent: 'present',
         domain_settings: {
           realm: 'DOMAIN1.SINK.TEST',
           join_sources: [

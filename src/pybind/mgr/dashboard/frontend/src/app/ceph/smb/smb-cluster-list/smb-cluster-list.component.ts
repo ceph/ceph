@@ -19,7 +19,6 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { SMBCluster } from '../smb.model';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -42,7 +41,6 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   selection = new CdTableSelection();
   smbClusters$: Observable<SMBCluster[]>;
   subject$ = new BehaviorSubject<SMBCluster[]>([]);
-  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -71,7 +69,7 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
     ];
     this.tableActions = [
       {
-        name: `${this.actionLabels.CREATE}`,
+        name: `${this.actionLabels.CREATE} cluster`,
         permission: 'create',
         icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),
