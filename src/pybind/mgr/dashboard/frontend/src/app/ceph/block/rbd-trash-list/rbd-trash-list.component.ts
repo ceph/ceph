@@ -6,7 +6,7 @@ import moment from 'moment';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -204,7 +204,7 @@ export class RbdTrashListComponent implements OnInit {
     const isExpired = moment().isAfter(expiresAt);
     const imageIdSpec = new ImageSpec(poolName, namespace, imageId);
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'RBD',
       itemNames: [imageIdSpec],
       bodyTemplate: this.deleteTpl,

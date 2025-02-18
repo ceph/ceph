@@ -21,7 +21,7 @@ import { ErrorComponent } from '~/app/core/error/error.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { SelectBadgesComponent } from '~/app/shared/components/select-badges/select-badges.component';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
@@ -795,7 +795,7 @@ describe('PoolFormComponent', () => {
 
     describe('crush rule deletion', () => {
       let taskWrapper: TaskWrapperService;
-      let deletion: CriticalConfirmationModalComponent;
+      let deletion: DeleteConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
 
@@ -946,7 +946,7 @@ describe('PoolFormComponent', () => {
 
     describe('ecp deletion', () => {
       let taskWrapper: TaskWrapperService;
-      let deletion: CriticalConfirmationModalComponent;
+      let deletion: DeleteConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
       let modal: NgbModalRef;

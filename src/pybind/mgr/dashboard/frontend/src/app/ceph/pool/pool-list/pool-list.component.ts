@@ -9,7 +9,7 @@ import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -30,6 +30,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Pool } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'pool';
 
@@ -223,7 +224,8 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
 
   deletePoolModal() {
     const name = this.selection.first().pool_name;
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'Pool',
       itemNames: [name],
       submitActionObservable: () =>

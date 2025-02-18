@@ -11,7 +11,7 @@ import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { CrushNodeSelectionClass } from '~/app/shared/classes/crush.node.selection.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -687,7 +687,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       return;
     }
     const name = value[nameAttribute];
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription,
       itemNames: [name],
       submitActionObservable: () => {
