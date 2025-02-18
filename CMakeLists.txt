@@ -623,11 +623,6 @@ endif()
 # -lz link into kv
 find_package(ZLIB REQUIRED)
 
-#option for EventTrace
-CMAKE_DEPENDENT_OPTION(
-  WITH_EVENTTRACE "Event tracing support, requires WITH_LTTNG"
-  OFF "USE_LTTNG" OFF)
-
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
@@ -638,6 +633,11 @@ if(${WITH_LTTNG})
     message(FATAL_ERROR "Can't find lttng-gen-tp.")
   endif()
 endif(${WITH_LTTNG})
+
+#option for EventTrace
+CMAKE_DEPENDENT_OPTION(
+  WITH_EVENTTRACE "Event tracing support, requires WITH_LTTNG"
+  OFF "WITH_LTTNG" OFF)
 
 option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
 

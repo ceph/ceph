@@ -45,7 +45,7 @@ void EventTrace::init_tp(CephContext *_ctx)
   }
 }
 
-void EventTrace::set_message_attrs(const Message *m, string& oid, string& context, bool incl_oid)
+void EventTrace::set_message_attrs(const Message *m, std::string& oid, std::string& context, bool incl_oid)
 {
   // arg1 = oid, arg2 = message type, arg3 = source!source_addr!tid!sequence
   if (m && (m->get_type() == CEPH_MSG_OSD_OP || m->get_type() == CEPH_MSG_OSD_OPREPLY)) {
@@ -56,7 +56,7 @@ void EventTrace::set_message_attrs(const Message *m, string& oid, string& contex
         oid = ((MOSDOpReply *)m)->get_oid().name;
     }
 
-    ostringstream buf;
+    std::ostringstream buf;
     buf << m->get_source() << "!" << m->get_source_addr() << "!"
         << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();
     context = buf.str();
@@ -89,7 +89,7 @@ EventTrace::~EventTrace()
 void EventTrace::log_event_latency(const char *event)
 {
   utime_t now = ceph_clock_now();
-  double usecs = (now.to_nsec()-last_ts.to_nsec())/1000;
+  double usecs = (now.to_nsec()-last_ts.to_nsec())/1000.0;
   OID_ELAPSED("", usecs, event);
   last_ts = now;
 }
@@ -106,7 +106,7 @@ void EventTrace::trace_oid_event(const char *oid, const char *event, const char 
 void EventTrace::trace_oid_event(const Message *m, const char *event, const char *file,
   const char *func, int line, bool incl_oid)
 {
-  string oid, context;
+  std::string oid, context;
   set_message_attrs(m, oid, context, incl_oid);
   trace_oid_event(oid.c_str(), event, context.c_str(), file, func, line);
 }
@@ -123,7 +123,7 @@ void EventTrace::trace_oid_elapsed(const char *oid, const char *event, const cha
 void EventTrace::trace_oid_elapsed(const Message *m, const char *event, double elapsed,
   const char *file, const char *func, int line, bool incl_oid)
 {
-  string oid, context;
+  std::string oid, context;
   set_message_attrs(m, oid, context, incl_oid);
   trace_oid_elapsed(oid.c_str(), event, context.c_str(), elapsed, file, func, line);
 }
