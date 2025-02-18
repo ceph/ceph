@@ -462,15 +462,18 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
-                                 mempool::mds_co::string alternate_name,
+// This also adds referent remote if referent inode is passed
+CDentry* CDir::add_remote_dentry(std::string_view dname, CInode *ref_in, inodeno_t ino,
+                                 unsigned char d_type, mempool::mds_co::string alternate_name,
 				 snapid_t first, snapid_t last) 
 {
   // foreign
   ceph_assert(lookup_exact_snap(dname, last) == 0);
 
+  inodeno_t referent_ino = ref_in ? ref_in->ino() : inodeno_t(0);
+
   // create dentry
-  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), ino, d_type, first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), ino, referent_ino, d_type, first, last);
   dn->dir = this;
   dn->version = get_projected_version();
   dn->check_corruption(true);
@@ -483,6 +486,13 @@ CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned
   //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
+
+  //link referent inode
+  if (ref_in) {
+    dn->get_linkage()->referent_inode = ref_in;
+    link_inode_work(dn, ref_in);
+  }
+
   if (last == CEPH_NOSNAP)
     num_head_items++;
   else
@@ -581,6 +591,64 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
   ceph_assert(get_num_any() == items.size());
 }
 
+void CDir::link_null_referent_inode(CDentry *dn, inodeno_t referent_ino, inodeno_t rino, unsigned char d_type)
+{
+  dout(12) << __func__ << " " << *dn << " referent_ino " << referent_ino << " remote " << rino << dendl;
+  ceph_assert(dn->get_linkage()->is_null());
+
+  dn->get_linkage()->set_remote(rino, d_type);
+  dn->get_linkage()->referent_ino = referent_ino;
+}
+
+/*
+ * The linking fun - It can be done in following different ways
+ *   1. add_remote_dentry()
+ *           - single step, if referent CInode is available and dentry needs to be created.
+ *   2. link_referent_inode()
+ *           - if referent CInode is available and dentry needs to be created, usually in
+ *           referent inode creation phase.
+ *           e.g., pop_projected_linkage() preceded by push_projected_linkage()
+ *   3. add_null_dentry() -> link_referent_inode()
+ *           - two step, if referent CInode is not available and dentry needs to be created,
+ *           usually in journal replay.
+ *   4. link_null_referent_inode() -> link_referent_inode()
+ *           - two step, if referent CInode is not available and dentry exists, usually in
+ *           migration.
+ *           e.g., decode_replica_dentry() followed by decode_replica_inode()
+ */
+void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsigned char d_type)
+{
+  ceph_assert(ref_in);
+  dout(12) << __func__ << " " << *dn << " remote " << rino << " referent inode " << *ref_in << dendl;
+
+  // The link_referent_inode could be called after add_null_dentry or link_null_referent_inode.
+  // So linkage need not be always null
+  ceph_assert(dn->get_linkage()->is_null() || dn->get_linkage()->get_referent_ino() > 0);
+  ceph_assert(!dn->get_linkage()->get_referent_inode());
+
+  // set linkage
+  dn->get_linkage()->set_remote(rino, d_type);
+  dn->get_linkage()->referent_inode = ref_in;
+  dn->get_linkage()->referent_ino = ref_in->ino();
+
+  link_inode_work(dn, ref_in);
+
+  if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+    mdcache->bottom_lru.lru_remove(dn);
+    mdcache->lru.lru_insert_mid(dn);
+    dn->state_clear(CDentry::STATE_BOTTOMLRU);
+  }
+
+  if (dn->last == CEPH_NOSNAP) {
+    num_head_items++;
+    num_head_null--;
+  } else {
+    num_snap_items++;
+    num_snap_null--;
+  }
+  ceph_assert(get_num_any() == items.size());
+}
+
 void CDir::link_primary_inode(CDentry *dn, CInode *in)
 {
   dout(12) << __func__ << " " << *dn << " " << *in << dendl;
@@ -610,7 +678,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
-  ceph_assert(dn->get_linkage()->get_inode() == in);
+  ceph_assert(dn->get_linkage()->get_inode() == in || dn->get_linkage()->get_referent_inode() == in);
   in->set_primary_parent(dn);
 
   // set inode version
@@ -705,6 +773,35 @@ void CDir::unlink_inode_work(CDentry *dn)
       dn->unlink_remote(dn->get_linkage());
 
     dn->get_linkage()->set_remote(0, 0);
+  } else if(dn->get_linkage()->is_referent_remote()) {
+      // referent remote
+      CInode *ref_in = dn->get_linkage()->get_referent_inode();
+
+      if (ref_in->get_num_ref())
+        dn->put(CDentry::PIN_INODEPIN);
+
+      if (ref_in->state_test(CInode::STATE_TRACKEDBYOFT))
+        mdcache->open_file_table.notify_unlink(ref_in);
+      if (ref_in->is_any_caps())
+        adjust_num_inodes_with_caps(-1);
+
+      // unlink auth_pin count
+      if (ref_in->auth_pins)
+        dn->adjust_nested_auth_pins(-ref_in->auth_pins, nullptr);
+
+      if (ref_in->is_freezing_inode())
+        ref_in->item_freezing_inode.remove_myself();
+      else if (ref_in->is_frozen_inode() || ref_in->is_frozen_auth_pin())
+        num_frozen_inodes--;
+
+      // detach inode
+      ref_in->remove_primary_parent(dn);
+      if (in)
+        dn->unlink_remote(dn->get_linkage());
+
+      dn->get_linkage()->set_remote(0, 0);
+      dn->get_linkage()->referent_inode = 0;
+      dn->get_linkage()->referent_ino = 0;
   } else if (dn->get_linkage()->is_primary()) {
     // primary
     // unpin dentry?
@@ -1856,7 +1953,7 @@ CDentry *CDir::_load_dentry(
       }
     } else {
       // (remote) link
-      dn = add_remote_dentry(dname, ino, d_type, std::move(alternate_name), first, last);
+      dn = add_remote_dentry(dname, nullptr, ino, d_type, std::move(alternate_name), first, last);
 
       // link to inode?
       CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
