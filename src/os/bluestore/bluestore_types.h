@@ -662,7 +662,7 @@ public:
     while (b_off >= p->length) {
       b_off -= p->length;
       if (++p == extents.end())
-        return false;
+        return !require_allocated; // going beyond means we have no allocations
     }
     b_len += b_off;
     while (b_len) {
@@ -674,7 +674,7 @@ public:
       }
       b_len -= p->length;
       if (++p == extents.end())
-        return false;
+        return !require_allocated; // going beyond means we have no allocations
     }
     ceph_abort_msg("we should not get here");
     return false;
