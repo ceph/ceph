@@ -16,9 +16,9 @@ sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://download.ceph.com/qa/boost_1_85_0.tar.bz2"
-boostSha256Sum="7009fe1faa1697476bdc7027703a2badb84e849b7b0baad5086b087b971f8617"
-boostSrcDir="${depsSrcDir}/boost_1_85_0"
+boostUrl="https://download.ceph.com/qa/boost_1_87_0.tar.bz2"
+boostSha256Sum="af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89"
+boostSrcDir="${depsSrcDir}/boost_1_87_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
