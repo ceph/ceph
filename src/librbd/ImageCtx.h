@@ -31,6 +31,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
+#include "librbd/ImageConfigProxy.h"
 #include "librbd/Types.h"
 
 #include <boost/lockfree/policies.hpp>
@@ -86,7 +87,7 @@ namespace librbd {
     static const std::string METADATA_CONF_PREFIX;
 
     CephContext *cct;
-    ConfigProxy config;
+    ImageConfigProxy config;
     std::set<std::string> config_overrides;
 
     PerfCounters *perfcounter;
