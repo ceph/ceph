@@ -168,6 +168,19 @@
                   </cds-code-snippet>
                 </td>
               </tr>
+              <tr *ngIf="selection.lifecycle_progress?.length > 0">
+                <td i18n
+                    class="bold w-25">Lifecycle Progress</td>
+                <td>
+                  <cds-tooltip [description]="lifecycleProgressMap.get(lifecycleProgress)?.description"
+                               [align]="'top'">
+                    <cds-tag size="md"
+                             [type]="lifecycleProgressMap.get(lifecycleProgress)?.color">
+                      {{ lifecycleProgress }}
+                    </cds-tag>
+                  </cds-tooltip>
+                </td>
+              </tr>
               <tr>
                 <td i18n
                     class="bold w-25">Replication policy</td>
@@ -204,6 +217,14 @@
             </tbody>
           </table>
         </div>
+      </ng-template>
+    </ng-container>
+
+    <ng-container ngbNavItem="tiering">
+      <a ngbNavLink
+         i18n>Tiering</a>
+      <ng-template ngbNavContent>
+        <cd-rgw-bucket-lifecycle-list [bucket]="selection"></cd-rgw-bucket-lifecycle-list>
       </ng-template>
     </ng-container>
   </nav>

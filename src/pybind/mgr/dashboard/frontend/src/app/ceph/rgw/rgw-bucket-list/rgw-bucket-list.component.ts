@@ -24,6 +24,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Bucket } from '../models/rgw-bucket';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { RgwBucketTieringFormComponent } from '../rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
 
 const BASE_URL = 'rgw/bucket';
 
@@ -129,7 +130,14 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
       click: () => this.deleteAction(),
       name: this.actionLabels.DELETE
     };
-    this.tableActions = [addAction, editAction, deleteAction];
+    const tieringAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.openTieringModal(),
+      disable: () => !this.selection.hasSelection,
+      name: this.actionLabels.TIERING
+    };
+    this.tableActions = [addAction, editAction, deleteAction, tieringAction];
     this.setTableRefreshTimeout();
   }
 
@@ -150,6 +158,12 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  openTieringModal() {
+    this.modalService.show(RgwBucketTieringFormComponent, {
+      bucket: this.selection.first()
+    });
   }
 
   deleteAction() {

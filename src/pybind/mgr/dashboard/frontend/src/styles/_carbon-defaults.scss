@@ -149,3 +149,10 @@ Code snippet
 .cds--snippet {
   width: fit-content;
 }
+
+/******************************************
+Tooltip
+******************************************/
+.cds--tooltip-content {
+  background-color: theme.$layer-02;
+}
