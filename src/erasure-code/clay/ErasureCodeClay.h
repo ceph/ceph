@@ -46,6 +46,18 @@ public:
 
   ~ErasureCodeClay() override;
 
+  uint64_t get_supported_optimizations() const override {
+    if (m == 1) {
+      // PARTIAL_WRITE optimization can be supported in
+      // the corner case of m = 1
+      return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+	FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+        FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS;
+    }
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS;
+  }
+
   unsigned int get_chunk_count() const override {
     return k+m;
   }
@@ -59,6 +71,8 @@ public:
   }
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
+
+  unsigned int get_minimum_granularity() override;
 
   int minimum_to_decode(const std::set<int> &want_to_read,
 			const std::set<int> &available,
@@ -74,6 +88,13 @@ public:
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::bufferlist> &chunks,
 		    std::map<int, ceph::bufferlist> *decoded) override;
+
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta);
+
+  void apply_delta(const std::map<int, ceph::bufferptr> &in,
+                   std::map <int, ceph::bufferptr> &out);
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
