@@ -140,7 +140,7 @@ inconsistent_obj_wrapper::set_auth_missing(const hobject_t& hoid,
       ++shallow_errors;
     union_shards.errors |= shard_map[pg_map.first].errors;
     shards.emplace(osd_shard_t{pg_map.first.osd,
-      static_cast<int8_t>(pg_map.first.shard)}, shard_map[pg_map.first]);
+      pg_map.first.shard}, shard_map[pg_map.first]);
   }
 }
 
