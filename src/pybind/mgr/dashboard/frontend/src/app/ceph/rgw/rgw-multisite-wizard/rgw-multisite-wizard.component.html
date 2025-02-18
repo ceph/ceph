@@ -5,6 +5,7 @@
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
+        data-testid="rgw-multisite-wizard-header"
         i18n>Set up Multi-site Replication</h3>
   </cds-modal-header>
 
@@ -22,7 +23,7 @@
               #formDir="ngForm"
               novalidate>
           <ng-container [ngSwitch]="currentStep?.stepIndex">
-            <div *ngSwitchCase="'0'"
+            <div *ngSwitchCase="0"
                  class="ms-5">
               <cd-alert-panel type="info"
                               spacingClass="mb-3">
@@ -95,7 +96,7 @@
                 </div>
               </div>
             </div>
-            <div *ngSwitchCase="'1'"
+            <div *ngSwitchCase="1"
                  class="ms-5">
               <div class="form-group row">
                 <label class="cd-col-form-label required"
@@ -165,7 +166,7 @@
               </div>
             </div>
             <div cass="ms-5"
-                 *ngSwitchCase="'2'">
+                 *ngSwitchCase="2">
               <div *ngIf="isMultiClusterConfigured; else nonMultiClusterTemplate">
                 <div class="form-group row">
                   <label class="cd-col-form-label required"
@@ -212,7 +213,7 @@
                 </div>
               </div>
             </div>
-            <div *ngSwitchCase="'3'"
+            <div *ngSwitchCase="3"
                  class="ms-5">
               <div *ngIf="isMultiClusterConfigured">
                 <ng-container *ngIf="!loading; else loadingTemplate">
@@ -323,14 +324,16 @@
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Realm Name:</label>
-    <div class="cd-col-form-input mt-2 text-muted">
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="realmName">
       <b>{{ multisiteSetupForm.get('realmName').value }}</b>
     </div>
   </div>
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Zonegroup Name:</label>
-    <div class="cd-col-form-input mt-2 text-muted">
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="zonegroupName">
       <b>{{ multisiteSetupForm.get('zonegroupName').value }}</b>
     </div>
   </div>
@@ -344,7 +347,8 @@
   <div class="form-group row">
     <label class="cd-col-form-label"
            i18n>Zone Name:</label>
-    <div class="cd-col-form-input mt-2 text-muted">
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="zoneName">
       <b>{{ multisiteSetupForm.get('zoneName').value }}</b>
     </div>
   </div>
