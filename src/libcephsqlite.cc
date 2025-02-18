@@ -46,10 +46,17 @@ SQLITE_EXTENSION_INIT1
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/version.h"
 
 #include "include/libcephsqlite.h"
 #include "SimpleRADOSStriper.h"
+
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_subsys ceph_subsys_cephsqlite
 #undef dout_prefix
