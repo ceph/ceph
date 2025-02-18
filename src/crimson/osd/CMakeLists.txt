@@ -73,6 +73,7 @@ target_link_libraries(crimson-osd
   dmclock::dmclock)
 set_target_properties(crimson-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+target_compile_features(crimson-osd PRIVATE cxx_std_20)
 install(TARGETS crimson-osd DESTINATION bin)
 if(WITH_TESTS)
   add_dependencies(tests crimson-osd)
