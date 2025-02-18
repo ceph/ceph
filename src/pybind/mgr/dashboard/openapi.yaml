@@ -7546,7 +7546,12 @@ paths:
       - Multi-cluster
   /api/nfs-ganesha/cluster:
     get:
-      parameters: []
+      parameters:
+      - default: false
+        in: query
+        name: info
+        schema:
+          type: boolean
       responses:
         '200':
           content:
@@ -7568,7 +7573,12 @@ paths:
       - NFS-Ganesha
   /api/nfs-ganesha/export:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: cluster_id
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -7672,7 +7682,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List all NFS-Ganesha exports
+      summary: 'List all or cluster specific NFS-Ganesha exports '
       tags:
       - NFS-Ganesha
     post:
