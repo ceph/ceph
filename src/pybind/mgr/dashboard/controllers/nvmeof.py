@@ -353,9 +353,10 @@ else:
             self,
             nqn: str,
             rbd_image_name: str,
+            size: Optional[int] = None,
+            rbd_image_size: Optional[int] = None,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
-            rbd_image_size: Optional[int] = 1024,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
             gw_group: Optional[str] = None,
@@ -367,7 +368,7 @@ else:
                     rbd_pool_name=rbd_pool,
                     block_size=block_size,
                     create_image=create_image,
-                    size=rbd_image_size,
+                    size=rbd_image_size or size or 1024,
                     anagrpid=load_balancing_group,
                 )
             )
