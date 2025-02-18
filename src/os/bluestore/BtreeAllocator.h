@@ -7,10 +7,11 @@
 #include "include/cpp-btree/btree_map.h"
 #include "include/cpp-btree/btree_set.h"
 #include "Allocator.h"
+#include "AllocatorBase.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
 
-class BtreeAllocator : public Allocator {
+class BtreeAllocator : public AllocatorBase {
   struct range_seg_t {
     uint64_t start;   ///< starting offset of this segment
     uint64_t end;     ///< ending offset (non-inclusive)

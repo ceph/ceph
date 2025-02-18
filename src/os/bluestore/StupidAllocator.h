@@ -7,13 +7,14 @@
 #include <mutex>
 
 #include "Allocator.h"
+#include "AllocatorBase.h"
 #include "include/btree_map.h"
 #include "include/interval_set.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
-class StupidAllocator : public Allocator {
+class StupidAllocator : public AllocatorBase {
   CephContext* cct;
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
