@@ -510,8 +510,8 @@ public:
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
     size_t unaligned_rest_size = size - aligned_size;
     output.clear();
-    buffer::ptr buf(aligned_size + AES_256_IVSIZE);
-    unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
+    auto buf = buffer::ptr_node::create(buffer::create(aligned_size + AES_256_IVSIZE));
+    unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf->c_str());
     const unsigned char* input_raw = reinterpret_cast<const unsigned char*>(input.c_str());
 
     /* encrypt main bulk of data */
@@ -546,8 +546,8 @@ public:
     }
     if (result) {
       ldpp_dout(this->dpp, 25) << "Encrypted " << size << " bytes"<< dendl;
-      buf.set_length(size);
-      output.append(buf);
+      buf->set_length(size);
+      output.push_back(std::move(buf));
     } else {
       ldpp_dout(this->dpp, 5) << "Failed to encrypt" << dendl;
     }
@@ -566,9 +566,10 @@ public:
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
     size_t unaligned_rest_size = size - aligned_size;
     output.clear();
-    buffer::ptr buf(aligned_size + AES_256_IVSIZE);
-    unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
-    unsigned char* input_raw = reinterpret_cast<unsigned char*>(input.c_str());
+    auto buf = buffer::ptr_node::create(buffer::create(aligned_size + AES_256_IVSIZE));
+    unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf->c_str());
+    const unsigned char* input_raw =
+      reinterpret_cast<const unsigned char*>(input.c_str());
 
     /* decrypt main bulk of data */
     result = cbc_transform(buf_raw,
@@ -602,8 +603,8 @@ public:
     }
     if (result) {
       ldpp_dout(this->dpp, 25) << "Decrypted " << size << " bytes"<< dendl;
-      buf.set_length(size);
-      output.append(buf);
+      buf->set_length(size);
+      output.push_back(std::move(buf));
     } else {
       ldpp_dout(this->dpp, 5) << "Failed to decrypt" << dendl;
     }

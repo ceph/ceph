@@ -119,11 +119,11 @@ TEST_P(KVTest, OpenWriteRead) {
     bufferlist v1, v2;
     ASSERT_EQ(0, db->get("prefix", "key", &v1));
     ASSERT_EQ(v1.length(), 5u);
-    (v1.c_str())[v1.length()] = 0x0;
+    (v1.data())[v1.length()] = 0x0;
     ASSERT_EQ(std::string(v1.c_str()), std::string("value"));
     ASSERT_EQ(0, db->get("prefix", "key2", &v2));
     ASSERT_EQ(v2.length(), 6u);
-    (v2.c_str())[v2.length()] = 0x0;
+    (v2.data())[v2.length()] = 0x0;
     ASSERT_EQ(std::string(v2.c_str()), std::string("value2"));
   }
   fini();
@@ -179,9 +179,7 @@ TEST_P(KVTest, BenchCommit) {
     cout << "priming" << std::endl;
     // prime
     bufferlist big;
-    bufferptr bp(1048576);
-    bp.zero();
-    big.append(bp);
+    big.append_zero(1048576);
     for (int i=0; i<30; ++i) {
       KeyValueDB::Transaction t = db->get_transaction();
       t->set("prefix", "big" + stringify(i), big);
@@ -190,9 +188,7 @@ TEST_P(KVTest, BenchCommit) {
   }
   cout << "now doing small writes" << std::endl;
   bufferlist data;
-  bufferptr bp(1024);
-  bp.zero();
-  data.append(bp);
+  data.append_zero(1024);
   for (int i=0; i<n; ++i) {
     KeyValueDB::Transaction t = db->get_transaction();
     t->set("prefix", "key" + stringify(i), data);

@@ -280,7 +280,7 @@ struct seastore_test_t :
       uint64_t offset,
       size_t len,
       char fill)  {
-      auto buffer = bufferptr(buffer::create(len));
+      auto buffer = bufferptr_rw(buffer::create(len));
       ::memset(buffer.c_str(), fill, len);
       bufferlist bl;
       bl.append(buffer);

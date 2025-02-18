@@ -423,7 +423,7 @@ public:
   bool empty_payload() const { return payload.length() == 0; }
   ceph::buffer::list& get_payload() { return payload; }
   const ceph::buffer::list& get_payload() const { return payload; }
-  void set_payload(ceph::buffer::list& bl) {
+  void set_payload(ceph::buffer::list&& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
     payload = std::move(bl);
@@ -431,7 +431,7 @@ public:
       byte_throttler->take(payload.length());
   }
 
-  void set_middle(ceph::buffer::list& bl) {
+  void set_middle(ceph::buffer::list&& bl) {
     if (byte_throttler)
       byte_throttler->put(middle.length());
     middle = std::move(bl);
@@ -536,7 +536,7 @@ public:
   }
 
   // virtual bits
-  virtual void decode_payload() = 0;
+  virtual void decode_payload(uint64_t features) = 0;
   virtual void encode_payload(uint64_t features) = 0;
   virtual std::string_view get_type_name() const = 0;
   virtual void print(std::ostream& out) const {
@@ -552,10 +552,11 @@ extern Message *decode_message(CephContext *cct,
                                int crcflags,
                                ceph_msg_header& header,
                                ceph_msg_footer& footer,
-                               ceph::buffer::list& front,
-                               ceph::buffer::list& middle,
-                               ceph::buffer::list& data,
-                               Message::ConnectionRef conn);
+                               ceph::buffer::list&& front,
+                               ceph::buffer::list&& middle,
+                               const ceph::buffer::list& data,
+                               Message::ConnectionRef conn,
+                               uint64_t features);
 inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)
@@ -565,7 +566,8 @@ inline std::ostream& operator<<(std::ostream& out, const Message& m) {
 
 extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
-                               ceph::buffer::list::const_iterator& bl);
+                               ceph::buffer::list::const_iterator& bl,
+                               uint64_t features);
 
 /// this is a "safe" version of Message. it does not allow calling get/put
 /// methods on its derived classes. This is intended to prevent some accidental

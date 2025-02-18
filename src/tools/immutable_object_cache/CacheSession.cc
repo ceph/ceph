@@ -81,7 +81,7 @@ void CacheSession::handle_request_header(const boost::system::error_code& err,
 
 void CacheSession::read_request_data(uint64_t data_len) {
   ldout(m_cct, 20) << dendl;
-  bufferptr bp_data(buffer::create(data_len));
+  bufferptr_rw bp_data(buffer::create(data_len));
   boost::asio::async_read(m_dm_socket,
     boost::asio::buffer(bp_data.c_str(), bp_data.length()),
     boost::asio::transfer_exactly(data_len),

@@ -46,12 +46,12 @@ class CacheClient {
   void receive_message();
   void process(ObjectCacheRequest* reply, uint64_t seq_id);
   void read_reply_header();
-  void handle_reply_header(bufferptr bp_head,
+  void handle_reply_header(bufferptr_rw bp_head,
                            const boost::system::error_code& ec,
                            size_t bytes_transferred);
-  void read_reply_data(bufferptr&& bp_head, bufferptr&& bp_data,
+  void read_reply_data(bufferptr_rw&& bp_head, bufferptr_rw&& bp_data,
                        const uint64_t data_len);
-  void handle_reply_data(bufferptr bp_head, bufferptr bp_data,
+  void handle_reply_data(bufferptr_rw bp_head, bufferptr_rw bp_data,
                         const uint64_t data_len,
                         const boost::system::error_code& ec,
                         size_t bytes_transferred);
@@ -77,7 +77,7 @@ class CacheClient {
     ceph::make_mutex("ceph::cache::cacheclient::m_lock");
   std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
   bufferlist m_outcoming_bl;
-  bufferptr m_bp_header;
+  bufferptr_rw m_bp_header;
 };
 
 }  // namespace immutable_obj_cache

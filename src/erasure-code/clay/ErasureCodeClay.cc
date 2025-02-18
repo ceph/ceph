@@ -143,8 +143,8 @@ int ErasureCodeClay::encode_chunks(const set<int> &want_to_encode,
   }
 
   for (int i = k; i < k + nu; i++) {
-    bufferptr buf(buffer::create_aligned(chunk_size, SIMD_ALIGN));
-    buf.zero();
+    auto buf = buffer::ptr_node::create(buffer::create_aligned(chunk_size, SIMD_ALIGN));
+    buf->zero();
     chunks[i].push_back(std::move(buf));
   }
 
@@ -173,8 +173,8 @@ int ErasureCodeClay::decode_chunks(const set<int> &want_to_read,
   int chunk_size = coded_chunks[0].length();
 
   for (int i = k; i < k+nu; i++) {
-    bufferptr buf(buffer::create_aligned(chunk_size, SIMD_ALIGN));
-    buf.zero();
+    auto buf = buffer::ptr_node::create(buffer::create_aligned(chunk_size, SIMD_ALIGN));
+    buf->zero();
     coded_chunks[i].push_back(std::move(buf));
   }
 
@@ -434,10 +434,10 @@ int ErasureCodeClay::repair(const set<int> &want_to_read,
         int aloof_node_id = (i < k) ? i: i+nu;
         aloof_nodes.insert(aloof_node_id);
       } else {
-        bufferptr ptr(buffer::create_aligned(chunksize, SIMD_ALIGN));
-	ptr.zero();
+        auto ptr = buffer::ptr_node::create(buffer::create_aligned(chunksize, SIMD_ALIGN));
+        ptr->zero();
         int lost_node_id = (i < k) ? i : i+nu;
-        (*repaired)[i].push_back(ptr);
+        (*repaired)[i].push_back(std::move(ptr));
         recovered_data[lost_node_id] = (*repaired)[i];
         get_repair_subchunks(lost_node_id, repair_sub_chunks_ind);
       }
@@ -446,9 +446,9 @@ int ErasureCodeClay::repair(const set<int> &want_to_read,
 
   // this is for shortened codes i.e., when nu > 0
   for (int i=k; i < k+nu; i++) {
-    bufferptr ptr(buffer::create_aligned(repair_blocksize, SIMD_ALIGN));
-    ptr.zero();
-    helper_data[i].push_back(ptr);
+    auto ptr = buffer::ptr_node::create(buffer::create_aligned(repair_blocksize, SIMD_ALIGN));
+    ptr->zero();
+    helper_data[i].push_back(std::move(ptr));
   }
 
   ceph_assert(helper_data.size()+aloof_nodes.size()+recovered_data.size() ==
@@ -507,8 +507,8 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 
   for (int i = 0; i < q*t; i++) {
     if (U_buf[i].length() == 0) {
-      bufferptr buf(buffer::create_aligned(sub_chunk_no*sub_chunksize, SIMD_ALIGN));
-      buf.zero();
+      auto buf = buffer::ptr_node::create(buffer::create_aligned(sub_chunk_no*sub_chunksize, SIMD_ALIGN));
+      buf->zero();
       U_buf[i].push_back(std::move(buf));
     }
   }
@@ -585,8 +585,8 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 		}
 		pft.erasure_code->decode_chunks(pft_erasures, known_subchunks, &pftsubchunks);
 	      } else {
-		char* uncoupled_chunk = U_buf[node_xy].c_str();
-		char* coupled_chunk = helper_data[node_xy].c_str();
+		char* uncoupled_chunk = U_buf[node_xy].data();
+		const char* coupled_chunk = helper_data[node_xy].c_str();
 		memcpy(&uncoupled_chunk[z*sub_chunksize],
 		       &coupled_chunk[repair_plane_to_ind[z]*sub_chunksize],
 		       sub_chunksize);
@@ -616,8 +616,8 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 	// make sure it is not an aloof node before you retrieve repaired_data
 	if (aloof_nodes.count(i) == 0) {
 	  if (x == z_vec[y]) { // hole-dot pair (type 0)
-	    char* coupled_chunk = recovered_data[i].c_str();
-	    char* uncoupled_chunk = U_buf[i].c_str();
+	    char* coupled_chunk = recovered_data[i].data();
+	    const char* uncoupled_chunk = U_buf[i].c_str();
 	    memcpy(&coupled_chunk[z*sub_chunksize],
 		   &uncoupled_chunk[z*sub_chunksize],
 		   sub_chunksize);
@@ -671,8 +671,8 @@ int ErasureCodeClay::decode_layered(set<int> &erased_chunks,
   int z_vec[t];
   for (int i = 0; i < q*t; i++) {
     if (U_buf[i].length() == 0) {
-      bufferptr buf(buffer::create_aligned(size, SIMD_ALIGN));
-      buf.zero();
+      auto buf = buffer::ptr_node::create(buffer::create_aligned(size, SIMD_ALIGN));
+      buf->zero();
       U_buf[i].push_back(std::move(buf));
     }
   }
@@ -702,8 +702,8 @@ int ErasureCodeClay::decode_layered(set<int> &erased_chunks,
               get_coupled_from_uncoupled(chunks, x, y, z, z_vec, sc_size);
 	    }
 	  } else {
-	    char* C = (*chunks)[node_xy].c_str();
-            char* U = U_buf[node_xy].c_str();
+	    char* C = (*chunks)[node_xy].data();
+            const char* U = U_buf[node_xy].c_str();
             memcpy(&C[z*sc_size], &U[z*sc_size], sc_size);
           }
         }
@@ -729,8 +729,8 @@ int ErasureCodeClay::decode_erasures(const set<int>& erased_chunks, int z,
 	if (z_vec[y] < x) {
 	  get_uncoupled_from_coupled(chunks, x, y, z, z_vec, sc_size);
 	} else if (z_vec[y] == x) {
-	  char* uncoupled_chunk = U_buf[node_xy].c_str();
-	  char* coupled_chunk = (*chunks)[node_xy].c_str();
+	  char* uncoupled_chunk = U_buf[node_xy].data();
+	  const char* coupled_chunk = (*chunks)[node_xy].c_str();
           memcpy(&uncoupled_chunk[z*sc_size], &coupled_chunk[z*sc_size], sc_size);
         } else {
           if (erased_chunks.count(node_sw) > 0) {
@@ -788,8 +788,8 @@ void ErasureCodeClay::recover_type1_erasure(map<int, bufferlist>* chunks,
 
   map<int, bufferlist> known_subchunks;
   map<int, bufferlist> pftsubchunks;
-  bufferptr ptr(buffer::create_aligned(sc_size, SIMD_ALIGN));
-  ptr.zero();
+  auto ptr = buffer::ptr_node::create(buffer::create_aligned(sc_size, SIMD_ALIGN));
+  ptr->zero();
 
   int i0 = 0, i1 = 1, i2 = 2, i3 = 3;
   if (z_vec[y] > x) {
@@ -805,7 +805,7 @@ void ErasureCodeClay::recover_type1_erasure(map<int, bufferlist>* chunks,
   known_subchunks[i2].substr_of(U_buf[node_xy], z * sc_size, sc_size);
   pftsubchunks[i1] = known_subchunks[i1];
   pftsubchunks[i2] = known_subchunks[i2];
-  pftsubchunks[i3].push_back(ptr);
+  pftsubchunks[i3].push_back(std::move(ptr));
 
   for (int i=0; i<3; i++) {
     pftsubchunks[i].rebuild_aligned_size_and_memory(sc_size, SIMD_ALIGN);

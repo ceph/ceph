@@ -153,17 +153,17 @@ public:
   virtual read_ertr::future<> read(
     paddr_t addr,
     size_t len,
-    ceph::bufferptr &out) = 0;
+    ceph::bufferptr_rw &out) = 0;
 
   read_ertr::future<ceph::bufferptr> read(
     paddr_t addr,
     size_t len
   ) {
-    auto ptrref = std::make_unique<ceph::bufferptr>(
+    auto ptrref = std::make_unique<ceph::bufferptr_rw>(
       buffer::create_page_aligned(len));
     return read(addr, len, *ptrref
     ).safe_then([ptrref=std::move(ptrref)]() mutable {
-      return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));
+      return read_ertr::make_ready_future<bufferptr>(std::move(static_cast<bufferptr&>(*ptrref)));
     });
   }
 };

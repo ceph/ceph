@@ -284,7 +284,7 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
 
   // we store a new table to the cache
 
-  ceph::buffer::ptr cachetable;
+  ceph::buffer::ptr_rw cachetable;
 
   std::lock_guard lock{codec_tables_guard};
 

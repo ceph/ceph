@@ -77,7 +77,7 @@ public:
     encode(metadata, payload);
     encode(osd_features, payload);
   }
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     auto p = payload.cbegin();
     using ceph::decode;
     paxos_decode(p);

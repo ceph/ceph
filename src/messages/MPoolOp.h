@@ -65,7 +65,7 @@ public:
     encode(pad, payload);  /* for v3->v4 encoding change */
     encode(crush_rule, payload);
   }
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

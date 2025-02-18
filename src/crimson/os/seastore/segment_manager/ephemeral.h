@@ -119,7 +119,7 @@ public:
   read_ertr::future<> read(
     paddr_t addr,
     size_t len,
-    ceph::bufferptr &out) final;
+    ceph::bufferptr_rw &out) final;
 
   size_t get_available_size() const final {
     return config.size;

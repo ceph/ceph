@@ -133,12 +133,12 @@ static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t 
     return r;
 
   if (tag == RBD_DIFF_WRITE) {
-    bufferptr bp = buffer::create(length);
-    r = safe_read_exact(fd, bp.c_str(), length);
+    auto bp = buffer::ptr_node::create(buffer::create(length));
+    r = safe_read_exact(fd, bp->c_str(), length);
     if (r < 0)
       return r;
     bufferlist data;
-    data.append(bp);
+    data.push_back(std::move(bp));
     r = data.write_fd(pd);
     if (r < 0)
       return r;
@@ -346,7 +346,7 @@ static int do_merge_diff(const char *first, const char *second,
         delta = f_len;
       if (f_tag == RBD_DIFF_WRITE) {
         if (first_stdin) {
-          bufferptr bp = buffer::create(delta);
+          bufferptr_rw bp = buffer::create(delta);
           r = safe_read_exact(fd, bp.c_str(), delta);
         } else {
           off64_t l = lseek64(fd, delta, SEEK_CUR);

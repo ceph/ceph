@@ -868,7 +868,7 @@ int LoadGen::bootstrap(const char *pool)
   }
 
   int buf_len = 1;
-  bufferptr p = buffer::create(buf_len);
+  bufferptr_rw p = buffer::create(buf_len);
   bufferlist bl;
   memset(p.c_str(), 0, buf_len);
   bl.push_back(p);
@@ -928,10 +928,7 @@ void LoadGen::run_op(LoadGenOp *op)
     io_ctx.aio_read(op->oid, op->completion, &op->bl, op->len, op->off);
     break;
   case OP_WRITE:
-    bufferptr p = buffer::create(op->len);
-    memset(p.c_str(), 0, op->len);
-    op->bl.push_back(p);
-    
+    op->bl.append_zero(op->len);
     io_ctx.aio_write(op->oid, op->completion, op->bl, op->len, op->off);
     break;
   }

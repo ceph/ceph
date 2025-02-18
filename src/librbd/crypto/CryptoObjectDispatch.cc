@@ -631,7 +631,7 @@ int CryptoObjectDispatch<I>::prepare_copyup(
     return 0;
   }
 
-  ceph::bufferlist current_bl;
+  ceph::bufferlist_rw current_bl;
   current_bl.append_zero(m_image_ctx->get_object_size());
 
   for (auto& [key, extent_map]: *snapshot_sparse_bufferlist) {
@@ -660,7 +660,7 @@ int CryptoObjectDispatch<I>::prepare_copyup(
       uint64_t position = 0;
       for (auto [image_offset, image_length]: image_extents) {
         ceph::bufferlist aligned_bl;
-        aligned_bl.substr_of(current_bl, aligned_off + position, image_length);
+        aligned_bl.substr_of(current_bl.as_const_bl(), aligned_off + position, image_length);
         aligned_bl.rebuild(); // to deep copy aligned_bl from current_bl
         position += image_length;
 

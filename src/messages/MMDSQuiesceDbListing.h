@@ -37,7 +37,7 @@ public:
     ::encode(peer_listing, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     // noop to prevent unnecessary overheads
   }
 

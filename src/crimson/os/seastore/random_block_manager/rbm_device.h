@@ -73,7 +73,7 @@ public:
   read_ertr::future<> read (
     paddr_t addr,
     size_t len,
-    ceph::bufferptr &out) final {
+    ceph::bufferptr_rw &out) final {
     uint64_t rbm_addr = convert_paddr_to_abs_addr(addr);
     return read(rbm_addr, out);
   }
@@ -117,7 +117,7 @@ public:
 
   virtual read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr) = 0;
+    bufferptr_rw &bptr) = 0;
 
   /*
    * Multi-stream write
@@ -229,7 +229,7 @@ public:
   using RBMDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr) override;
+    bufferptr_rw &bptr) override;
 
   close_ertr::future<> close() override;
 

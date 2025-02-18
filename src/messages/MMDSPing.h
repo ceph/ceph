@@ -36,7 +36,7 @@ public:
     encode(seq, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto iter = payload.cbegin();
     decode(seq, iter);

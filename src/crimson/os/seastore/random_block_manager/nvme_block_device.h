@@ -227,7 +227,7 @@ public:
   using RBMDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
-    bufferptr &bptr) final;
+    bufferptr_rw &bptr) final;
 
   read_ertr::future<> nvme_read(
     uint64_t offset, size_t len, void *buffer_ptr);
@@ -250,7 +250,7 @@ public:
     uint16_t stream = 0) final;
 
   write_ertr::future<> nvme_write(
-    uint64_t offset, size_t len, void *buffer_ptr);
+    uint64_t offset, size_t len, const void *buffer_ptr);
 
   stat_device_ret stat_device() final {
     return seastar::file_stat(device_path, seastar::follow_symlink::yes

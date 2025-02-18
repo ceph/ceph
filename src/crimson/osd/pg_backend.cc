@@ -301,7 +301,7 @@ namespace {
       return crimson::ct_error::invarg::make();
     }
     const uint32_t chunk_count = buf.length() / chunk_size;
-    ceph::bufferptr csum_data{
+    ceph::bufferptr_rw csum_data{
       ceph::buffer::create(sizeof(typename CSum::value_t) * chunk_count)};
     Checksummer::calculate<CSum>(
       init_value, chunk_size, 0, buf.length(), buf, &csum_data);

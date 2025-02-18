@@ -33,13 +33,13 @@ void generate_buffer(int size, bufferlist *outbl, int seed)
   while (left) {
     size_t l = std::min<size_t>((engine2() & 0xffff0) + 16, left);
     left -= l;
-    bufferptr p(l);
-    p.set_length(l);
-    char *b = p.c_str();
+    auto p = buffer::ptr_node::create(buffer::create(l));
+    p->set_length(l);
+    char *b = p->c_str();
     for (size_t i = 0; i < l / sizeof(uint64_t); ++i) {
       ((ceph_le64 *)b)[i] = ceph_le64(engine());
     }
-    outbl->append(p);
+    outbl->push_back(std::move(p));
   }
 }
 

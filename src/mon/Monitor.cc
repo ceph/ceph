@@ -4350,8 +4350,9 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       auto q = rr->request_bl.cbegin();
+      // for features see forward_request_leader()
       PaxosServiceMessage *req =
-	(PaxosServiceMessage *)decode_message(cct, 0, q);
+	(PaxosServiceMessage *)decode_message(cct, 0, q, CEPH_FEATURES_ALL);
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
@@ -4849,7 +4850,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   stringstream ss;
   f->flush(ss);
   encode(ss.str(), payload);
-  reply->set_payload(payload);
+  reply->set_payload(std::move(payload));
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
   m->get_connection()->send_message(reply);
 }

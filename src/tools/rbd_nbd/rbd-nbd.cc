@@ -418,14 +418,14 @@ private:
 	  dout(0) << "disconnect request received" << dendl;
           goto signal;
         case NBD_CMD_WRITE:
-          bufferptr ptr(ctx->request.len);
-	  r = safe_read_exact(fd, ptr.c_str(), ctx->request.len);
+          auto ptr = buffer::ptr_node::create(buffer::create(ctx->request.len));
+	  r = safe_read_exact(fd, ptr->c_str(), ctx->request.len);
           if (r < 0) {
 	    derr << *ctx << ": failed to read nbd request data: "
 		 << cpp_strerror(r) << dendl;
             goto error;
 	  }
-          ctx->data.push_back(ptr);
+          ctx->data.push_back(std::move(ptr));
           break;
       }
 

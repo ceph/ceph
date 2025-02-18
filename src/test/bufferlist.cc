@@ -51,6 +51,7 @@ using namespace std;
 static char cmd[128];
 
 using ceph::buffer_instrumentation::instrumented_bptr;
+using ceph::buffer_instrumentation::instrumented_bptr_rw;
 
 TEST(Buffer, constructors) {
   unsigned len = 17;
@@ -116,7 +117,7 @@ TEST(Buffer, constructors) {
   // buffer::create_page_aligned
   //
   {
-    bufferptr ptr(buffer::create_page_aligned(len));
+    bufferptr_rw ptr(buffer::create_page_aligned(len));
     ::memset(ptr.c_str(), 'X', len);
     // doesn't throw on my x86_64 wheezy box --sage
     //EXPECT_THROW(buffer::create_page_aligned((unsigned)ULLONG_MAX), buffer::bad_alloc);
@@ -130,7 +131,7 @@ void bench_buffer_alloc(int size, int num)
 {
   utime_t start = ceph_clock_now();
   for (int i=0; i<num; ++i) {
-    bufferptr p = buffer::create(size);
+    bufferptr_rw p = buffer::create(size);
     p.zero();
   }
   utime_t end = ceph_clock_now();
@@ -258,7 +259,7 @@ TEST(BufferPtr, operator_assign) {
   //
   // ptr& operator= (const ptr& p)
   //
-  bufferptr ptr(10);
+  bufferptr_rw ptr(10);
   ptr.copy_in(0, 3, "ABC");
   char dest[1];
   {
@@ -334,14 +335,14 @@ TEST(BufferPtr, assignment) {
 TEST(BufferPtr, swap) {
   unsigned len = 17;
 
-  bufferptr ptr1(len);
+  bufferptr_rw ptr1(len);
   ::memset(ptr1.c_str(), 'X', len);
   unsigned ptr1_offset = 4;
   ptr1.set_offset(ptr1_offset);
   unsigned ptr1_length = 3;
   ptr1.set_length(ptr1_length);
 
-  bufferptr ptr2(len);
+  bufferptr_rw ptr2(len);
   ::memset(ptr2.c_str(), 'Y', len);
   unsigned ptr2_offset = 5;
   ptr2.set_offset(ptr2_offset);
@@ -405,12 +406,12 @@ TEST(BufferPtr, is_partial) {
 
 TEST(BufferPtr, accessors) {
   unsigned len = 17;
-  bufferptr ptr(len);
+  bufferptr_rw ptr(len);
   ptr.c_str()[0] = 'X';
   ptr[1] = 'Y';
   const bufferptr const_ptr(ptr);
 
-  EXPECT_NE((void*)nullptr, (void*)static_cast<instrumented_bptr&>(ptr).get_raw());
+  EXPECT_NE((void*)nullptr, (void*)static_cast<instrumented_bptr_rw&>(ptr).get_raw());
   EXPECT_EQ('X', ptr.c_str()[0]);
   {
     bufferptr ptr;
@@ -481,15 +482,44 @@ TEST(BufferPtr, cmp) {
   EXPECT_LE(1, af.cmp(acc));
 }
 
+TEST(BufferPtr, is_zero_fast) {
+  // there is no easy way to create `raw_zeros` instances outside
+  // of bufferlist, thus use list::append_zero() to instantiate
+  buffer::list zeroed_bl;
+  zeroed_bl.append_zero(42);
+  {
+    const auto& zeroed_bptr = zeroed_bl.front();
+    EXPECT_TRUE(zeroed_bptr.is_zero());
+    EXPECT_TRUE(zeroed_bptr.is_zero_fast());
+  }
+  {
+    buffer::ptr sub_zeroed_bptr(zeroed_bl.front(), 0, 42/2);
+    EXPECT_TRUE(sub_zeroed_bptr.is_zero());
+    EXPECT_TRUE(sub_zeroed_bptr.is_zero_fast());
+  }
+  {
+    buffer::ptr zeroed_empty_bptr(zeroed_bl.front(), 0, 0);
+    EXPECT_TRUE(zeroed_empty_bptr.is_zero());
+    EXPECT_TRUE(zeroed_empty_bptr.is_zero_fast());
+  }
+}
+
 TEST(BufferPtr, is_zero) {
   char str[2] = { '\0', 'X' };
   {
     const bufferptr ptr(buffer::create_static(2, str));
     EXPECT_FALSE(ptr.is_zero());
+    EXPECT_FALSE(ptr.is_zero_fast());
   }
   {
     const bufferptr ptr(buffer::create_static(1, str));
     EXPECT_TRUE(ptr.is_zero());
+    EXPECT_FALSE(ptr.is_zero_fast());
+  }
+  {
+    const bufferptr ptr(buffer::create_static(0, str));
+    EXPECT_TRUE(ptr.is_zero());
+    EXPECT_FALSE(ptr.is_zero_fast());
   }
 }
 
@@ -529,15 +559,15 @@ TEST(BufferPtr, copy_out_bench) {
   }
 }
 
-TEST(BufferPtr, copy_in) {
+TEST(BufferPtrRW, copy_in) {
   {
-    bufferptr ptr;
+    bufferptr_rw ptr;
     PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.copy_in((unsigned)0, (unsigned)0, NULL), "");
   }
   {
     char in[] = "ABCD";
-    bufferptr ptr(2);
+    bufferptr_rw ptr(2);
     {
       PrCtl unset_dumpable;
       EXPECT_DEATH(ptr.copy_in((unsigned)0, strlen(in) + 1, NULL), "");
@@ -555,7 +585,7 @@ TEST(BufferPtr, copy_in_bench) {
     int buflen = 1048576;
     int count = 1000;
     for (int i=0; i<count; ++i) {
-      bufferptr bp(buflen);
+      bufferptr_rw bp(buflen);
       for (int64_t j=0; j<buflen; j += s) {
 	bp.copy_in(j, s, (char *)&j, false);
       }
@@ -567,15 +597,15 @@ TEST(BufferPtr, copy_in_bench) {
   }
 }
 
-TEST(BufferPtr, append) {
+TEST(BufferPtrRW, append) {
   {
-    bufferptr ptr;
+    bufferptr_rw ptr;
     PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.append('A'), "");
     EXPECT_DEATH(ptr.append("B", (unsigned)1), "");
   }
   {
-    bufferptr ptr(2);
+    bufferptr_rw ptr(2);
     {
       PrCtl unset_dumpable;
       EXPECT_DEATH(ptr.append('A'), "");
@@ -591,7 +621,7 @@ TEST(BufferPtr, append) {
   }
 }
 
-TEST(BufferPtr, append_bench) {
+TEST(BufferPtrRW, append_bench) {
   char src[1048576];
   memset(src, 0, sizeof(src));
   for (int s=4; s<=16384; s*=4) {
@@ -599,7 +629,7 @@ TEST(BufferPtr, append_bench) {
     int buflen = 1048576;
     int count = 4000;
     for (int i=0; i<count; ++i) {
-      bufferptr bp(buflen);
+      bufferptr_rw bp(buflen);
       bp.set_length(0);
       for (int64_t j=0; j<buflen; j += s) {
 	bp.append(src + j, s);
@@ -612,9 +642,9 @@ TEST(BufferPtr, append_bench) {
   }
 }
 
-TEST(BufferPtr, zero) {
+TEST(BufferPtrRW, zero) {
   char str[] = "XXXX";
-  bufferptr ptr(buffer::create_static(strlen(str), str));
+  bufferptr_rw ptr(buffer::create_static(strlen(str), str));
   {
     PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.zero(ptr.length() + 1, 0), "");
@@ -712,7 +742,7 @@ TEST(BufferListIterator, constructors) {
     EXPECT_NE(*i, *j);
     EXPECT_EQ('B', *i);
     EXPECT_EQ('C', *j);
-    bl.c_str()[1] = 'X';
+    bl.data()[1] = 'X';
   }
 
   //
@@ -1022,22 +1052,6 @@ TEST(BufferListIterator, operator_plus_plus) {
   }
 }
 
-TEST(BufferListIterator, get_current_ptr) {
-  bufferlist bl;
-  {
-    bufferlist::iterator i(&bl);
-    EXPECT_THROW(++i, buffer::end_of_buffer);
-  }
-  bl.append("ABC", 3);
-  {
-    bufferlist::iterator i(&bl, 1);
-    const buffer::ptr ptr = i.get_current_ptr();
-    EXPECT_EQ('B', ptr[0]);
-    EXPECT_EQ((unsigned)1, ptr.offset());
-    EXPECT_EQ((unsigned)2, ptr.length());
-  }  
-}
-
 TEST(BufferListIterator, copy) {
   bufferlist bl;
   const char *expected = "ABC";
@@ -1078,9 +1092,8 @@ TEST(BufferListIterator, copy) {
   // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
   //
   {
-    bufferptr ptr;
     bufferlist::iterator i(&bl);
-    i.copy_deep(2, ptr);
+    bufferptr ptr = i.copy_deep(2);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('A', ptr[0]);
     EXPECT_EQ('B', ptr[1]);
@@ -1089,9 +1102,8 @@ TEST(BufferListIterator, copy) {
   // void buffer::list::iterator::copy_shallow(unsigned len, ptr &dest)
   //
   {
-    bufferptr ptr;
     bufferlist::iterator i(&bl);
-    i.copy_shallow(2, ptr);
+    bufferptr ptr = i.copy_shallow(2);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('A', ptr[0]);
     EXPECT_EQ('B', ptr[1]);
@@ -1180,15 +1192,15 @@ TEST(BufferListIterator, copy) {
   }
 }
 
-TEST(BufferListIterator, copy_in) {
-  bufferlist bl;
+TEST(BufferListRWIterator, copy_in) {
+  bufferlist_rw bl;
   const char *existing = "XXX";
   bl.append(existing, 3);
   //
   // void buffer::list::iterator::copy_in(unsigned len, const char *src)
   //
   {
-    bufferlist::iterator i(&bl);
+    bufferlist_rw::iterator i(&bl);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
@@ -1205,7 +1217,7 @@ TEST(BufferListIterator, copy_in) {
   // void copy_in(unsigned len, const char *src) via begin(size_t offset)
   //
   {
-    bufferlist bl;
+    bufferlist_rw bl;
     bl.append("XXX");
     EXPECT_THROW(bl.begin((unsigned)100).copy_in((unsigned)100, (char*)0), buffer::end_of_buffer);
     bl.begin(1).copy_in(2, "AB");
@@ -1215,7 +1227,7 @@ TEST(BufferListIterator, copy_in) {
   // void buffer::list::iterator::copy_in(unsigned len, const list& otherl)
   //
   {
-    bufferlist::iterator i(&bl);
+    bufferlist_rw::iterator i(&bl);
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
@@ -1233,7 +1245,7 @@ TEST(BufferListIterator, copy_in) {
   // void copy_in(unsigned len, const list& src) via begin(size_t offset)
   //
   {
-    bufferlist bl;
+    bufferlist_rw bl;
     bl.append("XXX");
     bufferlist src;
     src.append("ABC");
@@ -1737,9 +1749,10 @@ TEST(BufferList, page_aligned_appender) {
     cout << bl << std::endl;
     ASSERT_EQ(2u, bl.get_num_buffers());
 
+    const auto& initial_back = bl.back();
     a.append_zero(42);
-    // ensure append_zero didn't introduce a fragmentation
-    ASSERT_EQ(2u, bl.get_num_buffers());
+    // the extra ptr is expected due to `append_zero()` deduplicates zeros.
+    ASSERT_EQ(3u, bl.get_num_buffers());
     // verify the end is actually zeroed
     {
       bufferlist t;
@@ -1750,20 +1763,19 @@ TEST(BufferList, page_aligned_appender) {
     // let's check whether appending a bufferlist directly to `bl`
     // doesn't fragment further C string appends via appender.
     {
-      const auto& initial_back = bl.back();
       {
         bufferlist src;
         src.append("abc", 3);
         bl.claim_append(src);
         // surely the extra `ptr_node` taken from `src` must get
         // reflected in the `bl` instance
-        ASSERT_EQ(3u, bl.get_num_buffers());
+        ASSERT_EQ(4u, bl.get_num_buffers());
       }
 
       // moreover, the next C string-taking `append()` had to
       // create anoter `ptr_node` instance but...
       a.append("xyz", 3);
-      ASSERT_EQ(4u, bl.get_num_buffers());
+      ASSERT_EQ(5u, bl.get_num_buffers());
 
       // ... it should point to the same `buffer::raw` instance
       // (to the same same block of memory).
@@ -1779,17 +1791,16 @@ TEST(BufferList, page_aligned_appender) {
 
   {
     cout << bl << std::endl;
-    ASSERT_EQ(6u, bl.get_num_buffers());
+    ASSERT_EQ(7u, bl.get_num_buffers());
   }
 
   // Verify that `page_aligned_appender` does respect the carrying
-  // `_carriage` over multiple allocations. Although `append_zero()`
-  // is used here, this affects other members of the append family.
+  // `_carriage` over multiple allocations.
   // This part would be crucial for e.g. `encode()`.
   {
-    bl.append_zero(42);
+    bl.append("foo", strlen("foo"));
     cout << bl << std::endl;
-    ASSERT_EQ(6u, bl.get_num_buffers());
+    ASSERT_EQ(7u, bl.get_num_buffers());
   }
 }
 
@@ -1910,14 +1921,14 @@ TEST(BufferList, push_back) {
   {
     bufferlist bl;
     bl.append('A');
-    bufferptr ptr(len);
+    bufferptr_rw ptr(len);
     ptr.c_str()[0] = 'B';
     bl.push_back(ptr);
     EXPECT_EQ((unsigned)(1 + len), bl.length());
     EXPECT_EQ((unsigned)2, bl.get_num_buffers());
     EXPECT_EQ('B', bl.back()[0]);
     const bufferptr& back_bp = bl.back();
-    EXPECT_EQ(static_cast<instrumented_bptr&>(ptr).get_raw(),
+    EXPECT_EQ(static_cast<instrumented_bptr_rw&>(ptr).get_raw(),
               static_cast<const instrumented_bptr&>(back_bp).get_raw());
   }
   //
@@ -1933,13 +1944,13 @@ TEST(BufferList, push_back) {
   {
     bufferlist bl;
     bl.append('A');
-    bufferptr ptr(len);
+    bufferptr_rw ptr(len);
     ptr.c_str()[0] = 'B';
     bl.push_back(std::move(ptr));
     EXPECT_EQ((unsigned)(1 + len), bl.length());
     EXPECT_EQ((unsigned)2, bl.get_num_buffers());
     EXPECT_EQ('B', bl.buffers().back()[0]);
-    EXPECT_FALSE(static_cast<instrumented_bptr&>(ptr).get_raw());
+    EXPECT_FALSE(static_cast<instrumented_bptr_rw&>(ptr).get_raw());
   }
 }
 
@@ -1959,7 +1970,7 @@ TEST(BufferList, is_contiguous) {
 TEST(BufferList, rebuild) {
   {
     bufferlist bl;
-    bufferptr ptr(buffer::create_page_aligned(2));
+    bufferptr_rw ptr(buffer::create_page_aligned(2));
     ptr[0] = 'X';
     ptr[1] = 'Y';
     ptr.set_offset(1);
@@ -2013,7 +2024,7 @@ TEST(BufferList, rebuild_page_aligned) {
   }
   {
     bufferlist bl;
-    bufferptr ptr(buffer::create_page_aligned(1));
+    bufferptr_rw ptr(buffer::create_page_aligned(1));
     char *p = ptr.c_str();
     bl.append(ptr);
     bl.rebuild_page_aligned();
@@ -2165,9 +2176,11 @@ TEST(BufferList, append) {
   //
   {
     bufferlist bl;
-    bl.append('A');
-    bufferptr back(bl.back());
-    bufferptr in(back);
+    bufferptr_rw back = buffer::create(2);
+    back.set_length(0);
+    back.append('A');
+    bufferptr_rw in(back);
+    bl.append(back);
     EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_EQ((unsigned)1, bl.length());
     {
@@ -2185,7 +2198,7 @@ TEST(BufferList, append) {
     bufferlist bl;
     EXPECT_EQ((unsigned)0, bl.get_num_buffers());
     EXPECT_EQ((unsigned)0, bl.length());
-    bufferptr ptr(2);
+    bufferptr_rw ptr(2);
     ptr.set_length(0);
     ptr.append("AB", 2);
     bl.append(ptr, 1, 1);
@@ -2284,7 +2297,6 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }
@@ -2584,10 +2596,10 @@ TEST(BufferList, crc32c_zeros) {
 
 TEST(BufferList, crc32c_append_perf) {
   int len = 256 * 1024 * 1024;
-  bufferptr a(len);
-  bufferptr b(len);
-  bufferptr c(len);
-  bufferptr d(len);
+  bufferptr_rw a(len);
+  bufferptr_rw b(len);
+  bufferptr_rw c(len);
+  bufferptr_rw d(len);
   std::cout << "populating large buffers (a, b=c=d)" << std::endl;
   char *pa = a.c_str();
   char *pb = b.c_str();
@@ -2840,8 +2852,8 @@ TEST(BufferList, zero) {
   }
   {
     bufferlist bl;
-    bufferptr ptr1(4);
-    bufferptr ptr2(4);
+    bufferptr_rw ptr1(4);
+    bufferptr_rw ptr2(4);
     memset(ptr1.c_str(), 'a', 4);
     memset(ptr2.c_str(), 'b', 4);
     bl.append(ptr1);
@@ -3020,8 +3032,8 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_FALSE(bl.is_provided_buffer(buff));
 }
 
-TEST(BufferList, DISABLED_DanglingLastP) {
-  bufferlist bl;
+TEST(BufferList, DanglingLastP) {
+  bufferlist_rw bl;
   {
     // previously we're using the unsharable buffer type to distinguish
     // the last_p-specific problem from the generic crosstalk issues we
@@ -3029,9 +3041,9 @@ TEST(BufferList, DISABLED_DanglingLastP) {
     // https://gist.github.com/rzarzynski/aed18372e88aed392101adac3bd87bbc
     // this is no longer possible as `buffer::create_unsharable()` has
     // been dropped.
-    bufferptr bp(buffer::create(10));
+    bufferptr_rw bp(buffer::create(10));
     bp.copy_in(0, 3, "XXX");
-    bl.push_back(std::move(bp));
+    bl.append(std::move(bp));
     EXPECT_EQ(0, ::memcmp("XXX", bl.c_str(), 3));
 
     // let `copy_in` to set `last_p` member of bufferlist
@@ -3039,11 +3051,11 @@ TEST(BufferList, DISABLED_DanglingLastP) {
     EXPECT_EQ(0, ::memcmp("ABX", bl.c_str(), 3));
   }
 
-  bufferlist empty;
+  bufferlist_rw empty;
   // before the fix this would have left `last_p` unchanged leading to
   // the dangerous dangling state – keep in mind that the initial,
   // unsharable bptr will be freed.
-  bl = const_cast<const bufferlist&>(empty);
+  bl = const_cast<const bufferlist_rw&>(empty);
   bl.append("123");
 
   // we must continue from where the previous copy_in had finished.

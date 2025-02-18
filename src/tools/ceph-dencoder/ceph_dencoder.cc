@@ -179,7 +179,7 @@ int main(int argc, const char **argv)
 	cerr << "must first select type with 'type <name>'" << std::endl;
 	return 1;
       }
-      err = den->decode(encbl, skip);
+      err = den->decode(encbl, skip, features | CEPH_FEATURE_RESERVED);
     } else if (*i == string("copy_ctor")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;

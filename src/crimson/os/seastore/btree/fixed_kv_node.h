@@ -161,7 +161,7 @@ struct FixedKVNode : ChildableCachedExtent {
     return (bool)has_parent_tracker() || (bool)root_block;
   }
 
-  FixedKVNode(uint16_t capacity, ceph::bufferptr &&ptr)
+  FixedKVNode(uint16_t capacity, ceph::bufferptr_rw &&ptr)
     : ChildableCachedExtent(std::move(ptr)),
       children(capacity, nullptr),
       capacity(capacity) {}
@@ -713,7 +713,7 @@ struct FixedKVInternalNode
     node_size,
     node_type_t>;
 
-  explicit FixedKVInternalNode(ceph::bufferptr &&ptr)
+  explicit FixedKVInternalNode(ceph::bufferptr_rw &&ptr)
     : FixedKVNode<NODE_KEY>(CAPACITY, std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
   }
@@ -1056,7 +1056,7 @@ struct FixedKVInternalNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    ceph::buffer::ptr_rw bptr(delta_buffer.get_bytes());
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);
@@ -1135,7 +1135,7 @@ struct FixedKVLeafNode
     node_type_t,
     has_children>;
   using base_t = FixedKVNode<NODE_KEY>;
-  explicit FixedKVLeafNode(ceph::bufferptr &&ptr)
+  explicit FixedKVLeafNode(ceph::bufferptr_rw &&ptr)
     : FixedKVNode<NODE_KEY>(has_children ? CAPACITY : 0, std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
   }
@@ -1424,7 +1424,7 @@ struct FixedKVLeafNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    ceph::buffer::ptr_rw bptr(delta_buffer.get_bytes());
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);

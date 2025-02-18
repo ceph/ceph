@@ -42,13 +42,13 @@ void intrusive_ptr_release(CachedExtent *);
 
 // Note: BufferSpace::to_full_ptr() also creates extent ptr.
 
-inline ceph::bufferptr create_extent_ptr_rand(extent_len_t len) {
+inline ceph::bufferptr_rw create_extent_ptr_rand(extent_len_t len) {
   assert(is_aligned(len, CEPH_PAGE_SIZE));
   assert(len > 0);
-  return ceph::bufferptr(buffer::create_page_aligned(len));
+  return ceph::bufferptr_rw(buffer::create_page_aligned(len));
 }
 
-inline ceph::bufferptr create_extent_ptr_zero(extent_len_t len) {
+inline ceph::bufferptr_rw create_extent_ptr_zero(extent_len_t len) {
   auto bp = create_extent_ptr_rand(len);
   bp.zero();
   return bp;
@@ -170,7 +170,7 @@ struct trans_spec_view_t {
 
 struct load_range_t {
   extent_len_t offset;
-  ceph::bufferptr ptr;
+  ceph::bufferptr_rw ptr;
 
   extent_len_t get_length() const {
     return ptr.length();
@@ -186,7 +186,7 @@ struct load_ranges_t {
   extent_len_t length = 0;
   std::list<load_range_t> ranges;
 
-  void push_back(extent_len_t offset, ceph::bufferptr ptr) {
+  void push_back(extent_len_t offset, ceph::bufferptr_rw ptr) {
     assert(ranges.empty() ||
            (ranges.back().get_end() < offset));
     assert(ptr.length());
@@ -197,7 +197,7 @@ struct load_ranges_t {
 
 /// manage small chunks of extent
 class BufferSpace {
-  using map_t = std::map<extent_len_t, ceph::bufferlist>;
+  using map_t = std::map<extent_len_t, ceph::bufferptr_rw>;
 public:
   BufferSpace() = default;
 
@@ -211,7 +211,7 @@ public:
   load_ranges_t load_ranges(extent_len_t offset, extent_len_t length);
 
   /// Converts to ptr when fully loaded
-  ceph::bufferptr to_full_ptr(extent_len_t length);
+  ceph::bufferptr_rw to_full_ptr(extent_len_t length);
 
 private:
   // create and append the read-hole to
@@ -221,7 +221,7 @@ private:
       ceph::bufferlist& bl,
       extent_len_t hole_offset,
       extent_len_t hole_length) {
-    ceph::bufferptr hole_ptr = create_extent_ptr_rand(hole_length);
+    ceph::bufferptr_rw hole_ptr = create_extent_ptr_rand(hole_length);
     bl.append(hole_ptr);
     ret.push_back(hole_offset, std::move(hole_ptr));
   }
@@ -235,10 +235,10 @@ private:
       extent_len_t hole_length,
       const map_t::const_iterator& next_it) {
     assert(!buffer_map.contains(hole_offset));
-    ceph::bufferlist bl;
-    create_hole_append_bl(ret, bl, hole_offset, hole_length);
+    ceph::bufferptr_rw hole_ptr = create_extent_ptr_rand(hole_length);
+    ret.push_back(hole_offset, hole_ptr);
     auto it = buffer_map.insert(
-        next_it, std::pair{hole_offset, std::move(bl)});
+        next_it, std::pair{hole_offset, std::move(hole_ptr)});
     assert(next_it == std::next(it));
     return it;
   }
@@ -708,11 +708,11 @@ public:
   }
 
   /// Get ref to raw buffer
-  virtual bufferptr &get_bptr() {
+  virtual bufferptr_rw &get_bptr() {
     assert(ptr.has_value());
     return *ptr;
   }
-  virtual const bufferptr &get_bptr() const {
+  virtual const bufferptr_rw &get_bptr() const {
     assert(ptr.has_value());
     return *ptr;
   }
@@ -831,7 +831,7 @@ private:
   journal_seq_t dirty_from_or_retired_at;
 
   /// cache data contents, std::nullopt iff partially loaded
-  std::optional<ceph::bufferptr> ptr;
+  std::optional<ceph::bufferptr_rw> ptr;
 
   /// disk data length, 0 iff root
   extent_len_t length;
@@ -890,7 +890,7 @@ protected:
   CachedExtent(CachedExtent &&other) = delete;
 
   /// construct a fully loaded CachedExtent
-  explicit CachedExtent(ceph::bufferptr &&_ptr)
+  explicit CachedExtent(ceph::bufferptr_rw &&_ptr)
     : length(_ptr.length()),
       loaded_length(_ptr.length()) {
     ptr = std::move(_ptr);
@@ -928,7 +928,7 @@ protected:
       ptr = create_extent_ptr_rand(length);
       other.ptr->copy_out(0, length, ptr->c_str());
     } else { // length == 0, must be root
-      ptr = ceph::bufferptr(0);
+      ptr = ceph::bufferptr_rw(0);
     }
 
     assert(is_fully_loaded());
@@ -954,7 +954,7 @@ protected:
   // 0 length is only possible for the RootBlock
   struct root_construct_t {};
   CachedExtent(root_construct_t)
-    : ptr(ceph::bufferptr(0)),
+    : ptr(ceph::bufferptr_rw(0)),
       length(0),
       loaded_length(0) {
     assert(is_fully_loaded());
@@ -1013,7 +1013,7 @@ protected:
   }
 
   /// set bufferptr
-  void set_bptr(ceph::bufferptr &&nptr) {
+  void set_bptr(ceph::bufferptr_rw &&nptr) {
     ptr = nptr;
   }
 
@@ -1077,7 +1077,7 @@ protected:
       // adjust ret since the ptr has been rebuild
       for (load_range_t& range : ret.ranges) {
         auto range_length = range.ptr.length();
-        range.ptr = ceph::bufferptr(*ptr, range.offset, range_length);
+        range.ptr = ceph::bufferptr_rw(*ptr, range.offset, range_length);
       }
     }
     return ret;
