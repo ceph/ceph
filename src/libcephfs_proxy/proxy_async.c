@@ -10,7 +10,50 @@
 typedef int32_t (*proxy_cbk_handler_t)(proxy_async_t *, proxy_cbk_t *, void *,
 				       uint32_t);
 
+static int32_t libcephfsd_cbk_nonblocking_rw(proxy_async_t *async,
+					     proxy_cbk_t *cbk, void *data,
+					     uint32_t size)
+{
+	struct ceph_ll_io_info *info;
+	const struct iovec *iov;
+	int32_t err, count;
+
+	err = ptr_check(&async->random, cbk->ll_nonblocking_rw.info,
+			(void **)&info);
+	if (err < 0) {
+		return err;
+	}
+
+	info->result = cbk->ll_nonblocking_rw.res;
+
+	if ((size >= 0) && !info->write) {
+		iov = info->iov;
+		count = info->iovcnt;
+		while (size > 0) {
+			if (count == 0) {
+				proxy_log(LOG_ERR, 0, "Excess data received");
+				break;
+			}
+			if (size < iov->iov_len) {
+				memcpy(iov->iov_base, data, size);
+				break;
+			}
+
+			memcpy(iov->iov_base, data, iov->iov_len);
+			data += iov->iov_len;
+			size -= iov->iov_len;
+			iov++;
+			count--;
+		}
+	}
+
+	info->callback(info);
+
+	return 0;
+}
+
 static proxy_cbk_handler_t libcephfsd_cbk_handlers[LIBCEPHFSD_CBK_TOTAL_OPS] = {
+	[LIBCEPHFSD_CBK_LL_NONBLOCKING_RW] = libcephfsd_cbk_nonblocking_rw,
 };
 
 static void *
