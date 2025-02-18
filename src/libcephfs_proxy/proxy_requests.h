@@ -48,9 +48,15 @@
 	CEPH_DATA(_name, _req, _req_count);                 \
 	CEPH_DATA(_name, _ans, _ans_count)
 
+#define CEPH_CBK(_name, _cbk, _cbk_count) \
+	CEPH_DATA(_name, _cbk, _cbk_count)
+
 #define CEPH_CALL(_sd, _op, _req, _ans)                                      \
 	proxy_link_request((_sd), _op, _req##_iov, _req##_count, _ans##_iov, \
 			   _ans##_count)
+
+#define CEPH_CALL_CBK(_sd, _op, _cbk) \
+	proxy_link_req_send((_sd), _op, _cbk##_iov, _cbk##_count)
 
 #define CEPH_RET(_sd, _res, _ans) \
 	proxy_link_ans_send((_sd), (_res), _ans##_iov, _ans##_count)
@@ -133,11 +139,19 @@ enum {
 		_fields                                            \
 	}
 
+#define CEPH_TYPE_CBK(_name, _fields...)                           \
+	struct _proxy_##_name##_cbk;                               \
+	typedef struct _proxy_##_name##_cbk proxy_##_name##_cbk_t; \
+	struct _proxy_##_name##_cbk {                              \
+		_fields                                            \
+	}
+
 #define FIELDS(_fields...) _fields
 #define REQ(_fields...) FIELDS(proxy_link_req_t header; _fields)
 #define REQ_CMOUNT(_fields...) REQ(uint64_t cmount; _fields)
 #define ANS(_fields...) FIELDS(proxy_link_ans_t header; _fields)
 #define ANS_CMOUNT(_fields...) ANS(uint64_t cmount; _fields)
+#define CBK(_fields...) FIELDS(proxy_link_req_t header; _fields)
 
 #define CEPH_TYPE(_name, _req, _ans) \
 	CEPH_TYPE_REQ(_name, _req);  \
