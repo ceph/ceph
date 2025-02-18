@@ -5081,10 +5081,10 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
 
   DECLARE_LOCALS;
   ps->backfill_reserved = true;
-  pl->on_backfill_reserved();
   ps->state_clear(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
   ps->state_set(PG_STATE_BACKFILLING);
+  pl->on_backfill_reserved();
   pl->publish_stats_to_osd();
 }
 
@@ -5130,13 +5130,18 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
   ps->state_clear(PG_STATE_BACKFILLING);
   suspend_backfill();
 
-  pl->schedule_event_after(
-    std::make_shared<PGPeeringEvent>(
-      ps->get_osdmap_epoch(),
-      ps->get_osdmap_epoch(),
-      RequestBackfill()),
-    c.delay);
-  return transit<NotBackfilling>();
+  if (ps->needs_backfill()) {
+    pl->schedule_event_after(
+      std::make_shared<PGPeeringEvent>(
+	ps->get_osdmap_epoch(),
+	ps->get_osdmap_epoch(),
+	RequestBackfill()),
+      c.delay);
+    return transit<NotBackfilling>();
+  } else {
+    // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
+    return discard_event();
+  }
 }
 
 boost::statechart::result
