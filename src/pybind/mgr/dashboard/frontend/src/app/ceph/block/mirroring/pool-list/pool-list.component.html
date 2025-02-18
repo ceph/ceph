@@ -18,11 +18,14 @@
 <ng-template #healthTmpl
              let-row="data.row"
              let-value="data.value">
-  <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
+  <cds-tag [size]="'md'"
+           [class]="row.health_color | mirrorHealthColor">
+           {{ value }}
+  </cds-tag>
 </ng-template>
 <ng-template #localTmpl>
   <span i18n
-        i18n-ngbTooltip
+        i18n-ngbToolti
         ngbTooltip="Local image count"># Local</span>
 </ng-template>
 <ng-template #remoteTmpl>

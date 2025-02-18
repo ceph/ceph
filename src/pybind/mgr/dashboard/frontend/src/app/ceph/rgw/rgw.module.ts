@@ -77,7 +77,8 @@ import {
   TreeviewModule,
   SelectModule,
   NumberModule,
-  TabsModule
+  TabsModule,
+  TagModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -114,7 +115,8 @@ import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw
     CheckboxModule,
     SelectModule,
     NumberModule,
-    TabsModule
+    TabsModule,
+    TagModule
   ],
   exports: [
     RgwDaemonListComponent,
