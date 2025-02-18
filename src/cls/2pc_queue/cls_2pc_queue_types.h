@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include "include/encoding_unordered_map.h"
 #include "include/types.h"
 
 struct cls_2pc_reservation

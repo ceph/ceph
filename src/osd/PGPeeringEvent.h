@@ -3,9 +3,15 @@
 
 #pragma once
 
+#include <boost/intrusive_ptr.hpp>
 #include <boost/statechart/event.hpp>
 
 #include "osd/osd_types.h"
+
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <string>
 
 class MOSDPGLog;
 

@@ -14,13 +14,14 @@
  *
  */
 
+#include "AsyncConnection.h"
+
 #include <unistd.h>
 
 #include "include/Context.h"
 #include "include/random.h"
 #include "common/errno.h"
 #include "AsyncMessenger.h"
-#include "AsyncConnection.h"
 
 #include "ProtocolV1.h"
 #include "ProtocolV2.h"

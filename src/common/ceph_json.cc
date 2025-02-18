@@ -1,4 +1,6 @@
 #include "common/ceph_json.h"
+#include "include/encoding_map.h"
+#include "include/encoding_vector.h"
 #include "include/utime.h"
 
 // for testing DELETE ME
@@ -991,5 +993,31 @@ bool JSONFormattable::handle_close_section() {
   enc_stack.pop_back();
   cur_enc = enc_stack.back();
   return false; /* continue processing */
+}
+
+void JSONFormattable::encode(ceph::buffer::list& bl) const {
+  ENCODE_START(2, 1, bl);
+  encode((uint8_t)type, bl);
+  encode(value.str, bl);
+  encode(arr, bl);
+  encode(obj, bl);
+  encode(value.quoted, bl);
+  ENCODE_FINISH(bl);
+}
+
+void JSONFormattable::decode(ceph::buffer::list::const_iterator& bl) {
+  DECODE_START(2, bl);
+  uint8_t t;
+  decode(t, bl);
+  type = (Type)t;
+  decode(value.str, bl);
+  decode(arr, bl);
+  decode(obj, bl);
+  if (struct_v >= 2) {
+    decode(value.quoted, bl);
+  } else {
+    value.quoted = true;
+  }
+  DECODE_FINISH(bl);
 }
 

@@ -16,6 +16,8 @@
 #include "common/Formatter.h"
 #include "common/dout.h"
 #include "include/ceph_assert.h"
+#include "include/cephfs/keys_and_values.h"
+#include "include/container_ios.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
