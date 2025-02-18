@@ -22,4 +22,4 @@ std::string read_file_to_string(std::string path);
 
 void promethize(std::string &name);
 
-std::vector<std::string> split_regexes(std::string regexes);
+std::vector<std::string> split_string_on_delimeter(std::string s, char delimiter);

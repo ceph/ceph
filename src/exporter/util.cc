@@ -61,17 +61,15 @@ void promethize(std::string &name) {
   name = "ceph_" + name;
 }
 
-std::vector<std::string> split_regexes(std::string regexes) {
-  std::regex delimiter("\\|\\|");  // Escape the "|" in regex
+std::vector<std::string> split_string_on_delimeter(std::string s, char delimiter) {
+  std::vector<std::string> tokens;
+  size_t start = 0, end;
 
-  std::sregex_token_iterator iter(regexes.begin(), regexes.end(), delimiter, -1);
-  std::sregex_token_iterator end;
-    
-  std::vector<std::string> regex_list;
-  while (iter != end) {
-    regex_list.push_back(*iter);
-    ++iter;
+  while ((end = s.find(delimiter, start)) != std::string::npos) {
+      tokens.push_back(s.substr(start, end - start));
+      start = end + 1;
   }
+  tokens.push_back(s.substr(start));  // Last token
 
-  return regex_list;
+  return tokens;
 }

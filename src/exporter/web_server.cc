@@ -105,8 +105,8 @@ protected:
       response_.set(http::field::content_type, "text/plain; charset=utf-8");
 
       auto filters = parse_query_string(extract_query_string(request_.target()));
-      auto is_only = (filters.find("exclude_perf_counter_prefix") != filters.end());
-      auto is_exclude = (filters.find("only_perf_counter_prefix") != filters.end());
+      auto is_only = (filters.find(OnlyFilterPrefix) != filters.end());
+      auto is_exclude = (filters.find(ExcludeFilterPrefix) != filters.end());
       if (is_only && is_exclude) {
         response_.body() = "Please pass either exclude_perf_counter_prefix or only_perf_counter_prefix and not both";
       } else {

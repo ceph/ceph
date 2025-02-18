@@ -26,6 +26,9 @@ struct pstat {
   int resident_size;
 };
 
+const std::string ExcludeFilterPrefix = "exclude_perf_counter_prefix";
+const std::string OnlyFilterPrefix = "only_perf_counter_prefix";
+
 class MetricsBuilder;
 class OrderedMetricsBuilder;
 class UnorderedMetricsBuilder;
