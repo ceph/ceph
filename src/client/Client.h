@@ -1162,7 +1162,7 @@ protected:
 
   void dump_status(Formatter *f);  // debug
 
-  bool ms_dispatch2(const MessageRef& m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const MessageRef& m) override;
 
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;

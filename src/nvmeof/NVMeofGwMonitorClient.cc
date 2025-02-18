@@ -428,7 +428,7 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   map = new_map;
 }
 
-bool NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
   dout(10) << "got map type " << m->get_type() << dendl;
