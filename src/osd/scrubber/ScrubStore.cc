@@ -3,10 +3,13 @@
 
 #include "./ScrubStore.h"
 #include "osd/osd_types.h"
+#include "common/debug.h"
 #include "common/scrub_types.h"
 #include "include/rados/rados_types.hpp"
 
 #include "pg_scrubber.h"
+
+#include <sstream>
 
 using std::ostringstream;
 using std::string;
