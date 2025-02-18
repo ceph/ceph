@@ -3735,8 +3735,8 @@ void pg_notify_t::decode(ceph::buffer::list::const_iterator &bl)
 
 void pg_notify_t::dump(Formatter *f) const
 {
-  f->dump_int("from", from);
-  f->dump_int("to", to);
+  f->dump_int("from", static_cast<int>(from));
+  f->dump_int("to", static_cast<int>(to));
   f->dump_unsigned("query_epoch", query_epoch);
   f->dump_unsigned("epoch_sent", epoch_sent);
   {
@@ -4476,8 +4476,8 @@ void pg_query_t::decode(ceph::buffer::list::const_iterator &bl) {
 
 void pg_query_t::dump(Formatter *f) const
 {
-  f->dump_int("from", from);
-  f->dump_int("to", to);
+  f->dump_int("from", static_cast<int>(from));
+  f->dump_int("to", static_cast<int>(to));
   f->dump_string("type", get_type_name());
   f->dump_stream("since") << since;
   f->dump_stream("epoch_sent") << epoch_sent;

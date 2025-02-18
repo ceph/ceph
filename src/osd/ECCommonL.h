@@ -20,10 +20,10 @@
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
-#include "ECUtil.h"
+#include "ECUtilL.h"
 #include "ECTypes.h"
 #if WITH_SEASTAR
-#include "ExtentCache.h"
+#include "ECExtentCacheL.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
@@ -35,7 +35,7 @@ struct ECTransaction {
     std::map<hobject_t,extent_set> to_read;
     std::map<hobject_t,extent_set> will_write; // superset of to_read
 
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
+    std::map<hobject_t,ECUtilL::HashInfoRef> hash_infos;
   };
 };
 
@@ -45,15 +45,18 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "common/WorkQueue.h"
 #endif
 
-#include "ECTransaction.h"
-#include "ExtentCache.h"
+#include "ECTransactionL.h"
+#include "ECExtentCacheL.h"
 #include "ECListener.h"
 
 //forward declaration
 struct ECSubWrite;
 struct PGLog;
 
-struct ECCommon {
+namespace ECLegacy {
+
+struct ECCommonL {
+
   struct ec_extent_t {
     int err;
     extent_map emap;
@@ -61,7 +64,7 @@ struct ECCommon {
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
 
-  virtual ~ECCommon() = default;
+  virtual ~ECCommonL() = default;
 
   virtual void handle_sub_write(
     pg_shard_t from,
@@ -261,7 +264,7 @@ struct ECCommon {
 
     CephContext* cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     // TODO: lay an interface down here
     ECListener* parent;
 
@@ -272,7 +275,7 @@ struct ECCommon {
 
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
-                const ECUtil::stripe_info_t& sinfo,
+                const ECUtilL::stripe_info_t& sinfo,
                 ECListener* parent)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
@@ -297,7 +300,7 @@ struct ECCommon {
     static void get_min_want_to_read_shards(
       const uint64_t offset,
       const uint64_t length,
-      const ECUtil::stripe_info_t& sinfo,
+      const ECUtilL::stripe_info_t& sinfo,
       std::set<int> *want_to_read);
 
     int get_remaining_shards(
@@ -338,7 +341,7 @@ struct ECCommon {
    *
    * ECTransaction is responsible for generating a transaction for
    * each shard to which we need to send the write.  As required
-   * by the PGBackend interface, the ECBackend write mechanism
+   * by the PGBackend interface, the ECBackendL write mechanism
    * passes trim information with the write and last_complete back
    * with the reply.
    *
@@ -382,7 +385,7 @@ struct ECCommon {
       std::set<hobject_t> temp_added;
       std::set<hobject_t> temp_cleared;
 
-      ECTransaction::WritePlan plan;
+      ECTransactionL::WritePlan plan;
       bool requires_rmw() const { return !plan.to_read.empty(); }
       bool invalidates_cache() const { return plan.invalidates_cache; }
 
@@ -411,7 +414,7 @@ struct ECCommon {
       OpRequestRef client_op;
 
       /// pin for cache
-      ExtentCache::write_pin pin;
+      ECExtentCacheL::write_pin pin;
 
       /// Callbacks
       Context *on_all_commit = nullptr;
@@ -422,7 +425,7 @@ struct ECCommon {
       virtual void generate_transactions(
         ceph::ErasureCodeInterfaceRef &ecimpl,
         pg_t pgid,
-        const ECUtil::stripe_info_t &sinfo,
+        const ECUtilL::stripe_info_t &sinfo,
         std::map<hobject_t,extent_map> *written,
         std::map<shard_id_t, ceph::os::Transaction> *transactions,
         DoutPrefixProvider *dpp,
@@ -432,7 +435,7 @@ struct ECCommon {
     using op_list = boost::intrusive::list<Op>;
     friend std::ostream &operator<<(std::ostream &lhs, const Op &rhs);
 
-    ExtentCache cache;
+    ECExtentCacheL cache;
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
     /**
      * We model the possible rmw states as a std::set of waitlists.
@@ -511,7 +514,7 @@ struct ECCommon {
         _to_read,
         false,
         make_gen_lambda_context<
-        ECCommon::ec_extents_t &&, Func>(
+        ECCommonL::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
     }
     void handle_sub_write(
@@ -525,15 +528,15 @@ struct ECCommon {
     // end of iface
 
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     ECListener* parent;
-    ECCommon& ec_backend;
+    ECCommonL& ec_backend;
 
     RMWPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
-                const ECUtil::stripe_info_t& sinfo,
+                const ECUtilL::stripe_info_t& sinfo,
                 ECListener* parent,
-                ECCommon& ec_backend)
+                ECCommonL& ec_backend)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
@@ -546,7 +549,7 @@ struct ECCommon {
     CephContext *cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
     /// If modified, ensure that the ref is held until the update is applied
-    SharedPtrRegistry<hobject_t, ECUtil::HashInfo> registry;
+    SharedPtrRegistry<hobject_t, ECUtilL::HashInfo> registry;
 
   public:
     UnstableHashInfoRegistry(
@@ -555,11 +558,11 @@ struct ECCommon {
       : cct(cct),
 	ec_impl(std::move(ec_impl)) {}
 
-    ECUtil::HashInfoRef maybe_put_hash_info(
+    ECUtilL::HashInfoRef maybe_put_hash_info(
       const hobject_t &hoid,
-      ECUtil::HashInfo &&hinfo);
+      ECUtilL::HashInfo &&hinfo);
 
-    ECUtil::HashInfoRef get_hash_info(
+    ECUtilL::HashInfoRef get_hash_info(
       const hobject_t &hoid,
       bool create,
       const std::map<std::string, ceph::buffer::list, std::less<>>& attr,
@@ -568,24 +571,24 @@ struct ECCommon {
 };
 
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::RMWPipeline::pipeline_state_t &rhs);
+			 const ECCommonL::RMWPipeline::pipeline_state_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::read_request_t &rhs);
+			 const ECCommonL::read_request_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::read_result_t &rhs);
+			 const ECCommonL::read_result_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::ReadOp &rhs);
+			 const ECCommonL::ReadOp &rhs);
 std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::RMWPipeline::Op &rhs);
+			 const ECCommonL::RMWPipeline::Op &rhs);
 
 template <class F, class G>
-void ECCommon::ReadPipeline::check_recovery_sources(
+void ECCommonL::ReadPipeline::check_recovery_sources(
   const OSDMapRef& osdmap,
   F&& on_erase,
   G&& on_schedule_recovery)
 {
   std::set<ceph_tid_t> tids_to_filter;
-  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator 
+  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator
        i = shard_to_read_map.begin();
        i != shard_to_read_map.end();
        ) {
@@ -606,7 +609,7 @@ void ECCommon::ReadPipeline::check_recovery_sources(
 }
 
 template <class F, class G>
-void ECCommon::ReadPipeline::filter_read_op(
+void ECCommonL::ReadPipeline::filter_read_op(
   const OSDMapRef& osdmap,
   ReadOp &op,
   F&& on_erase,
@@ -675,9 +678,10 @@ void ECCommon::ReadPipeline::filter_read_op(
     on_schedule_recovery(op);
   }
 }
+}// namespace ECLegacy
 
-template <> struct fmt::formatter<ECCommon::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::read_request_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::read_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::ReadOp> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECLegacy::ECCommonL::RMWPipeline::Op> : fmt::ostream_formatter {};

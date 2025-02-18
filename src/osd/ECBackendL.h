@@ -17,14 +17,13 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 
-#include "ECCommon.h"
+#include "ECCommonL.h"
 #include "OSD.h"
 #include "PGBackend.h"
 #include "erasure-code/ErasureCodeInterface.h"
-#include "ECUtil.h"
-#include "ECTransaction.h"
-#include "ExtentCache.h"
-#include "ECListener.h"
+#include "ECUtilL.h"
+#include "ECTransactionL.h"
+#include "ECExtentCacheL.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -33,31 +32,32 @@ struct ECSubRead;
 struct ECSubReadReply;
 class ECSwitch;
 
+namespace ECLegacy {
 struct RecoveryMessages;
 
-class ECBackend : public ECCommon {
+class ECBackendL : public ECCommonL {
 public:
-    PGBackend::RecoveryHandle *open_recovery_op();
+  PGBackend::RecoveryHandle *open_recovery_op();
 
   void run_recovery_op(
-      PGBackend::RecoveryHandle *h,
+    PGBackend::RecoveryHandle *h,
     int priority
-      );
+    );
 
   int recover_object(
     const hobject_t &hoid,
     eversion_t v,
     ObjectContextRef head,
     ObjectContextRef obc,
-      PGBackend::RecoveryHandle *h
-      );
+    PGBackend::RecoveryHandle *h
+    );
 
   bool _handle_message(
     OpRequestRef op
-      );
+    );
   bool can_handle_while_inactive(
     OpRequestRef op
-      );
+    );
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_committed(
@@ -144,15 +144,15 @@ public:
   void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
-    GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
+    GenContextURef<ECCommonL::ec_extents_t &&> &&func) override;
 
-  void objects_read_async(
-    const hobject_t &hoid,
-    uint64_t object_size,
-    const std::list<std::pair<ec_align_t,
-                              std::pair<ceph::buffer::list*, Context*>>> &to_read,
-    Context *on_complete,
-    bool fast_read = false);
+    void objects_read_async(
+      const hobject_t &hoid,
+      uint64_t object_size,
+      const std::list<std::pair<ec_align_t,
+                                std::pair<ceph::buffer::list*, Context*>>> &to_read,
+      Context *on_complete,
+      bool fast_read = false);
 
 private:
   friend struct ECRecoveryHandle;
@@ -186,7 +186,7 @@ private:
    * object_context if missing on completion of the first read.
    *
    * In order to batch up reads and writes, we batch Push, PushReply,
-   * Transaction, and reads in a RecoveryMessages object which is passed
+ * Transaction, and reads in a RecoveryMessages object which is passed
    * among the recovery methods.
    */
 public:
@@ -194,12 +194,12 @@ public:
     CephContext* cct;
     const coll_t &coll;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t& sinfo;
+    const ECUtilL::stripe_info_t& sinfo;
     ReadPipeline& read_pipeline;
     UnstableHashInfoRegistry& unstable_hashinfo_registry;
     // TODO: lay an interface down here
     ECListener* parent;
-    ECBackend* ecbackend;
+    ECBackendL* ecbackend;
 
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -211,11 +211,11 @@ public:
     RecoveryBackend(CephContext* cct,
 		    const coll_t &coll,
 		    ceph::ErasureCodeInterfaceRef ec_impl,
-		    const ECUtil::stripe_info_t& sinfo,
+		    const ECUtilL::stripe_info_t& sinfo,
 		    ReadPipeline& read_pipeline,
 		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
 		    ECListener* parent,
-		    ECBackend* ecbackend);
+		    ECBackendL* ecbackend);
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
@@ -246,7 +246,7 @@ public:
     // must be filled if state == WRITING
     std::map<int, ceph::buffer::list> returned_data;
     std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
-    ECUtil::HashInfoRef hinfo;
+    ECUtilL::HashInfoRef hinfo;
     ObjectContextRef obc;
     std::set<pg_shard_t> waiting_on_pushes;
 
@@ -269,11 +269,11 @@ public:
   virtual void commit_txn_send_replies(
     ceph::os::Transaction&& txn,
     std::map<int, MOSDPGPushReply*> replies) = 0;
-  void dispatch_recovery_messages(RecoveryMessages &m, int priority);
+void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
   PGBackend::RecoveryHandle *open_recovery_op();
   void run_recovery_op(
-    struct ECRecoveryHandle &h,
+struct ECRecoveryHandle &h,
     int priority);
   int recover_object(
     const hobject_t &hoid,
@@ -301,19 +301,19 @@ public:
   int get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
-  void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
+  void _failed_push(const hobject_t &hoid, ECCommonL::read_result_t &res);
   };
   struct ECRecoveryBackend : RecoveryBackend {
     ECRecoveryBackend(CephContext* cct,
-		      const coll_t &coll,
-		      ceph::ErasureCodeInterfaceRef ec_impl,
-		      const ECUtil::stripe_info_t& sinfo,
-		      ReadPipeline& read_pipeline,
-		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
-		      PGBackend::Listener* parent,
-		      ECBackend* ecbackend)
+                      const coll_t &coll,
+                      ceph::ErasureCodeInterfaceRef ec_impl,
+                      const ECUtilL::stripe_info_t& sinfo,
+                      ReadPipeline& read_pipeline,
+                      UnstableHashInfoRegistry& unstable_hashinfo_registry,
+                      PGBackend::Listener* parent,
+                      ECBackendL* ecbackend)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener(), ecbackend),
-	parent(parent) {
+        parent(parent) {
     }
 
     void commit_txn_send_replies(
@@ -326,19 +326,19 @@ public:
     PGBackend::Listener *parent;
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryBackend::RecoveryOp &rhs);
-  friend struct RecoveryMessages;
+friend struct RecoveryMessages;
   friend struct OnRecoveryReadComplete;
-  friend struct RecoveryReadCompleter;
+friend struct RecoveryReadCompleter;
 
   void handle_recovery_push(
     const PushOp &op,
-    RecoveryMessages *m,
+  RecoveryMessages *m,
     bool is_repair);
 
 public:
-    PGBackend::Listener *parent;
-    CephContext *cct;
-    ECSwitch *switcher;
+  PGBackend::Listener *parent;
+  CephContext *cct;
+  ECSwitch *switcher;
   struct ReadPipeline read_pipeline;
   struct RMWPipeline rmw_pipeline;
   struct ECRecoveryBackend recovery_backend;
@@ -376,13 +376,13 @@ public:
     return std::make_unique<ECRecPred>(ec_impl);
   }
 
-    unsigned get_ec_data_chunk_count() const {
+  unsigned get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
   int get_ec_stripe_chunk_size() const {
     return sinfo.get_chunk_size();
   }
-  uint64_t object_size_to_shard_size(const uint64_t size, int shard) const {
+  uint64_t object_size_to_shard_size(const uint64_t size) const {
     return sinfo.logical_to_next_chunk_offset(size);
   }
   /**
@@ -405,10 +405,9 @@ public:
     return std::make_unique<ECReadPred>(whoami, ec_impl);
   }
 
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtilL::stripe_info_t sinfo;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
-
+  ECCommonL::UnstableHashInfoRegistry unstable_hashinfo_registry;
 
   std::tuple<
     int,
@@ -418,7 +417,7 @@ public:
 
 public:
   int object_stat(const hobject_t &hoid, struct stat* st);
-  ECBackend(
+  ECBackendL(
     PGBackend::Listener *pg,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
@@ -441,4 +440,5 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
+ostream &operator<<(ostream &lhs, const ECBackendL::RMWPipeline::pipeline_state_t &rhs);
+}
