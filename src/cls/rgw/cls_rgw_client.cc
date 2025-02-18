@@ -798,7 +798,7 @@ int CLSRGWIssueGetDirHeader::issue_op(const int shard_id, const string& oid)
   string empty_delimiter;
   return issue_bucket_list_op(io_ctx, shard_id, oid,
 			      empty_key, empty_prefix, empty_delimiter,
-			      0, false, RGW_BUCKET_NO_SNAP, &manager, &result[shard_id]);
+			      0, false, rgw_bucket_snap_id(), &manager, &result[shard_id]);
 }
 
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)

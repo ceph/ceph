@@ -172,7 +172,7 @@ void rgw_bucket_pending_info::decode_json(JSONObj *obj) {
 void cls_rgw_obj_key::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("instance", instance, obj);
-  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
 }
 
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
@@ -204,7 +204,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
   encode_json("appendable", appendable, f);
-  encode_json("snap_id", (int64_t)snap_id, f);
+  encode_json("snap_id", snap_id, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -223,7 +223,7 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
   JSONDecoder::decode_json("appendable", appendable, obj);
-  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
@@ -271,19 +271,19 @@ void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& 
 
 void rgw_bucket_snap_skip_entry::dump(Formatter *f) const
 {
-  encode_json("snap_id", (int64_t)snap_id, f);
+  encode_json("snap_id", snap_id, f);
   encode_json("index_key", index_key , f);
 }
 
 void rgw_bucket_snap_skip_entry::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("snap_id", (int64_t&)snap_id, obj);
+  JSONDecoder::decode_json("snap_id", snap_id, obj);
   JSONDecoder::decode_json("index_key", index_key, obj);
 }
 
 void rgw_bucket_dirent_snap_info::dump(Formatter *f) const
 {
   encode_json("skip", skip, f);
-  encode_json("removed_at", (int64_t)removed_at, f);
+  encode_json("removed_at", removed_at, f);
   encode_json("current_flag_map", current_flag_map, f);
 }
 

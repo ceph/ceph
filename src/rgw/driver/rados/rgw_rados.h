@@ -136,7 +136,7 @@ WRITE_CLASS_ENCODER(RGWOLHSnapInfo)
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
 
   RGWOLHInfo() : removed(false) {}
 
@@ -1103,8 +1103,7 @@ public:
         Params() :
 	  enforce_ns(true),
 	  list_versions(false),
-	  allow_unordered(false),
-          max_snap(RGW_BUCKET_SNAP_NOSNAP)
+	  allow_unordered(false)
 	{}
       } params;
 

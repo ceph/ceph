@@ -94,7 +94,7 @@ void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index
     bufferlist olh_tag;
     olh_tag.append(tag);
     rgw_zone_set zone_set;
-    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, RGW_BUCKET_SNAP_NOSNAP, olh_tag,
+    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, rgw_bucket_snap_id(), olh_tag,
                                          false, tag, &meta, epoch,
                                          ceph::real_time{}, true, true, zone_set));
   }
@@ -376,7 +376,7 @@ static void list_entries(librados::IoCtx& ioctx,
   string empty_delimiter;
   ASSERT_EQ(0, CLSRGWIssueBucketList(ioctx, start_key, empty_prefix,
                                      empty_delimiter, num_entries,
-                                     true, RGW_BUCKET_NO_SNAP,
+                                     true, rgw_bucket_snap_id(),
                                      oids, results, 1)());
 }
 
@@ -493,7 +493,7 @@ TEST_F(cls_rgw, index_list)
   string empty_delimiter;
   int r = CLSRGWIssueBucketList(ioctx, start_key,
 				empty_prefix, empty_delimiter,
-				1000, true, RGW_BUCKET_NO_SNAP,
+				1000, true, rgw_bucket_snap_id(),
                                 oids, list_results, 1)();
   ASSERT_EQ(r, 0);
   ASSERT_EQ(1u, list_results.size());
@@ -570,7 +570,7 @@ TEST_F(cls_rgw, index_list_delimited)
   const string delimiter = "/";
   int r = CLSRGWIssueBucketList(ioctx, start_key,
 				empty_prefix, delimiter,
-				1000, true, RGW_BUCKET_NO_SNAP,
+				1000, true, rgw_bucket_snap_id(),
                                 oids, list_results, 1)();
   ASSERT_EQ(r, 0);
   ASSERT_EQ(1u, list_results.size()) <<
@@ -599,7 +599,7 @@ TEST_F(cls_rgw, index_list_delimited)
   cls_rgw_obj_key start_key2("p/", "");
   r = CLSRGWIssueBucketList(ioctx, start_key2,
 			    empty_prefix, delimiter,
-			    1000, true, RGW_BUCKET_NO_SNAP,
+			    1000, true, rgw_bucket_snap_id(),
                             oids, list_results, 1)();
   ASSERT_EQ(r, 0);
 

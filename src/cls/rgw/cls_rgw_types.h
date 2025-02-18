@@ -199,22 +199,6 @@ inline std::ostream& operator<<(std::ostream& out, RGWObjCategory c) {
   return out << to_string(c);
 }
 
-using rgw_bucket_snap_id = uint64_t;
-
-#define RGW_BUCKET_NO_SNAP (rgw_bucket_snap_id)-1
-#define RGW_BUCKET_MIN_SNAP (rgw_bucket_snap_id)0
-
-static inline bool cmp_snap_lt(rgw_bucket_snap_id s1,
-                          rgw_bucket_snap_id s2) {
-  if (s1 == RGW_BUCKET_NO_SNAP) {
-    return s2 != s1;
-  }
-  if (s2 == RGW_BUCKET_NO_SNAP) {
-    return false;
-  }
-  return s1 < s2;
-}
-
 struct rgw_bucket_dir_entry_meta {
   RGWObjCategory category = RGWObjCategory::None;
   uint64_t size = 0;
@@ -227,7 +211,7 @@ struct rgw_bucket_dir_entry_meta {
   std::string user_data;
   std::string storage_class;
   bool appendable = false;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id snap_id;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(8, 3, bl);
@@ -387,7 +371,7 @@ inline std::ostream& operator<<(std::ostream& out, const cls_rgw_obj_key& o) {
 }
 
 struct rgw_bucket_snap_skip_entry {
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id snap_id;
   std::string index_key;
 
   void dump(ceph::Formatter *f) const;
@@ -411,7 +395,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_snap_skip_entry)
 
 struct rgw_bucket_dirent_snap_info {
   rgw_bucket_snap_skip_entry skip;
-  rgw_bucket_snap_id removed_at = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id removed_at;
   std::map<rgw_bucket_snap_id, bool> current_flag_map;
 
   void dump(ceph::Formatter *f) const;
@@ -558,22 +542,22 @@ struct rgw_bucket_dir_entry {
 
   rgw_bucket_snap_id removed_at_snap() const {
     if (!snap_info) {
-      return RGW_BUCKET_NO_SNAP;
+      return rgw_bucket_snap_id();
     }
     return snap_info->removed_at;
   }
   bool exists_at_snap(rgw_bucket_snap_id check_snap_id) const {
-    if (check_snap_id == RGW_BUCKET_NO_SNAP) {
-      return (removed_at_snap() == RGW_BUCKET_NO_SNAP);
+    if (!check_snap_id.is_set()) {
+      return (!removed_at_snap().is_set());
     }
-    if (cmp_snap_lt(check_snap_id, meta.snap_id)) {
+    if (check_snap_id < meta.snap_id) {
       /* we were created at a later snapshot than the checked one */
       return false;
     }
 
     auto removed_at = removed_at_snap();
-    return (removed_at == RGW_BUCKET_NO_SNAP ||
-            cmp_snap_lt(check_snap_id, removed_at));
+    return (!removed_at.is_set() ||
+            check_snap_id < removed_at);
   }
   rgw_bucket_dirent_snap_info& set_snap_info() {
     if (!snap_info) {
@@ -653,7 +637,7 @@ struct rgw_bucket_olh_log_entry {
   std::string op_tag;
   cls_rgw_obj_key key;
   bool delete_marker;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id snap_id;
 
 
   rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
@@ -699,7 +683,7 @@ struct rgw_bucket_olh_entry {
   bool exists;
   bool pending_removal;
 
-  rgw_bucket_olh_entry() : snap_id(RGW_BUCKET_NO_SNAP), delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
+  rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(2, 1, bl);
