@@ -2979,8 +2979,45 @@ Then run the following:
         self.spec_store.save(osd_default_spec)
         self.apply([osd_default_spec])
 
+    def validate_device(self, host_name: str, drive_group: DriveGroupSpec) -> str:
+        """
+        Validates whether the specified device exists and is available for OSD creation.
+        Returns:
+            str: An error message if validation fails; an empty string if validation passes.
+        """
+        try:
+
+            if not drive_group.data_devices or not drive_group.data_devices.paths:
+                return "Error: No data devices specified."
+
+            if self.cache.is_host_unreachable(host_name):
+                return f"Host {host_name} is not reachable (it may be offline or in maintenance mode)."
+
+            host_cache = self.cache.devices.get(host_name, [])
+            if not host_cache:
+                return (f"Error: No devices found for host {host_name}. "
+                        "You can check known devices with 'ceph orch device ls'. "
+                        "If no devices appear, wait for an automatic refresh.")
+
+            available_devices = {
+                dev.path: dev for dev in host_cache if dev.available
+            }
+            self.log.debug(f"Host {host_name} has {len(available_devices)} available devices.")
+
+            for device in drive_group.data_devices.paths:
+                matching_device = next((dev for dev in host_cache if dev.path == device.path), None)
+                if not matching_device:
+                    return f"Error: Device {device.path} is not found on host {host_name}"
+                if not matching_device.available:
+                    return (f"Error: Device {device.path} is present but unavailable for OSD creation. "
+                            f"Reason: {', '.join(matching_device.rejected_reasons) if matching_device.rejected_reasons else 'Unknown'}")
+
+            return ""
+        except AttributeError as e:
+            return f"Error- Attribute issue: {e}"
+
     @handle_orch_error
-    def create_osds(self, drive_group: DriveGroupSpec) -> str:
+    def create_osds(self, drive_group: DriveGroupSpec, skip_validation: bool = False) -> str:
         hosts: List[HostSpec] = self.inventory.all_specs()
         filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
         if not filtered_hosts:
@@ -2994,6 +3031,12 @@ Then run the following:
             self.create_osd_default_spec(drive_group)
         else:
             self.log.info("osd.default already exists.")
+        host_name = filtered_hosts[0]
+        if not skip_validation:
+            self.log.warning("Skipping the validation of device paths for osd daemon add command. Please make sure that the osd path is valid")
+            err_msg = self.validate_device(host_name, drive_group)
+            if err_msg:
+                return err_msg
 
         return self.osd_service.create_from_spec(drive_group)
 

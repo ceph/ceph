@@ -737,7 +737,7 @@ class Orchestrator(object):
         # assert action in ["start", "stop", "reload, "restart", "redeploy"]
         raise NotImplementedError()
 
-    def create_osds(self, drive_group: DriveGroupSpec) -> OrchResult[str]:
+    def create_osds(self, drive_group: DriveGroupSpec, skip_validation: bool = False) -> OrchResult[str]:
         """
         Create one or more OSDs within a single Drive Group.
 
