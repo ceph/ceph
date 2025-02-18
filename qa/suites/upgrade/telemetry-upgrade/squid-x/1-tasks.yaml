@@ -19,6 +19,7 @@ overrides:
       - is down
       - TELEMETRY_CHANGED
       - pg .*? is .*?degraded.*?, acting
+      - pg .* is stuck peering
 tasks:
 - install:
     branch: squid
