@@ -31,24 +31,6 @@ static const std::string IMAGE_POOL_NAME("image-" + at::POOL_NAME);
 static const std::string GROUP_NAMESPACE_NAME("group-" + at::NAMESPACE_NAME);
 static const std::string IMAGE_NAMESPACE_NAME("image-" + at::NAMESPACE_NAME);
 
-void add_group_option(po::options_description *opt,
-		      at::ArgumentModifier modifier) {
-  std::string name = GROUP_NAME;
-  std::string description = at::get_description_prefix(modifier) + "group name";
-  switch (modifier) {
-  case at::ARGUMENT_MODIFIER_NONE:
-  case at::ARGUMENT_MODIFIER_SOURCE:
-    break;
-  case at::ARGUMENT_MODIFIER_DEST:
-    name = DEST_GROUP_NAME;
-    break;
-  }
-
-  // TODO add validator
-  opt->add_options()
-    (name.c_str(), po::value<std::string>(), description.c_str());
-}
-
 void add_prefixed_pool_option(po::options_description *opt,
                               const std::string &prefix) {
   std::string name = prefix + "-" + at::POOL_NAME;
@@ -73,7 +55,7 @@ void add_group_spec_options(po::options_description *pos,
                             bool snap) {
   at::add_pool_option(opt, modifier);
   at::add_namespace_option(opt, modifier);
-  add_group_option(opt, modifier);
+  at::add_group_option(opt, modifier);
   if (!snap) {
     pos->add_options()
       ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
@@ -311,6 +293,16 @@ int execute_info(const po::variables_map &vm,
   std::string group_id;
   r = rbd.group_get_id(io_ctx, group_name.c_str(), &group_id);
   if (r < 0) {
+    std::cout << "rbd: failed to get info for group " << group_name << " : "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  librbd::mirror_group_info_t mirror_group_info;
+  mirror_group_info.state = RBD_MIRROR_GROUP_DISABLED;
+  r = rbd.mirror_group_get_info(io_ctx, group_name.c_str(), &mirror_group_info,
+                                sizeof(mirror_group_info));
+  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
@@ -318,11 +310,41 @@ int execute_info(const po::variables_map &vm,
     f->open_object_section("group");
     f->dump_string("group_name", group_name);
     f->dump_string("group_id", group_id);
-    f->close_section();
-    f->flush(std::cout);
   } else {
     std::cout << "rbd group '" << group_name << "':\n"
-              << "\t" << "id: " << group_id << std::endl;
+              << "\t" << "id: " << group_id
+              << std::endl;
+  }
+
+  if (mirror_group_info.state != RBD_MIRROR_GROUP_DISABLED) {
+    if (f) {
+      f->open_object_section("mirroring");
+      f->dump_string("mode",
+                     utils::mirror_image_mode(mirror_group_info.mirror_image_mode));
+      f->dump_string("state",
+                     utils::mirror_group_state(mirror_group_info.state));
+      f->dump_string("global_id", mirror_group_info.global_id);
+      f->dump_bool("primary", mirror_group_info.primary);
+      f->close_section();
+    } else {
+      std::cout << "\tmirroring state: "
+                << utils::mirror_group_state(mirror_group_info.state)
+                << std::endl;
+      if (mirror_group_info.state != RBD_MIRROR_GROUP_DISABLED) {
+	std::cout << "\tmirroring mode: "
+                  << utils::mirror_image_mode(mirror_group_info.mirror_image_mode)
+                  << std::endl
+                  << "\tmirroring global id: " << mirror_group_info.global_id
+                  << std::endl
+                  << "\tmirroring primary: "
+                  << (mirror_group_info.primary ? "true" : "false") <<std::endl;
+      }
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
   }
 
   return 0;
@@ -954,7 +976,7 @@ void get_add_arguments(po::options_description *positional,
 
   add_prefixed_pool_option(options, "group");
   add_prefixed_namespace_option(options, "group");
-  add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   positional->add_options()
     (at::IMAGE_SPEC.c_str(),
@@ -975,7 +997,7 @@ void get_remove_image_arguments(po::options_description *positional,
 
   add_prefixed_pool_option(options, "group");
   add_prefixed_namespace_option(options, "group");
-  add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   positional->add_options()
     (at::IMAGE_SPEC.c_str(),
