@@ -15,7 +15,7 @@
 class RGWBucketSnapMgr
 {
   bool enabled = false;
-  rgw_bucket_snap_id cur_snap = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id cur_snap{rgw_bucket_snap_id::SNAP_MIN};
 
   std::map<rgw_bucket_snap_id, rgw_bucket_snap> snaps;
 
@@ -61,8 +61,8 @@ public:
   void set_enabled(bool flag) {
     enabled = flag;
 
-    if (enabled && cur_snap == RGW_BUCKET_SNAP_NOSNAP) {
-      cur_snap = RGW_BUCKET_SNAP_START;
+    if (enabled) {
+      ++cur_snap;
     }
   }
 };

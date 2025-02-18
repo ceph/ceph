@@ -33,7 +33,7 @@
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   std::string name;
   std::string instance;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
 
   rgw_obj_index_key() {}
   rgw_obj_index_key(const std::string &_name) : name(_name) {}
@@ -98,7 +98,7 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   void dump(ceph::Formatter *f) const {
     encode_json("name", name, f);
     encode_json("instance", instance, f);
-    encode_json("snap_id", (int64_t)snap_id, f);
+    encode_json("snap_id", snap_id, f);
   }
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<rgw_obj_index_key*>& ls) {
@@ -123,7 +123,7 @@ struct rgw_obj_key {
   std::string instance;
   std::string ns;
 
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
 
   rgw_obj_key() {}
 
@@ -273,7 +273,7 @@ struct rgw_obj_key {
 
   bool need_to_encode_instance() const {
     return have_non_null_instance() ||
-      snap_id != RGW_BUCKET_SNAP_NOSNAP;
+      snap_id.is_set();
   }
 
   std::string instance_oid_str() const {
@@ -306,7 +306,7 @@ struct rgw_obj_key {
 
   rgw_bucket_snap_id get_snap_id() const {
     if (!instance.empty()) {
-      return RGW_BUCKET_SNAP_NOSNAP;
+      return rgw_bucket_snap_id();
     }
     return snap_id;
   }
@@ -337,7 +337,7 @@ struct rgw_obj_key {
 
     if (field.empty()) {
       instance.clear();
-      snap_id = RGW_BUCKET_SNAP_NOSNAP;
+      snap_id.reset();
       return;
     } 
 
@@ -347,7 +347,7 @@ struct rgw_obj_key {
       snap_id = std::stoll(field.substr(5));
     } else {
       instance = field;
-      snap_id = RGW_BUCKET_SNAP_NOSNAP;
+      snap_id.reset();
       return;
     }
 
@@ -360,7 +360,7 @@ struct rgw_obj_key {
       ns = ns.substr(0, pos);
     } else {
       instance.clear();
-      snap_id = RGW_BUCKET_SNAP_NOSNAP;
+      snap_id.reset();
     }
   }
 
@@ -369,7 +369,7 @@ struct rgw_obj_key {
   static bool parse_raw_oid(const std::string& oid, rgw_obj_key *key) {
     key->instance.clear();
     key->ns.clear();
-    key->snap_id = RGW_BUCKET_SNAP_NOSNAP;
+    key->snap_id.reset();
     if (oid[0] != '_') {
       key->name = oid;
       return true;
@@ -422,7 +422,7 @@ struct rgw_obj_key {
   static bool strip_namespace_from_name(std::string& name, std::string& ns, std::string& instance, rgw_bucket_snap_id snap_id) {
     ns.clear();
     instance.clear();
-    snap_id = RGW_BUCKET_SNAP_NOSNAP;
+    snap_id.reset();
 
     if (name[0] != '_') {
       return true;
@@ -493,7 +493,7 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_obj_key &key) {
   return out << fmt::format("{}", key);
 #else
   if (key.instance.empty()) {
-    if (key.snap_id == RGW_BUCKET_SNAP_NOSNAP) {
+    if (!key.snap_id.is_set()) {
       return out << fmt::format("{}", key.name);
     } else {
       return out << fmt::format("{}[null.{}]", key.name, key.snap_id);

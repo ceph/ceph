@@ -1269,7 +1269,7 @@ namespace rgw::sal {
     //info.manifest = manifest;
 
     if (psnap_id) {
-      *psnap_id = RGW_BUCKET_SNAP_NOSNAP;
+      psnap_id->reset();
     }
     
     DB::Object op_target(store->getDB(),

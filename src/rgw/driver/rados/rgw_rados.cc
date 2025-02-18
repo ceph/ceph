@@ -3330,7 +3330,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (attrs.find(RGW_ATTR_PG_VER) == attrs.end()) {
     cls_rgw_obj_store_pg_ver(op, RGW_ATTR_PG_VER);
   }
-  if (snap_id != RGW_BUCKET_SNAP_NOSNAP &&
+  if (snap_id.is_set() &&
       attrs.find(RGW_ATTR_SNAP_ID) == attrs.end()) {
     bufferlist bl;
     encode((int64_t)snap_id, bl);
@@ -3908,7 +3908,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     // the instance info
     rgw_obj olh_obj = head_obj;
     olh_obj.key.instance.clear();
-    olh_obj.key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
+    olh_obj.key.snap_id.reset();
 
     RGWObjState* olh_state { nullptr };
     RGWObjManifest* olh_manifest { nullptr }; // we don't use, but must send in
@@ -4029,7 +4029,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   bufferlist olh_info_bl;
   bool appendable { false };
   bufferlist part_num_bl;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
 
   rgw::sal::Attrs& attr_set = head_state->attrset;
   read_attr(attr_set, RGW_ATTR_ETAG, etag);
@@ -4416,7 +4416,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   append_rand_alpha(cct, tag, tag, 32);
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
   int ret;
   const string fetched_obj = fmt::format(
     "object(src={}:{}, dest={}:{})", src_obj.bucket.bucket_id, src_obj.key.name,
@@ -4928,7 +4928,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   auto& zonegroup = svc.zone->get_zonegroup();
 
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
 
   remote_dest = !zonegroup.equals(dest_bucket_info.zonegroup);
   remote_src = !zonegroup.equals(src_bucket_info.zonegroup);
@@ -5657,7 +5657,7 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 				      prefix,
 				      NUM_ENTRIES,
 				      true,
-                                      RGW_BUCKET_SNAP_NOSNAP,
+                                      rgw_bucket_snap_id(),
 				      ent_list,
 				      &is_truncated,
 				      &marker,
@@ -6370,7 +6370,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
     bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-    if ((instance.empty() && obj.key.snap_id == RGW_BUCKET_SNAP_NOSNAP) || explicit_marker_version) {
+    if ((instance.empty() && !obj.key.snap_id.is_set()) || explicit_marker_version) {
       rgw_obj marker = obj;
       marker.key.instance.clear();
 
@@ -6775,7 +6775,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
 
   if (r == -ENOENT &&
       bucket_info.versioned() &&
-      obj.key.get_snap_id() != RGW_BUCKET_SNAP_NOSNAP &&
+      obj.key.get_snap_id().is_set() &&
       follow_snap) {
     rgw_obj olh_obj(obj.bucket, obj.key.name);
     return get_obj_state_impl(dpp, octx, bucket_info,
@@ -6959,7 +6959,7 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
-                             follow_olh, RGW_BUCKET_SNAP_NOSNAP, y,
+                             follow_olh, rgw_bucket_snap_id(), y,
                              assume_noent, delete_marker_enoent,
                              follow_snap);
   } while (ret == -EAGAIN);
@@ -9055,7 +9055,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   bool need_to_link = false;
   uint64_t link_epoch = 0;
   cls_rgw_obj_key key;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  rgw_bucket_snap_id snap_id;
   bool delete_marker = false;
   list<cls_rgw_obj_key> remove_instances;
   bool need_to_remove = false;
@@ -9318,7 +9318,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
 
   rgw_obj olh_obj = target_obj;
   olh_obj.key.instance.clear();
-  olh_obj.key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  olh_obj.key.snap_id.reset();
 
   RGWObjState *state = NULL;
   RGWObjManifest *manifest = nullptr;
@@ -9415,7 +9415,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider* dpp,
 
   rgw_obj olh_obj = target_obj;
   olh_obj.key.instance.clear();
-  olh_obj.key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
+  olh_obj.key.snap_id.reset();
 
   RGWObjState *state = NULL;
   RGWObjManifest *manifest = NULL;
@@ -9645,7 +9645,7 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
   if (iter == state->attrset.end()) {
     return -EINVAL;
   }
-  if (snap_id != RGW_BUCKET_SNAP_NOSNAP) {
+  if (snap_id.is_set()) {
     iter = state->attrset.find(RGW_ATTR_OLH_SNAP_INFO);
     if (iter == state->attrset.end()) {
       return -ENOENT;

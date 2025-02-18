@@ -5525,14 +5525,14 @@ void RGWDeleteObj::execute(optional_yield y)
       }
 
       auto& obj_key = s->object->get_key();
-      if (orig_obj_key.snap_id == RGW_BUCKET_SNAP_NOSNAP &&
+      if (!orig_obj_key.snap_id.is_set() &&
           orig_obj_key.instance.empty() &&
-          obj_key.snap_id != RGW_BUCKET_SNAP_NOSNAP) {
+          obj_key.snap_id.is_set()) {
         /* no version id was specified originally so if it's a versioned bucket the request is
          * to create a delete marker. We shouldn't have snap_id set, otherwise we'll
          * try to remove that specific instance.
          */
-        obj_key.snap_id = RGW_BUCKET_SNAP_NOSNAP;
+        obj_key.snap_id.reset();
       }
 
       if (null_verid &&

@@ -237,7 +237,7 @@ struct rgw_cls_unlink_instance_op {
   uint16_t bilog_flags;
   std::string olh_tag;
   rgw_zone_set zones_trace;
-  rgw_bucket_snap_id snap_id = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id snap_id;
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
@@ -259,7 +259,7 @@ struct rgw_cls_unlink_instance_op {
     encode(bilog_flags, bl);
     encode(olh_tag, bl);
     encode(zones_trace, bl);
-    encode((uint64_t)snap_id, bl);
+    encode(snap_id, bl);
     encode(flags, bl);
     ENCODE_FINISH(bl);
   }
@@ -402,7 +402,7 @@ struct rgw_cls_list_op
   std::string filter_prefix;
   bool list_versions;
   std::string delimiter;
-  rgw_bucket_snap_id max_snap = RGW_BUCKET_NO_SNAP;
+  rgw_bucket_snap_id max_snap;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 

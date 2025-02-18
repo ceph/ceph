@@ -365,10 +365,10 @@ static void get_list_index_key(rgw_bucket_dir_entry& entry, uint64_t epoch, stri
   index_key->append(instance_delim);
   index_key->append(entry.key.instance);
 
-  if (entry.key.snap_id != RGW_BUCKET_NO_SNAP) {
+  if (entry.key.snap_id.is_set()) {
     string snap_delim("\0s", 2);
     index_key->append(snap_delim);
-    index_key->append(std::to_string(entry.key.snap_id));
+    index_key->append(entry.key.snap_id.to_string());
   }
 }
 
@@ -394,10 +394,14 @@ static void _append_obj_versioned_data_key(string *index_key, const cls_rgw_obj_
     string dm("\0d", 2);
     index_key->append(dm);
   }
-  if (key.snap_id != RGW_BUCKET_NO_SNAP) {
+  if (key.snap_id.is_set()) {
     string dm("\0s", 2);
     index_key->append(dm);
-    index_key->append(std::to_string(key.snap_id));
+
+    /* keep snapshot in index key as uint64, and have it sort from higher to lower */
+    uint64_t reverse_sid = (uint64_t)-1 - (uint64_t)key.snap_id;
+    string snap_id_s((const char *)&reverse_sid, sizeof(reverse_sid));
+    index_key->append(snap_id_s);
   }
 }
 
@@ -411,7 +415,7 @@ static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key, string *in
 static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key, bool delete_marker = false)
 {
   if (key.instance.empty() &&
-      key.snap_id == RGW_BUCKET_NO_SNAP) {
+      !key.snap_id.is_set()) {
     *index_key = key.name;
   } else {
     encode_obj_versioned_data_key(key, index_key, delete_marker);
@@ -430,7 +434,7 @@ static void encode_snap_index_key(const cls_rgw_obj_key& key, rgw_bucket_snap_id
   *index_key = BI_PREFIX_CHAR;
   index_key->append(bucket_index_prefixes[BI_BUCKET_SNAP_INDEX]);
   char buf[32];
-  snprintf(buf, sizeof(buf), "%lld_", (long long)snap_id);
+  snprintf(buf, sizeof(buf), "%lld_", (long long)snap_id.snap_id);
   index_key->append(buf);
   _append_obj_versioned_data_key(index_key, key, false);
 }
@@ -704,8 +708,8 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
-      if (op.max_snap != RGW_BUCKET_NO_SNAP) {
-        if (entry.meta.snap_id != RGW_BUCKET_NO_SNAP &&
+      if (op.max_snap.is_set()) {
+        if (entry.meta.snap_id.is_set() &&
             entry.meta.snap_id > op.max_snap) {
           CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: max_snap=%d",
                   __func__, key.name.c_str(), key.instance.c_str(),
@@ -713,7 +717,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           continue;
         }
 
-        if (op.max_snap != RGW_BUCKET_NO_SNAP) {
+        if (op.max_snap.is_set()) {
           /* make it current as it was current during the requested snapshot */
           if (entry.is_current_at_snap(op.max_snap)) {
             entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
@@ -1162,7 +1166,7 @@ static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
   int rc = read_index_entry(hctx, *idx, entry);
   if (rc == -ENOENT &&
       special_delete_marker_name && 
-      key.snap_id != RGW_BUCKET_NO_SNAP &&
+      key.snap_id.is_set() &&
       key.instance.empty()) {
     /* in the case of null objects in snapshot, we will
      * have different key if the entry is a delete_marker,
@@ -1420,7 +1424,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   __func__, escape_str(idx).c_str(), rc);
       return rc;
     }
-    if (entry.meta.snap_id != RGW_BUCKET_NO_SNAP) {
+    if (entry.meta.snap_id.is_set()) {
       rc = write_snap_entry(hctx, entry, op.key, entry.meta.snap_id);
       if (rc < 0) {
         CLS_LOG_BITX(bitx_inst, 1,
@@ -2225,7 +2229,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-  if (op.meta.snap_id != RGW_BUCKET_NO_SNAP) {
+  if (op.meta.snap_id.is_set()) {
     rgw_bucket_dir_entry next_entry;
     std::string next_idx;
     bool found;
@@ -2235,7 +2239,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
     if (found) {
       CLS_LOG(20, "next dir entry found idx=%s", escape_str(next_idx).c_str());
-      if (next_entry.meta.snap_id == RGW_BUCKET_NO_SNAP ||
+      if (!next_entry.meta.snap_id.is_set() ||
           next_entry.meta.snap_id < op.meta.snap_id) {
         obj.set_snap_skip(next_entry.meta.snap_id, next_idx);
       } else {
@@ -2334,8 +2338,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     bool instance_only = false;
     cls_rgw_obj_key key(dest_key.name);
     ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only,
-                                           RGW_BUCKET_NO_SNAP, /* demoted_at_sap: doesn't matter,
-                                                                  as we're about to remove this entry */
+                                           rgw_bucket_snap_id(), /* demoted_at_sap: doesn't matter,
+                                                                    as we're about to remove this entry */
                                            header);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
@@ -2399,7 +2403,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       // gets resharded, because this key is used for hash placement
       next_key.name = dest_key.name;
       olh.update(next_key, false);
-      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, RGW_BUCKET_NO_SNAP, false);
+      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, rgw_bucket_snap_id(), false);
       olh.set_exists(false);
       olh.set_pending_removal(true);
     }
