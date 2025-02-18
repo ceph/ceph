@@ -143,37 +143,39 @@ RGW admin command
 Upgrading root ca certificates
 ------------------------------
 
+#. Make sure that the RGW service is running.
+#. Make sure that the RGW service is up.
+#. Make sure that the RGW service has been upgraded to the latest release.
+#. From the Primary cluster on the Manager node, run the following command:
 
-To upgrade root ca certificate, make sure rgw serives is upgraded. Make sure the rgw service is up and running.
-On Primary cluster on manger node run command:
+   .. prompt:: bash #
 
-::
+      ceph orch cert-store get cert cephadm_root_ca_cert
 
-  ceph orch cert-store get cert cephadm_root_ca_cert
+#. On the node where the RGW service is running, store the certificate on the
+   following path::
 
-Store the certificate on node where rgw service is running on path
-::
+      /etc/pki/ca-trust/source/anchors/<cert_name>.crt
 
-   /etc/pki/ca-trust/source/anchors/<cert_name>.crt
+#. Verify the certificate by running the following command:
 
-Verify certificate using command:
+   .. prompt:: bash #
 
-::
+      openssl x509 -in <cert_name>.crt -noout -text
 
-  openssl x509 -in <cert_name>.crt -noout -text
+#. Perform the above steps on the MGR node and on the RGW node of all secondary
+   clusters.
 
-Perform above steps on mgr node and rgw node of secondary clusters.
+#. After the certificates have been validated on all clusters, run the
+   following command on all clusters that generate certificates: 
 
-Once certificates are validated on all the sites. Run:
+   .. prompt:: bash #
 
-::
+      update-ca-trust
 
-  update-ca-trust
+#. From the primary node, ensure that the ``curl`` command can be run by the
+   user:
 
-on all the nodes where certificates are generated.
+   .. prompt:: bash [root@primary-node]# 
 
-Check from primary node if the curl command works for the user:
-
-::
-
-  [root@ceph-pri-node-0 anchors]# curl https://<host_ip>:443
+      curl https://<host_ip>:443
