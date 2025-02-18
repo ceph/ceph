@@ -13,7 +13,7 @@ import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 export class RgwBucketDetailsComponent implements OnChanges {
   @Input()
   selection: any;
-  lifecycleProgress: string;
+  lifecycleProgress: { bucket: string; status: string; started: string };
   lifecycleProgressMap = new Map<string, { description: string; color: string }>([
     ['UNINITIAL', { description: $localize`The process has not run yet`, color: 'cool-gray' }],
     ['PROCESSING', { description: $localize`The process is currently running`, color: 'cyan' }],
@@ -27,33 +27,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   constructor(private rgwBucketService: RgwBucketService) {}
 
   ngOnChanges() {
-    if (this.selection) {
-      this.rgwBucketService.get(this.selection.bid).subscribe((bucket: object) => {
-        bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
-        this.selection = bucket;
-        if (this.lifecycleFormat === 'json' && !this.selection.lifecycle) {
-          this.selection.lifecycle = {};
-        }
-        this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
-        if (this.selection.replication?.['Rule']?.['Status']) {
-          this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
-        }
-        if (this.selection.lifecycle_progress?.length > 0) {
-          this.selection.lifecycle_progress.forEach(
-            (progress: { bucket: string; status: string; started: string }) => {
-              if (progress.bucket.includes(this.selection.bucket)) {
-                this.lifecycleProgress = progress.status;
-              }
-            }
-          );
-        }
-      });
-      this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
-        if (resp && resp.bucket_ratelimit !== undefined) {
-          this.bucketRateLimit = resp.bucket_ratelimit;
-        }
-      });
-    }
+    this.updateBucketDetails(this.extraxtDetailsfromResponse.bind(this));
   }
 
   parseXmlAcl(xml: any, bucketOwner: string): Record<string, string[]> {
@@ -89,5 +63,43 @@ export class RgwBucketDetailsComponent implements OnChanges {
       }
     });
     return data;
+  }
+
+  updateBucketDetails(cbFn: Function) {
+    if (this.selection) {
+      this.rgwBucketService.get(this.selection.bid).subscribe((bucket: object) => {
+        bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
+        this.selection = bucket;
+        cbFn();
+      });
+    }
+  }
+
+  extraxtDetailsfromResponse() {
+    this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
+    if (this.selection.replication?.['Rule']?.['Status']) {
+      this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
+    }
+    this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
+      if (resp && resp.bucket_ratelimit !== undefined) {
+        this.bucketRateLimit = resp.bucket_ratelimit;
+      }
+    });
+    this.extractLifecycleDetails();
+  }
+
+  extractLifecycleDetails() {
+    if (this.lifecycleFormat === 'json' && !this.selection.lifecycle) {
+      this.selection.lifecycle = {};
+    }
+    if (this.selection.lifecycle_progress?.length > 0) {
+      this.selection.lifecycle_progress.forEach(
+        (progress: { bucket: string; status: string; started: string }) => {
+          if (progress.bucket.includes(this.selection.bucket)) {
+            this.lifecycleProgress = progress;
+          }
+        }
+      );
+    }
   }
 }
