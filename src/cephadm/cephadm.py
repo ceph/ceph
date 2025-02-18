@@ -3271,6 +3271,8 @@ def command_set_coredump_overrides(ctx: CephadmContext) -> None:
     else:
         remove_coredump_overrides(ctx, ctx.fsid)
         systemd_unit.update_base_ceph_unit_file(ctx, ctx.fsid, limit_core_infinity=False)
+    # make sure changes to unit files and drop-ins are picked up
+    call_throws(ctx, ['systemctl', 'daemon-reload'])
 
 ##################################
 
