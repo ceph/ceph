@@ -597,13 +597,11 @@ public:
   }
 
   const_iterator find_string_key(std::string_view str) const {
-    auto ret = iter_begin();
-    for (; ret != iter_end(); ++ret) {
-     std::string s = ret->get_key();
-      if (s == str)
-        break;
+    auto iter = string_lower_bound(str);
+    if (iter.get_key() == str) {
+      return iter;
     }
-    return ret;
+    return iter_cend();
   }
 
   iterator find_string_key(std::string_view str) {
