@@ -150,6 +150,11 @@ bool rgw_sync_pipe_filter::has_tags() const
   return !tags.empty();
 }
 
+bool rgw_sync_pipe_filter::has_prefix() const
+{
+  return prefix.has_value();
+}
+
 bool rgw_sync_pipe_filter::check_tags(const std::vector<string>& _tags) const
 {
   if (tags.empty()) {
