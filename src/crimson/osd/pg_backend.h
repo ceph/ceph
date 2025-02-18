@@ -62,7 +62,7 @@ public:
       ::crimson::osd::IOInterruptCondition, T>;
   using rep_op_ret_t = 
     std::tuple<interruptible_future<>,
-	       interruptible_future<crimson::osd::acked_peers_t>>;
+	       interruptible_future<>>;
   using rep_op_fut_t = interruptible_future<rep_op_ret_t>;
   PGBackend(shard_id_t shard, CollectionRef coll,
             crimson::osd::ShardServices &shard_services,
