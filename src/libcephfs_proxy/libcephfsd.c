@@ -40,6 +40,12 @@ typedef struct _proxy {
 typedef int32_t (*proxy_handler_t)(proxy_client_t *, proxy_req_t *,
 				   const void *data, int32_t data_size);
 
+typedef struct _proxy_async_io {
+	struct ceph_ll_io_info io_info;
+	struct iovec iov;
+	proxy_async_t *async;
+} proxy_async_io_t;
+
 /* This is used for requests that are not associated with a cmount. */
 static proxy_random_t global_random;
 
@@ -1493,6 +1499,113 @@ static int32_t libcephfsd_mount_perms(proxy_client_t *client, proxy_req_t *req,
 	return CEPH_COMPLETE(client, err, ans);
 }
 
+static void libcephfsd_ll_nonblocking_rw_cbk(struct ceph_ll_io_info *cb_info)
+{
+	CEPH_CBK(ceph_ll_nonblocking_readv_writev, cbk, 1);
+	proxy_async_io_t *async_io;
+	proxy_async_t *async;
+	int32_t err;
+
+	async_io = container_of(cb_info, proxy_async_io_t, io_info);
+	async = async_io->async;
+
+	cbk.info = (uintptr_t)cb_info->priv;
+	cbk.res = cb_info->result;
+
+	if ((cbk.res >= 0) && !cb_info->write) {
+		CEPH_BUFF_ADD(cbk, cb_info->iov->iov_base, cbk.res);
+	}
+
+	err = CEPH_CALL_CBK(async->fd, LIBCEPHFSD_CBK_LL_NONBLOCKING_RW, cbk);
+	if (err < 0) {
+		proxy_log(LOG_ERR, -err,
+			  "Failed to send nonblocking rw completion "
+			  "notification");
+	}
+
+	if (!cb_info->write) {
+		proxy_free(cb_info->iov->iov_base);
+	}
+
+	proxy_free(async_io);
+}
+
+static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
+					    proxy_req_t *req,
+					    const void *data, int32_t data_size)
+{
+	CEPH_DATA(ceph_ll_nonblocking_readv_writev, ans, 0);
+	struct ceph_ll_io_info *io_info;
+	proxy_mount_t *mount;
+	proxy_async_io_t *async_io;
+	int64_t res;
+	int32_t err;
+
+	if ((client->neg.v1.enabled & PROXY_FEAT_ASYNC_IO) == 0) {
+		return -EOPNOTSUPP;
+	}
+
+	err = ptr_check(&client->random, req->ll_nonblocking_rw.cmount,
+			(void **)&mount);
+	if (err < 0) {
+		goto done;
+	}
+
+	async_io = proxy_malloc(sizeof(proxy_async_io_t));
+	if (async_io == NULL) {
+		err = -ENOMEM;
+		goto done;
+	}
+	io_info = &async_io->io_info;
+
+	io_info->callback = libcephfsd_ll_nonblocking_rw_cbk;
+	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_rw.info;
+	io_info->iov = &async_io->iov;
+	io_info->iovcnt = 1;
+	io_info->off = req->ll_nonblocking_rw.off;
+	io_info->result = 0;
+	io_info->write = req->ll_nonblocking_rw.write;
+	io_info->fsync = req->ll_nonblocking_rw.fsync;
+	io_info->syncdataonly = req->ll_nonblocking_rw.syncdataonly;
+
+	err = ptr_check(&client->random, req->ll_nonblocking_rw.fh,
+			(void **)&io_info->fh);
+	if (err < 0) {
+		goto done;
+	}
+
+	if (io_info->write) {
+		async_io->iov.iov_len = data_size;
+		async_io->iov.iov_base = (void *)data;
+	} else {
+		async_io->iov.iov_len = req->ll_nonblocking_rw.size;
+		async_io->iov.iov_base = proxy_malloc(async_io->iov.iov_len);
+		if (async_io->iov.iov_base == NULL) {
+			proxy_free(async_io);
+			err = -ENOMEM;
+			goto done;
+		}
+	}
+
+	async_io->async = &client->async;
+
+	res = ceph_ll_nonblocking_readv_writev(proxy_cmount(mount), io_info);
+	TRACE("ceph_ll_nonblocking_readv_writev(%p) -> %ld", mount, res);
+
+	ans.res = res;
+	if (res < 0) {
+		if (!io_info->write) {
+			proxy_free(async_io->iov.iov_base);
+		}
+		proxy_free(async_io);
+	}
+
+	err = 0;
+
+done:
+	return CEPH_COMPLETE(client, err, ans);
+}
+
 static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_VERSION] = libcephfsd_version,
 	[LIBCEPHFSD_OP_USERPERM_NEW] = libcephfsd_userperm_new,
@@ -1541,6 +1654,7 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_LL_RMDIR] = libcephfsd_ll_rmdir,
 	[LIBCEPHFSD_OP_LL_RELEASEDIR] = libcephfsd_ll_releasedir,
 	[LIBCEPHFSD_OP_MOUNT_PERMS] = libcephfsd_mount_perms,
+	[LIBCEPHFSD_OP_LL_NONBLOCKING_RW] = libcephfsd_ll_nonblocking_rw,
 };
 
 static void serve_binary(proxy_client_t *client)
