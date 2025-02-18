@@ -197,7 +197,7 @@ TEST(LibCephFS, LayoutSetBadJSON) {
       "\"pool_name\": \"cephfs.a.data\", "
       "}";
     // try to set a malformed JSON, eg. without an open brace
-    ASSERT_EQ(-CEPHFS_EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.json", (void*)new_layout, strlen(new_layout), XATTR_CREATE));
+    ASSERT_EQ(-EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.json", (void*)new_layout, strlen(new_layout), XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -219,7 +219,7 @@ TEST(LibCephFS, LayoutSetBadPoolName) {
 
   {
     // try setting a bad pool name
-    ASSERT_EQ(-CEPHFS_EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_name", (void*)"UglyPoolName", 12, XATTR_CREATE));
+    ASSERT_EQ(-EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_name", (void*)"UglyPoolName", 12, XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -241,7 +241,7 @@ TEST(LibCephFS, LayoutSetBadPoolId) {
 
   {
     // try setting a bad pool id
-    ASSERT_EQ(-CEPHFS_EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_id", (void*)"300", 3, XATTR_CREATE));
+    ASSERT_EQ(-EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_id", (void*)"300", 3, XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -263,7 +263,7 @@ TEST(LibCephFS, LayoutSetInvalidFieldName) {
 
   {
     // try to set in invalid field
-    ASSERT_EQ(-CEPHFS_ENODATA, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.bad_field", (void*)"300", 3, XATTR_CREATE));
+    ASSERT_EQ(-ENODATA, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.bad_field", (void*)"300", 3, XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -433,12 +433,12 @@ TEST(LibCephFS, Removexattr) {
   ASSERT_GT(fd, 0);
 
   // remove xattr
-  ASSERT_EQ(-CEPHFS_ENODATA, ceph_fremovexattr(cmount, fd, "user.remove.xattr"));
+  ASSERT_EQ(-ENODATA, ceph_fremovexattr(cmount, fd, "user.remove.xattr"));
   ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.remove.xattr", "foo", 3, XATTR_CREATE));
   ASSERT_EQ(0, ceph_fremovexattr(cmount, fd, "user.remove.xattr"));
 
   // remove xattr via setxattr & XATTR_REPLACE
-  ASSERT_EQ(-CEPHFS_ENODATA, ceph_fsetxattr(cmount, fd, "user.remove.xattr", nullptr, 0, XATTR_REPLACE));
+  ASSERT_EQ(-ENODATA, ceph_fsetxattr(cmount, fd, "user.remove.xattr", nullptr, 0, XATTR_REPLACE));
   ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.remove.xattr", "foo", 3, XATTR_CREATE));
   ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.remove.xattr", nullptr, 0, XATTR_REPLACE));
 

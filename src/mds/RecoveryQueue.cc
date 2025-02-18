@@ -190,7 +190,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 
   if (r != 0) {
     dout(0) << "recovery error! " << r << dendl;
-    if (r == -CEPHFS_EBLOCKLISTED) {
+    if (r == -EBLOCKLISTED) {
       mds->respawn();
       return;
     } else {
