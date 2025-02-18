@@ -68,7 +68,7 @@ public:
   }
 };
 
-int RGWLogSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+int RGWLogSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance) {
   string prefix = config["prefix"];
   instance->reset(new RGWLogSyncModuleInstance(prefix));
   return 0;

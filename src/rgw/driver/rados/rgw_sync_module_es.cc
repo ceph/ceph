@@ -951,7 +951,7 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   return new RGWRESTMgr_MDSearch_S3();
 }
 
-int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance) {
   string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;
