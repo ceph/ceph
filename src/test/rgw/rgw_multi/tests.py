@@ -1038,6 +1038,8 @@ def test_delete_marker_full_sync():
         # create a delete marker
         key2 = new_key(zone, bucket, 'obj')
         key2.delete()
+        key2.delete()
+        key2.delete()
 
     # wait for full sync
     for _, bucket in zone_bucket:
@@ -1062,10 +1064,39 @@ def test_suspended_delete_marker_full_sync():
         # create a delete marker
         key2 = new_key(zone, bucket, 'obj')
         key2.delete()
+        key2.delete()
+        key2.delete()
 
     # wait for full sync
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_concurrent_delete_markers_incremental_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    bucket.configure_versioning(True)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    obj = 'obj'
+
+    # upload a dummy object and wait for sync. this forces each zone to finish
+    # a full sync and switch to incremental
+    new_key(zone, bucket, obj).set_contents_from_string('')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # create several concurrent delete markers on each zone and let them race to sync
+    for i in range(2):
+        for zone_conn in zonegroup_conns.rw_zones:
+            key = new_key(zone_conn, bucket, obj)
+            key.delete()
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
