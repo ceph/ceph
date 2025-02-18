@@ -3065,7 +3065,7 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 // incoming messages
 
 
-bool Client::ms_dispatch2(const MessageRef &m)
+Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
 {
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   if (!iref_reader.is_state_satisfied()) {

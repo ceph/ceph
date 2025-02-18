@@ -273,7 +273,7 @@ public:
 	       LogChannelRef auditcl);
   ~DaemonServer() override;
 
-  bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const ceph::ref_t<Message>& m) override;
   bool ms_handle_fast_authentication(Connection *con) override;
   void ms_handle_accept(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;

@@ -402,7 +402,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
   }
 }
 
-bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
   dout(10) << state_str() << " " << *m << dendl;
