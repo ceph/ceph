@@ -1179,7 +1179,7 @@ public:
       std::move(ic),
       std::forward<OpFunc>(opfunc),
       std::forward<Params>(params)...
-    ).template handle_interruption(std::move(efunc));
+    ).handle_interruption(std::move(efunc));
   }
 
   template <typename OpFunc, typename OnInterrupt,

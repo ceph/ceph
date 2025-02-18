@@ -4,8 +4,10 @@ set(libcephfs_proxy_srcs libcephfs_proxy.c ${proxy_common_srcs})
 
 add_executable(libcephfsd ${libcephfsd_srcs})
 add_library(cephfs_proxy ${CEPH_SHARED} ${libcephfs_proxy_srcs})
+target_compile_options(cephfs_proxy PRIVATE "-Wno-gnu-pointer-arith")
 
 target_link_libraries(libcephfsd cephfs ${CRYPTO_LIBS})
+target_compile_options(libcephfsd PRIVATE "-Wno-gnu-pointer-arith")
 
 if(ENABLE_SHARED)
   set_target_properties(cephfs_proxy PROPERTIES
