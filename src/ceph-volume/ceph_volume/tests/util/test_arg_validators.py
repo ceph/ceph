@@ -2,7 +2,7 @@ import argparse
 import pytest
 from ceph_volume import exceptions, process
 from ceph_volume.util import arg_validators
-from mock.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 
 class TestOSDPath(object):

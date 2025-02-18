@@ -1,5 +1,5 @@
 import pytest
-from mock.mock import patch, Mock, call
+from unittest.mock import patch, Mock, call
 from ceph_volume.objectstore.baseobjectstore import BaseObjectStore
 from ceph_volume.util import system
 

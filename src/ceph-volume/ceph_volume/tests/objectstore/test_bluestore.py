@@ -1,4 +1,4 @@
-from mock import patch, Mock
+from unittest.mock import patch, Mock
 from ceph_volume.objectstore.bluestore import BlueStore
 
 
