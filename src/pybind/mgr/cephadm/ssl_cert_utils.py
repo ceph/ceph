@@ -137,7 +137,6 @@ class SSLCerts:
         root_public_key = self.root_key.public_key()
         root_builder = x509.CertificateBuilder()
         root_ca_name = x509.Name([
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Ceph"),
             x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
         ])
         root_builder = root_builder.subject_name(root_ca_name)
@@ -199,7 +198,6 @@ class SSLCerts:
 
         builder = x509.CertificateBuilder()
         root_ca_name = x509.Name([
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Ceph"),
             x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'),
         ])
         builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
