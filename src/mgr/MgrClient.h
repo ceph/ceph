@@ -116,7 +116,7 @@ public:
 
   void set_mgr_optional(bool optional_) {mgr_optional = optional_;}
 
-  bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const ceph::ref_t<Message>& m) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;

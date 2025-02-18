@@ -736,11 +736,17 @@ public:
    */
   void ms_deliver_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
+    bool acked = false;
     for ([[maybe_unused]] const auto& [priority, dispatcher] : dispatchers) {
-      if (dispatcher->ms_dispatch2(m)) {
+      auto r = Dispatcher::fold_dispatch_result(dispatcher->ms_dispatch2(m));
+      if (std::holds_alternative<Dispatcher::HANDLED>(r)) {
         return;
+      } else if (std::holds_alternative<Dispatcher::ACKNOWLEDGED>(r)) {
+        acked = true;
       }
     }
+    if (acked)
+      return;
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);

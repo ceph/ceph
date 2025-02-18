@@ -194,7 +194,7 @@ public:
 
   void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now, bufferlist &bl);
   void revoke_client_leases(SimpleLock *lock);
-  static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
+  void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 
 protected:
   void send_lock_message(SimpleLock *lock, int msg);

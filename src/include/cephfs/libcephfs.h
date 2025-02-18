@@ -319,6 +319,17 @@ int ceph_mount(struct ceph_mount_info *cmount, const char *root);
  */
 int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount);
 
+typedef void (*libcephfs_c_completion_t)(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud);
+
+int ceph_mds_command2(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    int one_shot,
+    libcephfs_c_completion_t c,
+    void* ud);
+
 /**
  * Execute a management command remotely on an MDS.
  *

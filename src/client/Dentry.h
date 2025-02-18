@@ -94,7 +94,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  friend std::ostream &operator<<(std::ostream &oss, const Dentry &Dentry);
+  void print(std::ostream&) const;
 
   Dir	   *dir;
   const std::string name;

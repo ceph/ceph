@@ -315,6 +315,9 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.get_inode()->get_quiesce_block()) {
     out << " qblock";
   }
+  if (in.get_inode()->optmetadata.size() > 0) {
+    out << " " << in.get_inode()->optmetadata;
+  }
 
   out << " " << &in;
   out << "]";
@@ -2161,7 +2164,7 @@ void CInode::decode_lock_iflock(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ipolicy(bufferlist& bl)
 {
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   if (is_dir()) {
     encode(get_inode()->version, bl);
     encode(get_inode()->ctime, bl);
@@ -2170,8 +2173,10 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
     encode(get_inode()->export_pin, bl);
     encode(get_inode()->flags, bl);
     encode(get_inode()->export_ephemeral_random_pin, bl);
+    encode(get_inode()->optmetadata, bl);
   } else {
     encode(get_inode()->flags, bl);
+    encode(get_inode()->optmetadata, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2180,7 +2185,7 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(3, p);
+  DECODE_START(4, p);
   if (is_dir()) {
     decode(_inode->version, p);
     utime_t tm;
@@ -2194,9 +2199,15 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
       decode(_inode->flags, p);
       decode(_inode->export_ephemeral_random_pin, p);
     }
+    if (struct_v >= 4) {
+      decode(_inode->optmetadata, p);
+    }
   } else {
     if (struct_v >= 3) {
       decode(_inode->flags, p);
+    }
+    if (struct_v >= 4) {
+      decode(_inode->optmetadata, p);
     }
   }
   DECODE_FINISH(p);
@@ -3945,7 +3956,24 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   } else {
     xattr_version = 0;
   }
-  
+
+  bufferlist optmdbl;
+  {
+    decltype(InodeStat::optmetadata) optmetadata;
+    using kind_t = decltype(optmetadata)::optkind_t;
+
+    auto* csp = get_charmap();
+    if (csp) {
+      dout(25) << *csp << dendl;
+      auto& opt = optmetadata.get_or_create_opt(kind_t::CHARMAP);
+      auto& cs = opt.template get_meta< charmap_md_t >();
+      cs = *csp;
+      dout(25) << "cs now " << cs << dendl;
+    }
+
+    encode(optmetadata, optmdbl);
+  }
+
   // do we have room?
   if (max_bytes) {
     unsigned bytes =
@@ -3956,7 +3984,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) + // dirstat.nfiles ~ rstat.rctime
       sizeof(__u32) + sizeof(__u32) * 2 * dirfragtree._splits.size() + // dirfragtree
       sizeof(__u32) + symlink.length() + // symlink
-      sizeof(struct ceph_dir_layout); // dir_layout
+      sizeof(struct ceph_dir_layout) // dir_layout
+      + 4 + file_i->fscrypt_auth.size() // len + data
+      + 4 + file_i->fscrypt_file.size() // len + data
+      + optmdbl.length()
+      ;
 
     if (xattr_version) {
       bytes += sizeof(__u32) + sizeof(__u32); // xattr buffer len + number entries
@@ -4110,7 +4142,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(std::tuple{
       oi->ino,
       snapid,
@@ -4162,6 +4194,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(!file_i->fscrypt_auth.empty(), bl);
     encode(file_i->fscrypt_auth, bl);
     encode(file_i->fscrypt_file, bl);
+    encode_nohead(optmdbl, bl);
+    // encode inodestat
     ENCODE_FINISH(bl);
   }
   else {
@@ -5536,6 +5570,16 @@ void CInode::set_export_pin(mds_rank_t rank)
   ceph_assert(is_dir());
   _get_projected_inode()->export_pin = rank;
   maybe_export_pin(true);
+}
+
+charmap_md_t<mempool::mds_co::pool_allocator> const* CInode::get_charmap() const
+{
+  dout(25) << __func__ << ": " << *this << dendl;
+  auto const& pi = get_projected_inode();
+  if (pi->has_charmap()) {
+    return &pi->get_charmap();
+  }
+  return nullptr;
 }
 
 mds_rank_t CInode::get_export_pin(bool inherit) const

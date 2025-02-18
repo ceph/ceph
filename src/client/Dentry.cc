@@ -27,7 +27,17 @@ void Dentry::dump(Formatter *f) const
   f->dump_int("cap_shared_gen", cap_shared_gen);
 }
 
-std::ostream &operator<<(std::ostream &oss, const Dentry &dn)
+void Dentry::print(std::ostream& os) const
 {
-  return oss << dn.dir->parent_inode->vino() << "[\"" << dn.name << "\"]";
+  os << dir->parent_inode->vino() << "[\"" << name << "\" altn=" << binstrprint(alternate_name, 16) << "]";
+}
+
+void intrusive_ptr_add_ref(Dentry* dn)
+{
+  dn->get();
+}
+
+void intrusive_ptr_release(Dentry* dn)
+{
+  dn->put();
 }
