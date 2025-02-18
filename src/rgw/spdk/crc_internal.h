@@ -6,7 +6,9 @@
 #ifndef SPDK_CRC_INTERNAL_H
 #define SPDK_CRC_INTERNAL_H
 
+#if 0
 #include "spdk/config.h"
+#endif
 
 #ifdef SPDK_CONFIG_ISAL
 #define SPDK_HAVE_ISAL
