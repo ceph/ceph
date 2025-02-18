@@ -25,15 +25,17 @@
 #  include "include/libcephsqlite.h"
 #endif
 
-#include "mgr/MgrContext.h"
-
-#include "DaemonServer.h"
-#include "messages/MMgrDigest.h"
+#include "mds/FSMap.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
-#include "messages/MLog.h"
-#include "messages/MServiceMap.h"
+#include "messages/MFSMap.h"
 #include "messages/MKVData.h"
+#include "messages/MLog.h"
+#include "messages/MMgrDigest.h"
+#include "messages/MServiceMap.h"
+
+#include "MgrContext.h"
+#include "DaemonServer.h"
 #include "PyModule.h"
 #include "Mgr.h"
 
@@ -576,7 +578,7 @@ void Mgr::handle_mon_map()
   daemon_state.cull("mon", names_exist);
 }
 
-bool Mgr::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t Mgr::ms_dispatch2(const ref_t<Message>& m)
 {
   dout(10) << *m << dendl;
   std::lock_guard l(lock);
@@ -584,16 +586,16 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
   switch (m->get_type()) {
     case MSG_MGR_DIGEST:
       handle_mgr_digest(ref_cast<MMgrDigest>(m));
-      break;
+      return Dispatcher::HANDLED();
     case CEPH_MSG_MON_MAP:
       /* MonClient passthrough of MonMap to us */
       handle_mon_map(); /* use monc's monmap */
       py_module_registry->notify_all("mon_map", "");
-      break;
+      return Dispatcher::ACKNOWLEDGED();
     case CEPH_MSG_FS_MAP:
       handle_fs_map(ref_cast<MFSMap>(m));
       py_module_registry->notify_all("fs_map", "");
-      return false; // I shall let this pass through for Client
+      return Dispatcher::ACKNOWLEDGED();
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
       py_module_registry->notify_all("osd_map", "");
@@ -601,14 +603,14 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
       objecter->maybe_request_map();
-      break;
+      return Dispatcher::ACKNOWLEDGED();
     case MSG_SERVICE_MAP:
       handle_service_map(ref_cast<MServiceMap>(m));
       //no users: py_module_registry->notify_all("service_map", "");
-      break;
+      return Dispatcher::ACKNOWLEDGED();
     case MSG_LOG:
       handle_log(ref_cast<MLog>(m));
-      break;
+      return Dispatcher::HANDLED();
     case MSG_KV_DATA:
       {
 	auto msg = ref_cast<MKVData>(m);
@@ -645,12 +647,10 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
 	  }
 	}
       }
-      break;
-
+      return Dispatcher::HANDLED();
     default:
-      return false;
+      return Dispatcher::UNHANDLED();
   }
-  return true;
 }
 
 
