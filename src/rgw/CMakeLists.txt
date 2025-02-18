@@ -19,6 +19,11 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   message("-- arrow flight is installed")
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(CEPH_HAVE_ISAL)
+  message("-- building RGW with ISA-L support")
+  add_definitions(-DSPDK_CONFIG_ISAL)
+endif()
+
 function(gperf_generate input output)
   add_custom_command(
     OUTPUT ${output}
@@ -57,6 +62,7 @@ set(librgw_common_srcs
   services/svc_user_rados.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
+  spdk/crc64.c
   rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
