@@ -20,9 +20,9 @@
                    type="text"
                    formControlName="user_id"
                    [readonly]="editing">
-              <span class="invalid-feedback"
-                    *ngIf="userForm.showError('user_id', frm, 'required')"
-                    i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('user_id', frm, 'required')"
+                  i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('user_id', frm, 'pattern')"
                   i18n>The value is not valid.</span>
@@ -32,22 +32,22 @@
           </div>
         </div>
 
-          <!-- Show Tenant -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="show_tenant"
-                       type="checkbox"
-                       (click)="updateFieldsWhenTenanted()"
-                       formControlName="show_tenant"
-                       [readonly]="true">
-                <label class="custom-control-label"
-                       for="show_tenant"
-                       i18n>Show Tenant</label>
-              </div>
+        <!-- Show Tenant -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="show_tenant"
+                     type="checkbox"
+                     (click)="updateFieldsWhenTenanted()"
+                     formControlName="show_tenant"
+                     [readonly]="true">
+              <label class="custom-control-label spacing-03"
+                     for="show_tenant"
+                     i18n>Show Tenant</label>
             </div>
           </div>
+        </div>
 
         <!-- Tenant -->
         <div class="form-group row"
@@ -156,7 +156,7 @@
                      id="suspended"
                      type="checkbox"
                      formControlName="suspended">
-              <label class="custom-control-label"
+              <label class="custom-control-label spacing-03"
                      for="suspended"
                      i18n>Suspended</label>
               <cd-helper i18n>Suspending the user disables the user and subuser.</cd-helper>
@@ -172,10 +172,11 @@
                      id="system"
                      type="checkbox"
                      formControlName="system">
-              <label class="custom-control-label"
+              <label class="custom-control-label spacing-03"
                      for="system"
                      i18n>System user</label>
-              <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform administrative tasks, manage buckets and objects</cd-helper>
+              <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform
+                administrative tasks, manage buckets and objects</cd-helper>
             </div>
           </div>
         </div>
@@ -192,7 +193,7 @@
                        id="generate_key"
                        type="checkbox"
                        formControlName="generate_key">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="generate_key"
                        i18n>Auto-generate key</label>
               </div>
@@ -245,7 +246,8 @@
               </div>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('secret_key', frm, 'required')"
-                    i18n>This field is required.</span>
+                    i18n>This field
+                is required.</span>
             </div>
           </div>
         </fieldset>
@@ -478,7 +480,7 @@
                        id="user_quota_enabled"
                        type="checkbox"
                        formControlName="user_quota_enabled">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="user_quota_enabled"
                        i18n>Enabled</label>
               </div>
@@ -494,7 +496,7 @@
                        id="user_quota_max_size_unlimited"
                        type="checkbox"
                        formControlName="user_quota_max_size_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="user_quota_max_size_unlimited"
                        i18n>Unlimited size</label>
               </div>
@@ -534,7 +536,7 @@
                        id="user_quota_max_objects_unlimited"
                        type="checkbox"
                        formControlName="user_quota_max_objects_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="user_quota_max_objects_unlimited"
                        i18n>Unlimited objects</label>
               </div>
@@ -575,7 +577,7 @@
                        id="bucket_quota_enabled"
                        type="checkbox"
                        formControlName="bucket_quota_enabled">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="bucket_quota_enabled"
                        i18n>Enabled</label>
               </div>
@@ -591,7 +593,7 @@
                        id="bucket_quota_max_size_unlimited"
                        type="checkbox"
                        formControlName="bucket_quota_max_size_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="bucket_quota_max_size_unlimited"
                        i18n>Unlimited size</label>
               </div>
@@ -631,7 +633,7 @@
                        id="bucket_quota_max_objects_unlimited"
                        type="checkbox"
                        formControlName="bucket_quota_max_objects_unlimited">
-                <label class="custom-control-label"
+                <label class="custom-control-label spacing-03"
                        for="bucket_quota_max_objects_unlimited"
                        i18n>Unlimited objects</label>
               </div>
@@ -655,10 +657,20 @@
                     i18n>This field is required.</span>
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'min')"
-                    i18n>The entered value must be >= 0.</span>
+                    i18n>Enter a positive number.</span>
             </div>
           </div>
         </fieldset>
+
+      <!-- Advanced Section -->
+      <cd-form-advanced-fieldset>
+        <!-- User Rate Limit -->
+        <cd-rgw-rate-limit [type]="'user'"
+                           [isEditing]="this.editing"
+                           [id]="uid"
+                           (rateLimitFormGroup)="rateLimitFormInit($event)">
+        </cd-rgw-rate-limit>
+      </cd-form-advanced-fieldset>
       </div>
 
       <div class="card-footer">
