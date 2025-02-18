@@ -9013,13 +9013,16 @@ paths:
                   description: RBD image name
                   type: string
                 rbd_image_size:
-                  default: 1024
                   description: RBD image size
                   type: integer
                 rbd_pool:
                   default: rbd
                   description: RBD pool name
                   type: string
+                size:
+                  default: 1024
+                  description: RBD image size
+                  type: integer
               required:
               - rbd_image_name
               type: object
