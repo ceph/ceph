@@ -321,6 +321,7 @@ class StoreObject : public Object {
     virtual Attrs& get_attrs(void) override { return state.attrset; }
     virtual const Attrs& get_attrs(void) const override { return state.attrset; }
     virtual int set_attrs(Attrs a) override { state.attrset = a; state.has_attrs = true; return 0; }
+    virtual int set_cloud_expiry_days(const DoutPrefixProvider* dpp, optional_yield y, std::optional<uint64_t> modified_days) override { return 0; }
     virtual bool has_attrs(void) override { return state.has_attrs; }
     virtual bool get_attr(const std::string& name, bufferlist &dest) override {
       if (!has_attrs())
