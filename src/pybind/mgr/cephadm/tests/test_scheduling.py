@@ -1753,3 +1753,515 @@ def test_placement_regex_host_pattern(service_type, placement, hosts, expected_a
         daemons=[],
     ).place()
     assert sorted([h.hostname for h in to_add]) == expected_add
+
+
+# Test count-per-label from point where no daemons have been deployed yet
+class CountPerLabelPlacementTestClean(NamedTuple):
+    candidate_hosts: List[HostSpec]
+    labels: List[str]
+    count_per_label: int
+    success: bool
+
+
+@pytest.mark.parametrize("candidate_hosts, labels, count_per_label, success",
+                         [
+                             CountPerLabelPlacementTestClean(
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '2']),
+                                     HostSpec(hostname='B', labels=['2', '4', '5']),
+                                     HostSpec(hostname='C', labels=['2', '3', '5']),
+                                     HostSpec(hostname='D', labels=['2', '4']),
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='F', labels=['2', '3', '4']),
+                                 ],
+                                 ['1', '2', '4'],
+                                 2,
+                                 True,
+                             ),
+                             CountPerLabelPlacementTestClean(
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '2', '4']),
+                                     HostSpec(hostname='B', labels=['2', '4', '5']),
+                                     HostSpec(hostname='C', labels=['2', '3', '5']),
+                                     HostSpec(hostname='D', labels=['2', '4']),
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='E', labels=['2', '3', '4']),
+                                 ],
+                                 ['3', '4'],
+                                 3,
+                                 True,
+                             ),
+                             CountPerLabelPlacementTestClean(
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '2']),
+                                     HostSpec(hostname='B', labels=['2', '4', '5']),
+                                     HostSpec(hostname='C', labels=['2', '3', '5']),
+                                     HostSpec(hostname='D', labels=['2', '4']),
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='E', labels=['2', '3', '4']),
+                                 ],
+                                 ['3', '4'],
+                                 3,
+                                 False,
+                             ),
+                         ])
+def test_placement_count_per_label_clean(candidate_hosts, labels, count_per_label, success):
+    h = HostAssignment(
+        spec=ServiceSpec(service_type='mon'),
+        hosts=[],
+        unreachable_hosts=[],
+        draining_hosts=[],
+        daemons=[]
+    )
+    if success:
+        label_mapping, _ = h.generate_count_per_label_placement(
+            candidate_hosts=candidate_hosts,
+            labels=labels,
+            count_per_label=count_per_label,
+            known_daemon_hosts=[]
+        )
+        assert all(len(hosts) == count_per_label for hosts in label_mapping.values())
+    else:
+        with pytest.raises(OrchestratorValidationError):
+            label_mapping, _ = h.generate_count_per_label_placement(
+                candidate_hosts=candidate_hosts,
+                labels=labels,
+                count_per_label=count_per_label,
+                known_daemon_hosts=[],
+            )
+
+
+# Test count-per-label from point where daemons have already been deployed
+class CountPerLabelPlacementTestDirty(NamedTuple):
+    candidate_hosts: List[HostSpec]
+    known_daemon_hosts: List[HostSpec]
+    labels: List[str]
+    count_per_label: int
+    success: bool
+    # hosts we expect should be in the final placement. Note this is not
+    # necessarily including every host we will pick since there is some
+    # degree of randomness.
+    required_hosts: List[str]
+
+
+@pytest.mark.parametrize("candidate_hosts, known_daemon_hosts, labels, count_per_label, success, required_hosts",
+                         [
+                             CountPerLabelPlacementTestDirty(
+                                 [
+                                     HostSpec(hostname='B', labels=['2', '4', '5']),
+                                     HostSpec(hostname='C', labels=['2', '3', '5']),
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='F', labels=['2', '3', '4']),
+                                 ],
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '2']),
+                                     HostSpec(hostname='D', labels=['2', '4'])
+                                 ],
+                                 ['1', '2'],
+                                 2,
+                                 True,
+                                 ['A', 'D', 'E']
+                             ),
+                             CountPerLabelPlacementTestDirty(
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '2']),
+                                     HostSpec(hostname='B', labels=['2', '4', '5']),
+                                     HostSpec(hostname='C', labels=['2', '3', '5']),
+                                     HostSpec(hostname='D', labels=['2', '4']),
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='F', labels=['2', '3', '4']),
+                                 ],
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '2']),
+                                     HostSpec(hostname='D', labels=['2', '4']),
+                                 ],
+                                 ['1', '2'],
+                                 2,
+                                 True,
+                                 ['A', 'D', 'E']
+                             ),
+                             CountPerLabelPlacementTestDirty(
+                                 [
+                                     HostSpec(hostname='A', labels=['1', '3']),
+                                     HostSpec(hostname='B', labels=['2', '3', '5']),
+                                     HostSpec(hostname='C', labels=['2', '3', '5']),
+                                     HostSpec(hostname='D', labels=['2', '4']),
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='F', labels=['2', '3', '4']),
+                                 ],
+                                 [
+                                     HostSpec(hostname='E', labels=['1', '3', '5']),
+                                     HostSpec(hostname='F', labels=['2', '3', '4'])
+                                 ],
+                                 ['3'],
+                                 3,
+                                 True,
+                                 ['E', 'F']
+                             ),
+                             CountPerLabelPlacementTestDirty(
+                                 [
+                                     HostSpec(hostname='A', labels=['3']),
+                                     HostSpec(hostname='B', labels=['3']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='F', labels=['3']),
+                                 ],
+                                 [
+                                     HostSpec(hostname='D', labels=['2']),
+                                     HostSpec(hostname='E', labels=['1', '2']),
+                                 ],
+                                 ['1', '2'],
+                                 2,
+                                 False,
+                                 []
+                             ),
+                             CountPerLabelPlacementTestDirty(
+                                 [
+                                     HostSpec(hostname='B', labels=['1']),
+                                 ],
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['1', '2']),
+                                 ],
+                                 ['1'],
+                                 2,
+                                 True,
+                                 []
+                             ),
+                             CountPerLabelPlacementTestDirty(
+                                 [],
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['1']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['1', '2']),
+                                     HostSpec(hostname='E', labels=['1']),
+                                 ],
+                                 ['1'],
+                                 3,
+                                 True,
+                                 []
+                             ),
+                         ])
+def test_placement_count_per_label_dirty(
+    candidate_hosts,
+    known_daemon_hosts,
+    labels,
+    count_per_label,
+    success,
+    required_hosts
+):
+    h = HostAssignment(
+        spec=ServiceSpec(service_type='mon'),
+        hosts=[],
+        unreachable_hosts=[],
+        draining_hosts=[],
+        daemons=[]
+    )
+    if success:
+        label_mapping, already_present_label_mapping = h.generate_count_per_label_placement(
+            candidate_hosts=candidate_hosts,
+            labels=labels,
+            count_per_label=count_per_label,
+            known_daemon_hosts=known_daemon_hosts,
+        )
+        # merge lists of hosts
+        hosts = []
+        already_present_hosts = []
+        for host_list in label_mapping.values():
+            hosts.extend(host_list)
+        for host_list in already_present_label_mapping.values():
+            already_present_hosts.extend(host_list)
+        hostnames = [host.hostname for host in hosts]
+        already_present_hostnames = [host.hostname for host in already_present_hosts]
+        # already present hosts should not be in the return as we are
+        # building a "to add" list, not an overall list of hosts that
+        # should have daemons
+        assert all(hostname not in hostnames for hostname in known_daemon_hosts)
+        # make sure the correct number of hosts were selected overall
+        if ((len(labels) * count_per_label) - len(known_daemon_hosts)) < 0:
+            # test was supposed to remove daemons. Instead of checking the
+            # set of to_add hosts, check that the number of hosts in the
+            # already_present_label_mapping is the expected number of total hosts
+            assert len(already_present_hostnames) == (len(labels) * count_per_label)
+        else:
+            # wanted to add daemons. Verify the "to add" list + the "existing" list is the right size
+            assert len(hosts + already_present_hosts) == (len(labels) * count_per_label)
+        # make sure we got the right number of hosts for each label.
+        for label in labels:
+            assert (len(label_mapping[label]) + len(already_present_label_mapping[label])) == count_per_label
+    else:
+        with pytest.raises(OrchestratorValidationError):
+            label_mapping, already_present_label_mapping = h.generate_count_per_label_placement(
+                candidate_hosts=candidate_hosts,
+                labels=labels,
+                count_per_label=count_per_label,
+                known_daemon_hosts=known_daemon_hosts,
+            )
+
+
+class MultiLabelFullPlacementTest(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[HostSpec]
+    daemons: List[DaemonDescription]
+    # there is some randomness to what hosts get added/removed
+    # due to the use of count-per-label. To test, we're splitting
+    # the add/remove checks into "expected" hosts which must be
+    # getting added/removed and "possible" hosts that could be
+    # getting added/removed + an integer to track how many of
+    # those possible hosts should be getting added/removed
+    expected_add: List[List[str]]
+    possible_add: List[List[str]]
+    possible_add_count: int
+    expected_remove: List[List[str]]
+    possible_remove: List[List[str]]
+    possible_remove_count: int
+
+
+@pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_add,possible_add,possible_add_count,expected_remove,possible_remove,possible_remove_count",
+                         [
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1']),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1', '2']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'A', 'A'),
+                                 ],
+                                 ['C'],
+                                 [],
+                                 0,
+                                 [],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['2']),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'A', 'A'),
+                                     DaemonDescription('crash', 'B', 'B'),
+                                 ],
+                                 [],
+                                 [],
+                                 0,
+                                 ['A'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1']),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'A', 'A'),
+                                     DaemonDescription('crash', 'B', 'B'),
+                                 ],
+                                 ['C'],
+                                 [],
+                                 0,
+                                 ['B'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1'], count_per_label=2),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['2']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'B', 'B'),
+                                     DaemonDescription('crash', 'D', 'D'),
+                                 ],
+                                 ['A', 'C'],
+                                 [],
+                                 0,
+                                 ['B', 'D'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1'], count_per_label=1),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'B', 'B'),
+                                 ],
+                                 [],
+                                 ['A', 'C'],
+                                 1,
+                                 ['B'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1'], count_per_label=3),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'B', 'B'),
+                                     DaemonDescription('crash', 'A', 'A'),
+                                 ],
+                                 ['C', 'D'],
+                                 [],
+                                 0,
+                                 ['B'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1'], count_per_label=3),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['1']),
+                                     HostSpec(hostname='D', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'B', 'B'),
+                                     DaemonDescription('crash', 'A', 'A'),
+                                 ],
+                                 [],
+                                 ['C', 'D', 'E'],
+                                 2,
+                                 ['B'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1'], count_per_label=2),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['1']),
+                                     HostSpec(hostname='E', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'A', 'A'),
+                                     DaemonDescription('crash', 'B', 'B'),
+                                     DaemonDescription('crash', 'C', 'C'),
+                                     DaemonDescription('crash', 'D', 'D'),
+                                     DaemonDescription('crash', 'E', 'E'),
+                                 ],
+                                 [],
+                                 [],
+                                 0,
+                                 ['B'],
+                                 ['A', 'C', 'D', 'E'],
+                                 2
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1', '2'], count_per_label=2),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['1', '2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['2']),
+                                     HostSpec(hostname='E', labels=['1']),
+                                     HostSpec(hostname='F', labels=['3']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'B', 'B'),
+                                     DaemonDescription('crash', 'C', 'C'),
+                                     DaemonDescription('crash', 'F', 'F'),
+                                 ],
+                                 ['D'],
+                                 ['A', 'E'],
+                                 1,
+                                 ['F'],
+                                 [],
+                                 0
+                             ),
+                             MultiLabelFullPlacementTest(
+                                 'crash',
+                                 PlacementSpec(labels=['1', '2'], count_per_label=2),
+                                 [
+                                     HostSpec(hostname='A', labels=['1']),
+                                     HostSpec(hostname='B', labels=['1', '2']),
+                                     HostSpec(hostname='C', labels=['1']),
+                                     HostSpec(hostname='D', labels=['2']),
+                                     HostSpec(hostname='E', labels=['1']),
+                                     HostSpec(hostname='F', labels=['1']),
+                                 ],
+                                 [
+                                     DaemonDescription('crash', 'A', 'A'),
+                                     DaemonDescription('crash', 'B', 'B'),
+                                     DaemonDescription('crash', 'C', 'C'),
+                                     DaemonDescription('crash', 'D', 'D'),
+                                     DaemonDescription('crash', 'E', 'E'),
+                                     DaemonDescription('crash', 'F', 'F'),
+                                 ],
+                                 [],
+                                 [],
+                                 0,
+                                 [],
+                                 ['A', 'C', 'E', 'F'],
+                                 2
+                             ),
+                         ])
+def test_multi_label_full_placement(
+    service_type,
+    placement,
+    hosts,
+    daemons,
+    expected_add,
+    possible_add,
+    possible_add_count,
+    expected_remove,
+    possible_remove,
+    possible_remove_count
+):
+    spec = ServiceSpec(service_type=service_type,
+                       service_id='test',
+                       placement=placement)
+
+    hosts, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=hosts,
+        unreachable_hosts=[],
+        draining_hosts=[],
+        daemons=daemons,
+    ).place()
+    to_add_hostnames = [h.hostname for h in to_add]
+    to_remove_hostnames = [h.hostname for h in to_remove]
+    assert all(hostname in to_add_hostnames for hostname in expected_add)
+    assert all(hostname in to_remove_hostnames for hostname in expected_remove)
+    if possible_add:
+        non_required_adds = [h.hostname for h in to_add if h.hostname not in expected_add]
+        assert len(non_required_adds) == possible_add_count
+        assert all(hostname in possible_add for hostname in non_required_adds)
+    if possible_remove:
+        non_required_removes = [dd.hostname for dd in to_remove if dd.hostname not in expected_remove]
+        assert len(non_required_removes) == possible_remove_count
+        assert all(hostname in possible_remove for hostname in non_required_removes)
