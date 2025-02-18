@@ -7,7 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-
+#include <regex>
 #include "common/debug.h"
 
 #define dout_context g_ceph_context
@@ -59,4 +59,19 @@ void promethize(std::string &name) {
   boost::replace_all(name, "+", "_plus");
 
   name = "ceph_" + name;
+}
+
+std::vector<std::string> split_regexes(std::string regexes) {
+  std::regex delimiter("\\|\\|");  // Escape the "|" in regex
+
+  std::sregex_token_iterator iter(regexes.begin(), regexes.end(), delimiter, -1);
+  std::sregex_token_iterator end;
+    
+  std::vector<std::string> regex_list;
+  while (iter != end) {
+    regex_list.push_back(*iter);
+    ++iter;
+  }
+
+  return regex_list;
 }
