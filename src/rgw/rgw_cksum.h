@@ -45,6 +45,7 @@ namespace rgw { namespace cksum {
       sha256,
       sha512,
       blake3,
+      crc64nvme,
   };
 
   static constexpr uint16_t FLAG_NONE =      0x0000;
@@ -80,7 +81,7 @@ namespace rgw { namespace cksum {
 
   class Cksum {
   public:
-    static constexpr std::array<Desc, 8> checksums =
+    static constexpr std::array<Desc, 9> checksums =
     {
       Desc(Type::none, "none", 0, FLAG_NONE),
       Desc(Type::crc32, "crc32", 4, FLAG_AWS_CKSUM),
@@ -90,6 +91,7 @@ namespace rgw { namespace cksum {
       Desc(Type::sha256, "sha256", 32, FLAG_AWS_CKSUM),
       Desc(Type::sha512, "sha512", 64, FLAG_NONE),
       Desc(Type::blake3, "blake3", 32, FLAG_NONE),
+      Desc(Type::crc64nvme, "crc64nvme", 8, FLAG_AWS_CKSUM),
     };
 
     static constexpr uint16_t max_digest_size = 64;

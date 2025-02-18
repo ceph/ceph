@@ -11,8 +11,13 @@
 #ifndef SPDK_CRC64_H
 #define SPDK_CRC64_H
 
+#if 0
 #include "spdk/stdinc.h"
 #include "spdk/config.h"
+#else
+#include <stdint.h>
+#include <sys/types.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
