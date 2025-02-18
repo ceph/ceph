@@ -1014,40 +1014,57 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr module ls") {
     if (f) {
+      const auto active_modules = map.get_always_on_modules();
+      const auto available_modules = map.available_modules;
+
       f->open_object_section("modules");
-      {
-        f->open_array_section("always_on_modules");
-        for (auto& p : map.get_always_on_modules()) {
-          f->dump_string("module", p);
-        }
-        f->close_section();
-
-        f->open_array_section("force_disabled_modules");
-        for (auto& p : map.force_disabled_modules) {
-          f->dump_string("module", p);
-        }
-        f->close_section();
-
-        f->open_array_section("enabled_modules");
-        for (auto& p : map.modules) {
-          if (map.get_always_on_modules().count(p) > 0)
-            continue;
-          // We only show the name for enabled modules.  The any errors
-          // etc will show up as a health checks.
-          f->dump_string("module", p);
-        }
-        f->close_section();
-        f->open_array_section("disabled_modules");
-        for (auto& p : map.available_modules) {
-          if (map.modules.count(p.name) == 0 &&
-            map.get_always_on_modules().count(p.name) == 0) {
-            // For disabled modules, we show the full info if the detail
-            // parameter is enabled, to give a hint about whether enabling it will work
-            p.dump(f.get());
-          }
-        }
-        f->close_section();
+      
+      // always_on_modules
+      f->open_array_section("always_on_modules");
+      for (const auto& module_name : active_modules) {
+        auto module_itr = std::find_if(
+          available_modules.begin(), 
+          available_modules.end(), 
+          [&module_name](const MgrMap::ModuleInfo &m) -> bool {return m.name == module_name;}
+        );
+        if (module_itr != available_modules.end()) {
+          (*module_itr).dump(f.get());
+        } 
       }
+      f->close_section();
+
+      f->open_array_section("force_disabled_modules");
+      for (auto& p : map.force_disabled_modules) {
+        f->dump_string("module", p);
+      }
+      f->close_section();
+
+      // enabled_modules
+      f->open_array_section("enabled_modules");
+      for (const auto& module_name : map.modules) {
+        if (active_modules.contains(module_name))
+          continue;
+        auto module_itr = std::find_if(
+          available_modules.begin(), 
+          available_modules.end(), 
+          [&module_name](const MgrMap::ModuleInfo &m) -> bool {return m.name == module_name;}
+        );
+        if (module_itr != available_modules.end()) {
+          (*module_itr).dump(f.get());
+        } 
+      }
+      f->close_section();
+
+      // disabled_modules
+      f->open_array_section("disabled_modules");
+      for (const auto& p : map.available_modules) {
+        if (!map.modules.contains(p.name) &&
+            !active_modules.contains(p.name)) {
+          p.dump(f.get());
+        }
+      }
+      f->close_section();
+      
       f->close_section();
       f->flush(rdata);
     } else {
