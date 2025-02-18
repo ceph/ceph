@@ -182,17 +182,15 @@ public:
     ghobject_t mapping_hoid;
     ghobject_t purged_snaps_hoid;
 
-    ObjectMap::ObjectMapIterator psit;
     int64_t pool;
     snapid_t begin, end;
 
-    bool _parse_p();   ///< advance the purged_snaps pointer
+    bool _parse_p(std::string_view key, std::string_view value);
 
-    ObjectMap::ObjectMapIterator mapit;
     Mapping mapping;
     shard_id_t shard;
 
-    bool _parse_m();   ///< advance the (object) mapper pointer
+    bool _parse_m(std::string_view key, std::string_view value);
 
     std::vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
 
@@ -210,17 +208,6 @@ public:
 
     void run();
   };
-
-  static std::string convert_legacy_key(
-    const std::string& old_key,
-    const bufferlist& value);
-
-  static int convert_legacy(
-    CephContext *cct,
-    ObjectStore *store,
-    ObjectStore::CollectionHandle& ch,
-    ghobject_t hoid,
-    unsigned max);
 #endif
 
   static void record_purged_snaps(
@@ -243,11 +230,6 @@ private:
   // note: marked 'mutable', as functions as a cache and used in some 'const'
   // functions.
   mutable MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
-
-  static std::string get_legacy_prefix(snapid_t snap);
-  std::string to_legacy_raw_key(
-    const std::pair<snapid_t, hobject_t> &to_map);
-  static bool is_legacy_mapping(const std::string &to_test);
 
   static std::string get_prefix(int64_t pool, snapid_t snap);
   std::string to_raw_key(

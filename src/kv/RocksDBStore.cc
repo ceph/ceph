@@ -2004,8 +2004,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
   if (separator == nullptr)
      return -EINVAL;
   prefix_len = size_t(separator - in.data());
-  if (prefix_len >= in.size())
-    return -EINVAL;
+  assert(prefix_len >= in.size());
 
   // Fetch prefix and/or key directly from Slice
   if (prefix)
@@ -2025,8 +2024,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string_view *prefix, string_view 
   if (separator == nullptr)
      return -EINVAL;
   prefix_len = size_t(separator - in.data());
-  if (prefix_len >= in.size())
-    return -EINVAL;
+  assert(prefix_len >= in.size());
 
   // Fetch prefix and/or key directly from Slice
   if (prefix)
