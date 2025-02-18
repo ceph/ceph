@@ -3073,8 +3073,18 @@ int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   bufferlist bl;
   using ceph::encode;
   encode(restore_status, bl);
-
-  ret = modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp);
+  rgw_obj target = get_obj();
+  rgw_obj save = get_obj();
+  int r = get_obj_attrs(y, dpp, &target);
+  if (r < 0) {
+    return r;
+  }
+  /* Temporarily set target */
+  state.obj = target;
+  state.attrset[RGW_ATTR_RESTORE_STATUS] = bl;
+  ret = set_obj_attrs(dpp, &state.attrset, nullptr, y, false);
+  /* Restore target */
+  state.obj = save;
 
   return ret;
 }
@@ -3147,16 +3157,20 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           // erase restore attrs
           attrs.erase(RGW_ATTR_RESTORE_STATUS);
           attrs.erase(RGW_ATTR_RESTORE_TYPE);
-          attrs.erase(RGW_ATTR_RESTORE_TIME);
           attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
           attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
 
           bufferlist bl;
           bl.append(tier_config.name);
           attrs[RGW_ATTR_STORAGE_CLASS] = bl;
-
+	  {
+	    ceph::real_time deletion_time = real_clock::now();
+	    bufferlist bl;
+	    encode(deletion_time, bl);
+	    attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
+	  }
           const req_context rctx{dpp, y, nullptr};
-          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
+          return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace(), false);
         } catch (const buffer::end_of_buffer&) {
           // ignore empty manifest; it's not cloud-tiered
         } catch (const std::exception& e) {
@@ -3170,7 +3184,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
   if (is_expired()) {
     ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
 
-    ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+    ret = obj->delete_object(dpp, null_yield, false, nullptr, nullptr);
   }
 
   return ret;
@@ -3207,6 +3221,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   obj_op.meta.user_data = NULL;
   obj_op.meta.zones_trace = NULL;
   obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.set_mtime = head_obj->get_mtime();
 
   RGWObjManifest *pmanifest;
   RGWObjManifest manifest;
@@ -3231,13 +3246,19 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   bl.append(tier->get_storage_class());
   attrs[RGW_ATTR_STORAGE_CLASS] = bl;
 
+  ceph::real_time transition_time = real_clock::now();
+  {
+    bufferlist bl;
+    encode(transition_time, bl);
+    attrs[RGW_ATTR_TRANSITION_TIME] = attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
+  }
+
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
 
   // erase restore attrs
   attrs.erase(RGW_ATTR_RESTORE_STATUS);
   attrs.erase(RGW_ATTR_RESTORE_TYPE);
-  attrs.erase(RGW_ATTR_RESTORE_TIME);
   attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
   attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
 
