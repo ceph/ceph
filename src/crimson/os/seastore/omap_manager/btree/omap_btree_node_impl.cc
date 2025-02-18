@@ -495,8 +495,11 @@ OMapInnerNode::merge_entry(
 OMapInnerNode::internal_iterator_t
 OMapInnerNode::get_containing_child(const std::string &key)
 {
-  auto iter = std::find_if(iter_begin(), iter_end(),
-       [&key](auto it) { return it.contains(key); });
+  auto iter = string_lower_bound(key);
+  if (iter == iter_end() || (iter != iter_begin() && iter.get_key() > key)) {
+    iter--;
+  }
+  assert(iter.contains(key));
   return iter;
 }
 
