@@ -407,21 +407,19 @@ Dispatcher::dispatch_result_t MgrStandby::ms_dispatch2(const ref_t<Message>& m)
   std::lock_guard l(lock);
   dout(10) << state_str() << " " << *m << dendl;
 
+  Dispatcher::dispatch_result_t r;
+
   if (m->get_type() == MSG_MGR_MAP) {
     handle_mgr_map(ref_cast<MMgrMap>(m));
+    r = Dispatcher::ACKNOWLEDGED();
   }
-  bool handled = false;
   if (active_mgr) {
     auto am = active_mgr;
     lock.unlock();
-    handled = am->ms_dispatch2(m);
+    r = am->ms_dispatch2(m);
     lock.lock();
   }
-  if (m->get_type() == MSG_MGR_MAP) {
-    // let this pass through for mgrc
-    handled = false;
-  }
-  return handled;
+  return r;
 }
 
 

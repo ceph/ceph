@@ -17,24 +17,23 @@
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include <Python.h>
 
-#include "mds/FSMap.h"
-#include "messages/MFSMap.h"
-#include "msg/Messenger.h"
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "mon/MgrMap.h"
+#include "msg/Dispatcher.h"
+#include "msg/Messenger.h"
 
-#include "DaemonServer.h"
-#include "PyModuleRegistry.h"
-
-#include "DaemonState.h"
 #include "ClusterState.h"
+#include "DaemonServer.h"
+#include "DaemonState.h"
+#include "PyModuleRegistry.h"
 
 class MCommand;
 class MMgrDigest;
 class MLog;
 class MServiceMap;
 class Objecter;
+class MFSMap;
 
 class Mgr : public AdminSocketHook {
 protected:
@@ -89,7 +88,7 @@ public:
 
   bool got_mgr_map(const MgrMap& m);
 
-  bool ms_dispatch2(const ceph::ref_t<Message>& m);
+  Dispatcher::dispatch_result_t ms_dispatch2(const ceph::ref_t<Message>& m);
 
   void background_init(Context *completion);
 
