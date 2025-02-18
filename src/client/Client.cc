@@ -3126,8 +3126,11 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
     break;
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_MDS) {
-      handle_command_reply(ref_cast<MCommandReply>(m));
-      return Dispatcher::HANDLED();
+      if (handle_command_reply(ref_cast<MCommandReply>(m))) {
+        return Dispatcher::HANDLED();
+      } else {
+        return Dispatcher::UNHANDLED();
+      }
     } else {
       return Dispatcher::UNHANDLED();
     }
@@ -6681,7 +6684,7 @@ int Client::mds_command(
   return 0;
 }
 
-void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
+bool Client::handle_command_reply(const MConstRef<MCommandReply>& m)
 {
   ceph_tid_t const tid = m->get_tid();
 
@@ -6690,7 +6693,7 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
   std::scoped_lock cmd_lock(command_lock);
   if (!command_table.exists(tid)) {
     ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
-    return;
+    return false;
   }
 
   auto &op = command_table.get_command(tid);
@@ -6731,6 +6734,7 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
   }
 
   command_table.erase(tid);
+  return true;
 }
 
 // -------------------
