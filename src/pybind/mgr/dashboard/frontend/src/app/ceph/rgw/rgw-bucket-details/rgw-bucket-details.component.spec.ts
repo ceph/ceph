@@ -55,7 +55,7 @@ describe('RgwBucketDetailsComponent', () => {
     rgwBucketServiceGetSpy.and.returnValue(of(bucket));
     component.selection = { bid: 'bucket' };
     component.lifecycleFormat = 'json';
-    component.ngOnChanges();
+    component.extraxtDetailsfromResponse();
     expect(component.selection.lifecycle).toEqual({});
   });
 
@@ -85,7 +85,7 @@ describe('RgwBucketDetailsComponent', () => {
     const rateLimit = { bucket_ratelimit: { max_size: 1000 } };
     spyOn(rgwBucketService, 'getBucketRateLimit').and.returnValue(of(rateLimit));
     component.selection = { bid: 'bucket' };
-    component.ngOnChanges();
+    component.extraxtDetailsfromResponse();
     expect(component.bucketRateLimit).toEqual(rateLimit.bucket_ratelimit);
   });
 
