@@ -593,8 +593,8 @@ seastar::future<Ref<PG>> ShardServices::make_pg(
     std::move(get_pool_info_for_pg),
     std::move(get_collection)
   ).then([pgid, create_map, this](auto &&ret) {
-    auto [pool, name, ec_profile] = std::move(std::get<0>(ret).get());
-    auto coll = std::move(std::get<1>(ret).get());
+    auto [pool, name, ec_profile] = std::get<0>(std::move(ret)).get();
+    auto coll = std::get<1>(std::move(ret)).get();
     return seastar::make_ready_future<Ref<PG>>(
       new PG{
 	pgid,
@@ -911,6 +911,19 @@ seastar::future<> OSDSingletonState::send_incremental_map_to_osd(
       osdmap->get_cluster_addrs(osd).front(), CEPH_ENTITY_TYPE_OSD);
     return send_incremental_map(*conn, first);
   }
+}
+
+void OSDSingletonState::update_osd_stat(
+  epoch_t up_epoch,
+  const Heartbeat::osds_t& peers,
+  const store_statfs_t& st)
+{
+  osd_stat_seq++;
+  osd_stat.up_from = up_epoch;
+  osd_stat.hb_peers = peers;
+  osd_stat.statfs = st;
+  osd_stat.seq = (static_cast<uint64_t>(up_epoch) << 32
+  ) | osd_stat_seq;
 }
 
 };
