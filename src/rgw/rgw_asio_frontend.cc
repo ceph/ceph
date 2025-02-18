@@ -27,6 +27,7 @@
 #include "common/async/shared_mutex.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "ceph_ver.h"
 
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
@@ -122,8 +123,10 @@ class StreamIO : public rgw::asio::ClientIO {
            rgw::asio::parser_type& parser, boost::asio::yield_context yield,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
-           const tcp::endpoint& remote_endpoint)
-      : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
+           const tcp::endpoint& remote_endpoint,
+           std::string_view extra_response_headers)
+      : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint,
+                 extra_response_headers),
         cct(cct), stream(stream), timeout(timeout), yield(yield),
         buffer(buffer)
   {}
@@ -244,6 +247,7 @@ void handle_connection(boost::asio::io_context& context,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        const std::string& uri_prefix,
+                       std::string_view extra_response_headers,
                        boost::system::error_code& ec,
                        boost::asio::yield_context yield)
 {
@@ -316,7 +320,8 @@ void handle_connection(boost::asio::io_context& context,
       }
 
       StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
-                           is_ssl, local_endpoint, remote_endpoint};
+                           is_ssl, local_endpoint, remote_endpoint,
+                           extra_response_headers};
 
       auto real_client_io = rgw::io::add_reordering(
                               rgw::io::add_buffering(cct,
@@ -498,6 +503,8 @@ class AsioFrontend {
   void accept(Listener& listener, boost::asio::yield_context yield);
   void on_accept(Listener& listener, tcp::socket stream);
 
+  std::string extra_response_headers;
+
  public:
   AsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
 	       dmc::SchedulerCtx& sched_ctx,
@@ -623,6 +630,11 @@ int AsioFrontend::init()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
+
+  // optional Alt-Svc header to advertise other endpoints
+  if (auto alt = config.find("alt_svc"); alt != config.end()) {
+    extra_response_headers += "Alt-Svc: " + alt->second + "\r\n";
+  }
 
   if (auto i = config.find("prefix"); i != config.end()) {
     uri_prefix = i->second;
@@ -1121,7 +1133,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          uri_prefix, extra_response_headers, ec, yield);
 
         if (!ec || ec == http::error::end_of_stream) {
           // ssl shutdown (ignoring errors)
@@ -1144,7 +1156,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          uri_prefix, extra_response_headers, ec, yield);
         conn->socket.shutdown(tcp::socket::shutdown_both, ec);
       }, [] (std::exception_ptr eptr) {
         if (eptr) std::rethrow_exception(eptr);
