@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from ..call_wrappers import call, CallVerbosity
 from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, extract_uid_gid
+from ..container_types import CephContainer, SidecarContainer, extract_uid_gid
 from ..context import CephadmContext
 from ..context_getters import fetch_configs, get_config_and_keyring
 from ..daemon_form import register as register_daemon_form
@@ -61,6 +61,7 @@ class NFSGanesha(ContainerDaemonForm):
         self.extra_args = dict_get(config_json, 'extra_args', [])
         self.files = dict_get(config_json, 'files', {})
         self.rgw = dict_get(config_json, 'rgw', {})
+        self.stunnel = dict_get(config_json, 'stunnel', {})
 
         # validate the supplied args
         self.validate()
@@ -152,6 +153,13 @@ class NFSGanesha(ContainerDaemonForm):
             if not self.rgw.get('user'):
                 raise Error('RGW user is missing')
 
+        # stunnel validations
+        if self.stunnel:
+            if not self.stunnel.get('image'):
+                raise Error('Stunnel image arg missing.')
+            if not self.stunnel.get('args'):
+                raise Error('Stunnel entrypoint args missing.')
+
     def get_daemon_name(self):
         # type: () -> str
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -228,3 +236,24 @@ class NFSGanesha(ContainerDaemonForm):
 
     def default_entrypoint(self) -> str:
         return self.entrypoint
+
+    def sidecar_containers(
+        self, ctx: CephadmContext
+    ) -> List[SidecarContainer]:
+        if not self.stunnel:
+            return []
+
+        stunnel_sidecar = SidecarContainer.from_primary_and_values(
+            ctx,
+            self.container(ctx),
+            'stunnel',
+            image=self.stunnel.get('image'),
+            args=self.stunnel.get('args'),
+        )
+        stunnel_sidecar.volume_mounts = {}
+        stunnel_sidecar.bind_mounts = []
+        stunnel_sidecar.entrypoint = ''
+        tls_dir = self.stunnel.get('tls_dir')
+        if tls_dir:
+            stunnel_sidecar.volume_mounts = {tls_dir: '/etc/tls'}
+        return [stunnel_sidecar]
