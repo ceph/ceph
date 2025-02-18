@@ -1694,46 +1694,89 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         return out
 
-    # If realm list is empty restart RGW daemons else update the period.
-    def handle_rgw_realm(self):
+    # If realm list is empty, restart RGW daemons. Otherwise, update the period.
+    def ensure_realm_and_sync_period(self):
         rgw_realm_list = self.list_realms()
         if len(rgw_realm_list['realms']) < 1:
             rgw_service_manager = RgwServiceManager()
-            rgw_service_manager.restart_rgw_daemons_and_set_credentials()
+            rgw_service_manager.restart_rgw_daemons()
         else:
             self.update_period()
 
     def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
-        for placement_target in placement_targets:
-            cmd_add_placement_options = ['--rgw-zonegroup', zonegroup_name,
-                                         '--placement-id', placement_target['placement_id']]
-            if placement_target['tags']:
+        STANDARD_STORAGE_CLASS = "STANDARD"
+        CLOUD_S3_TIER_TYPE = "cloud-s3"
+
+        for placement_target in placement_targets:  # pylint: disable=R1702
+            cmd_add_placement_options = [
+                '--rgw-zonegroup', zonegroup_name,
+                '--placement-id', placement_target['placement_id']
+            ]
+            storage_class_name = placement_target.get('storage_class', None)
+
+            if (
+                placement_target.get('tier_type') == CLOUD_S3_TIER_TYPE
+                and storage_class_name != STANDARD_STORAGE_CLASS
+            ):
+                tier_config = placement_target.get('tier_config', {})
+                if tier_config:
+                    tier_config_items = (
+                        f'{key}={value}' for key, value in tier_config.items()
+                    )
+                    tier_config_str = ','.join(tier_config_items)
+                    cmd_add_placement_options += [
+                        '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
+                    ]
+
+            if placement_target.get('tags') and storage_class_name != STANDARD_STORAGE_CLASS:
                 cmd_add_placement_options += ['--tags', placement_target['tags']]
+
+            storage_classes = (
+                placement_target['storage_class'].split(",")
+                if placement_target['storage_class']
+                else []
+            )
             rgw_add_placement_cmd += cmd_add_placement_options
-            try:
-                exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
-                if exit_code > 0:
-                    raise DashboardException(e=err,
-                                             msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
-                                             http_status_code=500, component='rgw')
-            except SubprocessError as error:
-                raise DashboardException(error, http_status_code=500, component='rgw')
-            self.update_period()
-            storage_classes = placement_target['storage_class'].split(",") if placement_target['storage_class'] else []  # noqa E501  #pylint: disable=line-too-long
+
+            if not storage_classes:
+                try:
+                    exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
+                    if exit_code > 0:
+                        raise DashboardException(
+                            e=err,
+                            msg=(
+                                f'Unable to add placement target '
+                                f'{placement_target["placement_id"]} '
+                                f'to zonegroup {zonegroup_name}'
+                            )
+                        )
+                except SubprocessError as error:
+                    raise DashboardException(error, http_status_code=500, component='rgw')
+                self.ensure_realm_and_sync_period()
+
             if storage_classes:
                 for sc in storage_classes:
-                    cmd_add_placement_options = ['--storage-class', sc]
-                    try:
-                        exit_code, _, err = mgr.send_rgwadmin_command(
-                            rgw_add_placement_cmd + cmd_add_placement_options)
-                        if exit_code > 0:
-                            raise DashboardException(e=err,
-                                                     msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
-                                                     http_status_code=500, component='rgw')
-                    except SubprocessError as error:
-                        raise DashboardException(error, http_status_code=500, component='rgw')
-                    self.update_period()
+                    if sc == storage_class_name:
+                        cmd_add_placement_options = ['--storage-class', sc]
+                        try:
+                            exit_code, _, err = mgr.send_rgwadmin_command(
+                                rgw_add_placement_cmd + cmd_add_placement_options
+                            )
+                            if exit_code > 0:
+                                raise DashboardException(
+                                    e=err,
+                                    msg=(
+                                        f'Unable to add placement target '
+                                        f'{placement_target["placement_id"]} '
+                                        f'to zonegroup {zonegroup_name}'
+                                    ),
+                                    http_status_code=500,
+                                    component='rgw'
+                                )
+                        except SubprocessError as error:
+                            raise DashboardException(error, http_status_code=500, component='rgw')
+                        self.ensure_realm_and_sync_period()
 
     def modify_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'modify']
@@ -1787,7 +1830,7 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-        self.handle_rgw_realm()
+        self.ensure_realm_and_sync_period()
 
     # pylint: disable=W0102
     def edit_zonegroup(self, realm_name: str, zonegroup_name: str, new_zonegroup_name: str,
