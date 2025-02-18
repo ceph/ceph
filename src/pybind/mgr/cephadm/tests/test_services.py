@@ -1275,8 +1275,8 @@ class TestMonitoring:
                             'retention_time': '15d',
                             'retention_size': '0',
                             'ip_to_bind_to': '',
-                            'web_config': '/etc/prometheus/web.yml',
-                            "use_url_prefix": False
+                            "use_url_prefix": False,
+                            'web_config': '/etc/prometheus/web.yml'
                         },
                     }),
                     error_ok=True,

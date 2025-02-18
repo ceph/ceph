@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+def get_field_from_spec(spec: ServiceSpec, attr: str, default: Any) -> Any:
+    try:
+        value = getattr(spec, attr)
+        return value if value else default
+    except AttributeError:
+        return default
 
 @register_cephadm_service
 class GrafanaService(CephadmService):
@@ -495,6 +501,14 @@ class PrometheusService(CephadmService):
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
 
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
         mgr_map = self.mgr.get('mgr_map')
@@ -512,40 +526,8 @@ class PrometheusService(CephadmService):
         cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, 'prometheus_servers'], node_ip)
         return cert, key
 
-    def prepare_create(
-            self,
-            daemon_spec: CephadmDaemonDeploySpec,
-    ) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
+    def get_jobs_config(self, security_enabled: bool, mgmt_gw_enabled: bool) -> Tuple[Dict, Dict]:
 
-    def generate_config(
-            self,
-            daemon_spec: CephadmDaemonDeploySpec,
-    ) -> Tuple[Dict[str, Any], List[str]]:
-
-        assert self.TYPE == daemon_spec.daemon_type
-        spec = cast(PrometheusSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        try:
-            retention_time = spec.retention_time if spec.retention_time else '15d'
-        except AttributeError:
-            retention_time = '15d'
-
-        try:
-            targets = spec.targets
-        except AttributeError:
-            logger.warning('Prometheus targets not found in the spec. Using empty list.')
-            targets = []
-
-        try:
-            retention_size = spec.retention_size if spec.retention_size else '0'
-        except AttributeError:
-            # default to disabled
-            retention_size = '0'
-
-        # build service discovery end-point
-        security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
         if mgmt_gw_enabled:
             service_discovery_url_prefixes = [f'{self.mgr.get_mgmt_gw_internal_endpoint()}']
         else:
@@ -554,8 +536,7 @@ class PrometheusService(CephadmService):
             mgr_ips = self.mgr.get_mgr_ips()
             service_discovery_url_prefixes = [f'{protocol}://{wrap_ipv6(ip)}:{port}' for ip in mgr_ips]
 
-        job_names = {'mgr-prometheus': 'ceph',
-                     'node-exporter': 'node'}
+        job_names = {'mgr-prometheus': 'ceph', 'node-exporter': 'node'}
         services = [
             'mgr-prometheus',
             'alertmanager',
@@ -566,6 +547,7 @@ class PrometheusService(CephadmService):
             'nfs',
             'smb'
         ]
+
         service_urls = {
             service: [f'{prefix}/sd/prometheus/sd-config?service={service}' for prefix in service_discovery_url_prefixes]
             for service in services
@@ -574,82 +556,10 @@ class PrometheusService(CephadmService):
             or (service == 'haproxy' and bool(self.mgr.cache.get_daemons_by_type('ingress')))
         }
 
-        alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
-        prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
-        federate_path = self.get_target_cluster_federate_path(targets)
-        cluster_credentials: Dict[str, Any] = {}
-        cluster_credentials_files: Dict[str, Any] = {'files': {}}
-        FSID = self.mgr._cluster_fsid
-        if targets:
-            if 'dashboard' in self.mgr.get('mgr_map')['modules']:
-                cluster_credentials_files, cluster_credentials = self.mgr.remote(
-                    'dashboard', 'get_cluster_credentials_files', targets
-                )
-            else:
-                logger.error("dashboard module not found")
+        return service_urls, job_names
 
-        # generate the prometheus configuration
-        context = {
-            'alertmanager_url_prefix': '/alertmanager' if mgmt_gw_enabled else '/',
-            'security_enabled': security_enabled,
-            'alertmanager_web_user': alertmanager_user,
-            'alertmanager_web_password': alertmanager_password,
-            'service_discovery_username': self.mgr.http_server.service_discovery.username,
-            'service_discovery_password': self.mgr.http_server.service_discovery.password,
-            'job_names': job_names,
-            'service_urls': service_urls,
-            'external_prometheus_targets': targets,
-            'cluster_fsid': FSID,
-            'clusters_credentials': cluster_credentials,
-            'federate_path': federate_path
-        }
 
-        ip_to_bind_to = ''
-        if spec.only_bind_port_on_networks and spec.networks:
-            assert daemon_spec.host is not None
-            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
-            if ip_to_bind_to:
-                daemon_spec.port_ips = {str(port): ip_to_bind_to}
-
-        web_context = {
-            'enable_mtls': mgmt_gw_enabled,
-            'enable_basic_auth': not oauth2_enabled,
-            'prometheus_web_user': prometheus_user,
-            'prometheus_web_password': password_hash(prometheus_password),
-        }
-
-        if security_enabled:
-            # Following key/cert are needed for:
-            # 1- run the prometheus server (web.yml config)
-            # 2- use mTLS to scrape node-exporter (prometheus acts as client)
-            # 3- use mTLS to send alerts to alertmanager (prometheus acts as client)
-            cert, key = self.get_prometheus_certificates(daemon_spec)
-            r: Dict[str, Any] = {
-                'files': {
-                    'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
-                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
-                    'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
-                    'prometheus.crt': cert,
-                    'prometheus.key': key,
-                },
-                'retention_time': retention_time,
-                'retention_size': retention_size,
-                'ip_to_bind_to': ip_to_bind_to,
-                'web_config': '/etc/prometheus/web.yml',
-                'use_url_prefix': mgmt_gw_enabled
-            }
-            r['files'].update(cluster_credentials_files['files'])
-        else:
-            r = {
-                'files': {
-                    'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context)
-                },
-                'retention_time': retention_time,
-                'retention_size': retention_size,
-                'ip_to_bind_to': ip_to_bind_to,
-                'use_url_prefix': mgmt_gw_enabled
-            }
-
+    def configure_alerts(self, r: Dict) -> None:
         # include alerts, if present in the container
         if os.path.exists(self.mgr.prometheus_alerts_path):
             with open(self.mgr.prometheus_alerts_path, 'r', encoding='utf-8') as f:
@@ -672,6 +582,90 @@ class PrometheusService(CephadmService):
         #
         r['files']['/etc/prometheus/alerting/custom_alerts.yml'] = \
             self.mgr.get_store('services/prometheus/alerting/custom_alerts.yml', '')
+
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+
+        assert self.TYPE == daemon_spec.daemon_type
+
+        spec = cast(PrometheusSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        retention_time = get_field_from_spec(spec, 'retention_time', '15d')
+        retention_size = get_field_from_spec(spec, 'retention_size', '0')
+        targets = get_field_from_spec(spec, 'targets', [])
+
+        # build service discovery end-point
+        security_enabled, mgmt_gw_enabled, oauth2_enabled = self.mgr._get_security_config()
+        service_urls, job_names = self.get_jobs_config(security_enabled, mgmt_gw_enabled)
+        alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
+        federate_path = self.get_target_cluster_federate_path(targets)
+        cluster_credentials: Dict[str, Any] = {}
+        cluster_credentials_files: Dict[str, Any] = {'files': {}}
+        if targets:
+            if 'dashboard' in self.mgr.get('mgr_map')['modules']:
+                cluster_credentials_files, cluster_credentials = self.mgr.remote(
+                    'dashboard', 'get_cluster_credentials_files', targets
+                )
+            else:
+                logger.error("dashboard module not found")
+
+        # generate the prometheus configuration
+        context = {
+            'alertmanager_url_prefix': '/alertmanager' if mgmt_gw_enabled else '/',
+            'security_enabled': security_enabled,
+            'alertmanager_web_user': alertmanager_user,
+            'alertmanager_web_password': alertmanager_password,
+            'service_discovery_username': self.mgr.http_server.service_discovery.username,
+            'service_discovery_password': self.mgr.http_server.service_discovery.password,
+            'job_names': job_names,
+            'service_urls': service_urls,
+            'external_prometheus_targets': targets,
+            'cluster_fsid': self.mgr._cluster_fsid,
+            'clusters_credentials': cluster_credentials,
+            'federate_path': federate_path
+        }
+
+        ip_to_bind_to = ''
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            if ip_to_bind_to:
+                daemon_spec.port_ips = {str(self.mgr.service_discovery_port): ip_to_bind_to}
+
+        files = {
+            'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context)
+        }
+        r: Dict[str, Any] = {
+            'files': files,
+            'retention_time': retention_time,
+            'retention_size': retention_size,
+            'ip_to_bind_to': ip_to_bind_to,
+            'use_url_prefix': mgmt_gw_enabled
+        }
+        if security_enabled:
+            # Following key/cert are needed for:
+            # 1- run the prometheus server (web.yml config)
+            # 2- use mTLS to scrape node-exporter (prometheus acts as client)
+            # 3- use mTLS to send alerts to alertmanager (prometheus acts as client)
+            prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
+            web_context = {
+                'enable_mtls': mgmt_gw_enabled,
+                'enable_basic_auth': not oauth2_enabled,
+                'prometheus_web_user': prometheus_user,
+                'prometheus_web_password': password_hash(prometheus_password),
+            }
+            cert, key = self.get_prometheus_certificates(daemon_spec)
+            files.update({
+                'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
+                'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
+                'prometheus.crt': cert,
+                'prometheus.key': key,
+                **cluster_credentials_files['files']
+            })
+            r.update({'web_config': '/etc/prometheus/web.yml'})
+
+        self.configure_alerts(r)
 
         return r, self.get_dependencies(self.mgr)
 
