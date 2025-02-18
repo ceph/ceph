@@ -1704,6 +1704,61 @@ test_tasks_recovery() {
     ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
+test_rbd_du(){
+    echo "Testing rbd du with including non-user snapshots"
+    remove_images
+
+    rbd create --size 200M img1
+    rbd bench --io-type write --io-total 200M img1
+    rbd du img1 | grep -E "img1[[:space:]]+200 MiB[[:space:]]+200 MiB"
+    rbd snap create img1@snap1
+    rbd bench --io-type write --io-total 200M img1
+    rbd snap create img1@snap2
+    rbd bench --io-type write --io-total 200M img1
+    rbd snap ls img1 | grep -E "snap1|snap2"
+    rbd bench --io-type write --io-total 200M img1
+    rbd du img1 | grep "<TOTAL>.*600 MiB"
+    rbd clone img1@snap1 clone1 --rbd-default-clone-format 2
+    rbd snap rm img1@snap1
+    rbd du img1 | grep "<TOTAL>.*600 MiB"
+    rbd snap rm img1@snap2
+    rbd du img1 | grep "<TOTAL>.*400 MiB"
+    rbd snap create img1@snap3
+    rbd bench --io-type write --io-total 50M img1
+    rbd snap create img1@snap4
+    rbd bench --io-type write --io-total 50M img1
+    rbd clone img1@snap4 clone2 --rbd-default-clone-format 2
+    rbd snap rm img1@snap4
+    rbd du img1 | grep "<TOTAL>.*624 MiB"
+    rbd rm clone1
+    rbd rm clone2
+    rbd du img1 | grep "<TOTAL>.*312 MiB"
+    rbd snap rm img1@snap3
+    rbd snap create img1@snap5
+    rbd du img1 | grep "<TOTAL>.*200 MiB"
+    rbd bench --io-type write --io-total 200M img1
+    rbd du img1 | grep "<TOTAL>.*400 MiB"
+    rbd snap rm img1@snap5
+    rbd du img1 | grep -E "img1[[:space:]]+200 MiB[[:space:]]+200 MiB"
+    #group snapshots
+    rbd group create group1
+    rbd group image add group1 img1
+    rbd group snap create group1@snap1
+    rbd du img1 | grep "<TOTAL>.*200 MiB"
+    rbd bench --io-type write --io-total 100M img1
+    rbd du img1 | grep "<TOTAL>.*360 MiB"
+    rbd group snap create group1@snap2
+    rbd bench --io-type write --io-total 50M img1
+    rbd du img1 | grep "<TOTAL>.*472 MiB"
+    rbd group snap remove group1@snap1
+    rbd du img1 | grep "<TOTAL>.*312 MiB"
+    rbd group snap remove group1@snap2
+    rbd du img1 | grep -E "img1[[:space:]]+200 MiB[[:space:]]+200 MiB"
+    rbd group image remove group1 img1
+    rbd group remove group1
+    rbd rm img1
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -1733,5 +1788,6 @@ test_perf_image_iostat_recovery
 test_mirror_pool_peer_bootstrap_create
 test_tasks_removed_pool
 test_tasks_recovery
+test_rbd_du
 
 echo OK

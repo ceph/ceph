@@ -2468,7 +2468,7 @@ namespace librbd {
     int r = librbd::api::Snapshot<>::list(ictx, snaps);
     if (r >= 0) {
       for (int i = 0, n = snaps.size(); i < n; i++) {
-	tracepoint(librbd, snap_list_entry, snaps[i].id, snaps[i].size, snaps[i].name.c_str());
+        tracepoint(librbd, snap_list_entry, snaps[i].id, snaps[i].size, snaps[i].name.c_str());
       }
     }
     tracepoint(librbd, snap_list_exit, r, snaps.size());
@@ -2688,9 +2688,13 @@ namespace librbd {
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
                ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
                true, false);
-    int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						     cls::rbd::UserSnapshotNamespace(),
-						     fromsnapname, ofs,
+    uint64_t from_snap_id = 0;
+    if (fromsnapname != nullptr) {
+      std::shared_lock image_locker{ictx->image_lock};
+      from_snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), 
+                                       fromsnapname);
+    }
+    int r = librbd::api::DiffIterate<>::diff_iterate(ictx, from_snap_id, ofs,
                                                      len, true, false, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
@@ -2704,13 +2708,26 @@ namespace librbd {
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
               ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
               include_parent, whole_object);
-    int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						     cls::rbd::UserSnapshotNamespace(),
-						     fromsnapname, ofs,
-                                                     len, include_parent,
+    uint64_t from_snap_id = 0;
+    if (fromsnapname != nullptr) {
+      std::shared_lock image_locker{ictx->image_lock};
+      from_snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
+                                       fromsnapname);
+    }
+    int r = librbd::api::DiffIterate<>::diff_iterate(ictx, from_snap_id,
+                                                     ofs, len, include_parent,
                                                      whole_object, cb, arg);
     tracepoint(librbd, diff_iterate_exit, r);
     return r;
+  }
+
+  int Image::diff_iterate3(uint64_t from_snap_id, uint64_t ofs, uint64_t len,
+                           bool include_parent, bool whole_object,
+                           int (*cb)(uint64_t, size_t, int, void *), void *arg)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::DiffIterate<>::diff_iterate(ictx, from_snap_id,
+                                                    ofs, len, include_parent,whole_object, cb, arg);                                                
   }
 
   ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
@@ -6182,10 +6199,15 @@ extern "C" int rbd_diff_iterate(rbd_image_t image,
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
              true, false);
-  int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						   cls::rbd::UserSnapshotNamespace(),
-						   fromsnapname, ofs, len,
-                                                   true, false, cb, arg);
+  uint64_t from_snap_id = 0;
+  if (fromsnapname != nullptr) {
+    std::shared_lock image_locker{ictx->image_lock};
+    from_snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), 
+                                     fromsnapname);
+  }
+  int r = librbd::api::DiffIterate<>::diff_iterate(ictx, from_snap_id, 
+                                                   ofs, len, true,
+                                                   false, cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
 }
@@ -6200,13 +6222,29 @@ extern "C" int rbd_diff_iterate2(rbd_image_t image, const char *fromsnapname,
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
             ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
             include_parent != 0, whole_object != 0);
-  int r = librbd::api::DiffIterate<>::diff_iterate(ictx,
-						   cls::rbd::UserSnapshotNamespace(),
-						   fromsnapname, ofs, len,
-                                                   include_parent, whole_object,
-                                                   cb, arg);
+  uint64_t from_snap_id = 0;
+  if (fromsnapname != nullptr) {
+    std::shared_lock image_locker{ictx->image_lock};
+    from_snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
+                                     fromsnapname);
+  }
+  int r = librbd::api::DiffIterate<>::diff_iterate(ictx, from_snap_id, 
+                                                   ofs, len, include_parent, 
+                                                   whole_object, cb, arg);
   tracepoint(librbd, diff_iterate_exit, r);
   return r;
+}
+
+extern "C" int rbd_diff_iterate3(rbd_image_t image, uint64_t from_snap_id,
+                                 uint64_t ofs, uint64_t len,
+                                 uint8_t include_parent, uint8_t whole_object,
+                                 int (*cb)(uint64_t, size_t, int, void *),
+                                 void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::DiffIterate<>::diff_iterate(ictx, from_snap_id, 
+                                                   ofs, len, include_parent,
+                                                   whole_object, cb, arg);
 }
 
 extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
