@@ -913,6 +913,13 @@ void BootstrapRequest<I>::handle_get_local_mirror_image(int r) {
                << dendl;
       m_local_images.insert({spec.pool_id, mirror_image.global_image_id});
     } else {
+      if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+        dout(10) << "local group with global_group_id: " << m_local_mirror_group.global_group_id
+                 << " is in disabling state, will retry later." << dendl;
+        finish(-ERESTART);
+        return;
+      }
+
       dout(10) << "add to trash queue: " << spec.pool_id << " "
                << spec.image_id << " " << mirror_image.global_image_id
                << dendl;
