@@ -41,7 +41,7 @@ tasks:
     mon.a:
     - ceph versions
     - ceph osd dump -f json-pretty
-    - ceph osd require-osd-release squid
+    - ceph osd require-osd-release tentacle
     - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
 - ceph.healthy:
 - print: "**** done ceph.restart"

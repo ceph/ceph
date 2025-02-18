@@ -322,10 +322,29 @@ def read_from_file(fs):
     return retval
 
 def releases():
-    return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
-            'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
-            'luminous', 'mimic', 'nautilus', 'octopus', 'pacific', 'quincy',
-            'reef')
+    r = (
+        'argonaut',
+        'bobtail',
+        'cuttlefish',
+        'dumpling',
+        'emperor',
+        'firefly',
+        'giant',
+        'hammer',
+        'infernalis',
+        'jewel',
+        'kraken',
+        'luminous',
+        'mimic',
+        'nautilus',
+        'octopus',
+        'pacific',
+        'quincy',
+        'reef',
+        'squid',
+        'tentacle',
+    )
+    return r
 
 def report_params(a):
     global dry_run
@@ -350,11 +369,27 @@ def tag_sha1(repo, sha1):
     repo.git.tag(bri_tag, sha1)
 
 def ver_to_release():
-    return {'v9.2': 'infernalis', 'v10.2': 'jewel', 'v11.2': 'kraken',
-            'v12.2': 'luminous', 'v13.2': 'mimic', 'v14.2': 'nautilus',
-            'v15.2': 'octopus', 'v16.0': 'pacific', 'v16.1': 'pacific', 
-            'v16.2': 'pacific', 'v17.0': 'quincy', 'v17.2': 'quincy',
-            'v18.0': 'reef', 'v18.1': 'reef'}
+    d = {
+      'v9.2': 'infernalis',
+      'v10.2': 'jewel',
+      'v11.2': 'kraken',
+      'v12.2': 'luminous',
+      'v13.2': 'mimic',
+      'v14.2': 'nautilus',
+      'v15.2': 'octopus',
+      'v16.0': 'pacific',
+      'v16.1': 'pacific',
+      'v16.2': 'pacific',
+      'v17.0': 'quincy',
+      'v17.2': 'quincy',
+      'v18.0': 'reef',
+      'v18.1': 'reef',
+      'v19.0': 'squid',
+      'v19.1': 'squid',
+      'v20.0': 'tentacle',
+      'v20.1': 'tentacle'
+    }
+    return d
 
 def usage():
     logging.error("Redmine credentials are required to perform this operation. "
