@@ -106,7 +106,7 @@ void Beacon::init(const MDSMap &mdsmap)
   });
 }
 
-bool Beacon::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t Beacon::ms_dispatch2(const ref_t<Message>& m)
 {
   dout(25) << __func__ << ": processing " << m << dendl;
   if (m->get_type() == MSG_MDS_BEACON) {

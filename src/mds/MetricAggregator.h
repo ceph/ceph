@@ -34,7 +34,7 @@ public:
 
   void notify_mdsmap(const MDSMap &mdsmap);
 
-  bool ms_dispatch2(const ref_t<Message> &m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const ref_t<Message> &m) override;
 
   void ms_handle_connect(Connection *c) override {
   }
