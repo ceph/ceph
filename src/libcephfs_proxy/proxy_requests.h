@@ -135,8 +135,6 @@ enum {
 
 /* Declaration of types used to transder requests and answers. */
 
-CEPH_TYPE(hello, FIELDS(uint32_t id;), FIELDS(int16_t major; int16_t minor;));
-
 CEPH_TYPE(ceph_version, REQ(),
 	  ANS(int32_t major; int32_t minor; int32_t patch; int16_t text;));
 

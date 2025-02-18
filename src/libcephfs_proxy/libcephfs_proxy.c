@@ -12,23 +12,34 @@
  * so this won't be noticed. */
 struct ceph_mount_info {
 	proxy_link_t link;
+	proxy_link_negotiate_t neg;
 	uint64_t cmount;
 };
 
 /* The global_cmount is used to stablish an initial connection to serve requests
  * not related to a real cmount, like ceph_version or ceph_userperm_new. */
-static struct ceph_mount_info global_cmount = { PROXY_LINK_DISCONNECTED, 0 };
+static struct ceph_mount_info global_cmount = {
+	.link = PROXY_LINK_DISCONNECTED,
+	.neg = {},
+	.cmount = 0
+};
 
 static bool client_stop(proxy_link_t *link)
 {
 	return false;
 }
 
+static int32_t proxy_negotiation_check(proxy_link_negotiate_t *neg)
+{
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+
+	return 0;
+}
+
 static int32_t proxy_connect(proxy_link_t *link)
 {
-	CEPH_REQ(hello, req, 0, ans, 0);
 	char *path, *env;
-	int32_t sd, err;
+	int32_t sd;
 
 	path = PROXY_SOCKET;
 	env = getenv(PROXY_SOCKET_ENV);
@@ -41,31 +52,7 @@ static int32_t proxy_connect(proxy_link_t *link)
 		return sd;
 	}
 
-	req.id = LIBCEPHFS_LIB_CLIENT;
-	err = proxy_link_send(sd, req_iov, 1);
-	if (err < 0) {
-		goto failed;
-	}
-	err = proxy_link_recv(sd, ans_iov, 1);
-	if (err < 0) {
-		goto failed;
-	}
-
-	proxy_log(LOG_INFO, 0, "Connected to libcephfsd version %d.%d",
-		  ans.major, ans.minor);
-
-	if ((ans.major != LIBCEPHFSD_MAJOR) ||
-	    (ans.minor != LIBCEPHFSD_MINOR)) {
-		err = proxy_log(LOG_ERR, ENOTSUP, "Version not supported");
-		goto failed;
-	}
-
 	return sd;
-
-failed:
-	proxy_link_close(link);
-
-	return err;
 }
 
 static void proxy_disconnect(proxy_link_t *link)
@@ -81,6 +68,19 @@ static int32_t proxy_global_connect(void)
 
 	if (!proxy_link_is_connected(&global_cmount.link)) {
 		err = proxy_connect(&global_cmount.link);
+		if (err < 0) {
+			return err;
+		}
+
+		proxy_link_negotiate_init(&global_cmount.neg, 0, PROXY_FEAT_ALL,
+					  0, 0);
+
+		err = proxy_link_handshake_client(&global_cmount.link, err,
+						  &global_cmount.neg,
+						  proxy_negotiation_check);
+		if (err < 0) {
+			proxy_disconnect(&global_cmount.link);
+		}
 	}
 
 	return err;
@@ -177,6 +177,16 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 		goto failed;
 	}
 	sd = err;
+
+	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0, 0);
+
+	err = proxy_link_handshake_client(&ceph_mount->link, sd,
+					  &ceph_mount->neg,
+					  proxy_negotiation_check);
+	if (err < 0) {
+		goto failed_link;
+	}
+
 
 	CEPH_STR_ADD(req, id, id);
 
