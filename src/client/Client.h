@@ -980,7 +980,7 @@ protected:
 
   void set_cap_epoch_barrier(epoch_t e);
 
-  void handle_command_reply(const MConstRef<MCommandReply>& m);
+  bool handle_command_reply(const MConstRef<MCommandReply>& m);
   int fetch_fsmap(bool user);
   int resolve_mds(
       const std::string &mds_spec,
