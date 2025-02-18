@@ -166,21 +166,29 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
                  << dendl;
 
-  uint32_t perm = acl.get_perm(dpp, auth_identity, perm_mask);
+  uint32_t perm = 0;
+  const uint32_t user_perm = auth_identity.get_perm_mask();
+  if (user_perm == RGW_PERM_FULL_CONTROL) {
+    // Only consider ACL if the user has full control (either a subuser with full control or a non-subuser)
+    perm = acl.get_perm(dpp, auth_identity, perm_mask);
 
-  if (auth_identity.is_owner_of(owner.id)) {
-    perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
-  }
+    if (auth_identity.is_owner_of(owner.id)) {
+      perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
+    }
 
-  if (perm == perm_mask) {
-    return perm;
-  }
+    if (perm == perm_mask) {
+      return perm;
+    }
+  } else if (auth_identity.is_owner_of(owner.id)) {
+    // Subuser ACLs are only relevant if the resource owner is the subuser's parent
+    perm = user_perm;
+  } // else: subuser ACLs are not relevant
 
   /* should we continue looking up? */
-  if (!ignore_public_acls && ((perm & perm_mask) != perm_mask)) {
+  if (!ignore_public_acls) {
     perm |= acl.get_group_perm(dpp, ACL_GROUP_ALL_USERS, perm_mask);
 
-    if (false == auth_identity.is_owner_of(rgw_user(RGW_USER_ANON_ID))) {
+    if (false == auth_identity.is_anonymous()) {
       /* this is not the anonymous user */
       perm |= acl.get_group_perm(dpp, ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
     }
@@ -200,7 +208,6 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
 
 bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
                                                const rgw::auth::Identity& auth_identity,
-                                               const uint32_t user_perm_mask,
                                                const uint32_t perm,
                                                const char * const http_referer,
                                                bool ignore_public_acls) const
@@ -219,13 +226,12 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
   if (policy_perm & RGW_PERM_READ_OBJS) {
     policy_perm |= (RGW_PERM_READ | RGW_PERM_READ_ACP);
   }
-   
-  uint32_t acl_perm = policy_perm & perm & user_perm_mask;
+
+  uint32_t acl_perm = policy_perm & perm;
 
   ldpp_dout(dpp, 10) << " identity=" << auth_identity
                  << " requested perm (type)=" << perm
                  << ", policy perm=" << policy_perm
-                 << ", user_perm_mask=" << user_perm_mask
                  << ", acl perm=" << acl_perm << dendl;
 
   return (perm == acl_perm);
