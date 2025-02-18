@@ -6,6 +6,8 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd
 {
 

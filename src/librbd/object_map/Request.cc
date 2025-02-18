@@ -8,6 +8,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/object_map/InvalidateRequest.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::object_map::Request: "
