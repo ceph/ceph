@@ -8899,30 +8899,6 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
-int BlueStore::_set_bdev_label_size(unsigned id, uint64_t size)
-{
-  ceph_assert(bluefs);
-  BlockDevice* my_bdev = bluefs->get_block_device(id);
-  int r = -1;
-  if (my_bdev != nullptr) {
-    string my_path = get_device_path(id);
-    bluestore_bdev_label_t label;
-    r = _read_bdev_label(cct, my_bdev, my_path, &label);
-    if (r < 0) {
-      derr << "unable to read label for " << my_path << ": "
-            << cpp_strerror(r) << dendl;
-    } else {
-      label.size = size;
-      r = _write_bdev_label(cct, my_bdev, my_path, label);
-      if (r < 0) {
-        derr << "unable to write label for " << my_path << ": "
-              << cpp_strerror(r) << dendl;
-      }
-    }
-  }
-  return r;
-}
-
 int BlueStore::expand_devices(ostream& out)
 {
   // let's open in read-only mode first to be able to recover
@@ -8933,38 +8909,85 @@ int BlueStore::expand_devices(ostream& out)
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
+  // updating dedicated devices first
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
-    if (devid == bluefs_layout.shared_bdev ) {
+    if (devid == bluefs_layout.shared_bdev) {
       continue;
     }
-    uint64_t size = bluefs->get_block_device_size(devid);
+    auto my_bdev = bluefs->get_block_device(devid);
+    uint64_t size = my_bdev ? my_bdev->get_size() : 0;
     if (size == 0) {
       // no bdev
       continue;
     }
-    out << devid
-	<<" : expanding " << " to 0x" << size << std::dec << std::endl;
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(devid, size) >= 0) {
-        out << devid
-          << " : size label updated to " << size
-          << std::endl;
+    if (my_bdev->supported_bdev_label()) {
+      string my_path = get_device_path(devid);
+      bluestore_bdev_label_t my_label;
+      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      if (r < 0) {
+        derr << "unable to read label for " << my_path << ": "
+              << cpp_strerror(r) << dendl;
+        continue;
+      } else {
+        if (size == my_label.size) {
+          // no need to expand
+          out << devid
+	      << " : nothing to do, skipped"
+	      << std::endl;
+          continue;
+        } else if (size < my_label.size) {
+          // something weird in bdev label
+          out << devid
+	      <<" : ERROR: bdev label is above device size, skipped"
+	      << std::endl;
+          continue;
+        } else {
+          my_label.size = size;
+          out << devid
+	      << " : Expanding to 0x" << std::hex << size
+	      << std::dec << "(" << byte_u_t(size) << ")"
+	      << std::endl;
+          r = _write_bdev_label(cct, my_bdev, my_path, my_label);
+          if (r < 0) {
+            derr << "unable to write label for " << my_path << ": "
+                  << cpp_strerror(r) << dendl;
+          } else {
+            out << devid
+                << " : size updated to 0x" << std::hex << size
+                << std::dec << "(" << byte_u_t(size) << ")"
+                << std::endl;
+          }
+        }
       }
     }
   }
+  // now proceed with a shared device
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
-  if (size0 < size) {
-    out << bluefs_layout.shared_bdev
-      << " : expanding " << " from 0x" << std::hex
-      << size0 << " to 0x" << size << std::dec << std::endl;
-    _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
+  auto devid = bluefs_layout.shared_bdev;
+  auto aligned_size = p2align(size, min_alloc_size);
+  if (aligned_size == size0) {
+    // no need to expand
+    out << devid
+        << " : nothing to do, skipped"
+        << std::endl;
+  } else if (aligned_size < size0) {
+    // something weird in bdev label
+    out << devid
+        << " : ERROR: previous device size is above the current one, skipped"
+	<< std::endl;
+  } else {
+    auto my_path = get_device_path(devid);
+    out << devid
+	<<" : Expanding to 0x" << std::hex << size
+	<< std::dec << "(" << byte_u_t(size) << ")"
+	<< std::endl;  
+    r = _write_out_fm_meta(size);
+    if (r != 0) {
+      derr << "unable to write out fm meta for " << my_path << ": "
+           << cpp_strerror(r) << dendl;
+    } else if (bdev->supported_bdev_label()) {
       bdev_label.size = size;
-
       uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
       for (uint64_t loc : bdev_label_positions) {
         if ((loc >= size0) && (loc + lsize <= size)) {
@@ -8974,22 +8997,32 @@ int BlueStore::expand_devices(ostream& out)
           }
         }
       }
-      _write_bdev_label(cct, bdev,
-         get_device_path(bluefs_layout.shared_bdev),
-         bdev_label, bdev_label_valid_locations);
+      r = _write_bdev_label(cct, bdev, my_path,
+        bdev_label, bdev_label_valid_locations);
+      if (r != 0) {
+        derr << "unable to write label(s) for " << my_path << ": "
+             << cpp_strerror(r) << dendl;
+      }
     }
-    _close_db_and_around();
+    if (r == 0) {
+      out << devid
+          << " : size updated to 0x" << std::hex << size
+          << std::dec << "(" << byte_u_t(size) << ")"
+          << std::endl;
+      _close_db_and_around();
 
-    //
-    // Mount in read/write to sync expansion changes
-    // and make sure everything is all right.
-    //
-    before_expansion_bdev_size = size0; //preserve orignal size to permit following
-                                        // _db_open_and_around() do some post-init stuff
-                                        // on opened allocator
+       //
+      // Mount in read/write to sync expansion changes
+      // and make sure everything is all right.
+      //
+      before_expansion_bdev_size = size0; // preserve orignal size to permit
+                                          // following _db_open_and_around()
+                                          // do some post-init stuff on opened
+                                          // allocator.
 
-    r = _open_db_and_around(false);
-    ceph_assert(r == 0);
+      r = _open_db_and_around(false);
+      ceph_assert(r == 0);
+    }
   }
   _close_db_and_around();
   return r;
