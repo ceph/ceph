@@ -1,11 +1,6 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_SEASTAR=1")
-# disable concepts to address https://github.com/boostorg/asio/issues/312
-if((CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10) OR
-   (CMAKE_CXX_COMPILER_ID STREQUAL Clang))
- list(APPEND crimson_cflag_definitions
-   "BOOST_ASIO_DISABLE_CONCEPTS")
-endif()
+
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
   INTERFACE_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>
