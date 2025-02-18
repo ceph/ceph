@@ -1046,9 +1046,11 @@ int D4NFilterObject::calculate_version(const DoutPrefixProvider* dpp, optional_y
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " instance: " << this->have_instance() << dendl;
   if (! this->have_instance() && version.empty()) {
     bufferlist bl = attrs[RGW_ATTR_ID_TAG];
-    version = bl.c_str();
-    if (!version.empty()) {
-      ldpp_dout(dpp, 20) << __func__ << " id tag version is: " << version << dendl;
+    if (bl.length()) {
+      version = bl.c_str();
+      if (!version.empty()) {
+	ldpp_dout(dpp, 20) << __func__ << " id tag version is: " << version << dendl;
+      }
     }
   }
   if (this->have_instance()) {
@@ -1690,9 +1692,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       return ret;
     }
 
-    if (params.part_num) {
-      params.parts_count = next->params.parts_count;
-    }
+    params.parts_count = next->params.parts_count;
     this->source->load_obj_state(dpp, y);
     attrs = source->get_attrs();
     source->set_attrs_from_obj_state(dpp, y, attrs);
@@ -1722,12 +1722,19 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to cache head object during eviction, ret=" << ret << dendl;
     }
   } else {
-    if (params.part_num) {
-      //if object is non-multipart and part num is anything apart from one
+    /* 
+      The following if statement handles the following:
+      1. When part_num is given: if it is anything other than 1 and if source is not multipart, then return error
+      2. When part_num is 0 and source is multipart
+      In both the cases the head is fetched from the backend store.
+    */
+    if (params.part_num || (!params.part_num && source->is_multipart())) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): source->is_multipart()= " << source->is_multipart() << dendl;
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): *(params.part_num)= " << *(params.part_num) << dendl;
+      if (params.part_num) { 
+	ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): *(params.part_num)= " << *(params.part_num) << dendl;
+      }
       if (!source->is_multipart()) {
-        if (*(params.part_num) != 1) {
+        if (params.part_num && *(params.part_num) != 1) {
           return -ERR_INVALID_PART;
         }
       } else {
