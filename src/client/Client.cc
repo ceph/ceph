@@ -16097,7 +16097,7 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
   }
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, true);
 }
 
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
@@ -16112,7 +16112,7 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
   }
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, true);
 }
 
 int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
