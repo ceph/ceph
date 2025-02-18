@@ -502,7 +502,6 @@ Message *decode_message(CephContext *cct,
   case CEPH_MSG_MON_GET_VERSION_REPLY:
     m = make_message<MMonGetVersionReply>();
     break;
-
   case MSG_OSD_BOOT:
     m = make_message<MOSDBoot>();
     break;
