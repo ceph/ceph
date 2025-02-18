@@ -336,28 +336,42 @@ TEST_F(BucketCacheFixtureMarker1, ListMarker1)
 
 class BucketCacheFixtureInotify1 : public testing::Test, protected BucketCacheFixtureBase {
 protected:
-  static void SetUpTestSuite() {
-    int nfiles = 20;
-    std::string bucket{"inotify1"};
-
-    sf::path tp{sf::path{bucket_root} / bucket};
+  void SetUp() override {
+    sf::path tp{sf::path{bucket_root} / "inotify1"};
     sf::remove_all(tp);
     sf::create_directory(tp);
+    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+  }
 
-    std::string fbase{"file_"};
+  void TearDown() override {
+    delete bucket_cache;
+    bucket_cache = nullptr;
+    sf::path tp{sf::path{bucket_root} / "inotify1"};
+    sf::remove_all(tp);
+    sf::create_directory(tp);
+  }
+
+  static void create_files(std::string bucket, std::string fbase, int nfiles) {
+    sf::path tp{sf::path{bucket_root} / "inotify1"};
+
     for (int ix = 0; ix < nfiles; ++ix) {
       sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
       std::ofstream ofs(ttp);
       ofs << "data for " << ttp << std::endl;
       ofs.close();
+      ASSERT_TRUE(sf::exists(ttp));
     }
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
   }
 
-  static void TearDownTestSuite() {
-    delete bucket_cache;
-    bucket_cache = nullptr;
+  static void remove_files(std::string bucket, std::string fbase, int fstart, int fend) {
+    sf::path tp{sf::path{bucket_root} / "inotify1"};
+    for (int ix = fstart; ix < fend; ++ix) {
+      sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
+      sf::remove(ttp);
+      ASSERT_FALSE(sf::exists(ttp));
+    }
   }
+
 };
 
 TEST_F(BucketCacheFixtureInotify1, ListInotify1)
@@ -365,6 +379,7 @@ TEST_F(BucketCacheFixtureInotify1, ListInotify1)
   std::string bucket{"inotify1"};
   std::string marker{""};
   std::vector<std::string> names;
+  int nfiles{20};
 
   auto f = [&](const rgw_bucket_dir_entry& bde) -> int {
     //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
@@ -372,34 +387,27 @@ TEST_F(BucketCacheFixtureInotify1, ListInotify1)
     return true;
   };
 
+  create_files(bucket, "file_", nfiles);
+
   MockSalBucket sb{bucket};
 
   (void) bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
-  ASSERT_EQ(names.size(), 20);
+  ASSERT_EQ(names.size(), nfiles);
 } /* ListInotify1 */
 
 TEST_F(BucketCacheFixtureInotify1, UpdateInotify1)
 {
-  int nfiles = 10;
   std::string bucket{"inotify1"};
 
   sf::path tp{sf::path{bucket_root} / bucket};
 
+  create_files(bucket, "file_", 20);
+
   /* add some */
-  std::string fbase{"upfile_"};
-  for (int ix = 0; ix < nfiles; ++ix) {
-    sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
-    std::ofstream ofs(ttp);
-    ofs << "data for " << ttp << std::endl;
-    ofs.close();
-  }
+  create_files(bucket, "upfile_", 10);
 
   /* remove some */
-  fbase = "file_";
-  for (int ix = 5; ix < 10; ++ix) {
-    sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
-    sf::remove(ttp);
-  }
+  remove_files(bucket, "file_", 5, 10);
 } /* SetupInotify1 */
 
 TEST_F(BucketCacheFixtureInotify1, List2Inotify1)
@@ -415,35 +423,56 @@ TEST_F(BucketCacheFixtureInotify1, List2Inotify1)
     return true;
   };
 
+  create_files(bucket, "file_", 20);
+
   MockSalBucket sb{bucket};
 
   /* Do a timed backoff up to ~20 seconds to pass on CI */
   while (timeout < 16000) {
+    names.clear();
+    (void)bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+    if (names.size() == 20)
+      break;
+    std::cout << fmt::format("waiting for {}ms for cache sync size={}", timeout, names.size()) << std::endl;
+    std::this_thread::sleep_for(1000ms);
+    timeout *= 2;
+  }
+  ASSERT_EQ(names.size(), 20);
+
+  /* Add some */
+  sf::path tp{sf::path{bucket_root} / bucket};
+  timeout = 50;
+
+  create_files(bucket, "upfile_", 10);
+
+  /* Do a timed backoff up to ~20 seconds to pass on CI */
+  while (timeout < 16000) {
+    names.clear();
+    (void)bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+    if (names.size() == 30)
+      break;
+    std::cout << fmt::format("waiting for {}ms for cache sync size={}", timeout, names.size()) << std::endl;
+    std::this_thread::sleep_for(1000ms);
+    timeout *= 2;
+  }
+  ASSERT_EQ(names.size(), 30);
+
+  /* remove some */
+  timeout = 50;
+
+  remove_files(bucket, "file_", 5, 10);
+
+  /* Do a timed backoff up to ~20 seconds to pass on CI */
+  while (timeout < 16000) {
+    names.clear();
     (void)bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
     if (names.size() == 25)
       break;
-    std::cout << fmt::format("waiting for {}ms for cache sync", timeout) << std::endl;
+    std::cout << fmt::format("waiting for {}ms for cache sync size={}", timeout, names.size()) << std::endl;
     std::this_thread::sleep_for(1000ms);
     timeout *= 2;
-    names.clear();
   }
   ASSERT_EQ(names.size(), 25);
-
-  /* check these */
-  sf::path tp{sf::path{bucket_root} / bucket};
-
-  std::string fbase{"upfile_"};
-  for (int ix = 0; ix < 10; ++ix) {
-    sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
-    ASSERT_TRUE(sf::exists(ttp));
-  }
-
-  /* remove some */
-  fbase = "file_";
-  for (int ix = 5; ix < 10; ++ix) {
-    sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
-    ASSERT_FALSE(sf::exists(ttp));
-  }
 } /* List2Inotify1 */
 
 int main (int argc, char *argv[])
