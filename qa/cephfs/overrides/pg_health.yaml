@@ -11,3 +11,4 @@ overrides:
       - Degraded data redundancy
       - pg .* is stuck inactive
       - pg .* is .*degraded
+      - pg .* is stuck peering
