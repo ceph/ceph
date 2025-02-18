@@ -20,7 +20,7 @@
 #include <time.h>
 #include <errno.h>
 
-#if defined(WITH_SEASTAR)
+#ifdef WITH_CRIMSON
 #include <seastar/core/lowres_clock.hh>
 #endif
 
@@ -93,7 +93,7 @@ public:
     tv.tv_nsec = std::max<common_t>((std::chrono::duration_cast<std::chrono::nanoseconds>(dur) %
 				     std::chrono::seconds(1)).count(), 0);
   }
-#if defined(WITH_SEASTAR)
+#ifdef WITH_CRIMSON
   explicit utime_t(const seastar::lowres_system_clock::time_point& t) {
     tv.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(
         t.time_since_epoch()).count();
