@@ -23,6 +23,7 @@
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
+#include <boost/iterator/counting_iterator.hpp>
 
 SET_SUBSYS(osd);
 
