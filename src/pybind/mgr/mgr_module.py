@@ -987,6 +987,12 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return socket.gethostname()
         return ips[0]
 
+    def get_mgr_ips(self) -> List[str]:
+        ips = self.get("mgr_ips").get('ips', [])
+        if not ips:
+            return [socket.gethostname()]
+        return ips
+
     def get_hostname(self) -> str:
         return socket.gethostname()
 
@@ -1109,7 +1115,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._rados: Optional[rados.Rados] = None
 
         # this does not change over the lifetime of an active mgr
-        self._mgr_ips: Optional[str] = None
+        self._mgr_ips: Optional[List[str]] = None
 
         self._db_lock = threading.Lock()
 
@@ -1985,14 +1991,18 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_get_ceph_conf_path()
 
     @API.expose
-    def get_mgr_ip(self) -> str:
+    def get_mgr_ips(self) -> List[str]:
         if not self._mgr_ips:
             ips = self.get("mgr_ips").get('ips', [])
             if not ips:
-                return socket.gethostname()
-            self._mgr_ips = ips[0]
+                return [socket.gethostname()]
+            self._mgr_ips = ips
         assert self._mgr_ips is not None
         return self._mgr_ips
+
+    @API.expose
+    def get_mgr_ip(self) -> str:
+        return self.get_mgr_ips()[0]
 
     @API.expose
     def get_hostname(self) -> str:
