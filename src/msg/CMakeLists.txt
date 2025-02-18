@@ -44,6 +44,10 @@ if(HAVE_RDMA)
     async/rdma/RDMAStack.cc)
 endif()
 
+if(WITH_URING)
+  list(APPEND msg_srcs async/UringManager.cc)
+endif(WITH_URING)
+
 add_library(common-msg-objs OBJECT ${msg_srcs})
 target_compile_definitions(common-msg-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
@@ -51,6 +55,10 @@ target_include_directories(common-msg-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(common-msg-objs
   PUBLIC
     legacy-option-headers)
+
+if(WITH_URING)
+  target_compile_definitions(common-msg-objs PUBLIC WITH_URING=1)
+endif(WITH_URING)
 
 if(WITH_DPDK)
   set(async_dpdk_srcs
