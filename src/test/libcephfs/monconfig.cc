@@ -68,7 +68,7 @@ TEST_F(MonConfig, MonAddrsMissing) {
   ASSERT_NE(nullptr, cct);
   clear_mon_config(cct);
 
-  ASSERT_EQ(-CEPHFS_ENOENT, ceph_mount(ca, NULL));
+  ASSERT_EQ(-ENOENT, ceph_mount(ca, NULL));
 }
 
 TEST_F(MonConfig, MonAddrsInConfigProxy) {
