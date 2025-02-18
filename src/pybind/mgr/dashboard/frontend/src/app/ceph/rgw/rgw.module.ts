@@ -64,6 +64,7 @@ import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-mo
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
 import { RgwStorageClassListComponent } from './rgw-storage-class-list/rgw-storage-class-list.component';
+
 import {
   ButtonModule,
   GridModule,
@@ -77,13 +78,15 @@ import {
   TreeviewModule,
   SelectModule,
   NumberModule,
-  TabsModule
+  TabsModule,
+  AccordionModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
 import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
 import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
+import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
 
 @NgModule({
   imports: [
@@ -111,10 +114,13 @@ import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw
     IconModule,
     NgbProgressbar,
     InputModule,
+    AccordionModule,
     CheckboxModule,
     SelectModule,
     NumberModule,
-    TabsModule
+    TabsModule,
+    IconModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -171,7 +177,8 @@ import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw
     RgwUserAccountsFormComponent,
     RgwUserAccountsDetailsComponent,
     RgwStorageClassListComponent,
-    RgwStorageClassDetailsComponent
+    RgwStorageClassDetailsComponent,
+    RgwStorageClassFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -325,7 +332,14 @@ const routes: Routes = [
   {
     path: 'tiering',
     data: { breadcrumbs: 'Tiering' },
-    children: [{ path: '', component: RgwStorageClassListComponent }]
+    children: [
+      { path: '', component: RgwStorageClassListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      }
+    ]
   },
   {
     path: 'nfs',
