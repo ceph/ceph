@@ -1072,7 +1072,11 @@ class RgwService(CephService):
             # this is a redeploy of older instance that doesn't have an explicitly
             # assigned port, in which case we can assume there is only 1 per host
             # and it matches the spec.
-            port = spec.get_port()
+            ports = spec.get_port()
+            if spec.ssl:
+                port = ports[1] if len(ports) > 1 else ports[0]
+            else:
+                port = ports[0]
 
         if spec.generate_cert:
             cert, key = self.mgr.cert_mgr.generate_cert(
