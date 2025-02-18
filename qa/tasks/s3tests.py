@@ -367,6 +367,10 @@ def configure(ctx, config):
         if lc_debug_interval:
             s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
 
+        rgw_restore_debug_interval = properties.get('rgw_restore_debug_interval')
+        if rgw_restore_debug_interval:
+            s3tests_conf['s3 main']['rgw_restore_debug_interval'] = rgw_restore_debug_interval
+
         if ctx.rgw_cloudtier is not None:
             log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
             client_rgw_config = ctx.rgw_cloudtier.config.get(client)
@@ -388,6 +392,12 @@ def configure(ctx, config):
                     s3tests_conf['s3 cloud']['target_path'] = cloud_target_path
                 if (cloud_target_storage_class != None):
                     s3tests_conf['s3 cloud']['target_storage_class'] = cloud_target_storage_class
+                cloud_allow_read_through = client_rgw_config.get('cloud_allow_read_through')
+                if (cloud_allow_read_through != None):
+                    s3tests_conf['s3 cloud']['allow_read_through'] = cloud_allow_read_through
+                cloud_read_through_restore_days = client_rgw_config.get('cloud_read_through_restore_days')
+                if (cloud_read_through_restore_days != None):
+                    s3tests_conf['s3 cloud']['read_through_restore_days'] = cloud_read_through_restore_days
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf_fp = BytesIO()
