@@ -90,6 +90,7 @@ tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% if iobuf_options %}
 iobuf_options = {{ iobuf_options }}
 {% endif %}
+qos_timeslice_in_usecs = {{ spec.qos_timeslice_in_usecs }}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}
