@@ -1,5 +1,5 @@
 @use '@carbon/styles/scss/config' with (
-  $font-path: '~@ibm/plex',
+  $font-path: '@ibm/plex',
   $flex-grid-columns: 16,
   $use-flexbox-grid: true,
 );
