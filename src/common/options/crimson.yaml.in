@@ -51,6 +51,35 @@ options:
   - startup
   min: 0
   max: 32
+- name: crimson_reactor_task_quota_ms
+  type: float
+  level: advanced
+  default: 0.5
+  desc: The maximum time (ms) Seastar reactors will wait between polls.
+  long_desc: The maximum time (ms) Seastar reactors will wait between polls.
+             Shorter time between pools will result in larger CPU utilization.
+  flags:
+  - startup
+- name: crimson_reactor_idle_poll_time_us
+  type: uint
+  level: advanced
+  default: 200
+  desc: Seastar's reactor idle polling time (ms) before going back to sleep.
+  long_desc: Seastar's reactor idle polling time (ms) before going back to sleep.
+             Longer reactor poll time will result in larger CPU utilization.
+  flags:
+  - startup
+- name: crimson_reactor_io_latency_goal_ms
+  type: float
+  level: advanced
+  default: 0
+  desc: The maximum time (ms) Seastar's reactor IO operations must take.
+        If not set(0 mean not set), defaults to 1.5 * crimson_reactor_task_quota_ms
+  long_desc: The maximum time (ms) Seastar's reactor IO operations must take.
+             If not set, defaults to 1.5 * crimson_reactor_task_quota_ms.
+             Increasing this value will allow more IO requests to be dispatched concurrently.
+  flags:
+  - startup
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
