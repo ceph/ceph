@@ -68,6 +68,18 @@ verify_fatal=1
 direct=1
 EOF
 
+status_log() {
+    POOL="${RBD_POOL:-mypool}"
+    GROUP="${NVMEOF_GROUP:-mygroup0}"
+    ceph -s
+    ceph host ls
+    ceph orch ls 
+    ceph orch ps
+    ceph health detail
+    ceph nvme-gw show $POOL $GROUP
+}
+
+
 echo "[nvmeof.fio] starting fio test..."
 
 if [ -n "$IOSTAT_INTERVAL" ]; then
@@ -79,6 +91,13 @@ if [ "$rbd_iostat" = true  ]; then
     timeout 20 rbd perf image iostat $RBD_POOL --iterations $iterations &
 fi
 fio --showcmd $fio_file
-sudo fio $fio_file 
+
+set +e 
+sudo fio $fio_file
+if [ $? -ne 0 ]; then
+    status_log
+    exit 1
+fi
+
 
 echo "[nvmeof.fio] fio test successful!"
