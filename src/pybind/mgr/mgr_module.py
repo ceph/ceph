@@ -1639,6 +1639,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: list of dicts describing the counters requested
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
+    
+    @API.expose
+    def get_perf_schema_labeled(self,
+                        svc_type: str,
+                        svc_name: str) -> Dict[str,
+                                               Dict[str, Dict[str, Union[str, int]]]]:
+        """
+        Called by the plugin to fetch perf counter schema info.
+        svc_name can be nullptr, as can svc_type, in which case
+        they are wildcards
+
+        :param str svc_type:
+        :param str svc_name:
+        :return: list of dicts describing the counters requested
+        """
+        return self._ceph_get_perf_schema_labeled(svc_type, svc_name)
 
     def get_rocksdb_version(self) -> str:
         """
@@ -1671,7 +1687,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_latest_counter(self,
                            svc_type: str,
                            svc_name: str,
-                           path: str) -> Dict[str, Union[Tuple[float, int],
+                           path: str,
+                           counter_name: str,
+                           sub_counter_name: str,
+                           labels: List[(str, str)]) -> Dict[str, Union[Tuple[float, int],
                                                          Tuple[float, int, int]]]:
         """
         Called by the plugin to fetch only the newest performance counter data
@@ -1685,7 +1704,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             (timestamp, value, count) is returned.  This may be empty if no
             data is available.
         """
-        return self._ceph_get_latest_counter(svc_type, svc_name, path)
+        return self._ceph_get_latest_counter(svc_type, svc_name, path, counter_name, sub_counter_name, labels)
 
     @API.expose
     def list_servers(self) -> List[ServerInfoT]:
@@ -2172,22 +2191,35 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(OSDMap, self._ceph_get_osdmap())
 
+    # TODO: Naveen: have two different API's - one for labeled and another for unlabeled
     @API.expose
-    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
-        data = self.get_latest_counter(
-            daemon_type, daemon_name, counter)[counter]
+    def get_latest(self, daemon_type: str, daemon_name: str, counter: str, counter_name: str, sub_counter_name: str, labels: List[(str, str)]) -> int:
+        data = 0;
+        if (len(labels) != 0):
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter_name]
+        else:
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter]
         if data:
+            self.log.debug('get_latest: counter: {0}, counter_name: {1}, data {2}'.format(counter, counter_name, data[1]))
             return data[1]
         else:
             return 0
 
     @API.expose
-    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
-        data = self.get_latest_counter(
-            daemon_type, daemon_name, counter)[counter]
+    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str, counter_name: str, sub_counter_name: str, labels: List[(str, str)]) -> Tuple[int, int]:
+        data = 0;
+        if (len(labels) != 0):
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter_name]
+        else:
+            data = self.get_latest_counter(
+                daemon_type, daemon_name, counter, counter_name, sub_counter_name, labels)[counter]
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
+            self.log.debug('get_latest: counter: {0}, counter_name: {1}, data {2}'.format(counter, counter_name, data))
             return value, count
         else:
             return 0, 0
@@ -2227,11 +2259,19 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     continue
 
                 schemas = self.get_perf_schema(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas: {}'.format(schemas))
+                self.log.debug('perf-schemas json: {}'.format(json.dumps(schemas)))
                 if not schemas:
                     self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
                     ))
                     continue
+                
+                labeled_schemas = self.get_perf_schema_labeled(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas-labeled: {}'.format(labeled_schemas))
+                self.log.debug('perf-schemas-labeled json: {}'.format(json.dumps(labeled_schemas)))
 
                 # Value is returned in a potentially-multi-service format,
                 # get just the service we're asking about
@@ -2257,7 +2297,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         v, c = self.get_latest_avg(
                             service['type'],
                             service['id'],
-                            counter_path
+                            counter_path,
+                            "",
+                            "",
+                            []
                         )
                         counter_info['value'], counter_info['count'] = v, c
                         result[svc_full_name][counter_path] = counter_info
@@ -2265,7 +2308,109 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         counter_info['value'] = self.get_latest(
                             service['type'],
                             service['id'],
-                            counter_path
+                            counter_path,
+                            "",
+                            "",
+                            []
+                        )
+
+                    result[svc_full_name][counter_path] = counter_info
+
+        self.log.debug('perf-schemas-labeled result json: {}'.format(json.dumps(result)))
+        self.log.debug("returning {0} counter".format(len(result)))
+
+        return result
+    
+    # TODO: naveen: fix comments and add a comment to say that people should use this API over the previous
+    @API.expose
+    @profile_method()
+    def get_labeled_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
+        """
+        Return the perf counters currently known to this ceph-mgr
+        instance, filtered by priority equal to or greater than `prio_limit`.
+
+        The result is a map of string to dict, associating services
+        (like "osd.123") with their counters.  The counter
+        dict for each service maps counter paths to a counter
+        info structure, which is the information from
+        the schema, plus an additional "value" member with the latest
+        value.
+        """
+
+        result = defaultdict(dict)  # type: Dict[str, dict]
+
+        for server in self.list_servers():
+            for service in cast(List[ServiceInfoT], server['services']):
+                if service['type'] not in services:
+                    continue
+
+                schemas = self.get_perf_schema(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas: {}'.format(schemas))
+                self.log.debug('perf-schemas json: {}'.format(json.dumps(schemas)))
+                if not schemas:
+                    self.log.warning("No perf counter schema for {0}.{1}".format(
+                        service['type'], service['id']
+                    ))
+                    continue
+                
+                labeled_schemas = self.get_perf_schema_labeled(service['type'], service['id'])
+                self.log.debug('services: {}'.format(service))
+                self.log.debug('perf-schemas-labeled: {}'.format(labeled_schemas))
+                self.log.debug('perf-schemas-labeled json: {}'.format(json.dumps(labeled_schemas)))
+
+
+                # Value is returned in a potentially-multi-service format,
+                # get just the service we're asking about
+                svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
+                schema = schemas[svc_full_name]
+
+                # Populate latest values
+                for counter_path, counter_schema in schema.items():
+                    # self.log.debug("{0}: {1}".format(
+                    #     counter_path, json.dumps(counter_schema)
+                    # ))
+                    priority = counter_schema['priority']
+                    assert isinstance(priority, int)
+                    if priority < prio_limit:
+                        continue
+
+                    tp = counter_schema['type']
+                    assert isinstance(tp, int)
+                    counter_info = dict(counter_schema)
+                    # Also populate count for the long running avgs
+                    if tp & self.PERFCOUNTER_LONGRUNAVG:
+                        v, c = self.get_latest_avg(
+                            service['type'],
+                            service['id'],
+                            counter_path,
+                            "", # TODO: Naveen
+                            "",
+                            []
+                        )
+                        counter_info['value'], counter_info['count'] = v, c
+                        result[svc_full_name][counter_path] = counter_info
+                    else:
+                        counter_info['value'] = self.get_latest(
+                            service['type'],
+                            service['id'],
+                            counter_path,
+                            "", #TODO: Naveen
+                            "",
+                            []
                         )
 
                     result[svc_full_name][counter_path] = counter_info

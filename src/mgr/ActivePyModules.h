@@ -97,8 +97,14 @@ public:
   PyObject *get_latest_counter_python(
     const std::string &svc_type,
     const std::string &svc_id,
-    const std::string &path);
+    const std::string &path,
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels);
   PyObject *get_perf_schema_python(
+     const std::string &svc_type,
+     const std::string &svc_id);
+  PyObject *get_perf_schema_labeled_python(
      const std::string &svc_type,
      const std::string &svc_id);
   PyObject *get_rocksdb_version();
@@ -112,7 +118,10 @@ public:
         PyFormatter& f)> fct,
       const std::string &svc_name,
       const std::string &svc_id,
-      const std::string &path) const;
+      const std::string &path,
+      const std::string_view &counter_name,
+      const std::string_view &sub_counter_name,
+      const std::vector<std::pair<std::string_view,std::string_view>> &labels) const;
 
   MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,

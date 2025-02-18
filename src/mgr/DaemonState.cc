@@ -391,6 +391,7 @@ void DaemonPerfCounters::update(const MMgrReport& report)
   }
   // Remove any old types
   for (const auto &t : report.undeclare_types) {
+    // ASK ME: Naveen: Why are we not removing old types for DaemonPerfCounter's types variable?
     session->declared_types.erase(t);
   }
 
@@ -406,6 +407,7 @@ void DaemonPerfCounters::update(const MMgrReport& report)
     // multiple sessions from daemons with the same name, and one
     // session clearing stats created by another on open.
     if (instances_it == instances.end()) {
+      dout(20) << "DaemonPerfCounter::update t_path" << t_path << dendl;
       instances_it = instances.insert({t_path, t.type}).first;
     }
     uint64_t val = 0;

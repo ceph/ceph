@@ -18,6 +18,7 @@
 
 #include <rocksdb/version.h>
 
+#include "common/perf_counters_key.h"
 #include "common/errno.h"
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
@@ -45,6 +46,8 @@
 
 using std::pair;
 using std::string;
+using std::vector;
+using std::string_view;
 using namespace std::literals;
 
 ActivePyModules::ActivePyModules(
@@ -843,24 +846,51 @@ PyObject* ActivePyModules::with_perf_counters(
     std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path) const
+    const std::string &path,
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels) const
 {
   PyFormatter f;
-  f.open_array_section(path);
+
+  std::string resolved_path;
+  // if labels are not empty, construct the path
+  if (!labels.empty()){
+
+    // Convert the vector to an array of label_pair
+    // FIXME: Naveen: Arrays take constant integral expression. I can't use labels.size() to declare the array size here
+    // https://stackoverflow.com/questions/2923272/how-to-convert-vector-to-array/40031309#comment31156323_2923295
+    // Check, if declaring a size of 100 for labels enough? 
+    ceph::perf_counters::label_pair labels_array[100];
+    std::copy(labels.begin(), labels.end(), labels_array);
+
+    // Call key_create with the labels_array
+    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name, std::move(labels_array));
+    resolved_path = (counter_name_with_labels.append(".")).append(sub_counter_name);
+    dout(20) << "with_perf_counters labels resolved_path" << resolved_path << dendl;
+  }
+  else {
+    resolved_path = path;
+    dout(20) << "with_perf_counters without labels resolved_path" << resolved_path << dendl;
+  }
+
+  // FIXME: Naveen: Is the resolved_path (i.e path with labels important here?), because open_array_section strips
+  // null values? I am thinking this is just a placeholder?
+  f.open_array_section(resolved_path);
   {
     without_gil_t no_gil;
     std::lock_guard l(lock);
     auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
     if (metadata) {
       std::lock_guard l2(metadata->lock);
-      if (metadata->perf_counters.instances.count(path)) {
-        auto counter_instance = metadata->perf_counters.instances.at(path);
-        auto counter_type = metadata->perf_counters.types.at(path);
+      if (metadata->perf_counters.instances.count(resolved_path)) {
+        auto counter_instance = metadata->perf_counters.instances.at(resolved_path);
+        auto counter_type = metadata->perf_counters.types.at(resolved_path);
         with_gil(no_gil, [&] {
           fct(counter_instance, counter_type, f);
         });
       } else {
-        dout(4) << "Missing counter: '" << path << "' ("
+        dout(4) << "Missing counter: '" << resolved_path << "' ("
 		<< svc_name << "." << svc_id << ")" << dendl;
         dout(20) << "Paths are:" << dendl;
         for (const auto &i : metadata->perf_counters.instances) {
@@ -905,13 +935,16 @@ PyObject* ActivePyModules::get_counter_python(
       }
     }
   };
-  return with_perf_counters(extract_counters, svc_name, svc_id, path);
+  return with_perf_counters(extract_counters, svc_name, svc_id, path, "", "", {});
 }
 
 PyObject* ActivePyModules::get_latest_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path)
+    const std::string &path,
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels)
 {
   auto extract_latest_counters = [](
       PerfCounterInstance& counter_instance,
@@ -929,7 +962,7 @@ PyObject* ActivePyModules::get_latest_counter_python(
       f.dump_unsigned("v", datapoint.v);
     }
   };
-  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path);
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path, counter_name, sub_counter_name, labels);
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(
@@ -982,6 +1015,188 @@ PyObject* ActivePyModules::get_perf_schema_python(
     dout(4) << __func__ << ": No daemon state found for "
               << svc_type << "." << svc_id << ")" << dendl;
   }
+  return f.get();
+}
+
+PyObject* ActivePyModules::get_perf_schema_labeled_python(
+    const std::string &svc_type,
+    const std::string &svc_id)
+{
+  without_gil_t no_gil;
+  std::lock_guard l(lock);
+
+  DaemonStateCollection daemons;
+
+  if (svc_type == "") {
+    daemons = daemon_state.get_all();
+  } else if (svc_id.empty()) {
+    daemons = daemon_state.get_by_service(svc_type);
+  } else {
+    auto key = DaemonKey{svc_type, svc_id};
+    // so that the below can be a loop in all cases
+    auto got = daemon_state.get(key);
+    if (got != nullptr) {
+      daemons[key] = got;
+    }
+  }
+
+  auto f = with_gil(no_gil, [&] {
+    return PyFormatter();
+  });
+  if (!daemons.empty()) {
+    for (auto& [key, state] : daemons) {
+      std::lock_guard l(state->lock);
+      with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
+        string_view prev_key_name;
+        string_view key_name;
+        std::vector<std::pair<std::string_view,std::string_view>> prev_key_labels;
+
+        // Main object section
+        f.open_object_section(key.c_str());
+
+        for (auto ctr_inst_iter : state->perf_counters.instances) {
+          // counter_name "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+          const auto &counter_name_with_labels = ctr_inst_iter.first;
+          // PerfCounterType?
+          auto type = state->perf_counters.types[counter_name_with_labels];
+          
+          // "osd_scrub_sh_repl"
+          
+          
+          // create a vector of labels i.e [(level, shallow), (pooltype, replicated)]
+          std::vector<std::pair<std::string_view,std::string_view>> key_labels;
+          for (auto label : ceph::perf_counters::key_labels(counter_name_with_labels)) {
+            if (!label.first.empty()){
+              key_labels.push_back(label);
+            }
+          }
+
+          // key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+          string key_name_without_counter;
+          if (!key_labels.empty()){
+            // counter_name "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+            // key_name = osd_scrub_sh_repl
+            key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+            dout(20) << __func__ << " key_name: " << key_name << dendl;
+          } else {
+            // counter name "osd.stat_bytes"
+            // key_name = osd
+            dout(20) << __func__ << " counter_name_with_labels: " << counter_name_with_labels << dendl;
+
+            size_t pos = counter_name_with_labels.find('.');
+            dout(20) << __func__ << " delimiter pos: " << pos << dendl;
+
+
+            key_name_without_counter = counter_name_with_labels.substr(0, pos);
+            key_name = key_name_without_counter;
+            dout(20) << __func__ << " unlabelled key_name: " << key_name << dendl;
+
+            string x = counter_name_with_labels.substr(0, pos);
+            dout(20) << __func__ << " unlabelled key_name x: " << x << dendl;
+
+          }
+
+          // TODO: naveen: Add counter_name to PerfCounterType when building in MgrClient.
+          // We loose the ability to extract the name here
+          // "successful_scrubs_elapsed"
+          string_view counter_name = type.counter_name;
+
+          if (prev_key_name != key_name) {
+            // close previous set of counters
+            if (!prev_key_name.empty()){
+              f.close_section(); // counters
+              f.close_section(); // close label counter object section
+              f.close_section(); // close array section
+            }
+            prev_key_name = key_name;
+            prev_key_labels = key_labels;
+
+            dout(20) << __func__ << " f.open_array_section(key_name) 1 " << key_name << dendl;
+            f.open_array_section(key_name);
+            dout(20) << __func__ << " f.open_array_section(key_name) 2" << key_name << dendl;
+            
+            f.open_object_section(""); // should be enclosed by array
+          
+            f.open_object_section("labels");
+            for (auto label: key_labels){
+              f.dump_string(label.first, label.second);
+            }
+            f.close_section(); //labels
+
+            f.open_object_section("counters");
+            f.open_object_section(counter_name);
+            f.dump_string("description", type.description);
+            // f.dump_string_raw("description", std::string(counter_name_with_labels).data());
+
+            if (!type.nick.empty()) {
+              f.dump_string("nick", type.nick);
+            }
+            f.dump_unsigned("type", type.type);
+            f.dump_unsigned("priority", type.priority);
+            f.dump_unsigned("units", type.unit);
+            f.close_section();//counter_name section
+
+            dout(20) << __func__ << " test 1 " << key_name << dendl;
+
+          }
+
+          if (prev_key_name == key_name && prev_key_labels == key_labels) {
+            f.open_object_section(counter_name);
+            //f.dump_string("description", type.description);
+            f.dump_string("description", counter_name_with_labels);
+
+            if (!type.nick.empty()) {
+              f.dump_string("nick", type.nick);
+            }
+            f.dump_unsigned("type", type.type);
+            f.dump_unsigned("priority", type.priority);
+            f.dump_unsigned("units", type.unit);
+            f.close_section();//counter_name section
+            dout(20) << __func__ << " test 2 " << key_name << dendl;
+
+          }
+
+          if (prev_key_name == key_name && prev_key_labels != key_labels) {
+            // close previous counter section of metric
+            f.close_section(); // counters
+            f.close_section(); // close label counter object section
+
+            f.open_object_section(""); // should be enclosed by array
+          
+            f.open_object_section("labels");
+            for (auto label: key_labels){
+              f.dump_string(label.first, label.second);
+            }
+            f.close_section(); //labels
+            dout(20) << __func__ << " test 3 " << key_name << dendl;
+
+            f.open_object_section("counters");
+            f.open_object_section(counter_name);
+            //f.dump_string("description", type.description);
+            f.dump_string("description", counter_name_with_labels);
+
+            if (!type.nick.empty()) {
+              f.dump_string("nick", type.nick);
+            }
+            f.dump_unsigned("type", type.type);
+            f.dump_unsigned("priority", type.priority);
+            f.dump_unsigned("units", type.unit);
+            f.close_section();//counter_name section
+
+          }
+        }
+
+        f.close_section(); // counters
+        f.close_section(); // close label counter object section
+        f.close_section(); // close array section
+      });
+      dout(20) << __func__ << " test 4 " << dendl;
+    }
+  } else {
+    dout(4) << __func__ << ": No daemon state found for "
+              << svc_type << "." << svc_id << ")" << dendl;
+  }
+  dout(20) << __func__ << " test 5 " << dendl;
   return f.get();
 }
 
