@@ -46,7 +46,7 @@ int add(const DoutPrefixProvider* dpp,
 
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_add(op, resource, exclusive, limit);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int remove(const DoutPrefixProvider* dpp,
@@ -63,7 +63,7 @@ int remove(const DoutPrefixProvider* dpp,
 
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_rm(op, name);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int list(const DoutPrefixProvider* dpp,
@@ -89,7 +89,7 @@ int list(const DoutPrefixProvider* dpp,
   ::cls_user_account_resource_list(op, marker, path_prefix, max_items,
                                    entries, &truncated, &next_marker, &ret);
 
-  r = ref.operate(dpp, &op, nullptr, y);
+  r = ref.operate(dpp, std::move(op), nullptr, y);
   if (r == -ENOENT) {
     next_marker.clear();
     return 0;

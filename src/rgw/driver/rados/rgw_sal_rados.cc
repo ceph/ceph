@@ -1293,7 +1293,7 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
     std::ignore = completion.release();
     return 0;
   }
-  if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, &op, y); ret < 0) {
+  if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, std::move(op), y); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to append to logging object '" << temp_obj_name <<
       "'. ret = " << ret << dendl;
     return ret;
@@ -2768,7 +2768,7 @@ int RadosObject::get_torrent_info(const DoutPrefixProvider* dpp,
   librados::ObjectReadOperation op;
   op.omap_get_vals_by_keys(keys, &result, nullptr);
 
-  ret = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, nullptr, y);
+  ret = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -4260,10 +4260,11 @@ MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* 
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
+  librados::ObjectWriteOperation op;
   op.assert_exists();
   lock.set_duration(dur);
   lock.lock_exclusive(&op);
-  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (! ret) {
     locked = true;
   }
@@ -4293,7 +4294,7 @@ int RadosLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_get_entry(op, marker, bl);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -4319,7 +4320,7 @@ int RadosLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield
   cls_rgw_lc_get_next_entry(op, marker, bl);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -4349,7 +4350,7 @@ int RadosLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_set_entry(op, cls_entry);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
 }
 
 int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
@@ -4363,7 +4364,7 @@ int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y
   cls_rgw_lc_list(op, marker, max_entries, bl);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -4393,7 +4394,7 @@ int RadosLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_rm_entry(op, cls_entry);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
 }
 
 int RadosLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
@@ -4404,7 +4405,7 @@ int RadosLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_get_head(op, bl);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (ret < 0) {
     return ret;
   }
@@ -4434,7 +4435,7 @@ int RadosLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
   cls_rgw_lc_put_head(op, cls_head);
 
   auto& ioctx = *store->getRados()->get_lc_pool_ctx();
-  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
 }
 
 std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& lock_name,
@@ -4759,7 +4760,7 @@ int RadosLuaManager::add_package(const DoutPrefixProvider *dpp, optional_yield y
   librados::ObjectWriteOperation op;
   op.omap_set(new_package);
   return rgw_rados_operate(dpp, ioctx,
-      PACKAGE_LIST_OBJECT_NAME, &op, y);
+      PACKAGE_LIST_OBJECT_NAME, std::move(op), y);
 }
 
 int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yield y, const std::string& package_name)
@@ -4774,7 +4775,7 @@ int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yiel
     // remove specific version of the the package
     op.omap_rm_keys(std::set<std::string>({package_name}));
     auto ret = rgw_rados_operate(dpp, ioctx,
-        PACKAGE_LIST_OBJECT_NAME, &op, y);
+        PACKAGE_LIST_OBJECT_NAME, std::move(op), y);
     if (ret < 0) {
         return ret;
     }
@@ -4791,7 +4792,7 @@ int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yiel
     if (package_no_version.compare(package_name) == 0) {
         op.omap_rm_keys(std::set<std::string>({package}));
         ret = rgw_rados_operate(dpp, ioctx,
-            PACKAGE_LIST_OBJECT_NAME, &op, y);
+            PACKAGE_LIST_OBJECT_NAME, std::move(op), y);
         if (ret < 0) {
             return ret;
         }
@@ -4815,7 +4816,7 @@ int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield
     rgw::lua::packages_t packages_chunk;
     op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
     const auto ret = rgw_rados_operate(dpp, ioctx,
-      PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
+      PACKAGE_LIST_OBJECT_NAME, std::move(op), nullptr, y);
 
     if (ret < 0) {
       return ret;
@@ -4837,7 +4838,7 @@ int RadosLuaManager::watch_reload(const DoutPrefixProvider* dpp)
   librados::ObjectWriteOperation op;
   op.create(false);
   auto r = rgw_rados_operate(dpp, ioctx,
-      PACKAGE_LIST_OBJECT_NAME, &op, null_yield);
+      PACKAGE_LIST_OBJECT_NAME, std::move(op), null_yield);
   if (r < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to watch " << PACKAGE_LIST_OBJECT_NAME
         << ". cannot create object. error: " << cpp_strerror(r) << dendl;

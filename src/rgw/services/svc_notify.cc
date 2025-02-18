@@ -219,7 +219,7 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
     librados::ObjectWriteOperation op;
     op.create(false);
 
-    r = notify_obj.operate(dpp, &op, y);
+    r = notify_obj.operate(dpp, std::move(op), y);
     if (r < 0 && r != -EEXIST) {
       ldpp_dout(dpp, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
       return r;

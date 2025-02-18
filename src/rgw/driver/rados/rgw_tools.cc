@@ -198,7 +198,7 @@ int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
 }
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      librados::ObjectReadOperation&& op, bufferlist* pbl,
                       optional_yield y, int flags, const jspan_context* trace_info,
                       version_t* pver)
 {
@@ -208,7 +208,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     auto& yield = y.get_yield_context();
     auto ex = yield.get_executor();
     boost::system::error_code ec;
-    auto [ver, bl] = librados::async_operate(ex, ioctx, oid, std::move(*op),
+    auto [ver, bl] = librados::async_operate(ex, ioctx, oid, std::move(op),
                                              flags, trace_info, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
@@ -219,7 +219,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     return -ec.value();
   }
   maybe_warn_about_blocking(dpp);
-  int r = ioctx.operate(oid, op, nullptr, flags);
+  int r = ioctx.operate(oid, &op, nullptr, flags);
   if (pver) {
     *pver = ioctx.get_last_version();
   }
@@ -227,14 +227,14 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
 }
 
 int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectWriteOperation *op, optional_yield y,
+                      librados::ObjectWriteOperation&& op, optional_yield y,
 		      int flags, const jspan_context* trace_info, version_t* pver)
 {
   if (y) {
     auto& yield = y.get_yield_context();
     auto ex = yield.get_executor();
     boost::system::error_code ec;
-    version_t ver = librados::async_operate(ex, ioctx, oid, std::move(*op),
+    version_t ver = librados::async_operate(ex, ioctx, oid, std::move(op),
                                             flags, trace_info, yield[ec]);
     if (pver) {
       *pver = ver;
@@ -242,7 +242,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     return -ec.value();
   }
   maybe_warn_about_blocking(dpp);
-  int r = ioctx.operate(oid, op, flags, trace_info);
+  int r = ioctx.operate(oid, &op, flags, trace_info);
   if (pver) {
     *pver = ioctx.get_last_version();
   }
