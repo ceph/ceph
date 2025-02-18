@@ -202,7 +202,7 @@ namespace rgw::dedup {
 		     bool                 src_has_sha256);
 
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
-    void init_rados_access_handles();
+    int  init_rados_access_handles();
 
     // private data members
     rgw::sal::Driver* driver = nullptr;

@@ -115,7 +115,7 @@ namespace rgw::dedup {
 			  uint64_t *p_duplicate_bytes_approx);
     void remove_singletons_and_redistribute_keys();
   private:
-    // 28 Bytes unified entries
+    // 32 Bytes unified entries
     struct table_entry_t {
       key_t key;
       value_t val;

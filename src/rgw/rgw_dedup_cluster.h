@@ -47,22 +47,21 @@ namespace rgw::dedup {
     };
 
     //==================================================================================
-    cluster(const DoutPrefixProvider *_dpp, CephContext* const _cct);
-    int          init(rgw::sal::RadosStore *store,
-		      librados::IoCtx &ioctx,
-		      struct dedup_epoch_t*,
-		      bool init_epoch,
-		      work_shard_t num_work_shards,
-		      md5_shard_t num_md5_shards);
-    bool         was_initialized() { return d_was_initialized; }
+    cluster(const DoutPrefixProvider *_dpp,
+	    CephContext* cct,
+	    rgw::sal::Driver* driver);
+    int          reset(rgw::sal::RadosStore *store,
+		       librados::IoCtx &ioctx,
+		       struct dedup_epoch_t*,
+		       work_shard_t num_work_shards,
+		       md5_shard_t num_md5_shards);
+
     utime_t      get_epoch_time() { return d_epoch_time; }
     work_shard_t get_next_work_shard_token(librados::IoCtx &ioctx,
 					   work_shard_t num_work_shards);
     md5_shard_t  get_next_md5_shard_token(librados::IoCtx &ioctx,
 					  md5_shard_t num_md5_shards);
-    static bool  can_start_new_scan(rgw::sal::RadosStore *store,
-				    const utime_t &epoch,
-				    const DoutPrefixProvider *dpp);
+    bool         can_start_new_scan(rgw::sal::RadosStore *store);
     static int   collect_all_shard_stats(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp);
     static int   dedup_control(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp, int urgent_msg);
     static int   dedup_restart_scan(rgw::sal::RadosStore *store, bool dry_run, const DoutPrefixProvider *dpp);
@@ -131,7 +130,7 @@ namespace rgw::dedup {
     static constexpr unsigned TOKEN_STATE_TIMED_OUT = 0xDD;
     static constexpr unsigned TOKEN_STATE_COMPLETED = 0xFF;
 
-    void reset();
+    void clear();
     bool all_shard_tokens_completed(librados::IoCtx &ioctx,
 				    unsigned shards_count,
 				    const char *prefix,
@@ -153,10 +152,8 @@ namespace rgw::dedup {
 				   const bufferlist &bl);
 
     const DoutPrefixProvider *dpp;
-    CephContext* const cct;
     std::string               d_lock_cookie;
     std::string               d_cluster_id;
-    bool                      d_was_initialized = false;
     md5_shard_t               d_curr_md5_shard = 0;
     work_shard_t              d_curr_worker_shard = 0;
     utime_t                   d_epoch_time;

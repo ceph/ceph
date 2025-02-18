@@ -3,7 +3,6 @@
 #include "rgw_dedup_epoch.h"
 #include "rgw_common.h"
 #include "rgw_dedup_store.h"
-#include "include/ceph_assert.h"
 #include "include/rados/rados_types.hpp"
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
@@ -239,6 +238,7 @@ namespace rgw::dedup {
       "size": )" + replica_count +
       R"(
     })";
+
     int ret = rados->get_rados_handle()->mon_command(command, inbl, nullptr, &output);
     if (output.length()) {
       if (output != "pool 'rgw_dedup_pool' already exists") {
@@ -246,8 +246,10 @@ namespace rgw::dedup {
       }
     }
     if (ret != 0 && ret != -EEXIST) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed to create pool " << DEDUP_POOL_NAME
-			<< " with: " << cpp_strerror(ret) << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to create pool "
+			<< DEDUP_POOL_NAME << " with: "
+			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+      return ret;
     }
 
     ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), dedup_pool, ioctx);
@@ -260,23 +262,10 @@ namespace rgw::dedup {
   }
 
   //==========================================================================
-  static constexpr auto COOKIE_LEN = 15;
-  static constexpr auto CLUSTER_ID_LEN = 15;
-  //---------------------------------------------------------------------------
-  cluster::cluster(const DoutPrefixProvider *_dpp, CephContext* const _cct) :
-    dpp(_dpp), cct(_cct),
-    d_lock_cookie(gen_rand_alphanumeric(cct, COOKIE_LEN)),
-    d_cluster_id (gen_rand_alphanumeric(cct, CLUSTER_ID_LEN))
-  {
-    d_was_initialized = false;
-    ldpp_dout(dpp, 10) << __func__ << "::cluser_id=" << d_cluster_id << dendl;
-  }
 
   //---------------------------------------------------------------------------
-  void cluster::reset()
+  void cluster::clear()
   {
-    d_was_initialized = false;
-
     d_curr_md5_shard = 0;
     d_curr_worker_shard = 0;
 
@@ -290,30 +279,57 @@ namespace rgw::dedup {
     d_num_failed_workers = 0;
   }
 
+
+  static constexpr auto COOKIE_LEN = 15;
+  static constexpr auto CLUSTER_ID_LEN = 15;
   //---------------------------------------------------------------------------
-  int cluster::init(rgw::sal::RadosStore *store,
-		    librados::IoCtx &ioctx,
-		    //md5_shard_t num_md5_shards,
-		    dedup_epoch_t *p_epoch,
-		    bool init_epoch,
-		    work_shard_t num_work_shards,
-		    md5_shard_t num_md5_shards)
+  cluster::cluster(const DoutPrefixProvider *_dpp,
+		   CephContext *cct,
+		   rgw::sal::Driver* driver):
+    dpp(_dpp),
+    d_lock_cookie(gen_rand_alphanumeric(cct, COOKIE_LEN)),
+    d_cluster_id (gen_rand_alphanumeric(cct, CLUSTER_ID_LEN))
   {
-    int ret;
-    reset();
-    if (init_epoch) {
-      ldpp_dout(dpp, 10) << __func__ << "::init_epoch is set" << dendl;
-      ret = set_epoch(ioctx, d_cluster_id, dpp, num_work_shards, num_md5_shards);
-      if (ret != 0) {
-	ldpp_dout(dpp, 1) << __func__ << "::failed set_epoch()! ret="
-			  << ret << "::" << cpp_strerror(ret) << dendl;
-	return ret;
-      }
+    clear();
+    ldpp_dout(dpp, 10) << __func__ << "::cluser_id=" << d_cluster_id << dendl;
+
+    auto store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      ldpp_dout(dpp, 0) << "ERR: failed dynamic_cast to RadosStore" << dendl;
+      // TBD: should we through an exception ??
+      return;
     }
+
+    librados::IoCtx ioctx;
+    if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
+      // TBD: should we through an exception ??
+      return;
+    }
+    // generate an empty epoch with zero counters
+    int ret = set_epoch(ioctx, d_cluster_id, dpp, 0, 0);
+    if (ret != 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::failed set_epoch()! ret="
+			<< ret << "::" << cpp_strerror(ret) << dendl;
+      return;
+    }
+
+    dedup_epoch_t epoch;
+    reset(store, ioctx, &epoch, 0, 0);
+  }
+
+  //---------------------------------------------------------------------------
+  int cluster::reset(rgw::sal::RadosStore *store,
+		     librados::IoCtx &ioctx,
+		     dedup_epoch_t *p_epoch,
+		     work_shard_t num_work_shards,
+		     md5_shard_t num_md5_shards)
+  {
     ldpp_dout(dpp, 10) << __func__ << "::REQ num_work_shards=" << num_work_shards
 		       << "::num_md5_shards=" << num_md5_shards << dendl;
+    clear();
+
     while (true) {
-      ret = get_epoch(ioctx, dpp, p_epoch, __func__);
+      int ret = get_epoch(ioctx, dpp, p_epoch, __func__);
       if (ret != 0) {
 	return ret;
       }
@@ -323,7 +339,7 @@ namespace rgw::dedup {
 	break;
       }
       else if (!num_work_shards && !num_md5_shards) {
-
+	ldpp_dout(dpp, 10) << __func__ << "::Init flow, no need to wait" << dendl;
 	break;
       }
       else {
@@ -336,8 +352,6 @@ namespace rgw::dedup {
     cleanup_prev_run(ioctx);
     create_shard_tokens(ioctx, p_epoch->num_work_shards, WORKER_SHARD_PREFIX);
     create_shard_tokens(ioctx, p_epoch->num_md5_shards, MD5_SHARD_PREFIX);
-
-    d_was_initialized = true;
 
     return 0;
   }
@@ -437,7 +451,6 @@ namespace rgw::dedup {
 					    uint64_t count_b,
 					    const char *prefix)
   {
-    ceph_assert(d_was_initialized);
     shard_token_oid sto(prefix, shard);
     std::string oid(sto.get_buff(), sto.get_buff_size());
     bufferlist empty_bl;
@@ -455,7 +468,6 @@ namespace rgw::dedup {
 					  const char *prefix,
 					  const bufferlist &bl)
   {
-    ceph_assert(d_was_initialized);
     shard_token_oid sto(prefix, shard);
     std::string oid(sto.get_buff(), sto.get_buff_size());
     ldpp_dout(dpp, 10) << __func__ << "::" << prefix << "::" << oid << dendl;
@@ -482,8 +494,6 @@ namespace rgw::dedup {
 					uint16_t max_shard,
 					const char *prefix)
   {
-    ceph_assert(d_was_initialized);
-
     // lock paramters:
     const utime_t     lock_duration;  // zero duration means lock doesn't expire
     const uint8_t     lock_flags = 0; // no flags
@@ -573,7 +583,6 @@ namespace rgw::dedup {
 					   uint8_t completed_arr[],
 					   uint64_t *p_total_ingressed)
   {
-    ceph_assert(d_was_initialized);
     unsigned count = 0;
     shard_token_oid sto(prefix);
     for (unsigned shard = 0; shard < shards_count; shard++) {
@@ -1030,11 +1039,9 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  bool cluster::can_start_new_scan(rgw::sal::RadosStore *store,
-				   const utime_t &epoch_time,
-				   const DoutPrefixProvider *dpp)
+  bool cluster::can_start_new_scan(rgw::sal::RadosStore *store)
   {
-    ldpp_dout(dpp, 10) << __func__ << "::epoch=" << epoch_time << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::epoch=" << d_epoch_time << dendl;
     librados::IoCtx ioctx;
     if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
       return -1;
@@ -1048,13 +1055,13 @@ namespace rgw::dedup {
       return true;
     }
 
-    if (new_epoch.time <= epoch_time) {
-      if (new_epoch.time == epoch_time) {
+    if (new_epoch.time <= d_epoch_time) {
+      if (new_epoch.time == d_epoch_time) {
 	ldpp_dout(dpp, 10) << __func__ << "::Epoch hasn't change - > Do not restart scan!!" << dendl;
       }
       else {
 	ldpp_dout(dpp, 1) << __func__ << "::Do not restart scan!\n    epoch="
-			  << epoch_time << "\nnew_epoch="<< new_epoch.time << dendl;
+			  << d_epoch_time << "\nnew_epoch="<< new_epoch.time <<dendl;
       }
       return false;
     }
