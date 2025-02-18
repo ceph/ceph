@@ -30,6 +30,8 @@
 #include "librbd/io/ImageDispatchSpec.h"
 #include <boost/scope_exit.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::api::Image: " << __func__ << ": "

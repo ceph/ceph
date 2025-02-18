@@ -21,6 +21,7 @@
 #include <boost/tuple/tuple.hpp>
 #include <list>
 #include <map>
+#include <shared_mutex> // for std::shared_lock
 #include <vector>
 
 #define dout_subsys ceph_subsys_rbd
