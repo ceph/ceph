@@ -3085,26 +3085,26 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   if (!iref_reader.is_state_satisfied()) {
     ldout(cct, 10) << "inactive, discarding " << *m << dendl;
-    return true;
+    return Dispatcher::UNHANDLED();
   }
 
   switch (m->get_type()) {
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
     handle_mds_map(ref_cast<MMDSMap>(m));
-    break;
+    return Dispatcher::ACKNOWLEDGED();
   case CEPH_MSG_FS_MAP:
     handle_fs_map(ref_cast<MFSMap>(m));
-    break;
+    return Dispatcher::ACKNOWLEDGED();
   case CEPH_MSG_FS_MAP_USER:
     handle_fs_map_user(ref_cast<MFSMapUser>(m));
-    break;
-  case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session(ref_cast<MClientSession>(m));
-    break;
-
+    return Dispatcher::ACKNOWLEDGED();
   case CEPH_MSG_OSD_MAP:
     handle_osd_map(ref_cast<MOSDMap>(m));
+    return Dispatcher::ACKNOWLEDGED();
+
+  case CEPH_MSG_CLIENT_SESSION:
+    handle_client_session(ref_cast<MClientSession>(m));
     break;
 
     // requests
@@ -3132,8 +3132,9 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_MDS) {
       handle_command_reply(ref_cast<MCommandReply>(m));
+      return Dispatcher::HANDLED();
     } else {
-      return false;
+      return Dispatcher::UNHANDLED();
     }
     break;
   case CEPH_MSG_CLIENT_QUOTA:
@@ -3141,7 +3142,7 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
     break;
 
   default:
-    return false;
+    return Dispatcher::UNHANDLED();
   }
 
   // unmounting?
@@ -3160,7 +3161,7 @@ Dispatcher::dispatch_result_t Client::ms_dispatch2(const MessageRef &m)
     }
   }
 
-  return true;
+  return Dispatcher::HANDLED();
 }
 
 void Client::handle_fs_map(const MConstRef<MFSMap>& m)
