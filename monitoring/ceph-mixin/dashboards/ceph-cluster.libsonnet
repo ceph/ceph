@@ -233,7 +233,36 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addThresholds([
         { color: 'green', value: null },
-        { color: 'red', value: 80 },
+      ])
+      .addOverrides([
+        {
+          matcher: { id: 'byName', options: 'Out' },
+          properties: [
+            {
+              id: 'thresholds',
+              value: { mode: 'absolute', steps:
+                [
+                  { color: 'green', value: null },
+                  { color: 'yellow', value: 1 },
+                  { color: 'red', value: 10 },
+                ] },
+            },
+          ],
+        },
+        {
+          matcher: { id: 'byName', options: 'Down' },
+          properties: [
+            {
+              id: 'thresholds',
+              value: { mode: 'absolute', steps:
+                [
+                  { color: 'green', value: null },
+                  { color: 'yellow', value: 1 },
+                  { color: 'red', value: 10 },
+                ] },
+            },
+          ],
+        },
       ])
       .addTargets([
         $.addTargetSchema(
@@ -401,15 +430,35 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
       .addThresholds([
         { color: 'green', value: null },
-        { color: 'red', value: 1 },
       ])
       .addOverrides([
-        { matcher: { id: 'byName', options: 'Critical' }, properties: [
-          { id: 'color', value: { fixedColor: 'red', mode: 'fixed' } },
-        ] },
-        { matcher: { id: 'byName', options: 'Warning' }, properties: [
-          { id: 'color', value: { fixedColor: '#987d24', mode: 'fixed' } },
-        ] },
+        {
+          matcher: { id: 'byName', options: 'Critical' },
+          properties: [
+            {
+              id: 'thresholds',
+              value: { mode: 'absolute', steps:
+                [
+                  { color: 'green', value: null },
+                  { color: 'red', value: 1 },
+                ] },
+            },
+          ],
+        },
+        {
+          matcher: { id: 'byName', options: 'Warning' },
+          properties: [
+            {
+              id: 'thresholds',
+              value: { mode: 'absolute', steps:
+                [
+                  { color: 'green', value: null },
+                  { color: 'yellow', value: 1 },
+                  { color: 'red', value: 60 },
+                ] },
+            },
+          ],
+        },
       ])
       .addTargets([
         $.addTargetSchema(
