@@ -298,7 +298,7 @@ public:
      {
       return optimized.be_get_ondisk_size(logical_size, shard_id);
     }
-    return legacy.be_get_ondisk_size(logical_size, shard_id);
+    return legacy.be_get_ondisk_size(logical_size);
   }
 
   int be_deep_scrub(const hobject_t &oid, ScrubMap &map, ScrubMapBuilder &pos
