@@ -1696,7 +1696,7 @@ def test_ps_s3_notification_multi_delete_on_master():
 @attr('http_test')
 def test_ps_s3_notification_push_http_on_master():
     """ test pushing http s3 notification on master """
-    hostname = get_ip_http()
+    hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
 
@@ -1780,7 +1780,7 @@ def test_ps_s3_notification_push_http_on_master():
 @attr('http_test')
 def test_ps_s3_notification_push_cloudevents_on_master():
     """ test pushing cloudevents notification on master """
-    hostname = get_ip_http()
+    hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
 
