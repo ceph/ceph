@@ -251,6 +251,7 @@ else:
                 "rbd_pool": Param(str, "RBD pool name"),
                 "rbd_image_name": Param(str, "RBD image name"),
                 "create_image": Param(bool, "Create RBD image"),
+                "size": Param(int, "RBD image size"),
                 "rbd_image_size": Param(int, "RBD image size"),
                 "block_size": Param(int, "NVMeoF namespace block size"),
                 "load_balancing_group": Param(int, "Load balancing group"),
@@ -265,7 +266,8 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
-            rbd_image_size: Optional[int] = 1024,
+            size: Optional[int] = 1024,
+            rbd_image_size: Optional[int] = None,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
             gw_group: Optional[str] = None,
@@ -277,7 +279,7 @@ else:
                     rbd_pool_name=rbd_pool,
                     block_size=block_size,
                     create_image=create_image,
-                    size=rbd_image_size,
+                    size=rbd_image_size or size,
                     anagrpid=load_balancing_group,
                 )
             )
