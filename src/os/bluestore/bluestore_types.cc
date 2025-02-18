@@ -1419,8 +1419,52 @@ void bluestore_onode_t::dump(Formatter *f) const
 
 void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
 {
-  o.push_back(new bluestore_onode_t());
-  // FIXME
+
+  auto* onode1 = new bluestore_onode_t();
+  onode1->nid = 0xDEADBEEF;
+  onode1->size = 99999;
+  onode1->expected_object_size = 123456;
+  onode1->expected_write_size = 7890;
+  onode1->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP);
+
+  ceph::buffer::ptr buf1 = ceph::buffer::create(50);
+  memset(buf1.c_str(), 0x42, 50);
+  onode1->attrs["chaos_attr1"] = buf1;
+
+  onode1->extent_map_shards.push_back({.offset = 555, .bytes = 777});
+
+  o.push_back(onode1);
+
+  auto* onode2 = new bluestore_onode_t();
+  onode2->nid = 0xBAADF00D;
+  onode2->size = 54321;
+  onode2->expected_object_size = 654321;
+  onode2->expected_write_size = 4321;
+  onode2->set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
+
+  ceph::buffer::ptr buf2 = ceph::buffer::create(30);
+  memset(buf2.c_str(), 0xAB, 30);
+  onode2->attrs["glitch_attr"] = buf2;
+
+  onode2->extent_map_shards.push_back({.offset = 333, .bytes = 444});
+
+  o.push_back(onode2);
+
+  auto* onode3 = new bluestore_onode_t();
+  onode3->nid = 0xFEEDFACE;
+  onode3->size = 0;
+  onode3->expected_object_size = 1;
+  onode3->expected_write_size = 1;
+  onode3->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
+
+  ceph::buffer::ptr buf3 = ceph::buffer::create(100);
+  memset(buf3.c_str(), 0xFF, 100);
+  onode3->attrs["maxed_out"] = buf3;
+
+  onode3->extent_map_shards.push_back({.offset = 999, .bytes = 2048});
+
+  o.push_back(onode3);
+
 }
 
 // bluestore_deferred_op_t
