@@ -203,6 +203,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_clean_bucket_index_max_aio
+  type: uint
+  level: advanced
+  desc: Max number of concurrent RADOS requests when cleaning bucket shards.
+  default: 1
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_multi_obj_del_max_aio
   type: uint
   level: advanced
