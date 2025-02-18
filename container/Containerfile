@@ -51,6 +51,15 @@ OSD_FLAVOR=${OSD_FLAVOR}
 #   keeping run steps separate makes local rebuilds quick, but images are big without squash option
 #===================================================================================================
 
+# Disable documentation
+# (assumes only [main] section exists)
+RUN \
+    if grep -q 'tsflags' /etc/dnf/dnf.conf ; then \
+        sed -i 's/tsflags=.*/tsflags=nodocs/g' /etc/dnf/dnf.conf ; \
+    else \
+        echo "tsflags=nodocs" >> /etc/dnf/dnf.conf ; \
+    fi
+
 # Pre-reqs
 RUN dnf install -y --setopt=install_weak_deps=False epel-release jq
 
@@ -201,9 +210,7 @@ RUN set -ex && \
     rm -rf /var/lib/dnf/* && \
     rm -f /var/lib/rpm/__db* && \
     # remove unnecessary files with big impact
-    rm -rf /etc/selinux /usr/share/{doc,man,selinux} && \
-    # don't keep compiled python binaries
-    find / -xdev \( -name "*.pyc" -o -name "*.pyo" \) -delete && \
+    rm -rf /etc/selinux /usr/share/selinux && \
     rm -f /etc/yum.repos.d/{ceph,ganesha,tcmu-runner,ceph-iscsi}.repo
 
 # Verify that the packages installed haven't been accidentally cleaned, then
