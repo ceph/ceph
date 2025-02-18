@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import errno
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import yaml
 from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
@@ -49,6 +49,45 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
         return 0, 'Success', ''
     except ManagedByOrchestratorException as ex:
         return -errno.EINVAL, '', str(ex)
+
+
+B = "B"
+K, KB = "K", "KB"
+M, MB = "M", "MB"
+G, GB = "G", "GB"
+T, TB = "T", "TB"
+P, PB = "P", "PB"
+UNITS = {
+    B: 1,
+    KB: 1024,
+    K: 1024,
+    MB: 1024**2,
+    M: 1024**2,
+    GB: 1024**3,
+    G: 1024**3,
+    TB: 1024**4,
+    T: 1024**4,
+    PB: 1024**5,
+    P: 1024**5
+}
+
+
+def convert_to_bytes(size: Union[int, str], default_unit=None):
+    if isinstance(size, int):
+        number = size
+        size = str(size)
+    else:
+        num_str = ''.join(filter(str.isdigit, size))
+        number = int(num_str)
+    unit_str = ''.join(filter(str.isalpha, size))
+    if not unit_str:
+        if not default_unit:
+            raise ValueError("No size unit was provided")
+        unit_str = default_unit
+
+    if unit_str in UNITS:
+        return number * UNITS[unit_str]
+    raise ValueError(f"Invalid unit: {unit_str}")
 
 
 class NvmeofCLICommand(CLICommand):

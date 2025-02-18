@@ -9013,7 +9013,6 @@ paths:
                   description: RBD image name
                   type: string
                 rbd_image_size:
-                  default: 1024
                   description: RBD image size
                   type: integer
                 rbd_pool:
@@ -9022,6 +9021,7 @@ paths:
                   type: string
               required:
               - rbd_image_name
+              - rbd_image_size
               type: object
       responses:
         '201':
