@@ -4,7 +4,7 @@
  */
 
 #include "crc_internal.h"
-#include "spdk/crc64.h"
+#include "crc64.h"
 
 #ifdef SPDK_CONFIG_ISAL
 #include "isa-l/include/crc64.h"
