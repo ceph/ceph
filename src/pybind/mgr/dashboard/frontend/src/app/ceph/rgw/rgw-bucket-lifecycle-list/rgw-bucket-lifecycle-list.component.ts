@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { Bucket } from '../models/rgw-bucket';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -25,6 +25,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 })
 export class RgwBucketLifecycleListComponent implements OnInit {
   @Input() bucket: Bucket;
+  @Output() updateBucketDetails = new EventEmitter();
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   permission: Permission;
@@ -115,11 +116,12 @@ export class RgwBucketLifecycleListComponent implements OnInit {
   }
 
   openTieringModal(type: string) {
-    this.modalService.show(RgwBucketTieringFormComponent, {
+    const modalRef = this.modalService.show(RgwBucketTieringFormComponent, {
       bucket: this.bucket,
       selectedLifecycle: this.selection.first(),
       editing: type === this.actionLabels.EDIT ? true : false
     });
+    modalRef?.close?.subscribe(() => this.updateBucketDetails.emit());
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -149,6 +151,7 @@ export class RgwBucketLifecycleListComponent implements OnInit {
             NotificationType.success,
             $localize`Lifecycle rule deleted successfully`
           );
+          this.updateBucketDetails.emit();
         },
         error: () => {
           this.modalRef.componentInstance.stopLoadingSpinner();
