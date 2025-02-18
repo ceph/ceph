@@ -238,6 +238,7 @@ class SysReqApplier : public DecoratedApplier<T> {
   const RGWHTTPArgs& args;
   mutable boost::tribool is_system;
   mutable std::optional<ACLOwner> effective_owner;
+  mutable std::optional<std::string> effective_tenant;
 
 public:
   template <typename U>
@@ -262,6 +263,14 @@ public:
     }
     return DecoratedApplier<T>::get_aclowner();
   }
+
+  const std::string& get_tenant() const override {
+    if (effective_tenant) {
+      return *effective_tenant;
+    }
+    return DecoratedApplier<T>::get_tenant();
+  }
+
 };
 
 template <typename T>
@@ -287,6 +296,7 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
     std::string str = args.sys_get(RGW_SYS_PARAM_PREFIX "uid");
     if (!str.empty()) {
       effective_owner.emplace();
+
       effective_owner->id = parse_owner(str);
 
       if (const auto* uid = std::get_if<rgw_user>(&effective_owner->id); uid) {
@@ -296,7 +306,17 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
           throw -EACCES;
         }
         effective_owner->display_name = user->get_display_name();
-      }
+        effective_tenant = uid->tenant;
+      } else if (const auto* id = std::get_if<rgw_account_id>(&effective_owner->id); id) {
+        RGWAccountInfo info;
+        rgw::sal::Attrs attrs;
+        RGWObjVersionTracker objv;
+        int r = driver->load_account_by_id(dpp, null_yield, *id, info, attrs, objv);
+        if (r < 0) {
+          throw -EACCES;
+        }
+        effective_tenant = info.tenant;
+     }
     }
   }
   return user;
