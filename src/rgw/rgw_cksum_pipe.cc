@@ -43,9 +43,15 @@ namespace rgw::putobj {
     if (algo_header.first) {
       if (algo_header.second) {
 	auto cksum_type = cksum::parse_cksum_type(algo_header.second);
-	return
-	  std::make_unique<RGWPutObj_Cksum>(
-				    next, cksum_type, std::move(algo_header));
+       /* unknown checksum type in header */
+       if (cksum_type != rgw::cksum::Type::none) {
+         return
+           std::make_unique<RGWPutObj_Cksum>(
+                              next, cksum_type, std::move(algo_header));
+       } else {
+	 /* unknown checksum type requested */
+	 throw rgw::io::Exception(EINVAL, std::system_category());
+       }
       }
       /* malformed checksum algorithm header(s) */
       throw rgw::io::Exception(EINVAL, std::system_category());
@@ -58,6 +64,7 @@ namespace rgw::putobj {
 	std::make_unique<RGWPutObj_Cksum>(
 			   next, override_type, std::move(algo_header));
     }
+    /* no checksum requested */
     return std::unique_ptr<RGWPutObj_Cksum>();
   }
 

@@ -36,6 +36,7 @@ namespace {
   using namespace rgw::cksum;
 
   bool verbose = false;
+  bool gen_test_data = false;
 
   cksum::Type t1 = cksum::Type::blake3;
   cksum::Type t2 = cksum::Type::sha1;
@@ -51,6 +52,24 @@ namespace {
   std::string dolor =
     R"(Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.)";
 
+TEST(RGWCksum, Output)
+{
+  if (gen_test_data) {
+    auto o_mode = std::ios::out|std::ios::trunc;
+    std::ofstream of;
+
+    std::cout << "writing lorem text to /tmp/lorem " << std::endl;
+    of.open("/tmp/lorem", o_mode);
+    of << lorem;
+    of.close();
+
+    std::cout << "writing dolor text to /tmp/dolor " << std::endl;
+    of.open("/tmp/dolor", o_mode);
+    of << dolor;
+    of.close();
+  }
+}
+ 
 TEST(RGWCksum, Ctor)
 {
   cksum::Cksum ck1;
@@ -328,10 +347,71 @@ TEST(RGWCksum, DigestBL)
   } /* for t1, ... */
 }
 
+TEST(RGWCksum, CRC64NVME1)
+{
+  /* from SPDK crc64_ut.c */
+  unsigned int buf_size = 4096;
+  char buf[buf_size];
+  uint64_t crc;
+  unsigned int i, j;
 
+  /* All the expected CRC values are compliant with
+   * the NVM Command Set Specification 1.0c */
 
+  /* Input buffer = 0s */
+  memset(buf, 0, buf_size);
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0x6482D367EB22B64E);
 
-  //foop
+  /* Input buffer = 1s */
+  memset(buf, 0xFF, buf_size);
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0xC0DDBA7302ECA3AC);
+
+  /* Input buffer = 0x00, 0x01, 0x02, ... */
+  memset(buf, 0, buf_size);
+  j = 0;
+  for (i = 0; i < buf_size; i++) {
+    buf[i] = (char)j;
+    if (j == 0xFF) {
+      j = 0;
+    } else {
+      j++;
+    }
+  }
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0x3E729F5F6750449C);
+
+  /* Input buffer = 0xFF, 0xFE, 0xFD, ... */
+  memset(buf, 0, buf_size);
+  j = 0xFF;
+  for (i = 0; i < buf_size ; i++) {
+		buf[i] = (char)j;
+		if (j == 0) {
+		  j = 0xFF;
+		} else {
+		  j--;
+		}
+  }
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0x9A2DF64B8E9E517E);
+}
+
+TEST(RGWCksum, CRC64NVME2)
+{
+  auto t = cksum::Type::crc64nvme;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+  Digest *digest = get_digest(dv);
+  ASSERT_NE(digest, nullptr);
+
+  digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum = rgw::cksum::finalize_digest(digest, t);
+
+  /* the armored value produced by awscliv2 2.24.5 */
+  ASSERT_EQ(cksum.to_armor(), "wiBA+PSv41M=");
+}
+
 TEST(RGWCksum, CtorUnarmor)
 {
   auto t = cksum::Type::sha256;
@@ -357,11 +437,13 @@ int main(int argc, char *argv[])
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  std::string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
      if (ceph_argparse_flag(args, arg_iter, "--verbose",
 			    (char*) nullptr)) {
        verbose = true;
+     } else if (ceph_argparse_flag(args, arg_iter, "--gen_test_data",
+				   (char*) nullptr)) {
+       gen_test_data = true;
      } else {
        ++arg_iter;
      }
