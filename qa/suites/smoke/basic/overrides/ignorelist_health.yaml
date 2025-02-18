@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - PG_AVAILABILITY
+      - pg .*? is stuck peering .*? last acting
