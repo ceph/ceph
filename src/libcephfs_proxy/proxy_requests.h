@@ -40,7 +40,7 @@
 
 #define CEPH_DATA(_name, _data, _data_count)       \
 	proxy_##_name##_##_data##_t _data;         \
-	struct iovec _data##_iov[_data_count + 1]; \
+	struct iovec _data##_iov[(_data_count) + 1]; \
 	int32_t _data##_count = 0;                 \
 	CEPH_BUFF_ADD(_data, &_data, sizeof(_data))
 

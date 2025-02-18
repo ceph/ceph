@@ -26,6 +26,9 @@
 	((_type *)((uintptr_t)(_ptr) - offset_of(_type, _field)))
 
 enum {
+	/* Support for ceph_ll_nonblocking_readv_writev */
+	PROXY_FEAT_ASYNC_IO = 0x00000001,
+
 	/* Mask of all features requiring the asynchronous callback handling. */
 	PROXY_FEAT_ASYNC_CBK = 0x00000001,
 

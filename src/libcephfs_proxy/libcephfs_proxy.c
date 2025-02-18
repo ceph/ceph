@@ -181,7 +181,7 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	sd = err;
 
 	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0,
-				  PROXY_FEAT_ASYNC_CBK);
+				  PROXY_FEAT_ASYNC_IO);
 
 	err = proxy_link_handshake_client(&ceph_mount->link, sd,
 					  &ceph_mount->neg,
@@ -910,4 +910,39 @@ __public UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 	}
 
 	return value_ptr(ans.userperm);
+}
+
+__public int64_t ceph_ll_nonblocking_readv_writev(
+	struct ceph_mount_info *cmount, struct ceph_ll_io_info *io_info)
+{
+	CEPH_REQ(ceph_ll_nonblocking_readv_writev, req,
+		 io_info->write ? io_info->iovcnt : 0, ans, 0);
+	int32_t i, err;
+
+	if ((cmount->neg.v1.enabled & PROXY_FEAT_ASYNC_IO) == 0) {
+		return -EOPNOTSUPP;
+	}
+
+	req.info = ptr_checksum(&cmount->async.random, io_info);
+	req.fh = (uintptr_t)io_info->fh;
+	req.off = io_info->off;
+	req.size = 0;
+	req.write = io_info->write;
+	req.fsync = io_info->fsync;
+	req.syncdataonly = io_info->syncdataonly;
+
+	for (i = 0; i < io_info->iovcnt; i++) {
+		if (io_info->write) {
+			CEPH_BUFF_ADD(req, io_info->iov[i].iov_base,
+				      io_info->iov[i].iov_len);
+		}
+		req.size += io_info->iov[i].iov_len;
+	}
+
+	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_NONBLOCKING_RW, req, ans);
+	if (err < 0) {
+		return err;
+	}
+
+	return ans.res;
 }
