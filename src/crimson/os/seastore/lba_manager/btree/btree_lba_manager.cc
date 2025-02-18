@@ -71,30 +71,27 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
   }
 }
 
-template <typename ROOT>
-void link_phy_tree_root_node(RootBlockRef &root_block, ROOT* lba_root) {
-  root_block->lba_root_node = lba_root;
-  ceph_assert(lba_root != nullptr);
-  lba_root->root_block = root_block;
-}
+template <typename RootT>
+class TreeRootLinker<RootBlock, RootT> {
+public:
+  static void link_root(RootBlockRef &root_block, RootT* lba_root) {
+    root_block->lba_root_node = lba_root;
+    ceph_assert(lba_root != nullptr);
+    lba_root->parent_of_root = root_block;
+  }
+  static void unlink_root(RootBlockRef &root_block) {
+    root_block->lba_root_node = nullptr;
+  }
+};
 
-template void link_phy_tree_root_node(
-  RootBlockRef &root_block, lba_manager::btree::LBAInternalNode* lba_root);
-template void link_phy_tree_root_node(
-  RootBlockRef &root_block, lba_manager::btree::LBALeafNode* lba_root);
-template void link_phy_tree_root_node(
-  RootBlockRef &root_block, lba_manager::btree::LBANode* lba_root);
-
-template <>
-void unlink_phy_tree_root_node<laddr_t>(RootBlockRef &root_block) {
-  root_block->lba_root_node = nullptr;
-}
+template class TreeRootLinker<RootBlock, lba_manager::btree::LBAInternalNode>;
+template class TreeRootLinker<RootBlock, lba_manager::btree::LBALeafNode>;
 
 }
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-get_child_ret_t<LogicalCachedExtent>
+get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
 BtreeLBAMapping::get_logical_extent(Transaction &t)
 {
   ceph_assert(is_parent_viewable());
@@ -104,7 +101,7 @@ BtreeLBAMapping::get_logical_extent(Transaction &t)
   auto k = this->is_indirect()
     ? this->get_intermediate_base()
     : get_key();
-  auto v = p.template get_child<LogicalCachedExtent>(ctx, pos, k);
+  auto v = p.template get_child<LogicalChildNode>(ctx.trans, ctx.cache, pos, k);
   if (!v.has_child()) {
     this->child_pos = v.get_child_pos();
   }
@@ -113,23 +110,19 @@ BtreeLBAMapping::get_logical_extent(Transaction &t)
 
 bool BtreeLBAMapping::is_stable() const
 {
-  assert(!this->parent_modified());
+  assert(!parent_modified());
   assert(pos != std::numeric_limits<uint16_t>::max());
-  auto &p = static_cast<LBALeafNode&>(*parent);
-  auto k = this->is_indirect()
-    ? this->get_intermediate_base()
-    : get_key();
+  auto &p = (LBALeafNode&)*parent;
+  auto k = is_indirect() ? get_intermediate_base() : get_key();
   return p.is_child_stable(ctx, pos, k);
 }
 
 bool BtreeLBAMapping::is_data_stable() const
 {
-  assert(!this->parent_modified());
+  assert(!parent_modified());
   assert(pos != std::numeric_limits<uint16_t>::max());
-  auto &p = static_cast<LBALeafNode&>(*parent);
-  auto k = this->is_indirect()
-    ? this->get_intermediate_base()
-    : get_key();
+  auto &p = (LBALeafNode&)*parent;
+  auto k = is_indirect() ? get_intermediate_base() : get_key();
   return p.is_child_data_stable(ctx, pos, k);
 }
 
@@ -443,14 +436,18 @@ BtreeLBAManager::_alloc_extents(
 	      alloc_info.len,
 	      pladdr_t(alloc_info.val),
 	      refcount,
-	      alloc_info.checksum},
-	    alloc_info.extent
+	      alloc_info.checksum}
 	  ).si_then([&state, c, addr, total_len, hint, FNAME,
 		    &alloc_info, &rets](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
+	    auto &leaf_node = *iter.get_leaf_node();
+	    leaf_node.insert_child_ptr(
+	      iter.get_leaf_pos(),
+	      alloc_info.extent,
+	      leaf_node.get_size() - 1 /*the size before the insert*/);
 	    TRACET("{}~{}, hint={}, inserted at {}",
 		   c.trans, addr, total_len, hint, state.last_end);
-	    if (alloc_info.extent) {
+	    if (is_valid_child_ptr(alloc_info.extent)) {
 	      ceph_assert(alloc_info.val.is_paddr());
 	      assert(alloc_info.val == iter.get_val().pladdr);
 	      assert(alloc_info.len == iter.get_val().len);
@@ -493,7 +490,7 @@ _init_cached_extent(
   bool &ret)
 {
   if (e->is_logical()) {
-    auto logn = e->cast<LogicalCachedExtent>();
+    auto logn = e->cast<LogicalChildNode>();
     return btree.lower_bound(
       c,
       logn->get_laddr()
@@ -542,6 +539,7 @@ BtreeLBAManager::init_cached_extent(
   });
 }
 
+#ifdef UNIT_TESTS_BUILT
 BtreeLBAManager::check_child_trackers_ret
 BtreeLBAManager::check_child_trackers(
   Transaction &t) {
@@ -552,6 +550,7 @@ BtreeLBAManager::check_child_trackers(
     return btree.check_child_trackers(c);
   });
 }
+#endif
 
 BtreeLBAManager::scan_mappings_ret
 BtreeLBAManager::scan_mappings(
@@ -624,7 +623,7 @@ BtreeLBAManager::update_mapping(
   extent_len_t len,
   paddr_t addr,
   uint32_t checksum,
-  LogicalCachedExtent *nextent)
+  LogicalChildNode *nextent)
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
   TRACET("laddr={}, paddr {} => {}", t, laddr, prev_addr, addr);
@@ -753,7 +752,7 @@ BtreeLBAManager::_decref_intermediate(
 	        std::make_optional<ref_update_result_t>(res));
 	  });
 	} else {
-	  return btree.update(c, iter, val, nullptr
+	  return btree.update(c, iter, val
 	  ).si_then([](auto) {
 	    return ref_iertr::make_ready_future<
 	      std::optional<ref_update_result_t>>(std::nullopt);
@@ -823,7 +822,7 @@ BtreeLBAManager::_update_mapping(
   Transaction &t,
   laddr_t addr,
   update_func_t &&f,
-  LogicalCachedExtent* nextent)
+  LogicalChildNode* nextent)
 {
   auto c = get_context(t);
   return with_btree_ret<LBABtree, update_mapping_ret_bare_t>(
@@ -855,9 +854,17 @@ BtreeLBAManager::_update_mapping(
 	  return btree.update(
 	    c,
 	    iter,
-	    ret,
-	    nextent
-	  ).si_then([c, ret](auto iter) {
+	    ret
+	  ).si_then([c, ret, nextent](auto iter) {
+	    // child-ptr may already be correct,
+	    // see LBAManager::update_mappings()
+	    if (nextent && !nextent->has_parent_tracker()) {
+	      iter.get_leaf_node()->update_child_ptr(
+		iter.get_leaf_pos(), nextent);
+	    }
+	    assert(!nextent || 
+	      (nextent->has_parent_tracker()
+		&& nextent->get_parent_node().get() == iter.get_leaf_node().get()));
 	    return update_mapping_ret_bare_t{
 	      std::move(ret),
 	      iter.get_pin(c)

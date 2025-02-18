@@ -29,9 +29,6 @@ class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
 
-template <typename, typename>
-class BtreeNodeMapping;
-
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
 
@@ -1092,6 +1089,8 @@ protected:
   friend class ::lba_btree_test;
   friend class ::btree_test_base;
   friend class ::cache_test_t;
+  template <typename, typename, typename>
+  friend class ParentNode;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
@@ -1278,55 +1277,6 @@ private:
   uint64_t bytes = 0;
 };
 
-class ChildableCachedExtent;
-
-class child_pos_t {
-public:
-  child_pos_t(CachedExtentRef stable_parent, uint16_t pos)
-    : stable_parent(stable_parent), pos(pos) {}
-
-  template <typename parent_t>
-  TCachedExtentRef<parent_t> get_parent() {
-    ceph_assert(stable_parent);
-    return stable_parent->template cast<parent_t>();
-  }
-  uint16_t get_pos() {
-    return pos;
-  }
-  void link_child(ChildableCachedExtent *c);
-private:
-  CachedExtentRef stable_parent;
-  uint16_t pos = std::numeric_limits<uint16_t>::max();
-};
-
-using get_child_iertr = trans_iertr<crimson::errorator<
-  crimson::ct_error::input_output_error>>;
-template <typename T>
-using get_child_ifut = get_child_iertr::future<TCachedExtentRef<T>>;
-
-template <typename T>
-struct get_child_ret_t {
-  std::variant<child_pos_t, get_child_ifut<T>> ret;
-  get_child_ret_t(child_pos_t pos)
-    : ret(std::move(pos)) {}
-  get_child_ret_t(get_child_ifut<T> child)
-    : ret(std::move(child)) {}
-
-  bool has_child() const {
-    return ret.index() == 1;
-  }
-
-  child_pos_t &get_child_pos() {
-    ceph_assert(ret.index() == 0);
-    return std::get<0>(ret);
-  }
-
-  get_child_ifut<T> &get_child_fut() {
-    ceph_assert(ret.index() == 1);
-    return std::get<1>(ret);
-  }
-};
-
 template <typename key_t, typename>
 class PhysicalNodeMapping;
 
@@ -1414,68 +1364,6 @@ public:
   }
 };
 
-class parent_tracker_t
-  : public boost::intrusive_ref_counter<
-     parent_tracker_t, boost::thread_unsafe_counter> {
-public:
-  parent_tracker_t(CachedExtentRef parent)
-    : parent(parent) {}
-  parent_tracker_t(CachedExtent* parent)
-    : parent(parent) {}
-  ~parent_tracker_t();
-  template <typename T = CachedExtent>
-  TCachedExtentRef<T> get_parent() const {
-    ceph_assert(parent);
-    if constexpr (std::is_same_v<T, CachedExtent>) {
-      return parent;
-    } else {
-      return parent->template cast<T>();
-    }
-  }
-  void reset_parent(CachedExtentRef p) {
-    parent = p;
-  }
-  bool is_valid() const {
-    return parent && parent->is_valid();
-  }
-private:
-  CachedExtentRef parent;
-};
-
-std::ostream &operator<<(std::ostream &, const parent_tracker_t &);
-
-using parent_tracker_ref = boost::intrusive_ptr<parent_tracker_t>;
-
-class ChildableCachedExtent : public CachedExtent {
-public:
-  template <typename... T>
-  ChildableCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
-  bool has_parent_tracker() const {
-    return (bool)parent_tracker;
-  }
-  void reset_parent_tracker(parent_tracker_t *p = nullptr) {
-    parent_tracker.reset(p);
-  }
-  bool is_parent_valid() const {
-    return parent_tracker && parent_tracker->is_valid();
-  }
-  template <typename T = CachedExtent>
-  TCachedExtentRef<T> get_parent_node() const {
-    assert(parent_tracker);
-    return parent_tracker->template get_parent<T>();
-  }
-  void take_prior_parent_tracker() {
-    auto &prior = (ChildableCachedExtent&)(*get_prior_instance());
-    parent_tracker = prior.parent_tracker;
-  }
-  std::ostream &print_detail(std::ostream &out) const final;
-private:
-  parent_tracker_ref parent_tracker;
-  virtual std::ostream &_print_detail(std::ostream &out) const {
-    return out;
-  }
-};
-
 class LBAMapping;
 /**
  * LogicalCachedExtent
@@ -1485,12 +1373,10 @@ class LBAMapping;
  * Users of TransactionManager should be using extents derived from
  * LogicalCachedExtent.
  */
-class LogicalCachedExtent : public ChildableCachedExtent {
+class LogicalCachedExtent : public CachedExtent {
 public:
   template <typename... T>
-  LogicalCachedExtent(T&&... t)
-    : ChildableCachedExtent(std::forward<T>(t)...)
-  {}
+  LogicalCachedExtent(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
 
   void on_rewrite(Transaction&, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
@@ -1523,7 +1409,7 @@ public:
     return true;
   }
 
-  std::ostream &_print_detail(std::ostream &out) const final;
+  std::ostream &print_detail(std::ostream &out) const final;
 
   struct modified_region_t {
     extent_len_t offset;
@@ -1535,10 +1421,9 @@ public:
 
   virtual void clear_modified_region() {}
 
-  virtual ~LogicalCachedExtent();
+  virtual ~LogicalCachedExtent() {}
 
 protected:
-  void on_replace_prior() final;
 
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
 

@@ -5,6 +5,10 @@
 
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 
+namespace crimson::os::seastore {
+class LogicalChildNode;
+}
+
 namespace crimson::os::seastore::backref {
 
 using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
@@ -86,6 +90,7 @@ class BackrefInternalNode
     check_capacity(BACKREF_NODE_SIZE),
     "INTERNAL_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
+  using key_type = paddr_t;
   template <typename... T>
   BackrefInternalNode(T&&... t) :
     FixedKVInternalNode(std::forward<T>(t)...) {}
@@ -104,12 +109,13 @@ class BackrefLeafNode
       paddr_t, paddr_le_t,
       backref_map_val_t, backref_map_val_le_t,
       BACKREF_NODE_SIZE,
-      BackrefLeafNode,
-      false> {
+      BackrefInternalNode,
+      BackrefLeafNode> {
   static_assert(
     check_capacity(BACKREF_NODE_SIZE),
     "LEAF_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
+  using key_type = paddr_t;
   template <typename... T>
   BackrefLeafNode(T&&... t) :
     FixedKVLeafNode(std::forward<T>(t)...) {}
@@ -123,8 +129,7 @@ public:
   const_iterator insert(
     const_iterator iter,
     paddr_t key,
-    backref_map_val_t val,
-    LogicalCachedExtent*) final {
+    backref_map_val_t val) final {
     journal_insert(
       iter,
       key,
@@ -135,8 +140,7 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val,
-    LogicalCachedExtent*) final {
+    backref_map_val_t val) final {
     return journal_update(
       iter,
       val,
@@ -149,6 +153,46 @@ public:
       maybe_get_delta_buffer());
   }
 
+  void do_on_rewrite(Transaction &t, CachedExtent &extent) final {}
+  void do_on_replace_prior() final {}
+  void do_prepare_commit() final {}
+
+
+  void on_split(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void on_merge(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void on_balance(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right,
+    bool prefer_left,
+    BackrefLeafNode &replacement_left,
+    BackrefLeafNode &replacement_right) final {}
+
+  void adjust_copy_src_dest_on_split(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void adjust_copy_src_dest_on_merge(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void adjust_copy_src_dest_on_balance(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right,
+    bool prefer_left,
+    BackrefLeafNode &replacement_left,
+    BackrefLeafNode &replacement_right) final {}
   // backref leaf nodes don't have to resolve relative addresses
   void resolve_relative_addrs(paddr_t base) final {}
 
