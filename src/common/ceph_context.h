@@ -47,6 +47,7 @@
 #include "crush/CrushLocation.h"
 
 class AdminSocket;
+class AdminSocketHook;
 class CryptoHandler;
 class CryptoRandom;
 class MonMap;
@@ -381,8 +382,13 @@ private:
 #ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
 #endif
+
+  std::unique_ptr<AdminSocketHook> _msgr_hook;
+  ceph::mutex _msgr_hook_lock = ceph::make_mutex("CephContext::msgr_hook");
 public:
   TOPNSPC::crush::CrushLocation crush_location;
+  void modify_msgr_hook(std::function<AdminSocketHook*(void)> create,
+			std::function<void(AdminSocketHook*)> add);
 private:
 
   enum {
