@@ -8,14 +8,14 @@ from typing import Any, Dict, List, Optional
 
 import cephfs
 from mgr_module import NFS_GANESHA_SUPPORTED_FSALS
-
+from ..tools import str_to_bool
 from .. import mgr
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.exception import DashboardException, handle_cephfs_error, \
     serialize_dashboard_exception
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, Task, UIRouter
+    ReadPermission, UpdatePermission, RESTController, Task, UIRouter
 from ._version import APIVersion
 
 logger = logging.getLogger('controllers.nfs')
@@ -87,9 +87,40 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
 class NFSGaneshaCluster(RESTController):
     @ReadPermission
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
-    def list(self):
+    def list(self, moreInfo=False):
+        if str_to_bool(moreInfo)==True:
+            return mgr.remote('nfs', 'cluster_info')
         return mgr.remote('nfs', 'cluster_ls')
-
+    
+    @Endpoint(method='GET', path='/qos')
+    @EndpointDoc("Get the cluster qos configuration")
+    @ReadPermission
+    def qos(self, cluster_id:str):
+        clusterObj= mgr.remote('nfs', 'fetch_nfs_cluster_obj')
+        return clusterObj.get_nfs_cluster_qos(cluster_id)
+    
+    @Endpoint(method='PUT', path='/qos')
+    @EndpointDoc("Enable/disable qos configuration")
+    @UpdatePermission
+    def enable_cluster_qos(self, cluster_id:str, qos_type:str=None,max_export_write_bw=None,max_export_read_bw=None,max_client_write_bw=None,max_client_read_bw=None , max_export_combined_bw=None, max_client_combined_bw=None,disable_qos:bool=False):
+     
+        if disable_qos==True:
+             clusterObj= mgr.remote('nfs', 'fetch_nfs_cluster_obj')
+             return clusterObj.disable_nfs_cluster_qos(cluster_id)    
+        obj={}
+        if(max_export_write_bw):
+            obj['export_writebw']=max_export_write_bw
+        if(max_export_read_bw):
+            obj['export_readbw']= max_export_read_bw
+        if(max_client_write_bw):
+            obj['client_writebw']= max_client_write_bw
+        if(max_client_read_bw):
+            obj['client_readbw']= max_client_read_bw
+        if(max_export_combined_bw):
+            obj['export_rw_bw']= max_export_combined_bw
+        if(max_client_combined_bw):
+            obj['client_rw_bw']= max_client_combined_bw
+        return mgr.remote('nfs', 'enable_cluster_qos', cluster_id, qos_type, False, **obj)
 
 @APIRouter('/nfs-ganesha/export', Scope.NFS_GANESHA)
 @APIDoc(group="NFS-Ganesha")
@@ -109,11 +140,11 @@ class NFSGaneshaExports(RESTController):
         export['fsal'] = schema_fsal_info
         return export
 
-    @EndpointDoc("List all NFS-Ganesha exports",
+    @EndpointDoc("List all and cluster specific NFS-Ganesha exports ",
                  responses={200: [EXPORT_SCHEMA]})
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self, cluster_id=None) -> List[Dict[str, Any]]:
         exports = []
-        for export in mgr.remote('nfs', 'export_ls'):
+        for export in mgr.remote('nfs', 'export_ls', cluster_id, True):
             exports.append(self._get_schema_export(export))
 
         return exports
@@ -222,6 +253,34 @@ class NFSGaneshaExports(RESTController):
                 component='nfs')
         mgr.remote('nfs', 'export_rm', cluster_id, export['pseudo'])
 
+    @Endpoint(method='GET', path='/qos')
+    @EndpointDoc("Get the export qos configuration")
+    @ReadPermission
+    def qos(self, cluster_id:str, pseudo_path:str):
+        exportObj= mgr.remote('nfs', 'fetch_nfs_export_obj')
+        return exportObj.get_export_qos(cluster_id, pseudo_path)
+
+    @Endpoint(method='PUT', path='/qos')
+    @EndpointDoc("Enable/disable export qos configuration")
+    @UpdatePermission
+    def get_export_qos(self, cluster_id:str, pseudo_path:str,max_export_write_bw=None,max_export_read_bw=None,max_client_write_bw=None,max_client_read_bw=None , max_export_combined_bw=None, max_client_combined_bw=None,disable_qos:bool=False):
+        if disable_qos==True:
+             exportObj= mgr.remote('nfs', 'fetch_nfs_export_obj')
+             return exportObj.disable_export_qos(cluster_id, pseudo_path)
+        obj={}
+        if(max_export_write_bw):
+            obj['export_writebw']=max_export_write_bw
+        if(max_export_read_bw):
+            obj['export_readbw']= max_export_read_bw
+        if(max_client_write_bw):
+            obj['client_writebw']= max_client_write_bw
+        if(max_client_read_bw):
+            obj['client_readbw']= max_client_read_bw
+        if(max_export_combined_bw):
+            obj['export_rw_bw']= max_export_combined_bw
+        if(max_client_combined_bw):
+            obj['client_rw_bw']= max_client_combined_bw
+        return mgr.remote('nfs', 'enable_export_qos', cluster_id, pseudo_path, False, **obj)
 
 @UIRouter('/nfs-ganesha', Scope.NFS_GANESHA)
 class NFSGaneshaUi(BaseController):
