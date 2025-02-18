@@ -238,6 +238,7 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
     e->exists = true;
     e->meta = *m;
     e->tag = "tag";
+    e->log_zones = { rgw_zone_id("1588bb2c-439a-4b75-91ef-f0b31d02563b"), rgw_zone_id("1f9654c2-3a66-4407-b07c-0f6727c9df17") };
 
     o.push_back(e);
 
@@ -278,6 +279,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   encode_json("flags", (int)flags , f);
   encode_json("pending_map", pending_map, f);
   encode_json("versioned_epoch", versioned_epoch , f);
+  encode_json("log_zones", log_zones, f);
 }
 
 void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
@@ -293,6 +295,7 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
   flags = (uint16_t)val;
   JSONDecoder::decode_json("pending_map", pending_map, obj);
   JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
+  JSONDecoder::decode_json("log_zones", log_zones, obj);
 }
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
@@ -599,6 +602,7 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
   JSONDecoder::decode_json("zones_trace", zones_trace, obj);
+  JSONDecoder::decode_json("log_zones", log_zones, obj);
 }
 
 void rgw_bi_log_entry::dump(Formatter *f) const
@@ -632,6 +636,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   f->dump_string("owner", owner);
   f->dump_string("owner_display_name", owner_display_name);
   encode_json("zones_trace", zones_trace, f);
+  encode_json("log_zones", log_zones, f);
 }
 
 void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
@@ -972,4 +977,14 @@ std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
   }
 
   return out;
+}
+
+void encode_json(const char *name, const rgw_zone_id& zid, Formatter *f)
+{
+  encode_json(name, zid.id, f);
+}
+
+void decode_json_obj(rgw_zone_id& zid, JSONObj *obj)
+{
+  decode_json_obj(zid.id, obj);
 }

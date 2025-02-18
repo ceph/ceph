@@ -147,10 +147,16 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y)
 {
-
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
+  int ret = 0;
+  rgw_log_op_info log_op_info;
+  if (ret = should_log_op(driver, bucket->get_key(), object.get(), dpp, y, log_op_info); ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  const bool log_op = ret;
+
+  return object->delete_object(dpp, y, &log_op_info, log_op ? rgw::sal::FLAG_LOG_OP : 0, nullptr, nullptr);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -671,8 +677,16 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
             ldpp_dout(dpp, -1) << "ERROR failed to load state for: " << olh_entry.key.name << " load_obj_state(): " << cpp_strerror(-ret) << dendl;
             continue;
           }
+
+          rgw_log_op_info log_op_info;
+          if (ret = should_log_op(rados_store, bucket->get_key(), object.get(), dpp, y, log_op_info); ret < 0 && ret != -ENOENT) {
+            ldpp_dout(dpp, -1) << "ERROR failed to check log operation for: " << olh_entry.key.name << " should_log_op(): " << cpp_strerror(-ret) << dendl;
+            continue;
+          }
+          const bool log_op = ret;
+
 	  RGWObjState& state = static_cast<rgw::sal::RadosObject*>(object.get())->get_state();
-          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y);
+          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y, nullptr, &log_op_info, false, log_op);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
             continue;
@@ -1488,21 +1502,17 @@ static int bucket_stats(rgw::sal::Driver* driver,
     return ret;
   }
 
-  const RGWBucketInfo& bucket_info = bucket->get_info();
-
-  const auto& index = bucket_info.get_current_index();
-  if (is_layout_indexless(index)) {
-    cerr << "error, indexless buckets do not maintain stats; bucket=" <<
-      bucket->get_name() << std::endl;
-    return -EINVAL;
-  }
-
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
-    return ret;
+
+  const RGWBucketInfo& bucket_info = bucket->get_info();
+  const auto& index = bucket_info.get_current_index();
+  if (!is_layout_indexless(index)) {
+    ret = bucket->read_stats(dpp, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    if (ret < 0) {
+      cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
+      return ret;
+    }
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1523,8 +1533,12 @@ static int bucket_stats(rgw::sal::Driver* driver,
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
   formatter->dump_int("index_generation", bucket_info.layout.current_index.gen);
-  formatter->dump_int("num_shards",
-		      bucket_info.layout.current_index.layout.normal.num_shards);
+  if (is_layout_indexless(index)) {
+    formatter->dump_int("num_shards", 0); // default is 1 - so override for indexless to 0
+  } else {
+    formatter->dump_int("num_shards",
+                        bucket_info.layout.current_index.layout.normal.num_shards);
+  }
   formatter->dump_string("reshard_status", to_string(bucket_info.layout.resharding));
   logrecord_ut.gmtime(formatter->dump_stream("judge_reshard_lock_time"));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
@@ -2799,8 +2813,12 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
     return ret;
   }
 
-  // update related state on success
-  return put_post(dpp, y, bci, old, objv_tracker);
+  if (bci.info.zonegroup == driver->get_zone()->get_zonegroup().get_id()) {
+    // update related state on success only when I own it
+    return put_post(dpp, y, bci, old, objv_tracker);
+  }
+
+  return 0;
 }
 
 void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
@@ -2833,9 +2851,13 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     bool from_remote_zone)
 {
   if (from_remote_zone) {
-    // bucket layout information is local. don't overwrite existing layout with
-    // information from a remote zone
-    if (old_bci) {
+    if (bci.info.zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+      // not my bucket, mark it as an indexless bucket
+      bci.info.layout = rgw::BucketLayout{};
+      bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
+    } else if (old_bci) {
+      // bucket layout information is local. don't overwrite existing layout with
+      // information from a remote zone
       bci.info.layout = old_bci->info.layout;
     } else {
       // replace peer's layout with default-constructed, then apply our defaults
@@ -2865,14 +2887,17 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
         return ret;
       }
     }
-    bci.info.layout.current_index.layout.type = rule_info.index_type;
+
+    if (bci.info.zonegroup == driver->get_zone()->get_zonegroup().get_id()) {
+      bci.info.layout.current_index.layout.type = rule_info.index_type;
+    }
   } else {
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
   }
 
-  //always keep bucket versioning enabled on archive zone
+  // always keep bucket versioning enabled on archive zone
   if (driver->get_zone()->get_tier_type() == "archive") {
     bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
   }
@@ -3038,16 +3063,9 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
   svc.user = user_svc;
 }
 
-void RGWBucketCtl::init(RGWUserCtl *user_ctl,
-                        RGWDataChangesLog *datalog,
-                        const DoutPrefixProvider *dpp)
+void RGWBucketCtl::init(RGWUserCtl *user_ctl)
 {
   ctl.user = user_ctl;
-
-  datalog->set_bucket_filter(
-    [this](const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp) {
-      return bucket_exports_data(bucket, y, dpp);
-    });
 }
 
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
@@ -3483,21 +3501,6 @@ int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
   return 0;
 }
 
-int RGWBucketCtl::bucket_exports_data(const rgw_bucket& bucket,
-                                      optional_yield y,
-                                      const DoutPrefixProvider *dpp)
-{
-
-  RGWBucketSyncPolicyHandlerRef handler;
-
-  int r = get_sync_policy_handler(std::nullopt, bucket, &handler, y, dpp);
-  if (r < 0) {
-    return r;
-  }
-
-  return handler->bucket_exports_data();
-}
-
 int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
                                       optional_yield y, const DoutPrefixProvider *dpp)
 {
@@ -3510,6 +3513,20 @@ int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
   }
 
   return handler->bucket_imports_data();
+}
+
+int RGWBucketCtl::get_bucket_sync_hints(const DoutPrefixProvider *dpp,
+                                        const rgw_bucket& bucket,
+                                        std::set<rgw_bucket> *sources,
+                                        std::set<rgw_bucket> *dests,
+                                        optional_yield y)
+{
+  int r = svc.bucket_sync->get_bucket_sync_hints(dpp, bucket, sources, dests, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << __func__ << "(): failed to get bucket sync hints for bucket=" << bucket << " (r=" << r << ")" << dendl;
+    return r;
+  }
+  return 0;
 }
 
 auto create_bucket_metadata_handler(librados::Rados& rados,

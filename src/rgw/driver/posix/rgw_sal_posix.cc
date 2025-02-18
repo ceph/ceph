@@ -2736,10 +2736,11 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
 }
 
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
-				optional_yield y,
-				uint32_t flags,
-                                std::list<rgw_obj_index_key>* remove_objs,
-				RGWObjVersionTracker* objv)
+                               optional_yield y,
+                               rgw_log_op_info *log_op_info,
+                               uint32_t flags,
+                               std::list<rgw_obj_index_key>* remove_objs,
+                               RGWObjVersionTracker* objv)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
@@ -2896,7 +2897,7 @@ int POSIXObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_POSIX_ATTR_OBJECT_TYPE, pot)) {
     attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = pot;
   }
-  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  return dobj->set_obj_attrs(dpp, &attrs, nullptr, y, nullptr, rgw::sal::FLAG_LOG_OP);
 }
 
 int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -2918,7 +2919,7 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags)
 {
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -2963,14 +2964,15 @@ int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 }
 
 int POSIXObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp)
+                               optional_yield y, const DoutPrefixProvider* dpp,
+                               rgw_log_op_info *log_op_info, uint32_t flags)
 {
   state.attrset[attr_name] = attr_val;
   return write_attrs(dpp, y);
 }
 
 int POSIXObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+                               optional_yield y, rgw_log_op_info *log_op_info, uint32_t flags)
 {
   state.attrset.erase(attr_name);
 
@@ -3036,6 +3038,7 @@ int POSIXObject::transition(Bucket* bucket,
 			    uint64_t olh_epoch,
 			    const DoutPrefixProvider* dpp,
 			    optional_yield y,
+                            rgw_log_op_info *log_op_info,
                             uint32_t flags)
 {
   return -ERR_NOT_IMPLEMENTED;
@@ -3054,17 +3057,18 @@ int POSIXObject::transition_to_cloud(Bucket* bucket,
 }
 
 int POSIXObject::restore_obj_from_cloud(Bucket* bucket,
-          rgw::sal::PlacementTier* tier,
-          rgw_placement_rule& placement_rule,
-          rgw_bucket_dir_entry& o,
-	  CephContext* cct,
-          RGWObjTier& tier_config,
-          real_time& mtime,
-          uint64_t olh_epoch,
-          std::optional<uint64_t> days,
-          const DoutPrefixProvider* dpp, 
-          optional_yield y,
-          uint32_t flags)
+                                        rgw::sal::PlacementTier* tier,
+                                        rgw_placement_rule& placement_rule,
+                                        rgw_bucket_dir_entry& o,
+                                        CephContext* cct,
+                                        RGWObjTier& tier_config,
+                                        real_time& mtime,
+                                        uint64_t olh_epoch,
+                                        std::optional<uint64_t> days,
+                                        const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        rgw_log_op_info *log_op_info,
+                                        uint32_t flags)
 {
   return -ERR_NOT_IMPLEMENTED;
 }
@@ -3538,7 +3542,7 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  return source->delete_object(dpp, y, flags, nullptr, nullptr);
+  return source->delete_object(dpp, y, nullptr, flags, nullptr, nullptr);
 }
 
 int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -3658,7 +3662,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
-  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, nullptr, rgw::sal::FLAG_LOG_OP);
 }
 
 int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
@@ -3992,7 +3996,8 @@ int POSIXMultipartWriter::complete(
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
@@ -4074,7 +4079,8 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
+                       rgw_zone_set *zones_trace, rgw_log_op_info *log_op_info,
+                       bool *canceled,
                        const req_context& rctx,
                        uint32_t flags)
 {
