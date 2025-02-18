@@ -889,6 +889,8 @@ class Bucket {
       std::optional<std::string> swift_ver_location;
       std::optional<RGWQuotaInfo> quota;
       std::optional<ceph::real_time> creation_time;
+      std::optional<rgw::BucketIndexType> index_type;
+      std::optional<uint32_t> index_shards;
     };
 
     /// Create this bucket in the backing store.
