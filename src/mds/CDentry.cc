@@ -272,6 +272,7 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *remote_in, CInode *re
   dnl->inode = remote_in;
 
   if (referent_in) {
+    ceph_assert(referent_in->get_remote_ino() == dnl->get_remote_ino());
     dnl->referent_inode = referent_in;
     dnl->referent_ino = referent_in->ino();
   }
@@ -314,6 +315,7 @@ void CDentry::push_projected_linkage(CInode *referent_inode, inodeno_t remote_in
   linkage_t *p = _project_linkage();
   p->referent_inode = referent_inode;
   referent_inode->push_projected_parent(this);
+  referent_inode->set_remote_ino(remote_ino);
   p->referent_ino = referent_ino;
 
   p->remote_ino = remote_ino;
