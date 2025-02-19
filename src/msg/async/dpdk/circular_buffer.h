@@ -89,8 +89,12 @@ class circular_buffer {
   size_t mask(size_t idx) const;
 
   template<typename CB, typename ValueType>
-  struct cbiterator : std::iterator<std::random_access_iterator_tag, ValueType> {
-    typedef std::iterator<std::random_access_iterator_tag, ValueType> super_t;
+  struct cbiterator {
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = ValueType;
+    using difference_type = std::ptrdiff_t;
+    using pointer = ValueType*;
+    using reference = ValueType&;
 
     ValueType& operator*() const { return cb->_impl.storage[cb->mask(idx)]; }
     ValueType* operator->() const { return &cb->_impl.storage[cb->mask(idx)]; }
@@ -116,17 +120,17 @@ class circular_buffer {
       idx--;
       return v;
     }
-    cbiterator<CB, ValueType> operator+(typename super_t::difference_type n) const {
+    cbiterator<CB, ValueType> operator+(difference_type n) const {
       return cbiterator<CB, ValueType>(cb, idx + n);
     }
-    cbiterator<CB, ValueType> operator-(typename super_t::difference_type n) const {
+    cbiterator<CB, ValueType> operator-(difference_type n) const {
       return cbiterator<CB, ValueType>(cb, idx - n);
     }
-    cbiterator<CB, ValueType>& operator+=(typename super_t::difference_type n) {
+    cbiterator<CB, ValueType>& operator+=(difference_type n) {
       idx += n;
       return *this;
     }
-    cbiterator<CB, ValueType>& operator-=(typename super_t::difference_type n) {
+    cbiterator<CB, ValueType>& operator-=(difference_type n) {
       idx -= n;
       return *this;
     }
@@ -148,7 +152,7 @@ class circular_buffer {
     bool operator<=(const cbiterator<CB, ValueType>& rhs) const {
       return idx <= rhs.idx;
     }
-    typename super_t::difference_type operator-(const cbiterator<CB, ValueType>& rhs) const {
+    difference_type operator-(const cbiterator<CB, ValueType>& rhs) const {
       return idx - rhs.idx;
     }
    private:
