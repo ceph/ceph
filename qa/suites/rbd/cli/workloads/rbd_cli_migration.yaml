@@ -1,0 +1,13 @@
+overrides:
+  install:
+    extra_system_packages:
+      rpm:
+      - qemu-kvm-block-rbd
+      deb:
+      - qemu-block-extra
+      - qemu-utils
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/cli_migration.sh
