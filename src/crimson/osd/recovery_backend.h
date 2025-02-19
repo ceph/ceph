@@ -272,6 +272,14 @@ protected:
   virtual interruptible_future<> handle_backfill_op(
     Ref<MOSDFastDispatchOp> m,
     crimson::net::ConnectionXcoreRef conn);
+
+  /**
+   * replica_push_targets
+   *
+   * Holds obc on replica for in-progress pushes, see
+   * ReplicatedRecoveryBackend::handle_push
+   */
+  std::map<hobject_t, crimson::osd::ObjectContextRef> replica_push_targets;
 private:
   void handle_backfill_finish(
     MOSDPGBackfill& m,
