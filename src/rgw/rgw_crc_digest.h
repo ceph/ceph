@@ -92,6 +92,14 @@ namespace rgw { namespace digest {
     }
   }; /* Crc32c */
 
+  /* XXX the following validates against AWS intput as written, note
+   * but is apparently inconsistent with the published specification
+   * in at least initial value (init=0xffffffffffffffff), cf.
+   *
+   * https://nvmexpress.org/wp-content/uploads/NVM-Express-NVM-Command-Set-Specification-1.0d-2023.12.28-Ratified.pdf sec. 5.2.1.3.4
+   * (informally, cf. https://reveng.sourceforge.io/crc-catalogue/all.htm )
+   */
+
   class Crc64Nvme {
   private:
     uint64_t crc;
