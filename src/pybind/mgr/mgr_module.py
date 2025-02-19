@@ -2251,6 +2251,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
 
         result = defaultdict(dict)  # type: Dict[str, dict]
+        result_labeled = defaultdict(dict)  # type: Dict[str, dict]
 
         for server in self.list_servers():
             for service in cast(List[ServiceInfoT], server['services']):
@@ -2267,10 +2268,152 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     ))
                     continue
                 
+                # TODO: naveen: remove this
                 labeled_schemas = self.get_perf_schema_labeled(service['type'], service['id'])
                 self.log.debug('services: {}'.format(service))
                 self.log.debug('perf-schemas-labeled: {}'.format(labeled_schemas))
                 self.log.debug('perf-schemas-labeled json: {}'.format(json.dumps(labeled_schemas)))
+                
+                labeled_svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
+                labeled_schema = labeled_schemas[labeled_svc_full_name]
+                
+                """
+                counter schema looks like: 
+                {
+                    "AsyncMessenger::Worker": [
+                        {
+                            "labels": {
+                                "id": "0"
+                            },
+                            "counters": {
+                                "msgr_connection_idle_timeouts": {
+                                    "description": "Number of connections closed due to idleness",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                },
+                                "msgr_connection_ready_timeouts": {
+                                    "description": "Number of not yet ready connections declared as dead",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                }
+                            }
+                        }
+                    ]
+                }
+                
+                """
+                
+                # service_path: osd.0
+                for service_path, counter_schema in labeled_schemas.items():
+                    self.log.debug('service_path: {}'.format(service_path))
+                    self.log.debug('labeled counter schema json: {}'.format(json.dumps(counter_schema)))
+                    
+
+                    # counter_path: AsyncMessenger::Worker
+                    for counter_path, sub_counters_list in counter_schema.items():
+                        result_labeled[labeled_svc_full_name][counter_path] = []
+                        self.log.debug('counter_path: {}'.format(counter_path))
+                        sub_counter_labels = []
+                        """
+                        sub_counters look like:
+
+                        {
+                            "labels": {
+                                "id": "0"
+                            },
+                            "counters": {
+                                "msgr_connection_idle_timeouts": {
+                                    "description": "Number of connections closed due to idleness",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                },
+                                "msgr_connection_ready_timeouts": {
+                                    "description": "Number of not yet ready connections declared as dead",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                }
+                            }
+                        }
+                        """
+
+                        """
+                        counter_path: osd_scrub_sh_ec
+                        sub_counter_labels: [('level', 'shallow'), ('pooltype', 'ec')]
+                        sub_counter_name: successful_scrubs_elapsed
+                        sub_counter_schema json: {"description": "osd_scrub_sh_ec", "type": 5, "priority": 8, "units": 1}
+                        sub_counter_name: write_blocked_by_scrub
+                        sub_counter_schema json: {"description": "osd_scrub_sh_ec", "type": 10, "priority": 8, "units": 1}
+
+                        counter_path: osd_scrub_sh_repl
+                        sub_counter_labels: [('level', 'shallow'), ('pooltype', 'replicated')]
+                        sub_counter_name: successful_scrubs
+                        sub_counter_schema json: {"description": "osd_scrub_sh_repl", "type": 10, "priority": 8, "units": 1}
+                        sub_counter_name: successful_scrubs_elapsed
+                        sub_counter_schema json: {"description": "osd_scrub_sh_repl", "type": 5, "priority": 8, "units": 1}
+                        sub_counter_name: write_blocked_by_scrub
+                        sub_counter_schema json: {"description": "osd_scrub_sh_repl", "type": 10, "priority": 8, "units": 1}
+
+                        counter_path: osd
+                        sub_counter_labels: []
+                        sub_counter_name: numpg
+                        sub_counter_schema json: {"description": "osd.numpg", "nick": "pgs", "type": 2, "priority": 5, "units": 1}
+                        sub_counter_name: numpg_removing
+                        sub_counter_schema json: {"description": "osd.numpg_removing", "nick": "pgsr", "type": 2, "priority": 5, "units": 1}
+
+
+                        """
+                        for sub_counter in sub_counters_list:
+                            sub_counter_info = dict(sub_counter)
+
+                            for label_key, label_value in sub_counter["labels"].items():
+                                sub_counter_labels.append((label_key, label_value))
+                            
+                            self.log.debug('sub_counter_labels: {}'.format(sub_counter_labels))
+
+                            for sub_counter_name, sub_counter_schema in sub_counter["counters"].items():
+                                self.log.debug('sub_counter_name: {}'.format(sub_counter_name))
+                                self.log.debug('sub_counter_schema json: {}'.format(json.dumps(sub_counter_schema)))
+
+                                # HACK: This will be used when sub_counter_labels is empty in with_perf_counter
+                                counter_path_without_labels = counter_path + "." + sub_counter_name
+
+                                priority = sub_counter_schema['priority']
+                                assert isinstance(priority, int)
+                                if priority < prio_limit:
+                                    continue
+
+                                tp = sub_counter_schema['type']
+                                assert isinstance(tp, int)
+                                
+                                # Also populate count for the long running avgs
+                                if tp & self.PERFCOUNTER_LONGRUNAVG:
+                                    v, c = self.get_latest_avg(
+                                        service['type'],
+                                        service['id'],
+                                        counter_path_without_labels,
+                                        counter_path
+                                        sub_counter_name
+                                        sub_counter_labels
+                                    )
+                                    sub_counter_info['counters'][sub_counter_name]['value'] = v 
+                                    sub_counter_info['counters'][sub_counter_name]['count'] = c
+                                    
+                                else:
+                                    sub_counter_info['counters'][sub_counter_name]['value'] = self.get_latest(
+                                        service['type'],
+                                        service['id'],
+                                        counter_path_without_labels,
+                                        counter_path,
+                                        sub_counter_name,
+                                        sub_counter_labels
+                                    )
+                            
+                            result_labeled[labeled_svc_full_name][counter_path].append(sub_counter_info)
 
                 # Value is returned in a potentially-multi-service format,
                 # get just the service we're asking about
@@ -2314,8 +2457,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         )
 
                     result[svc_full_name][counter_path] = counter_info
-
-        self.log.debug('perf-schemas-labeled result json: {}'.format(json.dumps(result)))
+        
+        self.log.debug('perf-schemas-labeled result json: {}'.format(json.dumps(result_labeled)))
+        self.log.debug('perf-schemas without result json: {}'.format(json.dumps(result)))
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
