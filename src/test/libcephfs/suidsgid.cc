@@ -84,7 +84,7 @@ int do_mon_command(string s, string *key)
     std::cout << "key: " << *key << std::endl;
     free(outbuf);
   } else {
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   }
   if (outs_len) {
     string s(outs, outs_len);

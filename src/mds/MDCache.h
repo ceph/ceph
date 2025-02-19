@@ -598,7 +598,7 @@ private:
       MDSInternalContext(c->mds), cache(c), finisher(_finisher) {}
     ~C_MDS_QuiescePath() {
       if (finisher) {
-        finisher->complete(-CEPHFS_ECANCELED);
+        finisher->complete(-ECANCELED);
         finisher = nullptr;
       }
     }
