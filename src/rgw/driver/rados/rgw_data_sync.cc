@@ -2934,11 +2934,7 @@ class RGWObjFetchCR : public RGWCoroutine {
   bool need_more_info{false};
   bool check_change{false};
 
-  ceph::real_time src_mtime;
-  uint64_t src_size;
-  string src_etag;
   map<string, bufferlist> src_attrs;
-  map<string, string> src_headers;
 
   std::optional<rgw_user> param_user;
   rgw_sync_pipe_params::Mode param_mode;
@@ -3003,11 +2999,11 @@ public:
                                             sc->source_zone,
                                             sync_pipe.info.source_bs.bucket,
                                             key,
-                                            &src_mtime,
-                                            &src_size,
-                                            &src_etag,
+                                            nullptr,
+                                            nullptr,
+                                            nullptr,
                                             &src_attrs,
-                                            &src_headers));
+                                            nullptr));
           if (retcode < 0) {
             return set_cr_error(retcode);
           }
