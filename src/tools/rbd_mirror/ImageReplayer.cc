@@ -1025,14 +1025,6 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     return;
   }
 
-  if (!m_status_removed) {
-    auto ctx = new LambdaContext([this, r](int) {
-      m_status_removed = true;
-      handle_shut_down(r);
-    });
-    remove_image_status(m_delete_in_progress, ctx);
-    return;
-  }
 
   if (m_local_group_ctx != nullptr) {
     if (m_local_status_updater->mirror_group_image_exists(
@@ -1062,25 +1054,12 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       return;
     }
   } else {
-    if (m_local_status_updater->mirror_image_exists(m_global_image_id)) {
-      dout(15) << "removing local mirror image status" << dendl;
+    if (!m_status_removed) {
       auto ctx = new LambdaContext([this, r](int) {
-          handle_shut_down(r);
-        });
-      m_local_status_updater->remove_mirror_image_status(m_global_image_id,
-                                                         true, ctx);
-      return;
-    }
-
-    if (m_remote_image_peer.mirror_status_updater != nullptr &&
-        m_remote_image_peer.mirror_status_updater->mirror_image_exists(
-            m_global_image_id)) {
-      dout(15) << "removing remote mirror image status" << dendl;
-      auto ctx = new LambdaContext([this, r](int) {
-          handle_shut_down(r);
-        });
-      m_remote_image_peer.mirror_status_updater->remove_mirror_image_status(
-          m_global_image_id, true, ctx);
+        m_status_removed = true;
+        handle_shut_down(r);
+      });
+      remove_image_status(m_delete_in_progress, ctx);
       return;
     }
   }
