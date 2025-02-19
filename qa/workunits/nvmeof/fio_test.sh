@@ -72,11 +72,19 @@ status_log() {
     POOL="${RBD_POOL:-mypool}"
     GROUP="${NVMEOF_GROUP:-mygroup0}"
     ceph -s
-    ceph host ls
+    ceph orch host ls
     ceph orch ls 
     ceph orch ps
     ceph health detail
     ceph nvme-gw show $POOL $GROUP
+    sudo nvme list
+    sudo nvme list | wc -l
+    for device in $selected_drives; do
+        echo "Processing device: $device"
+        sudo nvme list-subsys /dev/$device
+        sudo nvme id-ns /dev/$device
+    done
+    
 }
 
 
