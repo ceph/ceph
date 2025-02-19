@@ -53,7 +53,7 @@ static int ceph_ll_delegation_wait(struct ceph_mount_info *cmount, Fh *fh,
   do {
     ret = ceph_ll_delegation(cmount, fh, cmd, cb, priv);
     usleep(10000);
-  } while (ret == -CEPHFS_EAGAIN && retry++ < 1000);
+  } while (ret == -EAGAIN && retry++ < 1000);
 
   return ret;
 }
@@ -95,7 +95,7 @@ static void open_breaker_func(struct ceph_mount_info *cmount, const char *filena
   for (;;) {
     ASSERT_EQ(ceph_ll_getattr(cmount, file, &stx, CEPH_STATX_ALL_STATS, 0, perms), 0);
     ret = ceph_ll_open(cmount, file, flags, &fh, perms);
-    if (ret != -CEPHFS_EAGAIN)
+    if (ret != -EAGAIN)
       break;
     ASSERT_LT(i++, MAX_WAIT);
     usleep(1000);
@@ -152,7 +152,7 @@ static void namespace_breaker_func(struct ceph_mount_info *cmount, int cmd, cons
       // Bad command
       ceph_abort();
     }
-    if (ret != -CEPHFS_EAGAIN)
+    if (ret != -EAGAIN)
       break;
     ASSERT_LT(i++, MAX_WAIT);
     usleep(1000);
@@ -337,7 +337,7 @@ TEST(LibCephFS, DelegTimeout) {
    * in the mounter in main thread has already timedout.
    */
   sleep(3);
-  ASSERT_EQ(ceph_ll_getattr(cmount, root, &stx, 0, 0, perms), -CEPHFS_ENOTCONN);
+  ASSERT_EQ(ceph_ll_getattr(cmount, root, &stx, 0, 0, perms), -ENOTCONN);
   ceph_release(cmount);
 }
 

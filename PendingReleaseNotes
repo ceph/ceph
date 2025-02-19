@@ -623,3 +623,9 @@ It is also adding 2 new mon commands, to notify monitor about the gateway creati
   - nvme-gw create
   - nvme-gw delete
 Relevant tracker: https://tracker.ceph.com/issues/64777
+
+* MDS now uses host errors, as defined in errno.cc, for current platform.
+errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+All CEPHFS_E* defines have been removed across Ceph (including the python binding).
+Relevant tracker: https://tracker.ceph.com/issues/64611
