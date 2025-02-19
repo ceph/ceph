@@ -3,3 +3,9 @@ tasks:
     clients:
       client.0:
         - rgw/run-rados-pool-quota.sh
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - reached quota
+      - POOL_FULL
