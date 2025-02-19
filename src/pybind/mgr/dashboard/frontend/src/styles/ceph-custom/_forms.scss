@@ -1,5 +1,7 @@
 @use '../vendor/variables' as vv;
 @use '@carbon/colors';
+@use '@carbon/layout';
+@use '@carbon/type';
 
 /* Forms */
 .required::after {
@@ -132,4 +134,12 @@ Form Controls
 
 fieldset {
   @extend .cds--fieldset;
+}
+
+.item-action-btn {
+  margin-top: layout.$spacing-07;
+}
+
+.form-group-header {
+  @include type.type-style('heading-01');
 }

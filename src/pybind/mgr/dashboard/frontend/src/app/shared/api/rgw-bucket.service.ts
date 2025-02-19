@@ -272,4 +272,25 @@ export class RgwBucketService extends ApiClient {
       return this.http.get(`${this.url}/getEncryptionConfig`, { params: params });
     });
   }
+
+  setLifecycle(bucket_name: string, lifecycle: string, owner: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        lifecycle: lifecycle,
+        owner: owner
+      });
+      return this.http.put(`${this.url}/lifecycle`, null, { params: params });
+    });
+  }
+
+  getLifecycle(bucket_name: string, owner: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        owner: owner
+      });
+      return this.http.get(`${this.url}/lifecycle`, { params: params });
+    });
+  }
 }
