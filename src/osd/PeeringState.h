@@ -25,6 +25,7 @@
 #include "OSDMap.h"
 #include "MissingLoc.h"
 #include "osd/osd_perf_counters.h"
+#include "common/config_cacher.h"
 #include "common/ostream_temp.h"
 
 struct PGPool {
@@ -1391,6 +1392,10 @@ public:
 
   PGStateHistory state_history;
   CephContext* cct;
+  md_config_cacher_t<int64_t> osd_pg_stat_report_interval_max_seconds{
+    cct->_conf, "osd_pg_stat_report_interval_max_seconds" };
+  md_config_cacher_t<int64_t> osd_pg_stat_report_interval_max_epochs{
+    cct->_conf, "osd_pg_stat_report_interval_max_epochs" };
   spg_t spgid;
   DoutPrefixProvider *dpp;
   PeeringListener *pl;
