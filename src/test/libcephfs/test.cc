@@ -2060,30 +2060,34 @@ TEST(LibCephFS, SetSize) {
 
 TEST(LibCephFS, OperationsOnRoot)
 {
+  UserPerm *rootcred = ceph_userperm_new(0, 0, 0, NULL);
+  ASSERT_TRUE(rootcred);
   struct ceph_mount_info *cmount;
-  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
-  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
-  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+  ASSERT_EQ(0, ceph_init(cmount));
+  ASSERT_EQ(0, ceph_mount_perms_set(cmount, rootcred));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
   char dirname[32];
   sprintf(dirname, "/somedir%x", getpid());
 
   ASSERT_EQ(ceph_mkdir(cmount, dirname, 0755), 0);
 
-  ASSERT_EQ(ceph_rmdir(cmount, "/"), -EBUSY);
+  ASSERT_EQ(ceph_rmdir(cmount, "/"), -EINVAL);
 
   ASSERT_EQ(ceph_link(cmount, "/", "/"), -EEXIST);
   ASSERT_EQ(ceph_link(cmount, dirname, "/"), -EEXIST);
   ASSERT_EQ(ceph_link(cmount, "nonExisitingDir", "/"), -ENOENT);
 
-  ASSERT_EQ(ceph_unlink(cmount, "/"), -EISDIR);
+  ASSERT_EQ(ceph_unlink(cmount, "/"), -EINVAL);
 
-  ASSERT_EQ(ceph_rename(cmount, "/", "/"), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, dirname, "/"), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "nonExistingDir", "/"), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "/", dirname), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "/", "nonExistingDir"), -EBUSY);
+  ASSERT_EQ(ceph_rename(cmount, "/", "/"), -EINVAL);
+  ASSERT_EQ(ceph_rename(cmount, dirname, "/"), -EINVAL);
+  ASSERT_EQ(ceph_rename(cmount, "nonExistingDir", "/"), -ENOENT);
+  ASSERT_EQ(ceph_rename(cmount, "/", dirname), -EINVAL);
+  ASSERT_EQ(ceph_rename(cmount, "/", "nonExistingDir"), -EINVAL);
 
   ASSERT_EQ(ceph_mkdir(cmount, "/", 0777), -EEXIST);
 
@@ -2094,6 +2098,7 @@ TEST(LibCephFS, OperationsOnRoot)
   ASSERT_EQ(ceph_symlink(cmount, "nonExistingDir", "/"), -EEXIST);
 
   ceph_shutdown(cmount);
+  ceph_userperm_destroy(rootcred);
 }
 
 // no rlimits on Windows
