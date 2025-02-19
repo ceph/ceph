@@ -89,7 +89,7 @@ struct GroupReplayer<librbd::MockTestImageCtx> {
   }
 
   MOCK_METHOD0(destroy, void());
-  MOCK_METHOD4(start, void(Context *, bool, bool, bool));
+  MOCK_METHOD3(start, void(Context *, bool, bool));
   MOCK_METHOD2(stop, void(Context *, bool));
   MOCK_METHOD2(restart, void(Context*, bool));
   MOCK_METHOD0(flush, void());
@@ -197,7 +197,8 @@ public:
 
   void expect_work_queue(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.work_queue, queue(_, _))
-      .WillOnce(Invoke([this](Context *ctx, int r) {
+      .Times(testing::AtLeast(1))
+      .WillRepeatedly(Invoke([this](Context *ctx, int r) {
           m_threads->work_queue->queue(ctx, r);
         }));
   }
@@ -224,7 +225,8 @@ public:
 
   void expect_cancel_event(MockThreads &mock_threads, bool canceled) {
     EXPECT_CALL(*mock_threads.timer, cancel_event(_))
-      .WillOnce(Return(canceled));
+      .Times(testing::AtLeast(1))
+      .WillRepeatedly(Return(canceled));
   }
 };
 
@@ -434,6 +436,7 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
 
   expect_work_queue(mock_threads);
   expect_cancel_event(mock_threads, true);
+  expect_work_queue(mock_threads);
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   expect_work_queue(mock_threads);
   expect_work_queue(mock_threads);
