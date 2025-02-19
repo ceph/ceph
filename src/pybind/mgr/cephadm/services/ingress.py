@@ -97,10 +97,18 @@ class IngressService(CephService):
         # sufficient to detect changes.
         if not spec:
             return []
+
         ingress_spec = cast(IngressSpec, spec)
         assert ingress_spec.backend_service
         daemons = mgr.cache.get_daemons_by_service(ingress_spec.backend_service)
-        return sorted([d.name() for d in daemons])
+        deps = [d.name() for d in daemons]
+        for attr in ['ssl_cert', 'ssl_key']:
+            ssl_cert_key = getattr(ingress_spec, attr, None)
+            if ssl_cert_key:
+                assert isinstance(ssl_cert_key, str)
+                deps.append(f'ssl-cert-key:{str(utils.md5_hash(ssl_cert_key))}')
+
+        return sorted(deps)
 
     def haproxy_generate_config(
             self,
@@ -224,11 +232,12 @@ class IngressService(CephService):
                 "haproxy.cfg": haproxy_conf,
             }
         }
+
         if spec.ssl_cert:
-            ssl_cert = spec.ssl_cert
-            if isinstance(ssl_cert, list):
-                ssl_cert = '\n'.join(ssl_cert)
-            config_files['files']['haproxy.pem'] = ssl_cert
+            config_files['files']['haproxy.pem'] = spec.ssl_cert
+
+        if spec.ssl_key:
+            config_files['files']['haproxy.pem.key'] = spec.ssl_key
 
         return config_files, self.get_haproxy_dependencies(self.mgr, spec)
 
