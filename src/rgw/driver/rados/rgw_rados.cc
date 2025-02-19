@@ -5378,6 +5378,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     }
 
     // TODO : check whether log_op need to passed to this function
+    // The temporary cloud restore object should sync to other site
     log_op = false;
 
   } else { // permanent restore

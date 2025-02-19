@@ -668,7 +668,7 @@ public:
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 			    rgw_obj* target_obj = NULL) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-			       optional_yield y, const DoutPrefixProvider* dpp) override;
+			       optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
 			       optional_yield y) override;
   virtual bool is_expired() override;
