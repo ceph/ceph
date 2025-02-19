@@ -2058,19 +2058,19 @@ TEST(LibCephFS, OperationsOnRoot)
 
   ASSERT_EQ(ceph_mkdir(cmount, dirname, 0755), 0);
 
-  ASSERT_EQ(ceph_rmdir(cmount, "/"), -EBUSY);
+  ASSERT_EQ(ceph_rmdir(cmount, "/"), -EINVAL);
 
   ASSERT_EQ(ceph_link(cmount, "/", "/"), -EEXIST);
   ASSERT_EQ(ceph_link(cmount, dirname, "/"), -EEXIST);
   ASSERT_EQ(ceph_link(cmount, "nonExisitingDir", "/"), -ENOENT);
 
-  ASSERT_EQ(ceph_unlink(cmount, "/"), -EISDIR);
+  ASSERT_EQ(ceph_unlink(cmount, "/"), -EINVAL);
 
-  ASSERT_EQ(ceph_rename(cmount, "/", "/"), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, dirname, "/"), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "nonExistingDir", "/"), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "/", dirname), -EBUSY);
-  ASSERT_EQ(ceph_rename(cmount, "/", "nonExistingDir"), -EBUSY);
+  ASSERT_EQ(ceph_rename(cmount, "/", "/"), -EINVAL);
+  ASSERT_EQ(ceph_rename(cmount, dirname, "/"), -EINVAL);
+  ASSERT_EQ(ceph_rename(cmount, "nonExistingDir", "/"), -ENOENT);
+  ASSERT_EQ(ceph_rename(cmount, "/", dirname), -EINVAL);
+  ASSERT_EQ(ceph_rename(cmount, "/", "nonExistingDir"), -EINVAL);
 
   ASSERT_EQ(ceph_mkdir(cmount, "/", 0777), -EEXIST);
 
