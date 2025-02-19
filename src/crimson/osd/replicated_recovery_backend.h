@@ -175,4 +175,7 @@ private:
     bufferlist omap_header);
   using interruptor = crimson::interruptible::interruptor<
     crimson::osd::IOInterruptCondition>;
+
+  std::pair<object_info_t, crimson::osd::SnapSetContextRef>
+  get_md_from_push_op(PushOp &push_op);
 };
