@@ -1351,3 +1351,25 @@ ReplicatedRecoveryBackend::handle_recovery_op(
   }
 }
 
+std::pair<object_info_t, crimson::osd::SnapSetContextRef>
+ReplicatedRecoveryBackend::get_md_from_push_op(PushOp &push_op)
+{
+  LOG_PREFIX(ReplicatedRecoveryBackend::get_md_from_push_op);
+  object_info_t oi;
+  oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);
+
+  crimson::osd::SnapSetContextRef ssc;
+  if (auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
+      ss_attr_iter != push_op.attrset.end()) {
+    try {
+      ssc = new crimson::osd::SnapSetContext(
+	push_op.soid.get_snapdir());
+      ssc->snapset = SnapSet(ss_attr_iter->second);
+      ssc->exists = true;
+    } catch (const buffer::error&) {
+      WARNDPP("unable to decode SnapSet", pg);
+      throw crimson::osd::invalid_argument();
+    }
+  }
+  return std::make_pair(std::move(oi), std::move(ssc));
+}
