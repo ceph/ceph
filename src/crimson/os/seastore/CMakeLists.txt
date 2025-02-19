@@ -1,6 +1,7 @@
 set(crimson_seastore_srcs
   cached_extent.cc
   lba_mapping.cc
+  logical_child_node.cc
   seastore_types.cc
   segment_manager.cc
   segment_manager/ephemeral.cc
@@ -20,7 +21,6 @@ set(crimson_seastore_srcs
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
-  btree/fixed_kv_node.cc
   onode.cc
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc
