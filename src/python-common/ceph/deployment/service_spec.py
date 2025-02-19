@@ -3180,7 +3180,11 @@ class SMBSpec(ServiceSpec):
         return uri
 
     def get_port_start(self) -> List[int]:
-        return [445, 9922]  # SMB service runs on port 445, and smbmetrics uses 9922
+        ports = [445, 9922]  # SMB service runs on port 445 and smbmetrics uses 9922
+        if 'clustered' in self.features:
+            # ctdb uses port 4379
+            ports.append(4379)
+        return ports
 
     def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
         return [s.to_strict() for s in (self.cluster_public_addrs or [])]
