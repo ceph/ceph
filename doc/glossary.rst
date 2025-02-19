@@ -224,7 +224,7 @@
                 Architecture document<architecture_cluster_map>` for details.
 
         Crimson
-                A next-generation OSD architecture whose main aim is the
+                A next-generation OSD architecture whose aim is the
                 reduction of latency costs incurred due to cross-core
                 communications. A re-design of the OSD reduces lock
                 contention by reducing communication between shards in the data
