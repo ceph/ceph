@@ -842,6 +842,7 @@ void ActivePyModules::_refresh_config_map()
   }
 }
 
+
 // TODO: Naveen: A better idea: Create a C++ function which takes counter_name, sub_counter_name and labels
 // and creates the path. And then call this function from the python code to construct the path and then
 // send the path. This way, none of these functions would need changing
@@ -867,17 +868,16 @@ PyObject* ActivePyModules::with_perf_counters(
     // https://stackoverflow.com/questions/2923272/how-to-convert-vector-to-array/40031309#comment31156323_2923295
     // Check, if declaring a size of 100 for labels enough? 
     ceph::perf_counters::label_pair labels_array[100];
-    std::copy(labels.begin(), labels.end(), labels_array);
-
-    // Call key_create with the labels_array
-    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name, std::move(labels_array));
+    std::copy(labels.begin(), labels.end(), std::begin(labels_array));
+  
+    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name.data(), std::move(labels_array));
     resolved_path = (counter_name_with_labels.append(".")).append(sub_counter_name);
-    dout(20) << "with_perf_counters labels resolved_path" << resolved_path << dendl;
+    dout(20) << "labels resolved_path " << resolved_path << dendl;
   }
   else {
     f.open_array_section(path);
     resolved_path = path;
-    dout(20) << "with_perf_counters without labels resolved_path" << resolved_path << dendl;
+    dout(20) << "without labels resolved_path " << resolved_path << dendl;
   }
   
   {
@@ -886,14 +886,14 @@ PyObject* ActivePyModules::with_perf_counters(
     auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
     if (metadata) {
       std::lock_guard l2(metadata->lock);
-      if (metadata->perf_counters.instances.count(path)) {
-        auto counter_instance = metadata->perf_counters.instances.at(path);
-        auto counter_type = metadata->perf_counters.types.at(path);
+      if (metadata->perf_counters.instances.count(resolved_path)) {
+        auto counter_instance = metadata->perf_counters.instances.at(resolved_path);
+        auto counter_type = metadata->perf_counters.types.at(resolved_path);
         with_gil(no_gil, [&] {
           fct(counter_instance, counter_type, f);
         });
       } else {
-        dout(4) << "Missing counter: '" << path << "' ("
+        dout(4) << "Missing counter: '" << resolved_path << "' ("
 		<< svc_name << "." << svc_id << ")" << dendl;
         dout(20) << "Paths are:" << dendl;
         for (const auto &i : metadata->perf_counters.instances) {
@@ -1128,8 +1128,8 @@ PyObject* ActivePyModules::get_perf_schema_labeled_python(
 
             f.open_object_section("counters");
             f.open_object_section(counter_name);
-            //f.dump_string("description", type.description);
-            f.dump_string("description", counter_name_with_labels);
+            f.dump_string("description", type.description);
+            // f.dump_string("description", counter_name_with_labels);
 
             if (!type.nick.empty()) {
               f.dump_string("nick", type.nick);
