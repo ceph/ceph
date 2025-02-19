@@ -24,6 +24,10 @@ An execution of a script in a context can use up to 500K byte of memory. This in
 To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero.
 By default, the execution of a Lua script is limited to a maximum runtime of 1000 milliseconds. This limit can be changed using the ``rgw_lua_max_runtime_per_state`` configuration parameter. If a Lua script exceeds this runtime, it will be terminated. To disable the runtime limit, use zero.
 
+.. warning:: Be cautious when modifying the memory limit. If the current memory usage exceeds the newly set limit, all previously stored data in the background state will be lost.
+
+.. warning:: Disabling the runtime limit may result in unbounded script execution, which can lead to excessive resource consumption and potentially impact the RADOS gateway's availability.
+
 By default, all Lua standard libraries are available in the script, however, in order to allow for additional Lua modules to be used in the script, we support adding packages to an allowlist:
 
   - Adding a Lua package to the allowlist, or removing a packge from it does not install or remove it. For the changes to take affect a "reload" command should be called.
