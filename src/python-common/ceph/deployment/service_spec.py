@@ -1411,6 +1411,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 grpc_trace: Optional[str] = None,
                  ):
         assert service_type == 'nvmeof'
         super(NvmeofServiceSpec, self).__init__('nvmeof', service_id=service_id,
@@ -1419,7 +1420,8 @@ class NvmeofServiceSpec(ServiceSpec):
                                                 config=config, networks=networks,
                                                 extra_container_args=extra_container_args,
                                                 extra_entrypoint_args=extra_entrypoint_args,
-                                                custom_configs=custom_configs)
+                                                custom_configs=custom_configs,
+                                                grpc_trace=grpc_trace)
 
         #: RADOS pool where ceph-nvmeof config data is stored.
         self.pool = pool
@@ -1559,6 +1561,9 @@ class NvmeofServiceSpec(ServiceSpec):
         self.enable_monitor_client = enable_monitor_client
         #: ``monitor_client_log_file_dir`` the monitor client log output file file directory
         self.monitor_client_log_file_dir = monitor_client_log_file_dir
+        #: ``grpc_trace`` enable grpc library traces, for instance 'tcp,http,api'
+        #: see https://github.com/grpc/grpc/blob/master/TROUBLESHOOTING.md
+        self.grpc_trace = grpc_trace
 
     def get_port_start(self) -> List[int]:
         return [self.port, 4420, self.discovery_port, self.prometheus_port]

@@ -82,6 +82,10 @@ class NvmeofService(CephService):
         if spec.spdk_mem_size:
             daemon_spec.extra_files['spdk_mem_size'] = str(spec.spdk_mem_size)
 
+        # Indicate to the daemon whether to enable grpc tracing
+        if spec.grpc_trace:
+            daemon_spec.extra_files['grpc_trace'] = str(spec.grpc_trace)
+
         if spec.enable_auth:
             if (
                 not spec.client_cert
