@@ -519,13 +519,15 @@ namespace ceph {
     virtual int decode_concat(const std::map<int, bufferlist> &chunks,
 			      bufferlist *decoded) = 0;
 
+    using plugin_flags = uint64_t;
+
     /**
      * Return a set of flags indicating which EC optimizations are supported
      * by the plugin.
      *
      * @return logical OR of the supported performance optimizations
      */
-    virtual uint64_t get_supported_optimizations() const = 0;
+    virtual plugin_flags get_supported_optimizations() const = 0;
     enum {
       /* Partial read optimization assumes that the erasure code is systematic
        * and that concatenating the data chunks in the order returned by
@@ -561,7 +563,7 @@ namespace ceph {
        */
       FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS = 1<<5,
     };
-    static const char *get_optimization_flag_name(const uint64_t flag) {
+    static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
       case FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION: return "partialread";
       case FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION: return "partialwrite";
@@ -572,13 +574,16 @@ namespace ceph {
       default: return "???";
       }
     }
-    static std::string get_optimization_flags_string(const uint64_t flags) {
+
+    static std::string get_optimization_flags_string(plugin_flags flags) {
       std::string s;
       for (unsigned n=0; flags && n<64; ++n) {
-	if (flags & (1ull << n)) {
+        plugin_flags possible_flag = flags & (1ull << n);
+	if (possible_flag) {
 	  if (s.length())
 	    s += ",";
 	  s += get_optimization_flag_name(1ull << n);
+          flags -= possible_flag;
 	}
       }
       return s;
