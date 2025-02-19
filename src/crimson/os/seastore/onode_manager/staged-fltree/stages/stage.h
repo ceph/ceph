@@ -1153,7 +1153,7 @@ struct staged {
       return insert_size(key, value);
     } else {
       assert(stage < STAGE);
-      return NXT_STAGE_T::template insert_size_at(stage, key, value);
+      return NXT_STAGE_T::insert_size_at(stage, key, value);
     }
   }
 
@@ -1406,7 +1406,7 @@ struct staged {
         return container_t::insert_at(
             mut, container, key, value, 0, _insert_size, p_left_bound);
       } else {
-        auto range = container_t::template insert_prefix_at(
+        auto range = container_t::insert_prefix_at(
             mut, container, key, 0, _insert_size, p_left_bound);
         return NXT_STAGE_T::template insert_new<KT>(mut, range, key, value);
       }
