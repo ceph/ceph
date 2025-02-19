@@ -1864,7 +1864,7 @@ TEST_F(ExtentMapFixture, rain) {
     X.push_back(create());
   }
   for (size_t i = 0; i < H - 1; i++) {
-    write(X[i], (rand() % W - 1) * au_size, au_size);
+    write(X[i], (rand() % (W - 1)) * au_size, au_size);
     dup(X[i], X[i + 1], 0, W * au_size);
   }
   for (size_t i = 0; i < H; i++) {
@@ -3174,6 +3174,54 @@ TEST(bluestore_blob_t, wrong_map_bl_in_51682) {
     ASSERT_EQ(expected_pos, num_expected_entries);
   }
 }
+
+TEST(bluestore_blob_t, get_unused_mask) {
+  uint32_t disk_block = 4 * 1024;
+  for (uint32_t alloc = 4 * 1024; alloc <= 256 * 1024; alloc *= 2) {
+    for (uint32_t t = 0; t < 10000; t++) {
+      bluestore_blob_t b;
+      uint32_t size = (rand() % 10 + 1) * alloc;
+      b.allocated_test({uint64_t(rand() * 0x1000), size});
+      b.add_unused(0, size);
+      // sprinkle used
+      uint32_t regions = (rand() % 4) + 1;
+      for (uint32_t i = 0; i < regions; i++) {
+        uint32_t left = (rand() % 4) ?
+          rand() % (size / disk_block + 1) * disk_block : //aligned to disk block
+          (rand() * 1024 + rand()) % size; // completely free
+        uint32_t right = (rand() % 4) ?
+          rand() % (size / disk_block + 1) * disk_block : //aligned to disk block
+          (rand() * 1024 + rand()) % size; // completely free
+        if (left == right) continue;
+        if (left > right) swap(left, right);
+        b.mark_used(left, right - left);
+      }
+
+      for (uint32_t io_chunk_size = 1024; io_chunk_size <= 32 * 1024; io_chunk_size *= 2) {
+        if (size < io_chunk_size || (size % io_chunk_size) != 0) {
+          continue;
+        }
+        if (size / io_chunk_size > 64) continue;
+        uint32_t io_begin = rand() % (size / io_chunk_size + 1) * io_chunk_size;
+        uint32_t io_end  = rand() % (size / io_chunk_size + 1) * io_chunk_size;
+        if (io_begin == io_end) continue;
+        if (io_begin > io_end) swap(io_begin, io_end);
+
+        uint64_t mask = 0;
+        uint64_t bit = 1;
+        for (uint32_t i = io_begin; i < io_end; i += io_chunk_size) {
+          mask = mask | (b.is_unused(i, io_chunk_size) ? bit : 0);
+          bit = bit << 1;
+        }
+        uint64_t result = b.get_unused_mask(io_begin, io_end - io_begin, io_chunk_size);
+        auto ref = std::bitset<64>(mask).to_string().substr(64 - (io_end - io_begin) / io_chunk_size);
+        auto uuu = std::bitset<64>(result).to_string().substr(64 - (io_end - io_begin) / io_chunk_size);
+        EXPECT_EQ(ref, uuu);
+      }
+    }
+  }
+}
+
 class bluestore_blob_t_test :
   public ::testing::Test,
   public ::testing::WithParamInterface<std::vector<int>>
