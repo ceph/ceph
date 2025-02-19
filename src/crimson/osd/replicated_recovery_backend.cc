@@ -837,40 +837,28 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     pull_info.recovery_info.version = push_op.version;
 
   if (pull_info.recovery_progress.first) {
-    auto obc_manager = pg.obc_loader.get_obc_manager(pull_info.recovery_info.soid);
-    co_await pg.obc_loader.load_and_lock(
-      obc_manager, RWState::RWNONE
-    ).handle_error_interruptible(
-      crimson::ct_error::assert_all("unexpected error")
-    );
+    auto [oi, ssc] = get_md_from_push_op(push_op);
 
-    auto obc = obc_manager.get_obc();
-    pull_info.obc = obc;
-    recovery_waiter.obc = obc;
-    // TODO: move to ObjectContextLoader once constructing obc from attrset is supported
-    obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
-                              push_op.soid);
-    auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
-    if (ss_attr_iter != push_op.attrset.end()) {
-      if (!obc->ssc) {
-        obc->ssc = new crimson::osd::SnapSetContext(
-          push_op.soid.get_snapdir());
-      }
-      try {
-        obc->ssc->snapset = SnapSet(ss_attr_iter->second);
-        obc->ssc->exists = true;
-      } catch (const buffer::error&) {
-        WARNDPP("unable to decode SnapSet", pg);
-        throw crimson::osd::invalid_argument();
-      }
+    // If clone, head has the ssc
+    if (!pull_info.recovery_info.soid.is_head()) {
+      ceph_assert(!ssc); // clones can't have SS_ATTR
+      ssc = pull_info.head_ctx->ssc;
+      ceph_assert(ssc);
     }
-    pull_info.recovery_info.oi = obc->obs.oi;
+
+    pull_info.recovery_info.oi = std::move(oi);
+
     if (pull_info.recovery_info.soid.snap &&
-        pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
-        recalc_subsets(pull_info.recovery_info,
-                       pull_info.obc->ssc);
+	pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
+      recalc_subsets(pull_info.recovery_info,
+		     ssc);
     }
-  }
+
+    pull_info.obc = recovery_waiter.obc =
+      pg.obc_loader.create_cached_obc_from_push_data(
+	pull_info.recovery_info.oi,
+	ssc);
+  };
 
   const bool first = pull_info.recovery_progress.first;
   pull_info.recovery_progress = push_op.after_progress;
