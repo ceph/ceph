@@ -34,7 +34,12 @@ using namespace std::literals::string_view_literals;
 #endif
 #include <sys/uio.h>
 
+#include <string>
+#include <string_view>
+
 #include <boost/lexical_cast.hpp>
+#include <boost/locale/encoding_utf.hpp>
+#include <boost/locale.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
 #include "common/async/waiter.h"
@@ -164,6 +169,7 @@ using std::oct;
 using std::pair;
 using std::string;
 using std::vector;
+using namespace std::literals;
 
 using namespace TOPNSPC::common;
 
@@ -391,6 +397,12 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     m_command_hook(this),
     fscid(0)
 {
+  /* We only use the locale for normalization/case folding. That is unaffected
+   * by the locale but required by the API.
+   */
+  auto generator = boost::locale::generator();
+  m_locale = generator("en_US.UTF-8");
+
   _reset_faked_inos();
 
   user_id = cct->_conf->client_mount_uid;
@@ -1066,6 +1078,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (in->is_symlink())
     in->symlink = st->symlink;
 
+  in->optmetadata = st->optmetadata; // TODO maybe prune unknown_md_t
+
   // only update inode if mds info is strictly newer, or it is the same and projected (odd).
   bool new_version = false;
   if (in->version == 0 ||
@@ -1251,6 +1265,108 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   update_dentry_lease(dn, dlease, from, session);
   return dn;
 }
+
+bool Client::_wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name)
+{
+  ldout(cct, 20) << __func__ << ": (" << dname << " len=" << dname.size() << ", " << alternate_name << ") on " << diri << dendl;
+  ceph_assert(dname.size() > 0);
+  if (diri.has_charmap()) {
+    auto& cs = diri.get_charmap();
+    ldout(cct, 25) << __func__ << ":  " << cs << dendl;
+    const auto&& encoding = cs.get_encoding();
+    const auto&& normalization = cs.get_normalization();
+    const bool is_insensitive = !cs.is_casesensitive();
+
+    std::string encoded;
+    if (encoding == "utf8"sv) {
+      try {
+        /* confirm valid utf-8 name */
+        encoded = boost::locale::conv::to_utf<char>(dname, "UTF-8", boost::locale::conv::stop);
+      } catch (const boost::locale::conv::conversion_error& e) {
+        ldout(cct, 2) << "`" << dname << "' is not valid utf-8: " << e.what() << dendl;
+        return false;
+      }
+    } else if (!encoding.empty()) {
+      ldout(cct, 2) << "unknown encoding: " << encoding << dendl;
+      return false;
+    }
+
+    std::string normalized;
+    if (normalization.size()) {
+      if (encoded.empty()) {
+        ldout(cct, 2) << "unknown encoding: " << encoding << dendl;
+        return false;
+      }
+      boost::locale::norm_type norm_type;
+      if (normalization == "nfd"sv) {
+        norm_type = boost::locale::norm_type::norm_nfd;
+      } else if (normalization == "nfc") {
+        norm_type = boost::locale::norm_type::norm_nfc;
+      } else if (normalization == "nfkd") {
+        norm_type = boost::locale::norm_type::norm_nfkd;
+      } else if (normalization == "nfkc") {
+        norm_type = boost::locale::norm_type::norm_nfkc;
+      } else {
+        ldout(cct, 2) << "unknown normalization: " << normalization << dendl;
+        return false;
+      }
+      try {
+        normalized = boost::locale::normalize(encoded, norm_type, m_locale);
+      } catch (const std::bad_cast& e) {
+        ldout(cct, -1) << __func__ << ": linking issue detected: multiple copies of boost::locale present in this binary! Link Boost / Boost::Python shared." << dendl;
+        return false;
+      }
+      ldout(cct, 25) << __func__ << " normalized: " << normalized << " len=" << normalized.size() << dendl;
+    }
+
+    std::string folded;
+    if (is_insensitive) {
+      if (normalized.empty()) {
+        ldout(cct, 2) << __func__ << " normalization is required before case folding: " << dname << dendl;
+        return false;
+      }
+      try {
+        folded = boost::locale::fold_case(normalized, m_locale);
+      } catch (const std::bad_cast& e) {
+        ldout(cct, -1) << __func__ << ": linking issue detected: multiple copies of boost::locale present in this binary! Link Boost / Boost::Python shared." << dendl;
+        return false;
+      }
+      ldout(cct, 25) << __func__ << " folded: " << folded << " len=" << folded.size() << dendl;
+    }
+
+    if (folded.size()) {
+      alternate_name = dname;
+      dname = folded;
+    } else if (normalized.size()) {
+      alternate_name = dname;
+      dname = normalized;
+    } /* else: no normalization / folding / encoding */
+  }
+  return true;
+}
+
+std::string Client::_unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name)
+{
+  ldout(cct, 20) << __func__ << ": (" << dname << ", " << alternate_name << ") on " << diri << dendl;
+  std::string newdname = dname;
+
+  /* TODO: annotate alternate_name with metadata for multiple wrappings? */
+  if (diri.has_charmap()) {
+    auto& cs = diri.get_charmap();
+    ldout(cct, 25) << __func__ << ":  " << cs << dendl;
+    const bool is_insensitive = !cs.is_casesensitive();
+
+    /* no reverse of normalization / encoding */
+
+    if (is_insensitive) {
+      ldout(cct, 25) << __func__ << ":  = " << alternate_name << dendl;
+      newdname = alternate_name;
+    }
+  }
+
+  return newdname;
+}
+
 
 void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session)
 {
@@ -7507,7 +7623,7 @@ relookup:
   return r;
 }
 
-Dentry *Client::get_or_create(Inode *dir, const char* name)
+Dentry *Client::get_or_create(Inode *dir, const std::string& name)
 {
   // lookup
   ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
@@ -7585,6 +7701,13 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
         goto out;
       }
       caps = CEPH_CAP_AUTH_SHARED;
+    }
+
+    // N.B.: we don't validate alternate_name we generate during wrapping
+    // matches the dentry. We probably should!
+    if (!_wrap_name(*diri, dname, alternate_name)) {
+      rc = -EACCES;
+      goto out;
     }
 
     if (dname.size() > NAME_MAX) {
@@ -9278,7 +9401,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 	   << " last_name " << dirp->last_name
 	   << " offset " << hex << dirp->offset << dec
 	   << dendl;
-  Dir *dir = dirp->inode->dir;
+  auto& diri = dirp->inode;
+  Dir *dir = diri->dir;
 
   if (!dir) {
     ldout(cct, 10) << " dir is empty" << dendl;
@@ -9333,7 +9457,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     fill_statx(dn->inode, caps, &stx);
 
     uint64_t next_off = dn->offset + 1;
-    fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+    auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
+    fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
     ++pd;
     if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
@@ -9552,6 +9677,8 @@ int Client::_readdir_r_cb(int op,
 	 ++it) {
       dir_result_t::dentry &entry = *it;
 
+      ldout(cct, 25) << __func__ << ": " << entry << dendl;
+
       uint64_t next_off = entry.offset + 1;
 
       int r;
@@ -9566,7 +9693,8 @@ int Client::_readdir_r_cb(int op,
       }
 
       fill_statx(entry.inode, caps, &stx);
-      fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
+      auto dname = _unwrap_name(*diri, entry.name, entry.alternate_name);
+      fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
       Inode *inode = NULL;
       if (getref) {
@@ -15050,6 +15178,15 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 		<< todir->ino << " " << toname
 		<< " uid " << perm.uid() << " gid " << perm.gid() << ")"
 		<< dendl;
+
+  /* N.B.: when toname/fromname (wrapped) refer to the same file, then we
+   * expect the MDS to succeed since both names "exist" and refer to the same
+   * hard link. (From the MDS side, the wrapped names are equal too!)
+   *
+   * If an application wants to do a case-sensitive rename, they must use an
+   * intermediate file name.
+   *
+   */
 
   walk_dentry_result wdr_from;
   if (int rc = path_walk(fromdir, filepath(fromname), &wdr_from, perm, {.followsym = false, .is_rename = true}); rc < 0) {

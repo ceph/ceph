@@ -46,6 +46,7 @@
 #include "UserPerm.h"
 
 #include <fstream>
+#include <locale>
 #include <map>
 #include <memory>
 #include <set>
@@ -974,6 +975,9 @@ protected:
 
   void check_caps(const InodeRef& in, unsigned flags);
 
+  bool _wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name);
+  std::string _unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name);
+
   void set_cap_epoch_barrier(epoch_t e);
 
   void handle_command_reply(const MConstRef<MCommandReply>& m);
@@ -1755,7 +1759,7 @@ private:
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
 
-  Dentry *get_or_create(Inode *dir, const char* name);
+  Dentry *get_or_create(Inode *dir, const std::string& name);
 
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
@@ -1977,6 +1981,8 @@ private:
   bool is_fuse = false;
   bool client_permissions;
   bool fuse_default_permissions;
+
+  std::locale m_locale;
 };
 
 /**
