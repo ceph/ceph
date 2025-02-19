@@ -882,6 +882,15 @@ def ceph_bootstrap(ctx, config):
         yield
 
     finally:
+        log.info('Disabling cephadm mgr module')
+        _shell(
+            ctx,
+            cluster_name,
+            bootstrap_remote,
+            ['ceph', 'mgr', 'module', 'disable', 'cephadm'],
+            check_status=False  # can fail if bootstrap failed and mask errors
+        )
+
         log.info('Cleaning up testdir ceph.* files...')
         ctx.cluster.run(args=[
             'rm', '-f',
@@ -917,11 +926,14 @@ def ceph_bootstrap(ctx, config):
         )
 
         # clean up /etc/ceph
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        ctx.cluster.run(
+            args=[
+                'sudo', 'rm', '-f',
+                '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+            ],
+            check_status=False,  # rm-cluster above should have cleaned these up
+        )
 
 
 @contextlib.contextmanager
