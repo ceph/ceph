@@ -58,7 +58,7 @@ from mgr_module import (
     NotifyType,
     MonCommandFailed,
 )
-from mgr_util import build_url, verify_cacrt_content, ServerConfigException
+from mgr_util import build_url
 import orchestrator
 from orchestrator.module import to_format, Format
 
@@ -710,6 +710,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
 
+        # register ancilary certificates/keys
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert('rgw', 'rgw_frontend_ssl_cert', TLSObjectScope.SERVICE)
         self.cert_mgr.register_key('nvmeof', 'nvmeof_encryption_key', TLSObjectScope.SERVICE)
@@ -3291,18 +3292,16 @@ Then run the following:
     @handle_orch_error
     def cert_store_set_cert(
         self,
-        cert: str,
         cert_name: str,
-        service_name: Optional[str] = None,
-        hostname: Optional[str] = None,
+        cert: str,
+        service_name: str = "",
+        hostname: str = "",
     ) -> str:
 
-        try:
-            days_to_expiration = verify_cacrt_content(cert)
-            if days_to_expiration < self.certificate_renewal_threshold_days:
-                raise OrchestratorError(f'Error: Certificate is about to expire (Remaining days: {days_to_expiration})')
-        except ServerConfigException as e:
-            raise OrchestratorError(f'Error: Invalid certificate for {cert_name}: {e}')
+        target = service_name or hostname
+        cert_info = self.cert_mgr.check_certificate_state(cert_name, target, cert)
+        if not cert_info.is_operationally_valid():
+            raise OrchestratorError(cert_info.get_status_description())
 
         self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, True)
         return f'Certificate for {cert_name} set correctly'

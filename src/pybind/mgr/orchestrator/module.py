@@ -1287,8 +1287,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             raise OrchestratorError('This command requires passing a certificate using --cert parameter or "-i <filepath>" option')
 
         completion = self.cert_store_set_cert(
-            cert_content,
             cert_name,
+            cert_content,
             service_name,
             hostname,
         )

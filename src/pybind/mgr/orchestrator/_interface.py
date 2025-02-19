@@ -607,8 +607,8 @@ class Orchestrator(object):
 
     def cert_store_set_cert(
         self,
-        cert: str,
         cert_name: str,
+        cert: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
     ) -> OrchResult[str]:

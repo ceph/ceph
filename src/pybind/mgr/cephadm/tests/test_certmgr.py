@@ -535,51 +535,91 @@ class TestCertMgr(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
     def test_tlsobject_store_load(self, _get_store_prefix, cephadm_module: CephadmOrchestrator):
 
-        rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
-        grafana_host1_key = 'fake-grafana-host1-cert'
-        nvmeof_server_cert = 'nvmeof-server-cert'
-        nvmeof_client_cert = 'nvmeof-client-cert'
-        nvmeof_root_ca_cert = 'nvmeof-root-ca-cert'
-        nvmeof_server_key = 'nvmeof-server-key'
-        nvmeof_client_key = 'nvmeof-client-key'
-        nvmeof_encryption_key = 'nvmeof-encryption-key'
-        unknown_cert_entity = 'unknown_per_service_cert'
-        unknown_cert_key = 'unknown_per_service_key'
+        # Define certs and keys with their corresponding scopes
+        certs = {
+            'rgw_frontend_ssl_cert': ('rgw.foo', 'fake-rgw-cert', TLSObjectScope.SERVICE),
+            'nvmeof_server_cert': ('nvmeof.foo', 'nvmeof-server-cert', TLSObjectScope.SERVICE),
+            'nvmeof_client_cert': ('nvmeof.foo', 'nvmeof-client-cert', TLSObjectScope.SERVICE),
+            'nvmeof_root_ca_cert': ('nvmeof.foo', 'nvmeof-root-ca-cert', TLSObjectScope.SERVICE),
+            'ingress_ssl_cert': ('ingress', 'ingress-ssl-cert', TLSObjectScope.SERVICE),
+            'iscsi_ssl_cert': ('iscsi', 'iscsi-ssl-cert', TLSObjectScope.SERVICE),
+            'grafana_cert': ('host1', 'grafana-cert', TLSObjectScope.HOST),
+            'mgmt_gw_cert': ('mgmt-gateway', 'mgmt-gw-cert', TLSObjectScope.GLOBAL),
+            'oauth2_proxy_cert': ('oauth2-proxy', 'oauth2-proxy-cert', TLSObjectScope.GLOBAL),
+        }
+        unknown_certs = {
+            'unknown_per_service_cert': ('unknown-svc.foo', 'unknown-cert', TLSObjectScope.SERVICE),
+            'unknown_per_host_cert': ('unknown-host.foo', 'unknown-cert', TLSObjectScope.HOST),
+            'unknown_global_cert': ('unknown-global.foo', 'unknown-cert', TLSObjectScope.GLOBAL),
+            'cert_with_unknown_scope': ('unknown-global.foo', 'unknown-cert', TLSObjectScope.UNKNOWN),
+        }
 
+        keys = {
+            'grafana_key': ('host1', 'fake-grafana-host1-key', TLSObjectScope.HOST),
+            'nvmeof_server_key': ('nvmeof.foo', 'nvmeof-server-key', TLSObjectScope.SERVICE),
+            'nvmeof_client_key': ('nvmeof.foo', 'nvmeof-client-key', TLSObjectScope.SERVICE),
+            'nvmeof_encryption_key': ('nvmeof.foo', 'nvmeof-encryption-key', TLSObjectScope.SERVICE),
+            'mgmt_gw_key': ('mgmt-gateway', 'mgmt-gw-key', TLSObjectScope.GLOBAL),
+            'oauth2_proxy_key': ('oauth2-proxy', 'oauth2-proxy-key', TLSObjectScope.GLOBAL),
+            'ingress_ssl_key': ('ingress', 'ingress-ssl-key', TLSObjectScope.SERVICE),
+            'iscsi_ssl_key': ('iscsi', 'iscsi-ssl-key', TLSObjectScope.SERVICE),
+        }
+        unknown_keys = {
+            'unknown_per_service_key': ('unknown-svc.foo', 'unknown-key', TLSObjectScope.SERVICE),
+            'unknown_per_host_key': ('unknown-host.foo', 'unknown-key', TLSObjectScope.HOST),
+            'unknown_global_key': ('unknown-global.foo', 'unknown-key', TLSObjectScope.GLOBAL),
+            'key_with_unknown_scope': ('unknown-global.foo', 'unknown-key', TLSObjectScope.UNKNOWN),
+        }
+
+        # Mock function to simulate store behavior
         def _fake_prefix_store(key):
+            from itertools import chain
             if key == 'cert_store.cert.':
                 return {
-                    f'{TLSOBJECT_STORE_CERT_PREFIX}rgw_frontend_ssl_cert': json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()}),
-                    f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_server_cert': json.dumps({'nvmeof.foo': Cert(nvmeof_server_cert, True).to_json()}),
-                    f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_client_cert': json.dumps({'nvmeof.foo': Cert(nvmeof_client_cert, True).to_json()}),
-                    f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_root_ca_cert': json.dumps({'nvmeof.foo': Cert(nvmeof_root_ca_cert, True).to_json()}),
-                    f'{TLSOBJECT_STORE_CERT_PREFIX}{unknown_cert_entity}': json.dumps({'unkonwn.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()}),
+                    f'{TLSOBJECT_STORE_CERT_PREFIX}{cert_name}': json.dumps(
+                        {target: Cert(cert_value, True).to_json()} if scope != TLSObjectScope.GLOBAL
+                        else Cert(cert_value, True).to_json()
+                    )
+                    for cert_name, (target, cert_value, scope) in chain(certs.items(), unknown_certs.items())
                 }
             elif key == 'cert_store.key.':
                 return {
-                    f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_key': json.dumps({'host1': PrivKey(grafana_host1_key).to_json()}),
-                    f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_server_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_server_key).to_json()}),
-                    f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_client_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()}),
-                    f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_encryption_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_encryption_key).to_json()}),
-                    f'{TLSOBJECT_STORE_KEY_PREFIX}{unknown_cert_key}': json.dumps({'unkonwn.foo': PrivKey(nvmeof_encryption_key).to_json()}),
+                    f'{TLSOBJECT_STORE_KEY_PREFIX}{key_name}': json.dumps(
+                        {target: PrivKey(key_value).to_json()} if scope != TLSObjectScope.GLOBAL
+                        else PrivKey(key_value).to_json()
+                    )
+                    for key_name, (target, key_value, scope) in chain(keys.items(), unknown_keys.items())
                 }
             else:
-                raise Exception(f'Get store with unexpected value {key}')
+                raise Exception(f'Unexpected key access in store: {key}')
 
+        # Inject the mock store behavior and the cert manager
         _get_store_prefix.side_effect = _fake_prefix_store
         cephadm_module._init_cert_mgr()
 
-        assert cephadm_module.cert_mgr.cert_store.known_entities['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
-        assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_server_cert']['nvmeof.foo'] == Cert(nvmeof_server_cert, True)
-        assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_client_cert']['nvmeof.foo'] == Cert(nvmeof_client_cert, True)
-        assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_root_ca_cert']['nvmeof.foo'] == Cert(nvmeof_root_ca_cert, True)
-        assert cephadm_module.cert_mgr.key_store.known_entities['grafana_key']['host1'] == PrivKey(grafana_host1_key)
-        assert unknown_cert_entity not in cephadm_module.cert_mgr.cert_store.known_entities
+        # Validate certificates in cert_store
+        for cert_name, (target, cert_value, scope) in certs.items():
+            assert cert_name in cephadm_module.cert_mgr.cert_store.known_entities
+            if scope == TLSObjectScope.GLOBAL:
+                assert cephadm_module.cert_mgr.cert_store.known_entities[cert_name] == Cert(cert_value, True)
+            else:
+                assert cephadm_module.cert_mgr.cert_store.known_entities[cert_name][target] == Cert(cert_value, True)
 
-        assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
-        assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
-        assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
-        assert unknown_cert_key not in cephadm_module.cert_mgr.key_store.known_entities
+        # Validate keys in key_store
+        for key_name, (target, key_value, scope) in keys.items():
+            assert key_name in cephadm_module.cert_mgr.key_store.known_entities
+            if scope == TLSObjectScope.GLOBAL:
+                assert cephadm_module.cert_mgr.key_store.known_entities[key_name] == PrivKey(key_value)
+            else:
+                assert cephadm_module.cert_mgr.key_store.known_entities[key_name][target] == PrivKey(key_value)
+
+        # Check unknown certificates are not loaded
+        for unknown_cert in unknown_certs:
+            assert unknown_cert not in cephadm_module.cert_mgr.cert_store.known_entities
+
+        # Check unknown keys are not loaded
+        for unknown_key in unknown_keys:
+            assert unknown_key not in cephadm_module.cert_mgr.key_store.known_entities
 
     def test_tlsobject_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
 
