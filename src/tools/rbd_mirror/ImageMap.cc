@@ -212,6 +212,14 @@ void ImageMap<I>::schedule_update_task() {
 }
 
 template <typename I>
+void ImageMap<I>::schedule_update_task(const ceph::mutex &timer_lock) {
+  ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
+  CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
+  double after = cct->_conf.get_val<double>("rbd_mirror_image_policy_update_throttle_interval");
+  schedule_update_task(m_threads->timer_lock, after);
+}
+
+template <typename I>
 void ImageMap<I>::schedule_update_task(const ceph::mutex &timer_lock,
                                        double after) {
   ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
@@ -259,7 +267,7 @@ void ImageMap<I>::rebalance() {
     }
   }
 
-  schedule_update_task();
+  schedule_update_task(m_threads->timer_lock);
 }
 
 template <typename I>
@@ -422,7 +430,7 @@ void ImageMap<I>::update_images_added(
   for (auto &entity : entities) {
     auto global_id = GlobalId(entity.type, entity.global_id);
     auto result = m_peer_map[global_id].insert(mirror_uuid);
-    if ((result.second || entity.type == MIRROR_ENTITY_TYPE_GROUP)) {
+    if ((result.second && m_peer_map[global_id].size() == 1) || entity.type == MIRROR_ENTITY_TYPE_GROUP) {
       if (m_policy->add_entity(global_id, entity.count)) {
         schedule_action(global_id);
       }
