@@ -114,6 +114,12 @@ ObjectContextLoader::load_and_lock_clone(
 
     if (manager.target_state.obc->loading_started) {
       co_await manager.target_state.lock_to(RWState::RWREAD);
+      if (!manager.target_state.obc->ssc) {
+	// A cached clone obc may have a null ssc if created via
+	// create_cached_obc_from_push_data.  This interface
+	// is responsible for fixing that if found.
+	manager.target_state.obc->ssc = manager.head_state.obc->ssc;
+      }
     } else {
       manager.target_state.lock_excl_sync();
       manager.target_state.obc->loading_started = true;
@@ -123,6 +129,8 @@ ObjectContextLoader::load_and_lock_clone(
     }
   }
 
+  ceph_assert(manager.target_state.obc->ssc);
+  ceph_assert(manager.head_state.obc->ssc);
   releaser.cancel();
 }
 
