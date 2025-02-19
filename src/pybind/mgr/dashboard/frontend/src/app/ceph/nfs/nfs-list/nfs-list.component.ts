@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -49,6 +49,12 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   @ViewChild('table', { static: true })
   table: TableComponent;
 
+  @ViewChild('protocol', { static: true })
+  protocol: TemplateRef<any>;
+
+  @ViewChild('transport', { static: true })
+  transport: TemplateRef<any>;
+
   columns: CdTableColumn[];
   permission: Permission;
   selection = new CdTableSelection();
@@ -59,6 +65,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   isDefaultCluster = false;
   fsal: SUPPORTED_FSAL;
 
+  @Input() clusterId: string;
   modalRef: NgbModalRef;
 
   builders = {
@@ -135,7 +142,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         name: this.fsal === SUPPORTED_FSAL.CEPH ? $localize`Path` : $localize`Bucket`,
         prop: 'path',
         flexGrow: 2,
-        cellTemplate: this.pathTmpl
+        cellTemplate: this.pathTmpl,
+        cellTransformation: CellTemplate.path
       },
       {
         name: $localize`Pseudo`,
@@ -157,11 +165,23 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         name: $localize`Access Type`,
         prop: 'access_type',
         flexGrow: 2
+      },
+      {
+        name: $localize`NFS Protocol`,
+        prop: 'protocols',
+        flexGrow: 2,
+        cellTemplate: this.protocol
+      },
+      {
+        name: $localize`Transports`,
+        prop: 'transports',
+        flexGrow: 2,
+        cellTemplate: this.transport
       }
     ];
 
     this.taskListService.init(
-      () => this.nfsService.list(),
+      () => this.nfsService.list(this.clusterId),
       (resp) => this.prepareResponse(resp),
       (exports) => (this.exports = exports),
       () => this.onFetchError(),
