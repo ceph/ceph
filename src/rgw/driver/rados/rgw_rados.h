@@ -1101,7 +1101,7 @@ public:
 	RGWBucketListNameFilter force_check_filter;
         bool list_versions;
 	bool allow_unordered;
-        rgw_bucket_snap_id max_snap;
+        rgw_bucket_snap_range snap_range;
 
         Params() :
 	  enforce_ns(true),
@@ -1596,7 +1596,7 @@ public:
 			      const std::string& delimiter,
 			      const uint32_t num_entries,
 			      const bool list_versions,
-                              rgw_bucket_snap_id max_snap,
+                              rgw_bucket_snap_range snap_range,
 			      const uint16_t exp_factor, // 0 means ignore
 			      ent_map_t& m,
 			      bool* is_truncated,
@@ -1612,7 +1612,7 @@ public:
 				const std::string& prefix,
 				uint32_t num_entries,
 				bool list_versions,
-                                rgw_bucket_snap_id max_snap,
+                                rgw_bucket_snap_range snap_range,
 				std::vector<rgw_bucket_dir_entry>& ent_list,
 				bool *is_truncated,
 				rgw_obj_index_key *last_entry,

@@ -402,7 +402,7 @@ struct rgw_cls_list_op
   std::string filter_prefix;
   bool list_versions;
   std::string delimiter;
-  rgw_bucket_snap_id max_snap;
+  rgw_bucket_snap_range snap_range;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
@@ -413,7 +413,7 @@ struct rgw_cls_list_op
     encode(start_obj, bl);
     encode(list_versions, bl);
     encode(delimiter, bl);
-    encode(max_snap, bl);
+    encode(snap_range, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -435,7 +435,7 @@ struct rgw_cls_list_op
       decode(delimiter, bl);
     }
     if (struct_v >= 7) {
-      decode(max_snap, bl);
+      decode(snap_range, bl);
     }
     DECODE_FINISH(bl);
   }

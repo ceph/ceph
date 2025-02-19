@@ -3268,7 +3268,7 @@ void RGWListBucket::execute(optional_yield y)
   params.marker = marker;
   params.end_marker = end_marker;
   params.list_versions = list_versions;
-  params.max_snap = max_snap;
+  params.snap_range = snap_range;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
 

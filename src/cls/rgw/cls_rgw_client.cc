@@ -209,7 +209,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
-                            rgw_bucket_snap_id max_snap,
+                            rgw_bucket_snap_range snap_range,
                             rgw_cls_list_ret* result)
 {
   bufferlist in;
@@ -219,7 +219,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   call.delimiter = delimiter;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
-  call.max_snap = max_snap;
+  call.snap_range = snap_range;
   encode(call, in);
 
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,

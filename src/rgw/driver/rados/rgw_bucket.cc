@@ -825,7 +825,7 @@ static int is_versioned_instance_listable(const DoutPrefixProvider *dpp,
   do {
     librados::ObjectReadOperation op;
     cls_rgw_bucket_list_op(op, marker, key.name, empty_delim, 1000,
-                           true, rgw_bucket_snap_id(), &result);
+                           true, rgw_bucket_snap_range(), &result);
     bufferlist ibl;
     int r = bs.bucket_obj.operate(dpp, std::move(op), &ibl, y);
     if (r < 0) {

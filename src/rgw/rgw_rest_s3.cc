@@ -1806,13 +1806,63 @@ void RGWGetUsage_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int parse_snap_id(const string& s, rgw_bucket_snap_id *snap_id, string& err)
+{
+  if (s.empty()) {
+    snap_id->reset();
+    return 0;
+  }
+  uint64_t val = (uint64_t)strict_strtoll(s, 10, &err);
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+  snap_id->init(val);
+  return 0;
+}
+
+static int parse_snap_range(const string& s, rgw_bucket_snap_range *result, string& err)
+{
+  auto p = s.find('-');
+  if (p == string::npos) {
+    /* only one param */
+    rgw_bucket_snap_id snap_id;
+    int r = parse_snap_id(s, &snap_id, err);
+    if (r < 0) {
+      return r;
+    }
+    result->end = snap_id;
+    result->start.init(snap_id.snap_id - 1);
+    return 0;
+  }
+
+  auto start_s = s.substr(0, p);
+  auto end_s = s.substr(p + 1);
+
+  int r = parse_snap_id(start_s, &result->start, err);
+  if (r < 0) {
+    return r;
+  }
+
+  r = parse_snap_id(end_s, &result->end, err);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWListBucket_ObjStore_S3::get_common_params()
 {
   list_versions = s->info.args.exists("versions");
-  const char *max_snap_header = s->info.env->get("HTTP_RGWX_MAX_SNAP");
-  if (max_snap_header) {
-    string max_snap_str(max_snap_header);
-    max_snap = std::stoll(max_snap_str);
+  const char *snap_range_header = s->info.env->get("HTTP_RGWX_SNAP_RANGE");
+  if (snap_range_header) {
+    string snap_range_str(snap_range_header);
+    string err;
+    op_ret = parse_snap_range(snap_range_str, &snap_range, err);
+    if (op_ret < 0) {
+      ldpp_dout(this, 5) << "failed to parse snap_range (snap_range_str=" << snap_range_str << "): " + err << dendl;
+      return op_ret;
+    }
   }
   prefix = s->info.args.get("prefix");
 
@@ -1923,9 +1973,9 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   if (op_ret >= 0) {
     auto& snap_mgr = s->bucket->get_info().local.snap_mgr;
     auto check_snap = snap_mgr.get_cur_snap_id();
-    if (max_snap.is_set() &&
-        max_snap < check_snap) {
-      check_snap = max_snap;
+    if (snap_range.end.is_set() &&
+        snap_range.end < check_snap) {
+      check_snap = snap_range.end;
     }
 
     if (objs_container) {

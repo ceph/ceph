@@ -930,6 +930,7 @@ struct ListReader : rgwrados::shard_io::RadosReader {
   const std::string& delimiter;
   uint32_t num_entries;
   bool list_versions;
+  rgw_bucket_snap_range snap_range;
   std::map<int, rgw_cls_list_ret>& results;
 
   ListReader(const DoutPrefixProvider& dpp,
@@ -939,11 +940,12 @@ struct ListReader : rgwrados::shard_io::RadosReader {
              const std::string& prefix,
              const std::string& delimiter,
              uint32_t num_entries, bool list_versions,
+             const rgw_bucket_snap_range& snap_range,
              std::map<int, rgw_cls_list_ret>& results)
     : RadosReader(dpp, std::move(ex), ioctx),
       start_obj(start_obj), prefix(prefix), delimiter(delimiter),
       num_entries(num_entries), list_versions(list_versions),
-      results(results)
+      snap_range(snap_range), results(results)
   {}
   void prepare_read(int shard, librados::ObjectReadOperation& op) override {
     // set the marker depending on whether we've already queried this
@@ -955,7 +957,8 @@ struct ListReader : rgwrados::shard_io::RadosReader {
     const cls_rgw_obj_key& marker =
         result.marker.empty() ? start_obj : result.marker;
     cls_rgw_bucket_list_op(op, marker, prefix, delimiter,
-                           num_entries, list_versions, &result);
+                           num_entries, list_versions,
+                           snap_range, &result);
   }
   Result on_complete(int, boost::system::error_code ec) override {
     if (ec.value() == -RGWBIAdvanceAndRetryError) {
@@ -978,6 +981,7 @@ int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp, optiona
                                           const std::string& prefix,
                                           const std::string& delimiter,
                                           uint32_t num_entries, bool list_versions,
+                                          const rgw_bucket_snap_range& snap_range,
                                           std::map<int, rgw_cls_list_ret>& results)
 {
   const size_t max_aio = cct->_conf->rgw_bucket_index_max_aio;
@@ -987,14 +991,14 @@ int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp, optiona
     auto yield = y.get_yield_context();
     auto ex = yield.get_executor();
     auto reader = ListReader{*dpp, ex, index_pool, start_obj, prefix, delimiter,
-                             num_entries, list_versions, results};
+                             num_entries, list_versions, snap_range, results};
 
     rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio, yield[ec]);
   } else {
     // run a strand on the system executor and block on a condition variable
     auto ex = boost::asio::make_strand(boost::asio::system_executor{});
     auto reader = ListReader{*dpp, ex, index_pool, start_obj, prefix, delimiter,
-                             num_entries, list_versions, results};
+                             num_entries, list_versions, snap_range, results};
 
     maybe_warn_about_blocking(dpp);
     rgwrados::shard_io::async_reads(reader, bucket_objs, max_aio,

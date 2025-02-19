@@ -704,22 +704,22 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
-      if (!entry.exists_at_snap(op.max_snap)) {
+      if (!entry.exists_at_snap(op.snap_range.end)) {
         continue;
       }
 
-      if (op.max_snap.is_set()) {
+      if (op.snap_range.is_set()) {
         if (entry.meta.snap_id.is_set() &&
-            entry.meta.snap_id > op.max_snap) {
-          CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: max_snap=%d",
+            !op.snap_range.contains(entry.meta.snap_id)) {
+          CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: snap_range.start=%d snap_range.end=%d",
                   __func__, key.name.c_str(), key.instance.c_str(),
-                  (int)entry.meta.snap_id, (int)op.max_snap);
+                  (int)entry.meta.snap_id, (int)op.snap_range.start, (int)op.snap_range.end);
           continue;
         }
 
-        if (op.max_snap.is_set()) {
+        if (op.snap_range.is_set()) {
           /* make it current as it was current during the requested snapshot */
-          if (entry.is_current_at_snap(op.max_snap)) {
+          if (entry.is_current_at_snap(op.snap_range.end)) {
             entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
           } else {
             entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;

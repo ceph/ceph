@@ -381,9 +381,10 @@ static void list_entries(librados::IoCtx& ioctx,
   std::map<int, std::string> oids = { {0, oid} };
   string empty_prefix;
   constexpr bool list_versions = true;
+  rgw_bucket_snap_range snap_range;
   librados::ObjectReadOperation op;
   cls_rgw_bucket_list_op(op, start_key, empty_prefix, delimiter,
-                         num_entries, list_versions, &result);
+                         num_entries, list_versions, snap_range, &result);
   ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
 }
 

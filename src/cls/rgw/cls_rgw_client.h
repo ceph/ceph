@@ -342,7 +342,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 			    const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
-                            rgw_bucket_snap_id max_snap,
+                            rgw_bucket_snap_range snap_range,
                             rgw_cls_list_ret* result);
 
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,

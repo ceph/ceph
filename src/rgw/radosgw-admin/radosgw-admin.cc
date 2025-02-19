@@ -8665,7 +8665,7 @@ next:
       int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->cls_bucket_list_ordered(
 	dpp(), bucket->get_info(), current_index, RGW_NO_SHARD,
 	marker, empty_prefix, empty_delimiter,
-	NUM_ENTRIES, true, rgw_bucket_snap_id(), expansion_factor,
+	NUM_ENTRIES, true, rgw_bucket_snap_range(), expansion_factor,
 	result, &is_truncated, &cls_filtered, &marker,
 	null_yield,
 	rgw_bucket_object_check_filter);

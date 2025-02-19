@@ -888,7 +888,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.access_list_filter = params.access_list_filter;
   list_op.params.force_check_filter = params.force_check_filter;
   list_op.params.list_versions = params.list_versions;
-  list_op.params.max_snap = params.max_snap;
+  list_op.params.snap_range = params.snap_range;
   list_op.params.allow_unordered = params.allow_unordered;
 
   int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);

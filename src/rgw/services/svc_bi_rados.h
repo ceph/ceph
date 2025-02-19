@@ -164,6 +164,7 @@ public:
                    const std::string& prefix,
                    const std::string& delimiter,
                    uint32_t num_entries, bool list_versions,
+                   const rgw_bucket_snap_range& snap_range,
                    std::map<int, rgw_cls_list_ret>& results);
 
   int handle_overwrite(const DoutPrefixProvider *dpp, const RGWBucketInfo& info,
