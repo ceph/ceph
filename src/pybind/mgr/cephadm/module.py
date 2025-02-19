@@ -709,6 +709,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cert_mgr.register_cert_key_pair('iscsi', 'iscsi_ssl_cert', 'iscsi_ssl_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
+
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert('rgw', 'rgw_frontend_ssl_cert', TLSObjectScope.SERVICE)
         self.cert_mgr.register_key('nvmeof', 'nvmeof_encryption_key', TLSObjectScope.SERVICE)
