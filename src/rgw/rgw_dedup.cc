@@ -1862,7 +1862,99 @@ namespace rgw::dedup {
     }
     return 0;
   }
+#if 1
+  //-------------------------------------------------------------------------------
+  //  32B per object-entry in the hashtable
+  //  2MB per shard-buffer
+  //=============||==============||=========||===================================||
+  // Obj Count   || shard count  || memory  ||         calculatio                ||
+  // ------------||--------------||---------||---------------------------------- ||
+  //     1M      ||      4       ||     8MB ||    8MB/32 =  0.25M *   4 =     1M ||
+  //     4M      ||      8       ||    16MB ||   16MB/32 =  0.50M *   8 =     4M ||
+  //-------------------------------------------------------------------------------
+  //    16M      ||     16       ||    32MB ||   32MB/32 =  1.00M *  16 =    16M ||
+  //-------------------------------------------------------------------------------
+  //    64M      ||     32       ||    64MB ||   64MB/32 =  2.00M *  32 =    64M ||
+  //   256M      ||     64       ||   128MB ||  128MB/32 =  4.00M *  64 =   256M ||
+  //  1024M( 1G) ||    128       ||   256MB ||  256MB/32 =  8.00M * 128 =  1024M ||
+  //  4096M( 4G) ||    256       ||   512MB ||  512MB/32 = 16M.00 * 256 =  4096M ||
+  // 16384M(16G) ||    512       ||  1024MB || 1024MB/32 = 32M.00 * 512 = 16384M ||
+  //-------------||--------------||---------||-----------------------------------||
+  static md5_shard_t calc_num_md5_shards(uint64_t obj_count)
+  {
+    // create headroom by allocating space for a 10% bigger system
+    obj_count = obj_count + (obj_count/10);
 
+    uint64_t M = 1024 * 1024;
+    if (obj_count < 1*M) {
+      // less than 1M objects -> use 4 shards (8MB)
+      return 4;
+    }
+    else if (obj_count < 4*M) {
+      // less than 4M objects -> use 8 shards (16MB)
+      return 8;
+    }
+    else if (obj_count < 16*M) {
+      // less than 16M objects -> use 16 shards (32MB)
+      return 16;
+    }
+    else if (obj_count < 64*M) {
+      // less than 64M objects -> use 32 shards (64MB)
+      return 32;
+    }
+    else if (obj_count < 256*M) {
+      // less than 256M objects -> use 64 shards (128MB)
+      return 64;
+    }
+    else if (obj_count < 1024*M) {
+      // less than 1024M objects -> use 128 shards (256MB)
+      return 128;
+    }
+    else if (obj_count < 4*1024*M) {
+      // less than 4096M objects -> use 256 shards (512MB)
+      return 256;
+    }
+    else {
+      return 512;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::setup(dedup_epoch_t *p_epoch)
+  {
+    collect_pool_stats(dpp, rados, &d_num_rados_objects, &d_num_rados_objects_bytes);
+    collect_all_buckets_stats();
+    if (d_num_rados_objects > 0 && d_all_buckets_obj_count == 0) {
+      ldpp_dout(dpp, 5) << __func__ << "::All buckets are empty, but Rados has "
+			<< d_num_rados_objects << " objects!!" << dendl;
+    }
+
+    uint64_t obj_count_ceiling = d_all_buckets_obj_size / d_min_obj_size_for_dedup;
+    uint64_t obj_count = std::min(d_all_buckets_obj_count, obj_count_ceiling);
+
+    md5_shard_t num_md5_shards = calc_num_md5_shards(obj_count);
+    num_md5_shards = std::min(num_md5_shards, MAX_MD5_SHARD);
+    num_md5_shards = std::max(num_md5_shards, MIN_MD5_SHARD);
+
+    work_shard_t num_work_shards = num_md5_shards / 2;
+    num_work_shards = std::min(num_work_shards, MAX_WORK_SHARD);
+
+    int ret = d_cluster.reset(store, d_dedup_cluster_ioctx, p_epoch,
+			      num_work_shards, num_md5_shards);
+    if (ret != 0) {
+      derr << __func__ << "::ERR: failed cluster.init()" << dendl;
+      return -1;
+    }
+
+    ldpp_dout(dpp, 10) <<__func__ << "::" << *p_epoch << dendl;
+    d_ctl.dedup_type = p_epoch->dedup_type;
+    ceph_assert(d_ctl.dedup_type == DEDUP_TYPE_FULL ||
+		d_ctl.dedup_type == DEDUP_TYPE_DRY_RUN);
+    d_ctl.show_dedup_type(dpp, __func__);
+
+    return 0;
+  }
+#else
   //---------------------------------------------------------------------------
   int Background::setup(dedup_epoch_t *p_epoch)
   {
@@ -1909,7 +2001,7 @@ namespace rgw::dedup {
 
     return 0;
   }
-
+#endif
   //---------------------------------------------------------------------------
   int Background::watch_reload(const DoutPrefixProvider* dpp)
   {
@@ -2250,7 +2342,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::run()
   {
-    const uint64_t SHARD_BUFFERING_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
+    // 256x8KB=2MB
+    const uint64_t PER_SHARD_BUFFER_SIZE = DISK_BLOCK_COUNT *sizeof(disk_block_t);
     ldpp_dout(dpp, 20) <<__func__ << "::dedup::main loop" << dendl;
 
     while (!d_ctl.shutdown_req) {
@@ -2258,7 +2351,7 @@ namespace rgw::dedup {
 	handle_pause_req(__func__);
 	if (unlikely(d_ctl.should_stop())) {
 	  ldpp_dout(dpp, 5) <<__func__ << "::stop req after a pause" << dendl;
-	  d_ctl.dedup_exec =  false;
+	  d_ctl.dedup_exec = false;
 	}
       }
 
@@ -2270,9 +2363,11 @@ namespace rgw::dedup {
 	}
 	work_shard_t num_work_shards = epoch.num_work_shards;
 	md5_shard_t  num_md5_shards  = epoch.num_md5_shards;
-	const uint64_t RAW_MEM_SIZE = SHARD_BUFFERING_SIZE * num_md5_shards;
-
-	// DEDUP_DYN_ALLOC - 16M entries per-shard
+	const uint64_t RAW_MEM_SIZE = PER_SHARD_BUFFER_SIZE * num_md5_shards;
+	ldpp_dout(dpp, 5) <<__func__ << "::RAW_MEM_SIZE=" << RAW_MEM_SIZE
+			  << "::num_work_shards=" << num_work_shards
+			  << "::num_md5_shards=" << num_md5_shards << dendl;
+	// DEDUP_DYN_ALLOC
 	auto raw_mem = std::make_unique<uint8_t[]>(RAW_MEM_SIZE);
 	if (raw_mem == nullptr) {
 	  derr << "failed slab memory allocation - size=" << RAW_MEM_SIZE << dendl;
