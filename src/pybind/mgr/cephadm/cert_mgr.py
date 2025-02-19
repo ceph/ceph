@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any
 import logging
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
-from mgr_util import verify_tls, ServerConfigException
+from mgr_util import verify_tls, verify_cacrt_content, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
 from cephadm.tlsobject_types import Cert, PrivKey
 from cephadm.tlsobject_store import TLSObjectStore, TLSObjectScope, TLSObjectException
@@ -328,7 +328,7 @@ class CertMgr:
             logger.warning(short_error_msg)
             self.mgr.set_health_warning(CertMgr.CEPHADM_CERTMGR_HEALTH_ERR, short_error_msg, total_issues, detailed_error_msgs)
 
-    def check_certificate_state(self, cert_name: str, target: str, cert: str, key: str) -> CertInfo:
+    def check_certificate_state(self, cert_name: str, target: str, cert: str, key: Optional[str] = None) -> CertInfo:
         """
         Checks if a certificate is valid and close to expiration.
 
@@ -339,17 +339,17 @@ class CertMgr:
             - exception_info: Details of any exception encountered during validation.
         """
         cert_obj = Cert(cert, True)
-        key_obj = PrivKey(key, True)
+        key_obj = PrivKey(key, True) if key else None
         return self._check_certificate_state(cert_name, target, cert_obj, key_obj)
 
-    def _check_certificate_state(self, cert_name: str, target: Optional[str], cert: Cert, key: PrivKey) -> CertInfo:
+    def _check_certificate_state(self, cert_name: str, target: Optional[str], cert: Cert, key: Optional[PrivKey] = None) -> CertInfo:
         """
         Checks if a certificate is valid and close to expiration.
 
         Returns: CertInfo
         """
         try:
-            days_to_expiration = verify_tls(cert.cert, key.key)
+            days_to_expiration = verify_tls(cert.cert, key.key) if key else verify_cacrt_content(cert.cert)
             is_close_to_expiration = days_to_expiration < self.mgr.certificate_renewal_threshold_days
             return CertInfo(cert_name, target, cert.user_made, True, is_close_to_expiration, days_to_expiration, "")
         except ServerConfigException as e:
@@ -393,9 +393,8 @@ class CertMgr:
 
     def get_problematic_certificates(self) -> List[Tuple[CertInfo, Cert]]:
 
-        def get_key(cert_name: str, target: Optional[str]) -> Optional[PrivKey]:
+        def get_key(cert_name: str, key_name: str, target: Optional[str]) -> Optional[PrivKey]:
             try:
-                key_name = cert_name.replace('_cert', '_key')
                 service_name, host = self.cert_store.determine_tlsobject_target(cert_name, target)
                 key = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name=service_name, host=host))
                 return key
@@ -407,21 +406,28 @@ class CertMgr:
         problematics_certs: List[Tuple[CertInfo, Cert]] = []
         for cert_name, cert_tlsobj, target in certs_tlsobjs:
             cert_obj = cast(Cert, cert_tlsobj)
-            key_obj = get_key(cert_name, target)
-            if cert_obj and key_obj:
+            if not cert_obj:
+                logger.error(f'Cannot find certificate {cert_name} in the TLSObjectStore')
+                continue
+
+            key_name = cert_name.replace('_cert', '_key')
+            key_obj = get_key(cert_name, key_name, target)
+            if key_obj:
+                # certificate has a key, let's check the cert/key pair
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj, key_obj)
-                if not cert_info.is_operationally_valid():
-                    problematics_certs.append((cert_info, cert_obj))
-                else:
-                    target_info = f" ({target})" if target else ""
-                    logger.info(f'Certificate for "{cert_name}{target_info}" is still valid for {cert_info.days_to_expiration} days.')
-            elif cert_obj:
-                # Cert is present but key is None, could only happen if somebody has put manually a bad key!
-                logger.warning(f"Key is missing for certificate '{cert_name}'.")
+            elif key_name in self.known_keys:
+                # certificate is supposed to have a key but it's missing
+                logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
                 cert_info = CertInfo(cert_name, target, cert_obj.user_made, False, False, 0, "missing key")
+            else:
+                # certificate has no associated key
+                cert_info = self._check_certificate_state(cert_name, target, cert_obj)
+
+            if not cert_info.is_operationally_valid():
                 problematics_certs.append((cert_info, cert_obj))
             else:
-                logger.error(f'Cannot get cert/key {cert_name}')
+                target_info = f" ({target})" if target else ""
+                logger.info(f'Certificate for "{cert_name}{target_info}" is still valid for {cert_info.days_to_expiration} days.')
 
         return problematics_certs
 
