@@ -572,8 +572,10 @@ void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, 
   } else {
     predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_DIR, 1);
     journal_dirty_inode(mut.get(), &le->metablob, in);
+    //TODO: A referent inode for system file ??
     dn->push_projected_linkage(in->ino(), in->d_type());
-    le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type());
+    dout(10) << __func__ << " add remote dentry " << *dn << dendl;
+    le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type(), 0, nullptr);
     le->metablob.add_root(true, in);
   }
   if (mdir)
