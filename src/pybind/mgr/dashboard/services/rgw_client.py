@@ -948,6 +948,14 @@ class RgwClient(RestClient):
                    f' For more information about the format look at {link}')
             raise DashboardException(msg=msg, component='rgw')
 
+    def get_lifecycle_progress(self):
+        rgw_bucket_lc_progress_command = ['lc', 'list']
+        code, lifecycle_progress, _err = mgr.send_rgwadmin_command(rgw_bucket_lc_progress_command)
+        if code != 0:
+            raise DashboardException(msg=f'Error getting lifecycle status: {_err}',
+                                     component='rgw')
+        return lifecycle_progress
+
     def get_role(self, role_name: str):
         rgw_get_role_command = ['role', 'get', '--role-name', role_name]
         code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
