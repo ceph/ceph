@@ -1,0 +1,23 @@
+roles:
+- - host.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - mon.a
+  - mgr.a
+  - client.0
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_PAUSED
+    log-only-match:
+      - CEPHADM_
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply mds a
+- cephfs_test_runner:
+    modules:
+      - tasks.cephadm_cases.test_cli

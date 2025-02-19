@@ -1,0 +1,30 @@
+roles:
+# 3 osd roles on host.a is required for cephadm task. It checks if the cluster is healthy.
+# More daemons will be deployed on both hosts in e2e tests.
+- - host.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - mon.a
+  - mgr.a
+  - client.0
+- - host.b
+  - client.1
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(PG_DEGRADED\)
+tasks:
+- install:
+- cephadm:
+- ceph:
+    log-ignorelist:
+      - \(OSD_DOWN\)
+- workunit:
+    clients:
+      client.1:
+        - cephadm/create_iscsi_disks.sh
+- workunit:
+    clients:
+      client.0:
+        - cephadm/test_dashboard_e2e.sh

@@ -1,0 +1,15 @@
+overrides:
+ ansible.cephlab: 
+  vars: 
+   quick_lvs_to_create: 4
+openstack:
+  - machine:
+      disk: 10
+    volumes:
+      count: 4
+      size: 20
+roles:
+- [mon.a, mgr.y, osd.0, osd.1]
+- [mon.b, osd.2, osd.3]
+- [mon.c, osd.4, osd.5]
+- [mgr.x, client.0]

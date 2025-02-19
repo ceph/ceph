@@ -1,0 +1,37 @@
+<cds-overflow-menu [customTrigger]="customTrigger"
+                   [flip]="true">
+  <li>
+    <a [ngClass]="{'cds--overflow-menu-options__btn': true, 'disabled': !docsUrl}"
+       href="{{ docsUrl }}"
+       target="_blank"
+       i18n>Documentation
+      <svg cdsIcon="launch"
+           class="ms-2"
+           size="16"></svg>
+    </a>
+  </li>
+  <li>
+    <a routerLink="/api-docs"
+       target="_blank"
+       class="cds--overflow-menu-options__btn"
+       i18n>API
+      <svg cdsIcon="launch"
+           class="ms-2"
+           size="16"></svg>
+    </a>
+  </li>
+  <cds-overflow-menu-option (click)="openAboutModal()"
+                            i18n>About</cds-overflow-menu-option>
+  <cds-overflow-menu-option (click)="openFeedbackModal()"
+                            i18n>Report an issue...</cds-overflow-menu-option>
+</cds-overflow-menu>
+
+<ng-template #customTrigger>
+  <svg cdsIcon="help"
+       size="20"
+       i18n-title
+       title="Help"
+       role="button"></svg>
+  <span i18n
+        class="d-md-none">Help</span>
+</ng-template>
