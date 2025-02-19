@@ -417,6 +417,7 @@ def build_container(ctx):
     cmd = [
         ctx.container_engine,
         "build",
+        "--pull=always",
         "-t",
         ctx.image_name,
         f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
