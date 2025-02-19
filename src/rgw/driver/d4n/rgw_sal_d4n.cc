@@ -720,6 +720,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
     baseAttrs.insert(attrs.begin(), attrs.end());
   }
 
+
   time_t creationTime = -1;
   std::string dest_version;
   if (write_to_cache) {
@@ -771,6 +772,9 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   bufferlist bl_val;
   bl_val.append(std::to_string(this->is_multipart()));
   baseAttrs[RGW_CACHE_ATTR_MULTIPART] = std::move(bl_val);
+  bl_val.append(*etag);
+  baseAttrs[RGW_ATTR_ETAG] = std::move(bl_val);
+  baseAttrs[RGW_ATTR_ACL] = std::move(attrs[RGW_ATTR_ACL]);
 
   bufferlist bl_data;
   dest_version = d4n_dest_object->get_object_version();
@@ -789,6 +793,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
     baseAttrs.erase(RGW_CACHE_ATTR_OBJECT_NS);
     baseAttrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
     baseAttrs.erase(RGW_CACHE_ATTR_DIRTY);
+
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " version stored in update method is: " << dest_version << dendl;
       bufferlist bl;
