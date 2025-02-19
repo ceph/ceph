@@ -7405,7 +7405,10 @@ relookup:
         << " ttl " << dn->lease_ttl << " seq " << dn->lease_seq << dendl;
 
     if (!dn->inode || dn->inode->caps_issued_mask(mask, true)) {
+      ldout(cct, 25) << __func__ << " no inode or have caps" << dendl;
+
       if (_dentry_valid(dn)) {
+        ldout(cct, 25) << __func__ << " dentry is valid" << dendl;
         // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
         // make trim_caps() behave.
         dir->try_touch_cap(dn->lease_mds);
@@ -7413,7 +7416,9 @@ relookup:
       }
       // dir shared caps?
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
+        ldout(cct, 25) << __func__ << " dir has Fs" << dendl;
 	if (dn->cap_shared_gen == dir->shared_gen) {
+          ldout(cct, 25) << __func__ << " valid shared_gen match" << dendl;
 	  goto hit_dn;
         }
 	if (!dn->inode && (dir->flags & I_COMPLETE)) {
