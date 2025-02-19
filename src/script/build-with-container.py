@@ -431,9 +431,6 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
-    if ctx.cli.homedir:
-        cwd = pathlib.Path(".").absolute()
-        cmd.append(f"--volume={cwd}:{ctx.cli.homedir}:Z")
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
