@@ -7749,7 +7749,8 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);      // new dn
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
-  le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
+  // TODO: Pass referent inode upon creation. It's adding just remote dentry now
+  le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), 0, nullptr);  // new remote
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, targeti);
 
   // do this after predirty_*, to avoid funky extra dnl arg
@@ -7867,7 +7868,8 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   if (inc) {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
-    le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type()); // new remote
+    // TODO: Pass referent inode upon creation. It's adding just remote dentry now
+    le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), 0, nullptr); // new remote
     dn->push_projected_linkage(targeti->ino(), targeti->d_type());
   } else {
     dn->pre_dirty();
@@ -9879,7 +9881,8 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 
     if (destdn->is_auth())
-      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
+      // TODO: Pass referent inode upon creation. It's adding just remote dentry now
+      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type(), 0, nullptr);
 
     if (srci->is_auth() ) { // it's remote
       if (mdr->peer_request) {

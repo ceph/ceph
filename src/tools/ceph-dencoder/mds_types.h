@@ -96,7 +96,7 @@ TYPE_FEATUREFUL_NOCOPY(EImportStart)
 
 #include "mds/events/EMetaBlob.h"
 TYPE_FEATUREFUL_NOCOPY(EMetaBlob::fullbit)
-TYPE(EMetaBlob::remotebit)
+TYPE_FEATUREFUL_NOCOPY(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
 TYPE_FEATUREFUL_NOCOPY(EMetaBlob::dirlump)
 TYPE_FEATUREFUL_NOCOPY(EMetaBlob)
