@@ -148,6 +148,7 @@ private:
   void schedule_action(const image_map::GlobalId &global_id);
 
   void schedule_update_task();
+  void schedule_update_task(const ceph::mutex &timer_lock);
   void schedule_update_task(const ceph::mutex &timer_lock, double after);
   void process_updates();
   void update_image_mapping(Updates&& map_updates,
