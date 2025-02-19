@@ -543,6 +543,8 @@ class TestCertMgr(object):
         nvmeof_server_key = 'nvmeof-server-key'
         nvmeof_client_key = 'nvmeof-client-key'
         nvmeof_encryption_key = 'nvmeof-encryption-key'
+        unknown_cert_entity = 'unknown_per_service_cert'
+        unknown_cert_key = 'unknown_per_service_key'
 
         def _fake_prefix_store(key):
             if key == 'cert_store.cert.':
@@ -551,6 +553,7 @@ class TestCertMgr(object):
                     f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_server_cert': json.dumps({'nvmeof.foo': Cert(nvmeof_server_cert, True).to_json()}),
                     f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_client_cert': json.dumps({'nvmeof.foo': Cert(nvmeof_client_cert, True).to_json()}),
                     f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_root_ca_cert': json.dumps({'nvmeof.foo': Cert(nvmeof_root_ca_cert, True).to_json()}),
+                    f'{TLSOBJECT_STORE_CERT_PREFIX}{unknown_cert_entity}': json.dumps({'unkonwn.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()}),
                 }
             elif key == 'cert_store.key.':
                 return {
@@ -558,20 +561,25 @@ class TestCertMgr(object):
                     f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_server_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_server_key).to_json()}),
                     f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_client_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()}),
                     f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_encryption_key': json.dumps({'nvmeof.foo': PrivKey(nvmeof_encryption_key).to_json()}),
+                    f'{TLSOBJECT_STORE_KEY_PREFIX}{unknown_cert_key}': json.dumps({'unkonwn.foo': PrivKey(nvmeof_encryption_key).to_json()}),
                 }
             else:
                 raise Exception(f'Get store with unexpected value {key}')
 
         _get_store_prefix.side_effect = _fake_prefix_store
-        cephadm_module.cert_mgr.load()
+        cephadm_module._init_cert_mgr()
+
         assert cephadm_module.cert_mgr.cert_store.known_entities['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
         assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_server_cert']['nvmeof.foo'] == Cert(nvmeof_server_cert, True)
         assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_client_cert']['nvmeof.foo'] == Cert(nvmeof_client_cert, True)
         assert cephadm_module.cert_mgr.cert_store.known_entities['nvmeof_root_ca_cert']['nvmeof.foo'] == Cert(nvmeof_root_ca_cert, True)
         assert cephadm_module.cert_mgr.key_store.known_entities['grafana_key']['host1'] == PrivKey(grafana_host1_key)
+        assert unknown_cert_entity not in cephadm_module.cert_mgr.cert_store.known_entities
+
         assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_server_key']['nvmeof.foo'] == PrivKey(nvmeof_server_key)
         assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_client_key']['nvmeof.foo'] == PrivKey(nvmeof_client_key)
         assert cephadm_module.cert_mgr.key_store.known_entities['nvmeof_encryption_key']['nvmeof.foo'] == PrivKey(nvmeof_encryption_key)
+        assert unknown_cert_key not in cephadm_module.cert_mgr.key_store.known_entities
 
     def test_tlsobject_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
 

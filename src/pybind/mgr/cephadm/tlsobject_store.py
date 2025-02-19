@@ -41,6 +41,7 @@ class TLSObjectStore():
         self.known_entities: Dict[str, Any] = {key: {} for key in all_known_entities}
         self.per_service_name_tlsobjects = known_entities[TLSObjectScope.SERVICE]
         self.per_host_tlsobjects = known_entities[TLSObjectScope.HOST]
+        self.global_tlsobjects = known_entities[TLSObjectScope.GLOBAL]
         self.store_prefix = f'{TLSOBJECT_STORE_PREFIX}{tlsobject_class.STORAGE_PREFIX}.'
 
     def determine_tlsobject_target(self, entity: str, target: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
@@ -56,8 +57,10 @@ class TLSObjectStore():
             return TLSObjectScope.SERVICE, service_name
         elif entity in self.per_host_tlsobjects:
             return TLSObjectScope.HOST, host
-        else:
+        elif entity in self.global_tlsobjects:
             return TLSObjectScope.GLOBAL, None
+        else:
+            return TLSObjectScope.UNKNOWN, None
 
     def get_tlsobject(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[TLSObjectProtocol]:
         self._validate_tlsobject_entity(entity, service_name, host)
@@ -78,11 +81,13 @@ class TLSObjectStore():
                 key: self.tlsobject_class.to_json(self.known_entities[entity][key])
                 for key in self.known_entities[entity]
             }
-        else:
+            self.mgr.set_store(self.store_prefix + entity, json.dumps(j))
+        elif scope == TLSObjectScope.GLOBAL:
             self.known_entities[entity] = tlsobject
             j = self.tlsobject_class.to_json(tlsobject)
-
-        self.mgr.set_store(self.store_prefix + entity, json.dumps(j))
+            self.mgr.set_store(self.store_prefix + entity, json.dumps(j))
+        else:
+            logger.error(f'Trying to save entity {entity} with a not-supported/unknown TLSObjectScope scope {scope.value}')
 
     def rm_tlsobject(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         """Remove a tlsobjectificate for a specific entity, service, or host."""
@@ -137,14 +142,19 @@ class TLSObjectStore():
     def load(self) -> None:
         for k, v in self.mgr.get_store_prefix(self.store_prefix).items():
             entity = k[len(self.store_prefix):]
+            if entity not in self.known_entities:
+                logger.warning(f"TLSObjectStore: Discarding unkown entity '{entity}'")
+                continue
             entity_targets = json.loads(v)
-            self.known_entities[entity] = {}
             if entity in self.per_service_name_tlsobjects or entity in self.per_host_tlsobjects:
+                self.known_entities[entity] = {}
                 for target in entity_targets:
                     tlsobject = self.tlsobject_class.from_json(entity_targets[target])
                     if tlsobject:
                         self.known_entities[entity][target] = tlsobject
-            else:
+            elif entity in self.global_tlsobjects:
                 tlsobject = self.tlsobject_class.from_json(entity_targets)
                 if tlsobject:
                     self.known_entities[entity] = tlsobject
+            else:
+                logger.error(f"TLSObjectStore: Found a known entity {entity} with unknown scope!")
