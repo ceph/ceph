@@ -450,7 +450,7 @@ class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
   std::string delimiter;
   uint32_t num_entries;
   bool list_versions;
-  rgw_bucket_snap_id max_snap;
+  rgw_bucket_snap_range snap_range;
   std::map<int, rgw_cls_list_ret>& result; // request_id -> return value
 
 protected:
@@ -464,14 +464,14 @@ public:
 			const std::string& _delimiter,
 			uint32_t _num_entries,
                         bool _list_versions,
-                        rgw_bucket_snap_id _max_snap,
+                        rgw_bucket_snap_range _snap_range,
                         std::map<int, std::string>& oids, // shard_id -> shard_oid
 			// shard_id -> return value
                         std::map<int, rgw_cls_list_ret>& list_results,
                         uint32_t max_aio) :
   CLSRGWConcurrentIO(io_ctx, oids, max_aio),
     start_obj(_start_obj), filter_prefix(_filter_prefix), delimiter(_delimiter),
-    num_entries(_num_entries), list_versions(_list_versions), max_snap(_max_snap),
+    num_entries(_num_entries), list_versions(_list_versions), snap_range(_snap_range),
     result(list_results)
   {}
 };
@@ -482,7 +482,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 			    const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
-                            rgw_bucket_snap_id max_snap,
+                            rgw_bucket_snap_range snap_range,
                             rgw_cls_list_ret* result);
 
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,

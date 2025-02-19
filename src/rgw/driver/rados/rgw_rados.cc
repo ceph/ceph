@@ -1899,7 +1899,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
 					   params.delim,
 					   read_ahead + 1 - count,
 					   params.list_versions,
-                                           params.max_snap,
+                                           params.snap_range,
 					   attempt,
 					   ent_map,
 					   &truncated,
@@ -2250,7 +2250,7 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 					     cur_prefix,
 					     read_ahead,
 					     params.list_versions,
-                                             params.max_snap,
+                                             params.snap_range,
 					     ent_list,
 					     &truncated,
 					     &cur_marker,
@@ -5540,7 +5540,7 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 				      prefix,
 				      NUM_ENTRIES,
 				      true,
-                                      rgw_bucket_snap_id(),
+                                      rgw_bucket_snap_range(),
 				      ent_list,
 				      &is_truncated,
 				      &marker,
@@ -10176,7 +10176,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 				      const std::string& delimiter,
 				      const uint32_t num_entries,
 				      const bool list_versions,
-                                      rgw_bucket_snap_id max_snap,
+                                      rgw_bucket_snap_range snap_range,
 				      const uint16_t expansion_factor,
 				      ent_map_t& m,
 				      bool* is_truncated,
@@ -10200,7 +10200,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     "\", num_entries=" << num_entries <<
     ", shard_id=" << shard_id <<
     ", list_versions=" << list_versions <<
-    ", max_snap=" << max_snap <<
+    ", snap_range=" << snap_range <<
     ", expansion_factor=" << expansion_factor <<
     ", force_check_filter is " <<
     (force_check_filter ? "set" : "unset") << dendl_bitx;
@@ -10268,7 +10268,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
   r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
 			    num_entries_per_shard,
-			    list_versions, max_snap, shard_oids, shard_list_results,
+			    list_versions, snap_range, shard_oids, shard_list_results,
 			    cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
     ldpp_dout(dpp, 0) << __func__ <<
@@ -10531,7 +10531,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					const std::string& prefix,
 					uint32_t num_entries,
 					bool list_versions,
-                                        rgw_bucket_snap_id max_snap,
+                                        rgw_bucket_snap_range snap_range,
 					std::vector<rgw_bucket_dir_entry>& ent_list,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
@@ -10629,7 +10629,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
     const std::string empty_delimiter;
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
-                           list_versions, max_snap, &result);
+                           list_versions, snap_range, &result);
     r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, nullptr, &index_ver.epoch);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
