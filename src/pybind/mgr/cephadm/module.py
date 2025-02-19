@@ -2853,12 +2853,24 @@ Then run the following:
         return [self._apply(spec) for spec in specs]
 
     @handle_orch_error
-    def create_osds(self, drive_group: DriveGroupSpec) -> str:
+    def create_osds(self, drive_group: DriveGroupSpec, service_name: Optional[str] = None, force: bool = True) -> str:
         hosts: List[HostSpec] = self.inventory.all_specs()
         filtered_hosts: List[str] = drive_group.placement.filter_matching_hostspecs(hosts)
         if not filtered_hosts:
             return "Invalid 'host:device' spec: host not found in cluster. Please check 'ceph orch host ls' for available hosts"
-        return self.osd_service.create_from_spec(drive_group)
+
+        if service_name:
+            if service_name in self.spec_store.all_specs:
+                drive_group.service_id = self.spec_store.all_specs[service_name].service_id
+                self.log.info(f"Assigned user-specified service ID: {drive_group.service_id}")
+            else:
+                return f"Invalid service name: {service_name}. Please check available services using 'ceph orch ls'"
+        else:
+            drive_group.service_id = "default"
+            self.log.info("No service name provided. Using service ID: default")
+
+        self.log.info(f"Creating OSDs with service ID: {drive_group.service_id}")
+        return self.osd_service.create_from_spec(drive_group, force_apply=force)
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None

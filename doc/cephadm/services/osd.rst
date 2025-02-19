@@ -198,17 +198,33 @@ There are a few ways to create new OSDs:
 
 .. warning:: When deploying new OSDs with ``cephadm``, ensure that the ``ceph-osd`` package is not already installed on the target host. If it is installed, conflicts may arise in the management and control of the OSD that may lead to errors or unexpected behavior.
 
-* OSDs created via ``ceph orch daemon add`` are by default not added to the orchestrator's OSD service, they get added to 'osd' service. To attach an OSD to a different, existing OSD service, issue a command of the following form:
+* New OSDs created using the ``ceph orch daemon add osd`` command are added under the ``osd.default`` service as unmanaged OSDs. 
 
-  .. prompt:: bash *
+However, users now have the option to create an OSD and directly attach it to an existing managed service by specifying the desired service name.
 
-    ceph orch osd set-spec-affinity <service_name> <osd_id(s)>
+  To explicitly specify the service for a new OSD, use the ``--service-name`` option. This will attach the new OSD to an existing managed service:
+
+  .. prompt:: bash #
+
+      ceph orch daemon add osd <host>:<device-path> [--service-name <service_name>]
 
   For example:
 
   .. prompt:: bash #
 
-    ceph orch osd set-spec-affinity osd.default_drive_group 0 1
+      ceph orch daemon add osd host1:/dev/sdb --service-name osd.my_custom_service
+
+  To attach an existing OSD to a different managed service, ``ceph orch osd set-spec-affinity`` command can be used:
+
+  .. prompt:: bash #
+
+     ceph orch osd set-spec-affinity <service_name> <osd_id(s)>
+
+  For example:
+
+  .. prompt:: bash #
+    
+     ceph orch osd set-spec-affinity osd.default_drive_group 0 1
 
 Dry Run
 -------

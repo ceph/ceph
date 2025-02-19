@@ -31,16 +31,16 @@ logger = logging.getLogger(__name__)
 class OSDService(CephService):
     TYPE = 'osd'
 
-    def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
+    def create_from_spec(self, drive_group: DriveGroupSpec, force_apply: bool = True) -> str:
         logger.debug(f"Processing DriveGroup {drive_group}")
         osd_id_claims = OsdIdClaims(self.mgr)
         if osd_id_claims.get():
             logger.info(
                 f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims.get()}")
 
-        async def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
+        async def create_from_spec_one(host: str, drive_selection: DriveSelection, force: bool = True) -> Optional[str]:
             # skip this host if there has been no change in inventory
-            if not self.mgr.cache.osdspec_needs_apply(host, drive_group):
+            if not force and not self.mgr.cache.osdspec_needs_apply(host, drive_group):
                 self.mgr.log.debug("skipping apply of %s on %s (no change)" % (
                     host, drive_group))
                 return None
@@ -73,7 +73,7 @@ class OSDService(CephService):
             return ret_msg
 
         async def all_hosts() -> List[Optional[str]]:
-            futures = [create_from_spec_one(h, ds)
+            futures = [create_from_spec_one(h, ds, force_apply)
                        for h, ds in self.prepare_drivegroup(drive_group)]
             return await gather(*futures)
 
