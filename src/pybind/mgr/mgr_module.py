@@ -2396,9 +2396,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                                         service['type'],
                                         service['id'],
                                         counter_path_without_labels,
-                                        counter_path
-                                        sub_counter_name
-                                        sub_counter_labels
+                                        counter_path,
+                                        sub_counter_name,
+                                        sub_counter_labels,
                                     )
                                     sub_counter_info['counters'][sub_counter_name]['value'] = v 
                                     sub_counter_info['counters'][sub_counter_name]['count'] = c
