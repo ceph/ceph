@@ -863,8 +863,6 @@ ReplicatedRecoveryBackend::_handle_pull_response(
         WARNDPP("unable to decode SnapSet", pg);
         throw crimson::osd::invalid_argument();
       }
-      assert(!pull_info.obc->ssc->exists ||
-             obc->ssc->snapset.seq == pull_info.obc->ssc->snapset.seq);
     }
     pull_info.recovery_info.oi = obc->obs.oi;
     if (pull_info.recovery_info.soid.snap &&
