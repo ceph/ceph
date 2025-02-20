@@ -251,7 +251,7 @@ After running the above command:
 
 * When you add new drives to the cluster, they will automatically be used to
   create new OSDs.
-* When ou remove an OSD and clean the LVM physical volume, a new OSD will be
+* When you remove an OSD and clean the LVM physical volume, a new OSD will be
   created automatically.
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
@@ -437,7 +437,7 @@ Example command:
 
 .. note::
     If the ``unmanaged`` flag is not set, ``cephadm`` automatically deploys drives that
-    match the OSDSpec.  For example, if you specifythe
+    match the OSDSpec.  For example, if you specify the
     ``all-available-devices`` option when creating OSDs, when you ``zap`` a
     device the ``cephadm`` orchestrator automatically creates a new OSD on the
     device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
@@ -642,7 +642,7 @@ To match only drives that are less than or equal to 1701 GB in size:
 
     size: ':1701G'
 
-To include drives equal to or greater than 666 GB in siz:
+To include drives equal to or greater than 666 GB in size:
 
 .. code-block:: yaml
 
@@ -825,7 +825,7 @@ Here designate all HDDs to be data devices (OSDs) and all SSDs to be used
 for WAL+DB offload.
 
 If you know that drives larger than 2 TB should always be used as data devices,
-and drives smaller than 2 TB should always be used as WAL/DB devices,  you can
+and drives smaller than 2 TB should always be used as WAL/DB devices, you can
 filter by size:
 
 .. code-block:: yaml
@@ -957,7 +957,7 @@ You can specify a ``placement`` to target only certain nodes.
       data_devices:
         rotational: 1           # All drives identified as HDDs
       db_devices:
-        rotational: 0           # All drivves identified as SSDs
+        rotational: 0           # All drives identified as SSDs
     ---
     service_type: osd
     service_id: disk_layout_b
@@ -1049,7 +1049,7 @@ including ``size`` or ``vendor`` so that OSD services adapt when
 Linux or an HBA may enumerate devices differently across boots, or when
 drives are added or replaced.
 
-It iss possible to specify a ``crush_device_class`` parameter
+It is possible to specify a ``crush_device_class`` parameter
 to be applied to OSDs created on devices matched by the ``paths`` filter:
 
 .. code-block:: yaml
