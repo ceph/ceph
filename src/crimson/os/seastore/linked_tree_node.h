@@ -400,6 +400,12 @@ protected:
     : children(capacity, nullptr) {}
   ParentNode(const ParentNode &rhs)
     : children(rhs.children.capacity(), nullptr) {}
+  void sync_children_capacity() {
+    auto &me = down_cast();
+    if (me.get_size() > children.capacity()) {
+      children.resize(me.get_size() * 2);
+    }
+  }
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
     ceph_assert(down_cast().is_stable());
     ceph_assert(dest->is_pending());

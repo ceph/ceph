@@ -111,6 +111,8 @@ struct OMapNode : LogicalChildNode {
 
   virtual ~OMapNode() = default;
 
+  virtual std::string get_begin() const = 0;
+  virtual std::string get_end() const = 0;
   bool is_btree_root() const { return root; }
   void unset_root() { root = false; }
   void set_root() { root = true; }
@@ -119,10 +121,6 @@ private:
 };
 
 using OMapNodeRef = OMapNode::OMapNodeRef;
-
-using omap_load_extent_iertr = OMapNode::base_iertr;
-omap_load_extent_iertr::future<OMapNodeRef>
-omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth);
 
 }
 

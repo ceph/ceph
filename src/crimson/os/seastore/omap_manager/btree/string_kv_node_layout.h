@@ -504,7 +504,7 @@ public:
     inner_remove(iter);
   }
 
-  StringKVInnerNodeLayout() : buf(nullptr) {}
+  StringKVInnerNodeLayout(char *buf) : buf(buf) {}
 
   void set_layout_buf(char *_buf) {
     assert(buf == nullptr);

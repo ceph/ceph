@@ -45,12 +45,21 @@ BtreeOMapManager::get_omap_root(omap_context_t oc, const omap_root_t &omap_root)
 {
   assert(omap_root.get_location() != L_ADDR_NULL);
   laddr_t laddr = omap_root.get_location();
-  return omap_load_extent(
-    oc, laddr, omap_root.get_depth()
-  ).si_then([](auto extent) {
-    extent->set_root();
-    return extent;
-  });
+  if (omap_root.get_depth() > 1) {
+    return omap_load_extent<OMapInnerNode>(
+      oc, laddr, omap_root.get_depth()
+    ).si_then([](auto extent) {
+      extent->set_root();
+      return extent->template cast<OMapNode>();
+    });
+  } else {
+    return omap_load_extent<OMapLeafNode>(
+      oc, laddr, omap_root.get_depth()
+    ).si_then([](auto extent) {
+      extent->set_root();
+      return extent->template cast<OMapNode>();
+    });
+  }
 }
 
 BtreeOMapManager::handle_root_split_ret
@@ -63,14 +72,21 @@ BtreeOMapManager::handle_root_split(
   DEBUGT("{}", oc.t, omap_root);
   return oc.tm.alloc_non_data_extent<OMapInnerNode>(oc.t, omap_root.hint,
                                            OMAP_INNER_BLOCK_SIZE)
-    .si_then([&omap_root, mresult, oc](auto&& nroot) -> handle_root_split_ret {
+    .si_then([&omap_root, mresult, oc, FNAME]
+	      (auto&& nroot) -> handle_root_split_ret {
     auto [left, right, pivot] = *(mresult.split_tuple);
     omap_node_meta_t meta{omap_root.depth + 1};
     nroot->set_meta(meta);
     nroot->set_root();
     left->unset_root();
+    nroot->insert_child_ptr(
+      nroot->iter_begin().get_offset(),
+      dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(left.get()));
     nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr(),
                                 "", nroot->maybe_get_delta_buffer());
+    nroot->insert_child_ptr(
+      (nroot->iter_begin() + 1).get_offset(),
+      dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(right.get()));
     right->unset_root();
     nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
                                 pivot, nroot->maybe_get_delta_buffer());
@@ -78,6 +94,7 @@ BtreeOMapManager::handle_root_split(
       omap_root.get_type());
     oc.t.get_omap_tree_stats().depth = omap_root.depth;
     ++(oc.t.get_omap_tree_stats().extents_num_delta);
+    DEBUGT("l {}, r {}", oc.t, *left, *right);
     return seastar::now();
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
