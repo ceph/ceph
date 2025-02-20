@@ -79,6 +79,12 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     out << ")";
   }
 
+  if (dn.get_linkage()->is_referent_remote()) {
+    out << " REFERENT REMOTE(";
+    out << dn.get_linkage()->get_remote_d_type_string();
+    out << ")";
+  }
+
   if (!dn.lock.is_sync_and_unlocked())
     out << " " << dn.lock;
   if (!dn.versionlock.is_sync_and_unlocked())
@@ -103,6 +109,20 @@ ostream& operator<<(ostream& out, const CDentry& dn)
      } else {
        out << "(nil)";
      }
+  }
+
+  {
+    out << " remote_ino=";
+    out << dn.get_linkage()->get_remote_ino();
+    const CInode *ref_in = dn.get_linkage()->get_referent_inode();
+    out << " referent_inode_ptr=";
+     if (ref_in) {
+       out << ref_in;
+     } else {
+       out << "(nil)";
+     }
+    out << " referent_ino=";
+    out << dn.get_linkage()->get_referent_ino();
   }
 
   out << " state=" << dn.get_state();
@@ -643,6 +663,7 @@ void CDentry::dump(Formatter *f) const
   
   f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_referent_remote", get_linkage()->is_referent_remote());
   f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
@@ -653,6 +674,8 @@ void CDentry::dump(Formatter *f) const
 
   if (linkage.is_remote()) {
     f->dump_string("remote_type", linkage.get_remote_d_type_string());
+  } else if (linkage.is_referent_remote()) {
+    f->dump_string("referent_remote_type", linkage.get_remote_d_type_string());
   } else {
     f->dump_string("remote_type", "");
   }
