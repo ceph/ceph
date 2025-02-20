@@ -344,13 +344,14 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
+    const auto old_obj = obj_name;
     op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, null_yield, true, &objv_tracker);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << obj_name
+      ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << old_obj
                << "' to target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
-    ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << obj_name
+    ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
                 << "' to target bucket '" << configuration.target_bucket << "'" << dendl;
   }
 };

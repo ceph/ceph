@@ -15,6 +15,7 @@
 #include <sstream>
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
@@ -142,7 +143,7 @@ int JournalTool::main(std::vector<const char*> &argv)
   stringstream (rank_str.substr(rank_str.find(':') + 1)) >> rank;
   if (fs.get_mds_map().is_active(rank)) {
     derr << "Cannot run cephfs-journal-tool on an active file system!" << dendl;
-    return -CEPHFS_EPERM;
+    return -EPERM;
   }
 
   int64_t const pool_id = fs.get_mds_map().get_metadata_pool();
@@ -202,7 +203,7 @@ int JournalTool::validate_type(const std::string &type)
   if (type == "mdlog" || type == "purge_queue") {
     return 0;
   }
-  return -CEPHFS_EPERM;
+  return -EPERM;
 }
 
 std::string JournalTool::gen_dump_file_path(const std::string &prefix) {

@@ -22,6 +22,10 @@
 #include "common/ceph_mutex.h"
 #include "msg/msg_types.h"		// for entity_addr_t
 
+#include <list>
+#include <map>
+#include <string>
+
 namespace ceph {
 
 /**

@@ -15,7 +15,7 @@ from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
-    RgwClient, RgwMultisite, RgwMultisiteAutomation
+    RgwClient, RgwMultisite, RgwMultisiteAutomation, RgwRateLimit
 from ..services.rgw_iam import RgwAccounts
 from ..services.service import RgwServiceManager, wait_for_daemon_to_start
 from ..tools import json_str_to_object, str_to_bool
@@ -465,6 +465,10 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_tags(bucket_name, tags)
 
+    def _get_lifecycle_progress(self):
+        rgw_client = RgwClient.admin_instance()
+        return rgw_client.get_lifecycle_progress()
+
     def _get_lifecycle(self, bucket_name: str, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_lifecycle(bucket_name)
@@ -561,7 +565,7 @@ class RgwBucket(RgwRESTController):
         result['acl'] = self._get_acl(bucket_name, daemon_name, owner)
         result['replication'] = self._get_replication(bucket_name, owner, daemon_name)
         result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, owner)
-
+        result['lifecycle_progress'] = self._get_lifecycle_progress()
         # Append the locking configuration.
         locking = self._get_locking(owner, daemon_name, bucket_name)
         result.update(locking)
@@ -705,6 +709,43 @@ class RgwBucket(RgwRESTController):
     @allow_empty_body
     def get_encryption_config(self, daemon_name=None, owner=None):
         return CephService.get_encryption_config(daemon_name)
+
+    @RESTController.Collection(method='PUT', path='/lifecycle')
+    @allow_empty_body
+    def set_lifecycle_policy(self, bucket_name: str = '', lifecycle: str = '', daemon_name=None,
+                             owner=None):
+        if lifecycle == '{}':
+            return self._delete_lifecycle(bucket_name, daemon_name, owner)
+        return self._set_lifecycle(bucket_name, lifecycle, daemon_name, owner)
+
+    @RESTController.Collection(method='GET', path='/lifecycle')
+    def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None):
+        return self._get_lifecycle(bucket_name, daemon_name, owner)
+
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the bucket global rate limit")
+    @ReadPermission
+    def get_global_rate_limit(self):
+        rgwBucketRateLimit_instance = RgwRateLimit()
+        return rgwBucketRateLimit_instance.get_global_rateLimit()
+
+    @Endpoint(method='GET', path='{uid}/ratelimit')
+    @EndpointDoc("Get the bucket rate limit")
+    @ReadPermission
+    def get_rate_limit(self, uid: str):
+        rgwBucketRateLimit_instance = RgwRateLimit()
+        return rgwBucketRateLimit_instance.get_rateLimit('bucket', uid)
+
+    @Endpoint(method='PUT', path='{uid}/ratelimit')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Update the bucket rate limit")
+    def set_rate_limit(self, enabled: bool, uid: str, max_read_ops: int,
+                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int):
+        rgwBucketRateLimit_instance = RgwRateLimit()
+        return rgwBucketRateLimit_instance.set_rateLimit('bucket', enabled, uid,
+                                                         max_read_ops, max_write_ops,
+                                                         max_read_bytes, max_write_bytes)
 
 
 @UIRouter('/rgw/bucket', Scope.RGW)
@@ -948,6 +989,31 @@ class RgwUser(RgwRESTController):
             'purge-keys': purge_keys
         }, json_response=False)
 
+    @Endpoint(method='GET', path='/ratelimit')
+    @EndpointDoc("Get the user global rate limit")
+    @ReadPermission
+    def get_global_rate_limit(self):
+        rgwUserRateLimit_instance = RgwRateLimit()
+        return rgwUserRateLimit_instance.get_global_rateLimit()
+
+    @Endpoint(method='GET', path='{uid}/ratelimit')
+    @EndpointDoc("Get the user rate limit")
+    @ReadPermission
+    def get_rate_limit(self, uid: str):
+        rgwUserRateLimit_instance = RgwRateLimit()
+        return rgwUserRateLimit_instance.get_rateLimit('user', uid)
+
+    @Endpoint(method='PUT', path='{uid}/ratelimit')
+    @UpdatePermission
+    @allow_empty_body
+    @EndpointDoc("Update the user rate limit")
+    def set_rate_limit(self, uid: str, enabled: bool = False, max_read_ops: int = 0,
+                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0):
+        rgwUserRateLimit_instance = RgwRateLimit()
+        return rgwUserRateLimit_instance.set_rateLimit('user', enabled,
+                                                       uid, max_read_ops, max_write_ops,
+                                                       max_read_bytes, max_write_bytes)
+
 
 class RGWRoleEndpoints:
     @staticmethod
@@ -1182,6 +1248,21 @@ class RgwZonegroup(RESTController):
         result = multisite_instance.get_zonegroup(zonegroup_name)
         return result
 
+    @Endpoint('DELETE', path='storage-class')
+    @DeletePermission
+    def remove_storage_class(self, placement_id: str, storage_class: str):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.delete_placement_targets(placement_id, storage_class)
+        return result
+
+    @Endpoint('POST', path='storage-class')
+    @CreatePermission
+    # pylint: disable=W0102
+    def storage_class(self, zone_group, placement_targets: List[Dict[str, str]] = []):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.add_placement_targets(zone_group, placement_targets)
+        return result
+
     @Endpoint()
     @ReadPermission
     def get_all_zonegroups_info(self):
@@ -1294,7 +1375,7 @@ class RgwZone(RESTController):
 
     @Endpoint()
     @ReadPermission
-    def get_user_list(self, zoneName=None):
+    def get_user_list(self, zoneName=None, realmName=None):
         multisite_instance = RgwMultisite()
-        result = multisite_instance.get_user_list(zoneName)
+        result = multisite_instance.get_user_list(zoneName, realmName)
         return result

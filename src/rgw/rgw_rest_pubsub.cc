@@ -560,7 +560,7 @@ class RGWPSGetTopicOp : public RGWOp {
     if (ret < 0) {
       return ret;
     }
-    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
@@ -646,7 +646,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     if (ret < 0) {
       return ret;
     }
-    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
@@ -811,7 +811,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name
@@ -884,8 +884,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
   if (!already_persistent && topic_needs_queue(dest)) {
     // initialize the persistent queue's location, using ':' as the namespace
     // delimiter because its inclusion in a TopicName would break ARNs
-    dest.persistent_queue = string_cat_reserve(
-        get_account_or_tenant(s->owner.id), ":", topic_name);
+    dest.persistent_queue = string_cat_reserve(topic_arn.account, ":", topic_name);
 
     op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
     if (op_ret < 0) {
@@ -905,7 +904,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
                            opaque_data, topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -947,7 +946,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
@@ -1030,7 +1029,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
   op_ret = ps.remove_topic(this, topic_name, y);
   if (op_ret < 0 && op_ret != -ENOENT) {
     ldpp_dout(this, 4) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;

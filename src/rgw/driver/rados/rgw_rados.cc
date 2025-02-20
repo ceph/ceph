@@ -4276,6 +4276,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
+  const string fetched_obj = fmt::format(
+    "object(src={}:{}, dest={}:{})", src_obj.bucket.bucket_id, src_obj.key.name,
+    dest_obj.bucket.bucket_id, dest_obj.key.name
+  );
 
   // use an empty owner until we decode RGW_ATTR_ACL
   ACLOwner owner;
@@ -4333,7 +4337,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 					       &override_owner,
                                                &ptail_rule);
                       if (ret < 0) {
-                        ldpp_dout(rctx.dpp, 5) << "Aborting fetch: source object filter returned ret=" << ret << dendl;
+                        ldpp_dout(rctx.dpp, 5) << "Aborting fetch: source " << fetched_obj
+                          << " filter returned ret=" << ret << dendl;
                         return ret;
                       }
 
@@ -4402,7 +4407,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                                  &accounted_size, nullptr, nullptr, rctx.y);
     if (ret < 0) {
       if (ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
-        ldpp_dout(rctx.dpp, 20) << __func__  << "(): failed to fetch object from remote. retries=" << tries << dendl;
+        ldpp_dout(rctx.dpp, 20) << __func__ << "(): failed to fetch " << fetched_obj
+                                << " from remote. retries=" << tries << dendl;
         continue;
       }
       goto set_err_state;
@@ -4415,8 +4421,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   }
   if (cb.get_data_len() != accounted_size) {
     ret = -EIO;
-    ldpp_dout(rctx.dpp, 0) << "ERROR: object truncated during fetching, expected "
-        << accounted_size << " bytes but received " << cb.get_data_len() << dendl;
+    ldpp_dout(rctx.dpp, 0) << "ERROR: " << fetched_obj
+        << " truncated during fetching, expected " << accounted_size
+        << " bytes but received " << cb.get_data_len() << dendl;
     goto set_err_state;
   }
 
@@ -4440,7 +4447,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
       accounted_size = info.orig_size;
     } catch (const buffer::error&) {
       ldpp_dout(rctx.dpp, 0) << "ERROR: could not decode compression attr for "
-          "replicated object " << dest_obj << dendl;
+          "replicated " << fetched_obj << dendl;
       // decode error isn't fatal, but we might put the wrong size in the index
     }
   }
@@ -4559,8 +4566,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
     if (verifier_etag != trimmed_etag) {
       ret = -EIO;
-      ldpp_dout(rctx.dpp, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-        << trimmed_etag << " Computed etag:" << verifier_etag << dendl;
+      ldpp_dout(rctx.dpp, 0) << "ERROR: source and destination objects don't match: " << fetched_obj
+        << ". Expected etag:" << trimmed_etag << " Computed etag:" << verifier_etag << dendl;
       goto set_err_state;
     }
   }
@@ -4577,28 +4584,34 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     }
 
     if (copy_if_newer && canceled) {
-      ldpp_dout(rctx.dpp, 20) << "raced with another write of obj: " << dest_obj << dendl;
+      ldpp_dout(rctx.dpp, 20) << "raced with another write of obj: " << fetched_obj << dendl;
       dest_obj_ctx.invalidate(dest_obj); /* object was overwritten */
       ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
       if (ret < 0) {
-        ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
+        ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret
+                               << " " <<  fetched_obj << dendl;
         goto set_err_state;
       }
       dest_mtime_weight.init(dest_state);
       dest_mtime_weight.high_precision = high_precision_time;
       if (!dest_state->exists ||
         dest_mtime_weight < set_mtime_weight) {
-        ldpp_dout(rctx.dpp, 20) << "retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
+        ldpp_dout(rctx.dpp, 20) << "retrying writing " << fetched_obj
+                                << " mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime
+                                << " dest_state->exists=" << dest_state->exists << dendl;
         continue;
       } else {
-        ldpp_dout(rctx.dpp, 20) << "not retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
+        ldpp_dout(rctx.dpp, 20) << "not retrying writing " << fetched_obj
+                                 << " mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime
+                                 << " dest_state->exists=" << dest_state->exists << dendl;
       }
     }
     break;
   }
 
   if (i == MAX_COMPLETE_RETRY) {
-    ldpp_dout(rctx.dpp, 0) << "ERROR: retried object completion too many times, something is wrong!" << dendl;
+    ldpp_dout(rctx.dpp, 0) << "ERROR: retried " << fetched_obj
+      << " completion too many times, something is wrong!" << dendl;
     ret = -EIO;
     goto set_err_state;
   }
@@ -4749,7 +4762,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
-    const req_context rctx{dpp, y, nullptr};
+    // null_yield resolves a crash when calling progress_cb(), because the beast
+    // frontend tried to use this same yield context to write the progress
+    // response to the frontend socket. call fetch_remote_obj() synchronously so
+    // that only one thread tries to suspend that coroutine
+    const req_context rctx{dpp, null_yield, nullptr};
     return fetch_remote_obj(dest_obj_ctx, remote_user, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
@@ -9708,7 +9725,7 @@ int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucke
   return ret;
 }
 
-bool RGWRados::process_expire_objects(const DoutPrefixProvider *dpp, optional_yield y)
+bool RGWRados::process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y)
 {
   return obj_expirer->inspect_all_shards(dpp, utime_t(), ceph_clock_now(), y);
 }

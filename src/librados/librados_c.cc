@@ -44,7 +44,7 @@
 #define tracepoint(...)
 #endif
 
-#if defined(HAVE_ASM_SYMVER) || defined(HAVE_ATTR_SYMVER)
+#if defined(LIBRADOS_SHARED) && (defined(HAVE_ASM_SYMVER) || defined(HAVE_ATTR_SYMVER))
 // prefer __attribute__() over global asm(".symver"). because the latter
 // is not parsed by the compiler and is partitioned away by GCC if
 // lto-partitions is enabled, in other words, these asm() statements

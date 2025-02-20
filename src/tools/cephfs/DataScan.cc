@@ -12,7 +12,10 @@
  *
  */
 
+#include "DataScan.h"
+
 #include "include/compat.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include <fstream>
@@ -27,7 +30,6 @@
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "PgFiles.h"
-#include "DataScan.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context
@@ -1068,10 +1070,18 @@ int DataScan::scan_links()
     dirfrag_t dirfrag() const {
       return dirfrag_t(dirino, frag);
     }
+    void print(std::ostream& os) const {
+      os << "link_info_t(diri=" << dirino << "." << frag << " name=" << name << " v=" << version << " l=" << nlink << ")";
+    }
+    bool operator==(const link_info_t& o) const {
+      return dirino == o.dirino
+             && frag == o.frag
+             && name == o.name;
+    }
   };
   map<inodeno_t, list<link_info_t> > dup_primaries;
   map<inodeno_t, link_info_t> bad_nlink_inos;
-  map<inodeno_t, link_info_t> injected_inos;
+  multimap<inodeno_t, link_info_t> injected_inos;
 
   map<dirfrag_t, set<string> > to_remove;
 
@@ -1202,7 +1212,7 @@ int DataScan::scan_links()
 			     make_move_iterator(end(srnode.snaps)));
 	      }
 	      if (dnfirst == CEPH_NOSNAP) {
-                injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+                injected_inos.insert({ino, link_info_t(dir_ino, frag_id, dname, inode.inode)});
                 dout(20) << "adding " << ino << " for future processing to fix dnfirst" << dendl;
               }
 	    }
@@ -1270,6 +1280,7 @@ int DataScan::scan_links()
 
     link_info_t newest;
     for (auto& q : p.second) {
+      dout(10) << " primary: " << q << dendl;
       if (q.version > newest.version) {
 	newest = q;
       } else if (q.version == newest.version &&
@@ -1278,10 +1289,11 @@ int DataScan::scan_links()
 	newest = q;
       }
     }
+    dout(10) << "newest is: " << newest << dendl;
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
-      if (newest.dirino == q.dirino && newest.name == q.name) {
+      if (newest == q) {
 	snaps.insert(make_move_iterator(begin(q.snaps)),
 		     make_move_iterator(end(q.snaps)));
 	continue;
@@ -1293,6 +1305,17 @@ int DataScan::scan_links()
       to_remove[q.dirfrag()].insert(key);
       derr << "Remove duplicated ino 0x" << p.first << " from "
 	   << q.dirfrag() << "/" << q.name << dendl;
+      {
+        /* we've removed the injected linkage: don't fix it later */
+        auto range = injected_inos.equal_range(p.first);
+        for (auto it = range.first; it != range.second; ) {
+          if (it->second == q) {
+            it = injected_inos.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      }
     }
 
     int nlink = 0;
@@ -1307,6 +1330,8 @@ int DataScan::scan_links()
 	   << " has " << newest.nlink << dendl;
       bad_nlink_inos[p.first] = newest;
       bad_nlink_inos[p.first].nlink = nlink;
+    } else {
+      bad_nlink_inos.erase(p.first);
     }
   }
   dup_primaries.clear();
@@ -1358,7 +1383,7 @@ int DataScan::scan_links()
       derr << "Unexpected error reading dentry "
 	   << p.second.dirfrag() << "/" << p.second.name
 	   << ": " << cpp_strerror(r) << dendl;
-      return r;
+      continue;
     }
 
     if (inode.inode->ino != p.first || inode.inode->version != p.second.version)
@@ -1384,7 +1409,7 @@ int DataScan::scan_links()
       derr << "Unexpected error reading dentry "
 	<< p.second.dirfrag() << "/" << p.second.name
 	<< ": " << cpp_strerror(r) << dendl;
-      return r;
+      continue;
     }
 
     if (first != CEPH_NOSNAP) {
@@ -2046,19 +2071,13 @@ int MetadataDriver::inject_with_backtrace(
       }
     }
 
-    if (!created_dirfrag) {
-      // If the parent dirfrag already existed, then stop traversing the
-      // backtrace: assume that the other ancestors already exist too.  This
-      // is an assumption rather than a truth, but it's a convenient way
-      // to avoid the risk of creating multiply-linked directories while
-      // injecting data.  If there are in fact missing ancestors, this
-      // should be fixed up using a separate tool scanning the metadata
-      // pool.
-      break;
-    } else {
-      // Proceed up the backtrace, creating parents
-      ino = parent_ino;
-    }
+    // N.B.: when the metadata pool has suffered a partial loss (like one PG), then
+    // an arbitrary ancestor dirfrag may be missing. We need to traverse up the
+    // backtrace ancestry to create those missing dirfrags/links. There is a risk
+    // that we create duplicate primary links to a directory this way. scan_links
+    // will catch this and pick either a legitimate link (with a version >1) or
+    // an arbitrary injected link, removing the others.
+    ino = parent_ino;
   }
 
   return 0;
@@ -2115,28 +2134,23 @@ int MetadataDriver::find_or_create_dirfrag(
     r = metadata_io.operate(frag_oid.name, &op);
     if (r == -EOVERFLOW || r == -EEXIST) {
       // Someone else wrote it (see case A above)
-      dout(10) << "Dirfrag creation race: 0x" << std::hex
-        << ino << " " << fragment << std::dec << dendl;
+      dout(10) << "Dirfrag creation race: " << ino << "." << fragment << dendl;
       *created = false;
       return 0;
     } else if (r < 0) {
       // We were unable to create or write it, error out
-      derr << "Failed to create dirfrag 0x" << std::hex
-        << ino << std::dec << ": " << cpp_strerror(r) << dendl;
+      derr << "Failed to create dirfrag " << ino << ": " << cpp_strerror(r) << dendl;
       return r;
     } else {
       // Success: the dirfrag object now exists with a value header
-      dout(10) << "Created dirfrag: 0x" << std::hex
-        << ino << std::dec << dendl;
+      dout(10) << "Created dirfrag: " << ino << dendl;
       *created = true;
     }
   } else if (r < 0) {
-    derr << "Unexpected error reading dirfrag 0x" << std::hex
-      << ino << std::dec << " : " << cpp_strerror(r) << dendl;
+    derr << "Unexpected error reading dirfrag " << ino << " : " << cpp_strerror(r) << dendl;
     return r;
   } else {
-    dout(20) << "Dirfrag already exists: 0x" << std::hex
-      << ino << " " << fragment << std::dec << dendl;
+    dout(20) << "Dirfrag already exists: " << ino << "." << fragment << dendl;
   }
 
   return 0;
@@ -2162,14 +2176,10 @@ int MetadataDriver::inject_linkage(
   vals[key] = dentry_bl;
   int r = metadata_io.omap_set(frag_oid.name, vals);
   if (r != 0) {
-    derr << "Error writing dentry 0x" << std::hex
-      << dir_ino << std::dec << "/"
-      << dname << ": " << cpp_strerror(r) << dendl;
+    derr << "Error writing dentry " << dir_ino << "/" << dname << ": " << cpp_strerror(r) << dendl;
     return r;
   } else {
-    dout(20) << "Injected dentry 0x" << std::hex
-      << dir_ino << "/" << dname << " pointing to 0x"
-      << inode.inode->ino << std::dec << dendl;
+    dout(20) << "Injected dentry " << dir_ino << "/" << dname << " pointing to " << inode.inode->ino << dendl;
     return 0;
   }
 }

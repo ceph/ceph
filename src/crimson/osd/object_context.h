@@ -76,12 +76,13 @@ public:
 
   CommonOBCPipeline obc_pipeline;
 
-  ObjectContext(hobject_t hoid) : lock(hoid),
+  ObjectContext(hobject_t hoid) : lock(hoid.to_str()),
                                   obs(std::move(hoid)) {}
 
-  void update_from(const ObjectContext &obc) {
-    obs = obc.obs;
-    ssc = obc.ssc;
+  void update_from(
+    std::pair<ObjectState, SnapSetContextRef> obc_data) {
+    obs = obc_data.first;
+    ssc = obc_data.second;
   }
 
   const hobject_t &get_oid() const {

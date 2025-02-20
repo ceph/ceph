@@ -15,6 +15,9 @@
 #ifndef OPREQUEST_H_
 #define OPREQUEST_H_
 
+#include "msg/Message.h"
+#include "msg/MessageRef.h"
+#include "msg/msg_types.h"
 #include "common/TrackedOp.h"
 #include "common/tracer.h"
 /**

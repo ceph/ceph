@@ -1141,6 +1141,7 @@ class NFSServiceSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
+                 monitoring_port: Optional[int] = None,
                  virtual_ip: Optional[str] = None,
                  enable_nlm: bool = False,
                  enable_haproxy_protocol: bool = False,
@@ -1157,6 +1158,7 @@ class NFSServiceSpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args, custom_configs=custom_configs)
 
         self.port = port
+        self.monitoring_port = monitoring_port
         self.virtual_ip = virtual_ip
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.idmap_conf = idmap_conf
@@ -1288,15 +1290,29 @@ class RGWSpec(ServiceSpec):
         self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
 
     def get_port_start(self) -> List[int]:
-        return [self.get_port()]
+        ports = self.get_port()
+        return ports
 
-    def get_port(self) -> int:
+    def get_port(self) -> List[int]:
+        ports = []
         if self.rgw_frontend_port:
-            return self.rgw_frontend_port
-        if self.ssl:
-            return 443
-        else:
-            return 80
+            ports.append(self.rgw_frontend_port)
+
+        ssl_port = next(
+            (
+                int(arg.split('=')[1])
+                for arg in (self.rgw_frontend_extra_args or [])
+                if arg.startswith("ssl_port=")
+            ),
+            None,
+        )
+
+        if self.ssl and ssl_port:
+            ports.append(ssl_port)
+        if not ports:
+            ports.append(443 if self.ssl else 80)
+
+        return ports
 
     def validate(self) -> None:
         super(RGWSpec, self).validate()
@@ -1340,7 +1356,6 @@ class NvmeofServiceSpec(ServiceSpec):
                  state_update_notify: Optional[bool] = True,
                  state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
-                 enable_key_encryption: Optional[bool] = True,
                  encryption_key: Optional[str] = None,
                  rebalance_period_sec: Optional[int] = 7,
                  max_gws_in_grp: Optional[int] = 16,
@@ -1355,15 +1370,17 @@ class NvmeofServiceSpec(ServiceSpec):
                  bdevs_per_cluster: Optional[int] = 32,
                  verify_nqns: Optional[bool] = True,
                  verify_keys: Optional[bool] = True,
+                 verify_listener_ip: Optional[bool] = True,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
                  max_hosts_per_namespace: Optional[int] = 8,
                  max_namespaces_with_netmask: Optional[int] = 1000,
                  max_subsystems: Optional[int] = 128,
+                 max_hosts: Optional[int] = 2048,
                  max_namespaces: Optional[int] = 1024,
                  max_namespaces_per_subsystem: Optional[int] = 256,
-                 max_hosts_per_subsystem: Optional[int] = 32,
+                 max_hosts_per_subsystem: Optional[int] = 128,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1385,6 +1402,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
+                 qos_timeslice_in_usecs: Optional[int] = 0,
                  discovery_addr: Optional[str] = None,
                  discovery_addr_map: Optional[Dict[str, str]] = None,
                  discovery_port: Optional[int] = None,
@@ -1437,8 +1455,6 @@ class NvmeofServiceSpec(ServiceSpec):
         self.state_update_interval_sec = state_update_interval_sec
         #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
-        #: ``enable_key_encryption`` encrypt DHCHAP and PSK keys before saving in OMAP
-        self.enable_key_encryption = enable_key_encryption
         #: ``encryption_key`` gateway encryption key
         self.encryption_key = encryption_key
         #: ``rebalance_period_sec`` number of seconds between cycles of auto namesapce rebalancing
@@ -1457,6 +1473,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_nqns = verify_nqns
         #: ``verify_keys`` enables verification of PSJ and DHCHAP keys in the gateway
         self.verify_keys = verify_keys
+        #: ``verify_listener_ip`` enables verification of listener IP address
+        self.verify_listener_ip = verify_listener_ip
         #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
         self.omap_file_lock_duration = omap_file_lock_duration
         #: ``omap_file_lock_retries`` number of retries to lock OMAP file before giving up
@@ -1471,6 +1489,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.max_namespaces_with_netmask = max_namespaces_with_netmask
         #: ``max_subsystems`` max number of subsystems
         self.max_subsystems = max_subsystems
+        #: ``max_hosts`` max number of hosts on all subsystems
+        self.max_hosts = max_hosts
         #: ``max_namespaces`` max number of namespaces on all subsystems
         self.max_namespaces = max_namespaces
         #: ``max_namespaces_per_subsystem`` max number of namespaces per one subsystem
@@ -1523,6 +1543,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
         self.iobuf_options: Optional[Dict[str, int]] = iobuf_options
+        #: ``qos_timeslice_in_usecs`` timeslice for QOS code, in micro seconds
+        self.qos_timeslice_in_usecs = qos_timeslice_in_usecs
         #: ``discovery_addr`` address of the discovery service
         self.discovery_addr = discovery_addr
         #: ``discovery_addr_map`` per node address map of the discovery service
@@ -1553,7 +1575,7 @@ class NvmeofServiceSpec(ServiceSpec):
         self.monitor_client_log_file_dir = monitor_client_log_file_dir
 
     def get_port_start(self) -> List[int]:
-        return [self.port, 4420, self.discovery_port]
+        return [self.port, 4420, self.discovery_port, self.prometheus_port]
 
     def validate(self) -> None:
         #  TODO: what other parameters should be validated as part of this function?
@@ -1585,6 +1607,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_positive_int(self.bdevs_per_cluster, "Bdevs per cluster")
         if self.bdevs_per_cluster is not None and self.bdevs_per_cluster < 1:
             raise SpecValidationError("Bdevs per cluster should be at least 1")
+        verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
@@ -1618,6 +1641,7 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.max_hosts_per_namespace, "Max hosts per namespace")
         verify_non_negative_int(self.max_namespaces_with_netmask, "Max namespaces with netmask")
         verify_positive_int(self.max_subsystems, "Max subsystems")
+        verify_positive_int(self.max_hosts, "Max hosts")
         verify_positive_int(self.max_namespaces, "Max namespaces")
         verify_positive_int(self.max_namespaces_per_subsystem, "Max namespaces per subsystem")
         verify_positive_int(self.max_hosts_per_subsystem, "Max hosts per subsystem")
@@ -1628,10 +1652,10 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
         verify_boolean(self.state_update_notify, "State update notify")
         verify_boolean(self.enable_spdk_discovery_controller, "Enable SPDK discovery controller")
-        verify_boolean(self.enable_key_encryption, "Enable key encryption")
         verify_boolean(self.enable_prometheus_exporter, "Enable Prometheus exporter")
         verify_boolean(self.verify_nqns, "Verify NQNs")
         verify_boolean(self.verify_keys, "Verify Keys")
+        verify_boolean(self.verify_listener_ip, "Verify listener IP address")
         verify_boolean(self.log_files_enabled, "Log files enabled")
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
@@ -2873,7 +2897,7 @@ class CephExporterSpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args)
 
         self.service_type = service_type
-        self.sock_dir = sock_dir
+        self.sock_dir = None
         self.addrs = addrs
         self.port = port
         self.prio_limit = prio_limit
@@ -2884,6 +2908,11 @@ class CephExporterSpec(ServiceSpec):
 
     def validate(self) -> None:
         super(CephExporterSpec, self).validate()
+
+        if self.sock_dir and self.sock_dir != '/var/run/ceph/':
+            raise SpecValidationError(
+                'sock_dir setting is deprecated and must be either unset or set to /var/run/ceph/'
+            )
 
         if not isinstance(self.prio_limit, int):
             raise SpecValidationError(
@@ -3149,6 +3178,9 @@ class SMBSpec(ServiceSpec):
         parts[-1] = objname
         uri = 'rados://' + '/'.join(parts)
         return uri
+
+    def get_port_start(self) -> List[int]:
+        return [445, 9922]  # SMB service runs on port 445, and smbmetrics uses 9922
 
     def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
         return [s.to_strict() for s in (self.cluster_public_addrs or [])]

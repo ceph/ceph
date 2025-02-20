@@ -2,7 +2,7 @@
 # vim: ts=4 sw=4 expandtab
 
 # repo auth with write perms must be present (this script does not log into
-# CONTAINER_REPO_HOSTNAME and CONTAINER_REPO_ORGANIZATION).
+# repos named by CONTAINER_REPO_*).
 # If NO_PUSH is set, no login is necessary
 
 
@@ -20,6 +20,7 @@ CEPH_SHA1 (of Ceph)
 ARCH (of build host, and resulting container)
 CONTAINER_REPO_HOSTNAME (quay.ceph.io, for CI, for instance)
 CONTAINER_REPO_ORGANIZATION (ceph-ci, for CI, for instance)
+CONTAINER_REPO (ceph, for CI, or prerelease-<arch> for release, for instance)
 CONTAINER_REPO_USERNAME
 CONTAINER_REPO_PASSWORD
 PRERELEASE_USERNAME for download.ceph.com:/prerelease/ceph
@@ -50,10 +51,12 @@ fi
 
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     CONTAINER_REPO_HOSTNAME=${CONTAINER_REPO_HOSTNAME:-quay.ceph.io}
-    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph-ci/ceph}
+    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph-ci}
+    CONTAINER_REPO=${CONTAINER_REPO:-ceph}
 else
     CONTAINER_REPO_HOSTNAME=${CONTAINER_REPO_HOSTNAME:-quay.ceph.io}
-    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph/prerelease-${REPO_ARCH}}
+    CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-ceph}
+    CONTAINER_REPO=${CONTAINER_REPO:-prerelease-${REPO_ARCH}}
     # default: most-recent annotated tag
     VERSION=${VERSION:-$(git describe --abbrev=0)}
 fi
@@ -64,20 +67,22 @@ fi
 : "${BRANCH:?}"
 : "${CEPH_SHA1:?}"
 : "${ARCH:?}"
-: "${CONTAINER_REPO_HOSTNAME:?}"
-: "${CONTAINER_REPO_ORGANIZATION:?}"
-: "${CONTAINER_REPO_USERNAME:?}"
-: "${CONTAINER_REPO_PASSWORD:?}"
+if [[ ${NO_PUSH} != "true" ]] ; then
+    : "${CONTAINER_REPO_HOSTNAME:?}"
+    : "${CONTAINER_REPO_ORGANIZATION:?}"
+    : "${CONTAINER_REPO_USERNAME:?}"
+    : "${CONTAINER_REPO_PASSWORD:?}"
+fi
 if [[ ${CI_CONTAINER} != "true" ]] ; then : "${VERSION:?}"; fi
 
 # check for valid repo auth (if pushing)
-ORGURL=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}
-MINIMAL_IMAGE=${ORGURL}/ceph:minimal-test
+repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_REPO}
+MINIMAL_IMAGE=${repopath}:minimal-test
 if [[ ${NO_PUSH} != "true" ]] ; then
     podman rmi ${MINIMAL_IMAGE} || true
     echo "FROM scratch" | podman build -f - -t ${MINIMAL_IMAGE}
     if ! podman push ${MINIMAL_IMAGE} ; then
-        echo "Not authenticated to ${ORGURL}; need docker/podman login?"
+        echo "Not authenticated to ${repopath}; need docker/podman login?"
         exit 1
     fi
     podman rmi ${MINIMAL_IMAGE} | true
@@ -145,14 +150,14 @@ fromtag=${fromtag/:/-}
 builddate=$(date -u +%Y%m%d)
 local_tag=${fromtag}-${CEPH_CONTAINER_CEPH_REF}-${CEPH_CONTAINER_ARCH}-${builddate}
 
-repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}
+repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_REPO}
 
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     # ceph-ci conventions for remote tags:
     # requires ARCH, BRANCH, CEPH_SHA1, FLAVOR
-    full_repo_tag=$repopath/ceph:${BRANCH}-${fromtag}-${ARCH}-devel
-    branch_repo_tag=$repopath/ceph:${BRANCH}
-    sha1_repo_tag=$repopath/ceph:${CEPH_SHA1}
+    full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
+    branch_repo_tag=${repopath}:${BRANCH}
+    sha1_repo_tag=${repopath}:${CEPH_SHA1}
 
     if [[ "${ARCH}" == "arm64" ]] ; then
         branch_repo_tag=${branch_repo_tag}-arm64
@@ -182,7 +187,7 @@ else
     # non-CI build.  Tags are like v19.1.0-20240701
     # push to quay.ceph.io/ceph/prerelease-$REPO_ARCH
     #
-    version_tag=${repopath}/prerelease-${REPO_ARCH}:v${VERSION}-${builddate}
+    version_tag=${repopath}:v${VERSION}-${builddate}
 
     podman tag ${image_id} ${version_tag}
     if [[ -z "${NO_PUSH}" ]] ; then

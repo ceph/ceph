@@ -64,7 +64,7 @@ class BaseObjectStore:
                             osd_uuid: str) -> Optional["Volume"]:
         raise NotImplementedError()
 
-    def safe_prepare(self, args: "argparse.Namespace") -> None:
+    def safe_prepare(self, args: Optional["argparse.Namespace"] = None) -> None:
         raise NotImplementedError()
 
     def add_objectstore_opts(self) -> None:
@@ -155,6 +155,9 @@ class BaseObjectStore:
                                        (returncode, ' '.join(cmd)))
 
     def activate(self) -> None:
+        raise NotImplementedError()
+
+    def activate_all(self) -> None:
         raise NotImplementedError()
 
     def enroll_tpm2(self, device: str) -> None:

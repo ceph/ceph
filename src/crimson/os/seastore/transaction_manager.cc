@@ -201,7 +201,7 @@ TransactionManager::close() {
 #ifdef UNIT_TESTS_BUILT
 TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
-  LogicalCachedExtentRef &ref)
+  LogicalChildNodeRef &ref)
 {
   LOG_PREFIX(TransactionManager::inc_ref);
   TRACET("{}", t, *ref);
@@ -232,7 +232,7 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
 
 TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
-  LogicalCachedExtentRef &ref)
+  LogicalChildNodeRef &ref)
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
@@ -335,7 +335,7 @@ TransactionManager::update_lba_mappings(
   LOG_PREFIX(TransactionManager::update_lba_mappings);
   SUBTRACET(seastore_t, "update extent lba mappings", t);
   return seastar::do_with(
-    std::list<LogicalCachedExtentRef>(),
+    std::list<LogicalChildNodeRef>(),
     std::list<CachedExtentRef>(),
     [this, &t, &pre_allocated_extents](auto &lextents, auto &pextents) {
     auto chksum_func = [&lextents, &pextents, this](auto &extent) {
@@ -365,7 +365,7 @@ TransactionManager::update_lba_mappings(
 	  assert(extent->get_last_committed_crc() == CRC_NULL);
 	}
 #endif
-        lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
+        lextents.emplace_back(extent->template cast<LogicalChildNode>());
       } else {
         assert(is_physical_type(extent->get_type()));
         pextents.emplace_back(extent);
@@ -519,7 +519,7 @@ TransactionManager::get_next_dirty_extents(
 TransactionManager::rewrite_extent_ret
 TransactionManager::rewrite_logical_extent(
   Transaction& t,
-  LogicalCachedExtentRef extent)
+  LogicalChildNodeRef extent)
 {
   LOG_PREFIX(TransactionManager::rewrite_logical_extent);
   if (extent->has_been_invalidated()) {
@@ -536,7 +536,7 @@ TransactionManager::rewrite_logical_extent(
       extent->get_length(),
       extent->get_user_hint(),
       // get target rewrite generation
-      extent->get_rewrite_generation())->cast<LogicalCachedExtent>();
+      extent->get_rewrite_generation())->cast<LogicalChildNode>();
     nextent->rewrite(t, *extent, 0);
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
@@ -590,7 +590,7 @@ TransactionManager::rewrite_logical_extent(
           extents,
           [extent, this, FNAME, &t, &off, &left, &refcount](auto &_nextent)
         {
-          auto nextent = _nextent->template cast<LogicalCachedExtent>();
+          auto nextent = _nextent->template cast<LogicalChildNode>();
           bool first_extent = (off == 0);
           ceph_assert(left >= nextent->get_length());
           nextent->rewrite(t, *extent, off);
@@ -702,7 +702,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
     assert(is_logical_type(extent->get_type()));
-    fut = rewrite_logical_extent(t, extent->cast<LogicalCachedExtent>());
+    fut = rewrite_logical_extent(t, extent->cast<LogicalChildNode>());
   } else if (is_backref_node(extent->get_type())) {
     fut = backref_manager->rewrite_extent(t, extent);
   } else {

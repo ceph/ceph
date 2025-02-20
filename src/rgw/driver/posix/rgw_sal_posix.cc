@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -2008,6 +2009,11 @@ void POSIXDriver::finalize(void)
 void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   return next->register_admin_apis(mgr);
+}
+
+bool POSIXDriver::process_expired_objects(const DoutPrefixProvider *dpp,
+	       				                          optional_yield y) {
+  return next->process_expired_objects(dpp, y);
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,

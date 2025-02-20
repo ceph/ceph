@@ -14,6 +14,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "common/safe_io.h" // for safe_read()
 #include "common/TextTable.h"
 #include "common/Throttle.h"
 #include "global/global_context.h"
@@ -1645,11 +1646,8 @@ int execute_status(const po::variables_map &vm,
     }
 
     // dump per-image status
-    librados::IoCtx default_ns_io_ctx;
-    default_ns_io_ctx.dup(io_ctx);
-    default_ns_io_ctx.set_namespace("");
     std::vector<librbd::mirror_peer_site_t> mirror_peers;
-    utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
+    utils::get_mirror_peer_sites(io_ctx, &mirror_peers);
 
     std::map<std::string, std::string> peer_mirror_uuids_to_name;
     utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,

@@ -3,11 +3,14 @@
 
 #pragma once
 
+#include <list>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
 
+#include "include/types.h" // for version_t
 #include "include/utime.h"
 #include "common/options.h"
 #include "common/entity_name.h"

@@ -11,7 +11,7 @@ import { MultiClusterFormComponent } from '../multi-cluster-form/multi-cluster-f
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -230,7 +230,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
 
   openDeleteClusterModal() {
     const cluster = this.selection.first();
-    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(DeleteConfirmationModalComponent, {
       infoMessage: $localize`Please note that the data for the disconnected cluster will be visible for a duration of ~ 5 minutes. After this period, it will be automatically removed.`,
       actionDescription: $localize`Disconnect`,
       itemDescription: $localize`Cluster`,

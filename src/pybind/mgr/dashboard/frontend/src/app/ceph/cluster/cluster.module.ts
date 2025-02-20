@@ -12,7 +12,8 @@ import {
   ProgressIndicatorModule,
   InputModule,
   ModalModule,
-  TreeviewModule
+  TreeviewModule,
+  ListModule
 } from 'carbon-components-angular';
 
 import {
@@ -26,7 +27,7 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -96,7 +97,7 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     NgbDatepickerModule,
     NgbPopoverModule,
     NgbDropdownModule,
-    NgxPipeFunctionModule,
+    PipesModule,
     NgbProgressbarModule,
     DashboardV3Module,
     ComboBoxModule,
@@ -106,7 +107,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ProgressIndicatorModule,
     ButtonModule,
     InputModule,
-    ModalModule
+    ModalModule,
+    ListModule
   ],
   declarations: [
     HostsComponent,

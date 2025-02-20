@@ -204,58 +204,58 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "ceph-dashboard:build",
-            "proxyConfig": "proxy.conf.json"
+            "proxyConfig": "proxy.conf.json",
+            "buildTarget": "ceph-dashboard:build"
           },
           "configurations": {
             "production": {
-              "browserTarget": "ceph-dashboard:build:production"
+              "buildTarget": "ceph-dashboard:build:production"
             },
             "cs": {
-              "browserTarget": "ceph-dashboard:build:cs"
+              "buildTarget": "ceph-dashboard:build:cs"
             },
             "de": {
-              "browserTarget": "ceph-dashboard:build:de"
+              "buildTarget": "ceph-dashboard:build:de"
             },
             "en-US": {
-              "browserTarget": "ceph-dashboard:build:en-US"
+              "buildTarget": "ceph-dashboard:build:en-US"
             },
             "es": {
-              "browserTarget": "ceph-dashboard:build:es"
+              "buildTarget": "ceph-dashboard:build:es"
             },
             "fr": {
-              "browserTarget": "ceph-dashboard:build:fr"
+              "buildTarget": "ceph-dashboard:build:fr"
             },
             "id": {
-              "browserTarget": "ceph-dashboard:build:id"
+              "buildTarget": "ceph-dashboard:build:id"
             },
             "it": {
-              "browserTarget": "ceph-dashboard:build:it"
+              "buildTarget": "ceph-dashboard:build:it"
             },
             "ja": {
-              "browserTarget": "ceph-dashboard:build:ja"
+              "buildTarget": "ceph-dashboard:build:ja"
             },
             "ko": {
-              "browserTarget": "ceph-dashboard:build:ko"
+              "buildTarget": "ceph-dashboard:build:ko"
             },
             "pl": {
-              "browserTarget": "ceph-dashboard:build:pl"
+              "buildTarget": "ceph-dashboard:build:pl"
             },
             "pt": {
-              "browserTarget": "ceph-dashboard:build:pt"
+              "buildTarget": "ceph-dashboard:build:pt"
             },
             "zh-Hans": {
-              "browserTarget": "ceph-dashboard:build:zh-Hans"
+              "buildTarget": "ceph-dashboard:build:zh-Hans"
             },
             "zh-Hant": {
-              "browserTarget": "ceph-dashboard:build:zh-Hant"
+              "buildTarget": "ceph-dashboard:build:zh-Hant"
             }
           }
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "ceph-dashboard:build"
+            "buildTarget": "ceph-dashboard:build"
           }
         },
         "lint": {

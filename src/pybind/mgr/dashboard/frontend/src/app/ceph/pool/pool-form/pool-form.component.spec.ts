@@ -21,14 +21,14 @@ import { ErrorComponent } from '~/app/core/error/error.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { SelectBadgesComponent } from '~/app/shared/components/select-badges/select-badges.component';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { Permission } from '~/app/shared/models/permissions';
 import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import {
@@ -135,28 +135,25 @@ describe('PoolFormComponent', () => {
 
   const routes: Routes = [{ path: '404', component: ErrorComponent }];
 
-  configureTestBed(
-    {
-      declarations: [ErrorComponent],
-      imports: [
-        BrowserAnimationsModule,
-        HttpClientTestingModule,
-        RouterTestingModule.withRoutes(routes),
-        ToastrModule.forRoot(),
-        NgbNavModule,
-        PoolModule,
-        SharedModule,
-        NgbModalModule
-      ],
-      providers: [
-        ErasureCodeProfileService,
-        NgbActiveModal,
-        SelectBadgesComponent,
-        { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
-      ]
-    },
-    [CriticalConfirmationModalComponent]
-  );
+  configureTestBed({
+    declarations: [ErrorComponent],
+    imports: [
+      BrowserAnimationsModule,
+      HttpClientTestingModule,
+      RouterTestingModule.withRoutes(routes),
+      ToastrModule.forRoot(),
+      NgbNavModule,
+      PoolModule,
+      SharedModule,
+      NgbModalModule
+    ],
+    providers: [
+      ErasureCodeProfileService,
+      NgbActiveModal,
+      SelectBadgesComponent,
+      { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
+    ]
+  });
 
   let navigationSpy: jasmine.Spy;
 
@@ -765,7 +762,7 @@ describe('PoolFormComponent', () => {
     it('should select the newly created rule', () => {
       expect(form.getValue('crushRule').rule_name).toBe('rep1');
       const name = 'awesomeRule';
-      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
         return {
           componentInstance: {
             submitAction: of({ name })
@@ -798,7 +795,7 @@ describe('PoolFormComponent', () => {
 
     describe('crush rule deletion', () => {
       let taskWrapper: TaskWrapperService;
-      let deletion: CriticalConfirmationModalComponent;
+      let deletion: DeleteConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
 
@@ -828,7 +825,7 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        modalSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(
           (deletionClass: any, initialState: any) => {
             deletion = Object.assign(new deletionClass(), initialState);
             return {
@@ -933,7 +930,7 @@ describe('PoolFormComponent', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile').name).toBe('ecp1');
       const name = 'awesomeProfile';
-      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
         return {
           componentInstance: {
             submitAction: of({ name })
@@ -949,7 +946,7 @@ describe('PoolFormComponent', () => {
 
     describe('ecp deletion', () => {
       let taskWrapper: TaskWrapperService;
-      let deletion: CriticalConfirmationModalComponent;
+      let deletion: DeleteConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
       let modal: NgbModalRef;
@@ -977,7 +974,7 @@ describe('PoolFormComponent', () => {
 
       beforeEach(() => {
         deletion = undefined;
-        modalSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(
           (comp: any, init: any) => {
             modal = modalServiceShow(comp, init);
             return modal;

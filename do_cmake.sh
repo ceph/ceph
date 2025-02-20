@@ -19,7 +19,9 @@ if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
       fedora)
-          if [ "$VERSION_ID" -ge "39" ] ; then
+          if [ "$VERSION_ID" -ge "41" ] ; then
+            PYBUILD="3.13"
+          elif [ "$VERSION_ID" -ge "39" ] ; then
             PYBUILD="3.12"
           else
             # Fedora 37 and above
@@ -41,7 +43,9 @@ if [ -r /etc/os-release ]; then
           ;;
       ubuntu)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-          if [ "$MAJOR_VER" -ge "22" ] ; then
+          if [ "$MAJOR_VER" -ge "24" ] ; then
+              PYBUILD="3.12"
+          elif [ "$MAJOR_VER" -ge "22" ] ; then
               PYBUILD="3.10"
           fi
           ;;

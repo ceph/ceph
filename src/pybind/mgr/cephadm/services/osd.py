@@ -19,6 +19,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
 
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@register_cephadm_service
 class OSDService(CephService):
     TYPE = 'osd'
 
@@ -95,10 +97,10 @@ class OSDService(CephService):
                 raise RuntimeError(
                     'cephadm exited with an error code: %d, stderr:%s' % (
                         code, '\n'.join(err)))
-        return await self.deploy_osd_daemons_for_existing_osds(host, drive_group.service_name(),
+        return await self.deploy_osd_daemons_for_existing_osds(host, drive_group,
                                                                replace_osd_ids)
 
-    async def deploy_osd_daemons_for_existing_osds(self, host: str, service_name: str,
+    async def deploy_osd_daemons_for_existing_osds(self, host: str, spec: DriveGroupSpec,
                                                    replace_osd_ids: Optional[List[str]] = None) -> str:
 
         if replace_osd_ids is None:
@@ -142,11 +144,12 @@ class OSDService(CephService):
                     continue
 
                 created.append(osd_id)
-                daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
-                    service_name=service_name,
+                daemon_spec: CephadmDaemonDeploySpec = self.make_daemon_spec(
+                    spec=spec,
                     daemon_id=str(osd_id),
                     host=host,
                     daemon_type='osd',
+                    network='',  # required arg but only really needed for mons
                 )
                 daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
                 await CephadmServe(self.mgr)._create_daemon(
@@ -183,11 +186,12 @@ class OSDService(CephService):
                 continue
 
             created.append(osd_id)
-            daemon_spec = CephadmDaemonDeploySpec(
-                service_name=service_name,
+            daemon_spec = self.make_daemon_spec(
+                spec=spec,
                 daemon_id=osd_id,
                 host=host,
                 daemon_type='osd',
+                network='',  # required arg but only really needed for mons
             )
             daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
             await CephadmServe(self.mgr)._create_daemon(

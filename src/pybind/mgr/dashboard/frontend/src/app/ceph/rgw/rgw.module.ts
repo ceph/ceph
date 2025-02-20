@@ -10,7 +10,7 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
@@ -63,6 +63,8 @@ import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-pol
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
+import { RgwStorageClassListComponent } from './rgw-storage-class-list/rgw-storage-class-list.component';
+
 import {
   ButtonModule,
   GridModule,
@@ -73,9 +75,25 @@ import {
   CodeSnippetModule,
   InputModule,
   CheckboxModule,
-  TreeviewModule
+  TreeviewModule,
+  RadioModule,
+  SelectModule,
+  NumberModule,
+  TabsModule,
+  AccordionModule,
+  TagModule,
+  TooltipModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
+import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
+import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
+import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
+import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
+import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
+import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
+import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
+import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 
 @NgModule({
   imports: [
@@ -89,7 +107,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RouterModule,
     NgbTooltipModule,
     NgbPopoverModule,
-    NgxPipeFunctionModule,
+    PipesModule,
     TreeviewModule,
     DataTableModule,
     DashboardV3Module,
@@ -103,7 +121,18 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     IconModule,
     NgbProgressbar,
     InputModule,
-    CheckboxModule
+    AccordionModule,
+    CheckboxModule,
+    SelectModule,
+    NumberModule,
+    TabsModule,
+    IconModule,
+    SelectModule,
+    RadioModule,
+    SelectModule,
+    NumberModule,
+    TagModule,
+    TooltipModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -112,9 +141,11 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent
+    RgwUserDetailsComponent,
+    RgwStorageClassListComponent
   ],
   declarations: [
+    RgwRateLimitComponent,
     RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
@@ -154,7 +185,16 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RgwMultisiteSyncPolicyDetailsComponent,
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
-    RgwMultisiteTabsComponent
+    RgwMultisiteTabsComponent,
+    RgwUserAccountsComponent,
+    RgwUserAccountsFormComponent,
+    RgwUserAccountsDetailsComponent,
+    RgwStorageClassListComponent,
+    RgwStorageClassDetailsComponent,
+    RgwStorageClassFormComponent,
+    RgwBucketTieringFormComponent,
+    RgwBucketLifecycleListComponent,
+    RgwRateLimitDetailsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -185,6 +225,23 @@ const routes: Routes = [
     ]
   },
   {
+    path: 'accounts',
+    data: { breadcrumbs: 'Accounts' },
+    children: [
+      { path: '', component: RgwUserAccountsComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:id`,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
     path: 'roles',
     data: {
       breadcrumbs: 'Roles',
@@ -193,6 +250,10 @@ const routes: Routes = [
         {
           name: 'Users',
           url: '/rgw/user'
+        },
+        {
+          name: 'Accounts',
+          url: '/rgw/accounts'
         },
         {
           name: 'Roles',
@@ -281,6 +342,18 @@ const routes: Routes = [
             outlet: 'modal'
           }
         ]
+      }
+    ]
+  },
+  {
+    path: 'tiering',
+    data: { breadcrumbs: 'Tiering' },
+    children: [
+      { path: '', component: RgwStorageClassListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
       }
     ]
   },

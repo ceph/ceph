@@ -273,6 +273,20 @@ class SpecStore():
                                self.spec_created[name],
                                self.spec_deleted.get(name, None))
 
+    def get_by_service_type(self, service_type: str) -> List[SpecDescription]:
+        matching_specs: List[SpecDescription] = []
+        for name, spec in self._specs.items():
+            if spec.service_type == service_type:
+                matching_specs.append(
+                    SpecDescription(
+                        spec,
+                        self._rank_maps.get(name),
+                        self.spec_created[name],
+                        self.spec_deleted.get(name, None)
+                    )
+                )
+        return matching_specs
+
     @property
     def active_specs(self) -> Mapping[str, ServiceSpec]:
         return {k: v for k, v in self._specs.items() if k not in self.spec_deleted}
@@ -521,6 +535,13 @@ class SpecStore():
             self._save(name)
         else:
             self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as having been configured')
+
+    def get_specs_by_type(self, service_type: str) -> Mapping[str, ServiceSpec]:
+        return {
+            service_name: spec
+            for service_name, spec in self._specs.items()
+            if service_type == spec.service_type
+        }
 
 
 class ClientKeyringSpec(object):
@@ -1338,10 +1359,15 @@ class HostCache():
 
     def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
         assert service_type not in ['keepalived', 'haproxy']
-
         daemons = self.daemons[host].values() if host else self._get_daemons()
-
         return [d for d in daemons if d.daemon_type in service_to_daemon_types(service_type)]
+
+    def get_daemons_by_types(self, daemon_types: List[str]) -> List[str]:
+        daemon_names = []
+        for daemon_type in daemon_types:
+            for dd in self.get_daemons_by_type(daemon_type):
+                daemon_names.append(dd.name())
+        return daemon_names
 
     def get_daemon_types(self, hostname: str) -> Set[str]:
         """Provide a list of the types of daemons on the host"""

@@ -25,6 +25,7 @@
 #include "OSDMap.h"
 #include "MissingLoc.h"
 #include "osd/osd_perf_counters.h"
+#include "common/config_cacher.h"
 #include "common/ostream_temp.h"
 
 struct PGPool {
@@ -417,7 +418,7 @@ public:
 
     // ============ recovery reservation notifications ==========
     virtual void on_backfill_reserved() = 0;
-    virtual void on_backfill_canceled() = 0;
+    virtual void on_backfill_suspended() = 0;
     virtual void on_recovery_reserved() = 0;
     virtual void on_recovery_cancelled() = 0;
 
@@ -963,7 +964,7 @@ public:
     boost::statechart::result react(const RemoteReservationRevoked& evt);
     boost::statechart::result react(const DeferBackfill& evt);
     boost::statechart::result react(const UnfoundBackfill& evt);
-    void cancel_backfill();
+    void suspend_backfill();
     void exit();
   };
 
@@ -1391,6 +1392,10 @@ public:
 
   PGStateHistory state_history;
   CephContext* cct;
+  md_config_cacher_t<int64_t> osd_pg_stat_report_interval_max_seconds{
+    cct->_conf, "osd_pg_stat_report_interval_max_seconds" };
+  md_config_cacher_t<int64_t> osd_pg_stat_report_interval_max_epochs{
+    cct->_conf, "osd_pg_stat_report_interval_max_epochs" };
   spg_t spgid;
   DoutPrefixProvider *dpp;
   PeeringListener *pl;

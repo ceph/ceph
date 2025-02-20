@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_CACHE_PWL_REQUEST_H
 #define CEPH_LIBRBD_CACHE_PWL_REQUEST_H
 
+#include "common/perf_counters.h"
 #include "include/Context.h"
 #include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/pwl/LogOperation.h"

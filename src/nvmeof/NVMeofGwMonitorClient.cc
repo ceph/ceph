@@ -151,13 +151,12 @@ int NVMeofGwMonitorClient::init()
 
   // We must register our config callback before calling init(), so
   // that we see the initial configuration message
-  monc.register_config_callback([this](const std::string &k, const std::string &v){
+  monc.register_config_callback([](const std::string &k, const std::string &v){
       // leaving this for debugging purposes
       dout(10) << "nvmeof config_callback: " << k << " : " << v << dendl;
-      
       return false;
     });
-  monc.register_config_notify_callback([this]() {
+  monc.register_config_notify_callback([]() {
       dout(4) << "nvmeof monc config notify callback" << dendl;
     });
   dout(4) << "nvmeof Registered monc callback" << dendl;

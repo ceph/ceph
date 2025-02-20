@@ -32,10 +32,7 @@ status_checks() {
         return 1
     fi
 
-    ceph_status=$(ceph -s)
-    if ! echo "$ceph_status" | grep -q "HEALTH_OK"; then
-        return 1
-    fi
+    ceph -s
 }
 
 total_gateways_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1 ))

@@ -9,8 +9,6 @@ import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
-import { DownloadButtonComponent } from '~/app/shared/components/download-button/download-button.component';
-import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryComponent } from './telemetry.component';
@@ -46,19 +44,16 @@ describe('TelemetryComponent', () => {
     'url'
   ];
 
-  configureTestBed(
-    {
-      declarations: [TelemetryComponent],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
-      ]
-    },
-    [LoadingPanelComponent, DownloadButtonComponent]
-  );
+  configureTestBed({
+    declarations: [TelemetryComponent],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ]
+  });
 
   describe('configForm', () => {
     beforeEach(() => {

@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { BehaviorSubject, of as observableOf } from 'rxjs';
 import { catchError, map, mapTo } from 'rxjs/operators';
 import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
+import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
 import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
@@ -271,5 +272,35 @@ export class RgwBucketService extends ApiClient {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.get(`${this.url}/getEncryptionConfig`, { params: params });
     });
+  }
+
+  setLifecycle(bucket_name: string, lifecycle: string, owner: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        lifecycle: lifecycle,
+        owner: owner
+      });
+      return this.http.put(`${this.url}/lifecycle`, null, { params: params });
+    });
+  }
+
+  getLifecycle(bucket_name: string, owner: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        owner: owner
+      });
+      return this.http.get(`${this.url}/lifecycle`, { params: params });
+    });
+  }
+  updateBucketRateLimit(bid: string, bucketRateLimitArgs: RgwRateLimitConfig) {
+    return this.http.put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs);
+  }
+  getBucketRateLimit(uid: string) {
+    return this.http.get(`${this.url}/${uid}/ratelimit`);
+  }
+  getGlobalBucketRateLimit() {
+    return this.http.get(`${this.url}/ratelimit`);
   }
 }

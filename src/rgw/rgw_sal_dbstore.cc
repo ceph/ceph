@@ -242,7 +242,7 @@ namespace rgw::sal {
   {
     int ret;
 
-    ret = store->getDB()->update_bucket(dpp, "info", info, exclusive, nullptr, nullptr, &_mtime, &info.objv_tracker);
+    ret = store->getDB()->update_bucket(dpp, "info", info, exclusive, nullptr, &attrs, &_mtime, &info.objv_tracker);
 
     return ret;
 
@@ -1852,6 +1852,12 @@ namespace rgw::sal {
   std::unique_ptr<Lifecycle> DBStore::get_lifecycle(void)
   {
     return std::make_unique<DBLifecycle>(this);
+  }
+
+  bool DBStore::process_expired_objects(const DoutPrefixProvider *dpp,
+		 			optional_yield y)
+  {
+    return 0;
   }
 
   int DBLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,

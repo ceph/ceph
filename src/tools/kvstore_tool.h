@@ -9,6 +9,7 @@
 
 #include "acconfig.h"
 #include "include/buffer_fwd.h"
+#include "kv/KeyValueDB.h"
 #ifdef WITH_BLUESTORE
 #include "os/bluestore/BlueStore.h"
 #endif

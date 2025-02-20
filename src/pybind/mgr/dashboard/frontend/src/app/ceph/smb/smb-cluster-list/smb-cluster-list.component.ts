@@ -14,12 +14,22 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
-import { SMBCluster } from '../smb.model';
 
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { SMBCluster } from '../smb.model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+
+const BASE_URL = 'cephfs/smb';
 @Component({
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
-  styleUrls: ['./smb-cluster-list.component.scss']
+  styleUrls: ['./smb-cluster-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
@@ -28,14 +38,17 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
-
+  selection = new CdTableSelection();
   smbClusters$: Observable<SMBCluster[]>;
   subject$ = new BehaviorSubject<SMBCluster[]>([]);
 
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
-    private smbService: SmbService
+    private smbService: SmbService,
+    private modalService: ModalCdsService,
+    private taskWrapper: TaskWrapperService,
+    private urlBuilder: URLBuilderService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().smb;
@@ -54,6 +67,22 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       }
     ];
+    this.tableActions = [
+      {
+        name: `${this.actionLabels.CREATE} cluster`,
+        permission: 'create',
+        icon: Icons.add,
+        routerLink: () => this.urlBuilder.getCreate(),
+
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeSMBClusterModal(),
+        name: this.actionLabels.REMOVE
+      }
+    ];
 
     this.smbClusters$ = this.subject$.pipe(
       switchMap(() =>
@@ -69,5 +98,26 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
 
   loadSMBCluster() {
     this.subject$.next([]);
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  removeSMBClusterModal() {
+    const cluster_id = this.selection.first().cluster_id;
+
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`Cluster`,
+      itemNames: [cluster_id],
+      actionDescription: $localize`remove`,
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('smb/cluster/remove', {
+            cluster_id: cluster_id
+          }),
+          call: this.smbService.removeCluster(cluster_id)
+        })
+    });
   }
 }

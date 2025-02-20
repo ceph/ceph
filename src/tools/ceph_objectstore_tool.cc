@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional.hpp>
+#include <iomanip>
 #include <fstream>
 
 #include <stdlib.h>
@@ -24,6 +25,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
+#include "common/perf_counters_collection.h"
 #include "common/url_escape.h"
 
 #include "global/global_init.h"
@@ -4872,7 +4874,8 @@ out:
   if (debug) {
     ostringstream ostr;
     Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-    cct->get_perfcounters_collection()->dump_formatted(f, false, false);
+    cct->get_perfcounters_collection()->dump_formatted(
+	f, false, select_labeled_t::unlabeled);
     ostr << "ceph-objectstore-tool ";
     f->flush(ostr);
     delete f;

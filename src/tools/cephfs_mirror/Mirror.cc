@@ -10,6 +10,7 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
 #include "include/types.h"
 #include "mon/MonClient.h"

@@ -59,7 +59,7 @@ struct BackfillState {
   struct RequestDone : sc::event<RequestDone> {
   };
 
-  struct CancelBackfill : sc::event<CancelBackfill> {
+  struct SuspendBackfill : sc::event<SuspendBackfill> {
   };
 
   struct ThrottleAcquired : sc::event<ThrottleAcquired> {
@@ -212,14 +212,14 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<PrimaryScanned>,
       sc::transition<RequestDone, Done>,
-      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<SuspendBackfill>,
       sc::custom_reaction<Triggered>,
       sc::transition<sc::event_base, Crashed>>;
     explicit PrimaryScanning(my_context);
     sc::result react(ObjectPushed);
     // collect scanning result and transit to Enqueuing.
     sc::result react(PrimaryScanned);
-    sc::result react(CancelBackfill);
+    sc::result react(SuspendBackfill);
     sc::result react(Triggered);
   };
 
@@ -228,7 +228,7 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<ReplicaScanned>,
-      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<SuspendBackfill>,
       sc::custom_reaction<Triggered>,
       sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
@@ -237,7 +237,7 @@ public:
     // to Enqueuing will happen.
     sc::result react(ObjectPushed);
     sc::result react(ReplicaScanned);
-    sc::result react(CancelBackfill);
+    sc::result react(SuspendBackfill);
     sc::result react(Triggered);
 
     // indicate whether a particular peer should be scanned to retrieve
@@ -257,23 +257,23 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::transition<RequestDone, Done>,
-      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<SuspendBackfill>,
       sc::custom_reaction<Triggered>,
       sc::transition<ThrottleAcquired, Enqueuing>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Waiting(my_context);
     sc::result react(ObjectPushed);
-    sc::result react(CancelBackfill);
+    sc::result react(SuspendBackfill);
     sc::result react(Triggered);
   };
 
   struct Done : sc::state<Done, BackfillMachine>,
                 StateHelper<Done> {
     using reactions = boost::mpl::list<
-      sc::custom_reaction<CancelBackfill>,
+      sc::custom_reaction<SuspendBackfill>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Done(my_context);
-    sc::result react(CancelBackfill) {
+    sc::result react(SuspendBackfill) {
       return discard_event();
     }
   };
@@ -387,7 +387,7 @@ struct BackfillState::PeeringFacade {
   virtual const std::set<pg_shard_t>& get_backfill_targets() const = 0;
   virtual const hobject_t& get_peer_last_backfill(pg_shard_t peer) const = 0;
   virtual const PGLog& get_pg_log() const = 0;
-  virtual const eversion_t& get_last_update() const = 0;
+  virtual eversion_t get_pg_committed_to() const = 0;
   virtual const eversion_t& get_log_tail() const = 0;
 
   // the performance impact of `std::function` has not been considered yet.

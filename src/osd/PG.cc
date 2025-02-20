@@ -514,6 +514,8 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
+  dout(10) << __func__ << " split_bits " << split_bits << dendl;
+
   recovery_state.split_into(child_pgid, &child->recovery_state, split_bits);
 
   child->update_snap_mapper_bits(split_bits);
@@ -1561,8 +1563,12 @@ void PG::on_backfill_reserved()
   queue_recovery();
 }
 
-void PG::on_backfill_canceled()
+void PG::on_backfill_suspended()
 {
+  // Scan replies asked before suspending this backfill should be ignored.
+  // See PrimaryLogPG::do_scan -  case MOSDPGScan::OP_SCAN_DIGEST.
+  // `waiting_on_backfill` will be re-refilled after the suspended backfill
+  // is resumed/restarted.
   if (!waiting_on_backfill.empty()) {
     waiting_on_backfill.clear();
     finish_recovery_op(hobject_t::get_max());

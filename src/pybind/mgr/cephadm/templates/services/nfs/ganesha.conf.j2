@@ -13,12 +13,14 @@ NFS_CORE_PARAM {
 {% if haproxy_hosts %}
         HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
 {% endif %}
+        Monitoring_Port = {{ monitoring_port }};
 }
 
 NFSv4 {
         Delegations = false;
-        RecoveryBackend = 'rados_cluster';
+        RecoveryBackend = "rados_cluster";
         Minor_Versions = 1, 2;
+        Server_Scope = {{ cluster_id }}-{{ namespace }}
 {% if nfs_idmap_conf %}
         IdmapConf = "{{ nfs_idmap_conf }}";
 {% endif %}
@@ -26,7 +28,7 @@ NFSv4 {
 
 RADOS_KV {
         UserId = "{{ user }}";
-        nodeid = "{{ nodeid }}";
+        nodeid = {{ nodeid }};
         pool = "{{ pool }}";
         namespace = "{{ namespace }}";
 }

@@ -58,7 +58,7 @@ public:
    * caller should provide a context which is completed after all
    * in-progress scrub operations are completed and pending inodes
    * are removed from the scrub stack (with the context callbacks for
-   * inodes completed with -CEPHFS_ECANCELED).
+   * inodes completed with -ECANCELED).
    * @param on_finish Context callback to invoke after abort
    */
   void scrub_abort(Context *on_finish);
@@ -76,8 +76,8 @@ public:
   /**
    * Resume a paused scrub. Unlike abort or pause, this is instantaneous.
    * Pending pause operations are cancelled (context callbacks are
-   * invoked with -CEPHFS_ECANCELED).
-   * @returns 0 (success) if resumed, -CEPHFS_EINVAL if an abort is in-progress.
+   * invoked with -ECANCELED).
+   * @returns 0 (success) if resumed, -EINVAL if an abort is in-progress.
    */
   bool scrub_resume();
 
@@ -270,7 +270,7 @@ private:
 
   /**
    * Abort pending scrubs for inodes waiting in the inode stack.
-   * Completion context is complete with -CEPHFS_ECANCELED.
+   * Completion context is complete with -ECANCELED.
    */
   void abort_pending_scrubs();
 

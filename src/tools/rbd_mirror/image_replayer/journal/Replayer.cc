@@ -5,6 +5,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
 #include "common/Timer.h"
 #include "librbd/Journal.h"
@@ -22,6 +23,8 @@
 #include "tools/rbd_mirror/image_replayer/journal/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror

@@ -19,6 +19,9 @@
 #include "include/types.h"
 #include "common/DecayCounter.h"
 #include "messages/MMDSOp.h"
+#include "mds/mdstypes.h"
+
+#include <map>
 
 class MHeartbeat final : public MMDSOp {
 private:

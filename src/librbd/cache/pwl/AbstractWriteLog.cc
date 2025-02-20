@@ -5,20 +5,24 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/ceph_assert.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/debug.h"
 #include "common/deleter.h"
-#include "common/dout.h"
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/hostname.h"
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/plugin/Api.h"
+
 #include <map>
+#include <shared_mutex> // for std::shared_lock
 #include <vector>
 
 #undef dout_subsys
@@ -301,7 +305,8 @@ void AbstractWriteLog<I>::log_perf() {
   ss << "\"image\": \"" << m_image_ctx.name << "\",";
   bl.append(ss);
   bl.append("\"stats\": ");
-  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(f, false, false);
+  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(
+      f, false, select_labeled_t::unlabeled);
   f->flush(bl);
   bl.append(",\n\"histograms\": ");
   m_image_ctx.cct->get_perfcounters_collection()->dump_formatted_histograms(f, 0);

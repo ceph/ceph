@@ -6,7 +6,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { of } from 'rxjs';
 
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -124,7 +124,7 @@ describe('OsdSmartListComponent', () => {
       SharedModule,
       HttpClientTestingModule,
       NgbNavModule,
-      NgxPipeFunctionModule
+      PipesModule
     ]
   });
 

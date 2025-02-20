@@ -3930,8 +3930,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   // when there is no change in osdmap,
   // update info.stats.reported_epoch by the number of time seconds.
   utime_t cutoff_time = now;
-  cutoff_time -=
-      cct->_conf.get_val<int64_t>("osd_pg_stat_report_interval_max_seconds");
+  cutoff_time -= *osd_pg_stat_report_interval_max_seconds;
   const bool is_time_expired = cutoff_time > info.stats.last_fresh;
 
   // 500 epoch osdmaps are also the minimum number of osdmaps that mon must retain.
@@ -3939,8 +3938,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   // it can be considered that the one reported by pgid is too old and needs to be updated.
   // to facilitate mon trim osdmaps
   epoch_t cutoff_epoch = info.stats.reported_epoch;
-  cutoff_epoch +=
-      cct->_conf.get_val<int64_t>("osd_pg_stat_report_interval_max_epochs");
+  cutoff_epoch += *osd_pg_stat_report_interval_max_epochs;
   const bool is_epoch_behind = cutoff_epoch < get_osdmap_epoch();
 
   if (pg_stats_publish && pre_publish == *pg_stats_publish &&
@@ -5106,11 +5104,11 @@ void PeeringState::Backfilling::backfill_release_reservations()
   }
 }
 
-void PeeringState::Backfilling::cancel_backfill()
+void PeeringState::Backfilling::suspend_backfill()
 {
   DECLARE_LOCALS;
   backfill_release_reservations();
-  pl->on_backfill_canceled();
+  pl->on_backfill_suspended();
 }
 
 boost::statechart::result
@@ -5128,7 +5126,7 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
   psdout(10) << "defer backfill, retry delay " << c.delay << dendl;
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   ps->state_clear(PG_STATE_BACKFILLING);
-  cancel_backfill();
+  suspend_backfill();
 
   pl->schedule_event_after(
     std::make_shared<PGPeeringEvent>(
@@ -5146,7 +5144,7 @@ PeeringState::Backfilling::react(const UnfoundBackfill &c)
   psdout(10) << "backfill has unfound, can't continue" << dendl;
   ps->state_set(PG_STATE_BACKFILL_UNFOUND);
   ps->state_clear(PG_STATE_BACKFILLING);
-  cancel_backfill();
+  suspend_backfill();
   return transit<NotBackfilling>();
 }
 
@@ -5157,7 +5155,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 
   ps->state_set(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILLING);
-  cancel_backfill();
+  suspend_backfill();
 
   pl->schedule_event_after(
     std::make_shared<PGPeeringEvent>(
@@ -5174,7 +5172,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevoked &)
 {
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_BACKFILL_WAIT);
-  cancel_backfill();
+  suspend_backfill();
   if (ps->needs_backfill()) {
     return transit<WaitLocalBackfillReserved>();
   } else {

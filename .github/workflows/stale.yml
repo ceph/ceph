@@ -47,6 +47,9 @@ jobs:
           # Labels on PRs exempted from stale
           exempt-pr-labels: 'pinned,security'
           
+          # Exempt all PRs with milestones from stale (also exempts Issues)
+          exempt-all-pr-milestones: true
+          
           # Max number of operations per run
           operations-per-run: 100
 

@@ -20,7 +20,8 @@ public:
   void clear();
   bool reset(const std::string &name);
 
-  void dump_formatted(ceph::Formatter *f, bool schema, bool dump_labeled,
+  void dump_formatted(ceph::Formatter *f, bool schema,
+                      select_labeled_t dump_labeled,
                       const std::string &logger = "",
                       const std::string &counter = "");
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,

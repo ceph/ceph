@@ -9,7 +9,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
@@ -111,7 +111,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
 
   deleteSubsystemModal() {
     const subsystem = this.selection.first();
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'Subsystem',
       itemNames: [subsystem.nqn],
       actionDescription: 'delete',

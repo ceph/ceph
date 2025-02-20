@@ -8,7 +8,6 @@ enable_auth = {{ spec.enable_auth }}
 state_update_notify = {{ spec.state_update_notify }}
 state_update_interval_sec = {{ spec.state_update_interval_sec }}
 enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
-enable_key_encryption = {{ spec.enable_key_encryption }}
 encryption_key = /encryption.key
 rebalance_period_sec = {{ spec.rebalance_period_sec }}
 max_gws_in_grp = {{ spec.max_gws_in_grp }}
@@ -19,6 +18,7 @@ prometheus_port = {{ spec.prometheus_port }}
 prometheus_stats_interval = {{ spec.prometheus_stats_interval }}
 verify_nqns = {{ spec.verify_nqns }}
 verify_keys = {{ spec.verify_keys }}
+verify_listener_ip = {{ spec.verify_listener_ip }}
 omap_file_lock_duration = {{ spec.omap_file_lock_duration }}
 omap_file_lock_retries = {{ spec.omap_file_lock_retries }}
 omap_file_lock_retry_sleep_interval = {{ spec.omap_file_lock_retry_sleep_interval }}
@@ -30,6 +30,7 @@ enable_monitor_client = {{ spec.enable_monitor_client }}
 max_hosts_per_namespace = {{ spec.max_hosts_per_namespace }}
 max_namespaces_with_netmask = {{ spec.max_namespaces_with_netmask }}
 max_subsystems = {{ spec.max_subsystems }}
+max_hosts = {{ spec.max_hosts }}
 max_namespaces = {{ spec.max_namespaces }}
 max_namespaces_per_subsystem = {{ spec.max_namespaces_per_subsystem }}
 max_hosts_per_subsystem = {{ spec.max_hosts_per_subsystem }}
@@ -89,6 +90,7 @@ tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% if iobuf_options %}
 iobuf_options = {{ iobuf_options }}
 {% endif %}
+qos_timeslice_in_usecs = {{ spec.qos_timeslice_in_usecs }}
 
 [monitor]
 timeout = {{ spec.monitor_timeout }}

@@ -28,8 +28,8 @@ struct PeeringFacade final : BackfillState::PeeringFacade {
     return peering_state.get_peer_info(peer).last_backfill;
   }
 
-  const eversion_t& get_last_update() const override {
-    return peering_state.get_info().last_update;
+  eversion_t get_pg_committed_to() const override {
+    return peering_state.get_pg_committed_to();
   }
 
   const eversion_t& get_log_tail() const override {

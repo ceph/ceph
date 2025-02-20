@@ -6,7 +6,7 @@ import { Observable, Subscriber } from 'rxjs';
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { SilenceFormComponent } from '~/app/ceph/cluster/prometheus/silence-form/silence-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -195,7 +195,7 @@ export class SilenceListComponent extends PrometheusListHelper {
     const id = this.selection.first().id;
     const i18nSilence = $localize`Silence`;
     const applicationName = 'Prometheus';
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: i18nSilence,
       itemNames: [id],
       actionDescription: this.actionLabels.EXPIRE,

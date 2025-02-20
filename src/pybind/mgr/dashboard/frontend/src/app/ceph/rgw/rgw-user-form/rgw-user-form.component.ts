@@ -1,5 +1,5 @@
-import { Component, OnInit } from '@angular/core';
-import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { AbstractControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -12,7 +12,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validators';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -25,6 +25,8 @@ import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rg
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -40,7 +42,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   s3Keys: RgwUserS3Key[] = [];
   swiftKeys: RgwUserSwiftKey[] = [];
   capabilities: RgwUserCapability[] = [];
-
+  uid: string;
   action: string;
   resource: string;
   subuserLabel: string;
@@ -49,6 +51,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -183,6 +186,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       const observables = [];
       observables.push(this.rgwUserService.get(uid));
       observables.push(this.rgwUserService.getQuota(uid));
+      observables.push(this.rgwUserService.getUserRateLimit(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           // Get the default values.
@@ -222,6 +226,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               value[type + '_quota_max_objects'] = quota.max_objects;
             }
           });
+
           // Merge with default values.
           value = _.merge(defaults, value);
           // Update the form.
@@ -242,7 +247,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
             }
           });
           this.capabilities = resp[0].caps;
-
+          this.uid = this.getUID();
           this.loadingReady();
         },
         () => {
@@ -252,40 +257,52 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     });
   }
 
+  rateLimitFormInit(rateLimitForm: FormGroup) {
+    this.userForm.addControl('rateLimit', rateLimitForm);
+  }
+
   goToListView() {
     this.router.navigate(['/rgw/user']);
   }
 
   onSubmit() {
+    this.uid = this.getUID();
     let notificationTitle: string;
     // Exit immediately if the form isn't dirty.
-    if (this.userForm.pristine) {
+    if (this.userForm.pristine && this.rateLimitComponent.form.pristine) {
       this.goToListView();
       return;
     }
-    const uid = this.getUID();
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
         const args = this._getUpdateArgs();
-        this.submitObservables.push(this.rgwUserService.update(uid, args));
+        this.submitObservables.push(this.rgwUserService.update(this.uid, args));
       }
-      notificationTitle = $localize`Updated Object Gateway user '${uid}'`;
+      notificationTitle = $localize`Updated Object Gateway user '${this.uid}'`;
     } else {
       // Add
       const args = this._getCreateArgs();
       this.submitObservables.push(this.rgwUserService.create(args));
-      notificationTitle = $localize`Created Object Gateway user '${uid}'`;
+      notificationTitle = $localize`Created Object Gateway user '${this.uid}'`;
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
       const userQuotaArgs = this._getUserQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.updateQuota(uid, userQuotaArgs));
+      this.submitObservables.push(this.rgwUserService.updateQuota(this.uid, userQuotaArgs));
     }
     // Check if bucket quota has been modified.
     if (this._isBucketQuotaDirty()) {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
+      this.submitObservables.push(this.rgwUserService.updateQuota(this.uid, bucketQuotaArgs));
+    }
+
+    // Check if user ratelimit has been modified.
+    const ratelimitvalue: RgwRateLimitConfig = this.rateLimitComponent.getRateLimitFormValue();
+    if (!!ratelimitvalue) {
+      this.submitObservables.push(
+        this.rgwUserService.updateUserRateLimit(this.userForm.getValue('user_id'), ratelimitvalue)
+      );
     }
     // Finally execute all observables one by one in serial.
     observableConcat(...this.submitObservables).subscribe({
@@ -325,17 +342,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Validate the quota maximum size, e.g. 1096, 1K, 30M or 1.9MiB.
    */
   quotaMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
-    if (isEmptyInputValue(control.value)) {
-      return null;
-    }
-    const m = RegExp('^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
-      control.value
+    return new FormatterService().performValidation(
+      control,
+      '^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$',
+      { quotaMaxSize: true },
+      'quota'
     );
-    if (m === null) {
-      return { quotaMaxSize: true };
-    }
-    const bytes = new FormatterService().toBytes(control.value);
-    return bytes < 1024 ? { quotaMaxSize: true } : null;
   }
 
   /**
@@ -680,7 +692,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Helper function to get the arguments for the API request when the user
    * quota configuration has been modified.
    */
-  private _getUserQuotaArgs(): Record<string, any> {
+  _getUserQuotaArgs(): Record<string, any> {
     const result = {
       quota_type: 'user',
       enabled: this.userForm.getValue('user_quota_enabled'),

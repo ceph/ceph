@@ -236,6 +236,14 @@ class NFSCluster:
                     r['port'] = i.ports[0]
                     if len(i.ports) > 1:
                         r['monitor_port'] = i.ports[1]
+                if spec.keepalive_only:
+                    ingress_mode = IngressType.keepalive_only
+                elif spec.enable_haproxy_protocol:
+                    ingress_mode = IngressType.haproxy_protocol
+                else:
+                    ingress_mode = IngressType.haproxy_standard
+                r['ingress_mode'] = ingress_mode.value
+
         log.debug("Successfully fetched %s info: %s", cluster_id, r)
         return r
 

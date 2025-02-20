@@ -32,6 +32,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/obj_bencher.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/TextTable.h"
 #include "include/stringify.h"
 #include "mds/inode_backtrace.h"
@@ -61,6 +62,10 @@
 #include "osd/ECUtil.h"
 #include "objclass/objclass.h"
 #include "cls/refcount/cls_refcount_ops.h"
+
+#include <boost/optional.hpp>
+
+#include <iomanip>
 
 using namespace std::chrono_literals;
 using namespace librados;
