@@ -1179,7 +1179,8 @@ public:
                        const rgw_obj& stat_dest_obj,
                        std::optional<rgw_zone_set_entry> source_trace_entry,
                        rgw_zone_set *zones_trace = nullptr,
-                       std::optional<uint64_t>* bytes_transferred = 0);
+                       std::optional<uint64_t>* bytes_transferred = 0,
+                       bool keep_tags = true);
   /**
    * Copy an object.
    * dest_obj: the object to copy into

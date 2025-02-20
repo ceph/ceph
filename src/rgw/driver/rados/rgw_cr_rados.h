@@ -8,6 +8,7 @@
 #include "rgw_coroutine.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_bucket_sync.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
@@ -1129,6 +1130,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   rgw_zone_set zones_trace;
   PerfCounters* counters;
   const DoutPrefixProvider *dpp;
+  bool keep_tags;
 
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
@@ -1148,7 +1150,8 @@ public:
                          const rgw_zone_set_entry& source_trace_entry,
                          rgw_zone_set *_zones_trace,
                          PerfCounters* counters,
-                         const DoutPrefixProvider *dpp)
+                         const DoutPrefixProvider *dpp,
+                         bool _keep_tags)
     : RGWAsyncRadosRequest(caller, cn), store(_store),
       source_zone(_source_zone),
       user_id(_user_id),
@@ -1163,7 +1166,8 @@ public:
       stat_follow_olh(_stat_follow_olh),
       source_trace_entry(source_trace_entry),
       counters(counters),
-      dpp(dpp)
+      dpp(dpp),
+      keep_tags(_keep_tags)
   {
     if (_zones_trace) {
       zones_trace = *_zones_trace;
@@ -1199,6 +1203,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   rgw_zone_set *zones_trace;
   PerfCounters* counters;
   const DoutPrefixProvider *dpp;
+  bool keep_tags;
 
 public:
   RGWFetchRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
@@ -1216,7 +1221,8 @@ public:
                       const rgw_zone_set_entry& source_trace_entry,
                       rgw_zone_set *_zones_trace,
                       PerfCounters* counters,
-                      const DoutPrefixProvider *dpp)
+                      const DoutPrefixProvider *dpp,
+                      bool _keep_tags)
     : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
       async_rados(_async_rados), store(_store),
       source_zone(_source_zone),
@@ -1232,7 +1238,7 @@ public:
       req(NULL),
       stat_follow_olh(_stat_follow_olh),
       source_trace_entry(source_trace_entry),
-      zones_trace(_zones_trace), counters(counters), dpp(dpp) {}
+      zones_trace(_zones_trace), counters(counters), dpp(dpp), keep_tags(_keep_tags) {}
 
 
   ~RGWFetchRemoteObjCR() override {
@@ -1250,7 +1256,7 @@ public:
     req = new RGWAsyncFetchRemoteObj(this, stack->create_completion_notifier(), store,
     source_zone, user_id, src_bucket, dest_placement_rule, dest_bucket_info,
                                      key, dest_key, versioned_epoch, copy_if_newer, filter,
-                                     stat_follow_olh, source_trace_entry, zones_trace, counters, dpp);
+                                     stat_follow_olh, source_trace_entry, zones_trace, counters, dpp, keep_tags);
     async_rados->queue(req);
     return 0;
   }

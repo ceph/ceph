@@ -2732,6 +2732,22 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
                                   {}, op);
 }
 
+rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op)
+{
+  const rgw_obj obj(ps->bucket_info.bucket, obj_key);
+  const auto arn = rgw::ARN(obj);
+  const bool account_root = (ps->identity->get_identity_type() == TYPE_ROOT);
+
+  return ::evaluate_iam_policies(dpp,
+                                 ps->env,
+                                 *ps->identity,
+                                 account_root,
+                                 op, arn,
+                                 bucket_policy,
+                                 info->user_policies,
+                                 {});
+}
+
 int RGWUserPermHandler::policy_from_attrs(CephContext *cct,
                                           const map<string, bufferlist>& attrs,
                                           RGWAccessControlPolicy *acl) {
@@ -2877,6 +2893,7 @@ class RGWObjFetchCR : public RGWCoroutine {
 
   int try_num{0};
   std::shared_ptr<bool> need_retry;
+  bool replicate_tags{true};
 public:
   RGWObjFetchCR(RGWDataSyncCtx *_sc,
                 rgw_bucket_sync_pipe& _sync_pipe,
@@ -2971,7 +2988,7 @@ public:
           }
           user_perms.emplace(sync_env, *param_user);
 
-          yield call(user_perms->init_cr());
+          yield call(user_perms->init_cr(sync_env));
           if (retcode < 0) {
             ldout(cct, 0) << "ERROR: " << __func__ << ": failed to init user perms manager for uid=" << *param_user << dendl;
             return set_cr_error(retcode);
@@ -2990,6 +3007,11 @@ public:
             ldout(cct, 0) << "ERROR: " << __func__ << ": permission check failed: user not allowed to write into bucket (bucket=" << sync_pipe.info.dest_bucket.get_key() << ")" << dendl;
             return set_cr_error(-EPERM);
           }
+
+          // only if there is an explicit deny, we should not replicate tags
+          // otherwise, s3:ReplicateObject checked above already includes the permission to replicate tags
+          replicate_tags = dest_bucket_perms.evaluate_iam_policies(dest_key.value_or(key), rgw::IAM::s3ReplicateTags) != rgw::IAM::Effect::Deny;
+          ldout(cct, 20) << "replicate_tags=" << replicate_tags << dendl;
         }
 
         yield {
@@ -3009,7 +3031,7 @@ public:
                                        std::static_pointer_cast<RGWFetchObjFilter>(filter),
                                        stat_follow_olh,
                                        source_trace_entry, zones_trace,
-                                       sync_env->counters, dpp));
+                                       sync_env->counters, dpp, replicate_tags));
         }
         if (retcode < 0) {
           if (*need_retry) {

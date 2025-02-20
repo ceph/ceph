@@ -912,6 +912,7 @@ public:
              const std::map<std::string, bufferlist>& bucket_attrs);
 
     bool verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op);
+    rgw::IAM::Effect evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op);
   };
 
   static int policy_from_attrs(CephContext *cct,
