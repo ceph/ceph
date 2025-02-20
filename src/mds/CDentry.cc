@@ -494,7 +494,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
     encode(c, bl);
     encode(linkage.get_inode()->ino(), bl);
   }
-  else if (linkage.is_remote()) {
+  else if (linkage.is_remote() || linkage.is_referent_remote()) {
     c = 2;
     encode(c, bl);
     encode(linkage.get_remote_ino(), bl);
