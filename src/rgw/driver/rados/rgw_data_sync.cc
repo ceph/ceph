@@ -3045,7 +3045,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::remove_object(const DoutPrefixProvider *
 {
   auto sync_env = sc->env;
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
-                            sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
+                            sync_pipe, key, versioned, versioned_epoch,
                             NULL, NULL, false, &mtime, zones_trace);
 }
 
@@ -3054,7 +3054,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(const DoutPrefixPro
 {
   auto sync_env = sc->env;
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
-                            sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
+                            sync_pipe, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
@@ -3147,7 +3147,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(const DoutPrefixPro
 	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   auto sync_env = sc->env;
   return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->driver, sc->source_zone,
-                            sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
+                            sync_pipe, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
