@@ -84,6 +84,7 @@ log = logging.getLogger()
 try:
     from enum import StrEnum
 except ImportError:
+
     class StrEnum(str, enum.Enum):
         def __str__(self):
             return self.value
@@ -93,7 +94,7 @@ class DistroKind(StrEnum):
     CENTOS10 = "centos10"
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
-    FEDORA41 = 'fedora41'
+    FEDORA41 = "fedora41"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
 
@@ -106,7 +107,7 @@ class DefaultImage(StrEnum):
     CENTOS10 = "quay.io/centos/centos:stream10"
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
-    FEDORA41 = 'registry.fedoraproject.org/fedora:41'
+    FEDORA41 = "registry.fedoraproject.org/fedora:41"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
 
@@ -161,9 +162,9 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append(f"-eBUILD_DIR={ctx.cli.build_dir}")
     if ctx.cli.ccache_dir:
         ccdir = str(ctx.cli.ccache_dir).format(
-            homedir=ctx.cli.homedir or '',
-            build_dir=ctx.cli.build_dir or '',
-            distro=ctx.cli.distro or '',
+            homedir=ctx.cli.homedir or "",
+            build_dir=ctx.cli.build_dir or "",
+            distro=ctx.cli.distro or "",
         )
         cmd.append(f"-eCCACHE_DIR={ccdir}")
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
@@ -282,7 +283,9 @@ class Context:
     @property
     def dnf_cache_dir(self):
         if self.cli.dnf_cache_path and self.distro_cache_name:
-            path = pathlib.Path(self.cli.dnf_cache_path)/ self.distro_cache_name
+            path = (
+                pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
+            )
             path = path.expanduser()
             return path.resolve()
         return None
