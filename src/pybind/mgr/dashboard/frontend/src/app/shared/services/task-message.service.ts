@@ -498,6 +498,9 @@ export class TaskMessageService {
     ),
     'smb/share/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbShare(metadata)
+    ),
+    'smb/share/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.smbShare(metadata)
     )
   };
 
@@ -565,10 +568,6 @@ export class TaskMessageService {
     return $localize`SMB Cluster  '${metadata.cluster_id}'`;
   }
 
-  smbShare(metadata: { share_id: string }) {
-    return $localize`SMB Share  '${metadata.share_id}'`;
-  }
-
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }
@@ -611,6 +610,11 @@ export class TaskMessageService {
   snapshotSchedule(metadata: any) {
     return $localize`snapshot schedule for path '${metadata?.path}'`;
   }
+
+  smbShare(metadata: Record<'share_id', string>) {
+    return $localize`SMB share '${metadata?.share_id}'`;
+  }
+
   crudMessageId(id: string) {
     return $localize`${id}`;
   }

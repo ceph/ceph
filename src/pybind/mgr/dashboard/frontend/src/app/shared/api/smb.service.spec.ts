@@ -101,4 +101,14 @@ describe('SmbService', () => {
     const req = httpTesting.expectOne('api/smb/share');
     expect(req.request.method).toBe('POST');
   });
+
+  it('should call delete for given share of a cluster', () => {
+    const cluster_id = 'foo';
+    const share_id = 'bar';
+    service.deleteShare(cluster_id, share_id).subscribe((response: null) => {
+      expect(response).toBeUndefined();
+    });
+    const req = httpTesting.expectOne(`api/smb/share/${cluster_id}/${share_id}`);
+    expect(req.request.method).toBe('DELETE');
+  });
 });

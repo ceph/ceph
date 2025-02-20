@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
@@ -54,5 +54,11 @@ export class SmbService {
 
   createShare(requestModel: ShareRequestModel) {
     return this.http.post(`${this.baseURL}/share`, requestModel);
+  }
+
+  deleteShare(clusterId: string, shareId: string): Observable<HttpResponse<null>> {
+    return this.http.delete<null>(`${this.baseURL}/share/${clusterId}/${shareId}`, {
+      observe: 'response'
+    });
   }
 }
