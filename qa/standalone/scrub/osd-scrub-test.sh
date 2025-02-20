@@ -790,23 +790,25 @@ function TEST_abort_periodic_for_operator() {
     (( extr_dbg >= 2 )) && ceph tell osd.2 dump_scrub_reservations --format=json-pretty
 
     # the first PG to work with:
-    local pg1="1.0"
-    # and another one, that shares its primary, and at least one more active set member
     local pg2=""
-     for pg in "${!pg_pr[@]}"; do
-      if [[ "${pg_pr[$pg]}" == "${pg_pr[$pg1]}" ]]; then
-        local -i common=0
-        count_common_active $pg $pg1 pg_ac common
-        if [[ $common -gt 1 ]]; then
-          pg2=$pg
-          break
+    for pg1 in "${!pg_pr[@]}"; do
+      for pg in "${!pg_pr[@]}"; do
+        if [[ "$pg" == "$pg1" ]]; then
+          continue
         fi
-      fi
+        if [[ "${pg_pr[$pg]}" == "${pg_pr[$pg1]}" ]]; then
+          local -i common=$(count_common_active $pg $pg1 pg_ac)
+          if [[ $common -gt 1 ]]; then
+            pg2=$pg
+            break 2
+          fi
+        fi
+      done
     done
+
     if [[ -z "$pg2" ]]; then
-      # \todo handle the case when no such PG is found
       echo "No PG found with the same primary as $pg1"
-      return 1
+      return 0 # not an error
     fi
 
     # the common primary is allowed two concurrent scrubs

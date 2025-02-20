@@ -358,7 +358,6 @@ function count_common_active {
   local pg1=$1
   local pg2=$2
   local -n pg_acting_dict=$3
-  local -n res=$4
 
   local -a a1=(${pg_acting_dict[$pg1]})
   local -a a2=(${pg_acting_dict[$pg2]})
@@ -372,7 +371,7 @@ function count_common_active {
     done
   done
 
-  res=$cnt
+  printf '%d' "$cnt"
 }
 
 
@@ -389,8 +388,7 @@ function find_disjoint_but_primary {
 
   for cand in "${!ac_dict[@]}"; do
     if [[ "$cand" != "$pg" ]]; then
-      local -i common=0
-      count_common_active "$pg" "$cand" ac_dict common
+      local -i common=$(count_common_active "$pg" "$cand" ac_dict)
       if [[ $common -eq 0 || ( $common -eq 1 && "${p_dict[$pg]}" == "${p_dict[$cand]}" )]]; then
         res=$cand
         return
