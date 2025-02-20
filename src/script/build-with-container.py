@@ -425,7 +425,11 @@ def build_container(ctx):
     ]
     if ctx.cli.distro:
         cmd.append(f"--build-arg=DISTRO={ctx.from_image}")
-    if ctx.dnf_cache_dir:
+    if ctx.dnf_cache_dir and "docker" in ctx.container_engine:
+        log.warning(
+            "The --volume option is not supported by docker. Skipping dnf cache dir mounts"
+        )
+    elif ctx.dnf_cache_dir:
         cmd += [
             f"--volume={ctx.dnf_cache_dir}/lib:/var/lib/dnf:Z",
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
