@@ -886,6 +886,16 @@
           },
         },
         {
+          alert: 'NVMeoFMaxGatewayGroups',
+          'for': '1m',
+          expr: 'count(count by (group, cluster) (ceph_nvmeof_gateway_info)) by (cluster) > %.2f' % [$._config.NVMeoFMaxGatewayGroups],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Max gateway groups exceeded%(cluster)s' % $.MultiClusterSummary(),
+            description: 'You may create many gateway groups, but %(NVMeoFMaxGatewayGroups)d is the tested limit' % $._config,
+          },
+        },
+        {
           alert: 'NVMeoFSingleGatewayGroup',
           'for': '5m',
           expr: 'count(ceph_nvmeof_gateway_info) by(cluster,group) == 1',

@@ -39,7 +39,6 @@
 #endif
 
 #include <iosfwd>
-#include <iomanip>
 #include <list>
 #include <memory>
 #include <vector>

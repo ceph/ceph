@@ -134,7 +134,7 @@ Capability syntax follows this form::
 
     osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
 
-    osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
+    osd 'profile {name} [pool={pool-name}] [namespace={namespace-name}] [network {network/prefix}]'
 
   There are two alternative forms of the ``{access-spec}`` syntax: ::
 
@@ -142,9 +142,13 @@ Capability syntax follows this form::
 
         class {class name} [{method name}]
 
-  There are two alternative forms of the optional ``{match-spec}`` syntax::
+  There are four alternative forms of the optional ``{match-spec}`` syntax::
 
         pool={pool-name} [namespace={namespace-name}] [object_prefix {prefix}]
+
+        [pool={pool-name}] namespace={namespace-name} [object_prefix {prefix}]
+
+        [pool={pool-name}] [namespace={namespace-name}] object_prefix {prefix}
 
         [namespace={namespace-name}] tag {application} {key}={value}
 

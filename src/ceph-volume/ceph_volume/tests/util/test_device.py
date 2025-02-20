@@ -1,3 +1,4 @@
+#  type: ignore
 import os
 import pytest
 from copy import deepcopy
@@ -591,7 +592,7 @@ class TestDeviceEncryption(object):
         blkid = {'TYPE': 'mapper'}
         device_info(lsblk=lsblk, blkid=blkid)
         disk = device.Device("/dev/sda")
-        disk.lv_api = factory(encrypted=True)
+        disk.lv_api = api.Volume(**{'lv_name': 'lv1', 'lv_tags': 'ceph.encrypted=1'})
         assert disk.is_encrypted is True
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)

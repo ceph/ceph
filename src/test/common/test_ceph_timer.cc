@@ -66,7 +66,7 @@ void run_orderly()
                         });
   }
 
-  EXPECT_LT(first.get(), second.get());
+  EXPECT_TRUE(first.get() < second.get());
 }
 
 struct Destructo {

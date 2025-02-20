@@ -4,6 +4,8 @@
 
 #include "include/types.h"
 
+#include <unordered_map>
+
 struct cls_2pc_reservation
 {
   using id_t = uint32_t;
@@ -50,7 +52,7 @@ struct cls_2pc_reservation
 };
 WRITE_CLASS_ENCODER(cls_2pc_reservation)
 
-using cls_2pc_reservations = ceph::unordered_map<cls_2pc_reservation::id_t, cls_2pc_reservation>;
+using cls_2pc_reservations = std::unordered_map<cls_2pc_reservation::id_t, cls_2pc_reservation>;
 
 struct cls_2pc_urgent_data
 {

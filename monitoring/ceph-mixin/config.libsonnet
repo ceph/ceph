@@ -10,6 +10,7 @@
     CephRBDMirrorImageTransferBandwidthThreshold: 0.8,
     CephRBDMirrorImagesPerDaemonThreshold: 100,
     NVMeoFMaxGatewaysPerGroup: 8,
+    NVMeoFMaxGatewayGroups: 4,
     NVMeoFMaxGatewaysPerCluster: 32,
     NVMeoFHighGatewayCPU: 80,
     NVMeoFMaxSubsystemsPerGateway: 128,

@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgChartsModule } from 'ng2-charts';
+import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
@@ -15,10 +15,10 @@ import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
 import { InfoCardComponent } from './info-card/info-card.component';
 import { InfoGroupComponent } from './info-group/info-group.component';
-import { MdsSummaryPipe } from './mds-summary.pipe';
-import { MgrSummaryPipe } from './mgr-summary.pipe';
+import { MdsDashboardSummaryPipe } from './mds-dashboard-summary.pipe';
+import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
-import { OsdSummaryPipe } from './osd-summary.pipe';
+import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
 
 @NgModule({
   imports: [
@@ -26,25 +26,25 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     CommonModule,
     NgbNavModule,
     SharedModule,
-    NgChartsModule,
     RouterModule,
     NgbPopoverModule,
     FormsModule,
     ReactiveFormsModule,
-    DashboardV3Module
+    DashboardV3Module,
+    BaseChartDirective
   ],
-
   declarations: [
     HealthComponent,
     DashboardComponent,
     MonSummaryPipe,
-    OsdSummaryPipe,
-    MgrSummaryPipe,
-    MdsSummaryPipe,
+    osdDashboardSummaryPipe,
+    MgrDashboardSummaryPipe,
+    MdsDashboardSummaryPipe,
     HealthPieComponent,
     InfoCardComponent,
     InfoGroupComponent,
     FeedbackComponent
-  ]
+  ],
+  providers: [provideCharts(withDefaultRegisterables())]
 })
 export class DashboardModule {}

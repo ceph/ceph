@@ -234,6 +234,8 @@ private:
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
 
+  std::vector<DaemonHealthMetric> get_health_metrics();
+
 private:
   crimson::common::gate_per_shard gate;
 

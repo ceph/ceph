@@ -2450,6 +2450,38 @@ tests:
           summary: "Max gateways within a gateway group (group-1) exceeded on cluster mycluster"
           description: "You may create many gateways in a gateway group, but 8 is the tested limit"
 
+
+ # NVMeoFMaxGatewayGroups
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_gateway_info{group="group-1",addr="1.1.1.1",cluster="mycluster"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-2",addr="1.1.1.2",cluster="mycluster"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-3",addr="1.1.1.3",cluster="mycluster"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-4",addr="1.1.1.9",cluster="mycluster"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-5",addr="1.1.1.12",cluster="mycluster"}'
+      values: '1+0x20'
+   promql_expr_test:
+     - expr: count(count by (group, cluster) (ceph_nvmeof_gateway_info)) by (cluster) > 4.00
+       eval_time: 1m
+       exp_samples:
+         - labels: '{cluster="mycluster"}'
+           value: 5
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFMaxGatewayGroups
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          cluster: mycluster
+          type: ceph_default
+        exp_annotations:
+          summary: "Max gateway groups exceeded on cluster mycluster"
+          description: "You may create many gateway groups, but 4 is the tested limit"
+
  # NVMeoFSingleGatewayGroup
  - interval: 1m
    input_series:

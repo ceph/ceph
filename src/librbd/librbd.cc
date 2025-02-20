@@ -50,6 +50,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
 #include <algorithm>
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <utility>
 #include <vector>
@@ -1704,8 +1705,8 @@ namespace librbd {
       ImageCtx *ictx = (ImageCtx *)ctx;
       tracepoint(librbd, close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
 
+      ctx = NULL;  // before initiating close
       r = ictx->state->close();
-      ctx = NULL;
 
       tracepoint(librbd, close_image_exit, r);
     }
@@ -1721,9 +1722,9 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), c->pc);
 
+    ctx = NULL;  // before initiating close
     ictx->state->close(new C_AioCompletion(ictx, librbd::io::AIO_TYPE_CLOSE,
                                            get_aio_completion(c)));
-    ctx = NULL;
 
     tracepoint(librbd, aio_close_image_exit, 0);
     return 0;

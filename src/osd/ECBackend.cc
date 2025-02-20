@@ -132,7 +132,7 @@ ECBackend::ECBackend(
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
     recovery_backend(cct, this->coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent(), this),
     ec_impl(ec_impl),
-    sinfo(ec_impl->get_data_chunk_count(), stripe_width),
+    sinfo(ec_impl, stripe_width),
     unstable_hashinfo_registry(cct, ec_impl) {
   ceph_assert((ec_impl->get_data_chunk_count() *
 	  ec_impl->get_chunk_size(stripe_width)) == stripe_width);
@@ -994,8 +994,7 @@ void ECBackend::handle_sub_write(
     async);
 
   if (!get_parent()->pg_is_undersized() &&
-      (unsigned)get_parent()->whoami_shard().shard >=
-      ec_impl->get_data_chunk_count())
+      (unsigned)get_parent()->whoami_shard().shard >= sinfo.get_k())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   localt.register_on_commit(
@@ -1566,20 +1565,6 @@ int ECBackend::objects_read_sync(
   return -EOPNOTSUPP;
 }
 
-static bool should_partial_read(
-  const ECUtil::stripe_info_t& sinfo,
-  uint64_t off,
-  uint32_t len,
-  bool fast_read)
-{
-  // Don't partial read if we are doing a fast_read
-  if (fast_read) {
-    return false;
-  }
-  // Same stripe only
-  return sinfo.offset_length_is_same_stripe(off, len);
-}
-
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<ECCommon::ec_align_t,
@@ -1593,8 +1578,7 @@ void ECBackend::objects_read_async(
   extent_set es;
   for (const auto& [read, ctx] : to_read) {
     pair<uint64_t, uint64_t> tmp;
-    if (!cct->_conf->osd_ec_partial_reads ||
-	!should_partial_read(sinfo, read.offset, read.size, fast_read)) {
+    if (!cct->_conf->osd_ec_partial_reads || fast_read) {
       tmp = sinfo.offset_len_to_stripe_bounds(make_pair(read.offset, read.size));
     } else {
       tmp = sinfo.offset_len_to_chunk_bounds(make_pair(read.offset, read.size));
@@ -1652,18 +1636,18 @@ void ECBackend::objects_read_async(
 	  uint64_t offset = read.first.offset;
 	  uint64_t length = read.first.size;
 	  auto range = got.emap.get_containing_range(offset, length);
+	  uint64_t range_offset = range.first.get_off();
+	  uint64_t range_length = range.first.get_len();
 	  ceph_assert(range.first != range.second);
-	  ceph_assert(range.first.get_off() <= offset);
+	  ceph_assert(range_offset <= offset);
           ldpp_dout(dpp, 20) << "offset: " << offset << dendl;
-          ldpp_dout(dpp, 20) << "range offset: " << range.first.get_off() << dendl;
+          ldpp_dout(dpp, 20) << "range offset: " << range_offset << dendl;
           ldpp_dout(dpp, 20) << "length: " << length << dendl;
-          ldpp_dout(dpp, 20) << "range length: " << range.first.get_len()  << dendl;
-	  ceph_assert(
-	    (offset + length) <=
-	    (range.first.get_off() + range.first.get_len()));
+          ldpp_dout(dpp, 20) << "range length: " << range_length << dendl;
+	  ceph_assert(offset + length <= range_offset + range_length);
 	  read.second.first->substr_of(
 	    range.first.get_val(),
-	    offset - range.first.get_off(),
+	    offset - range_offset,
 	    length);
 	  if (read.second.second) {
 	    read.second.second->complete(length);

@@ -7,6 +7,8 @@
 
 #include "common/Formatter.h"
 
+#include <sstream>
+
 using ceph::bufferlist;
 using ceph::Formatter;
 

@@ -20,6 +20,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/lba_mapping.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -86,7 +87,7 @@ public:
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    LogicalCachedExtent &nextent,
+    LogicalChildNode &nextent,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
@@ -94,7 +95,7 @@ public:
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
-    std::vector<LogicalCachedExtentRef> extents,
+    std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
 
   virtual alloc_extent_ret clone_mapping(
@@ -161,14 +162,14 @@ public:
     Transaction &t,
     LBAMappingRef orig_mapping,
     std::vector<remap_entry> remaps,
-    std::vector<LogicalCachedExtentRef> extents  // Required if and only
+    std::vector<LogicalChildNodeRef> extents  // Required if and only
 						 // if pin isn't indirect
     ) = 0;
 
   /**
    * Should be called after replay on each cached extent.
    * Implementation must initialize the LBAMapping on any
-   * LogicalCachedExtent's and may also read in any dependent
+   * LogicalChildNode's and may also read in any dependent
    * structures, etc.
    *
    * @return returns whether the extent is alive
@@ -179,8 +180,10 @@ public:
     Transaction &t,
     CachedExtentRef e) = 0;
 
+#ifdef UNIT_TESTS_BUILT
   using check_child_trackers_ret = base_iertr::future<>;
   virtual check_child_trackers_ret check_child_trackers(Transaction &t) = 0;
+#endif
 
   /**
    * Calls f for each mapping in [begin, end)
@@ -221,7 +224,7 @@ public:
     extent_len_t len,
     paddr_t paddr,
     uint32_t checksum,
-    LogicalCachedExtent *nextent) = 0;
+    LogicalChildNode *nextent) = 0;
 
   /**
    * update_mappings
@@ -232,7 +235,7 @@ public:
   using update_mappings_ret = update_mappings_iertr::future<>;
   update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalCachedExtentRef>& extents);
+    const std::list<LogicalChildNodeRef>& extents);
 
   /**
    * get_physical_extent_if_live

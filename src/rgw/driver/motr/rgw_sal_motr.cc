@@ -3328,6 +3328,12 @@ std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
   return 0;
 }
 
+bool MotrStore::process_expired_objects(const DoutPrefixProvider *dpp,
+	       				optional_yield y)
+{
+  return 0;
+}
+
 std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, optional_yield y, const string* object_name)
 {

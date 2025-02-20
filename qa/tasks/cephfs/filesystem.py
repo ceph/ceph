@@ -61,6 +61,14 @@ class ObjectNotFound(Exception):
     def __str__(self):
         return "Object not found: '{0}'".format(self._object_name)
 
+class FSDamaged(Exception):
+    def __init__(self, ident, ranks):
+        self.ident = ident
+        self.ranks = ranks
+
+    def __str__(self):
+        return f"File system {self.ident} has damaged ranks {self.ranks}"
+
 class FSMissing(Exception):
     def __init__(self, ident):
         self.ident = ident
@@ -1092,9 +1100,16 @@ class FilesystemBase(MDSClusterBase):
             mds.check_status()
 
         active_count = 0
-        mds_map = self.get_mds_map(status=status)
 
+        if status is None:
+            status = self.status()
+
+        mds_map = self.get_mds_map(status=status)
         log.debug("are_daemons_healthy: mds map: {0}".format(mds_map))
+
+        damaged = self.get_damaged(status=status)
+        if damaged:
+            raise FSDamaged(self.id, damaged)
 
         for mds_id, mds_status in mds_map['info'].items():
             if mds_status['state'] not in ["up:active", "up:standby", "up:standby-replay"]:

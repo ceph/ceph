@@ -711,10 +711,6 @@ public:
       decode(s, data_bl_p);
       return s;
     }
-    void decode_bp(ceph::buffer::ptr& bp) {
-	using ceph::decode;
-      decode(bp, data_bl_p);
-    }
     void decode_bl(ceph::buffer::list& bl) {
 	using ceph::decode;
       decode(bl, data_bl_p);

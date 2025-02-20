@@ -735,24 +735,48 @@ __public int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_MOUNT, req, ans);
 }
 
-__public struct dirent *ceph_readdir(struct ceph_mount_info *cmount,
-				     struct ceph_dir_result *dirp)
+/* The return value of this function has the same meaning as the original
+ * ceph_readdir_r():
+ *
+ * Returned values:
+ *
+ *    1 if we got a dirent
+ *    0 for end of directory
+ *   <0 for error
+ */
+__public int ceph_readdir_r(struct ceph_mount_info *cmount,
+			    struct ceph_dir_result *dirp, struct dirent *de)
 {
-	static struct dirent de;
 	int32_t err;
 
 	CEPH_REQ(ceph_readdir, req, 0, ans, 1);
 
 	req.dir = ptr_value(dirp);
 
-	CEPH_BUFF_ADD(ans, &de, sizeof(de));
+	CEPH_BUFF_ADD(ans, de, sizeof(struct dirent));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_READDIR, req, ans);
 	if (err < 0) {
-		errno = -err;
-		return NULL;
+		return err;
 	}
 	if (ans.eod) {
+		return 0;
+	}
+
+	return 1;
+}
+
+__public struct dirent *ceph_readdir(struct ceph_mount_info *cmount,
+				     struct ceph_dir_result *dirp)
+{
+	static struct dirent de;
+	int res;
+
+	res = ceph_readdir_r(cmount, dirp, &de);
+	if (res <= 0) {
+		if (res < 0) {
+			errno = -res;
+		}
 		return NULL;
 	}
 

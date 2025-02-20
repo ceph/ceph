@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import sys
 import subprocess
 import tempfile
 import difflib
-from typing import Dict, Any
+from typing import Dict, List, Any
 from pathlib import Path
 import concurrent.futures
 from collections import OrderedDict
@@ -13,7 +14,7 @@ from collections import OrderedDict
 temp_unrec = tempfile.mktemp(prefix="unrecognized_")
 err_file_rc = tempfile.mktemp(prefix="dencoder_err_")
 
-fast_shouldnt_skip = []
+fast_shouldnt_skip: List[str] = []
 backward_compat: Dict[str, Any] = {}
 incompat_paths: Dict[str, Any] = {}
 
@@ -102,8 +103,11 @@ def test_object_wrapper(type, vdir, arversion, current_ver):
 
     if subprocess.call([CEPH_DENCODER, "type", type], stderr=subprocess.DEVNULL) == 0:
 
-        if should_skip_object(type, arversion, current_ver) and (type not in incompat_paths or len(incompat_paths[type]) == 0):
+        if should_skip_object(type, arversion, current_ver):
             debug_print(f"skipping object of type {type} due to backward incompatibility")
+            return (_numtests, _failed, unrecognized)
+        if type in incompat_paths:
+            debug_print(f"skipping object of type {type} it is in incompat paths")
             return (_numtests, _failed, unrecognized)
 
         debug_print(f"        {vdir}/objects/{type}")
@@ -129,48 +133,84 @@ def test_object_wrapper(type, vdir, arversion, current_ver):
         
     return (_numtests, _failed, unrecognized)
 
+def parse_version(version):
+    """
+    Parse a version string into a tuple of integers, ignoring suffixes.
+
+    Args:
+        version (str): The version string to parse.
+
+    Returns:
+        tuple: A tuple of integers representing the version.
+    """
+    numeric_part = re.match(r'(\d+(\.\d+)*).*', version)
+    if numeric_part:
+        return tuple(map(int, numeric_part.group(1).split('.')))
+    raise ValueError(f"Invalid version format: {version}")
+
+
 def should_skip_object(type, arversion, current_ver):
     """
-    Check if an object of a specific type should be skipped based on backward compatibility.
+    Determine if an object should be skipped based on backward compatibility.
 
-    Description:
-    This function determines whether an object of a given type should be skipped based on the
-    provided versions and backward compatibility information. It checks the global variable
-    'backward_compat' to make this decision.
+    Args:
+        type (str): The type of the object to check.
+        arversion (str): The archive version of the object.
+        current_ver (str): The current version of the decoder.
 
-    Input:
-    - type: str
-        The type of the object to be checked for skipping.
-
-    - arversion: str
-        The version from which the object is attempted to be accessed (archive version).
-
-    - current_ver: str
-        The version of the object being processed (current version).
-
-    Output:
-    - bool:
-        True if the object should be skipped, False otherwise.
-
-    Note: The function relies on two global variables, 'backward_compat' and 'fast_shouldnt_skip',
-    which should be defined and updated appropriately in the calling code.
+    Returns:
+        bool: True if the object should be skipped, False otherwise.
     """
     global backward_compat
     global fast_shouldnt_skip
 
+    # Validate global structures
+    if not isinstance(backward_compat, dict) or not isinstance(fast_shouldnt_skip, list):
+        raise ValueError("Global variables 'backward_compat' must be a dict and 'fast_shouldnt_skip' must be a list.")
+
+    # Early return for cached types
     if type in fast_shouldnt_skip:
-        debug_print(f"fast Type {type} does not exist in the backward compatibility structure.")
+        debug_print(f"fast Type {type} is in the fast_shouldnt_skip list - don't skip.")
         return False
 
+    # If the type doesn't exist in any backward_compat entry
     if all(type not in v for v in backward_compat.values()):
+        debug_print(f"fast Type {type} does not exist in the backward compatibility structure - don't skip.")
         fast_shouldnt_skip.append(type)
         return False
 
-    versions = [key for key, value in backward_compat.items() if type in value and key >= arversion and key != current_ver]
-    if len(versions) == 0:
+    # Parse current and archive versions
+    parsed_arversion = parse_version(arversion)
+    parsed_current_ver = parse_version(current_ver)
+
+    # Find the lowest version where the type exists
+    compatible_versions = [
+        parse_version(key) for key, types in backward_compat.items() if type in types
+    ]
+    if not compatible_versions:
+        debug_print(f"{type} has no compatible versions - don't skip.")
+        fast_shouldnt_skip.append(type)
         return False
 
-    return True
+    lowest_version = min(compatible_versions)
+    debug_print(f"{type} lowest compatible version: {lowest_version}")
+
+    # Check cascading compatibility
+    if parsed_current_ver < lowest_version:
+        # Current version is too old for this type
+        debug_print(f"{type} current version {parsed_current_ver} is less than {lowest_version} - skip.")
+        return True
+
+    # Filter archive versions within compatibility range
+    versions = [
+        key for key in backward_compat
+        if type in backward_compat[key]
+        and parse_version(key) >= parsed_arversion
+        and parse_version(key) <= parsed_current_ver
+    ]
+
+    debug_print(f"{type} versions: {versions} will return {len(versions) > 0}")
+    return len(versions) > 0
 
 def check_backward_compat():
     """

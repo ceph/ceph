@@ -168,7 +168,7 @@ add_executable(ceph_test_mutate
 target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
-if(NOT WIN32)
+if(WITH_BLUESTORE AND NOT WIN32)
 # test_trans
 add_executable(test_trans
   test_trans.cc
@@ -979,6 +979,7 @@ target_link_libraries(unittest_texttable ceph-common)
 add_executable(unittest_not_before_queue
   test_not_before_queue.cc)
 add_ceph_unittest(unittest_not_before_queue)
+target_link_libraries(unittest_not_before_queue ceph-common)
 
 if(NOT WIN32)
 # unittest_on_exit

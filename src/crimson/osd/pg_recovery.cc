@@ -531,10 +531,10 @@ void PGRecovery::enqueue_push(
 {
   logger().info("{}: obj={} v={} peers={}", __func__, obj, v, peers);
   auto &peering_state = pg->get_peering_state();
-  peering_state.prepare_backfill_for_missing(obj, v, peers);
   auto [recovering, added] = pg->get_recovery_backend()->add_recovering(obj);
   if (!added)
     return;
+  peering_state.prepare_backfill_for_missing(obj, v, peers);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");
@@ -641,13 +641,13 @@ void PGRecovery::backfilled()
     PeeringState::Backfilled{});
 }
 
-void PGRecovery::backfill_cancelled()
+void PGRecovery::backfill_suspended()
 {
   // We are not creating a new BackfillRecovery request here, as we
   // need to cancel the backfill synchronously (before this method returns).
   using BackfillState = crimson::osd::BackfillState;
   backfill_state->process_event(
-    BackfillState::CancelBackfill{}.intrusive_from_this());
+    BackfillState::SuspendBackfill{}.intrusive_from_this());
 }
 
 void PGRecovery::dispatch_backfill_event(

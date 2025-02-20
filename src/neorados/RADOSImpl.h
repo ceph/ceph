@@ -14,11 +14,9 @@
 #ifndef CEPH_NEORADOS_RADOSIMPL_H
 #define CEPH_NEORADOS_RADOSIMPL_H
 
-#include <functional>
 #include <memory>
 #include <string>
 
-#include <boost/asio/io_context.hpp>
 #include <boost/intrusive_ptr.hpp>
 
 #include "common/ceph_context.h"
@@ -31,6 +29,8 @@
 #include "mgr/MgrClient.h"
 
 #include "osdc/Objecter.h"
+
+namespace boost::asio { class io_context; }
 
 namespace neorados {
 

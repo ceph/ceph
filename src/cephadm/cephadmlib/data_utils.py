@@ -9,9 +9,10 @@ import logging
 
 from configparser import ConfigParser
 
-from typing import Dict, Any, Optional, Iterable, List
+from typing import Dict, Any, Optional, Iterable, List, Union
 
 from .constants import DATEFMT, DEFAULT_REGISTRY
+from .context import CephadmContext
 from .exceptions import Error
 
 
@@ -203,6 +204,30 @@ def get_legacy_config_fsid(
         ):
             return config.get('global', 'fsid')
     return None
+
+
+def get_legacy_daemon_fsid(
+    ctx: CephadmContext,
+    cluster: str,
+    daemon_type: str,
+    daemon_id: Union[int, str],
+    legacy_dir: Optional[str] = None,
+) -> Optional[str]:
+    fsid = None
+    if daemon_type == 'osd':
+        try:
+            fsid_file = os.path.join(
+                ctx.data_dir, daemon_type, 'ceph-%s' % daemon_id, 'ceph_fsid'
+            )
+            if legacy_dir is not None:
+                fsid_file = os.path.abspath(legacy_dir + fsid_file)
+            with open(fsid_file, 'r') as f:
+                fsid = f.read().strip()
+        except IOError:
+            pass
+    if not fsid:
+        fsid = get_legacy_config_fsid(cluster, legacy_dir=legacy_dir)
+    return fsid
 
 
 def _extract_host_info_from_applied_spec(

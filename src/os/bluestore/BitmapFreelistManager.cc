@@ -9,6 +9,7 @@
 #include "include/stringify.h"
 
 #include "common/debug.h"
+#include "common/strtol.h" // for strict_iecstrtoll()
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore

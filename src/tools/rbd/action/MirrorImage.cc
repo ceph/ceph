@@ -314,12 +314,8 @@ int execute_status(const po::variables_map &vm,
     return r;
   }
 
-  librados::IoCtx default_ns_io_ctx;
-  default_ns_io_ctx.dup(io_ctx);
-  default_ns_io_ctx.set_namespace("");
-
   std::vector<librbd::mirror_peer_site_t> mirror_peers;
-  utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
+  utils::get_mirror_peer_sites(io_ctx, &mirror_peers);
 
   std::map<std::string, std::string> peer_mirror_uuids_to_name;
   utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,

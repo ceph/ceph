@@ -307,3 +307,19 @@ upgrading:
 
 You should now have all your Manager daemons on the new version and be able to
 specify the limiting parameters for the rest of the upgrade.
+
+
+Updating a non-Ceph image service with custom image
+====================================================
+
+To update a non-Ceph image service, run a command of the following form:
+
+.. prompt:: bash #
+
+  ceph orch update service <service_type> <image>
+
+For example:
+
+.. prompt:: bash #
+
+  ceph orch update service prometheus quay.io/prometheus/prometheus:v2.55.1

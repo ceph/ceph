@@ -13,7 +13,8 @@ class TestBatch(object):
 
     def test_batch_instance(self, is_root):
         b = batch.Batch([])
-        b.main()
+        with pytest.raises(SystemExit):
+            b.main()
 
     def test_invalid_osd_ids_passed(self):
         with pytest.raises(SystemExit):

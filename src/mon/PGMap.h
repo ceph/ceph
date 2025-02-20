@@ -21,15 +21,22 @@
 #ifndef CEPH_PGMAP_H
 #define CEPH_PGMAP_H
 
-#include "include/health.h"
-#include "common/debug.h"
-#include "common/TextTable.h"
+#include "include/buffer.h"
+#include "common/debug.h" // for cmdmap_t
+#include "common/cmdparse.h"
+#include "common/Formatter.h"
 #include "osd/osd_types.h"
 #include "include/mempool.h"
-#include "mon/health_check.h"
-#include <sstream>
 
+#include <cstdint>
+#include <iosfwd>
+#include <map>
+#include <set>
+#include <string>
+
+struct health_check_map_t;
 namespace ceph { class Formatter; }
+class TextTable;
 
 class PGMapDigest {
 public:

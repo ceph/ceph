@@ -64,7 +64,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     ("help,h", "produce help message")
     ("stripe-width,s", po::value<int>()->default_value(4 * 1024),
      "stripe_width, i.e. the size of the buffer to be encoded")
-    ("plugin,p", po::value<string>()->default_value("jerasure"),
+    ("plugin,p", po::value<string>()->default_value("isa"),
      "erasure code plugin name")
     ("base", po::value<string>()->default_value("."),
      "prefix all paths with base")
@@ -314,7 +314,7 @@ int main(int argc, char** argv) {
  *   make ceph_erasure_code_non_regression &&
  *   libtool --mode=execute valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code_non_regression \
- *      --plugin jerasure \
+ *      --plugin isa \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \
  *      --parameter m=2 \

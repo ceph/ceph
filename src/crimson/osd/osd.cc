@@ -105,6 +105,7 @@ OSD::OSD(int id, uint32_t nonce,
       std::ignore = update_heartbeat_peers(
       ).then([this] {
 	update_stats();
+        mgrc->update_daemon_health(get_health_metrics());
 	tick_timer.arm(
 	  std::chrono::seconds(TICK_INTERVAL));
       });
@@ -976,7 +977,7 @@ void OSD::handle_conf_change(
   const crimson::common::ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
-  if (changed.count("osd_beacon_report_interval")) {
+  if (changed.contains("osd_beacon_report_interval")) {
     beacon_timer.rearm_periodic(
       std::chrono::seconds(conf->osd_beacon_report_interval));
   }
@@ -1413,6 +1414,74 @@ seastar::future<> OSD::handle_recovery_subreq(
 {
   return pg_shard_manager.start_pg_operation<RecoverySubRequest>(
     conn, std::move(m)).second;
+}
+
+vector<DaemonHealthMetric> OSD::get_health_metrics()
+{
+  LOG_PREFIX(OSD::get_health_metrics);
+  vector<DaemonHealthMetric> metrics;
+
+  const utime_t now = ceph_clock_now();
+  utime_t oldest_secs = now;
+  utime_t too_old = now;
+  too_old -= local_conf()->osd_op_complaint_time;
+  int slow = 0;
+  ClientRequest::ICRef oldest_op;
+  map<uint64_t, int> slow_op_pools;
+  bool log_aggregated_slow_op = local_conf()->osd_aggregated_slow_ops_logging;
+  auto count_slow_ops = [&](const ClientRequest& op) {
+    if (op.get_started() < too_old) {
+      std::stringstream ss;
+      ss << "slow request ";
+      op.print(ss);
+      ss << " initiated "
+         << op.get_started();
+      WARN("{}", ss.str());
+      if (log_aggregated_slow_op) {
+        uint64_t pool_id = op.get_pgid().pgid.m_pool;
+        if (pool_id > 0 && pool_id <= (uint64_t) osdmap->get_pool_max()) {
+          slow_op_pools[pool_id]++;
+        }
+      } else {
+        clog->warn() << ss.str();
+      }
+      ++slow;
+      if (!oldest_op || op.get_started() < oldest_op->get_started()) {
+        oldest_op = &op;
+      }
+    }
+  };
+
+  auto& op_registry = get_shard_services().get_registry();
+  op_registry.visit_ops_in_flight(count_slow_ops);
+  if (slow) {
+    std::stringstream ss;
+    ss << __func__ << " reporting " << slow << " slow ops, oldest is ";
+    ceph_assert(oldest_op);
+    oldest_op->print(ss);
+    ERROR("{}", ss.str());
+    if (log_aggregated_slow_op && !slow_op_pools.empty()) {
+      std::stringstream ss;
+      auto slow_pool_it = std::max_element(slow_op_pools.begin(), slow_op_pools.end(),
+                             [](std::pair<uint64_t, int> p1, std::pair<uint64_t, int> p2) {
+                               return p1.second < p2.second;
+                             });
+      if (osdmap->get_pools().find(slow_pool_it->first) != osdmap->get_pools().end()) {
+        string pool_name = osdmap->get_pool_name(slow_pool_it->first);
+        ss << "slow requests (most affected pool [ '"
+           << pool_name
+           << "' : "
+           << slow_pool_it->second
+           << " ])";
+      }
+      WARN("{}", ss.str());
+      clog->warn() << ss.str();
+    }
+    oldest_secs = now - oldest_op->get_started();
+    metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
+  }
+
+  return metrics;
 }
 
 bool OSD::should_restart() const

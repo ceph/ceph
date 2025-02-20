@@ -13,6 +13,7 @@
 
 
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 #include "mds/SessionMap.h"

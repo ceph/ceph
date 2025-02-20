@@ -3,6 +3,7 @@
 
 #include "mgr_perf_counters.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/ceph_context.h"
 
 PerfCounters *perfcounter = NULL;

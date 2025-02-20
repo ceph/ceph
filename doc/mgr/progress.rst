@@ -51,7 +51,7 @@ PG Recovery Event
 
 An event for each PG affected by recovery event can be shown in
 `ceph progress` This is completely optional, and disabled by default
-due to CPU overheard:
+due to CPU overhead:
 
 .. prompt:: bash #
 

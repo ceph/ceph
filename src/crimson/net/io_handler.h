@@ -200,7 +200,6 @@ public:
    * io behavior accordingly.
    */
   enum class io_state_t : uint8_t {
-    none,    // no IO is possible as the connection is not available to the user yet.
     delay,   // IO is delayed until open.
     open,    // Dispatch In and Out concurrently.
     drop,    // Drop IO as the connection is closed.
@@ -562,9 +561,6 @@ struct fmt::formatter<crimson::net::IOHandler::io_state_t>
     using enum crimson::net::IOHandler::io_state_t;
     std::string_view name;
     switch (state) {
-    case none:
-      name = "none";
-      break;
     case delay:
       name = "delay";
       break;

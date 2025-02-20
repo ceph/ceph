@@ -58,7 +58,7 @@
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/event_socket.h"
 #include "common/module.h"

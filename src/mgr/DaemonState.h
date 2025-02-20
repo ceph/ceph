@@ -17,6 +17,7 @@
 #include <map>
 #include <string>
 #include <memory>
+#include <shared_mutex> // for std::shared_lock
 #include <set>
 #include <boost/circular_buffer.hpp>
 

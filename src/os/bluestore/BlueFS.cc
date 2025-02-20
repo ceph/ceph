@@ -19,6 +19,8 @@
 #include "common/perf_counters_collection.h"
 #endif
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluefs
 #undef dout_prefix
@@ -161,6 +163,7 @@ private:
         std::string dir = d.first;
         for (auto &r : d.second->file_map) {
           f->open_object_section("file");
+          f->dump_int("ino", r.second->fnode.ino);
           f->dump_string("name", (dir + "/" + r.first).c_str());
           std::vector<size_t> sizes;
           sizes.resize(bluefs->bdev.size());
@@ -175,6 +178,10 @@ private:
 		f->dump_int(("dev-"+to_string(i)).c_str(), sizes[i]);
 	    }
           }
+          f->dump_int("size", r.second->fnode.size);
+          std::stringstream ss;
+          ss << r.second->fnode.mtime;
+          f->dump_string("mtime", ss.str());
           f->close_section();
         }
       }
@@ -625,7 +632,7 @@ uint64_t BlueFS::get_free(unsigned id)
 void BlueFS::dump_perf_counters(Formatter *f)
 {
   f->open_object_section("bluefs_perf_counters");
-  logger->dump_formatted(f, false, false);
+  logger->dump_formatted(f, false, select_labeled_t::unlabeled);
   f->close_section();
 }
 
@@ -4867,9 +4874,14 @@ void BlueFS::trim_free_space(const string& type, std::ostream& outss)
     outss << "device " << type << " is not configured";
     return;
   }
-  if (alloc[bdev_id] && !is_shared_alloc(bdev_id)) {
+  if (alloc[bdev_id]) {
     if (!bdev[bdev_id]->is_discard_supported()) {
       outss << "device " << type << " does not support trim";
+      return;
+    }
+    if (is_shared_alloc(bdev_id)) {
+      outss << "device " << type
+            << " shares allocations with main device, trimming skipped.";
       return;
     }
     alloc[bdev_id]->foreach(iterated_allocation);

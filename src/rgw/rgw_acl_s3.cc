@@ -200,7 +200,6 @@ bool ACLGrant_S3::xml_end(const char *el) {
   ACLURI_S3 *acl_uri;
   ACLEmail_S3 *acl_email;
   ACLDisplayName_S3 *acl_name;
-  string uri;
 
   acl_grantee = static_cast<ACLGrantee_S3 *>(find_first("Grantee"));
   if (!acl_grantee)

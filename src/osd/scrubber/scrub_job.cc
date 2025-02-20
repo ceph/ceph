@@ -377,13 +377,12 @@ void ScrubJob::dump(ceph::Formatter* f) const
 {
   const auto& entry = earliest_target().sched_info;
   const auto& sch = entry.schedule;
-  f->open_object_section("scrub");
+  Formatter::ObjectSection scrubjob_section{*f, "scrub"sv};
   f->dump_stream("pgid") << pgid;
   f->dump_stream("sched_time") << get_sched_time();
   f->dump_stream("orig_sched_time") << sch.scheduled_at;
   f->dump_stream("deadline") << sch.deadline;
   f->dump_bool("forced", entry.urgency >= urgency_t::operator_requested);
-  f->close_section();
 }
 
 // a set of static functions to determine, given a scheduling target's urgency,

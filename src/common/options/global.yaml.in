@@ -1114,7 +1114,7 @@ options:
   type: size
   level: advanced
   desc: Maximum amount of data to prefetch out of the socket receive buffer
-  default: 4_K
+  default: 64_K
   with_legacy: true
 - name: ms_initial_backoff
   type: float
@@ -2350,6 +2350,14 @@ options:
   level: advanced
   default: 10
   with_legacy: true
+- name: mon_client_hunt_on_resend
+  type: bool
+  level: advanced
+  default: true
+  fmt_desc: On commands connection failure, hunt for any monitor.
+    If false, try to resend the command to the same monitor to prevent
+    command race conditions.
+  with_legacy: true
 - name: mon_client_max_log_entries_per_message
   type: int
   level: advanced
@@ -2610,7 +2618,7 @@ options:
   type: str
   level: advanced
   desc: default erasure code profile for new erasure-coded pools
-  default: plugin=jerasure technique=reed_sol_van k=2 m=2
+  default: plugin=isa technique=reed_sol_van k=2 m=2
   services:
   - mon
   flags:
@@ -4039,6 +4047,16 @@ options:
   type: int
   level: advanced
   default: 16
+  with_legacy: true
+- name: bdev_aio_submit_retry_max
+  type: int
+  level: advanced
+  default: 16
+  with_legacy: true
+- name: bdev_aio_submit_retry_initial_delay_us
+  type: int
+  level: advanced
+  default: 125
   with_legacy: true
 - name: bdev_block_size
   type: size
@@ -5482,6 +5500,29 @@ options:
   desc: Enable health indication when spurious read errors are observed by OSD
   default: true
   with_legacy: true
+- name: bluestore_warn_on_free_fragmentation
+  type: float
+  level: basic
+  desc: Level at which disk free fragmentation causes health warning. Set "1" to disable.
+    This is same value as admin command "bluestore allocator score block".
+  default: 0.8
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_fragmentation_check_period
+- name: bluestore_fragmentation_check_period
+  type: uint
+  level: basic
+  desc: The period to perform bluestore free fragmentation check.
+    Checking fragmentation is usually almost immediate. For highly fragmented storage,
+    it can take several miliseconds. It can cause a stall to a write operation.
+  default: 3600
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_warn_on_free_fragmentation
 - name: bluestore_slow_ops_warn_lifetime
   type: uint
   level: advanced
@@ -6377,6 +6418,36 @@ options:
   min: 0
   flags:
   - runtime
+- name: rados_replica_read_policy
+  type: str
+  level: advanced
+  desc: read policy for sending read requests to OSD
+  fmt_desc : |
+    Policy for determining which OSD will receive read operations.
+    If set to ``default``, each PG's primary OSD will always be used
+    for read operations. If set to ``balance``, read operations will
+    be sent to a randomly selected OSD within the replica set. If set
+    to ``localize``, read operations will be sent to the closest OSD
+    as determined by the CRUSH map.
+  default: default
+  enum_values:
+  - default
+  - balance
+  - localize
+  flags:
+  - runtime
+- name: rados_replica_read_policy_on_objclass
+  type: bool
+  level: advanced
+  desc: enable read policy for sending read requests to OSD on objclass ops
+  fmt_desc : |
+    This would enable objclass ops to leverage read policy that can
+    determine which OSD will receive read operation. The reason
+    we might want to disable this is because objclass operations may
+    not be flagged correctly as read or write ops and we don't want
+    write ops to be sent to the wrong OSD (and system won't function
+    correctly).
+  default: false
 # true if LTTng-UST tracepoints should be enabled
 - name: rados_tracing
   type: bool

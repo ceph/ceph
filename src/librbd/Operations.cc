@@ -39,6 +39,7 @@
 #include "librbd/operation/SnapshotLimitRequest.h"
 #include "librbd/operation/SparsifyRequest.h"
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 #include <boost/bind/bind.hpp>
 #include <boost/scope_exit.hpp>
 
@@ -185,7 +186,6 @@ struct C_InvokeAsyncRequest : public Context {
   bool permit_snapshot;
   boost::function<void(Context*)> local;
   boost::function<void(Context*)> remote;
-  std::set<int> filter_error_codes;
   Context *on_finish;
   bool request_lock = false;
 
@@ -194,11 +194,10 @@ struct C_InvokeAsyncRequest : public Context {
                        bool permit_snapshot,
                        const boost::function<void(Context*)>& local,
                        const boost::function<void(Context*)>& remote,
-                       const std::set<int> &filter_error_codes,
                        Context *on_finish)
     : image_ctx(image_ctx), operation(operation), request_type(request_type),
       permit_snapshot(permit_snapshot), local(local), remote(remote),
-      filter_error_codes(filter_error_codes), on_finish(on_finish) {
+      on_finish(on_finish) {
   }
 
   void send() {
@@ -382,9 +381,6 @@ struct C_InvokeAsyncRequest : public Context {
   }
 
   void finish(int r) override {
-    if (filter_error_codes.count(r) != 0) {
-      r = 0;
-    }
     on_finish->complete(r);
   }
 };
@@ -503,11 +499,8 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
                                        m_image_ctx.image_watcher, request_id,
                                        boost::ref(prog_ctx), _1));
 
-  if (r < 0 && r != -EINVAL) {
-    return r;
-  }
   ldout(cct, 20) << "flatten finished" << dendl;
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -582,10 +575,7 @@ int Operations<I>::rebuild_object_map(ProgressContext &prog_ctx) {
                                        boost::ref(prog_ctx), _1));
 
   ldout(cct, 10) << "rebuild object map finished" << dendl;
-  if (r < 0) {
-    return r;
-  }
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -686,12 +676,9 @@ int Operations<I>::rename(const char *dstname) {
                            boost::bind(&ImageWatcher<I>::notify_rename,
                                        m_image_ctx.image_watcher, request_id,
                                        dstname, _1));
-  if (r < 0 && r != -EEXIST) {
-    return r;
-  }
 
   m_image_ctx.set_image_name(dstname);
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -874,7 +861,7 @@ void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespac
     boost::bind(&ImageWatcher<I>::notify_snap_create, m_image_ctx.image_watcher,
                 request_id, snap_namespace, snap_name, flags,
                 boost::ref(prog_ctx), _1),
-    {-EEXIST}, on_finish);
+    on_finish);
   req->send();
 }
 
@@ -1077,7 +1064,7 @@ void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespac
       boost::bind(&ImageWatcher<I>::notify_snap_remove,
                   m_image_ctx.image_watcher, request_id, snap_namespace,
                   snap_name, _1),
-      {-ENOENT}, on_finish);
+      on_finish);
     req->send();
   } else {
     std::shared_lock owner_lock{m_image_ctx.owner_lock};
@@ -1173,9 +1160,6 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
                              boost::bind(&ImageWatcher<I>::notify_snap_rename,
                                          m_image_ctx.image_watcher, request_id,
                                          snap_id, dstname, _1));
-    if (r < 0 && r != -EEXIST) {
-      return r;
-    }
   } else {
     C_SaferCond cond_ctx;
     {
@@ -1184,13 +1168,10 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
     }
 
     r = cond_ctx.wait();
-    if (r < 0) {
-      return r;
-    }
   }
 
   m_image_ctx.perfcounter->inc(l_librbd_snap_rename);
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -1275,9 +1256,6 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
                              boost::bind(&ImageWatcher<I>::notify_snap_protect,
                                          m_image_ctx.image_watcher, request_id,
 					 snap_namespace, snap_name, _1));
-    if (r < 0 && r != -EBUSY) {
-      return r;
-    }
   } else {
     C_SaferCond cond_ctx;
     {
@@ -1286,11 +1264,9 @@ int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespac
     }
 
     r = cond_ctx.wait();
-    if (r < 0) {
-      return r;
-    }
   }
-  return 0;
+
+  return r;
 }
 
 template <typename I>
@@ -1373,9 +1349,6 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
                              boost::bind(&ImageWatcher<I>::notify_snap_unprotect,
                                          m_image_ctx.image_watcher, request_id,
 					 snap_namespace, snap_name, _1));
-    if (r < 0 && r != -EINVAL) {
-      return r;
-    }
   } else {
     C_SaferCond cond_ctx;
     {
@@ -1384,11 +1357,9 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
     }
 
     r = cond_ctx.wait();
-    if (r < 0) {
-      return r;
-    }
   }
-  return 0;
+
+  return r;
 }
 
 template <typename I>
@@ -1709,9 +1680,6 @@ int Operations<I>::metadata_remove(const std::string &key) {
                            boost::bind(&ImageWatcher<I>::notify_metadata_remove,
                                        m_image_ctx.image_watcher, request_id,
                                        key, _1));
-  if (r == -ENOENT) {
-    r = 0;
-  }
 
   std::string config_key;
   if (util::is_metadata_config_override(key, &config_key) && r >= 0) {
@@ -1775,11 +1743,8 @@ int Operations<I>::migrate(ProgressContext &prog_ctx) {
                                        m_image_ctx.image_watcher, request_id,
                                        boost::ref(prog_ctx), _1));
 
-  if (r < 0 && r != -EINVAL) {
-    return r;
-  }
   ldout(cct, 20) << "migrate finished" << dendl;
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -1842,11 +1807,9 @@ int Operations<I>::sparsify(size_t sparse_size, ProgressContext &prog_ctx) {
                                            m_image_ctx.image_watcher,
                                            request_id, sparse_size,
                                            boost::ref(prog_ctx), _1));
-  if (r < 0 && r != -EINVAL) {
-    return r;
-  }
+
   ldout(cct, 20) << "resparsify finished" << dendl;
-  return 0;
+  return r;
 }
 
 template <typename I>
@@ -1934,7 +1897,7 @@ int Operations<I>::invoke_async_request(
                                                              permit_snapshot,
                                                              local_request,
                                                              remote_request,
-                                                             {}, &ctx);
+                                                             &ctx);
   req->send();
   return ctx.wait();
 }

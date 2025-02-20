@@ -2,6 +2,7 @@
 #define CEPH_MCLIENTQUOTA_H
 
 #include "msg/Message.h"
+#include "include/cephfs/types.h" // for nest_info_t, quota_info_t
 
 class MClientQuota final : public SafeMessage {
 public:

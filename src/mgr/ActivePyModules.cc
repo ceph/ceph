@@ -19,6 +19,7 @@
 #include <rocksdb/version.h>
 
 #include "common/errno.h"
+#include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
 #include "mon/MonMap.h"

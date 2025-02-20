@@ -4,9 +4,10 @@ from textwrap import dedent
 from ceph_volume.exceptions import SuffixParsingError
 from ceph_volume import decorators
 from .activate import Activate
+from typing import List, Optional
 
 
-def parse_osd_id(string):
+def parse_osd_id(string: str) -> str:
     osd_id = string.split('-', 1)[0]
     if not osd_id:
         raise SuffixParsingError('OSD id', string)
@@ -15,7 +16,7 @@ def parse_osd_id(string):
     raise SuffixParsingError('OSD id', string)
 
 
-def parse_osd_uuid(string):
+def parse_osd_uuid(string: str) -> str:
     osd_id = '%s-' % parse_osd_id(string)
     # remove the id first
     osd_uuid = string.split(osd_id, 1)[-1]
@@ -28,11 +29,11 @@ class Trigger(object):
 
     help = 'systemd helper to activate an OSD'
 
-    def __init__(self, argv):
+    def __init__(self, argv: Optional[List[str]] = None) -> None:
         self.argv = argv
 
     @decorators.needs_root
-    def main(self):
+    def main(self) -> None:
         sub_command_help = dedent("""
         ** DO NOT USE DIRECTLY **
         This tool is meant to help the systemd unit that knows about OSDs.
@@ -61,6 +62,8 @@ class Trigger(object):
             nargs='?',
             help='Data from a systemd unit containing ID and UUID of the OSD, like asdf-lkjh-0'
         )
+        if self.argv is None:
+            self.argv = []
         if len(self.argv) == 0:
             print(sub_command_help)
             return

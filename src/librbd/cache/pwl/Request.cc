@@ -5,6 +5,8 @@
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/cache/pwl/AbstractWriteLog.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix

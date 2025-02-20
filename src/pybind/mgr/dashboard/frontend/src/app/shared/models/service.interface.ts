@@ -65,8 +65,8 @@ export interface CephServiceAdditionalSpec {
 }
 
 export interface CephServicePlacement {
-  count: number;
-  placement: string;
-  hosts: string[];
-  label: string;
+  count?: number;
+  placement?: string;
+  hosts?: string[];
+  label?: string;
 }

@@ -11,6 +11,9 @@
     * interpretation of IAM policy without cross-account policy evaluation,
     * S3 API support for cross-tenant names such as `Bucket='tenant:bucketname'`
 * RGW: Lua scripts will not run against health checks.
+* RGW: For compatibility with AWS S3, LastModified timestamps are now truncated
+  to the second. Note that during upgrade, users may observe these timestamps
+  moving backwards as a result.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
@@ -69,6 +72,16 @@
 * The HeadBucket API now reports the `X-RGW-Bytes-Used` and `X-RGW-Object-Count`
   headers only when the `read-stats` querystring is explicitly included in the
   API request.
+
+* RADOS: The ceph df command reports incorrect MAX AVAIL for stretch mode pools when
+  CRUSH rules use multiple take steps for datacenters. PGMap::get_rule_avail
+  incorrectly calculates available space from only one datacenter.
+  As a workaround, define CRUSH rules with take default and choose firstn 0 type
+  datacenter. See https://tracker.ceph.com/issues/56650#note-6 for details.
+  Upgrading a cluster configured with a crush rule with multiple take steps
+  can lead to data shuffling, as the new crush changes may necessitate data
+  redistribution. In contrast, a stretch rule with a single-take configuration
+  will not cause any data movement during the upgrade process.
 
 >=19.2.1
 
@@ -611,3 +624,9 @@ It is also adding 2 new mon commands, to notify monitor about the gateway creati
   - nvme-gw create
   - nvme-gw delete
 Relevant tracker: https://tracker.ceph.com/issues/64777
+
+* MDS now uses host errors, as defined in errno.cc, for current platform.
+errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+All CEPHFS_E* defines have been removed across Ceph (including the python binding).
+Relevant tracker: https://tracker.ceph.com/issues/64611

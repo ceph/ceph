@@ -12,7 +12,6 @@
 
 #include "crimson/common/fixed_kv_node_layout.h"
 #include "crimson/common/errorator.h"
-#include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -21,9 +20,13 @@
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 
+namespace crimson::os::seastore {
+class LogicalChildNode;
+}
+
 namespace crimson::os::seastore::lba_manager::btree {
 
-using base_iertr = LBAManager::base_iertr;
+using base_iertr = Cache::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
 class BtreeLBAMapping;
@@ -87,6 +90,7 @@ struct LBAInternalNode
     "INTERNAL_NODE_CAPACITY doesn't fit in LBA_BLOCK_SIZE");
   using Ref = TCachedExtentRef<LBAInternalNode>;
   using internal_iterator_t = const_iterator;
+  using key_type = laddr_t;
   template <typename... T>
   LBAInternalNode(T&&... t) :
     FixedKVInternalNode(std::forward<T>(t)...) {}
@@ -148,8 +152,9 @@ struct LBALeafNode
       laddr_t, laddr_le_t,
       lba_map_val_t, lba_map_val_le_t,
       LBA_BLOCK_SIZE,
-      LBALeafNode,
-      true> {
+      LBAInternalNode,
+      LBALeafNode>,
+    ParentNode<LBALeafNode, laddr_t> {
   static_assert(
     check_capacity(LBA_BLOCK_SIZE),
     "LEAF_NODE_CAPACITY doesn't fit in LBA_BLOCK_SIZE");
@@ -159,90 +164,35 @@ struct LBALeafNode
 			  laddr_t, laddr_le_t,
 			  lba_map_val_t, lba_map_val_le_t,
 			  LBA_BLOCK_SIZE,
-			  LBALeafNode,
-			  true>;
+			  LBAInternalNode,
+			  LBALeafNode>;
   using internal_const_iterator_t =
     typename parent_type_t::node_layout_t::const_iterator;
   using internal_iterator_t =
     typename parent_type_t::node_layout_t::iterator;
-  template <typename... T>
-  LBALeafNode(T&&... t) :
-    parent_type_t(std::forward<T>(t)...) {}
+  using key_type = laddr_t;
+  using parent_node_t = ParentNode<LBALeafNode, laddr_t>;
+  using child_t = LogicalChildNode;
+  LBALeafNode(ceph::bufferptr &&ptr)
+    : parent_type_t(std::move(ptr)),
+      parent_node_t(LEAF_NODE_CAPACITY) {}
+  explicit LBALeafNode(extent_len_t length)
+    : parent_type_t(length),
+      parent_node_t(LEAF_NODE_CAPACITY) {}
+  LBALeafNode(const LBALeafNode &rhs)
+    : parent_type_t(rhs),
+      parent_node_t(rhs) {}
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
-  bool validate_stable_children() final {
-    LOG_PREFIX(LBALeafNode::validate_stable_children);
-    if (this->children.empty()) {
-      return false;
-    }
-
-    for (auto i : *this) {
-      auto child = (LogicalCachedExtent*)this->children[i.get_offset()];
-      // Children may not be marked as stable yet,
-      // the specific order is undefined in the transaction prepare record phase.
-      if (is_valid_child_ptr(child) && child->get_laddr() != i.get_key()) {
-	SUBERROR(seastore_fixedkv_tree,
-	  "stable child not valid: child {}, key {}",
-	  *child,
-	  i.get_key());
-	ceph_abort();
-	return false;
-      }
-    }
-    return true;
-  }
-
   void update(
     internal_const_iterator_t iter,
-    lba_map_val_t val,
-    LogicalCachedExtent* nextent) final {
-    LOG_PREFIX(LBALeafNode::update);
-    if (nextent) {
-      SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
-	this->pending_for_transaction,
-	iter.get_offset(),
-	*nextent);
-      // child-ptr may already be correct, see LBAManager::update_mappings()
-      if (!nextent->has_parent_tracker()) {
-	this->update_child_ptr(iter, nextent);
-      }
-      assert(nextent->has_parent_tracker()
-	&& nextent->get_parent_node<LBALeafNode>().get() == this);
-    }
-    this->on_modify();
-    if (val.pladdr.is_paddr()) {
-      val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
-    }
-    return this->journal_update(
-      iter,
-      val,
-      this->maybe_get_delta_buffer());
-  }
+    lba_map_val_t val) final;
 
   internal_const_iterator_t insert(
     internal_const_iterator_t iter,
     laddr_t addr,
-    lba_map_val_t val,
-    LogicalCachedExtent* nextent) final {
-    LOG_PREFIX(LBALeafNode::insert);
-    SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}, extent {}",
-      this->pending_for_transaction,
-      iter.get_offset(),
-      addr,
-      (void*)nextent);
-    this->on_modify();
-    this->insert_child_ptr(iter, nextent);
-    if (val.pladdr.is_paddr()) {
-      val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
-    }
-    this->journal_insert(
-      iter,
-      addr,
-      val,
-      this->maybe_get_delta_buffer());
-    return iter;
-  }
+    lba_map_val_t val) final;
 
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
@@ -252,7 +202,7 @@ struct LBALeafNode
       iter.get_key());
     assert(iter != this->end());
     this->on_modify();
-    this->remove_child_ptr(iter);
+    this->remove_child_ptr(iter.get_offset());
     return this->journal_remove(
       iter,
       this->maybe_get_delta_buffer());
@@ -297,7 +247,83 @@ struct LBALeafNode
     return TYPE;
   }
 
-  std::ostream &_print_detail(std::ostream &out) const final;
+  void do_on_rewrite(Transaction &t, CachedExtent &extent) final {
+    this->parent_node_t::on_rewrite(t, static_cast<LBALeafNode&>(extent));
+  }
+
+  void do_on_replace_prior() final {
+    this->parent_node_t::on_replace_prior();
+  }
+
+  void do_prepare_commit() final {
+    this->parent_node_t::prepare_commit();
+  }
+
+  bool is_child_stable(
+    op_context_t<laddr_t> c,
+    uint16_t pos,
+    laddr_t key) const {
+    return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key);
+  }
+  bool is_child_data_stable(
+    op_context_t<laddr_t> c,
+    uint16_t pos,
+    laddr_t key) const {
+    return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key, true);
+  }
+
+  void on_split(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right) final {
+    this->split_child_ptrs(t, left, right);
+  }
+  void adjust_copy_src_dest_on_split(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right) final {
+    this->parent_node_t::adjust_copy_src_dest_on_split(t, left, right);
+  }
+
+  void on_merge(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right) final {
+    this->merge_child_ptrs(t, left, right);
+  }
+  void adjust_copy_src_dest_on_merge(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right) final {
+    this->parent_node_t::adjust_copy_src_dest_on_merge(t, left, right);
+  }
+
+  void on_balance(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right,
+    bool prefer_left,
+    LBALeafNode &replacement_left,
+    LBALeafNode &replacement_right) final {
+    this->balance_child_ptrs(
+      t, left, right, prefer_left, replacement_left, replacement_right);
+  }
+  void adjust_copy_src_dest_on_balance(
+    Transaction &t,
+    LBALeafNode &left,
+    LBALeafNode &right,
+    bool prefer_left,
+    LBALeafNode &replacement_left,
+    LBALeafNode &replacement_right) final {
+    this->parent_node_t::adjust_copy_src_dest_on_balance(
+      t, left, right, prefer_left, replacement_left, replacement_right);
+  }
+
+  CachedExtentRef duplicate_for_write(Transaction&) final {
+    return CachedExtentRef(new LBALeafNode(*this));
+  }
+
+  std::ostream &print_detail(std::ostream &out) const final;
 
   void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
   std::unique_ptr<BtreeLBAMapping> get_mapping(op_context_t<laddr_t> c, laddr_t laddr);

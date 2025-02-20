@@ -13,6 +13,7 @@
  */
 
 #include "Writer.h"
+#include "common/debug.h"
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
 
@@ -1376,6 +1377,9 @@ void BlueStore::Writer::do_write(
   _collect_released_allocated();
   // update statfs
   txc->statfs_delta += statfs_delta;
+  onode->extent_map.compress_extent_map(location, data_end - location);
+  onode->extent_map.dirty_range(location, data_end-location);
+  onode->extent_map.maybe_reshard(location, data_end);
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
 }
 

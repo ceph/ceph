@@ -162,6 +162,7 @@ enum RGWRestoreStatus : uint8_t {
   RestoreFailed = 3
 };
 
+std::string_view rgw_restore_status_dump(rgw::sal::RGWRestoreStatus status);
 
 enum class RGWRestoreType : uint8_t {
   None = 0,
@@ -169,6 +170,7 @@ enum class RGWRestoreType : uint8_t {
   Permanent = 2
 };
 
+std::string_view rgw_restore_type_dump(rgw::sal::RGWRestoreType type);
 
 // a simple streaming data processing abstraction
 /**
@@ -466,6 +468,8 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    /** Reset the temporarily restored objects which are expired */
+    virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */

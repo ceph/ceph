@@ -5,6 +5,7 @@ coverage.xml
 junit*xml
 .cache
 ceph.conf
+ceph_image.tar
 
 # IDE
 .vscode

@@ -35,7 +35,7 @@ double DispatchQueue::get_max_age(utime_t now) const {
   if (marrival.empty())
     return 0;
   else
-    return (now - marrival.begin()->first);
+    return (now - *marrival.begin());
 }
 
 uint64_t DispatchQueue::pre_dispatch(const ref_t<Message>& m)
@@ -87,13 +87,14 @@ void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
     return;
   }
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
-  add_arrival(m);
+  QueueItem item{m};
+  add_arrival(item);
   if (priority >= CEPH_MSG_PRIO_LOW) {
-    mqueue.enqueue_strict(id, priority, QueueItem(m));
+    mqueue.enqueue_strict(id, priority, std::move(item));
   } else {
-    mqueue.enqueue(id, priority, m->get_cost(), QueueItem(m));
+    mqueue.enqueue(id, priority, m->get_cost(), std::move(item));
   }
-  cond.notify_all();
+  cond.notify_one();
 }
 
 void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
@@ -160,7 +161,7 @@ void DispatchQueue::entry()
     while (!mqueue.empty()) {
       QueueItem qitem = mqueue.dequeue();
       if (!qitem.is_code())
-	remove_arrival(qitem.get_message());
+	remove_arrival(qitem);
       l.unlock();
 
       if (qitem.is_code()) {
@@ -220,7 +221,7 @@ void DispatchQueue::discard_queue(uint64_t id) {
   for (auto i = removed.begin(); i != removed.end(); ++i) {
     ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const ref_t<Message>& m = i->get_message();
-    remove_arrival(m);
+    remove_arrival(*i);
     dispatch_throttle_release(m->get_dispatch_throttle_size());
   }
 }

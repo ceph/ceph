@@ -16,6 +16,6 @@
 #include <functional>
 #include <string_view>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 typedef std::function<void(int,std::string_view,ceph::buffer::list&)> asok_finisher;

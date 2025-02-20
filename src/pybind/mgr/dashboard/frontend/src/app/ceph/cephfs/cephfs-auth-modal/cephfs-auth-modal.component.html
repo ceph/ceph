@@ -90,7 +90,6 @@
                  formControlName="directory"
                  [skeleton]="directoryStore.isLoading"
                  [invalid]="!form.controls['directory'].valid && (form.controls['directory'].dirty)"
-                 [disabled]="directoryStore.isLoading"
                  [ngbTypeahead]="search">
         </cds-text-label>
         <ng-template #directoryError>

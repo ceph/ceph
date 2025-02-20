@@ -65,9 +65,8 @@ void OsdScrub::dump_scrubs(ceph::Formatter* f) const
 void OsdScrub::dump_scrub_reservations(ceph::Formatter* f) const
 {
   m_resource_bookkeeper.dump_scrub_reservations(f);
-  f->open_object_section("remote_scrub_reservations");
+  Formatter::ObjectSection rmt_section{*f, "remote_scrub_reservations"sv};
   m_osd_svc.get_scrub_reserver().dump(f);
-  f->close_section();
 }
 
 void OsdScrub::log_fwd(std::string_view text)

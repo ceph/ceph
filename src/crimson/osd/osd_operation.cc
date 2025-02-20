@@ -136,6 +136,17 @@ size_t OSDOperationRegistry::dump_slowest_historic_client_requests(ceph::Formatt
   return ops_count;
 }
 
+void OSDOperationRegistry::visit_ops_in_flight(std::function<void(const ClientRequest&)>&& visit)
+{
+  const auto& client_registry =
+    get_registry<static_cast<size_t>(OperationTypeCode::client_request)>();
+  auto it = std::begin(client_registry);
+  for (; it != std::end(client_registry); ++it) {
+    const auto& fastest_historic_op = static_cast<const ClientRequest&>(*it);
+    visit(fastest_historic_op);
+  }
+}
+
 OperationThrottler::OperationThrottler(ConfigProxy &conf)
   : scheduler(crimson::osd::scheduler::make_scheduler(conf))
 {

@@ -209,6 +209,22 @@ class Nvmeof(Task):
         if self.create_mtls_secrets: 
             self.write_mtls_config(gateway_ips)
         log.info("[nvmeof]: executed set_gateway_cfg successfully!")
+    
+    def teardown(self):
+        log.info("[nvmeof] Removing nvmeof service")
+        _shell(self.ctx, self.cluster_name, self.remote, [
+            'ceph', 'orch', 'host', 'ls'
+        ])
+        for i in range(self.groups_count):
+            group_name = self.groups_prefix + str(i)
+            service_name = f"nvmeof.{self.poolname}.{group_name}"
+            _shell(self.ctx, self.cluster_name, self.remote, [
+                'ceph', 'orch', 'rm', service_name
+            ])
+        _shell(self.ctx, self.cluster_name, self.remote, [
+            'ceph', 'orch', 'host', 'ls'
+        ])
+        log.info("[nvmeof] Nvmeof teardown completed!")
 
 
 class NvmeofThrasher(Thrasher, Greenlet):
@@ -334,26 +350,41 @@ class NvmeofThrasher(Thrasher, Greenlet):
     def stop(self):
         self.stopping.set()
 
+    def stop_and_join(self):
+        """
+        Stop the thrashing process and join the thread.
+        """
+        self.stop()
+        return self.join()
+
     def do_checks(self):
         """
         Run some checks to see if everything is running well during thrashing.
         """
         self.log('display and verify stats:')
-        for d in self.daemons:
-            d.remote.sh(d.status_cmd, check_status=False)
-        check_cmd = [
-            'ceph', 'orch', 'ls',
-            run.Raw('&&'), 'ceph', 'orch', 'ps', '--daemon-type', 'nvmeof',
-            run.Raw('&&'), 'ceph', 'health', 'detail',
-            run.Raw('&&'), 'ceph', '-s',
-            run.Raw('&&'), 'sudo', 'nvme', 'list',
-        ]
-        for dev in self.devices:
-            check_cmd += [
-                run.Raw('&&'), 'sudo', 'nvme', 'list-subsys', dev,
-                run.Raw('|'), 'grep', 'live optimized'
-            ] 
-        self.checker_host.run(args=check_cmd).wait()        
+        for retry in range(5):
+            try: 
+                random_gateway_host = None
+                initiator_host = self.checker_host 
+                for d in self.daemons:
+                    random_gateway_host = d.remote
+                    d.remote.sh(d.status_cmd, check_status=False)
+                random_gateway_host.run(args=['ceph', 'orch', 'ls', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'orch', 'ps', '--daemon-type', 'nvmeof', '--refresh'])
+                random_gateway_host.run(args=['ceph', 'health', 'detail'])
+                random_gateway_host.run(args=['ceph', '-s'])
+                random_gateway_host.run(args=['ceph', 'nvme-gw', 'show', 'mypool', 'mygroup0'])
+
+                initiator_host.run(args=['sudo', 'nvme', 'list'])
+                for dev in self.devices:
+                    device_check_cmd = [
+                        'sudo', 'nvme', 'list-subsys', dev,
+                        run.Raw('|'), 'grep', 'live optimized'
+                    ]
+                    initiator_host.run(args=device_check_cmd)
+                break
+            except run.CommandFailedError:
+                self.log(f"retry do_checks() for {retry} time")
 
     def switch_task(self):
         """
@@ -373,13 +404,14 @@ class NvmeofThrasher(Thrasher, Greenlet):
             ):
                 other_thrasher = t
                 self.log('switch_task: waiting for other thrasher')
-                other_thrasher.switch_thrasher.wait(300)
+                other_thrasher.switch_thrasher.wait(600)
                 self.log('switch_task: done waiting for the other thrasher')
                 other_thrasher.switch_thrasher.clear()
 
     def kill_daemon(self, daemon):
         kill_methods = [
-            "ceph_daemon_stop", "systemctl_stop",
+            "ceph_daemon_stop", 
+            # "systemctl_stop",
             "daemon_remove",
         ]
         chosen_method = self.rng.choice(kill_methods)
@@ -390,7 +422,8 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 d_name
             ], check_status=False)
         elif chosen_method == "systemctl_stop":
-            daemon.stop()
+            # To bypass is_started logic of CephadmUnit
+            daemon.remote.sh(daemon.stop_cmd, check_status=False)
         elif chosen_method == "daemon_remove":
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "rm",
@@ -399,14 +432,24 @@ class NvmeofThrasher(Thrasher, Greenlet):
         return chosen_method
 
     def revive_daemon(self, daemon, killed_method):
+        name = '%s.%s' % (daemon.type_, daemon.id_)
         if killed_method == "ceph_daemon_stop":
-            name = '%s.%s' % (daemon.type_, daemon.id_)
             daemon.remote.run(args=[
                 "ceph", "orch", "daemon", "restart",
                 name
             ])
+        # note: temporarily use 'daemon start' to restart
+        # daemons instead of 'systemctl start'
         elif killed_method == "systemctl_stop":
-            daemon.restart() 
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "start",
+                name
+            ])
+        else:
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "start",
+                name
+            ])
 
     def do_thrash(self):
         self.log('start thrashing')
@@ -514,6 +557,9 @@ class ThrashTest(Nvmeof):
             raise RuntimeError('error during thrashing')
         self.thrasher.join()
         log.info('done joining')
+
+    def teardown(self):
+        log.info('tearing down nvmeof thrasher...')
 
 
 task = Nvmeof

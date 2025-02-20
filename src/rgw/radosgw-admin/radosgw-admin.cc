@@ -1,9 +1,10 @@
-/*
- * Copyright (C) 2025 IBM 
-*/
 
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
+
+/*
+ * Copyright (C) 2025 IBM 
+*/
 
 #include <cerrno>
 #include <string>
@@ -83,6 +84,8 @@ extern "C" {
 
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
+
+#include <iomanip>
 
 #define dout_context g_ceph_context
 
@@ -7740,13 +7743,14 @@ int main(int argc, const char **argv)
       cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << std::endl;
       return -ret;
     }
+    const auto old_obj = obj_name;
     ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), null_yield, true, &objv_tracker);
     if (ret < 0) {
-      cerr << "ERROR: failed to flush pending logging object '" << obj_name
+      cerr << "ERROR: failed to flush pending logging object '" << old_obj
         << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
       return -ret;
     }
-    cout << "flushed pending logging object '" << obj_name
+    cout << "flushed pending logging object '" << old_obj
       << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
     return 0;
   }
@@ -8428,8 +8432,8 @@ next:
   } // OPT::OBJECT_REINDEX
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE) {
-    if (!static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(dpp(), null_yield)) {
-      cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
+    if (!driver->process_expired_objects(dpp(), null_yield)) {
+      cerr << "ERROR: process_expired_objects() processing returned error." << std::endl;
       return 1;
     }
   }
@@ -8864,9 +8868,19 @@ next:
       } else if (iter->first == RGW_ATTR_SOURCE_ZONE) {
         handled = decode_dump<uint32_t>("source_zone", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_RESTORE_EXPIRY_DATE) {
-        handled = decode_dump<utime_t>("restore_expiry_date", bl, formatter.get());
+        handled = decode_dump<ceph::real_time>("restore_expiry_date", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
-        handled = decode_dump<utime_t>("restore_time", bl, formatter.get());
+        handled = decode_dump<ceph::real_time>("restore_time", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_RESTORE_TYPE) {
+        rgw::sal::RGWRestoreType rt;
+        decode(rt, bl);
+        formatter->dump_string("RestoreType", rgw::sal::rgw_restore_type_dump(rt));
+        handled = true;
+      } else if (iter->first == RGW_ATTR_RESTORE_STATUS) {
+        rgw::sal::RGWRestoreStatus rs;
+        decode(rs, bl);
+        formatter->dump_string("RestoreStatus", rgw::sal::rgw_restore_status_dump(rs));
+        handled = true;
       }
 
       if (!handled)
@@ -8882,6 +8896,8 @@ next:
       bufferlist& bl = iter->second;
       if (iter->first == RGW_ATTR_OBJ_REPLICATION_TIMESTAMP) {
         decode_dump<ceph::real_time>("user.rgw.replicated-at", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+        decode_dump<ceph::real_time>("user.rgw.restore-at", bl, formatter.get());
       } else {
         dump_string(iter->first.c_str(), iter->second, formatter.get());
       }

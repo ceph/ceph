@@ -25,7 +25,8 @@
 #include "common/ceph_mutex.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
-#include "include/unordered_map.h"
+
+#include <unordered_map>
 
 template <class K, class V>
 class SharedLRU {
@@ -46,7 +47,7 @@ public:
 private:
   using C = std::less<K>;
   using H = std::hash<K>;
-  ceph::unordered_map<K, typename std::list<std::pair<K, VPtr> >::iterator, H> contents;
+  std::unordered_map<K, typename std::list<std::pair<K, VPtr>>::iterator, H> contents;
   std::list<std::pair<K, VPtr> > lru;
 
   std::map<K, std::pair<WeakVPtr, V*>, C> weak_refs;

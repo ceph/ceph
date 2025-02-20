@@ -13,6 +13,9 @@
  */
 
 #include "common.h"
+#include "log/Log.h"
+
+#include <boost/optional.hpp>
 
 struct EstimateResult {
   std::unique_ptr<CDC> cdc;

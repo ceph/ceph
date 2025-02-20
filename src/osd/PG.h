@@ -604,7 +604,7 @@ public:
   void queue_snap_retrim(snapid_t snap);
 
   void on_backfill_reserved() override;
-  void on_backfill_canceled() override;
+  void on_backfill_suspended() override;
   void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
 

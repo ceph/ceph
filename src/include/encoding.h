@@ -23,12 +23,13 @@
 #include <string_view>
 #include <tuple>
 #include <optional>
+#include <unordered_map>
+#include <unordered_set>
+
 #include <boost/container/small_vector.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
 
-#include "include/unordered_map.h"
-#include "include/unordered_set.h"
 #include "common/ceph_time.h"
 
 #include "include/int_types.h"
@@ -586,16 +587,16 @@ inline void encode(const std::multimap<T,U,Comp,Alloc>& m, bufferlist& bl);
 template<class T, class U, class Comp, class Alloc>
 inline void decode(std::multimap<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p);
 template<class T, class U, class Hash, class Pred, class Alloc>
-inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl,
+inline void encode(const std::unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl,
 		   uint64_t features);
 template<class T, class U, class Hash, class Pred, class Alloc>
-inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl);
+inline void encode(const std::unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl);
 template<class T, class U, class Hash, class Pred, class Alloc>
-inline void decode(unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p);
+inline void decode(std::unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p);
 template<class T, class Hash, class Pred, class Alloc>
-inline void encode(const ceph::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist& bl);
+inline void encode(const std::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist& bl);
 template<class T, class Hash, class Pred, class Alloc>
-inline void decode(ceph::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p);
+inline void decode(std::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p);
 template<class T, class Alloc>
 inline void encode(const std::deque<T,Alloc>& ls, bufferlist& bl, uint64_t features);
 template<class T, class Alloc>
@@ -1299,9 +1300,9 @@ inline void decode(std::multimap<T,U,Comp,Alloc>& m, bufferlist::const_iterator&
   }
 }
 
-// ceph::unordered_map
+// std::unordered_map
 template<class T, class U, class Hash, class Pred, class Alloc>
-inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl,
+inline void encode(const std::unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl,
 		   uint64_t features)
 {
   __u32 n = (__u32)(m.size());
@@ -1312,7 +1313,7 @@ inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl,
   }
 }
 template<class T, class U, class Hash, class Pred, class Alloc>
-inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl)
+inline void encode(const std::unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
@@ -1322,7 +1323,7 @@ inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl)
   }
 }
 template<class T, class U, class Hash, class Pred, class Alloc>
-inline void decode(unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p)
+inline void decode(std::unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -1335,7 +1336,7 @@ inline void decode(unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist::const_iter
 }
 
 template <std::move_constructible T, std::move_constructible U, class Hash, class Pred, class Alloc>
-inline void decode(unordered_map<T, U, Hash, Pred, Alloc>& m, bufferlist::const_iterator& p)
+inline void decode(std::unordered_map<T, U, Hash, Pred, Alloc>& m, bufferlist::const_iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -1349,9 +1350,9 @@ inline void decode(unordered_map<T, U, Hash, Pred, Alloc>& m, bufferlist::const_
   }
 }
 
-// ceph::unordered_set
+// std::unordered_set
 template<class T, class Hash, class Pred, class Alloc>
-inline void encode(const ceph::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist& bl)
+inline void encode(const std::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
@@ -1359,7 +1360,7 @@ inline void encode(const ceph::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist& 
     encode(*p, bl);
 }
 template<class T, class Hash, class Pred, class Alloc>
-inline void decode(ceph::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p)
+inline void decode(std::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist::const_iterator& p)
 {
   __u32 n;
   decode(n, p);

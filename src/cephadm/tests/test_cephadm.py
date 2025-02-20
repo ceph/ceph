@@ -226,7 +226,9 @@ class TestCephAdm(object):
 
     @mock.patch('cephadm.logger')
     def test_parse_mem_usage(self, _logger):
-        len, summary = _cephadm._parse_mem_usage(0, 'c6290e3f1489,-- / --')
+        from cephadmlib.container_engines import _parse_mem_usage
+
+        len, summary = _parse_mem_usage(0, 'c6290e3f1489,-- / --')
         assert summary == {}
 
     def test_CustomValidation(self):
@@ -648,9 +650,8 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mgr.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                 ),
                 _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
@@ -665,9 +666,8 @@ class TestCephAdm(object):
                     {'name': 'mgr.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                 ),
                 _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
@@ -682,9 +682,8 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '10000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                 ),
                 _cephadm.ContainerInfo('935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
                                  'registry.hub.docker.com/rkachach/ceph:custom-v0.5',
                                  '666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4',
@@ -699,9 +698,7 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-FFFF-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("",
-                 "",
-                 127),
+                None,
                 None
             ),
             # get container info by name (bad container stats: 127 code)
@@ -712,9 +709,7 @@ class TestCephAdm(object):
                     {'name': 'mgr.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("",
-                 "",
-                 127),
+                None,
                 None
             ),
             # get container info by invalid name (doens't contain '.')
@@ -725,9 +720,8 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                 ),
                 None
             ),
             # get container info by invalid name (empty)
@@ -738,9 +732,8 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                 ),
                 None
             ),
             # get container info by invalid type (empty)
@@ -751,9 +744,8 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-0000-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                 ),
                 None
             ),
             # get container info by name: no match (invalid fsid)
@@ -764,9 +756,8 @@ class TestCephAdm(object):
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-1111-0000-0000-0000deadbeef'},
                     {'name': 'mon.ceph-node-0', 'fsid': '00000000-2222-0000-0000-0000deadbeef'},
                 ],
-                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972,registry.hub.docker.com/rkachach/ceph:custom-v0.5,666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4,2022-04-19 13:45:20.97146228 +0000 UTC,",
-                 "",
-                 0),
+                ("935b549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972", "registry.hub.docker.com/rkachach/ceph:custom-v0.5", "666bbfa87e8df05702d6172cae11dd7bc48efb1d94f1b9e492952f19647199a4", "2022-04-19 13:45:20.97146228 +0000 UTC", ""
+                ),
                 None
             ),
             # get container info by name: no match
@@ -786,19 +777,36 @@ class TestCephAdm(object):
                 None
             ),
         ])
-    @mock.patch('cephadm.logger')
-    def test_get_container_info(self, _logger, daemon_filter, by_name, daemon_list, container_stats, output):
+    def test_get_container_info(
+        self,
+        daemon_filter,
+        by_name,
+        daemon_list,
+        container_stats,
+        output,
+        funkypatch,
+    ):
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeef'
         ctx.container_engine = mock_podman()
-        with mock.patch('cephadm.list_daemons', return_value=daemon_list):
-            with mock.patch('cephadm.get_container_stats', return_value=container_stats):
-                assert _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
+        funkypatch.patch('cephadm.list_daemons').return_value = daemon_list
+        cinfo = (
+            _cephadm.ContainerInfo(*container_stats)
+            if container_stats
+            else None
+        )
+        funkypatch.patch(
+            'cephadmlib.container_types.get_container_stats'
+        ).return_value = cinfo
+        assert (
+            _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
+        )
 
-    @mock.patch('cephadm.list_daemons')
-    @mock.patch('cephadm.get_container_stats')
-    @mock.patch('cephadm.get_container_stats_by_image_name')
-    def test_get_container_info_daemon_down(self, _get_stats_by_name, _get_stats, _list_daemons):
+    def test_get_container_info_daemon_down(self, funkypatch):
+        _get_stats_by_name = funkypatch.patch('cephadmlib.container_engines.parsed_container_image_stats')
+        _get_stats = funkypatch.patch('cephadmlib.container_types.get_container_stats')
+        _list_daemons = funkypatch.patch('cephadm.list_daemons')
+
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '5e39c134-dfc5-11ee-a344-5254000ee071'
         ctx.container_engine = mock_podman()
@@ -837,9 +845,6 @@ class TestCephAdm(object):
                 "configured": "2024-03-11T17:37:28.494075Z"
         }
         _list_daemons.return_value = [down_osd_json]
-        _get_stats_by_name.return_value = (('a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318,'
-                                   '2023-11-28 21:34:38.045413692 +0000 UTC,'),
-                                   '', 0)
 
         expected_container_info = _cephadm.ContainerInfo(
             container_id='',
@@ -847,6 +852,10 @@ class TestCephAdm(object):
             image_id='a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318',
             start='2023-11-28 21:34:38.045413692 +0000 UTC',
             version='')
+        # refactoring get_container_stats_by_image_name into
+        # parsed_container_image_stats has made this part of the test somewhat
+        # redundant
+        _get_stats_by_name.return_value = expected_container_info
 
         assert _cephadm.get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
         assert not _get_stats.called, 'only get_container_stats_by_image_name should have been called'
@@ -857,7 +866,7 @@ class TestCephAdm(object):
         # than it partially being taken from the list_daemons output
         up_osd_json = copy.deepcopy(down_osd_json)
         up_osd_json['state'] = 'running'
-        _get_stats.return_value = (('container_id,image_name,image_id,the_past,'), '', 0)
+        _get_stats.return_value = _cephadm.ContainerInfo('container_id', 'image_name','image_id','the_past','')
         _list_daemons.return_value = [down_osd_json, up_osd_json]
 
         expected_container_info = _cephadm.ContainerInfo(
@@ -1665,7 +1674,9 @@ class TestBootstrap(object):
 
 class TestShell(object):
 
-    def test_fsid(self, cephadm_fs):
+    def test_fsid(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
         fsid = '00000000-0000-0000-0000-0000deadbeef'
 
         cmd = ['shell', '--fsid', fsid]
@@ -1699,7 +1710,10 @@ class TestShell(object):
                 assert retval == 1
                 assert ctx.fsid == None
 
-    def test_name(self, cephadm_fs):
+    def test_name(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--name', 'foo']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1718,7 +1732,10 @@ class TestShell(object):
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
 
-    def test_config(self, cephadm_fs):
+    def test_config(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1737,7 +1754,10 @@ class TestShell(object):
             assert retval == 0
             assert ctx.config == 'foo'
 
-    def test_keyring(self, cephadm_fs):
+    def test_keyring(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1756,24 +1776,33 @@ class TestShell(object):
             assert retval == 0
             assert ctx.keyring == 'foo'
 
-    @mock.patch('cephadm.CephContainer')
-    def test_mount_no_dst(self, _ceph_container, cephadm_fs):
+    def test_mount_no_dst(self, cephadm_fs, funkypatch):
+        _ceph_container = funkypatch.patch('cephadm.CephContainer')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--mount', '/etc/foo']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
             assert _ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/mnt/foo'
 
-    @mock.patch('cephadm.CephContainer')
-    def test_mount_with_dst_no_opt(self, _ceph_container, cephadm_fs):
+    def test_mount_with_dst_no_opt(self, cephadm_fs, funkypatch):
+        _ceph_container = funkypatch.patch('cephadm.CephContainer')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
             assert _ceph_container.call_args.kwargs['volume_mounts']['/etc/foo'] == '/opt/foo/bar'
 
-    @mock.patch('cephadm.CephContainer')
-    def test_mount_with_dst_and_opt(self, _ceph_container, cephadm_fs):
+    def test_mount_with_dst_and_opt(self, cephadm_fs, funkypatch):
+        _ceph_container = funkypatch.patch('cephadm.CephContainer')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = ['shell', '--mount', '/etc/foo:/opt/foo/bar:Z']
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
@@ -1790,7 +1819,10 @@ class TestCephVolume(object):
             '--', 'inventory', '--format', 'json'
         ]
 
-    def test_noop(self, cephadm_fs):
+    def test_noop(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = self._get_cmd()
         with with_cephadm_ctx(cmd) as ctx:
             _cephadm.command_ceph_volume(ctx)
@@ -1799,7 +1831,10 @@ class TestCephVolume(object):
             assert ctx.keyring == None
             assert ctx.config_json == None
 
-    def test_fsid(self, cephadm_fs):
+    def test_fsid(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         fsid = '00000000-0000-0000-0000-0000deadbeef'
 
         cmd = self._get_cmd('--fsid', fsid)
@@ -1830,7 +1865,10 @@ class TestCephVolume(object):
                 _cephadm.command_ceph_volume(ctx)
                 assert ctx.fsid == None
 
-    def test_config(self, cephadm_fs):
+    def test_config(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = self._get_cmd('--config', 'foo')
         with with_cephadm_ctx(cmd) as ctx:
             err = r'No such file or directory'
@@ -1843,7 +1881,10 @@ class TestCephVolume(object):
             _cephadm.command_ceph_volume(ctx)
             assert ctx.config == 'bar'
 
-    def test_keyring(self, cephadm_fs):
+    def test_keyring(self, cephadm_fs, funkypatch):
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
+        _call.side_effect = lambda *args, **kwargs: ('', '', 0)
+
         cmd = self._get_cmd('--keyring', 'foo')
         with with_cephadm_ctx(cmd) as ctx:
             err = r'No such file or directory'
@@ -2260,7 +2301,7 @@ class TestPull:
         funkypatch.patch('cephadm.logger')
         _giifi = funkypatch.patch('cephadm.get_image_info_from_inspect')
         _giifi.return_value = {}
-        _call = funkypatch.patch('cephadmlib.call_wrappers.call')
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call', force=True)
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False

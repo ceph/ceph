@@ -49,8 +49,13 @@ create_users() {
     ceph auth get-or-create client.snap_none mon 'allow r' >> $KEYRING
     ceph auth get-or-create client.snap_all mon 'allow r' osd 'allow w' >> $KEYRING
     ceph auth get-or-create client.snap_pool mon 'allow r' osd 'allow w pool=images' >> $KEYRING
+    ceph auth get-or-create client.snap_pool_namespace mon 'allow r' osd 'allow w pool=images namespace=foo' >> $KEYRING
+    ceph auth get-or-create client.snap_namespace mon 'allow r' osd 'allow w namespace=foo' >> $KEYRING
+    ceph auth get-or-create client.snap_tag mon 'allow r' osd 'allow w tag fooapp *=*' >> $KEYRING
     ceph auth get-or-create client.snap_profile_all mon 'allow r' osd 'profile rbd' >> $KEYRING
     ceph auth get-or-create client.snap_profile_pool mon 'allow r' osd 'profile rbd pool=images' >> $KEYRING
+    ceph auth get-or-create client.snap_profile_pool_namespace mon 'allow r' osd 'profile rbd pool=images namespace=foo' >> $KEYRING
+    ceph auth get-or-create client.snap_profile_namespace mon 'allow r' osd 'profile rbd namespace=foo' >> $KEYRING
 
     ceph auth get-or-create client.mon_write mon 'allow *' >> $KEYRING
 }
@@ -208,11 +213,26 @@ test_remove_self_managed_snapshots() {
     create_self_managed_snapshot snap_pool images
     expect 1 create_self_managed_snapshot snap_pool volumes
 
+    create_self_managed_snapshot snap_pool_namespace images
+    expect 1 create_self_managed_snapshot snap_pool_namespace volumes
+
+    create_self_managed_snapshot snap_namespace images
+    create_self_managed_snapshot snap_namespace volumes
+
+    expect 1 create_self_managed_snapshot snap_tag images
+    expect 1 create_self_managed_snapshot snap_tag volumes
+
     create_self_managed_snapshot snap_profile_all images
     create_self_managed_snapshot snap_profile_all volumes
 
     create_self_managed_snapshot snap_profile_pool images
     expect 1 create_self_managed_snapshot snap_profile_pool volumes
+
+    create_self_managed_snapshot snap_profile_pool_namespace images
+    expect 1 create_self_managed_snapshot snap_profile_pool_namespace volumes
+
+    create_self_managed_snapshot snap_profile_namespace images
+    create_self_managed_snapshot snap_profile_namespace volumes
 
     # Ensure users cannot delete self-managed snapshots w/o permissions
     expect 1 remove_self_managed_snapshot snap_none images
@@ -224,11 +244,26 @@ test_remove_self_managed_snapshots() {
     remove_self_managed_snapshot snap_pool images
     expect 1 remove_self_managed_snapshot snap_pool volumes
 
+    remove_self_managed_snapshot snap_pool_namespace images
+    expect 1 remove_self_managed_snapshot snap_pool_namespace volumes
+
+    remove_self_managed_snapshot snap_namespace images
+    remove_self_managed_snapshot snap_namespace volumes
+
+    expect 1 remove_self_managed_snapshot snap_tag images
+    expect 1 remove_self_managed_snapshot snap_tag volumes
+
     remove_self_managed_snapshot snap_profile_all images
     remove_self_managed_snapshot snap_profile_all volumes
 
     remove_self_managed_snapshot snap_profile_pool images
     expect 1 remove_self_managed_snapshot snap_profile_pool volumes
+
+    remove_self_managed_snapshot snap_profile_pool_namespace images
+    expect 1 remove_self_managed_snapshot snap_profile_pool_namespace volumes
+
+    remove_self_managed_snapshot snap_profile_namespace images
+    remove_self_managed_snapshot snap_profile_namespace volumes
 }
 
 test_rbd_support() {

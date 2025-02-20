@@ -14,8 +14,11 @@
 #include <string>
 
 #include "common/ceph_argparse.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "common/strtol.h"
 
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/str_list.h"
 #include "mon/MonMap.h"

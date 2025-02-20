@@ -779,7 +779,7 @@ function maybe_deduce_remote {
     else
         assert_fail "bad remote_type ->$remote_type<- in maybe_deduce_remote"
     fi
-    remote=$(git remote -v | grep --extended-regexp --ignore-case '(://|@)github.com(/|:|:/)'${url_component}'/ceph(\s|\.|\/|-)' | head -n1 | cut -f 1)
+    remote=$(git remote -v | grep --extended-regexp --ignore-case '(://|@)github.com(/|:|:/)'${url_component}'/ceph(\s|\.|/|-)' | head -n1 | cut -f 1)
     echo "$remote"
 }
 
@@ -1078,6 +1078,7 @@ function try_known_milestones {
         pacific) mn="14" ;;
         quincy) mn="15" ;;
         reef) mn="16" ;;
+        squid) mn="17" ;;
     esac
     echo "$mn"
 }
@@ -1741,7 +1742,6 @@ fi
 
 if [ "$PR_PHASE" ] || [ "$EXISTING_PR" ] ; then
     maybe_update_pr_milestone_labels
-    pgrep firefox >/dev/null && firefox "${backport_pr_url}"
 fi
 
 if [ "$TRACKER_PHASE" ] ; then
@@ -1792,12 +1792,10 @@ if [ "$TRACKER_PHASE" ] ; then
     if [ "$tracker_is_in_desired_state" ] ; then
         [ "$tracker_was_updated" ] && info "Backport tracker ${redmine_url} was updated"
         info "Backport tracker ${redmine_url} is in the desired state"
-        pgrep firefox >/dev/null && firefox "${redmine_url}"
         exit 0
     fi
     if [ "$tracker_was_updated" ] ; then
         warning "backport tracker ${redmine_url} was updated, but is not in the desired state. Please check it."
-        pgrep firefox >/dev/null && firefox "${redmine_url}"
         exit 1
     else
         data_binary="{\"issue\":{\"notes\":\"please link this Backport tracker issue with GitHub PR ${desc_should_be}\nceph-backport.sh version ${SCRIPT_VERSION}\"}}"

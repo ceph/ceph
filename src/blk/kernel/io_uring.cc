@@ -146,7 +146,7 @@ int ioring_queue_t::init(std::vector<int> &fds)
   d->epoll_fd = epoll_create1(0);
   if (d->epoll_fd < 0) {
     ret = -errno;
-    goto close_ring_fd;
+    goto unregister_files;
   }
 
   struct epoll_event ev;
@@ -161,6 +161,8 @@ int ioring_queue_t::init(std::vector<int> &fds)
 
 close_epoll_fd:
   close(d->epoll_fd);
+unregister_files:
+  io_uring_unregister_files(&d->io_uring);
 close_ring_fd:
   io_uring_queue_exit(&d->io_uring);
 
@@ -172,12 +174,13 @@ void ioring_queue_t::shutdown()
   d->fixed_fds_map.clear();
   close(d->epoll_fd);
   d->epoll_fd = -1;
+  io_uring_unregister_files(&d->io_uring);
   io_uring_queue_exit(&d->io_uring);
 }
 
 int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
                                  void *priv,
-                                 int *retries)
+                                 int *retries, int submit_retries, int initial_delay_us)
 {
   (void)retries;
 
@@ -245,7 +248,7 @@ void ioring_queue_t::shutdown()
 
 int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
                                  void *priv,
-                                 int *retries)
+                                 int *retries, int submit_retries, int initial_delay_us)
 {
   ceph_assert(0);
 }

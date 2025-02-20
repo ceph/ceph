@@ -68,7 +68,9 @@ namespace rados {
         bufferlist in;
         bufferlist out;
         encode(op, in);
-        int r = ioctx.exec(oid, "otp", "otp_check", in, out);
+        librados::ObjectWriteOperation wop;
+        wop.exec("otp", "otp_check", in);
+        int r = ioctx.operate(oid, &wop);
         if (r < 0) {
           return r;
         }

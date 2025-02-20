@@ -23,7 +23,6 @@
 
 #include "include/types.h"
 #include "include/stringify.h"
-#include "include/unordered_map.h"
 #include "common/errno.h"
 #include "MemStore.h"
 #include "include/compat.h"
@@ -248,7 +247,7 @@ objectstore_perf_stat_t MemStore::get_cur_stats()
 MemStore::CollectionRef MemStore::get_collection(const coll_t& cid)
 {
   std::shared_lock l{coll_lock};
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+  auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
@@ -403,9 +402,7 @@ int MemStore::list_collections(std::vector<coll_t>& ls)
 {
   dout(10) << __func__ << dendl;
   std::shared_lock l{coll_lock};
-  for (ceph::unordered_map<coll_t,CollectionRef>::iterator p = coll_map.begin();
-       p != coll_map.end();
-       ++p) {
+  for (auto p = coll_map.begin(); p != coll_map.end(); ++p) {
     ls.push_back(p->first);
   }
   return 0;
@@ -1373,7 +1370,7 @@ int MemStore::_destroy_collection(const coll_t& cid)
 {
   dout(10) << __func__ << " " << cid << dendl;
   std::lock_guard l{coll_lock};
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+  auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return -ENOENT;
   {
@@ -1502,7 +1499,7 @@ int MemStore::_merge_collection(const coll_t& cid, uint32_t bits, coll_t dest)
 
   {
     std::lock_guard l{coll_lock};
-    ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+    auto cp = coll_map.find(cid);
     ceph_assert(cp != coll_map.end());
     used_bytes -= cp->second->used_bytes();
     coll_map.erase(cp);

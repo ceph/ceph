@@ -16,8 +16,7 @@
 #define CEPH_MDS_SESSIONMAP_H
 
 #include <set>
-
-#include "include/unordered_map.h"
+#include <unordered_map>
 
 #include "include/Context.h"
 #include "include/xlist.h"
@@ -587,7 +586,7 @@ public:
 
 protected:
   version_t version = 0;
-  ceph::unordered_map<entity_name_t, Session*> session_map;
+  std::unordered_map<entity_name_t, Session*> session_map;
   PerfCounters *logger =nullptr;
 
   // total request load avg
@@ -673,7 +672,7 @@ public:
 	    session_map_entry-> second : nullptr);
   }
   const Session* get_session(entity_name_t w) const {
-    ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
+    auto p = session_map.find(w);
     if (p == session_map.end()) {
       return NULL;
     } else {

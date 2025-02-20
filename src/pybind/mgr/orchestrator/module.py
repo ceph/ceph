@@ -21,7 +21,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spe
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 from ceph.utils import datetime_now
-
+from ceph.cephadm.images import NonCephImageServiceTypes
 from mgr_util import to_pretty_timedelta, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
@@ -2381,7 +2381,9 @@ Usage:
             'is_paused': status.is_paused,
         }
         out = json.dumps(r, indent=4)
-        return HandleCommandResult(stdout=out)
+        if r.get('in_progress'):
+            return HandleCommandResult(stdout=out)
+        return HandleCommandResult(stdout="There are no upgrades in progress currently.")
 
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
@@ -2418,5 +2420,12 @@ Usage:
     def _upgrade_stop(self) -> HandleCommandResult:
         """Stop an in-progress upgrade"""
         completion = self.upgrade_stop()
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command('orch update service')
+    def _update_service(self, service_type: NonCephImageServiceTypes, image: str) -> HandleCommandResult:
+        """Update image for non-ceph image daemon"""
+        completion = self.update_service(service_type.value, service_type.name, image)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

@@ -8,6 +8,7 @@
 #include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
+#include "mgr/DaemonHealthMetric.h"
 #include "mon/MgrMap.h"
 
 template<typename Message> using Ref = boost::intrusive_ptr<Message>;
@@ -35,6 +36,7 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
   void report();
+  void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
 private:
   std::optional<seastar::future<>> ms_dispatch(
@@ -58,6 +60,8 @@ private:
   crimson::common::gate_per_shard gates;
   uint64_t last_config_bl_version = 0;
   std::string service_name, daemon_name;
+
+  std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   void _send_report();
 };

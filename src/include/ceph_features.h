@@ -1,7 +1,9 @@
 #ifndef __CEPH_FEATURES
 #define __CEPH_FEATURES
 
-#include "sys/types.h"
+#include <cstdint>
+
+#include <sys/types.h>
 
 /*
  * Each time we reclaim bits for reuse we need to specify another

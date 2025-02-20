@@ -35,7 +35,8 @@ $content-theme: map-merge(
     text-disabled: vv.$gray-500,
     icon-secondary: vv.$gray-800,
     field-01: colors.$gray-10,
-    interactive: vv.$primary
+    interactive: vv.$primary,
+    border-interactive: vv.$primary
   )
 );
 

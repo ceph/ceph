@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 #include <boost/algorithm/string.hpp>

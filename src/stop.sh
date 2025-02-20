@@ -234,3 +234,8 @@ else
     [ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
     [ $stop_cephadm -eq 1 ] && do_killcephadm
 fi
+
+# Check whether the --crimson-balance-cpu option was used, if so remove any auxiliary files left:
+if [ "$ceph_osd" == "crimson-osd" ] && [ -f /tmp/numa_args_*.out ]; then
+    rm -f /tmp/numa_args_*.out
+fi

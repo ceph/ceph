@@ -1,8 +1,7 @@
-import { DebugElement, Type } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA, DebugElement, NO_ERRORS_SCHEMA, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
-import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
 import { NgbModal, NgbNav, NgbNavItem, NgbNavLink } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -29,20 +28,12 @@ import {
   PrometheusRule
 } from '~/app/shared/models/prometheus-alerts';
 
-export function configureTestBed(configuration: any, entryComponents?: any) {
-  beforeEach(async () => {
-    if (entryComponents) {
-      // Declare entryComponents without having to add them to a module
-      // This is needed since Jest doesn't yet support not declaring entryComponents
-      await TestBed.configureTestingModule(configuration).overrideModule(
-        BrowserDynamicTestingModule,
-        {
-          set: { entryComponents: entryComponents }
-        }
-      );
-    } else {
-      await TestBed.configureTestingModule(configuration);
-    }
+export function configureTestBed(configuration: any) {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      ...configuration,
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA]
+    });
   });
 }
 

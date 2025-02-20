@@ -88,7 +88,7 @@ void NVMeofGwMon::tick()
     // This case handles either local slowness (calls being delayed
     // for whatever reason) or cluster election slowness (a long gap
     // between calls while an election happened)
-    dout(10) << ": resetting beacon timeouts due to mon delay "
+    dout(4) << ": resetting beacon timeouts due to mon delay "
       "(slow election?) of " << now - last_tick << " seconds" << dendl;
     for (auto &i : last_beacon) {
       i.second = now;
@@ -110,7 +110,7 @@ void NVMeofGwMon::tick()
     auto& lb = itr.first;
     auto last_beacon_time = itr.second;
     if (last_beacon_time < cutoff) {
-      dout(10) << "beacon timeout for GW " << lb.gw_id << dendl;
+      dout(1) << "beacon timeout for GW " << lb.gw_id << dendl;
       pending_map.process_gw_map_gw_down(lb.gw_id, lb.group_key, propose);
       _propose_pending |= propose;
       last_beacon.erase(lb);
@@ -544,16 +544,16 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	       << map.created_gws << dendl;
       goto set_propose;
     } else {
-      dout(10) << "GW  prepares the full startup " << gw_id
+      dout(4) << "GW  prepares the full startup " << gw_id
 	       << " GW availability: "
 	       << pending_map.created_gws[group_key][gw_id].availability
 	       << dendl;
       if (pending_map.created_gws[group_key][gw_id].availability ==
 	  gw_availability_t::GW_AVAILABLE) {
-	dout(4) << " Warning :GW marked as Available in the NVmeofGwMon "
+	dout(1) << " Warning :GW marked as Available in the NVmeofGwMon "
 		<< "database, performed full startup - Apply GW!"
 		<< gw_id << dendl;
-	 pending_map.handle_gw_performing_fast_reboot(gw_id, group_key, propose);
+	 process_gw_down(gw_id, group_key, propose, avail);
 	 LastBeacon lb = {gw_id, group_key};
 	 last_beacon[lb] = now; //Update last beacon
       } else if (
@@ -578,7 +578,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	ack_map.created_gws[group_key][gw_id] =
 	  pending_map.created_gws[group_key][gw_id];
 	ack_map.epoch = map.epoch;
-	dout(4) << " Force gw to exit: Sending ack_map to GW: "
+	dout(1) << " Force gw to exit: Sending ack_map to GW: "
 		<< gw_id << dendl;
 	auto msg = make_message<MNVMeofGwMap>(ack_map);
 	mon.send_reply(op, msg.detach());

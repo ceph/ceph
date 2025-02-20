@@ -32,6 +32,15 @@ namespace {
 
 namespace crimson::osd {
 
+// workaround for clang 19
+// when a .cc file includes ops_executer.h but doesn't include the pg.h,
+// it seems that clang++-19 can't retrieve the type hierarchy of PG, so
+// that the destructor of boost::intrusive_ptr<PG> could not find the hidden
+// friend of intrusive_ptr_release.
+// Moving the destructor invocation of intrusive_ptr to this file could
+// solve this issue.
+OpsExecuter::~OpsExecuter() {}
+
 OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 {
   std::string cname, mname;

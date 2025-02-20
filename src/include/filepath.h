@@ -24,14 +24,14 @@
 
 
 #include <iosfwd>
+#include <list>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "buffer.h"
 #include "encoding.h"
-#include "include/types.h"
-#include "include/fs_types.h"
+#include "include/fs_types.h" // for inodeno_t
 
 #include "common/Formatter.h"
 

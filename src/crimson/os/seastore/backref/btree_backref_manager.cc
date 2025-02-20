@@ -47,24 +47,21 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
   }
 }
 
-template <typename ROOT>
-void link_phy_tree_root_node(RootBlockRef &root_block, ROOT* backref_root) {
-  root_block->backref_root_node = backref_root;
-  ceph_assert(backref_root != nullptr);
-  backref_root->root_block = root_block;
-}
+template <typename RootT>
+class TreeRootLinker<RootBlock, RootT> {
+public:
+  static void link_root(RootBlockRef &root_block, RootT* backref_root) {
+    root_block->backref_root_node = backref_root;
+    ceph_assert(backref_root != nullptr);
+    backref_root->parent_of_root = root_block;
+  }
+  static void unlink_root(RootBlockRef &root_block) {
+    root_block->backref_root_node = nullptr;
+  }
+};
 
-template void link_phy_tree_root_node(
-  RootBlockRef &root_block, backref::BackrefInternalNode* backref_root);
-template void link_phy_tree_root_node(
-  RootBlockRef &root_block, backref::BackrefLeafNode* backref_root);
-template void link_phy_tree_root_node(
-  RootBlockRef &root_block, backref::BackrefNode* backref_root);
-
-template <>
-void unlink_phy_tree_root_node<paddr_t>(RootBlockRef &root_block) {
-  root_block->backref_root_node = nullptr;
-}
+template class TreeRootLinker<RootBlock, backref::BackrefInternalNode>;
+template class TreeRootLinker<RootBlock, backref::BackrefLeafNode>;
 
 }
 
@@ -231,8 +228,7 @@ BtreeBackrefManager::new_mapping(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    val,
-	    nullptr
+	    val
 	  ).si_then([&state, c, addr, len, key](auto &&p) {
 	    LOG_PREFIX(BtreeBackrefManager::new_mapping);
 	    auto [iter, inserted] = std::move(p);

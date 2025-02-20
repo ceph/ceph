@@ -17,6 +17,11 @@
 #include "include/ceph_assert.h"
 #include "common/dout.h"
 
+#include <iomanip>
+#include <ostream>
+#include <sstream>
+#include <string>
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, epoch, elector)

@@ -1,12 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "hobject.h"
+#include "common/Formatter.h"
+
 #include <charconv>
 #include <fmt/compile.h>
 #include <fmt/core.h>
-
-#include "hobject.h"
-#include "common/Formatter.h"
 
 using std::list;
 using std::ostream;

@@ -77,13 +77,8 @@ int ceph_flags_sys2wire(int flags)
        ceph_sys2wire(O_EXCL);
        ceph_sys2wire(O_TRUNC);
 
-       #ifndef _WIN32
        ceph_sys2wire(O_DIRECTORY);
        ceph_sys2wire(O_NOFOLLOW);
-       // In some cases, FILE_FLAG_BACKUP_SEMANTICS may be used instead
-       // of O_DIRECTORY. We may need some workarounds in order to handle
-       // the fact that those flags are not available on Windows.
-       #endif
 
 #undef ceph_sys2wire
 

@@ -139,3 +139,43 @@ Join an existing realm by creating a new secondary zone (using the realm token)
   ceph rgw admin [*]
 
 RGW admin command
+
+Upgrading root ca certificates
+------------------------------
+
+#. Make sure that the RGW service is running.
+#. Make sure that the RGW service is up.
+#. Make sure that the RGW service has been upgraded to the latest release.
+#. From the Primary cluster on the Manager node, run the following command:
+
+   .. prompt:: bash #
+
+      ceph orch cert-store get cert cephadm_root_ca_cert
+
+#. On the node where the RGW service is running, store the certificate on the
+   following path::
+
+      /etc/pki/ca-trust/source/anchors/<cert_name>.crt
+
+#. Verify the certificate by running the following command:
+
+   .. prompt:: bash #
+
+      openssl x509 -in <cert_name>.crt -noout -text
+
+#. Perform the above steps on the MGR node and on the RGW node of all secondary
+   clusters.
+
+#. After the certificates have been validated on all clusters, run the
+   following command on all clusters that generate certificates: 
+
+   .. prompt:: bash #
+
+      update-ca-trust
+
+#. From the primary node, ensure that the ``curl`` command can be run by the
+   user:
+
+   .. prompt:: bash [root@primary-node]# 
+
+      curl https://<host_ip>:443

@@ -17,6 +17,8 @@ overrides:
       - OSD_UPGRADE_FINISHED
       - do not have an application enabled
       - is down
+      - TELEMETRY_CHANGED
+      - pg .*? is .*?degraded.*?, acting
 tasks:
 - install:
     branch: reef

@@ -62,9 +62,6 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 
 
 ## main branch runs - weekly
-## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
-## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
-
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
 00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 101 --force-priority
 08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 950
@@ -76,25 +73,18 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 56 20 * * 6        $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson
 
 
-## squid branch runs - twice weekly (crimson-rados is run weekly)
-## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
-## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
-
+## squid branch runs - weekly
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
-#                                                                 -p 94-
-00 21 * * 0        $CW $SS 100000 --ceph squid --suite      rados -p 700 --force-priority
-08 21 * * 1,5      $CW $SS     64 --ceph squid --suite       orch -p 100 --force-priority
-16 21 * * 2,6      $CW $SS    128 --ceph squid --suite        rbd -p 100 --force-priority
-24 21 * * 3,0      $CW $SS    512 --ceph squid --suite         fs -p 100 --force-priority
-32 21 * * 4,1      $CW $SS      4 --ceph squid --suite powercycle -p 100 --force-priority
-40 21 * * 5,2      $CW $SS      1 --ceph squid --suite        rgw -p 100 --force-priority
-48 21 * * 6,3      $CW $SS      4 --ceph squid --suite       krbd -p 100 --force-priority --kernel testing
-56 21 * * 6        $CW $SS      1 --ceph squid --suite crimson-rados -p 100 --force-priority --flavor crimson
+00 21 * * 0        $CW $SS 100000 --ceph squid --suite      rados -p 921
+08 21 * * 1        $CW $SS     64 --ceph squid --suite       orch -p 920
+16 21 * * 2        $CW $SS    128 --ceph squid --suite        rbd -p 920
+24 21 * * 3        $CW $SS    512 --ceph squid --suite         fs -p 920
+32 21 * * 4        $CW $SS      4 --ceph squid --suite powercycle -p 920
+40 21 * * 5        $CW $SS      1 --ceph squid --suite        rgw -p 920
+48 21 * * 6        $CW $SS      4 --ceph squid --suite       krbd -p 920 --kernel testing
+56 21 * * 6        $CW $SS      1 --ceph squid --suite crimson-rados -p 920 --flavor crimson
 
 ## reef branch runs - weekly
-## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
-## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
-
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
 00 22 * * 0        $CW $SS 100000 --ceph reef --suite      rados -p 931
 08 22 * * 1        $CW $SS     64 --ceph reef --suite       orch -p 930

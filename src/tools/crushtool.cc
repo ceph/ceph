@@ -27,6 +27,7 @@
 #include "common/errno.h"
 #include "common/config.h"
 #include "common/Formatter.h"
+#include "common/strtol.h" // for strict_strtol()
 
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"

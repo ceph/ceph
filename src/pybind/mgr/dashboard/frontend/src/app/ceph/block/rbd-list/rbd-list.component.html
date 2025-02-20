@@ -30,7 +30,7 @@
 <ng-template #parentTpl
              let-value="data.value">
   <span *ngIf="value">{{ value.pool_name }}<span
-          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
+          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}&#64;{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
 </ng-template>
 

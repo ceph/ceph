@@ -16,7 +16,6 @@
  */
 
 #include "PGLog.h"
-#include "include/unordered_map.h"
 #include "common/ceph_context.h"
 
 using std::make_pair;
