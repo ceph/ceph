@@ -308,9 +308,11 @@ setup_pools()
 
     rbd --cluster ${cluster} namespace create ${POOL}/${NS1}
     rbd --cluster ${cluster} namespace create ${POOL}/${NS2}
+    rbd --cluster ${cluster} namespace create ${PARENT_POOL}/${NS1}
 
     rbd --cluster ${cluster} mirror pool enable ${POOL}/${NS1} ${MIRROR_POOL_MODE}
     rbd --cluster ${cluster} mirror pool enable ${POOL}/${NS2} image
+    rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL}/${NS1} ${MIRROR_POOL_MODE}
 
     if [ -z ${RBD_MIRROR_MANUAL_PEERS} ]; then
       if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
