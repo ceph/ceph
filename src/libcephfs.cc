@@ -739,6 +739,105 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
   return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags, out);
 }
 
+extern "C" int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
+					const char* root_path,
+					const char* rel_path,
+					const char* snap1,
+					const char* snap2,
+					struct ceph_file_blockdiff_info* out_info)
+{
+  if (!cmount->is_mounted()) {
+    return -ENOTCONN;
+  }
+  if (!out_info || !root_path || !rel_path ||
+      !snap1 || !*snap1 || !snap2 || !*snap2) {
+    return -EINVAL;
+  }
+
+  char snapdir[PATH_MAX];
+  cmount->conf_get("client_snapdir", snapdir, sizeof(snapdir) - 1);
+
+  char path1[PATH_MAX];
+  char path2[PATH_MAX];
+  // construct snapshot paths for the files
+  int n = snprintf(path1, PATH_MAX, "%s/%s/%s/%s",
+		   root_path, snapdir, snap1, rel_path);
+  if (n < 0 || n == PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return -errno;
+  }
+  n = snprintf(path2, PATH_MAX, "%s/%s/%s/%s",
+	       root_path, snapdir, snap2, rel_path);
+  if (n < 0 || n == PATH_MAX) {
+    return -ENAMETOOLONG;
+  }
+
+  int r = cmount->get_client()->file_blockdiff_init_state(path1, path2,
+							  cmount->default_perms,
+							  (struct scan_state_t **)&(out_info->blockp));
+  if (r < 0) {
+    return r;
+  }
+
+  out_info->cmount = cmount;
+  return 0;
+}
+
+extern "C" int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
+				   struct ceph_file_blockdiff_changedblocks* blocks)
+{
+  if (!info->cmount->is_mounted()) {
+    return -ENOTCONN;
+  }
+
+  std::vector<std::pair<uint64_t,uint64_t>> _blocks;
+  struct scan_state_t *state = reinterpret_cast<scan_state_t *>(info->blockp);
+
+  int r = info->cmount->get_client()->file_blockdiff(state, info->cmount->default_perms, &_blocks);
+  if (r < 0) {
+    return r;
+  }
+
+  blocks->b = NULL;
+  blocks->num_blocks = _blocks.size();
+  if (blocks->num_blocks) {
+    struct cblock *b = (struct cblock *)calloc(blocks->num_blocks, sizeof(struct cblock));
+    if (!b) {
+      return -ENOMEM;
+    }
+
+    struct cblock *_b = b;
+    for (auto &_block : _blocks) {
+      _b->offset = _block.first;
+      _b->len = _block.second;
+      ++_b;
+    }
+
+    blocks->b = b;
+  }
+
+  return r;
+}
+
+extern "C" void ceph_free_file_blockdiff_buffer(struct ceph_file_blockdiff_changedblocks* blocks)
+{
+  if (blocks->b) {
+    free(blocks->b);
+  }
+  blocks->num_blocks = 0;
+  blocks->b = NULL;
+}
+
+extern "C" int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info)
+{
+  if (!info->cmount->is_mounted()) {
+    return -ENOTCONN;
+  }
+
+  struct scan_state_t *state = reinterpret_cast<scan_state_t *>(info->blockp);
+  return info->cmount->get_client()->file_blockdiff_finish(state);
+}
+
 extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
                                   const char* root_path,
                                   const char* rel_path,

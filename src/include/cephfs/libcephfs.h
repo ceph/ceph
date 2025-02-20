@@ -648,6 +648,71 @@ struct ceph_snapdiff_info
                                    // doesn't exist in the second snapshot
 };
 
+struct ceph_file_blockdiff_result;
+
+// blockdiff stream handle
+struct ceph_file_blockdiff_info
+{
+  struct ceph_mount_info* cmount;
+  struct ceph_file_blockdiff_result* blockp;
+};
+
+// set of file block diff's
+struct cblock
+{
+  uint64_t offset;
+  uint64_t len;
+};
+struct ceph_file_blockdiff_changedblocks
+{
+  uint64_t num_blocks;
+  struct cblock *b;
+};
+
+/**
+ * Initialize blockdiff stream to get file block deltas.
+ *
+ * @param cmount the ceph mount handle to use for snapdiff retrieval.
+ * @param root_path  root path for snapshots-in-question
+ * @param rel_path subpath under the root to build delta for
+ * @param snap1 the first snapshot name
+ * @param snap2 the second snapshot name
+ * @param out_info resulting blockdiff stream handle to be used for blokdiff results
+                   retrieval via ceph_file_blockdiff().
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
+                             const char* root_path,
+                             const char* rel_path,
+                             const char* snap1,
+                             const char* snap2,
+                             struct ceph_file_blockdiff_info* out_info);
+
+/**
+ * Get a set of file blockdiff's
+ *
+ * @param info blockdiff stream handle
+ * @param blocks next set of file blockdiff's (offset, length)
+ * @returns 0 or 1 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
+                        struct ceph_file_blockdiff_changedblocks* blocks);
+/**
+ * Free blockdiff buffer
+ *
+ * @param blocks file block diff's from ceph_file_blockdiff()
+ * @returns None
+ */
+void ceph_free_file_blockdiff_buffer(struct ceph_file_blockdiff_changedblocks* blocks);
+
+/**
+ * Close blockdiff stream
+ *
+ * @param info blockdiff stream handle
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info);
+
 /**
  * Opens snapdiff stream to get snapshots delta (aka snapdiff).
  *
