@@ -2077,7 +2077,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
   {
     std::lock_guard l(cache->lock);
-    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
+    auto p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
       cache->logger->inc(l_bluestore_onode_misses);
@@ -2122,9 +2122,8 @@ void BlueStore::OnodeSpace::rename(
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
-  po = onode_map.find(old_oid);
-  pn = onode_map.find(new_oid);
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
   ceph_assert(po != pn);
 
   ceph_assert(po != onode_map.end());
@@ -12147,7 +12146,7 @@ void BlueStore::_check_no_per_pg_or_pool_omap_alert()
 BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 {
   std::shared_lock l(coll_lock);
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+  auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
@@ -13261,9 +13260,7 @@ int BlueStore::list_collections(vector<coll_t>& ls)
 {
   std::shared_lock l(coll_lock);
   ls.reserve(coll_map.size());
-  for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
-       p != coll_map.end();
-       ++p)
+  for (auto p = coll_map.begin(); p != coll_map.end(); ++p)
     ls.push_back(p->first);
   return 0;
 }

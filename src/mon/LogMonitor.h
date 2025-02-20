@@ -44,7 +44,7 @@ class LogMonitor : public PaxosService,
                    public md_config_obs_t {
 private:
   std::multimap<utime_t,LogEntry> pending_log;
-  unordered_set<LogEntryKey> pending_keys;
+  std::unordered_set<LogEntryKey> pending_keys;
 
   LogSummary summary;
 

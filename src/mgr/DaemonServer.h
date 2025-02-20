@@ -19,6 +19,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 #include "common/ceph_mutex.h"
 #include "common/LogClient.h"
@@ -149,7 +150,7 @@ protected:
   std::set<ConnectionRef> daemon_connections;
 
   /// connections for osds
-  ceph::unordered_map<int,std::set<ConnectionRef>> osd_cons;
+  std::unordered_map<int, std::set<ConnectionRef>> osd_cons;
 
   ServiceMap pending_service_map;  // uncommitted
 
