@@ -25,6 +25,8 @@ import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rg
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
+import { Account } from '../models/rgw-user-accounts';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -49,6 +51,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  accounts: Account[] = [];
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -57,7 +60,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     private rgwUserService: RgwUserService,
     private modalService: ModalService,
     private notificationService: NotificationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private rgwUserAccountService: RgwUserAccountsService
   ) {
     super();
     this.resource = $localize`user`;
@@ -107,6 +111,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         [CdValidators.email],
         [CdValidators.unique(this.rgwUserService.emailExists, this.rgwUserService)]
       ],
+      account_id: [null, [this.tenantedAccountValidator.bind(this)]],
+      account_root_user: [false],
       max_buckets_mode: [1],
       max_buckets: [
         1000,
@@ -227,6 +233,13 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
           // Update the form.
           this.userForm.setValue(value);
 
+          if (this.userForm.getValue('account_id')) {
+            this.userForm.get('account_id').disable();
+          } else {
+            this.userForm.get('account_id').setValue(null);
+          }
+          const isAccountRoot = resp[0]['type'] == 'rgw' ? false : true;
+          this.userForm.get('account_root_user').setValue(isAccountRoot);
           // Get the sub users.
           this.subusers = resp[0].subusers;
 
@@ -250,6 +263,42 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         }
       );
     });
+    this.rgwUserAccountService.list(true).subscribe((accounts: Account[]) => {
+      this.accounts = accounts;
+      if (!this.editing) {
+        // needed to disable checkbox on create form load
+        this.userForm.get('account_id').reset();
+      }
+    });
+    this.userForm.get('account_id').valueChanges.subscribe((value) => {
+      if (!value) {
+        this.userForm
+          .get('display_name')
+          .setValidators([Validators.pattern(/^[a-zA-Z0-9!@#%^&*()._ -]+$/), Validators.required]);
+        this.userForm.get('display_name').updateValueAndValidity();
+        this.userForm.get('account_root_user').disable();
+      } else {
+        this.userForm
+          .get('display_name')
+          .setValidators([Validators.pattern(/^[\w+=,.@-]+$/), Validators.required]);
+        this.userForm.get('display_name').updateValueAndValidity();
+        this.userForm.get('account_root_user').enable();
+      }
+    });
+  }
+
+  tenantedAccountValidator(control: AbstractControl): ValidationErrors | null {
+    if (this?.userForm?.getValue('tenant') && this.accounts.length > 0) {
+      const index: number = this.accounts.findIndex(
+        (account: Account) => account.id == control.value
+      );
+      if (index != -1) {
+        return this.userForm.getValue('tenant') != this.accounts[index].tenant
+          ? { tenantedAccount: true }
+          : null;
+      }
+    }
+    return null;
   }
 
   goToListView() {
@@ -581,11 +630,18 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @return {Boolean} Returns TRUE if the general user settings have been modified.
    */
   private _isGeneralDirty(): boolean {
-    return ['display_name', 'email', 'max_buckets_mode', 'max_buckets', 'system', 'suspended'].some(
-      (path) => {
-        return this.userForm.get(path).dirty;
-      }
-    );
+    return [
+      'display_name',
+      'email',
+      'max_buckets_mode',
+      'max_buckets',
+      'system',
+      'suspended',
+      'account_id',
+      'account_root_user'
+    ].some((path) => {
+      return this.userForm.get(path).dirty;
+    });
   }
 
   /**
@@ -627,6 +683,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   private _getCreateArgs() {
     const result = {
       uid: this.getUID(),
+      account_id: this.userForm.getValue('account_id') ? this.userForm.getValue('account_id') : '',
+      account_root_user: this.userForm.getValue('account_root_user'),
       display_name: this.userForm.getValue('display_name'),
       system: this.userForm.getValue('system'),
       suspended: this.userForm.getValue('suspended'),
@@ -663,9 +721,19 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _getUpdateArgs() {
     const result: Record<string, any> = {};
-    const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
+    const keys = [
+      'display_name',
+      'email',
+      'max_buckets',
+      'system',
+      'suspended',
+      'account_root_user'
+    ];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
+    }
+    if (this.userForm.getValue('account_id')) {
+      result['account_id'] = this.userForm.getValue('account_id');
     }
     const maxBucketsMode = parseInt(this.userForm.getValue('max_buckets_mode'), 10);
     if (_.includes([-1, 0], maxBucketsMode)) {

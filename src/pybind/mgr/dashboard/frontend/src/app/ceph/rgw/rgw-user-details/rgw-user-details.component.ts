@@ -38,7 +38,6 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   keysSelection: CdTableSelection = new CdTableSelection();
   tableAction: CdTableAction[] = [];
   permissions: Permissions;
-
   icons = Icons;
 
   constructor(private rgwUserService: RgwUserService, private modalService: ModalService) {}
@@ -71,7 +70,6 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         icon: Icons.show
       }
     ];
-
     if (this.selection) {
       this.user = this.selection;
 
