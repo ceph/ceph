@@ -119,6 +119,7 @@ enum {
   s3GetObjectVersionAttributes,
   s3ReplicateDelete,
   s3ReplicateObject,
+  s3ReplicateTags,
   s3All,
 
   s3objectlambdaGetObject,
@@ -277,6 +278,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3BypassGovernanceRetention:
   case s3ReplicateDelete:
   case s3ReplicateObject:
+  case s3ReplicateTags:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
