@@ -49,6 +49,10 @@ struct FixedKVNode : CachedExtent {
   virtual ~FixedKVNode() = default;
   virtual void do_on_rewrite(Transaction &t, CachedExtent &extent) = 0;
 
+  bool is_in_range(const node_key_t key) const {
+    return get_node_meta().is_in_range(key);
+  }
+
   void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     assert(off == 0);
@@ -515,6 +519,7 @@ struct FixedKVLeafNode
   using base_t = FixedKVNode<NODE_KEY>;
   using child_node_t = ChildNode<internal_node_type_t, node_type_t, NODE_KEY>;
   using root_node_t = RootChildNode<RootBlock, node_type_t>;
+  using base_child_t = BaseChildNode<node_type_t, NODE_KEY>;
   explicit FixedKVLeafNode(ceph::bufferptr &&ptr)
     : FixedKVNode<NODE_KEY>(std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
