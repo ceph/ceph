@@ -36,6 +36,7 @@ enum {
   PAXOS_HEALTH,
   PAXOS_CONFIG,
   PAXOS_KV,
+  PAXOS_NVMEGW,
   PAXOS_NUM
 };
 
