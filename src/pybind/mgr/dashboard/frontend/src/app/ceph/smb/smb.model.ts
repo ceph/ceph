@@ -142,3 +142,5 @@ export const CLUSTER_RESOURCE = 'ceph.smb.cluster';
 export const SHARE_RESOURCE = 'ceph.smb.share';
 
 export const PROVIDER = 'samba-vfs';
+
+export const SHARE_URL = '/cephfs/smb/share/';
