@@ -46,7 +46,6 @@ function run() {
 
 function TEST_repeer_on_down_acting_member_coming_back() {
     local dir=$1
-    local dummyfile='/etc/fstab'
 
     local num_osds=6
     local osds="$(seq 0 $(expr $num_osds - 1))"
@@ -72,11 +71,13 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     wait_for_clean || return 1
 
     echo "writing initial objects"
+    local dummyfile=$(file_with_random_data)
     # write a bunch of objects
     for i in $(seq 1 $testobjects)
     do
-      rados -p $poolname put existing_$i $dummyfile
+      rados -p $poolname put existing_$i $dummyfile || return 1
     done
+    rm -f $dummyfile
 
     WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean
 
