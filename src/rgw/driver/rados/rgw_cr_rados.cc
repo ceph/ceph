@@ -12,6 +12,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rados.h"
+#include "rgw_data_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -830,7 +831,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        stat_dest_obj,
                        source_trace_entry,
                        &zones_trace,
-                       &bytes_transferred);
+                       &bytes_transferred,
+                       keep_tags);
 
   if (r < 0) {
     ldpp_dout(dpp, 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
@@ -932,21 +934,24 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   }
 
   if (params.mode == rgw_sync_pipe_params::MODE_USER) {
-    if (!params.user) {
+    std::optional<RGWUserPermHandler> user_perms;
+    RGWUserPermHandler::Bucket dest_bucket_perms;
+
+    if (params.user.empty()) {
       ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
       return 0; // -EPERM
     }
-    user_perms.emplace(dpp, store, dpp->get_cct(), *params.user);
+    user_perms.emplace(dpp, store, dpp->get_cct(), params.user);
 
     ret = user_perms->init();
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << *params.user << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << params.user << " ret=" << ret << dendl;
       return ret;
     }
 
     ret = user_perms->init_bucket(sync_pipe.dest_bucket_info, sync_pipe.dest_bucket_attrs, &dest_bucket_perms);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << *params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
       return ret;
     }
 
