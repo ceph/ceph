@@ -415,3 +415,67 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertNotIn('keys', self.json_body())
         self.assertNotIn('swift_keys', self.json_body())
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_rate_limit(self, mock_proxy, send_rgwadmin_command):
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        send_rgwadmin_command.return_value = (
+            0,
+            {
+                "user_ratelimit": {
+                    "max_read_ops": 100,
+                    "max_write_ops": 50
+                }
+            },
+            ""   # empty error msg
+        )
+
+        self._get('/test/api/rgw/user/testuser/ratelimit')
+        self.assertStatus(200)
+        self.assertInJsonBody('user_ratelimit')
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_global_rate_limit(self, mock_proxy, send_rgwadmin_command):
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        mock_return_value = {
+            "bucket_ratelimit": {
+                "max_read_ops": 2024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": True
+            },
+            "user_ratelimit": {
+                "max_read_ops": 1024,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": True
+            },
+            "anonymous_ratelimit": {
+                "max_read_ops": 0,
+                "max_write_ops": 0,
+                "max_read_bytes": 0,
+                "max_write_bytes": 0,
+                "enabled": True
+            }
+        }
+        send_rgwadmin_command.return_value = (
+            0,
+            mock_return_value,
+            ""   # empty error msg
+        )
+
+        self._get('/test/api/rgw/user/testuser/ratelimit')
+        self.assertStatus(200)
+        self.assertJsonBody(mock_return_value)
