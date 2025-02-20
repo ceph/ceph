@@ -7095,6 +7095,12 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
   if (dnl->is_remote()) {
     // just unlink.
     dir->unlink_inode(dn, false);
+  } else if (dnl->is_referent_remote()) {
+    // expire the referent inode too.
+    CInode *ref_in = dnl->get_referent_inode();
+    ceph_assert(ref_in);
+    if (trim_inode(dn, ref_in, con, expiremap))
+      return true; // purging stray instead of trimming
   } else if (dnl->is_primary()) {
     // expire the inode, too.
     CInode *in = dnl->get_inode();
@@ -7313,7 +7319,8 @@ void MDCache::trim_non_auth()
       // add back into lru (at the top)
       auth_list.push_back(dn);
 
-      if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
+      if ((dnl->is_remote() || dnl->is_referent_remote()) &&
+	  dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
     } else {
       // non-auth.  expire.
@@ -7325,9 +7332,15 @@ void MDCache::trim_non_auth()
       if (dnl->is_remote()) {
 	dir->unlink_inode(dn, false);
       } 
-      else if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
-	dout(10) << " removing " << *in << dendl;
+      else if (dnl->is_primary() || dnl->is_referent_remote()) {
+	CInode *in = nullptr;
+	if (dnl->is_referent_remote()) {
+          in = dnl->get_referent_inode();
+	  dout(10) << __func__ << " removing referent inode " << *in << dendl;
+	} else {
+          in = dnl->get_inode();
+	  dout(10) << __func__ << " removing inode " << *in << dendl;
+	}
 	auto&& ls = in->get_dirfrags();
 	for (const auto& subdir : ls) {
 	  ceph_assert(!subdir->is_subtree_root());
@@ -7447,8 +7460,16 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
     } else { // just remove it
       dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
-      if (dnl->is_remote())
+      if (dnl->is_remote() || dnl->is_referent_remote()) {
         dir->unlink_inode(dn, false);
+	if (dnl->is_referent_remote()) {
+          // remove referent inode
+	  CInode *ref_in = dnl->get_referent_inode();
+          dout(20) << __func__ << " removing referent inode " << ref_in << dendl;
+          remove_inode(ref_in);
+	  ceph_assert(!dir->has_bloom());
+	}
+      }
       dir->remove_dentry(dn);
     }
   }
