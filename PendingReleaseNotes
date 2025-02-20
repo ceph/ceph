@@ -4,6 +4,8 @@
 * RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
   and is now deprecated. If the NBD netlink interface is not supported by the
   kernel, then the mapping is retried using the legacy ioctl interface.
+* RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
+  existing versioning-enabled bucket that was not created with Object Lock enabled.
 
 >=18.2.4
 --------
