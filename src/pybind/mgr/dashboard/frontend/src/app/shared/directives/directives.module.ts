@@ -18,6 +18,7 @@ import { TrimDirective } from './trim.directive';
 import { RequiredFieldDirective } from './required-field.directive';
 import { ReactiveFormsModule } from '@angular/forms';
 import { OptionalFieldDirective } from './optional-field.directive';
+import { DynamicInputComboboxDirective } from './dynamic-input-combobox.directive';
 
 @NgModule({
   imports: [ReactiveFormsModule],
@@ -38,7 +39,8 @@ import { OptionalFieldDirective } from './optional-field.directive';
     CdFormValidationDirective,
     AuthStorageDirective,
     RequiredFieldDirective,
-    OptionalFieldDirective
+    OptionalFieldDirective,
+    DynamicInputComboboxDirective
   ],
   exports: [
     AutofocusDirective,
@@ -57,7 +59,8 @@ import { OptionalFieldDirective } from './optional-field.directive';
     CdFormValidationDirective,
     AuthStorageDirective,
     RequiredFieldDirective,
-    OptionalFieldDirective
+    OptionalFieldDirective,
+    DynamicInputComboboxDirective
   ]
 })
 export class DirectivesModule {}
