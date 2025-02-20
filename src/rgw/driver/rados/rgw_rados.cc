@@ -4319,7 +4319,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                const rgw_obj& stat_dest_obj,
                std::optional<rgw_zone_set_entry> source_trace_entry,
                rgw_zone_set *zones_trace,
-               std::optional<uint64_t>* bytes_transferred)
+               std::optional<uint64_t>* bytes_transferred,
+               bool keep_tags)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -4598,6 +4599,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
     attrs = cb.get_attrs();
+  }
+
+  if (!keep_tags) {
+    attrs.erase(RGW_ATTR_TAGS);
   }
 
   if (copy_if_newer) {
