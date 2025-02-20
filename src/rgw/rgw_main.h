@@ -67,7 +67,6 @@ class AppMain {
   std::vector<RGWFrontendConfig*> fe_configs;
   std::multimap<string, RGWFrontendConfig*> fe_map;
   std::unique_ptr<rgw::LDAPHelper> ldh;
-  OpsLogSink* olog = nullptr;
   RGWREST rest;
   std::unique_ptr<rgw::lua::Background> lua_background;
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;

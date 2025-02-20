@@ -342,7 +342,8 @@ int process_request(const RGWProcessEnv& penv,
           "WARNING: failed to execute pre request script. "
           "error: " << rc << dendl;
       } else {
-        rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script);
+        rc = rgw::lua::request::execute(driver, rest, penv.olog.get(), s, op,
+                                        script);
         if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute pre request script. "
@@ -440,7 +441,8 @@ done:
           "WARNING: failed to read post request script. "
           "error: " << rc << dendl;
       } else {
-        rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script);
+        rc = rgw::lua::request::execute(driver, rest, penv.olog.get(), s, op,
+                                        script);
         if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute post request script. "
@@ -459,7 +461,7 @@ done:
     perfcounter->inc(l_rgw_qactive, -1);
   }
   if (should_log) {
-    rgw_log_op(rest, s, op, penv.olog);
+    rgw_log_op(rest, s, op, penv.olog.get());
   }
 
   if (op) {
