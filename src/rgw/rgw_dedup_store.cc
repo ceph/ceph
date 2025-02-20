@@ -14,11 +14,6 @@
 #include "rgw_dedup.h"
 #include "rgw_dedup_store.h"
 
-static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
-//#define dout_context cct
-//#undef dout_prefix
-//#define dout_prefix *_dout << "RGW_DEDUP:: "
-
 namespace rgw::dedup {
 
   rgw_pool pool(DEDUP_POOL_NAME);

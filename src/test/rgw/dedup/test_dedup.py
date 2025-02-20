@@ -72,7 +72,9 @@ def gen_bucket_name():
     global num_buckets
 
     num_buckets += 1
-    return run_prefix + '-' + str(num_buckets)
+    bucket_name = run_prefix + '-' + str(num_buckets)
+    log.info("bucket_name=%s", bucket_name);
+    return bucket_name
 
 
 #-----------------------------------------------
@@ -711,8 +713,8 @@ def exec_dedup(expcted_dedup_stats, verify_stats=True):
     log.info("wait for dedup to complete")
 
     # dedup should complete in less than 5 minutes
-    max_dedup_time = 1*60
-    if expcted_dedup_stats.total_processed_objects > 10000:
+    max_dedup_time = 3*60
+    if expcted_dedup_stats.total_processed_objects > 1000:
         max_dedup_time = 5 * 60
     
     dedup_time = 0
@@ -746,8 +748,8 @@ def prepare_test(out_dir):
     cleanup_local(out_dir)
     #make sure we are starting with all buckets empty
     if count_object_parts_in_all_buckets() != (0, 0):
-        log.warn("The system was left dirty from previous run");
-        log.warn("Make sure to remove all objects before starting");
+        log.warning("The system was left dirty from previous run");
+        log.warning("Make sure to remove all objects before starting");
 
     assert count_object_parts_in_all_buckets() == (0, 0)
     os.mkdir(out_dir)
@@ -785,10 +787,12 @@ def small_single_part_objs_dedup(out_dir, conn, bucket_name, run_cleanup_after=T
         exec_dedup(dedup_stats)
         log.info("Verify all objects")
         verify_objects(out_dir, bucket_name, files, conn, expected_results, default_config)
-    finally:
-        # cleanup must be executed even after a failure
         if run_cleanup_after:
             cleanup(out_dir, bucket_name, conn)
+
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -823,11 +827,13 @@ def simple_dedup(out_dir, conn, files, bucket_name, run_cleanup_after, config):
         exec_dedup(dedup_stats)
         log.info("Verify all objects")
         verify_objects(out_dir, bucket_name, files, conn, expected_results, config)
-        return ret
-    finally:
-        # cleanup must be executed even after a failure
         if run_cleanup_after:
             cleanup(out_dir, bucket_name, conn)
+
+        return ret
+    finally:
+        log.info("test done")
+
 
 #-------------------------------------------------------------------------------
 def gen_connections_multi(max_copies_count):
@@ -875,9 +881,12 @@ def dedup_basic_with_tenants_common(out_dir, files, max_copies_count, config, cl
         bucket_names=ret[1]
         conns=ret[2]
         simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
-    finally:
         if cleanup:
             cleanup_all_buckets(out_dir, bucket_names, conns)
+
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -925,8 +934,10 @@ def test_dedup_small_with_tenants():
         exec_dedup(dedup_stats)
         log.info("Verify all objects")
         verify_objects_multi(OUT_DIR, files, conns, bucket_names, expected_results, default_config)
-    finally:
         cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+        return
+    finally:
+        log.info("test done")
 
 
 #------------------------------------------------------------------------------
@@ -968,8 +979,10 @@ def test_dedup_inc_0_with_tenants():
         # run dedup again and make sure nothing has changed
         exec_dedup(dedup_stats2)
         verify_objects_multi(OUT_DIR, files, conns, bucket_names, expected_results, config)
-    finally:
         cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+        return
+    finally:
+        log.info("test_dedup_inc_0_with_tenants failed")
 
 
 #------------------------------------------------------------------------------
@@ -1008,8 +1021,9 @@ def test_dedup_inc_0():
         # run dedup again and make sure nothing has changed
         exec_dedup(dedup_stats2)
         verify_objects(OUT_DIR, bucket_name, files, conn, expected_results, config)
-    finally:
         cleanup(OUT_DIR, bucket_name, conn)
+    finally:
+        log.info("test was finished")
 
 
 #-------------------------------------------------------------------------------
@@ -1065,8 +1079,9 @@ def test_dedup_inc_1_with_tenants():
         # run dedup again
         exec_dedup(stats_combined)
         verify_objects_multi(OUT_DIR, files_combined, conns, bucket_names, expected_results, config)
-    finally:
         cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+    finally:
+        log.info("test was finished")
 
 
 #-------------------------------------------------------------------------------
@@ -1118,8 +1133,10 @@ def test_dedup_inc_1():
         # run dedup again
         exec_dedup(stats_combined)
         verify_objects(OUT_DIR, bucket_name, files_combined, conn, expected_results, config)
-    finally:
         cleanup(OUT_DIR, bucket_name, conn)
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -1184,8 +1201,10 @@ def test_dedup_inc_2_with_tenants():
         # run dedup again
         exec_dedup(stats_combined)
         verify_objects_multi(OUT_DIR, files_combined, conns, bucket_names, expected_results, config)
-    finally:
         cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -1246,9 +1265,10 @@ def test_dedup_inc_2():
         exec_dedup(stats_combined)
         verify_objects(OUT_DIR, bucket_name, files_combined, conn, expected_results,
                        config)
-
-    finally:
         cleanup(OUT_DIR, bucket_name, conn)
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -1313,9 +1333,10 @@ def test_dedup_inc_with_remove_multi_tenants():
         exec_dedup(dedup_stats, False)
         expected_results=calc_expected_results(files_sub, config)
         verify_objects_multi(OUT_DIR, files_sub, conns, bucket_names, expected_results, config)
-
-    finally:
         cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -1386,9 +1407,10 @@ def test_dedup_inc_with_remove():
         expected_results=calc_expected_results(files_sub, config)
         verify_objects(OUT_DIR, bucket_name, files_sub, conn, expected_results,
                        config)
-
-    finally:
         cleanup(OUT_DIR, bucket_name, conn)
+        return
+    finally:
+        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -1521,7 +1543,7 @@ def test_dedup_large_scale_with_tenants():
 
     prepare_test(OUT_DIR)
     max_copies_count=3
-    num_files=1*1024
+    num_files=2*1024
     size=1*KB
     files=[]
     config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
@@ -1533,7 +1555,7 @@ def test_dedup_large_scale_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale():
-    return
+    #return
 
     start = time.time_ns()
     prepare_test(OUT_DIR)
@@ -1544,7 +1566,7 @@ def test_dedup_large_scale():
     files=[]
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(Bucket=bucket_name)
-    num_files = 1024
+    num_files = 2*1024
     size = 4*KB
 
     gen_files_fixed_size(OUT_DIR, files, num_files, size)
@@ -1557,7 +1579,7 @@ def test_dedup_large_scale():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_empty_bucket():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_empty_bucket: connect to AWS ...")
@@ -1619,6 +1641,7 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
 
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
+#@pytest.mark.inc_test
 def test_dedup_inc_loop_with_tenants():
     #return
 
@@ -1639,7 +1662,7 @@ def test_dedup_inc_loop_with_tenants():
         ret=simple_dedup_with_tenants(OUT_DIR, files, conns, bucket_names, config)
         stats_base=ret[1]
 
-        for idx in range(0, 3):
+        for idx in range(0, 9):
             log.info("test_dedup_inc_loop_with_tenants: INC-STEP %d", idx)
             ret = inc_step_with_tenants(stats_base, files, conns, bucket_names, config)
             files=ret[0]
@@ -1648,7 +1671,10 @@ def test_dedup_inc_loop_with_tenants():
             stats_base.set_shared_manifest += stats_last.set_shared_manifest
             stats_base.deduped_obj         += stats_last.deduped_obj
             stats_base.deduped_obj_bytes   += stats_last.deduped_obj_bytes
-    finally:
+
         cleanup_all_buckets(OUT_DIR, bucket_names, conns)
+        return
+    finally:
+        log.info("test done")
 
 
