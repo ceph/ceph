@@ -254,6 +254,19 @@ class SMBShare(RESTController):
         except RuntimeError as e:
             raise DashboardException(e, component='smb')
 
+    @ReadPermission
+    @EndpointDoc("Get an smb share",
+                 parameters={
+                     'cluster_id': (str, 'Unique identifier for the cluster'),
+                     'share_id': (str, 'Unique identifier for the share')
+                 },
+                 responses={200: SHARE_SCHEMA})
+    def get(self, cluster_id: str, share_id: str) -> Share:
+        """
+        Get an smb share by cluster and share id
+        """
+        return mgr.remote('smb', 'show', [f'{self._resource}.{cluster_id}.{share_id}'])
+
     @raise_on_failure
     @DeletePermission
     @EndpointDoc("Remove an smb share",
