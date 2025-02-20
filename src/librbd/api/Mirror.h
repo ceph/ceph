@@ -96,6 +96,8 @@ struct Mirror {
                           bool relax_same_pool_parent_check,
                           uint64_t *snap_id);
   static int image_disable(ImageCtxT *ictx, bool force);
+  static int image_disable(ImageCtxT *ictx, bool force,
+                           bool allow_group_member);
   static int image_promote(ImageCtxT *ictx, bool force);
   static void image_promote(ImageCtxT *ictx, bool force, Context *on_finish);
   static void image_promote(ImageCtxT *ictx,
