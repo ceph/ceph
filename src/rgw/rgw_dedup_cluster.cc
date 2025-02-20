@@ -20,7 +20,6 @@
 #include <ctime>
 #include <string>
 
-static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 using namespace ::cls::cmpxattr;
 
 namespace rgw::dedup {

@@ -63,9 +63,7 @@ using namespace ::cls::cmpxattr;
 #include "rgw_perf_counters.h"
 #include "include/ceph_assert.h"
 
-//#define DEDUP_DYN_ALLOC
 static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
-//#define dout_context cct
 //#undef dout_prefix
 //#define dout_prefix *_dout << "RGW_DEDUP:: "
 
