@@ -11,6 +11,7 @@
  *
  */
 
+#include "include/interval_set.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/stat.h"
@@ -37,6 +38,9 @@ using namespace std;
 class TestMount {
   ceph_mount_info* cmount = nullptr;
   char dir_path[64];
+
+  const uint64_t BLOCK_SIZE_FACTOR = 1*1024*1024;
+  const uint64_t BLOCK_SIZE=4*BLOCK_SIZE_FACTOR;
 
 public:
   TestMount( const char* root_dir_name = "dir0") {
@@ -160,20 +164,58 @@ public:
     return r;
   }
 
-  int write_full(const char* relpath, const string& data)
+  int write_full(const char* relpath, const string& data, int64_t offset=0, bool trunc=true)
   {
     auto file_path = make_file_path(relpath);
     int fd = ceph_open(cmount, file_path.c_str(), O_WRONLY | O_CREAT, 0666);
     if (fd < 0) {
       return -EACCES;
     }
-    int r = ceph_write(cmount, fd, data.c_str(), data.size(), 0);
+    int r = ceph_write(cmount, fd, data.c_str(), data.size(), offset);
     if (r >= 0) {
-      ceph_truncate(cmount, file_path.c_str(), data.size());
+      if (trunc) {
+	ceph_truncate(cmount, file_path.c_str(), data.size());
+      }
       ceph_fsync(cmount, fd, 0);
     }
+    return r;
+
     ceph_close(cmount, fd);
     return r;
+  }
+  void generate_random_string_n(uint64_t count, uint64_t block_size,
+				const std::function<void(const std::string&)> &f)
+  {
+    static const char alphabet[] =
+      "abcdefghijklmnopqrstuvwxyz"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      "0123456789";
+
+    std::random_device rd;
+    std::default_random_engine rng(rd());
+    std::uniform_int_distribution<> dist(0,sizeof(alphabet)/sizeof(*alphabet)-2);
+
+    std::vector<std::string> strs;
+    strs.reserve(count);
+    std::generate_n(std::back_inserter(strs), strs.capacity(),
+		    [&] { std::string str;
+		      str.reserve(block_size);
+		      std::generate_n(std::back_inserter(str), block_size,
+				      [&]() { return alphabet[dist(rng)];});
+		      return str; });
+    for (auto &str : strs) {
+      f(str);
+    }
+  }
+  int write_random(const char* relpath, uint64_t count, uint64_t block_size, int64_t offset=-1, bool trunc=false)
+  {
+    std::string s;
+    generate_random_string_n(count, block_size, [&s](const std::string& str) {
+      s.append(str);
+    });
+
+    std::cout << "write: [" << offset << "~" << count*block_size << " (trunc:" << trunc << ")]" << std::endl;
+    return write_full(relpath, s.c_str(), offset, trunc);
   }
   string concat_path(string_view path, string_view name) {
     string s(path);
@@ -336,6 +378,58 @@ public:
     return r;
   }
 
+  int for_each_file_blockdiff(const char* relpath,
+			      const char* snap1,
+			      const char* snap2,
+			      interval_set<uint64_t> *expected=nullptr)
+  {
+    auto s1 = make_snap_name(snap1);
+    auto s2 = make_snap_name(snap2);
+    ceph_file_blockdiff_info info;
+    int r = ceph_file_blockdiff_init(cmount,
+				     dir_path,
+				     relpath,
+				     s1.c_str(),
+				     s2.c_str(),
+				     &info);
+    if (r != 0) {
+      std::cerr << " Failed to init file block snapdiff, ret:" << r << std::endl;
+      return r;
+    }
+
+    r = 1;
+    while (r > 0) {
+      ceph_file_blockdiff_changedblocks blocks;
+      r = ceph_file_blockdiff(&info, &blocks);
+      if (r < 0) {
+	std::cerr << " Failed to get next changed block, ret:" << r << std::endl;
+	return r;
+      }
+
+      int nr_blocks = blocks.num_blocks;
+      struct cblock *b = blocks.b;
+      while (nr_blocks > 0) {
+	std::cout << " == [" << b->offset << "~" << b->len << "] == " << std::endl;
+	if (expected) {
+	  expected->erase(b->offset, b->len);
+	}
+	++b;
+	--nr_blocks;
+      }
+
+      ceph_free_file_blockdiff_buffer(&blocks);
+    }
+
+    ceph_assert(0 == ceph_file_blockdiff_finish(&info));
+    if (r < 0) {
+      std::cerr << " Failed to block diff, ret:" << r
+                << " " << relpath << ", " << snap1 << " vs. " << snap2
+                << std::endl;
+    }
+
+    return r;
+  }
+
   int mkdir(const char* relpath)
   {
     auto path = make_file_path(relpath);
@@ -385,9 +479,18 @@ public:
 		       const char* snap1,
                        const char* snap2);
 
+  void write_blocks(const std::vector<std::tuple<int64_t,uint64_t,bool>> &changes,
+		    interval_set<uint64_t> *expected=nullptr);
+
   void prepareSnapDiffLib1Cases();
   void prepareSnapDiffLib2Cases();
   void prepareSnapDiffLib3Cases();
+  void prepareBlockDiffNoChangeWithUnchangedHead();
+  void prepareBlockDiffNoChangeWithChangedHead();
+  void prepareBlockDiffChangedBlockWithUnchangedHead(interval_set<uint64_t> *expected);
+  void prepareBlockDiffChangedBlockWithChangedHead(interval_set<uint64_t> *expected);
+  void prepareBlockDiffChangedBlockWithTruncatedBlock(interval_set<uint64_t> *expected);
+  void prepareBlockDiffChangedBlockWithCustomObjectSize(interval_set<uint64_t> *expected);
   void prepareHugeSnapDiff(const std::string& name_prefix_start,
                            const std::string& name_prefix_bulk,
                            const std::string& name_prefix_end,
@@ -446,6 +549,138 @@ void TestMount::print_snap_diff(const char* relpath,
 # dirD        | dirD        |
 # dirD/fileD1 | dirD/fileD1 |
 */
+
+void TestMount::prepareBlockDiffNoChangeWithUnchangedHead()
+{
+  //************ snap1 *************
+  //************ snap2 *************
+  ASSERT_LE(0, write_random("fileA", 2, 4*1024*1024));
+  ASSERT_EQ(0, mksnap("snap1"));
+  ASSERT_EQ(0, mksnap("snap2"));
+  /* head is not modified */
+}
+
+void TestMount::prepareBlockDiffNoChangeWithChangedHead()
+{
+  //************ snap1 *************
+  //************ snap2 *************
+  ASSERT_LE(0, write_random("fileA", 2, 4*1024*1024));
+  ASSERT_EQ(0, mksnap("snap1"));
+  ASSERT_EQ(0, mksnap("snap2"));
+
+  /* modify head - fill up one object */
+  ASSERT_LE(0, write_random("fileA", 1, 4 * 1024 * 1024, -1, true));
+}
+
+// make thos helper track file holes
+void TestMount::write_blocks(const std::vector<std::tuple<int64_t,uint64_t,bool>> &changes,
+			     interval_set<uint64_t> *expected)
+{
+  for (auto &change : changes) {
+    int64_t offset = std::get<0>(change);
+    uint64_t len = std::get<1>(change);
+    bool trunc = std::get<2>(change);
+
+    uint64_t count = (len / BLOCK_SIZE);
+    uint64_t rem = (len % BLOCK_SIZE);
+    if (count) {
+      ASSERT_LE(0, write_random("fileA", count, BLOCK_SIZE, offset, trunc));
+      if (expected) {
+	expected->union_insert(offset, count*BLOCK_SIZE);
+      }
+    }
+    if (rem) {
+      offset += count * BLOCK_SIZE;
+      ASSERT_LE(0, write_random("fileA", 1, rem, offset, trunc));
+      if (expected) {
+	expected->union_insert(offset, rem);
+      }
+    }
+  }
+}
+
+void TestMount::prepareBlockDiffChangedBlockWithUnchangedHead(interval_set<uint64_t> *expected)
+{
+  //************ snap1 *************
+  ASSERT_LE(0, write_random("fileA", 5, BLOCK_SIZE));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  //************ snap2 *************
+  // overwrite first object w/ truncate
+  // partly fill fourth object (creating a hole in previous blocks)
+  srand(100);
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(0, BLOCK_SIZE, true),
+    std::make_tuple((12*BLOCK_SIZE_FACTOR)+(rand()%100), 0.5*BLOCK_SIZE_FACTOR, false)
+  };
+  // we'll prepare expected set ourselves
+  write_blocks(changes);
+
+  ASSERT_EQ(0, mksnap("snap2"));
+  /* head is not modified */
+  auto &l = changes.back();
+  /* blockdiff swallows holes */
+  expected->union_insert(0, std::get<0>(l)+std::get<1>(l));
+}
+
+void TestMount::prepareBlockDiffChangedBlockWithChangedHead(interval_set<uint64_t> *expected)
+{
+  //************ snap1 *************
+  ASSERT_LE(0, write_random("fileA", 5, 4*1024*1024));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  //************ snap2 *************
+  // overwrite first object w/o truncate
+  // partly fill third object (no holes)
+  srand(100);
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(0, BLOCK_SIZE, false),
+    std::make_tuple((8*BLOCK_SIZE_FACTOR)+(rand()%100), 0.5*BLOCK_SIZE_FACTOR, false)
+  };
+  write_blocks(changes, expected);
+  ASSERT_EQ(0, mksnap("snap2"));
+
+  /* modify head - fill up some objects */
+  ASSERT_LE(0, write_random("fileA", 2, 4 * 1024 * 1024, -1, false));
+}
+
+void TestMount::prepareBlockDiffChangedBlockWithTruncatedBlock(interval_set<uint64_t> *expected)
+{
+  //************ snap1 *************
+  ASSERT_LE(0, write_random("fileA", 4, 4*1024*1024));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  //************ snap2 *************
+  // write some bytes in few objects
+  // extend the file size
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(1*BLOCK_SIZE_FACTOR, 10, false),
+    std::make_tuple((5*BLOCK_SIZE_FACTOR), 20, false),
+    std::make_tuple((14*BLOCK_SIZE_FACTOR), 10*BLOCK_SIZE_FACTOR, false)
+  };
+  write_blocks(changes, expected);
+  ASSERT_EQ(0, mksnap("snap2"));
+}
+
+void TestMount::prepareBlockDiffChangedBlockWithCustomObjectSize(interval_set<uint64_t> *expected)
+{
+  //************ snap1 *************
+  auto file_path = make_file_path("fileA");
+  ASSERT_EQ(0, ceph_mknod(cmount, file_path.c_str(), 0666, 0));
+  std::string val = std::to_string(8 * BLOCK_SIZE_FACTOR);
+  ASSERT_EQ(0, ceph_setxattr(cmount, file_path.c_str(), "ceph.file.layout.object_size", val.c_str(),
+			     val.size(), 0));
+
+  ASSERT_LE(0, write_random("fileA", 10, 4 * BLOCK_SIZE_FACTOR));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(0, 40 * BLOCK_SIZE_FACTOR, false),
+  };
+  write_blocks(changes, expected);
+  ASSERT_EQ(0, mksnap("snap2"));
+}
+
 void TestMount::prepareSnapDiffLib1Cases()
 {
   //************ snap1 *************
@@ -1781,6 +2016,96 @@ TEST(LibCephFS, HugeSnapDiffLargeDelta)
     expected.emplace_back(name_prefix_end + "D", snapid2);
     test_mount.verify_snap_diff(expected, "", "snap1", "snap2");
   }
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffNoChangeWithUnchangedHead)
+{
+  TestMount test_mount;
+
+  test_mount.prepareBlockDiffNoChangeWithUnchangedHead();
+  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2");
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffNoChangeWithChangedHead)
+{
+  TestMount test_mount;
+
+  test_mount.prepareBlockDiffNoChangeWithChangedHead();
+  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2");
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffChangedBlockWithUnchangedHead)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffChangedBlockWithUnchangedHead(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2", &expected);
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffChangedBlockWithChangedHead)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffChangedBlockWithChangedHead(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2", &expected);
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffChangedBlockWithTruncatedBlock)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffChangedBlockWithTruncatedBlock(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2", &expected);
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffChangedBlockWithCustomObjectSize)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffChangedBlockWithCustomObjectSize(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2", &expected);
+  ASSERT_TRUE(expected.empty());
 
   std::cout << "------------- closing -------------" << std::endl;
   ASSERT_EQ(0, test_mount.purge_dir(""));
