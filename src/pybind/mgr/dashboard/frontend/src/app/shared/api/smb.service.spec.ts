@@ -4,6 +4,11 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { SmbService } from './smb.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { provideHttpClient } from '@angular/common/http';
+import {
+  CLUSTER_RESOURCE,
+  JOIN_AUTH_RESOURCE,
+  USERSGROUPS_RESOURCE
+} from '~/app/ceph/smb/smb.model';
 
 describe('SmbService', () => {
   let service: SmbService;
@@ -32,10 +37,9 @@ describe('SmbService', () => {
   it('should call create cluster', () => {
     const request = {
       cluster_resource: {
-        resource_type: 'ceph.smb.cluster',
+        resource_type: CLUSTER_RESOURCE,
         cluster_id: 'clusterUserTest',
         auth_mode: 'active-directory',
-        intent: 'present',
         domain_settings: {
           realm: 'DOMAIN1.SINK.TEST',
           join_sources: [
@@ -74,10 +78,49 @@ describe('SmbService', () => {
     expect(req.request.method).toBe('GET');
   });
 
+  it('should call create join auth', () => {
+    const request = {
+      resource_type: JOIN_AUTH_RESOURCE,
+      auth_id: 'foo',
+      auth: {
+        username: 'user',
+        password: 'pass'
+      },
+      linked_to_cluster: ''
+    };
+    service.createJoinAuth(request).subscribe();
+    const req = httpTesting.expectOne('api/smb/joinauth');
+    expect(req.request.method).toBe('POST');
+  });
+
   it('should call list usersgroups', () => {
     service.listUsersGroups().subscribe();
     const req = httpTesting.expectOne('api/smb/usersgroups');
     expect(req.request.method).toBe('GET');
+  });
+
+  it('should call create usersgroups', () => {
+    const request = {
+      resource_type: USERSGROUPS_RESOURCE,
+      users_groups_id: 'foo',
+      values: {
+        users: [
+          {
+            name: 'user',
+            password: 'pass'
+          }
+        ],
+        groups: [
+          {
+            name: 'bar'
+          }
+        ]
+      },
+      linked_to_cluster: ''
+    };
+    service.createUsersGroups(request).subscribe();
+    const req = httpTesting.expectOne('api/smb/usersgroups');
+    expect(req.request.method).toBe('POST');
   });
 
   it('should call create share', () => {

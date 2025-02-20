@@ -7,7 +7,15 @@
     [hasDetails]="true"
     (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadUsersGroups()"
->
+    (updateSelection)="updateSelection($event)"
+  >
+  <div class="table-actions">
+    <cd-table-actions
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
   <cd-smb-usersgroups-details
     *cdTableDetail
     [selection]="expandedRow"
@@ -23,6 +31,6 @@
     *ngFor="let group of row?.values.groups"
     size="md"
   >
-    {{ group.name }}
+    {{ group?.name }}
   </cds-tag>
 </ng-template>

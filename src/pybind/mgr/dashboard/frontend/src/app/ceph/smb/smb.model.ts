@@ -1,7 +1,7 @@
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 
 export interface SMBCluster {
-  resource_type: string;
+  resource_type: typeof CLUSTER_RESOURCE;
   cluster_id: string;
   auth_mode: typeof AUTHMODE[keyof typeof AUTHMODE];
   domain_settings?: DomainSettings;
@@ -9,7 +9,7 @@ export interface SMBCluster {
   custom_dns?: string[];
   placement?: CephServicePlacement;
   clustering?: typeof CLUSTERING;
-  public_addrs?: PublicAddress;
+  public_addrs?: PublicAddress[];
 }
 
 export interface ClusterRequestModel {
@@ -43,13 +43,15 @@ export interface DomainSettings {
   realm?: string;
   join_sources?: JoinSource[];
 }
+
+export interface JoinSource {
+  source_type?: string;
+  ref: string;
+}
+
 export interface PublicAddress {
   address: string;
-  destination: string;
-}
-export interface JoinSource {
-  source_type: string;
-  ref: string;
+  destination?: string;
 }
 
 export const CLUSTERING = {
@@ -103,7 +105,6 @@ interface SMBShareLoginControl {
 export interface SMBJoinAuth {
   resource_type: string;
   auth_id: string;
-  intent: Intent;
   auth: Auth;
   linked_to_cluster?: string;
 }
@@ -111,7 +112,6 @@ export interface SMBJoinAuth {
 export interface SMBUsersGroups {
   resource_type: string;
   users_groups_id: string;
-  intent: Intent;
   values: Value;
   linked_to_cluster?: string;
 }
@@ -121,12 +121,12 @@ interface Auth {
   password: string;
 }
 
-interface User {
+export interface User {
   name: string;
   password: string;
 }
 
-interface Group {
+export interface Group {
   name: string;
 }
 
@@ -135,10 +135,9 @@ interface Value {
   groups: Group[];
 }
 
-type Intent = 'present' | 'removed';
-
-export const CLUSTER_RESOURCE = 'ceph.smb.cluster';
-
-export const SHARE_RESOURCE = 'ceph.smb.share';
+export const CLUSTER_RESOURCE = 'ceph.smb.cluster' as const;
+export const SHARE_RESOURCE = 'ceph.smb.share' as const;
+export const JOIN_AUTH_RESOURCE = 'ceph.smb.join.auth' as const;
+export const USERSGROUPS_RESOURCE = 'ceph.smb.usersgroups' as const;
 
 export const PROVIDER = 'samba-vfs';

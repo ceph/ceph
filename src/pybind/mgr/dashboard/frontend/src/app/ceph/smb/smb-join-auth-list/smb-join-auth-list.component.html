@@ -5,5 +5,13 @@
   selectionType="single"
   [hasDetails]="false"
   (fetchData)="loadJoinAuth()"
+  (updateSelection)="updateSelection($event)"
 >
+  <div class="table-actions">
+    <cd-table-actions
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
 </cd-table>
