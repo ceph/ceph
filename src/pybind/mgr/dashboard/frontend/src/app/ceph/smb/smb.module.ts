@@ -21,7 +21,8 @@ import {
   PlaceholderModule,
   SelectModule,
   TabsModule,
-  TagModule
+  TagModule,
+  FileUploaderModule
 } from 'carbon-components-angular';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -34,11 +35,11 @@ import { SmbUsersgroupsListComponent } from './smb-usersgroups-list/smb-usersgro
 import { SmbTabsComponent } from './smb-tabs/smb-tabs.component';
 import { SmbJoinAuthListComponent } from './smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsDetailsComponent } from './smb-usersgroups-details/smb-usersgroups-details.component';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
+import { SmbJoinAuthFormComponent } from './smb-join-auth-form/smb-join-auth-form.component';
+import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form/smb-usersgroups-form.component';
 
 @NgModule({
   imports: [
-    ReactiveFormsModule,
     RouterModule,
     CommonModule,
     SharedModule,
@@ -51,6 +52,7 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
     SelectModule,
     TabsModule,
     TagModule,
+    FileUploaderModule,
     InputModule,
     CheckboxModule,
     SelectModule,
@@ -74,9 +76,11 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
     SmbUsersgroupsDetailsComponent,
     SmbTabsComponent,
     SmbJoinAuthListComponent,
+    SmbUsersgroupsDetailsComponent,
+    SmbJoinAuthFormComponent,
+    SmbUsersgroupsFormComponent,
     SmbShareFormComponent
-  ],
-  providers: [provideCharts(withDefaultRegisterables())]
+  ]
 })
 export class SmbModule {
   constructor(private iconService: IconService) {
