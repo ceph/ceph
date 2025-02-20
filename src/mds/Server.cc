@@ -256,6 +256,8 @@ void Server::create_logger()
                    "Request type rename snapshot latency");
   plb.add_time_avg(l_mdss_req_snapdiff_latency, "req_snapdiff_latency",
 		   "Request type snapshot difference latency");
+    plb.add_time_avg(l_mdss_req_file_blockdiff_latency, "req_blockdiff_latency",
+		   "Request type file blockdiff latency");
 
   plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
@@ -2235,6 +2237,9 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     code = l_mdss_req_snapdiff_latency;
     break;
+  case CEPH_MDS_OP_FILE_BLOCKDIFF:
+    code = l_mdss_req_file_blockdiff_latency;
+    break;
   default:
     dout(1) << ": unknown client op" << dendl;
     return;
@@ -2890,6 +2895,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     break;
   case CEPH_MDS_OP_READDIR_SNAPDIFF:
     handle_client_readdir_snapdiff(mdr);
+    break;
+  case CEPH_MDS_OP_FILE_BLOCKDIFF:
+    handle_client_file_blockdiff(mdr);
     break;
 
   default:
@@ -3759,13 +3767,21 @@ public:
   }
 };
 
-/* If this returns null, the request has been handled
- * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(const MDRequestRef& mdr,
 				    bool want_auth,
 				    bool no_want_auth)
 {
   const filepath& refpath = mdr->get_filepath();
+  return rdlock_path_pin_ref(mdr, refpath, want_auth, no_want_auth);
+}
+
+/* If this returns null, the request has been handled
+ * as appropriate: forwarded on, or the client's been replied to */
+CInode* Server::rdlock_path_pin_ref(const MDRequestRef& mdr,
+				    const filepath& refpath,
+				    bool want_auth,
+				    bool no_want_auth)
+{
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
 
   if (mdr->locking_state & MutationImpl::PATH_LOCKED)
@@ -11719,6 +11735,89 @@ void Server::_renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t 
   mdr->tracei = diri;
   mdr->snapid = snapid;
   respond_to_request(mdr, 0);
+}
+
+class C_MDS_file_blockdiff_finish : public ServerContext {
+public:
+  C_MDS_file_blockdiff_finish(Server *server, const MDRequestRef& mdr, CInode *in, uint64_t scan_idx)
+    : ServerContext(server),
+      mdr(mdr),
+      in(in) {
+    block_diff.rval = 0;
+    block_diff.scan_idx = scan_idx;
+  }
+
+  void finish(int r) override {
+    server->handle_file_blockdiff_finish(mdr, in, block_diff, r);
+  }
+
+private:
+  MDRequestRef mdr;
+  CInode *in;
+
+public:
+  BlockDiff block_diff;
+};
+
+void Server::handle_client_file_blockdiff(const MDRequestRef& mdr)
+{
+  const cref_t<MClientRequest>& req = mdr->client_request;
+
+  dout(10) << __func__ << dendl;
+
+  // no real need to rdlock_path_pin_ref() since the caller holds an
+  // open ref, but we need the snapped inode.
+  const filepath& refpath1 = mdr->get_filepath();
+  CInode* in1 = rdlock_path_pin_ref(mdr, refpath1, false, true);
+  if (!in1) {
+    return;
+  }
+  const filepath& refpath2 = mdr->get_filepath2();
+  CInode* in2 = rdlock_path_pin_ref(mdr, refpath2, false, true);
+  if (!in2) {
+    return;
+  }
+
+  if (!in1->is_file() || !in2->is_file()) {
+    dout(10) << __func__ << ": not a regular file req=" << req << dendl;
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  dout(20) << __func__ << ": in1=" << *in1 << dendl;
+  dout(20) << __func__ << ": in2=" << *in2 << dendl;
+
+  auto scan_idx = (uint64_t)req->head.args.blockdiff.scan_idx;
+  auto max_objects = (uint32_t)req->head.args.blockdiff.max_objects;
+
+  C_MDS_file_blockdiff_finish *ctx = new C_MDS_file_blockdiff_finish(this, mdr, in2, scan_idx);
+
+  if (in1 == in2) {
+    // does not matter if the inodes are snapped or refer to the head
+    // version -- both snaps are same.
+    dout(10) << __func__ << ": no diffs between snaps" << dendl;
+    handle_file_blockdiff_finish(mdr, in2, ctx->block_diff, 0);
+    delete ctx;
+    return;
+  }
+
+  mdcache->file_blockdiff(in1, in2, &(ctx->block_diff), max_objects, ctx);
+}
+
+void Server::handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
+					  int r) {
+  dout(10) << __func__ << ": in=" << *in << ", r=" << r << dendl;
+  if (r == 0) {
+    dout(10) << __func__ << ": blockdiff=" << block_diff << dendl;
+  }
+
+  ceph::bufferlist bl;
+  if (r == 0) {
+    encode(block_diff, bl);
+    mdr->reply_extra_bl = bl;
+  }
+
+  respond_to_request(mdr, r);
 }
 
 void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)

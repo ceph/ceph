@@ -103,6 +103,7 @@ enum {
   l_mdss_cap_revoke_eviction,
   l_mdss_cap_acquisition_throttle,
   l_mdss_req_getvxattr_latency,
+  l_mdss_req_file_blockdiff_latency,
   l_mdss_last,
 };
 
@@ -216,6 +217,8 @@ public:
   void _try_open_ino(const MDRequestRef& mdr, int r, inodeno_t ino);
   CInode* rdlock_path_pin_ref(const MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
+  CInode* rdlock_path_pin_ref(const MDRequestRef& mdr, const filepath& refpath, bool want_auth,
+			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(const MDRequestRef& mdr, bool create,
 				    bool okexist=false, bool authexist=false,
 				    bool want_layout=false);
@@ -324,6 +327,9 @@ public:
   void handle_client_renamesnap(const MDRequestRef& mdr);
   void _renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_readdir_snapdiff(const MDRequestRef& mdr);
+  void handle_client_file_blockdiff(const MDRequestRef& mdr);
+  void handle_file_blockdiff_finish(const MDRequestRef& mdr, CInode *in, const BlockDiff &block_diff,
+				    int r);
 
   // helpers
   bool _rename_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,
