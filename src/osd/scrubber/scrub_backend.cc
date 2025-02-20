@@ -717,10 +717,17 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
         return shard_as_auth_t{errstream.str()};
       }
     }
-  }
 
-  // This is automatically corrected in repair_oinfo_oid()
-  ceph_assert(oi.soid == obj);
+    if (!dup_error_cond(err,
+                        false,
+                        (oi.soid != obj),
+                        shard_info,
+                        &shard_info_wrapper::set_info_corrupted,
+                        "candidate info oid mismatch"sv,
+                        errstream)) {
+      return shard_as_auth_t{errstream.str()};
+    }
+  }
 
   if (test_error_cond(smap_obj.size != logical_to_ondisk_size(oi.size),
                       shard_info,
