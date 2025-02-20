@@ -72,6 +72,9 @@
   headers only when the `read-stats` querystring is explicitly included in the
   API request.
 
+* RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
+  existing versioning-enabled bucket that was not created with Object Lock enabled.
+
 * RADOS: The ceph df command reports incorrect MAX AVAIL for stretch mode pools when
   CRUSH rules use multiple take steps for datacenters. PGMap::get_rule_avail
   incorrectly calculates available space from only one datacenter.
