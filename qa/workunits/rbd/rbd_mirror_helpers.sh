@@ -1254,6 +1254,15 @@ count_mirror_snaps()
         grep -c -F " mirror ("
 }
 
+get_snaps_json()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} snap ls ${pool}/${image} --all --format json
+}
+
 write_image()
 {
     local cluster=$1
