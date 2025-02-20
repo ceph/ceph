@@ -28,7 +28,7 @@ function run() {
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
-	setup $dir || return 1
+        setup $dir || return 1
         $func $dir || return 1
         teardown $dir || return 1
     done
@@ -58,12 +58,12 @@ function TEST_availablity_score() {
     SCORE=$(echo "$AVAILABILITY_STATUS" | awk '{print $7}')
     IS_AVAILABLE=$(echo "$AVAILABILITY_STATUS" | awk '{print $8}')
     if [ $IS_AVAILABLE -ne 1 ]; then
-	    echo "Failed: Pool is not available in availabilty status"
+      echo "Failed: Pool is not available in availabilty status"
     fi
 
     # write some objects
     for i in $(seq 1 10); do
-	    rados --pool foo put object_id$i /etc/group;
+      rados --pool foo put object_id$i /etc/group;
     done
 
     # kill OSD 0 
@@ -74,7 +74,7 @@ function TEST_availablity_score() {
 
     #write more objects 
     for i in $(seq 1 20); do
-            rados --pool foo put object_id$i /etc/group;
+      rados --pool foo put object_id$i /etc/group;
     done
 
     # bring osd 0 back up 
@@ -96,12 +96,12 @@ function TEST_availablity_score() {
     IS_AVAILABLE=$(echo "$AVAILABILITY_STATUS" | awk '{print $8}')
     NEW_SCORE=$(echo "$AVAILABILITY_STATUS" | awk '{print $7}')
     if [ $IS_AVAILABLE -ne 0 ]; then
-            echo "Failed: Pool is available in availabilty status when unfound objects present"
-	    return 1
+      echo "Failed: Pool is available in availabilty status when unfound objects present"
+      return 1
     fi
     if (( $(echo "$NEW_SCORE >= $SCORE" | bc -l) )); then
-            echo "Failed: Availability score for the pool did not drop"
-	    return 1
+      echo "Failed: Availability score for the pool did not drop"
+      return 1
     fi
 
     echo "TEST PASSED"

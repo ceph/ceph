@@ -74,54 +74,59 @@ void MgrStatMonitor::calc_pool_availability()
     if (pool_availability.find(poolid) == pool_availability.end()){
       // New Pool so we add.
       pool_availability.insert({poolid, PoolAvailability()});
-      dout(20) << "Adding pool: " << poolid << dendl;
+      dout(20) << __func__ << "Adding pool: " << poolid << dendl;
     }
   }
   utime_t now(ceph_clock_now());
   for (const auto& i : pool_availability) {
     const auto& poolid = i.first;
     if (digest.pool_pg_unavailable_map.find(poolid) ==
-          digest.pool_pg_unavailable_map.end()) {
-        // delete none exist pool
-        pool_availability.erase(poolid);
-        dout(20) << "Deleting pool: " << poolid << dendl;
-        continue;
+      digest.pool_pg_unavailable_map.end()) {
+      // delete none exist pool
+      pool_availability.erase(poolid);
+      dout(20) << __func__ << "Deleting pool: " << poolid << dendl;
+      continue;
     }
     if (mon.osdmon()->osdmap.have_pg_pool(poolid)){
       // Currently, couldn't find an elegant way to get pool name
       pool_availability[poolid].pool_name = mon.osdmon()->osdmap.get_pool_name(poolid);
     } else {
-        pool_availability.erase(poolid);
-        dout(20) << "pool: " << poolid << " no longer exists in osdmap!" << dendl;
-        dout(20) << "Deleting pool: " << poolid << dendl;
-        continue;
+      pool_availability.erase(poolid);
+      dout(20) << __func__ << "pool: " 
+	       << poolid << " no longer exists in osdmap!" << dendl;
+      dout(20) << __func__ << "Deleting pool: " << poolid << dendl;
+      continue;
     }
     if (pool_availability[poolid].is_avail){
       if (!digest.pool_pg_unavailable_map[poolid].empty()){
-      // avail to unavail
-      dout(20) << "Pool status: Available to Unavailable" << dendl;
-      pool_availability[poolid].is_avail = false;
-      pool_availability[poolid].num_failures += 1;
-      pool_availability[poolid].last_downtime = now;
-      pool_availability[poolid].uptime +=
-        now - pool_availability[poolid].last_uptime;
+        // avail to unavail
+        dout(20) << __func__ 
+		 << "Pool status: Available to Unavailable" << dendl;
+        pool_availability[poolid].is_avail = false;
+        pool_availability[poolid].num_failures += 1;
+        pool_availability[poolid].last_downtime = now;
+        pool_availability[poolid].uptime +=
+          now - pool_availability[poolid].last_uptime;
       } else {
-          // avail to avail
-          dout(20) << "Pool status: Available to Available" << dendl;
-          pool_availability[poolid].uptime +=
-            now - pool_availability[poolid].last_uptime;
-          pool_availability[poolid].last_uptime = now;
-        }
+        // avail to avail
+        dout(20) << __func__ 
+		 << "Pool status: Available to Available" << dendl;
+        pool_availability[poolid].uptime +=
+          now - pool_availability[poolid].last_uptime;
+        pool_availability[poolid].last_uptime = now;
+      }
     } else {
       if (!digest.pool_pg_unavailable_map[poolid].empty()){
         // unavail to unavail
-        dout(20) << "Pool status: Unavailable to Unavailable" << dendl;
+        dout(20) << __func__ 
+		 << "Pool status: Unavailable to Unavailable" << dendl;
         pool_availability[poolid].downtime +=
           now - pool_availability[poolid].last_downtime;
         pool_availability[poolid].last_downtime = now;
       } else {
         // unavail to avail
-        dout(20) << "Pool status: Unavailable to Available" << dendl;
+        dout(20) << __func__ 
+		 << "Pool status: Unavailable to Available" << dendl;
         pool_availability[poolid].is_avail = true;
         pool_availability[poolid].last_uptime = now;
         pool_availability[poolid].uptime +=
@@ -148,13 +153,14 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
       if (!p.end()) {
 	decode(progress_events, p);
       }
-      dout(10) << __func__ << " v" << version
-	       << " service_map e" << service_map.epoch
-	       << " " << progress_events.size() << " progress events"
-	       << dendl;
       if (!p.end()) {
         decode(pool_availability, p);
       }
+      dout(10) << __func__ << " v" << version
+	       << " service_map e" << service_map.epoch
+	       << " " << progress_events.size() << " progress events"
+	       << " " << pool_availability.size() << " pools availability tracked"
+	       << dendl;
     }
     catch (ceph::buffer::error& e) {
       derr << "failed to decode mgrstat state; luminous dev version? "
