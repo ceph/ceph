@@ -1664,7 +1664,14 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	dn->first = dir_follows+1;
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDir *dir = dn->dir;
-          // TODO: What does this mean for referent inode ?? Passing nullptr for now.
+          /* TODO: No need to cow referent inode. So just the remote dentry is prepared,
+           * journalled and added to dirty_cow_dentries list. But when the journal is
+           * replayed. How does this play out ? Test this out.
+	   */
+	  if (mds->mdsmap->allow_referent_inodes()) {
+            dout(10) << __func__ << " lookout-1 - Adding dentry as remote for journal when referent inode feature is enabled !!! "
+	             << " dentry " << *dn << " first " << oldfirst << " last " << dir_follows << dendl;
+	  }
 	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
 	  dout(10) << " olddn " << *olddn << dendl;
 	  ceph_assert(dir->is_projected());
@@ -1750,8 +1757,15 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
     } else {
-      ceph_assert(dnl->is_remote());
-      //No need to journal referent inode for cow
+      ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
+      /* TODO: No need to cow referent inode. So just the remote dentry is prepared,
+       * journalled and added to dirty_cow_dentries list. But when the journal is
+       * replayed. How does this play out ? Test this out.
+       */
+      if (mds->mdsmap->allow_referent_inodes()) {
+        dout(10) << __func__ << " lookout-2 - Adding dentry as remote for journal when referent inode feature is enabled !!! "
+	         << " dentry " << *dn << " first " << oldfirst << " last " << follows << dendl;
+      }
       CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
@@ -8553,7 +8567,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       // do we have inode?
       CInode *in = dnl->get_inode();
       if (!in) {
-        ceph_assert(dnl->is_remote());
+        ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
         // do i have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
@@ -8840,11 +8854,19 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
   if (dnl->is_primary())
     return dnl->inode;
 
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
   CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
-    dout(7) << "get_dentry_inode linking in remote in " << *in << dendl;
-    dn->link_remote(dnl, in);
+    CInode *ref_in = dnl->get_referent_inode();
+    if (dnl->is_referent_remote())
+      ceph_assert(ref_in);
+    if (ref_in) {
+      dout(7) << __func__ << " linking in referent remote in " << *in << "referent " << *ref_in << dendl;
+      dn->link_remote(dnl, in, ref_in);
+    } else {
+      dout(7) << __func__ << " linking in remote in " << *in << dendl;
+      dn->link_remote(dnl, in);
+    }
     return in;
   } else {
     dout(10) << "get_dentry_inode on remote dn, opening inode for " << *dn << dendl;
@@ -8883,7 +8905,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext 
 {
   if (r < 0) {
     CDentry::linkage_t *dnl = dn->get_projected_linkage();
-    if (dnl->is_remote() && dnl->get_remote_ino() == ino) {
+    if ((dnl->is_remote() || dnl->is_referent_remote()) && dnl->get_remote_ino() == ino) {
       dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
       dn->state_set(CDentry::STATE_BADREMOTEINO);
 
@@ -13235,7 +13257,7 @@ void MDCache::repair_dirfrag_stats_work(const MDRequestRef& mdr)
 	frag_info.nsubdirs++;
       else
 	frag_info.nfiles++;
-    } else if (dnl->is_remote())
+    } else if (dnl->is_remote() || dnl->is_referent_remote())
       frag_info.nfiles++;
   }
 

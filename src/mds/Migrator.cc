@@ -921,7 +921,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 	dirfrag_size += null_size;
 	continue;
       }
-      if (dn->get_linkage()->is_remote()) {
+      if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent_remote()) {
 	dirfrag_size += remote_size;
 	continue;
       }

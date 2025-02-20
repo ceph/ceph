@@ -2367,7 +2367,7 @@ void Server::reply_client_request(const MDRequestRef& mdr, const ref_t<MClientRe
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
       tracedn &&
-      tracedn->get_projected_linkage()->is_remote()) {
+      (tracedn->get_projected_linkage()->is_remote() || tracedn->get_projected_linkage()->is_referent_remote())) {
     mdcache->eval_remote(tracedn);
   }
 }
@@ -11792,7 +11792,7 @@ bool Server::build_snap_diff(
 
     // remote link?
     // better for the MDS to do the work, if we think the client will stat any of these files.
-    if (dnl->is_remote() && !in) {
+    if ((dnl->is_remote() || dnl->is_referent_remote()) && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
       dout(20) << __func__ << " remote in: " << *in << " ino " << std::hex << dnl->get_remote_ino() << std::dec << dendl;
       if (in) {
