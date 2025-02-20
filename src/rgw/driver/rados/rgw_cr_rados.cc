@@ -925,9 +925,55 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     return 0;
   }
 
-  RGWAccessControlPolicy policy;
+  RGWObjTags obj_tags;
+  bufferlist bl_tag;
+  if (obj->get_attr(RGW_ATTR_TAGS, bl_tag)) {
+    auto bliter = bl_tag.cbegin();
+    try {
+      obj_tags.decode(bliter);
+    } catch (buffer::error &err) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+      return -EIO;
+    }
+  }
+
+  rgw_sync_pipe_params params;
+  if (!sync_pipe.info.handler.find_obj_params(obj->get_key(),
+                                              obj_tags.get_tags(),
+                                              &params)) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
+  if (params.mode == rgw_sync_pipe_params::MODE_USER) {
+    std::optional<RGWUserPermHandler> user_perms;
+    RGWUserPermHandler::Bucket dest_bucket_perms;
+
+    if (params.user.empty()) {
+      ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
+      return -EPERM;
+    }
+    user_perms.emplace(dpp, store, dpp->get_cct(), params.user);
+
+    ret = user_perms->init();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << params.user << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    ret = user_perms->init_bucket(sync_pipe.dest_bucket_info, sync_pipe.dest_bucket_attrs, &dest_bucket_perms);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    if (!dest_bucket_perms.verify_bucket_permission(obj->get_key(), rgw::IAM::s3ReplicateDelete)) {
+      ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user does not have permission to delete object" << dendl;
+      return -EPERM;
+    }
+  }
 
   /* decode policy */
+  RGWAccessControlPolicy policy;
   bufferlist bl;
   if (obj->get_attr(RGW_ATTR_ACL, bl)) {
     auto bliter = bl.cbegin();
