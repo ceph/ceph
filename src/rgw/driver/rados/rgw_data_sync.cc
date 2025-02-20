@@ -2650,7 +2650,9 @@ class RGWUserPermHandler {
   friend struct Init;
   friend class Bucket;
 
-  RGWDataSyncEnv *sync_env;
+  const DoutPrefixProvider *dpp;
+  rgw::sal::Driver *driver;
+  CephContext *cct;
   rgw_user uid;
 
   struct _info {
@@ -2667,32 +2669,35 @@ class RGWUserPermHandler {
   std::shared_ptr<Init> init_action;
 
   struct Init : public RGWGenericAsyncCR::Action {
-    RGWDataSyncEnv *sync_env;
+    const DoutPrefixProvider *dpp;
+    rgw::sal::Driver *driver;
+    CephContext *cct;
 
     rgw_user uid;
     std::shared_ptr<RGWUserPermHandler::_info> info;
 
     int ret{0};
     
-    Init(RGWUserPermHandler *handler) : sync_env(handler->sync_env),
+    Init(RGWUserPermHandler *handler) : dpp(handler->dpp),
+                                        driver(handler->driver),
+                                        cct(handler->cct),
                                         uid(handler->uid),
                                         info(handler->info) {}
     int operate() override {
-      auto user = sync_env->driver->get_user(uid);
-      ret = user->load_user(sync_env->dpp, null_yield);
+      auto user = driver->get_user(uid);
+      ret = user->load_user(dpp, null_yield);
       if (ret < 0) {
         return ret;
       }
 
       auto result = rgw::auth::transform_old_authinfo(
-          sync_env->dpp, null_yield, sync_env->driver, user.get(), &info->user_policies);
+          dpp, null_yield, driver, user.get(), &info->user_policies);
       if (!result) {
         return result.error();
       }
       info->identity = std::move(result).value();
 
-      ret = RGWUserPermHandler::policy_from_attrs(
-          sync_env->cct, user->get_attrs(), &info->user_acl);
+      ret = RGWUserPermHandler::policy_from_attrs(cct, user->get_attrs(), &info->user_acl);
       if (ret < 0 && ret != -ENOENT) {
         return ret;
       }
@@ -2702,21 +2707,36 @@ class RGWUserPermHandler {
   };
 
 public:
-  RGWUserPermHandler(RGWDataSyncEnv *_sync_env,
-                     const rgw_user& _uid) : sync_env(_sync_env),
-                                             uid(_uid) {}
-
-  RGWCoroutine *init_cr() {
+  RGWUserPermHandler(const DoutPrefixProvider *_dpp,
+                     rgw::sal::Driver *_driver,
+                     CephContext *_cct,
+                     const rgw_user& _uid) : dpp(_dpp),
+                                             driver(_driver),
+                                             cct(_cct),
+                                             uid(_uid) {
     info = make_shared<_info>();
     init_action = make_shared<Init>(this);
+  }
 
+  RGWUserPermHandler(RGWDataSyncEnv *_sync_env,
+                     const rgw_user& _uid) : RGWUserPermHandler(_sync_env->dpp,
+                                                                _sync_env->driver,
+                                                                _sync_env->cct,
+                                                                _uid) {}
+
+  RGWCoroutine *init_cr() {
     return new RGWGenericAsyncCR(sync_env->cct,
                                  sync_env->async_rados,
                                  init_action);
   }
 
+  int init() {
+    return init_action->operate();
+  }
+
   class Bucket {
-    RGWDataSyncEnv *sync_env;
+    const DoutPrefixProvider *dpp;
+    CephContext *cct;
     std::shared_ptr<_info> info;
     RGWAccessControlPolicy bucket_acl;
     std::optional<perm_state> ps;
@@ -2760,23 +2780,24 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
                                      const RGWBucketInfo& bucket_info,
                                      const map<string, bufferlist>& bucket_attrs)
 {
-  sync_env = handler->sync_env;
+  dpp = handler->dpp;
+  cct = handler->cct;
   info = handler->info;
 
-  int r = RGWUserPermHandler::policy_from_attrs(sync_env->cct, bucket_attrs, &bucket_acl);
+  int r = RGWUserPermHandler::policy_from_attrs(cct, bucket_attrs, &bucket_acl);
   if (r < 0) {
     return r;
   }
 
   // load bucket policy
   try {
-    bucket_policy = get_iam_policy_from_attr(sync_env->cct, bucket_attrs, bucket_info.bucket.tenant);
+    bucket_policy = get_iam_policy_from_attr(cct, bucket_attrs, bucket_info.bucket.tenant);
   } catch (const std::exception& e) {
-    ldpp_dout(sync_env->dpp, 0) << "ERROR: reading IAM Policy: " << e.what() << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: reading IAM Policy: " << e.what() << dendl;
     return -EACCES;
   }
 
-  ps.emplace(sync_env->cct,
+  ps.emplace(cct,
              info->env,
              info->identity.get(),
              bucket_info,
@@ -2796,24 +2817,24 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
   if (ps->identity->get_account()) {
     const bool account_root = (ps->identity->get_identity_type() == TYPE_ROOT);
     if (!ps->identity->is_owner_of(bucket_acl.get_owner().id)) {
-      ldpp_dout(sync_env->dpp, 4) << "cross-account request for bucket owner "
+      ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
           << bucket_acl.get_owner().id << " != " << ps->identity->get_aclowner().id << dendl;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
-      return ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, account_root, {}, {}, {},
+      return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {}, {},
                                       info->user_policies, {}, op)
-          && ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, false, info->user_acl,
+          && ::verify_bucket_permission(dpp, &(*ps), arn, false, info->user_acl,
                                       bucket_acl, bucket_policy, {}, {}, op);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
-      return ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, account_root, {}, {},
+      return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {},
                                       bucket_policy, info->user_policies,
                                       {}, op);
     }
   }
   constexpr bool account_root = false;
-  return ::verify_bucket_permission(sync_env->dpp, &(*ps), arn, account_root,
+  return ::verify_bucket_permission(dpp, &(*ps), arn, account_root,
                                   info->user_acl, bucket_acl,
                                   bucket_policy, info->user_policies,
                                   {}, op);
@@ -3035,14 +3056,14 @@ public:
 
         if (param_mode == rgw_sync_pipe_params::MODE_USER) {
           if (!param_user) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
+            ldout(cct, 0) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
             return set_cr_error(-EPERM);
           }
           user_perms.emplace(sync_env, *param_user);
 
           yield call(user_perms->init_cr());
           if (retcode < 0) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": failed to init user perms manager for uid=" << *param_user << dendl;
+            ldout(cct, 0) << "ERROR: " << __func__ << ": failed to init user perms manager for uid=" << *param_user << dendl;
             return set_cr_error(retcode);
           }
 
@@ -3051,7 +3072,7 @@ public:
                                           sync_pipe.dest_bucket_attrs,
                                           &dest_bucket_perms);
           if (r < 0) {
-            ldout(cct, 20) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
+            ldout(cct, 0) << "ERROR: " << __func__ << ": failed to init bucket perms manager for uid=" << *param_user << " bucket=" << sync_pipe.source_bucket_info.bucket.get_key() << dendl;
             return set_cr_error(retcode);
           }
 
