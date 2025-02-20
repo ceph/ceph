@@ -140,6 +140,7 @@ static const actpair actpairs[] =
  { "s3:DescribeJob", s3DescribeJob },
  { "s3:ReplicateDelete", s3ReplicateDelete },
  { "s3:ReplicateObject", s3ReplicateObject },
+ { "s3:ReplicateTags", s3ReplicateTags },
  { "s3-object-lambda:GetObject", s3objectlambdaGetObject },
  { "s3-object-lambda:ListBucket", s3objectlambdaListBucket },
  { "iam:PutUserPolicy", iamPutUserPolicy },
@@ -1516,6 +1517,9 @@ const char* action_bit_string(uint64_t action) {
 
   case s3ReplicateObject:
     return "s3:ReplicateObject";
+
+  case s3ReplicateTags:
+    return "s3:ReplicateTags";
 
   case s3objectlambdaGetObject:
     return "s3-object-lambda:GetObject";
