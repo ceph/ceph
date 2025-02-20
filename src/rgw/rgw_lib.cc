@@ -316,7 +316,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(nullptr /* !rest */, s, op, env.olog);
+      rgw_log_op(nullptr /* !rest */, s, op, env.olog.get());
     }
 
     int http_ret = s->err.http_ret;
