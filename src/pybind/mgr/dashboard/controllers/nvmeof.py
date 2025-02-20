@@ -6,9 +6,10 @@ import cherrypy
 from orchestrator import OrchestratorError
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..model import nvmeof as model
 from ..security import Scope
-from ..services.nvmeof_cli import NvmeofCLICommand
+from ..services.nvmeof_cli import B, NvmeofCLICommand, convert_to_bytes
 from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -353,13 +354,18 @@ else:
             self,
             nqn: str,
             rbd_image_name: str,
+            rbd_image_size: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
-            rbd_image_size: Optional[int] = 1024,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
             gw_group: Optional[str] = None,
         ):
+            try:
+                rbd_image_size = convert_to_bytes(rbd_image_size, B)
+            except ValueError as e:
+                raise DashboardException("invalid value for 'size'", code=400) from e
+
             return NVMeoFClient(gw_group=gw_group).stub.namespace_add(
                 NVMeoFClient.pb2.namespace_add_req(
                     subsystem_nqn=nqn,
