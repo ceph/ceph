@@ -28,6 +28,7 @@
 #include "common/bit_str.h"
 #include "common/ceph_releases.h"
 #include "msg/msg_types.h" // for entity_addrvec_t
+#include "common/Clock.h"
 
 // use as paxos_service index
 enum {
@@ -791,6 +792,19 @@ struct PoolAvailability {
     decode(is_avail, p);
     DECODE_FINISH(p);
   }
+
+  static void generate_test_instances(std::list<PoolAvailability*>& o) {
+    o.push_back(new PoolAvailability);
+    o.push_back(new PoolAvailability);
+    o.back()->pool_name = "foo";    
+    o.back()->started_at = utime_t();    
+    o.back()->uptime = 100;    
+    o.back()->last_uptime = utime_t();    
+    o.back()->downtime = 15;    
+    o.back()->last_downtime = utime_t();    
+    o.back()->num_failures = 2;    
+    o.back()->is_avail = true;    
+  }  
 };
 WRITE_CLASS_ENCODER(PoolAvailability)
 

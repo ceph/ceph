@@ -14342,7 +14342,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
-    mempool::pgmap::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
+    std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
     for (const auto& i : pool_availability) {
       const auto& p = i.second;
       double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;

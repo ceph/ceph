@@ -662,7 +662,6 @@ public:
   //       GetMissing
   //       WaitUpThru
   //       Incomplete
-  //       Down
   //     Active
   //       Activating
   //       Clean

@@ -170,6 +170,7 @@ TYPE(mon_feature_t)
 TYPE_FEATUREFUL(DataStats)
 TYPE_FEATUREFUL(ProgressEvent)
 TYPE(FeatureMap)
+TYPE(PoolAvailability)
 
 #include "mon/CreatingPGs.h"
 TYPE_FEATUREFUL(creating_pgs_t)
