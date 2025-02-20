@@ -99,6 +99,7 @@ ostream& ObjBencher::out(ostream& os)
 }
 
 void *ObjBencher::status_printer(void *_bencher) {
+  ceph_pthread_setname("OB::stat_print");
   ObjBencher *bencher = static_cast<ObjBencher *>(_bencher);
   bench_data& data = bencher->data;
   Formatter *formatter = bencher->formatter;
@@ -453,7 +454,6 @@ int ObjBencher::write_bench(int secondsToRun,
   pthread_t print_thread;
 
   pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
-  ceph_pthread_setname(print_thread, "write_stat");
   std::unique_lock locker{lock};
   data.finished = 0;
   data.start_time = mono_clock::now();
@@ -691,7 +691,6 @@ int ObjBencher::seq_read_bench(
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
-  ceph_pthread_setname(print_thread, "seq_read_stat");
 
   mono_time finish_time = data.start_time + time_to_run;
   //start initial reads
@@ -903,7 +902,6 @@ int ObjBencher::rand_read_bench(
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
-  ceph_pthread_setname(print_thread, "rand_read_stat");
 
   mono_time finish_time = data.start_time + time_to_run;
   //start initial reads

@@ -27,7 +27,7 @@ ThreadPool::ThreadPool(size_t n_threads,
         pin(*cpus);
       }
       block_sighup();
-      (void) pthread_setname_np(pthread_self(), "alien-store-tp");
+      (void) ceph_pthread_setname("alien-store-tp");
       loop(queue_max_wait, i);
     });
   }

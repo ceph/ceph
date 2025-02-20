@@ -11,16 +11,13 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/compat.h"
 
 #include "common/code_environment.h"
 
 #include <iostream>
 
 #include "acconfig.h"
-
-#ifdef HAVE_PTHREAD_GETNAME_NP
-#include <pthread.h>
-#endif
 
 #include <string.h>
 
@@ -57,7 +54,7 @@ int get_process_name(char *buf, int len)
   }
   // FIPS zeroization audit 20191115: this memset is not security related.
   memset(buf, 0, len);
-  return pthread_getname_np(pthread_self(), buf, len);
+  return ceph_pthread_getname(buf, len);
 }
 
 #elif defined(HAVE_GETPROGNAME)

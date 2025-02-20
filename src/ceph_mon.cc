@@ -250,7 +250,7 @@ int main(int argc, const char **argv)
 {
   // reset our process name, in case we did a respawn, so that it's not
   // left as "exe".
-  ceph_pthread_setname(pthread_self(), "ceph-mon");
+  ceph_pthread_setname("ceph-mon");
 
   int err;
 
