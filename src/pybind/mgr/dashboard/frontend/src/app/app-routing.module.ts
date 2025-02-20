@@ -477,7 +477,11 @@ const routes: Routes = [
               },
               {
                 path: `standalone/${URLVerbs.EDIT}/:usersGroupsId`,
-                component: SmbUsersgroupsFormComponent,
+                component: SmbUsersgroupsFormComponent
+              },
+              {
+                path: `share/${URLVerbs.EDIT}/:clusterId/:shareId`,
+                component: SmbShareFormComponent,
                 data: { breadcrumbs: ActionLabels.EDIT }
               }
             ]
