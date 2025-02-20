@@ -662,6 +662,14 @@ int Mirror<I>::image_enable(I *ictx,
     return r;
   }
 
+  if (group_snap_id.empty() &&
+      (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+    r = -EINVAL;
+    lderr(cct) << "cannot enable mirroring on an image that is member of a group"
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   cls::rbd::MirrorMode mirror_mode;
   r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
   if (r < 0) {
@@ -732,12 +740,25 @@ int Mirror<I>::image_enable(I *ictx,
 
 template <typename I>
 int Mirror<I>::image_disable(I *ictx, bool force) {
+  return Mirror<I>::image_disable(ictx, force, false);
+}
+
+template <typename I>
+int Mirror<I>::image_disable(I *ictx, bool force, bool allow_group_member) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
     lderr(cct) << "refresh request failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!allow_group_member &&
+      (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+    r = -EINVAL;
+    lderr(cct) << "cannot disable mirroring on an image that is member of a group"
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -952,6 +973,14 @@ void Mirror<I>::image_promote(I *ictx,
         return;
       }
 
+      if (group_snap_id.empty() &&
+          (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+        lderr(ictx->cct) << "cannot promote an image that is member of a group"
+                         << cpp_strerror(-EINVAL) << dendl;
+        on_promote->complete(-EINVAL);
+        return;
+      }
+
       auto req = mirror::PromoteRequest<>::create(*ictx, force,
                                                   ictx->group_spec.pool_id,
                                                   ictx->group_spec.group_id,
@@ -1006,6 +1035,14 @@ void Mirror<I>::image_demote(I *ictx,
         return;
       }
 
+      if (group_snap_id.empty() &&
+          (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+        lderr(ictx->cct) << "cannot demote an image that is member of a group"
+                         << cpp_strerror(-EINVAL) << dendl;
+        on_cleanup->complete(-EINVAL);
+        return;
+      }
+
       auto req = mirror::DemoteRequest<>::create(*ictx,
                                                  ictx->group_spec.pool_id,
                                                  ictx->group_spec.group_id,
@@ -1031,6 +1068,13 @@ int Mirror<I>::image_resync(I *ictx) {
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
     lderr(cct) << "refresh request failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL) {
+    r = -EINVAL;
+    lderr(cct) << "cannot resync image that is member of a group"
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -2412,6 +2456,15 @@ void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
         return;
       }
 
+      if (group_snap_id.empty() &&
+          (ictx->group_spec.pool_id != RBD_GROUP_INVALID_POOL)) {
+        lderr(ictx->cct) << "cannot create mirror snapshot of an image "
+                         << "that is member of a group"
+                         << cpp_strerror(-EINVAL) << dendl;
+        on_finish->complete(-EINVAL);
+        return;
+      }
+
       auto ctx = new C_ImageSnapshotCreate<I>(ictx, snap_create_flags,
                                               ictx->group_spec.pool_id,
                                               ictx->group_spec.group_id,
@@ -2829,7 +2882,7 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
       if (snap_ids[i] == CEPH_NOSNAP) {
         continue;
       }
-      r = image_disable(image_ctxs[i], false);
+      r = image_disable(image_ctxs[i], false, true);
       if (r < 0) {
         lderr(cct) << "failed to disable mirroring on image: "
                    << image_ctxs[i]->name << cpp_strerror(r) << dendl;
@@ -2949,7 +3002,7 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
   for (auto image_ctx : image_ctxs) {
     ldout(cct, 10) << "attempting to disable image with id " << image_ctx->id
                    << ": " << cpp_strerror(r) << dendl;
-    r = image_disable(image_ctx, force);
+    r = image_disable(image_ctx, force, true);
     if (r < 0) {
       lderr(cct) << "failed to disable mirroring on image: " << image_ctx->name
                  << cpp_strerror(r) << dendl;
