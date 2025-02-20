@@ -1,0 +1,35 @@
+tasks:
+- vip:
+
+# make sure cephadm notices the new IP
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+
+# stop kernel nfs server, if running
+- vip.exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+# use nfs module to create cluster and export
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create fs1
+      - ceph nfs cluster create happy --ingress --virtual-ip={{VIP0}} --ingress-mode=haproxy-protocol
+      - ceph nfs export create cephfs --fsname fs1 --cluster-id happy --pseudo-path /d1
+
+# wait for services to start
+- cephadm.wait_for_service:
+    service: nfs.happy
+- cephadm.wait_for_service:
+    service: ingress.nfs.happy
+
+# make sure mount can be reached over VIP, ensuring both that
+# keepalived is maintaining the VIP and that the nfs has bound to it
+- vip.exec:
+    host.a:
+      - mkdir /mnt/happy
+      - sleep 1
+      - mount -t nfs {{VIP0}}:/d1 /mnt/happy
+      - echo test > /mnt/happy/testfile
+      - sync
