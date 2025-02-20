@@ -328,6 +328,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_QUIESCE_INODE: return "quiesce_inode";
 	case CEPH_MDS_OP_LOCK_PATH: return "lock_path";
 	case CEPH_MDS_OP_UNINLINE_DATA: return "uninline_data";
+        case CEPH_MDS_OP_FILE_BLOCKDIFF: return "blockdiff";
 	}
 	return "???";
 }

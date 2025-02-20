@@ -14470,3 +14470,202 @@ void MDCache::upkeep_main(void)
     upkeep_cvar.wait_for(lock, interval);
   }
 }
+
+struct C_ListSnapsAggregator : public MDSIOContext {
+  C_ListSnapsAggregator(MDSRank *mds, CInode *in1, CInode *in2, BlockDiff *block_diff,
+			Context *on_finish)
+    : MDSIOContext(mds),
+      in1(in1),
+      in2(in2),
+      block_diff(block_diff),
+      on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    mds->mdcache->aggregate_snap_sets(snap_set_context, in1, in2,
+                                      block_diff, on_finish);
+  }
+
+  virtual void print(std::ostream& os) const {
+    os << "listsnaps";
+  }
+
+  void add_snap_set_context(std::unique_ptr<MDCache::SnapSetContext> ssc) {
+    snap_set_context.push_back(std::move(ssc));
+  }
+
+  CInode *in1;
+  CInode *in2;
+  BlockDiff *block_diff;
+  Context *on_finish;
+  std::vector<std::unique_ptr<MDCache::SnapSetContext>> snap_set_context;
+};
+
+void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
+			     MDSContext *ctx) {
+  ceph_assert(in1->last <= in2->last);
+
+  // I think this is not required since the MDS disallows setting
+  // layout when truncate_seq > 1.
+  if (in1->get_inode()->layout != in2->get_inode()->layout) {
+    dout(20) << __func__ << ": snaps have different layout: " << in1->get_inode()->layout
+	     << " vs " << in2->get_inode()->layout << dendl;
+    block_diff->blocks.union_insert(0, in2->get_inode()->size);
+    ctx->complete(0);
+    return;
+  }
+
+  uint64_t scan_idx = block_diff->scan_idx;
+  uint64_t num_objects1 = Striper::get_num_objects(in1->get_inode()->layout,
+						   in1->get_inode()->size);
+  uint64_t num_objects2 = Striper::get_num_objects(in2->get_inode()->layout,
+						   in2->get_inode()->size);
+  uint64_t num_objects_pending1 = num_objects1 - scan_idx;
+  uint64_t num_objects_pending2 = num_objects2 - scan_idx;
+
+  uint64_t scans = std::min(
+    std::min(num_objects_pending1, num_objects_pending2),
+    std::min((uint64_t)(g_conf().get_val<uint64_t>("mds_file_blockdiff_max_concurrent_object_scans")),
+	     max_objects));
+
+  dout(20) << __func__ << ": scanning " << scans << " objects" << dendl;
+  if (scans == 0) {
+    // we ran out of objects to scan - figure which ones
+    if (num_objects_pending1 == 0 && num_objects_pending2 == 0) {
+      // easy - both snaps have same number of objects
+      dout(20) << __func__ << ": equal extent" << dendl;
+      ctx->complete(0);
+    } else {
+      if (num_objects_pending1 == 0) {
+	// first snapshot has lesser number of objects - return
+	// an extent covering EOF.
+	dout(20) << __func__ << ": EOF extent" << dendl;
+	uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+						   scan_idx, 0);
+	block_diff->blocks.union_insert(offset, in2->get_inode()->size - offset);
+	ctx->complete(0);
+      } else {
+	// num_objects_pending2 == 0
+	dout(20) << __func__ << ": truncated extent" << dendl;
+	ctx->complete(0);
+      }
+    }
+
+    return;
+  }
+
+  C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
+  MDSGatherBuilder gather_ctx(g_ceph_context, on_finish);
+
+  while (scans > 0) {
+    ObjectOperation op;
+    std::unique_ptr<SnapSetContext> ssc(new SnapSetContext());
+    op.list_snaps(&ssc->snaps, &ssc->r);
+    ssc->objectid = scan_idx;
+
+    mds->objecter->read(file_object_t(in1->ino(), scan_idx),
+			OSDMap::file_to_object_locator(in2->get_inode()->layout),
+			op, LIBRADOS_SNAP_DIR, NULL, 0, gather_ctx.new_sub());
+    on_finish->add_snap_set_context(std::move(ssc));
+    ++scan_idx;
+    --scans;
+  }
+
+  gather_ctx.activate();
+}
+
+void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
+                                  CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish) {
+  dout(20) << __func__ << dendl;
+
+  // always signal to the client to request again since request
+  // completion is signalled in file_blockdiff().
+  int r = 1;
+  snapid_t snapid1 = in1->last;
+  snapid_t snapid2 = in2->last;
+  uint64_t scans = snap_set_ctx.size();
+
+  interval_set<uint64_t> extents;
+  for (auto &snap_set : snap_set_ctx) {
+    dout(20) << __func__ << ": objectid=" << snap_set->objectid << ", r=" << snap_set->r
+	     << dendl;
+    if (snap_set->r != 0 && snap_set->r != -ENOENT) {
+      derr << ": failed to get snap set for objectid=" << snap_set->objectid
+	   << ", r=" << snap_set->r << dendl;
+      r = snap_set->r;
+      break;
+    }
+
+    if (snap_set->r == 0) {
+      auto &clones = snap_set->snaps.clones;
+      auto it1 = std::find_if(clones.begin(), clones.end(),
+			      [snapid1](const librados::clone_info_t &clone)
+			      {
+				return snapid1 == clone.cloneid ||
+				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid1) != clone.snaps.end());
+			      });
+      // point to "head" if not found
+      if (it1 == clones.end()) {
+	it1 = std::prev(it1);
+      }
+      auto it2 = std::find_if(clones.begin(), clones.end(),
+			      [snapid2](const librados::clone_info_t &clone)
+			      {
+				return snapid2 == clone.cloneid ||
+				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid2) != clone.snaps.end());
+			      });
+      // point to "head" if not found
+      if (it2 == clones.end()) {
+	it2 = std::prev(it2);
+      }
+
+      if (it1 == it2) {
+	dout(10) << __func__ << ": both snaps in same clone" << dendl;
+	continue;
+      }
+
+      interval_set<uint64_t> extent;
+      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+						 snap_set->objectid, 0);
+
+      for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
+	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps
+		 << " overlap: " << it1->overlap << "]" << dendl;
+	auto next_it = it1 + 1;
+	dout(20) << __func__ << ": [next cloneid: " << next_it->cloneid << " snaps: " << next_it->snaps
+		 << " overlap: " << next_it->overlap << "]" << dendl;
+	auto sz = next_it->size;
+	if (sz == 0) {
+	  // this object is a hole in the file.
+	  // TODO: report holes in blockdiff strucuter. that way,
+	  // caller can optimize and punch holes rather than writing
+	  // zeros.
+	  dout(10) << __func__ << ": hole: [" << offset << "~" << it1->size << "]" << dendl;
+	  dout(10) << __func__ << ": adding whole extent - reader will read zeros" << dendl;
+	  sz = it1->size;
+	}
+
+	extent.clear();
+	extent.union_insert(offset, sz);
+	for (auto &overlap_region : it1->overlap) {
+	  uint64_t overlap_offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+							     snap_set->objectid, overlap_region.first);
+	  extent.erase(overlap_offset, overlap_region.second);
+	}
+
+	dout(20) << __func__ << ": (non overlapping) extent=" << extent << dendl;
+	extents.union_of(extent);
+	dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
+	++it1;
+      }
+    }
+  }
+
+  block_diff->rval = r;
+  if (r >= 0) {
+    r = 0;
+    block_diff->scan_idx += scans;
+    block_diff->blocks = extents;
+  }
+  on_finish->complete(r);
+}
