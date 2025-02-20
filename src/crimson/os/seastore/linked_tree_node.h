@@ -9,6 +9,8 @@
 
 namespace crimson::os::seastore {
 
+// XXX: It happens to be true that the width of node
+// 	index in lba and omap tree are the same.
 using btreenode_pos_t = uint16_t;
 
 template <typename ParentT>
@@ -123,8 +125,7 @@ protected:
   }
 
   void destroy() {
-    auto &me = down_cast();
-    assert(me.is_btree_root());
+    assert(down_cast().is_btree_root());
     ceph_assert(parent_of_root);
     TreeRootLinker<ParentT, T>::unlink_root(parent_of_root);
   }
@@ -491,7 +492,7 @@ protected:
       auto it = copy_sources.upper_bound(key);
       it--;
       auto &copy_source = *it;
-      ceph_assert(copy_source->get_node_meta().is_in_range(key));
+      ceph_assert(copy_source->is_in_range(key));
       return *copy_source;
     }
   }
@@ -780,9 +781,9 @@ protected:
   void copy_children_from_stable_sources() {
     if (!copy_sources.empty()) {
       auto &me = down_cast();
-      auto it = --copy_sources.upper_bound(me.get_node_meta().begin);
+      auto it = --copy_sources.upper_bound(me.get_begin());
       auto &cs = *it;
-      btreenode_pos_t start_pos = cs->lower_bound(me.get_node_meta().begin).get_offset();
+      btreenode_pos_t start_pos = cs->lower_bound(me.get_begin()).get_offset();
       if (start_pos == cs->get_size()) {
 	it++;
 	start_pos = 0;
@@ -791,9 +792,8 @@ protected:
       for (; it != copy_sources.end(); it++) {
 	auto& copy_source = *it;
 	auto end_pos = copy_source->get_size();
-	if (copy_source->get_node_meta().is_in_range(me.get_node_meta().end)) {
-	  end_pos = copy_source->upper_bound(
-	    me.get_node_meta().end).get_offset();
+	if (copy_source->is_in_range(me.get_end())) {
+	  end_pos = copy_source->upper_bound(me.get_end()).get_offset();
 	}
 	auto local_start_iter = me.iter_idx(local_next_pos);
 	auto foreign_start_iter = copy_source->iter_idx(start_pos);
@@ -991,39 +991,21 @@ private:
 template <typename ParentT, typename T, typename key_t>
 class ChildNode : public BaseChildNode<ParentT, key_t> {
 protected:
-  void take_prior_parent_tracker() {
-    auto &me = down_cast();
-    auto &prior = static_cast<T&>(*me.get_prior_instance());
-    this->parent_tracker = prior.parent_tracker;
-  }
-
-  void set_parent_tracker_from_prior_instance() {
-    auto &me = down_cast();
-    assert(!me.is_btree_root());
-    assert(me.is_mutation_pending());
-    take_prior_parent_tracker();
-    assert(me.is_parent_valid());
-    auto parent = this->get_parent_node();
-    //TODO: can this search be avoided?
-    auto off = parent->lower_bound(me.get_begin()).get_offset();
-    assert(parent->iter_idx(off).get_key() == me.get_begin());
-    parent->children[off] = &me;
-  }
-
   void on_invalidated() {
     this->reset_parent_tracker();
   }
+  void take_parent_from_prior() {
+    _take_parent_from_prior();
+  }
   void on_replace_prior() {
-    set_parent_tracker_from_prior_instance();
+    take_parent_from_prior();
   }
   void destroy() {
-    auto &me = down_cast();
-    assert(!me.is_btree_root());
-    ceph_assert(me.is_parent_valid());
+    assert(!down_cast().is_btree_root());
+    assert(this->has_parent_tracker());
+    auto off = get_parent_pos();
     auto parent = this->get_parent_node();
-    auto off = parent->lower_bound(me.get_begin()).get_offset();
-    assert(parent->iter_idx(off).get_key() == me.get_begin());
-    assert(parent->children[off] == &me);
+    assert(parent->children[off] == &down_cast());
     parent->children[off] = nullptr;
   }
 private:
@@ -1032,6 +1014,34 @@ private:
   }
   const T& down_cast() const {
     return *static_cast<const T*>(this);
+  }
+
+  void _take_parent_from_prior() {
+    auto &me = down_cast();
+    assert(!me.is_btree_root());
+    auto &prior = static_cast<T&>(*me.get_prior_instance());
+    this->parent_tracker = prior.BaseChildNode<ParentT, key_t>::parent_tracker;
+    assert(this->has_parent_tracker());
+    auto off = get_parent_pos();
+    auto parent = this->get_parent_node();
+    assert(me.get_prior_instance().get() ==
+	   dynamic_cast<CachedExtent*>(parent->children[off]));
+    parent->children[off] = &me;
+  }
+
+  btreenode_pos_t get_parent_pos() const {
+    auto &me = down_cast();
+    auto parent = this->get_parent_node();
+    assert(parent);
+    //TODO: can this search be avoided?
+    auto key = me.get_begin();
+    auto iter = parent->lower_bound(key);
+    if (iter.get_key() > key) {
+      assert(iter != parent->end());
+      iter--;
+    }
+    assert(iter.get_key() == me.get_begin());
+    return iter.get_offset();
   }
   bool valid() const final {
     return down_cast().is_valid();
