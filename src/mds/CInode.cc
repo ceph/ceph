@@ -212,8 +212,10 @@ ostream& operator<<(ostream& out, const CInode& in)
     }
   } else {
     out << " s=" << in.get_inode()->size;
-    if (in.get_inode()->nlink != 1)
+    if (in.get_inode()->nlink != 1) {
       out << " nl=" << in.get_inode()->nlink;
+      out << " referent_inodes=" << std::hex << in.get_inode()->referent_inodes;
+    }
   }
 
   // rstat
