@@ -182,10 +182,16 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
     if workdir:
         cmd.append(f"--workdir={workdir}")
     cwd = pathlib.Path(".").absolute()
-    cmd += [
-        f"--volume={cwd}:{ctx.cli.homedir}:Z",
-        f"-eHOMEDIR={ctx.cli.homedir}",
-    ]
+    overlay = ctx.overlay()
+    if overlay and overlay.temporary:
+        cmd.append(f"--volume={cwd}:{ctx.cli.homedir}:O")
+    elif overlay:
+        cmd.append(
+            f"--volume={cwd}:{ctx.cli.homedir}:O,upperdir={overlay.upper},workdir={overlay.work}"
+        )
+    else:
+        cmd.append(f"--volume={cwd}:{ctx.cli.homedir}:Z")
+    cmd.append(f"-eHOMEDIR={ctx.cli.homedir}")
     if ctx.cli.build_dir:
         cmd.append(f"-eBUILD_DIR={ctx.cli.build_dir}")
     if ctx.cli.ccache_dir:
@@ -356,6 +362,29 @@ class Context:
         except DidNotExecute:
             pass
 
+    def overlay(self):
+        if not self.cli.overlay_dir:
+            return None
+        overlay = Overlay(temporary=self.cli.overlay_dir == "-")
+        if not overlay.temporary:
+            obase = pathlib.Path(self.cli.overlay_dir).resolve()
+            # you can't nest the workdir inside the upperdir at least on the
+            # version of podman I tried. But the workdir does need to be on the
+            # same FS according to the docs.  So make the workdir and the upper
+            # dir (content) siblings within the specified dir. podman doesn't
+            # have the courtesy to manage the workdir automatically when
+            # specifying upper dir.
+            overlay.upper = obase / "content"
+            overlay.work = obase / "work"
+        return overlay
+
+
+class Overlay:
+    def __init__(self, temporary=True, upper=None, work=None):
+        self.temporary = temporary
+        self.upper = upper
+        self.work = work
+
 
 class Builder:
     """Organize and manage the build steps."""
@@ -373,6 +402,8 @@ class Builder:
         if step in self._did_steps:
             log.info("step already done: %s", step)
             return
+        if not self._did_steps:
+            prepare_env_once(ctx)
         self._steps[step](ctx)
         self._did_steps.add(step)
         log.info("step done: %s", step)
@@ -393,6 +424,14 @@ class Builder:
     def docs(cls):
         for step, func in cls._steps.items():
             yield str(step), getattr(func, "__doc__", "")
+
+
+def prepare_env_once(ctx):
+    overlay = ctx.overlay()
+    if overlay and not overlay.temporary:
+        log.info("Creating overlay dirs: %s, %s", overlay.upper, overlay.work)
+        overlay.upper.mkdir(parents=True, exist_ok=True)
+        overlay.work.mkdir(parents=True, exist_ok=True)
 
 
 @Builder.set(Steps.DNF_CACHE)
@@ -743,6 +782,15 @@ def parse_cli(build_step_names):
         help=(
             "Specify a build directory relative to the home dir"
             " (the ceph source root)"
+        ),
+    )
+    parser.add_argument(
+        "--overlay-dir",
+        "-l",
+        help=(
+            "Mount the homedir as an overlay volume using the given dir"
+            "to host the overlay content and working dir. Specify '-' to"
+            "use a temporary overlay (discarding writes on container exit)"
         ),
     )
     parser.add_argument(
