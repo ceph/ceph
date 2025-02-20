@@ -2510,7 +2510,7 @@ extern "C" int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
 				    int user)
 {
   if (!cmount->is_mounted())
-    return -CEPHFS_ENOTCONN;
+    return -ENOTCONN;
 
   return cmount->get_client()->add_fscrypt_key(key_data, key_len, kid, user);
 }
@@ -2520,7 +2520,7 @@ extern "C" int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
 				       int user)
 {
   if (!cmount->is_mounted())
-    return -CEPHFS_ENOTCONN;
+    return -ENOTCONN;
 
   return cmount->get_client()->remove_fscrypt_key(kid, user);
 }
@@ -2529,7 +2529,7 @@ extern "C" int ceph_get_fscrypt_key_status(struct ceph_mount_info *cmount,
                                        struct fscrypt_get_key_status_arg *arg)
 {
   if (!cmount->is_mounted())
-    return -CEPHFS_ENOTCONN;
+    return -ENOTCONN;
 
   return cmount->get_client()->get_fscrypt_key_status(arg);
 }
@@ -2538,7 +2538,7 @@ extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
                                           int fd, const struct fscrypt_policy_v2 *policy)
 {
   if (!cmount->is_mounted())
-    return -CEPHFS_ENOTCONN;
+    return -ENOTCONN;
 
   return cmount->get_client()->set_fscrypt_policy_v2(fd, *policy);
 }
@@ -2626,7 +2626,7 @@ extern "C" int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **per
 
 extern "C" int get_inode_flags(struct ceph_mount_info *cmount, int fd, int* file_attr_out) {
   if (!cmount->is_mounted())
-    return -CEPHFS_ENOTCONN;
+    return -ENOTCONN;
 
   return cmount->get_client()->get_inode_flags(fd, file_attr_out);
 }

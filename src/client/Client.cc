@@ -18482,7 +18482,7 @@ int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy
 {
   Fh *f = get_filehandle(fd);
   if (!f) {
-    return -CEPHFS_EBADF;
+    return -EBADF;
   }
 
   return ll_set_fscrypt_policy_v2(f->inode.get(), policy);
@@ -18961,7 +18961,7 @@ SubvolumeMetricTracker::aggregate(bool clean) {
 
 int  Client::get_inode_flags(const Inode* in, int* file_attr_out) {
   if (!file_attr_out)
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
 
   *file_attr_out = 0;
     // set or clear the encryption flag depending on the inode status
@@ -18976,7 +18976,7 @@ int  Client::get_inode_flags(const Inode* in, int* file_attr_out) {
 int Client::get_inode_flags(int fd, int* file_attr_out) {
   Fh *fh = get_filehandle(fd);
   if (!fh) {
-    return -CEPHFS_EBADF;
+    return -EBADF;
   }
   return get_inode_flags(fh->inode.get(), file_attr_out);
 }
