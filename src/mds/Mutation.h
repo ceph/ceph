@@ -16,6 +16,7 @@
 #define CEPH_MDS_MUTATION_H
 
 #include <optional>
+#include <unordered_map>
 
 #include "include/interval_set.h"
 #include "include/elist.h"
@@ -249,7 +250,7 @@ public:
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
 
-  ceph::unordered_map<MDSCacheObject*, ObjectState> object_states;
+  std::unordered_map<MDSCacheObject*, ObjectState> object_states;
   int num_pins = 0;
   int num_auth_pins = 0;
   int num_remote_auth_pins = 0;

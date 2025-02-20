@@ -223,9 +223,7 @@ ostream& operator<<(ostream& out, const HitSet::Params& p) {
 void ExplicitHashHitSet::dump(Formatter *f) const {
   f->dump_unsigned("insert_count", count);
   f->open_array_section("hash_set");
-  for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin();
-       p != hits.end();
-       ++p)
+  for (auto p = hits.cbegin(); p != hits.cend(); ++p)
     f->dump_unsigned("hash", *p);
   f->close_section();
 }
@@ -233,9 +231,7 @@ void ExplicitHashHitSet::dump(Formatter *f) const {
 void ExplicitObjectHitSet::dump(Formatter *f) const {
   f->dump_unsigned("insert_count", count);
   f->open_array_section("set");
-  for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin();
-       p != hits.end();
-       ++p) {
+  for (auto p = hits.cbegin(); p != hits.cend(); ++p) {
     f->open_object_section("object");
     p->dump(f);
     f->close_section();

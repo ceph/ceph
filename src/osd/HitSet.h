@@ -16,11 +16,11 @@
 #define CEPH_OSD_HITSET_H
 
 #include <string_view>
+#include <unordered_set>
 
 #include <boost/scoped_ptr.hpp>
 
 #include "include/encoding.h"
-#include "include/unordered_set.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
 
@@ -180,7 +180,7 @@ std::ostream& operator<<(std::ostream& out, const HitSet::Params& p);
  */
 class ExplicitHashHitSet : public HitSet::Impl {
   uint64_t count;
-  ceph::unordered_set<uint32_t> hits;
+  std::unordered_set<uint32_t> hits;
 public:
   class Params : public HitSet::Params::Impl {
   public:
@@ -251,7 +251,7 @@ WRITE_CLASS_ENCODER(ExplicitHashHitSet)
  */
 class ExplicitObjectHitSet : public HitSet::Impl {
   uint64_t count;
-  ceph::unordered_set<hobject_t> hits;
+  std::unordered_set<hobject_t> hits;
 public:
   class Params : public HitSet::Params::Impl {
   public:
