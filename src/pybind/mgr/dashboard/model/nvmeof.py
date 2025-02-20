@@ -68,6 +68,7 @@ class Namespace(NamedTuple):
     rw_mbytes_per_second: int
     r_mbytes_per_second: int
     w_mbytes_per_second: int
+    trash_image: bool
 
 
 class NamespaceIOStats(NamedTuple):
