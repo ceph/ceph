@@ -127,4 +127,13 @@ LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
   return iter;
 }
 
+#ifndef NDEBUG
+bool LBALeafNode::validate_child(
+  const LBALeafNode::base_child_node_t &child,
+  internal_const_iterator_t iter)
+{
+  return static_cast<const LogicalChildNode&>(child).get_begin() == iter.get_key();
+}
+#endif
+
 }
