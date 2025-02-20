@@ -26,9 +26,6 @@ namespace rgw::dedup {
 #define DEDUP_EPOCH_TOKEN  "EPOCH_TOKEN"
 
   static constexpr unsigned EPOCH_MAX_LOCK_DURATION_SEC = 30;
-  static constexpr unsigned MAX_LOCK_DURATION_SEC = 60;
-  static const ceph::bufferlist null_bl;
-
   struct shard_progress_t;
   static int collect_shard_stats(librados::IoCtx &ioctx,
 				 const DoutPrefixProvider *dpp,
