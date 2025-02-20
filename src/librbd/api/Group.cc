@@ -548,6 +548,18 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
+  cls::rbd::MirrorImage mirror_image;
+  r = cls_client::mirror_image_get(&image_ioctx, image_id, &mirror_image);
+  if (r < 0 && r != -ENOENT && r != -ENOTSUP) {
+    lderr(cct) << "failed to retrieve mirroring state of image: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  } else if (r == 0 &&
+             mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
+    lderr(cct) << "cannot add mirror enabled image to group" << dendl;
+    return -EINVAL;
+  }
+
   string image_header_oid = librbd::util::header_name(image_id);
 
   ldout(cct, 20) << "adding image " << image_name
