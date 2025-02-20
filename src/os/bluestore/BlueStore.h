@@ -2688,6 +2688,8 @@ private:
   private:
     void _update_cache_settings();
     void _resize_shards(bool interval_stats);
+
+    mono_clock::time_point last_fragmentation_check;
   } mempool_thread;
 
 #ifdef WITH_BLKIN

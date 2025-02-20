@@ -47,7 +47,9 @@ if(HAVE_LIBZFS)
 endif()
 
 add_library(os STATIC ${libos_srcs})
-target_link_libraries(os blk)
+target_link_libraries(os
+  blk
+  ${FMT_LIB})
 
 target_link_libraries(os heap_profiler kv)
 
