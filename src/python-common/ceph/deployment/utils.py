@@ -70,6 +70,9 @@ def valid_addr(addr: str) -> Tuple[bool, str]:
     colons = addr.count(':')
     addr_as_url = f'http://{addr}'
 
+    if addr.startswith('[') and dots:
+        return False, "IPv4 address wrapped in brackets is invalid"
+
     try:
         res = urlparse(addr_as_url)
     except ValueError as e:
@@ -88,9 +91,6 @@ def valid_addr(addr: str) -> Tuple[bool, str]:
             return False, 'Port must be numeric'
         elif ']:' in addr:
             return False, 'Port must be numeric'
-
-    if addr.startswith('[') and dots:
-        return False, "IPv4 address wrapped in brackets is invalid"
 
     # catch partial address like 10.8 which would be valid IPaddress schemes
     # but are classed as invalid here since they're not usable
