@@ -41,10 +41,10 @@ class TestCephAdm(object):
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_docker()
         r = _cephadm.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
-        assert 'Requires=docker.service' in r
+        assert 'Wants=docker.service' in r
         ctx.container_engine = mock_podman()
         r = _cephadm.get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9')
-        assert 'Requires=docker.service' not in r
+        assert 'Wants=docker.service' not in r
 
     @mock.patch('cephadm.logger')
     def test_attempt_bind(self, _logger):

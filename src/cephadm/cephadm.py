@@ -4610,7 +4610,7 @@ Description=Ceph %i for {fsid}
 # configuration.
 After=network-online.target local-fs.target time-sync.target{docker_after}
 Wants=network-online.target local-fs.target time-sync.target
-{docker_requires}
+{docker_wants}
 
 PartOf=ceph-{fsid}.target
 Before=ceph-{fsid}.target
@@ -4637,7 +4637,7 @@ WantedBy=ceph-{fsid}.target
            extra_args=extra_args,
            # if docker, we depend on docker.service
            docker_after=' docker.service' if docker else '',
-           docker_requires='Requires=docker.service\n' if docker else '')
+           docker_wants='Wants=docker.service\n' if docker else '')
 
     return u
 
