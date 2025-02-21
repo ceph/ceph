@@ -47,7 +47,6 @@ public:
             bool read_only,
 	    bool need_open_db = true,
 	    bool need_stats = false);
-  int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
   uint32_t traverse(const std::string& prefix,
                     const bool do_crc,
                     const bool do_value_dump,
@@ -80,4 +79,7 @@ public:
 
   int print_stats() const;
   int build_size_histogram(const std::string& prefix) const;
+
+private:
+  int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
 };
