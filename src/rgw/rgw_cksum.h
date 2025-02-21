@@ -122,7 +122,7 @@ namespace rgw { namespace cksum {
       break;
       case CtorStyle::raw:
       default:
-	memcpy((char*) _data, (char*) digest.data(), ckd.digest_size);	
+	memcpy((char*) digest.data(), (char*) _data, ckd.digest_size);
 	break;
       };
     }
@@ -245,6 +245,8 @@ namespace rgw { namespace cksum {
     return hdr_name == "x-amz-checksum-algorithm" ||
       parse_cksum_type_hdr(hdr_name) != Type::none;
   } /* is_cksum_hdr */
+
+  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* mem, size_t len);
 
   std::optional<rgw::cksum::Cksum>
   combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2);

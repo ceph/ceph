@@ -13,6 +13,7 @@
  *
  */
 
+#include <cstdint>
 #include <errno.h>
 #include <iostream>
 #include <fstream>
@@ -432,6 +433,31 @@ TEST(RGWCksum, CRC64NVME_COMBINE1)
   digest2->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
   auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
 
+  uint64_t s1;
+  memcpy((char*) &s1, cksum2.digest.data(), sizeof(uint64_t));
+
+  uint64_t s2 = rgw::digest::byteswap(s1);
+
+  uint64_t iv = 0xffffffffffffffff;
+  uint64_t check_crc2 =
+    rgw::cksum::diag_crc64_nvme_madler(iv, (const char*)lacrimae.c_str(),
+				       lacrimae.length());
+  uint64_t check_crc2_bs = rgw::digest::byteswap(check_crc2);
+
+  iv = 0;
+  uint64_t check_crc2_2 =
+    rgw::cksum::diag_crc64_nvme_madler(iv, (const char*)lacrimae.c_str(),
+				       lacrimae.length());
+  uint64_t check_crc2_2_bs = rgw::digest::byteswap(check_crc2_2);
+
+  std::cout << "s1: " << s1
+	    << "\ns2: " << s2
+	    << "\ncheck_crc2: " << check_crc2
+	    << "\ncheck_crc2_bs: " << check_crc2_bs
+	    << "\ncheck_crc2_2: " << check_crc2_2
+	    << "\ncheck_crc2_2_bs: " << check_crc2_2_bs
+	    << std::endl;
+  
   auto cksum3 = rgw::cksum::combine_crc_cksum(cksum1, cksum1, dolor.length());
   ASSERT_TRUE(cksum3);
 

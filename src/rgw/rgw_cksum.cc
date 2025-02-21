@@ -22,6 +22,12 @@ extern "C" {
 
 namespace rgw::cksum {
 
+  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* mem, size_t len)
+  {
+    crc = crc64nvme_bit(0, NULL, 0);
+    return crc64nvme_bit(crc, mem, len);
+  }
+
   std::optional<rgw::cksum::Cksum>
   combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2)
   {
@@ -34,8 +40,8 @@ namespace rgw::cksum {
     switch(ck1.type) {
     case rgw::cksum::Type::crc64nvme:
       uint64_t cck1, cck2, cck3;
-      memcpy((char*) ck1.digest.data(), &cck1, sizeof(cck1));
-      memcpy((char*) ck2.digest.data(), &cck2, sizeof(cck2));
+      memcpy(&cck1, (char*) ck1.digest.data(), sizeof(cck1));
+      memcpy(&cck2, (char*) ck2.digest.data(), sizeof(cck2));
       cck3 = crc64nvme_comb(cck1, cck2, len2);
       ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
 			 cksum::Cksum::CtorStyle::raw);
