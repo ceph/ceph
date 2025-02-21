@@ -340,7 +340,7 @@ void ImageMap<I>::notify_listener_acquire_release_images(
 
   for (auto const &update : release) {
     auto global_id = GlobalId(update.entity.type, update.entity.global_id);
-    if (update.entity.type == MIRROR_ENTITY_TYPE_IMAGE || update.entity.count != 0) {
+    if (update.entity.type == MIRROR_ENTITY_TYPE_IMAGE) {
       m_listener.release_image(
         update.entity.global_id, update.instance_id,
         create_async_context_callback(
