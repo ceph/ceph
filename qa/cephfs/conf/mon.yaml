@@ -4,3 +4,5 @@ overrides:
       mon:
         mon op complaint time: 120
         mon warn on pool no app: false
+        # cephadm can take up to 5 minutes to bring up remaining mons
+        mon down mkfs grace: 300
