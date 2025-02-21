@@ -5664,11 +5664,15 @@ def build_addrv_params(addrv: List[EndPoint]) -> str:
 def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
     """Get mon public network from configuration file."""
     cp = read_config(ctx.config)
-    if not cp.has_option('global', 'public_network'):
+    public_network = ''
+    if cp.has_option('mon', 'public_network'):
+        public_network = cp.get('mon', 'public_network').strip('"').strip("'")
+    elif cp.has_option('global', 'public_network'):
+        public_network = cp.get('global', 'public_network').strip('"').strip("'")
+    else:
         return None
 
     # Ensure all public CIDR networks are valid
-    public_network = cp.get('global', 'public_network').strip('"').strip("'")
     rc, _, err_msg = check_subnet(public_network)
     if rc:
         raise Error(f'Invalid public_network {public_network} parameter: {err_msg}')
@@ -6237,7 +6241,7 @@ def finish_bootstrap_config(
 
     if mon_network:
         cp = read_config(ctx.config)
-        cfg_section = 'global' if cp.has_option('global', 'public_network') else 'mon'
+        cfg_section = 'mon' if cp.has_option('mon', 'public_network') else 'global'
         logger.info(f'Setting public_network to {mon_network} in {cfg_section} config section')
         cli(['config', 'set', cfg_section, 'public_network', mon_network])
 
