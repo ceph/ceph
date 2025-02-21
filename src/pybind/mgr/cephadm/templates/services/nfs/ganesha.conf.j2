@@ -14,7 +14,7 @@ NFS_CORE_PARAM {
 
 NFSv4 {
         Delegations = false;
-        RecoveryBackend = 'rados_cluster';
+        RecoveryBackend = "rados_cluster";
         Minor_Versions = 1, 2;
 {% if nfs_idmap_conf %}
         IdmapConf = "{{ nfs_idmap_conf }}";
