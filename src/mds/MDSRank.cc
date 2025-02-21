@@ -26,6 +26,8 @@
 
 #include "mgr/MgrClient.h"
 
+#include "events/ESubtreeMap.h"
+
 #include "MDSDaemon.h"
 #include "MDSMap.h"
 #include "MetricAggregator.h"
@@ -1702,7 +1704,10 @@ void MDSRank::boot_start(BootStep step, int r)
       } else {
         dout(2) << "Booting: " << step << ": positioning at end of old mds log" << dendl;
         mdlog->append();
-        starting_done();
+        auto sle = mdcache->create_subtree_map();
+        mdlog->submit_entry(sle);
+        mdlog->flush();
+        mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::starting_done));
       }
       break;
     case MDS_BOOT_REPLAY_DONE:
