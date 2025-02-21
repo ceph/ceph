@@ -131,11 +131,12 @@ options:
   type: size
   level: advanced
   desc: The maximum size (in bytes) of regular (non multi-part) object upload.
-  long_desc: Plain object upload is capped at this amount of data. In order to upload
-    larger objects, a special composite upload mechanism is required: multi-part upload (MPU) for S3
-    and DLO and SLO for Swift.  Note that this value also limits the size of individual
-    chunks uploaded for MPU and DLO/SLO objects, thus the larget composite object
-    that can be uploaded is of size ``rgw_max_put_size`` * ``rgw_multipart_part_upload_limit``
+  long_desc: Plain object upload is capped at this amount of data. In order to
+    upload larger objects, a special composite upload mechanism is required
+    multi-part upload (MPU) for S3 and DLO and SLO for Swift.  Note that this
+    value also limits the size of individual chunks uploaded for MPU and
+    DLO/SLO objects, thus the larget composite object that can be uploaded is
+    of size ``rgw_max_put_size`` * ``rgw_multipart_part_upload_limit``
   default: 5_G
   services:
   - rgw
