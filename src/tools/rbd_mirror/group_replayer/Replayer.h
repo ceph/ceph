@@ -4,12 +4,13 @@
 #ifndef RBD_MIRROR_GROUP_REPLAYER_REPLAYER_H
 #define RBD_MIRROR_GROUP_REPLAYER_REPLAYER_H
 
-#include "tools/rbd_mirror/image_replayer/Replayer.h"
+#include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "librbd/mirror/snapshot/Types.h"
 #include "tools/rbd_mirror/Types.h"
+#include "tools/rbd_mirror/image_replayer/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 #include <string>
 
@@ -64,6 +65,7 @@ public:
   }
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
+  void finish_shut_down();
 
   bool is_replaying() const {
     std::unique_lock locker{m_lock};
@@ -98,6 +100,11 @@ private:
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
 
+  Context* m_load_snapshots_task = nullptr;
+  Context* m_on_shutdown = nullptr;
+
+  AsyncOpTracker m_in_flight_op_tracker;
+
   bool m_stop_requested = false;
 
   // map of <group_snap_id, pair<GroupSnapshot, on_finish>>
@@ -112,6 +119,9 @@ private:
       std::vector<cls::rbd::GroupImageStatus> *image_ids);
 
   void schedule_load_group_snapshots();
+  void handle_schedule_load_group_snapshots(int r);
+  void cancel_load_group_snapshots();
+
   void notify_group_listener_stop();
   bool is_resync_requested();
   bool is_rename_requested();
