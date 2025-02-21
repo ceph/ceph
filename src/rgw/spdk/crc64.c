@@ -166,4 +166,5 @@ spdk_crc64_nvme(const void *buf, size_t len, uint64_t crc)
 {
 	return crc64_rocksoft_refl_base(crc, (const uint8_t *)buf, len);
 }
+
 #endif
