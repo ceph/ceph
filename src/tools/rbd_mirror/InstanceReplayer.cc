@@ -658,10 +658,6 @@ void InstanceReplayer<I>::start_group_replayer(
 
   std::string global_group_id = group_replayer->get_global_group_id();
   if (!group_replayer->is_stopped()) {
-    if (group_replayer->needs_restart()) {
-      stop_group_replayer(group_replayer, new C_TrackedOp(m_async_op_tracker,
-                                                          nullptr));
-    }
     return;
   } else if (group_replayer->is_blocklisted()) {
     derr << "global_group_id=" << global_group_id << ": blocklisted detected "

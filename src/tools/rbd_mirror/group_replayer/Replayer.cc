@@ -77,9 +77,9 @@ bool Replayer<I>::is_replay_interrupted() {
 
 template <typename I>
 bool Replayer<I>::is_replay_interrupted(std::unique_lock<ceph::mutex>* locker) {
+
   if (m_state == STATE_COMPLETE) {
     locker->unlock();
-
     return true;
   }
 
@@ -88,14 +88,58 @@ bool Replayer<I>::is_replay_interrupted(std::unique_lock<ceph::mutex>* locker) {
 
 template <typename I>
 void Replayer<I>::schedule_load_group_snapshots() {
+
+  std::lock_guard timer_locker{m_threads->timer_lock};
+  std::lock_guard locker{m_lock};
+
+  if (m_state != STATE_REPLAYING) {
+    return;
+  }
+
   dout(10) << dendl;
+
+  ceph_assert(m_load_snapshots_task == nullptr);
+  m_load_snapshots_task = create_context_callback<
+    Replayer<I>,
+    &Replayer<I>::handle_schedule_load_group_snapshots>(this);
+
+  m_threads->timer->add_event_after(1, m_load_snapshots_task);
+}
+
+template <typename I>
+void Replayer<I>::handle_schedule_load_group_snapshots(int r) {
+  dout(10) << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+
+  {
+    std::unique_lock locker{m_lock};
+    if (m_state != STATE_REPLAYING) {
+      return;
+    }
+  }
+
+  ceph_assert(m_load_snapshots_task != nullptr);
+  m_load_snapshots_task = nullptr;
 
   auto ctx = new LambdaContext(
     [this](int r) {
       load_local_group_snapshots();
     });
-  std::lock_guard timer_locker{m_threads->timer_lock};
-  m_threads->timer->add_event_after(1, ctx);
+  m_threads->work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+void Replayer<I>::cancel_load_group_snapshots() {
+  dout(10) << dendl;
+
+  std::unique_lock timer_locker{m_threads->timer_lock};
+  if (m_load_snapshots_task != nullptr) {
+    dout(10) << dendl;
+
+    if (m_threads->timer->cancel_event(m_load_snapshots_task)) {
+      m_load_snapshots_task = nullptr;
+    }
+  }
 }
 
 template <typename I>
@@ -123,6 +167,7 @@ int Replayer<I>::local_group_image_list_by_id(
   do {
     std::vector<cls::rbd::GroupImageStatus> image_ids_page;
 
+//TODO: Make this async
     r = librbd::cls_client::group_image_list(&m_local_io_ctx, group_header_oid,
                                              start_last, max_read,
                                              &image_ids_page);
@@ -152,6 +197,7 @@ bool Replayer<I>::is_resync_requested() {
   std::string group_header_oid = librbd::util::group_header_name(
       m_local_group_id);
   std::string value;
+// TODO: make this async
   int r = librbd::cls_client::metadata_get(&m_local_io_ctx, group_header_oid,
                                            RBD_GROUP_RESYNC, &value);
   if (r < 0 && r != -ENOENT) {
@@ -212,7 +258,8 @@ template <typename I>
 void Replayer<I>::load_local_group_snapshots() {
   dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
 
-  if (is_replay_interrupted()) {
+  std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
     return;
   }
 
@@ -227,14 +274,16 @@ void Replayer<I>::load_local_group_snapshots() {
     dout(10) << "local group resync requested" << dendl;
     // send stop for Group Replayer
     notify_group_listener_stop();
+    return;
   } else if (is_rename_requested()) {
     m_stop_requested = true;
     dout(10) << "remote group rename requested" << dendl;
     // send stop for Group Replayer
     notify_group_listener_stop();
+    return;
   }
 
-  std::unique_lock locker{m_lock};
+  m_in_flight_op_tracker.start_op();
   m_local_group_snaps.clear();
   auto ctx = create_context_callback<
       Replayer<I>,
@@ -248,6 +297,12 @@ void Replayer<I>::load_local_group_snapshots() {
 template <typename I>
 void Replayer<I>::handle_load_local_group_snapshots(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (is_replay_interrupted()) {
+    m_in_flight_op_tracker.finish_op();
+    return;
+  }
+  m_in_flight_op_tracker.finish_op();
 
   if (r < 0) {
     derr << "error listing local mirror group snapshots: " << cpp_strerror(r)
@@ -268,6 +323,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     }
     // this is primary, IDLE the group replayer
     m_state = STATE_IDLE;
+    notify_group_listener_stop();
     return;
   }
 
@@ -288,6 +344,7 @@ void Replayer<I>::load_remote_group_snapshots() {
       handle_load_remote_group_snapshots(r);
   });
 
+  m_in_flight_op_tracker.start_op();
   auto req = librbd::group::ListSnapshotsRequest<I>::create(m_remote_io_ctx,
       m_remote_group_id, true, true, &m_remote_group_snaps, ctx);
   req->send();
@@ -296,6 +353,12 @@ void Replayer<I>::load_remote_group_snapshots() {
 template <typename I>
 void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (is_replay_interrupted()) {
+    m_in_flight_op_tracker.finish_op();
+    return;
+  }
+  m_in_flight_op_tracker.finish_op();
 
   if (r < 0) {
     derr << "error listing remote mirror group snapshots: " << cpp_strerror(r)
@@ -1134,17 +1197,44 @@ template <typename I>
 void Replayer<I>::shut_down(Context* on_finish) {
   dout(10) << dendl;
 
-  std::unique_lock locker{m_lock};
-  m_stop_requested = true;
-  auto state = STATE_COMPLETE;
-  std::swap(m_state, state);
-  locker.unlock();
-  if (on_finish) {
-    on_finish->complete(0);
+  {
+    std::unique_lock locker{m_lock};
+    m_stop_requested = true;
+    ceph_assert(m_on_shutdown == nullptr);
+    std::swap(m_on_shutdown, on_finish);
+
+    auto state = STATE_COMPLETE;
+    std::swap(m_state, state);
   }
+
+  cancel_load_group_snapshots();
+
+  if (!m_in_flight_op_tracker.empty()) {
+    m_in_flight_op_tracker.wait_for_ops(new LambdaContext([this](int) {
+        finish_shut_down();
+      }));
+    return;
+  }
+
+  finish_shut_down();
   return;
 }
 
+template <typename I>
+void Replayer<I>::finish_shut_down() {
+  dout(10) << dendl;
+
+  Context *on_finish = nullptr;
+
+  {
+    std::unique_lock locker{m_lock};
+    ceph_assert(m_on_shutdown != nullptr);
+    std::swap(m_on_shutdown, on_finish);
+  }
+  if (on_finish) {
+    on_finish->complete(0);
+  }
+}
 
 } // namespace group_replayer
 } // namespace mirror
