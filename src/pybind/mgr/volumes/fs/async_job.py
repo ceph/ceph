@@ -41,6 +41,13 @@ class JobThread(threading.Thread):
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
                             self.async_job.threads.remove(self)
                             return
+                        #timo = self.async_job.wakeup_timeout
+                        #if timo is not None:
+                        #    volnames = list_volumes(self.vc.mgr)
+                        #    missing = set(volnames) - set(self.async_job.q)
+                        #    for m in missing:
+                        #        self.async_job.jobs[m] = []
+                        #        self.async_job.q.append(m)
                         vol_job = self.async_job.get_job()
                         if vol_job:
                             break
