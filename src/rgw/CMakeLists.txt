@@ -57,6 +57,9 @@ set(librgw_common_srcs
   services/svc_zone.cc
   services/svc_zone_utils.cc
   spdk/crc64.c
+  madler/crc64nvme.c
+  madler/crc32iso_hdlc.c
+  madler/crc32iscsi.c
   rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
@@ -71,6 +74,7 @@ set(librgw_common_srcs
   rgw_bucket.cc
   rgw_bucket_layout.cc
   rgw_cache.cc
+  rgw_cksum.cc
   rgw_cksum_pipe.cc
   rgw_common.cc
   rgw_compression.cc
