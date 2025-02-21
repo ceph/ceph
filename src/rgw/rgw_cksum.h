@@ -50,6 +50,7 @@ namespace rgw { namespace cksum {
 
   static constexpr uint16_t FLAG_NONE =      0x0000;
   static constexpr uint16_t FLAG_AWS_CKSUM = 0x0001;
+  static constexpr uint16_t FLAG_LINEAR_COMBINE = 0x0002;
 
   class Desc
   {
@@ -91,7 +92,8 @@ namespace rgw { namespace cksum {
       Desc(Type::sha256, "sha256", 32, FLAG_AWS_CKSUM),
       Desc(Type::sha512, "sha512", 64, FLAG_NONE),
       Desc(Type::blake3, "blake3", 32, FLAG_NONE),
-      Desc(Type::crc64nvme, "crc64nvme", 8, FLAG_AWS_CKSUM),
+      Desc(Type::crc64nvme, "crc64nvme", 8,
+	   FLAG_AWS_CKSUM|FLAG_LINEAR_COMBINE),
     };
 
     static constexpr uint16_t max_digest_size = 64;
@@ -100,14 +102,29 @@ namespace rgw { namespace cksum {
     Type type;
     value_type digest;
 
+    enum class CtorStyle : uint8_t
+    {
+      raw = 0,
+      from_armored,
+    };
+
     Cksum(Type _type = Type::none) : type(_type) {}
-    Cksum(Type _type, const char* _armored_text)
+
+    Cksum(Type _type, const char* _data, CtorStyle style)
       : type(_type) {
       const auto& ckd = checksums[uint16_t(type)];
+      switch (style) {
+      case CtorStyle::from_armored:
       (void) ceph_unarmor((char*) digest.begin(),
 			  (char*) digest.begin() + ckd.digest_size,
-			  _armored_text,
-			  _armored_text + std::strlen(_armored_text));
+			  _data,
+			  _data + std::strlen(_data));
+      break;
+      case CtorStyle::raw:
+      default:
+	memcpy((char*) _data, (char*) digest.data(), ckd.digest_size);	
+	break;
+      };
     }
 
     const char* type_string() const {
@@ -116,6 +133,10 @@ namespace rgw { namespace cksum {
 
     const bool aws() const {
       return (Cksum::checksums[uint16_t(type)]).aws();
+    }
+
+    const bool combinable() const {
+      return (Cksum::checksums[uint16_t(type)]).flags & FLAG_LINEAR_COMBINE;
     }
 
     std::string aws_name() const {
@@ -224,5 +245,8 @@ namespace rgw { namespace cksum {
     return hdr_name == "x-amz-checksum-algorithm" ||
       parse_cksum_type_hdr(hdr_name) != Type::none;
   } /* is_cksum_hdr */
+
+  std::optional<rgw::cksum::Cksum>
+  combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2);
 
 }} /* namespace */

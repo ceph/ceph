@@ -412,6 +412,34 @@ TEST(RGWCksum, CRC64NVME2)
   ASSERT_EQ(cksum.to_armor(), "wiBA+PSv41M=");
 }
 
+#if 1
+TEST(RGWCksum, CRC64NVME_COMBINE1)
+{
+  auto t = cksum::Type::crc64nvme;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+
+  Digest* digest1 = get_digest(dv);
+  ASSERT_NE(digest1, nullptr);
+
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  std::string lacrimae = dolor + dolor;
+
+  Digest* digest2 = get_digest(dv);
+  ASSERT_NE(digest2, nullptr);
+
+  digest2->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  auto cksum3 = rgw::cksum::combine_crc_cksum(cksum1, cksum1, dolor.length());
+  ASSERT_TRUE(cksum3);
+
+  /* the CRC of dolor+dolor == gf combination of cksum1 and itself */
+  ASSERT_EQ(cksum2.to_armor(), cksum3->to_armor());
+}
+#endif
+
 TEST(RGWCksum, CtorUnarmor)
 {
   auto t = cksum::Type::sha256;
@@ -425,7 +453,8 @@ TEST(RGWCksum, CtorUnarmor)
 
   auto cksum1 = rgw::cksum::finalize_digest(digest, t);
   auto armored_text1 = cksum1.to_armor();
-  auto cksum2 = rgw::cksum::Cksum(cksum1.type, armored_text1.c_str());
+  auto cksum2 = rgw::cksum::Cksum(cksum1.type, armored_text1.c_str(),
+				  rgw::cksum::Cksum::CtorStyle::from_armored);
 
   ASSERT_EQ(armored_text1, cksum2.to_armor());
 }

@@ -1,0 +1,51 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright contributors to the Ceph project
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
+#include "rgw_cksum.h"
+#include <cstdint>
+
+extern "C" {
+#include "madler/crc64nvme.h"
+} // extern "C"
+
+namespace rgw::cksum {
+
+  std::optional<rgw::cksum::Cksum>
+  combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2)
+  {
+    std::optional<rgw::cksum::Cksum> ck3;
+    if ((ck1.type != ck2.type) ||
+	!ck1.combinable()) {
+      goto out;
+    }
+
+    switch(ck1.type) {
+    case rgw::cksum::Type::crc64nvme:
+      uint64_t cck1, cck2, cck3;
+      memcpy((char*) ck1.digest.data(), &cck1, sizeof(cck1));
+      memcpy((char*) ck2.digest.data(), &cck2, sizeof(cck2));
+      cck3 = crc64nvme_comb(cck1, cck2, len2);
+      ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
+			 cksum::Cksum::CtorStyle::raw);
+      break;
+    default:
+      break;
+    };
+
+  out:
+    return ck3;
+  }
+
+} // namespace rgw::cksum
