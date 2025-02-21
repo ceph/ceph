@@ -2845,7 +2845,7 @@ options:
   services:
   - rgw
   with_legacy: true
- name: rgw_crypt_s3_kms_backend
+- name: rgw_crypt_s3_kms_backend
   type: str
   level: advanced
   desc: Where the SSE-KMS encryption keys are stored. Supported KMS systems are OpenStack
