@@ -1246,6 +1246,7 @@ protected:
   std::string multipart_part_str;
   int multipart_part_num = 0;
   rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
+  uint16_t multipart_cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
   jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
@@ -1900,6 +1901,7 @@ protected:
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
   rgw::sal::Attrs attrs;
   rgw::cksum::Type cksum_algo{rgw::cksum::Type::none};
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
 
 public:
   RGWInitMultipart() {}

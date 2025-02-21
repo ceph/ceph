@@ -14,6 +14,7 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
+#include "common/dout.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h"
 #include "common/armor.h"
@@ -4264,6 +4265,7 @@ void RGWPutObj::execute(optional_yield y)
     }
 
     multipart_cksum_type = upload->cksum_type;
+    multipart_cksum_flags = upload->cksum_flags;
 
     /* upload will go out of scope, so copy the dest placement for later use */
     s->dest_placement = *pdest_placement;
@@ -4395,7 +4397,10 @@ void RGWPutObj::execute(optional_yield y)
     /* optional streaming checksum */
     try {
       cksum_filter =
-	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env, multipart_cksum_type);
+	rgw::putobj::RGWPutObj_Cksum::Factory(
+               filter, *s->info.env,
+	       multipart_cksum_type,
+	       multipart_cksum_flags);
     } catch (const rgw::io::Exception& e) {
       op_ret = -e.code().value();
       return;
@@ -4547,6 +4552,7 @@ void RGWPutObj::execute(optional_yield y)
 
   if (cksum_filter) {
     const auto& hdr = cksum_filter->header();
+
     auto expected_ck = cksum_filter->expected(*s->info.env);
     auto cksum_verify =
       cksum_filter->verify(*s->info.env); // valid or no supplied cksum
@@ -4558,7 +4564,7 @@ void RGWPutObj::execute(optional_yield y)
       ldpp_dout_fmt(this, 16,
 		    "{} checksum verified "
 		    "\n\tcomputed={} == \n\texpected={}",
-		    hdr.second,
+		    (hdr.second) ? hdr.second : "(no supplied checksum header)",
 		    cksum->to_armor(),
 		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
 
@@ -4575,7 +4581,7 @@ void RGWPutObj::execute(optional_yield y)
 		    computed_ck,
 		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
 
-      op_ret = -ERR_INVALID_REQUEST;
+      op_ret = -ERR_BAD_DIGEST;
       return;
     }
   }
@@ -4763,7 +4769,8 @@ void RGWPostObj::execute(optional_yield y)
     try {
       cksum_filter =
 	rgw::putobj::RGWPutObj_Cksum::Factory(
-	  filter, *s->info.env, rgw::cksum::Type::none /* no override */);
+               filter, *s->info.env, rgw::cksum::Type::none /* no override */,
+	       rgw::cksum::Cksum::FLAG_CKSUM_NONE);
     } catch (const rgw::io::Exception& e) {
       op_ret = -e.code().value();
       return;
@@ -4877,7 +4884,7 @@ void RGWPostObj::execute(optional_yield y)
 		      cksum->to_armor(),
 		      cksum_filter->expected(*s->info.env));
 
-        op_ret = -ERR_INVALID_REQUEST;
+        op_ret = -ERR_BAD_DIGEST;
         return;
       }
     }
@@ -6491,18 +6498,24 @@ void RGWInitMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
+
+  /* apparently, we are assured of upload */
   upload->obj_legal_hold = obj_legal_hold;
   upload->obj_retention = obj_retention;
   upload->cksum_type = cksum_algo;
-  op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
+  /* cksum_flags have been validated against algorithm, so, e.g., if
+   * FLAG_COMPOSITE is set, the algorithm can be used with a composite/
+   * digest checksum (e.g., it's not CRC64NVME) */
+  upload->cksum_flags = cksum_flags;
 
+  op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
   if (op_ret == 0) {
     upload_id = upload->get_upload_id();
   }
   s->trace->SetAttribute(tracing::rgw::UPLOAD_ID, upload_id);
   multipart_trace->UpdateName(tracing::rgw::MULTIPART + upload_id);
 
-}
+} /* RGWInitMultipart::execute() */
 
 int RGWCompleteMultipart::verify_permission(optional_yield y)
 {
@@ -6532,6 +6545,7 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
 		    rgw::sal::MultipartUpload* upload,
 		    RGWMultiCompleteUpload* parts,
 		    std::optional<rgw::cksum::Cksum>& out_cksum,
+		    std::optional<std::string>& armored_cksum,
 		    optional_yield y)
 {
   /* 1. need checksum-algorithm header (if invalid, fail)
@@ -6554,6 +6568,7 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
   auto num_parts = int(parts->parts.size());
 
   rgw::cksum::Type& cksum_type = upload->cksum_type;
+  uint16_t cksum_flags = upload->cksum_flags;
 
   int again_count{0};
  again:
@@ -6580,8 +6595,7 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  rgw::cksum::DigestVariant dv = rgw::cksum::digest_factory(cksum_type);
-  rgw::cksum::Digest* digest = rgw::cksum::get_digest(dv);
+  auto cksum_combiner = rgw::cksum::CombinerFactory(cksum_type, cksum_flags);
 
   /* returns the parts (currently?) in cache */
   auto parts_ix{0};
@@ -6606,12 +6620,12 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
     if ((part_cksum->type != cksum_type)) {
       /* if parts have inconsistent checksum, fail now */
 
-    ldpp_dout_fmt(dpp, 14,
-		  "ERROR: multipart part checksum type mismatch\n\tcomplete "
-		  "multipart header={} part={}",
-		  to_string(part_cksum->type), to_string(cksum_type));
+      ldpp_dout_fmt(dpp, 14,
+		    "ERROR: multipart part checksum type mismatch\n\tcomplete "
+		    "multipart header={} part={}",
+		    to_string(part_cksum->type), to_string(cksum_type));
 
-    op_ret = -ERR_INVALID_REQUEST;
+      op_ret = -ERR_INVALID_REQUEST;
       return op_ret;
     }
 
@@ -6620,18 +6634,27 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
      * "-<num-parts>.  See
      * https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums
      */
-    auto ckr = part_cksum->raw();
-    digest->Update((unsigned char *)ckr.data(), ckr.length());
+    cksum_combiner->append(*part_cksum, part.second->get_size());
+
   } /* all-parts */
 
   /* we cannot verify this checksum, only compute it */
-  out_cksum = rgw::cksum::finalize_digest(digest, cksum_type);
+  out_cksum = cksum_combiner->final();
+
+  armored_cksum = [&]() -> std::string {
+    std::string armor = out_cksum->to_armor();
+    if (out_cksum->composite()) {
+      armor += fmt::format("-{}", num_parts);
+    }
+    return armor;
+  }();
 
   ldpp_dout_fmt(dpp, 16,
-		"INFO: {} combined checksum {} {}-{}",
+		"INFO: {} combined checksum {} {}",
 		__func__,
 		out_cksum->type_string(),
-		out_cksum->to_armor(), num_parts);
+		out_cksum->to_armor(),
+		*armored_cksum);
 
   return op_ret;
 } /* try_sum_part_chksums */
@@ -6748,7 +6771,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   /* checksum computation */
   if (upload->cksum_type != rgw::cksum::Type::none) {
-    op_ret = try_sum_part_cksums(this, s->cct, upload.get(), parts, cksum, y);
+    op_ret = try_sum_part_cksums(this, s->cct, upload.get(), parts, cksum,
+				 armored_cksum, y);
     if (op_ret < 0) {
       ldpp_dout(this, 16) << "ERROR: try_sum_part_cksums failed, obj="
 			  << meta_obj << " ret=" << op_ret << dendl;
@@ -6768,9 +6792,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   auto& target_attrs = meta_obj->get_attrs();
 
   if (cksum) {
-    armored_cksum =
-      fmt::format("{}-{}", cksum->to_armor(), parts->parts.size());
-
     /* validate computed checksum against supplied checksum, if present */
     auto [hdr_cksum, supplied_cksum] =
       rgw::putobj::find_hdr_cksum(*(s->info.env));
@@ -6779,19 +6800,37 @@ void RGWCompleteMultipart::execute(optional_yield y)
 		    "INFO: client supplied checksum {}: {} ",
 		    hdr_cksum.header_name(), supplied_cksum);
 
-    if (! (supplied_cksum.empty()) &&
-	(supplied_cksum != armored_cksum)) {
-      /* some minio SDK clients assert a checksum that is cryptographically
-       * valid but omits the part count */
-      auto parts_suffix = fmt::format("-{}", parts->parts.size());
-      auto suffix_len = armored_cksum->size() - parts_suffix.size();
-      if (armored_cksum->compare(0, suffix_len, supplied_cksum) != 0) {
-	ldpp_dout_fmt(this, 4,
-		      "{} content checksum mismatch"
-		      "\n\tcalculated={} != \n\texpected={}",
-		      hdr_cksum.header_name(), armored_cksum, supplied_cksum);
-	op_ret = -ERR_INVALID_REQUEST;
-	return;
+    /* in late 2024, we observed some minio SDK clients assert a checksum that
+     * was a cryptographically valid *digest*, but omitted the part count;
+     *
+     * in addition, from 2025, AWS specifies that multipart uploads using CRC
+     * checksums may (CRC32, CRC32c) or must (CRC64NVME) be computed as full
+     * object checksums [1], so perhaps should not suffix a part count.
+     *
+     * for the present, it appears safe to accept both forms regardless of the
+     * checksum algorithm.
+     *
+     * [1] https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+     */
+
+    if (! supplied_cksum.empty()) {
+      const std::string_view acm = *armored_cksum;
+      const std::string_view scm = supplied_cksum;
+      if (scm != acm) {
+        auto c_len = acm.length();
+        if (cksum->composite()) {
+          auto parts_suffix = fmt::format("-{}", parts->parts.size());
+          c_len -= parts_suffix.length();
+        }
+        auto c_res = scm.compare(0, c_len, acm, 0, c_len);
+        if (c_res != 0) {
+          ldpp_dout_fmt(this, 4,
+                        "{} content checksum mismatch"
+                        "\n\tcalculated={} != \n\texpected={}",
+                        hdr_cksum.header_name(), armored_cksum, supplied_cksum);
+          op_ret = -ERR_BAD_DIGEST;
+          return;
+        }
       }
     }
 

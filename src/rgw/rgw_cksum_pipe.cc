@@ -14,6 +14,7 @@
  */
 
 #include "rgw_cksum_pipe.h"
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <fmt/format.h>
@@ -27,16 +28,19 @@ namespace rgw::putobj {
 
   RGWPutObj_Cksum::RGWPutObj_Cksum(rgw::sal::DataProcessor* next,
 				   rgw::cksum::Type _typ,
+				   uint16_t _flags,
 				   cksum_hdr_t&& _hdr)
     : Pipe(next),
       _type(_typ),
+      flags(_flags),
       dv(rgw::cksum::digest_factory(_type)),
       _digest(cksum::get_digest(dv)), cksum_hdr(_hdr)
   {}
 
   std::unique_ptr<RGWPutObj_Cksum> RGWPutObj_Cksum::Factory(
     rgw::sal::DataProcessor* next, const RGWEnv& env,
-    rgw::cksum::Type override_type)
+    rgw::cksum::Type override_type,
+    uint16_t cksum_flags)
   {
     /* look for matching headers */
     auto algo_header = cksum_algorithm_hdr(env);
@@ -47,7 +51,7 @@ namespace rgw::putobj {
        if (cksum_type != rgw::cksum::Type::none) {
          return
            std::make_unique<RGWPutObj_Cksum>(
-                              next, cksum_type, std::move(algo_header));
+		  next, cksum_type, cksum_flags, std::move(algo_header));
        } else {
 	 /* unknown checksum type requested */
 	 throw rgw::io::Exception(EINVAL, std::system_category());
@@ -62,7 +66,7 @@ namespace rgw::putobj {
       auto algo_header = cksum_algorithm_hdr(override_type);
       return
 	std::make_unique<RGWPutObj_Cksum>(
-			   next, override_type, std::move(algo_header));
+	        next, override_type, cksum_flags, std::move(algo_header));
     }
     /* no checksum requested */
     return std::unique_ptr<RGWPutObj_Cksum>();

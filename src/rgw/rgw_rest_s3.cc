@@ -506,12 +506,29 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	try {
 	  rgw::cksum::Cksum cksum;
 	  decode(cksum, i->second);
-	  if (multipart_parts_count && multipart_parts_count > 0) {
+	  auto cksum_type =
+	    rgw::cksum::get_checksum_type(cksum,
+	      (multipart_parts_count && multipart_parts_count > 0) /* is_multipart */);
+	  if (std::get<0>(cksum_type) == rgw::cksum::Cksum::FLAG_COMPOSITE) {
+	    /* cksum was computed with a digest algorithm, or predates the 2025
+	       update that introduced CRC combining */
+	    ldpp_dout_fmt(this, 16,
+			  "INFO: {} ChecksumMode==ENABLED element-name {} value {}-{}",
+			  __func__, cksum.element_name(), cksum.to_armor(),
+			  *multipart_parts_count);
 	    dump_header(s, cksum.header_name(),
 			fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
 	  } else {
-	    dump_header(s, cksum.header_name(), cksum.to_armor());
+	    /* a full object checksum, if multipart, because the checksum is CRC family */
+	    auto elt_name = cksum.element_name();
+	    auto armored_cksum = cksum.to_armor();
+
+	    ldpp_dout_fmt(this, 16,
+			  "INFO: {} ChecksumMode==ENABLED element-name {} value {}",
+			  __func__, cksum.element_name(), cksum.to_armor());
+	    dump_header(s, cksum.header_name(), armored_cksum);
 	  }
+	  dump_header(s, "x-amz-checksum-type", std::get<1>(cksum_type));
 	}  catch (buffer::error& err) {
 	  ldpp_dout(this, 0) << "ERROR: failed to decode rgw::cksum::Cksum"
 			     << dendl;
@@ -2745,6 +2762,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
       if (cksum && cksum->aws()) {
+	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
 	dump_header(s, cksum->header_name(), cksum->to_armor());
       }
       for (auto &it : crypt_http_responses)
@@ -2753,7 +2771,8 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
-      if (cksum) {
+      if (cksum && cksum->aws()) {
+	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
 	dump_header(s, cksum->header_name(), cksum->to_armor());
       }
       end_header(s, this, to_mime_type(s->format));
@@ -3765,12 +3784,20 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 	  rgw::cksum::Cksum cksum;
 	  auto bliter = iter->second.cbegin();
 	  cksum.decode(bliter);
-          if (multipart_parts_count && multipart_parts_count > 0) {
+	  auto cksum_type =
+	    rgw::cksum::get_checksum_type(cksum,
+	      (multipart_parts_count && multipart_parts_count > 0) /* is_multipart */);
+	  if (std::get<0>(cksum_type) == rgw::cksum::Cksum::FLAG_COMPOSITE) {
+	    /* cksum was computed with a digest algorithm, or predates the 2025
+	       update that introduced CRC combining */
 	    s->formatter->dump_string(cksum.element_name(),
-		fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+				      fmt::format("{}-{}", cksum.to_armor(),
+						  *multipart_parts_count));
 	  } else {
+	    /* a full object checksum, if multipart, because the checksum is CRC family */
 	    s->formatter->dump_string(cksum.element_name(), cksum.to_armor());
 	  }
+	  s->formatter->dump_string("ChecksumType", std::get<1>(cksum_type));
 	} catch (buffer::error& err) {
 	  ldpp_dout(this, 0)
 	    << "ERROR: could not decode stored cksum, caught buffer::error" << dendl;
@@ -3812,6 +3839,7 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 	      s->formatter->dump_int("PartNumber", part.part_number);
 	      s->formatter->dump_unsigned("Size", part.part_size);
 	      if (part.cksum.type != rgw::cksum::Type::none) {
+		/* parts always have a non-digest checksum */
 		s->formatter->dump_string(part.cksum.element_name(), part.cksum.to_armor());
 	      }
 	      s->formatter->close_section(); /* Part */
@@ -4214,13 +4242,24 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return -ERR_INVALID_REQUEST;
   }
 
-  auto algo_hdr = rgw::putobj::cksum_algorithm_hdr(*(s->info.env));
-  if (algo_hdr.second) {
-    cksum_algo = rgw::cksum::parse_cksum_type(algo_hdr.second);
+  /* checksums */
+  auto checksum_type_hdr =
+    s->info.env->get_optional("HTTP_X_AMZ_CHECKSUM_TYPE");
+
+  /* composite or "full object" */
+  cksum_algo = putobj::multipart_cksum_algo(*(s->info.env));
+  cksum_flags = putobj::parse_cksum_flags(cksum_algo, checksum_type_hdr);
+
+  auto aok = cksum::permitted_cksum_algo_and_type(cksum_algo, cksum_flags);
+  if (! std::get<0>(aok)) {
+    ldpp_dout_fmt(this, 5,
+		  "ERROR: {} checksum type {} not compatible with checksum algorithm {}",
+		  __func__, std::get<1>(aok), std::get<2>(aok));
+    return -ERR_INVALID_REQUEST;
   }
 
   return 0;
-}
+} /* RGWInitMultipart_ObjStore_S3::get_params() */
 
 void RGWInitMultipart_ObjStore_S3::send_response()
 {
@@ -4302,8 +4341,11 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
     s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
-    if (armored_cksum) {
+    if (armored_cksum) [[likely]] {
+      auto cksum_type
+	= rgw::cksum::get_checksum_type(*cksum, true /* is_multipart */);
       s->formatter->dump_string(cksum->element_name(), *armored_cksum);
+      s->formatter->dump_string("ChecksumType", std::get<1>(cksum_type));
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
