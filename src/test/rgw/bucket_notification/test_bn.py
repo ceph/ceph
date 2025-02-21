@@ -418,17 +418,25 @@ kafka_server = 'localhost'
 
 class KafkaReceiver(object):
     """class for receiving and storing messages on a topic from the kafka broker"""
-    def __init__(self, topic, security_type):
+    def __init__(self, topic, security_type, kafka_server='localhost'):
         from kafka import KafkaConsumer
         remaining_retries = 10
         port = 9092
         if security_type != 'PLAINTEXT':
             security_type = 'SSL'
             port = 9093
+
+        if kafka_server is None:
+            endpoint = "localhost" + ":" + str(port)
+        elif ":" not in kafka_server:
+            endpoint = kafka_server + ":" + str(port)
+        else:
+            endpoint = kafka_server
+
         while remaining_retries > 0:
             try:
-                self.consumer = KafkaConsumer(topic, 
-                        bootstrap_servers = kafka_server+':'+str(port), 
+                self.consumer = KafkaConsumer(topic,
+                        bootstrap_servers=endpoint,
                         security_protocol=security_type,
                         consumer_timeout_ms=16000)
                 print('Kafka consumer created on topic: '+topic)
@@ -467,9 +475,9 @@ def kafka_receiver_thread_runner(receiver):
         print('Kafka receiver ended unexpectedly: ' + str(error))
 
 
-def create_kafka_receiver_thread(topic, security_type='PLAINTEXT'):
+def create_kafka_receiver_thread(topic, security_type='PLAINTEXT', kafka_brokers=None):
     """create kafka receiver and thread"""
-    receiver = KafkaReceiver(topic, security_type)
+    receiver = KafkaReceiver(topic, security_type, kafka_server=kafka_brokers)
     task = threading.Thread(target=kafka_receiver_thread_runner, args=(receiver,))
     task.daemon = True
     return task, receiver
@@ -1395,6 +1403,139 @@ def test_ps_s3_notification_push_amqp_on_master():
     conn.delete_bucket(bucket_name)
 
 
+def notification_push(endpoint_type, conn, account=None, cloudevents=False, kafka_brokers=None):
+    """ test pushinging notification """
+    zonegroup = get_config_zonegroup()
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    host = get_ip()
+    task = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        host = get_ip()
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port), cloudevents=cloudevents)
+        endpoint_address = 'http://'+host+':'+str(port)
+        if cloudevents:
+            endpoint_args = 'push-endpoint='+endpoint_address+'&cloudevents=true'
+        else:
+            endpoint_args = 'push-endpoint='+endpoint_address
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status/100, 2)
+    elif endpoint_type == 'amqp':
+        # start amqp receiver
+        exchange = 'ex1'
+        task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+        task.start()
+        endpoint_address = 'amqp://' + host
+        # with acks from broker
+        exchange = 'ex1'
+        endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+        # create two s3 topic
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status/100, 2)
+    elif endpoint_type == 'kafka':
+        # start amqp receiver
+        task, receiver = create_kafka_receiver_thread(topic_name, kafka_brokers=kafka_brokers)
+        task.start()
+        endpoint_address = 'kafka://' + kafka_server
+        # without acks from broker
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
+        if kafka_brokers is not None:
+            endpoint_args += '&kafka-brokers=' + kafka_brokers
+        # create s3 topic
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status/100, 2)
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    # create objects in the bucket
+    number_of_objects = 100
+    if cloudevents:
+        number_of_objects = 10
+    client_threads = []
+    etags = []
+    objects_size = {}
+    start_time = time.time()
+    for i in range(number_of_objects):
+        content = str(os.urandom(1024*1024))
+        etag = hashlib.md5(content.encode()).hexdigest()
+        etags.append(etag)
+        object_size = len(content)
+        key = bucket.new_key(str(i))
+        objects_size[key.name] = object_size
+        thr = threading.Thread(target=set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + ' + endpoint_type + ' notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check receiver
+    keys = list(bucket.list())
+    receiver.verify_s3_events(keys, exact_match=True, deletions=False, expected_sizes=objects_size, etags=etags)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target=key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + ' + endpoint_type + ' notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check receiver
+    receiver.verify_s3_events(keys, exact_match=True, deletions=True, expected_sizes=objects_size, etags=etags)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    receiver.close(task)
+
+
 @attr('manual_test')
 def test_ps_s3_notification_push_amqp_idleness_check():
     """ test pushing amqp s3 notification and checking for connection idleness """
@@ -1623,6 +1764,20 @@ def test_ps_s3_notification_push_kafka_on_master():
         conn.delete_bucket(bucket_name)
         if receiver is not None:
             stop_kafka_receiver(receiver, task)
+
+
+@attr('kafka_failover')
+def test_notification_push_kafka_multiple_brokers_override():
+    """ test pushing kafka s3 notification on master """
+    conn = connection()
+    notification_push('kafka', conn, kafka_brokers='localhost:9092,localhost:19092')
+
+
+@attr('kafka_failover')
+def test_notification_push_kafka_multiple_brokers_append():
+    """ test pushing kafka s3 notification on master """
+    conn = connection()
+    notification_push('kafka', conn, kafka_brokers='localhost:19092')
 
 
 @attr('http_test')

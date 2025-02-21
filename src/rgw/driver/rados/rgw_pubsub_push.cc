@@ -303,11 +303,12 @@ public:
         cct(_cct),
         topic(_topic),
         ack_level(get_ack_level(args)) {
-    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
-          args.get_optional("ca-location"), args.get_optional("mechanism"))) {
+    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true),
+          args.get_optional("ca-location"), args.get_optional("mechanism"),
+          args.get_optional("kafka-brokers"))) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
-    }
-  }
+   }
+ }
 
   int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
