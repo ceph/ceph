@@ -98,7 +98,7 @@ namespace rgw { namespace digest {
 
   public:
     static constexpr uint16_t digest_size = 8;
-    static constexpr uint64_t initial_value = 0x0;
+    static constexpr uint64_t initial_value = 0ULL;
 
     Crc64Nvme() { Restart(); }
 
@@ -109,6 +109,10 @@ namespace rgw { namespace digest {
     }
 
     void Final(unsigned char* digest) {
+      /* due to AWS (and other) convention, the at-rest
+       * digest is byteswapped (on LE?); */
+      /* XXX is this really endian specific? don't want
+       * break ARM */
       if constexpr (std::endian::native != std::endian::big) {
 	crc = rgw::digest::byteswap(crc);
       }
