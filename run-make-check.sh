@@ -58,6 +58,8 @@ function run() {
             # do not return failure, as the jenkins publisher will take care of this
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.* ${CTEST_RESOURCE_FILE}
         fi
+        sudo rm -f /tmp/LastTest_*
+        sudo cp Testing/Temporary/LastTest_* /tmp/
     else
         if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.* ${CTEST_RESOURCE_FILE}
