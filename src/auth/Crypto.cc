@@ -17,6 +17,7 @@
 #include <fcntl.h>
 
 #include <openssl/aes.h>
+#include <openssl/core_names.h>
 
 #include "Crypto.h"
 
@@ -34,6 +35,10 @@
 #include "common/debug.h"
 #include <errno.h>
 
+#include <boost/endian/conversion.hpp>
+
+#define dout_subsys ceph_subsys_auth
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -46,6 +51,8 @@ using std::string;
 using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
+
+using boost::endian::native_to_big;
 
 
 // use getentropy() if available. it uses the same source of randomness
@@ -483,6 +490,415 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
 }
 
 
+// ---------------------------------------------------
+
+/*
+ * AES256CTS-HMAC384-192
+ */
+class CryptoAES256KRB5 : public CryptoHandler {
+public:
+  CryptoAES256KRB5() { }
+  ~CryptoAES256KRB5() override {}
+  int get_type() const override {
+    return CEPH_CRYPTO_AES256KRB5;
+  }
+  int create(CryptoRandom *random, bufferptr& secret) override;
+  int validate_secret(const bufferptr& secret) override;
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+};
+
+static constexpr const std::size_t AES256KRB5_KEY_LEN{32};
+static constexpr const std::size_t AES256KRB5_BLOCK_LEN{16};
+static constexpr const std::size_t AES256KRB5_HASH_LEN{24};
+static constexpr const std::size_t SHA384_LEN{48};
+
+class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
+  EVP_CIPHER *cipher{nullptr};
+
+  ceph::bufferlist ki;
+  const unsigned char *ki_raw;
+  ceph::bufferlist ke;
+  const unsigned char *ke_raw;
+
+static void dump_buf(CephContext *cct, string title, const unsigned char *buf, int len)
+{
+  std::stringstream ss;
+  ss << std::endl << title << std::endl;
+  for (int i = 0; i < len; ++i) {
+    if (i != 0 && i % 16 == 0) {
+      ss << std::endl;
+    }
+    ss << fmt::format("{:02x} ", buf[i]);
+  }
+  ss << std::endl;
+  ldout(cct, 0) << ss.str() << dendl;
+}
+    
+  int calc_hmac_sha384(const unsigned char *data, 
+                       int data_len,
+                       const unsigned char* hmac_key,
+                       int key_size,
+                       const unsigned char *iv,
+                       int iv_size,
+                       char *out,
+                       int out_size,
+                       ostringstream& err) const {
+    unsigned int len = 0;
+    char _out[SHA384_LEN];
+    char *pout;
+    bool need_trim = (out_size < (int)sizeof(_out));
+    if (need_trim) {
+      pout = _out;
+    } else {
+      pout = out;
+    }
+
+    /* IV is prepended to the plaintext */
+    ceph::bufferptr iv_buf(reinterpret_cast<const char *>(iv), iv_size);
+    ceph::bufferlist source;
+    source.push_back(iv_buf);
+    source.append((const char *)data, data_len);
+
+    HMAC(EVP_sha384(), hmac_key, key_size,
+         reinterpret_cast<const unsigned char *>(source.c_str()), source.length(),
+         (unsigned char *)pout, &len);
+
+    if (len != SHA384_LEN) {
+      err << "Unexpected calculated SHA384 length";
+      return -EIO;
+    }
+
+    if (need_trim) {
+      memcpy(out, pout, out_size);
+      len = out_size;
+    }
+
+    return len;
+  }
+
+  int calc_kx(const ceph::bufferptr& secret,
+              uint32_t usage,
+              uint8_t type,
+              int k,
+              ceph::bufferlist& out,
+              ostringstream& err) {
+
+    struct plain_data {
+      unsigned char prefix[4] = { 0, 0, 0, 1 };
+      uint32_t usage;
+      uint8_t type;
+      uint8_t c = 0;
+      uint32_t k;
+
+      plain_data(uint32_t _usage, uint8_t _type, uint32_t _k) :
+        usage(native_to_big<uint32_t>(_usage)),
+        type(_type),
+        k(native_to_big<uint32_t>(_k * 8)) {}
+    } __attribute__((packed)) data(usage, type, k);
+
+    ceph::bufferptr bp(reinterpret_cast<char *>(&data), sizeof(data));
+
+    ceph::bufferptr sha384(SHA384_LEN);
+    int r = calc_hmac_sha384((const unsigned char *)bp.c_str(), bp.length(),
+                             reinterpret_cast<const unsigned char *>(secret.c_str()),
+                             secret.length(),
+                             nullptr, 0, /* no IV */
+                             sha384.c_str(),
+                             SHA384_LEN,
+                             err);
+
+    bufferlist bl;
+    bl.append(sha384);
+    bl.splice(0, k, &out);
+
+    return r;
+  }
+
+  int encrypt_AES256_CTS(CephContext *cct,
+                         ceph::bufferlist& plaintext,
+                         const unsigned char* iv, int iv_size,
+                         unsigned char *ciphertext,
+                         int ciphertext_len) const {
+    if (!cipher) {
+      return -EINVAL; /* initialization error */
+    }
+
+    if ((size_t)ciphertext_len < plaintext.length()) {
+      return -EINVAL;
+    }
+
+    OSSL_PARAM params[2] = { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
+      OSSL_PARAM_construct_end()};
+
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+      ldout(cct, 20) << "EVP_CIPHER_CTX_new() returned null" << dendl;
+      return -EIO;
+    }
+
+    if (!EVP_EncryptInit_ex2(ctx, cipher, ke_raw, iv, params)) {
+      ldout(cct, 20) << "EVP_EncryptInit() failed" << dendl;
+      return -EIO;
+    }
+
+    int encrypted_len = 0;
+    int len;
+
+    auto ret = EVP_EncryptUpdate(ctx, ciphertext + encrypted_len, &len, (const unsigned char *)plaintext.c_str(), plaintext.length());
+    if (ret != 1) {
+      ldout(cct, 20) << "EVP_EncryptUpdate(len=" << plaintext.length() << ") returned " << ret << dendl;
+      return -EIO;
+    }
+    encrypted_len += len;
+
+    ret = EVP_EncryptFinal_ex(ctx, ciphertext + encrypted_len, &len);
+    if (ret != 1) {
+      ldout(cct, 20) << "EVP_EncryptFinal_ex() returned " << ret << dendl;
+      return -EIO;
+    }
+    encrypted_len += len;
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return encrypted_len;
+  }
+
+  int decrypt_AES256_CTS(ceph::bufferlist& ciphertext, 
+                         const unsigned char* key, const unsigned char* iv, 
+                         int iv_size,
+                         ceph::bufferptr& plaintext) const {
+    if (!cipher) {
+      return -EINVAL; /* initialization error really */
+    }
+
+    OSSL_PARAM params[2] = { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
+      OSSL_PARAM_construct_end()};
+
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+      return -EIO;
+    }
+
+    if (!EVP_DecryptInit_ex2(ctx, cipher, key, iv, params)) {
+      return -EIO;
+    }
+
+    int len;
+    auto dest = reinterpret_cast<unsigned char *>(plaintext.c_str());
+    int plaintext_len = 0;
+
+    int max = ciphertext.length();
+    auto iter = ciphertext.cbegin();
+    while (!iter.end()) {
+      const char *p;
+      int chunk_len = iter.get_ptr_and_advance(max, &p);
+
+      if (EVP_DecryptUpdate(ctx, dest + plaintext_len, &len, (const unsigned char *)p, chunk_len) != 1) {
+        return -EIO;
+      }
+      plaintext_len += len;
+    }
+
+    if (EVP_DecryptFinal_ex(ctx, dest + plaintext_len, &len) != 1) {
+      return -EIO;
+    }
+    plaintext_len += len;
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    return 0;
+  }
+
+public:
+  CryptoAES256KRB5KeyHandler() : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
+  }
+
+  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::decrypt;
+
+  int init(const ceph::bufferptr& s, ostringstream& err) {
+    cipher = EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL);
+    secret = s;
+
+    int r = calc_kx(secret, 0x2 /* usage */,
+                    0x55 /* Ki type */,
+                    AES256KRB5_HASH_LEN /* 192 bit */,
+                    ki,
+                    err);
+    if (r < 0) {
+      return r;
+    }
+    ki_raw = reinterpret_cast<const unsigned char *>(ki.c_str()); /* needed so that we can use ki in const methods */
+
+    r = calc_kx(secret, 0x2 /* usage */,
+                0xAA /* Ke type */,
+                32 /* 256 bit */,
+                ke,
+                err);
+    if (r < 0) {
+      return r;
+    }
+    ke_raw = reinterpret_cast<const unsigned char *>(ke.c_str()); /* same reason as with ki */
+
+    return 0;
+  }
+
+  int encrypt(CephContext *cct, const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+              std::string* /* unused */) const override {
+    // encrypted (confounder | data) | hash
+    ceph::bufferptr out_tmp{static_cast<unsigned>(
+      AES256KRB5_BLOCK_LEN + in.length() + AES256KRB5_HASH_LEN)};
+
+    /* encrypted (confounder data) */
+    char *aes_enc = out_tmp.c_str();
+    int aes_enc_len = AES256KRB5_BLOCK_LEN + in.length();
+
+    /* plaintext confounder */
+    bufferptr confounder(AES256KRB5_BLOCK_LEN);
+    cct->random()->get_bytes(confounder.c_str(), confounder.length());
+
+    // combine confounder with input data
+    ceph::bufferlist incopy;
+    incopy.append(confounder);
+    incopy.append(in);
+
+    // reinitialize IV each time. It might be unnecessary depending on
+    // actual implementation but at the interface layer we are obliged
+    // to deliver IV as non-const.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES256KRB5_BLOCK_LEN);
+    unsigned char iv[AES_BLOCK_LEN];
+    memset(iv, 0, sizeof(iv));
+
+    int r = encrypt_AES256_CTS(cct, incopy, iv, sizeof(iv), (unsigned char *)aes_enc, aes_enc_len);
+    if (r < 0) {
+      return r;
+    }
+    aes_enc_len = r;
+
+    char *hmac = out_tmp.c_str() + AES256KRB5_BLOCK_LEN + in.length();
+
+    ostringstream err;
+    r = calc_hmac_sha384((const unsigned char *)aes_enc, aes_enc_len, 
+                         ki_raw, ki.length(),
+                         iv, sizeof(iv),
+                         hmac, AES256KRB5_HASH_LEN, err);
+    if (r < 0) {
+      return r;
+    }
+
+    out.append(out_tmp);
+    return 0;
+  }
+
+  int decrypt(CephContext *cct, const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+	      std::string* /* unused */) const override {
+
+    if (in.length() < AES256KRB5_BLOCK_LEN + AES256KRB5_HASH_LEN) { /* minimum size: confounder + hmac */
+      return -EINVAL;
+    }
+
+    // needed because of .c_str() on const. It's a shallow copy.
+    bufferlist incopy(in);
+
+    ceph::bufferlist indata;
+
+    /* after this:
+     * indata holds: encrypted (confounder | plaintext)
+     * incopy holds: hmac hash of indata
+     */
+    incopy.splice(0, in.length() - AES256KRB5_HASH_LEN, &indata);
+
+    auto& inhash = incopy;
+
+    // make a local, modifiable copy of IV.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    unsigned char iv[AES_BLOCK_LEN];
+    memset(iv, 0, sizeof(iv));
+
+
+    /* first need to compare hmac to calculated hmac */
+    char hmac[AES256KRB5_HASH_LEN];
+    ostringstream err;
+    int r = calc_hmac_sha384((const unsigned char *)indata.c_str(), indata.length(),
+                             ki_raw, ki.length(),
+                             iv, sizeof(iv),
+                             hmac, sizeof(hmac), err);
+    if (r < 0) {
+      return r;
+    }
+
+    int len = r;
+
+    if ((size_t)len != inhash.length()) {
+      return -EPERM;
+    }
+
+    if (memcmp(hmac, inhash.c_str(), sizeof(hmac)) != 0) {
+      return -EPERM;
+    }
+
+    /* will consist of confounder | plaintext */
+    bufferptr tmp_out(indata.length());
+
+    r = decrypt_AES256_CTS(indata, 
+                           ke_raw, iv, sizeof(iv),
+                           tmp_out);
+    if (r < 0) {
+      return r;
+    }
+
+    auto confounder_len = AES256KRB5_BLOCK_LEN;
+
+    if (tmp_out.length() < confounder_len) {
+      /* should at least consist of the confounder */
+      return -EPERM;
+    }
+
+    int data_len = tmp_out.length() - AES256KRB5_BLOCK_LEN;
+
+    out.append(tmp_out.c_str() + AES256KRB5_BLOCK_LEN, data_len);
+
+    return 0;
+  }
+
+};
+
+
+// ------------------------------------------------------------
+
+int CryptoAES256KRB5::create(CryptoRandom *random, bufferptr& secret)
+{
+  bufferptr buf(AES256KRB5_KEY_LEN);
+  random->get_bytes(buf.c_str(), buf.length());
+  secret = std::move(buf);
+  return 0;
+}
+
+int CryptoAES256KRB5::validate_secret(const bufferptr& secret)
+{
+  if (secret.length() < AES256KRB5_KEY_LEN) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+CryptoKeyHandler *CryptoAES256KRB5::get_key_handler(const bufferptr& secret,
+					     string& error)
+{
+  CryptoAES256KRB5KeyHandler *ckh = new CryptoAES256KRB5KeyHandler;
+  ostringstream oss;
+  if (ckh->init(secret, oss) < 0) {
+    error = oss.str();
+    delete ckh;
+    return NULL;
+  }
+  return ckh;
+}
+
+
 
 
 // --
@@ -628,6 +1044,8 @@ CryptoHandler *CryptoHandler::create(int type)
     return new CryptoNone;
   case CEPH_CRYPTO_AES:
     return new CryptoAES;
+  case CEPH_CRYPTO_AES256KRB5:
+    return new CryptoAES256KRB5;
   default:
     return NULL;
   }

@@ -745,6 +745,7 @@ CephContext::CephContext(uint32_t module_type_,
     _heartbeat_map(NULL),
     _crypto_none(NULL),
     _crypto_aes(NULL),
+    _crypto_aes256krb5(NULL),
     _plugin_registry(NULL),
 #ifdef CEPH_DEBUG_MUTEX
     _lockdep_obs(NULL),
@@ -813,6 +814,7 @@ CephContext::CephContext(uint32_t module_type_,
 #endif
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
+  _crypto_aes256krb5 = CryptoHandler::create(CEPH_CRYPTO_AES256KRB5);
   _crypto_random.reset(new CryptoRandom());
 
   lookup_or_create_singleton_object<MempoolObs>("mempool_obs", false, this);
@@ -875,6 +877,7 @@ CephContext::~CephContext()
 
   delete _crypto_none;
   delete _crypto_aes;
+  delete _crypto_aes256krb5;
   if (_crypto_inited > 0) {
     ceph_assert(_crypto_inited == 1);  // or else someone explicitly did
 				  // init but not shutdown
@@ -1080,6 +1083,8 @@ CryptoHandler *CephContext::get_crypto_handler(int type)
     return _crypto_none;
   case CEPH_CRYPTO_AES:
     return _crypto_aes;
+  case CEPH_CRYPTO_AES256KRB5:
+    return _crypto_aes256krb5;
   default:
     return NULL;
   }
