@@ -368,6 +368,7 @@ private:
   // crypto
   CryptoHandler *_crypto_none;
   CryptoHandler *_crypto_aes;
+  CryptoHandler *_crypto_aes256krb5;
   std::unique_ptr<CryptoRandom> _crypto_random;
 
   // experimental
