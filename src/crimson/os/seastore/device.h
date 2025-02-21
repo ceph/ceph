@@ -168,6 +168,11 @@ public:
   }
 };
 
+using check_create_device_ertr = Device::access_ertr;
+using check_create_device_ret = check_create_device_ertr::future<>;
+check_create_device_ret check_create_device(
+  const std::string path,
+  size_t size);
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::device_spec_t)
