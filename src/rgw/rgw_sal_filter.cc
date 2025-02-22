@@ -435,6 +435,12 @@ std::unique_ptr<Lifecycle> FilterDriver::get_lifecycle(void)
   return std::make_unique<FilterLifecycle>(std::move(lc));
 }
 
+std::unique_ptr<Restore> FilterDriver::get_restore(void)
+{
+  std::unique_ptr<Restore> restore = next->get_restore();
+  return std::make_unique<FilterRestore>(std::move(restore));
+}
+
 bool FilterDriver::process_expired_objects(const DoutPrefixProvider *dpp,
 	       			           optional_yield y) {
   return next->process_expired_objects(dpp, y);
@@ -485,6 +491,11 @@ int FilterDriver::remove_persistent_topic(const DoutPrefixProvider* dpp,
 RGWLC* FilterDriver::get_rgwlc()
 {
   return next->get_rgwlc();
+}
+
+RGWRestore* FilterDriver::get_rgwrestore()
+{
+  return next->get_rgwrestore();
 }
 
 RGWCoroutinesManagerRegistry* FilterDriver::get_cr_registry()

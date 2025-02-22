@@ -292,6 +292,7 @@ public:
   }
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+  virtual std::unique_ptr<Restore> get_restore(void) override;
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
@@ -383,6 +384,7 @@ public:
     return next->get_bucket_topic_mapping(topic, bucket_keys, y, dpp);
   }
   virtual RGWLC* get_rgwlc(void) override;
+  virtual RGWRestore* get_rgwrestore(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 
   virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket,
@@ -1053,6 +1055,16 @@ public:
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
 						       const std::string& oid,
 						       const std::string& cookie) override;
+};
+
+class FilterRestore : public Restore {
+protected:
+  std::unique_ptr<Restore> next;
+
+public:
+
+  FilterRestore(std::unique_ptr<Restore> _next) : next(std::move(_next)) {}
+  virtual ~FilterRestore() = default;
 };
 
 class FilterNotification : public Notification {

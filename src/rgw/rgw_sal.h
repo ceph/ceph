@@ -36,6 +36,7 @@
 struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWLC;
+class RGWRestore;
 struct rgw_user_bucket;
 class RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
@@ -468,6 +469,8 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    /** Get a @a Restore object. Used to manage/run restore objects */
+    virtual std::unique_ptr<Restore> get_restore(void) = 0;
     /** Reset the temporarily restored objects which are expired */
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
@@ -559,6 +562,8 @@ class Driver {
                                          const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
+    /** Get access to the tier restore management thread */
+    virtual RGWRestore* get_rgwrestore(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
 
@@ -1651,6 +1656,20 @@ public:
 						       const std::string& cookie) = 0;
 };
 
+/** Single entry in a lifecycle run.  Multiple entries can exist processing different
+ * buckets. */
+struct RestoreEntry {
+  std::string bucket;
+  rgw_obj_index_key obj_key;
+  std::optional<uint64_t> days;
+};
+
+class Restore {
+public:
+  Restore() = default;
+  virtual ~Restore() = default;
+};
+
 /**
  * @brief Abstraction for a Notification event
  *
@@ -1869,6 +1888,7 @@ public:
 				      const rgw::SiteConfig& site_config,
 				      bool use_gc_thread,
 				      bool use_lc_thread,
+				      bool use_restore_thread,
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
@@ -1879,6 +1899,7 @@ public:
 						   site_config,
 						   use_gc_thread,
 						   use_lc_thread,
+						   use_restore_thread,
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
@@ -1904,6 +1925,7 @@ public:
 						const rgw::SiteConfig& site_config,
 						bool use_gc_thread,
 						bool use_lc_thread,
+						bool use_restore_thread,
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,

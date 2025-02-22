@@ -1854,6 +1854,11 @@ namespace rgw::sal {
     return std::make_unique<DBLifecycle>(this);
   }
 
+  std::unique_ptr<Restore> DBStore::get_restore(void)
+  {
+    return 0;
+  }
+
   bool DBStore::process_expired_objects(const DoutPrefixProvider *dpp,
 		 			optional_yield y)
   {

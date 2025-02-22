@@ -2321,6 +2321,11 @@ std::unique_ptr<Lifecycle> DaosStore::get_lifecycle(void) {
   return 0;
 }
 
+std::unique_ptr<Restore> DaosStore::get_restore(void) {
+  DAOS_NOT_IMPLEMENTED_LOG(nullptr);
+  return 0;
+}
+
 bool DaosStore::process_expired_objects(const DoutPrefixProvider *dpp,
 	       				optional_yield y) {
   DAOS_NOT_IMPLEMENTED_LOG(nullptr);

@@ -69,6 +69,7 @@
 
 #include "rgw_gc.h"
 #include "rgw_lc.h"
+#include "rgw_restore.h"
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
@@ -1327,6 +1328,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
 
   if (use_lc_thread)
     lc->start_processor();
+
+  restore = new RGWRestore();
+  restore->initialize(cct, this->driver);
+  if (use_restore_thread)
+    restore->start_processor();
 
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
 

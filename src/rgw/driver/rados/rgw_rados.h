@@ -372,9 +372,11 @@ class RGWRados
   rgw::sal::RadosStore* driver{nullptr};
   RGWGC* gc{nullptr};
   RGWLC* lc{nullptr};
+  RGWRestore* restore{nullptr};
   RGWObjectExpirer* obj_expirer{nullptr};
   bool use_gc_thread{false};
   bool use_lc_thread{false};
+  bool use_restore_thread{false};
   bool quota_threads{false};
   bool run_sync_thread{false};
   bool run_reshard_thread{false};
@@ -500,6 +502,10 @@ public:
     return gc;
   }
 
+  RGWRestore *get_restore() {
+    return restore;
+  }
+
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
     return *this;
@@ -507,6 +513,11 @@ public:
 
   RGWRados& set_run_lc_thread(bool _use_lc_thread) {
     use_lc_thread = _use_lc_thread;
+    return *this;
+  }
+
+  RGWRados& set_run_restore_thread(bool _use_restore_thread) {
+    use_restore_thread = _use_restore_thread;
     return *this;
   }
 

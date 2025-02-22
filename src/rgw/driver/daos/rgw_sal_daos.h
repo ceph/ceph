@@ -937,6 +937,7 @@ class DaosStore : public StoreDriver {
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+  virtual std::unique_ptr<Restore> get_restore(void) override;
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual std::unique_ptr<Notification> get_notification(
       rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
@@ -953,6 +954,7 @@ class DaosStore : public StoreDriver {
       std::string& _req_id,
       optional_yield y) override;
   virtual RGWLC* get_rgwlc(void) override { return NULL; }
+  virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override {
     return NULL;
   }

@@ -1006,6 +1006,7 @@ class MotrStore : public StoreDriver {
     virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+    virtual std::unique_ptr<Restore> get_restore(void) override;
     virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj,
         req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
@@ -1020,6 +1021,7 @@ class MotrStore : public StoreDriver {
         std::string& _req_id,
         optional_yield y) override;
     virtual RGWLC* get_rgwlc(void) override { return NULL; }
+    virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) override;

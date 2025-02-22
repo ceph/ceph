@@ -1895,6 +1895,11 @@ std::unique_ptr<Lifecycle> RadosStore::get_lifecycle(void)
   return std::make_unique<RadosLifecycle>(this);
 }
 
+std::unique_ptr<Restore> RadosStore::get_restore(void)
+{
+  return std::make_unique<RadosRestore>(this);
+}
+
 bool RadosStore::process_expired_objects(const DoutPrefixProvider *dpp,
 	       				 optional_yield y)
 {
