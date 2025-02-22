@@ -248,6 +248,9 @@ namespace rgw { namespace cksum {
 
   uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* data, size_t len);
 
+  uint64_t diag_crc64_combine_madler(uint64_t crc1, uint64_t crc2,
+				     uint64_t len);
+
   std::optional<uint64_t> diag_get_crc(const Cksum ck1);
 
   std::optional<rgw::cksum::Cksum>

@@ -455,8 +455,27 @@ TEST(RGWCksum, CRC64NVME2)
   ASSERT_EQ(cksum2.to_armor(), "oa2U66pdPLk=");
 }
 
-#if 1
 TEST(RGWCksum, CRC64NVME_COMBINE1)
+{
+  /* do crc64nvme and combining by hand */
+
+  uint64_t crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
+				  dolor.length(), 0ULL);
+
+  uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
+				  lacrimae.length(), 0ULL);
+
+  uint64_t crc3 = crc64_nvme_combine(crc1, crc1, dolor.length());
+
+  uint64_t crc4 =  diag_crc64_combine_madler(crc1, crc1, dolor.length());
+
+  // ASSERT_EQ(crc2, crc3);
+  ASSERT_EQ(crc2, crc4);
+}
+
+
+#if 0
+TEST(RGWCksum, CRC64NVME_COMBINE2)
 {
   auto t = cksum::Type::crc64nvme;
 

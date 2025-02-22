@@ -30,6 +30,12 @@ namespace rgw::cksum {
     return crc64nvme_bit(crc, data, len);
   }
 
+  uint64_t diag_crc64_combine_madler(uint64_t crc1, uint64_t crc2,
+				     uint64_t len)
+  {
+    return crc64nvme_comb(crc1, crc2, len);
+  }
+
   std::optional<uint64_t> diag_get_crc(const Cksum ck1)
   {
     std::optional<uint64_t> res;
