@@ -415,3 +415,31 @@ public:
   }
 };
 
+struct rgw_bucket_sync_pair_info {
+  RGWBucketSyncFlowManager::pipe_handler handler; /* responsible for sync filters */
+  rgw_bucket_shard source_bs;
+  rgw_bucket dest_bucket;
+};
+
+inline std::ostream& operator<<(std::ostream& out, const rgw_bucket_sync_pair_info& p) {
+  if (p.source_bs.bucket == p.dest_bucket) {
+    return out << p.source_bs;
+  }
+  return out << p.source_bs << "->" << p.dest_bucket;
+}
+
+struct rgw_bucket_sync_pipe {
+  rgw_bucket_sync_pair_info info;
+  RGWBucketInfo source_bucket_info;
+  std::map<std::string, bufferlist> source_bucket_attrs;
+  RGWBucketInfo dest_bucket_info;
+  std::map<std::string, bufferlist> dest_bucket_attrs;
+
+  RGWBucketSyncFlowManager::pipe_rules_ref& get_rules() {
+    return info.handler.rules;
+  }
+};
+
+inline std::ostream& operator<<(std::ostream& out, const rgw_bucket_sync_pipe& p) {
+  return out << p.info;
+}
