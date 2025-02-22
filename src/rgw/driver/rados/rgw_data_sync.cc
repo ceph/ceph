@@ -2646,135 +2646,27 @@ int RGWDefaultSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
   return 0;
 }
 
-class RGWUserPermHandler {
-  friend struct Init;
-  friend class Bucket;
-
-  const DoutPrefixProvider *dpp;
-  rgw::sal::Driver *driver;
-  CephContext *cct;
-  rgw_user uid;
-
-  struct _info {
-    rgw::IAM::Environment env;
-    std::unique_ptr<rgw::auth::Identity> identity;
-    RGWAccessControlPolicy user_acl;
-    std::vector<rgw::IAM::Policy> user_policies;
-  };
-
-  std::shared_ptr<_info> info;
-
-  struct Init;
-
-  std::shared_ptr<Init> init_action;
-
-  struct Init : public RGWGenericAsyncCR::Action {
-    const DoutPrefixProvider *dpp;
-    rgw::sal::Driver *driver;
-    CephContext *cct;
-
-    rgw_user uid;
-    std::shared_ptr<RGWUserPermHandler::_info> info;
-
-    int ret{0};
-    
-    Init(RGWUserPermHandler *handler) : dpp(handler->dpp),
-                                        driver(handler->driver),
-                                        cct(handler->cct),
-                                        uid(handler->uid),
-                                        info(handler->info) {}
-    int operate() override {
-      auto user = driver->get_user(uid);
-      ret = user->load_user(dpp, null_yield);
-      if (ret < 0) {
-        return ret;
-      }
-
-      auto result = rgw::auth::transform_old_authinfo(
-          dpp, null_yield, driver, user.get(), &info->user_policies);
-      if (!result) {
-        return result.error();
-      }
-      info->identity = std::move(result).value();
-
-      ret = RGWUserPermHandler::policy_from_attrs(cct, user->get_attrs(), &info->user_acl);
-      if (ret < 0 && ret != -ENOENT) {
-        return ret;
-      }
-
-      return 0;
-    }
-  };
-
-public:
-  RGWUserPermHandler(const DoutPrefixProvider *_dpp,
-                     rgw::sal::Driver *_driver,
-                     CephContext *_cct,
-                     const rgw_user& _uid) : dpp(_dpp),
-                                             driver(_driver),
-                                             cct(_cct),
-                                             uid(_uid) {
-    info = make_shared<_info>();
-    init_action = make_shared<Init>(this);
+int RGWUserPermHandler::Init::operate() {
+  auto user = driver->get_user(uid);
+  ret = user->load_user(dpp, null_yield);
+  if (ret < 0) {
+    return ret;
   }
 
-  RGWUserPermHandler(RGWDataSyncEnv *_sync_env,
-                     const rgw_user& _uid) : RGWUserPermHandler(_sync_env->dpp,
-                                                                _sync_env->driver,
-                                                                _sync_env->cct,
-                                                                _uid) {}
+  auto result = rgw::auth::transform_old_authinfo(
+      dpp, null_yield, driver, user.get(), &info->user_policies);
+  if (!result) {
+    return result.error();
+  }
+  info->identity = std::move(result).value();
 
-  RGWCoroutine *init_cr() {
-    return new RGWGenericAsyncCR(sync_env->cct,
-                                 sync_env->async_rados,
-                                 init_action);
+  ret = RGWUserPermHandler::policy_from_attrs(cct, user->get_attrs(), &info->user_acl);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
   }
 
-  int init() {
-    return init_action->operate();
-  }
-
-  class Bucket {
-    const DoutPrefixProvider *dpp;
-    CephContext *cct;
-    std::shared_ptr<_info> info;
-    RGWAccessControlPolicy bucket_acl;
-    std::optional<perm_state> ps;
-    boost::optional<rgw::IAM::Policy> bucket_policy;
-  public:
-    Bucket() {}
-
-    int init(RGWUserPermHandler *handler,
-             const RGWBucketInfo& bucket_info,
-             const map<string, bufferlist>& bucket_attrs);
-
-    bool verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op);
-  };
-
-  static int policy_from_attrs(CephContext *cct,
-                               const map<string, bufferlist>& attrs,
-                               RGWAccessControlPolicy *acl) {
-    auto aiter = attrs.find(RGW_ATTR_ACL);
-    if (aiter == attrs.end()) {
-      return -ENOENT;
-    }
-    auto iter = aiter->second.begin();
-    try {
-      acl->decode(iter);
-    } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
-      return -EIO;
-    }
-
-    return 0;
-  }
-
-  int init_bucket(const RGWBucketInfo& bucket_info,
-                  const map<string, bufferlist>& bucket_attrs,
-                  Bucket *bs) {
-    return bs->init(this, bucket_info, bucket_attrs);
-  }
-};
+  return 0;
+}
 
 int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
                                      const RGWBucketInfo& bucket_info,
@@ -2838,6 +2730,24 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
                                   info->user_acl, bucket_acl,
                                   bucket_policy, info->user_policies,
                                   {}, op);
+}
+
+int RGWUserPermHandler::policy_from_attrs(CephContext *cct,
+                                          const map<string, bufferlist>& attrs,
+                                          RGWAccessControlPolicy *acl) {
+  auto aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter == attrs.end()) {
+    return -ENOENT;
+  }
+  auto iter = aiter->second.begin();
+  try {
+    acl->decode(iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+
+  return 0;
 }
 
 class RGWFetchObjFilter_Sync : public RGWFetchObjFilter_Default {
