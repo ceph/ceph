@@ -828,3 +828,99 @@ public:
   bool supports_data_export() override { return false; }
   int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
+
+class RGWUserPermHandler {
+  friend struct Init;
+  friend class Bucket;
+
+  const DoutPrefixProvider *dpp;
+  rgw::sal::Driver *driver;
+  CephContext *cct;
+  rgw_user uid;
+
+  struct _info {
+    rgw::IAM::Environment env;
+    std::unique_ptr<rgw::auth::Identity> identity;
+    RGWAccessControlPolicy user_acl;
+    std::vector<rgw::IAM::Policy> user_policies;
+  };
+
+  std::shared_ptr<_info> info;
+
+  struct Init;
+
+  std::shared_ptr<Init> init_action;
+
+  struct Init : public RGWGenericAsyncCR::Action {
+    const DoutPrefixProvider *dpp;
+    rgw::sal::Driver *driver;
+    CephContext *cct;
+
+    rgw_user uid;
+    std::shared_ptr<RGWUserPermHandler::_info> info;
+
+    int ret{0};
+
+    Init(RGWUserPermHandler *handler) : dpp(handler->dpp),
+                                        driver(handler->driver),
+                                        cct(handler->cct),
+                                        uid(handler->uid),
+                                        info(handler->info) {}
+    int operate() override;
+  };
+
+public:
+  RGWUserPermHandler(const DoutPrefixProvider *_dpp,
+                     rgw::sal::Driver *_driver,
+                     CephContext *_cct,
+                     const rgw_user& _uid) : dpp(_dpp),
+                                             driver(_driver),
+                                             cct(_cct),
+                                             uid(_uid) {
+    info = std::make_shared<_info>();
+    init_action = std::make_shared<Init>(this);
+  }
+
+  RGWUserPermHandler(RGWDataSyncEnv *_sync_env,
+                     const rgw_user& _uid) : RGWUserPermHandler(_sync_env->dpp,
+                                                                _sync_env->driver,
+                                                                _sync_env->cct,
+                                                                _uid) {}
+
+  RGWCoroutine *init_cr(RGWDataSyncEnv *sync_env) {
+    return new RGWGenericAsyncCR(sync_env->cct,
+                                 sync_env->async_rados,
+                                 init_action);
+  }
+
+  int init() {
+    return init_action->operate();
+  }
+
+  class Bucket {
+    const DoutPrefixProvider *dpp;
+    CephContext *cct;
+    std::shared_ptr<_info> info;
+    RGWAccessControlPolicy bucket_acl;
+    std::optional<perm_state> ps;
+    boost::optional<rgw::IAM::Policy> bucket_policy;
+  public:
+    Bucket() {}
+
+    int init(RGWUserPermHandler *handler,
+             const RGWBucketInfo& bucket_info,
+             const std::map<std::string, bufferlist>& bucket_attrs);
+
+    bool verify_bucket_permission(const rgw_obj_key& obj_key, const uint64_t op);
+  };
+
+  static int policy_from_attrs(CephContext *cct,
+                               const std::map<std::string, bufferlist>& attrs,
+                               RGWAccessControlPolicy *acl);
+
+  int init_bucket(const RGWBucketInfo& bucket_info,
+                  const std::map<std::string, bufferlist>& bucket_attrs,
+                  Bucket *bs) {
+    return bs->init(this, bucket_info, bucket_attrs);
+  }
+};
