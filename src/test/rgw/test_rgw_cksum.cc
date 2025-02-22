@@ -473,9 +473,28 @@ TEST(RGWCksum, CRC64NVME_COMBINE1)
   ASSERT_EQ(crc2, crc4);
 }
 
+TEST(RGWCksum, CRC64NVME_COMBINE2)
+{
+  /* do crc64nvme and combining by hand, non-uniform strings */
+  std::string dolorem = dolor + lorem;
+
+  uint64_t crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
+				  dolor.length(), 0ULL);
+  
+  uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lorem.c_str(),
+				  lorem.length(), 0ULL);
+
+
+  uint64_t crc3 = spdk_crc64_nvme((const unsigned char *)dolorem.c_str(),
+				  dolorem.length(), 0ULL);
+  
+  uint64_t crc4 = diag_crc64_combine_madler(crc1, crc2, lorem.length());
+
+  ASSERT_EQ(crc3, crc4);
+}
 
 #if 0
-TEST(RGWCksum, CRC64NVME_COMBINE2)
+TEST(RGWCksum, CRC64NVME_COMBINE3)
 {
   auto t = cksum::Type::crc64nvme;
 
