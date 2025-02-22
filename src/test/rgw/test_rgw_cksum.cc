@@ -490,6 +490,14 @@ TEST(RGWCksum, CRC64NVME_COMBINE2)
   
   uint64_t crc4 = diag_crc64_combine_madler(crc1, crc2, lorem.length());
 
+  if (verbose) {
+    std::cout << "\ncrc1/dolor: " << crc1
+	      << "\ncrc2/lorem: " << crc2
+	      << "\ncrc3/dolorem: " << crc3
+	      << "\ncrc4/crc1+crc3: " << crc4
+	      << std::endl;
+  }
+
   ASSERT_EQ(crc3, crc4);
 }
 
