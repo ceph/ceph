@@ -56,7 +56,13 @@ public:
   }
 
   Namespace() {
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
+  }
+
+  ~Namespace() {
+    ceph_assert(s_instance == this);
+    s_instance = nullptr;
   }
 
   void add(const std::string &name) {
