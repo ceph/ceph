@@ -18,6 +18,7 @@
 
 extern "C" {
 #include "madler/crc64nvme.h"
+#include "spdk/crc64.h"
 } // extern "C"
 
 namespace rgw::cksum {
@@ -29,7 +30,7 @@ namespace rgw::cksum {
   }
 
   std::optional<rgw::cksum::Cksum>
-  combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2)
+  combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len1)
   {
     std::optional<rgw::cksum::Cksum> ck3;
     if ((ck1.type != ck2.type) ||
@@ -42,7 +43,11 @@ namespace rgw::cksum {
       uint64_t cck1, cck2, cck3;
       memcpy(&cck1, (char*) ck1.digest.data(), sizeof(cck1));
       memcpy(&cck2, (char*) ck2.digest.data(), sizeof(cck2));
-      cck3 = crc64nvme_comb(cck1, cck2, len2);
+#if 0
+      cck3 = crc64nvme_comb(cck1, cck2, len1);
+#else
+      cck3 = crc64_nvme_combine(cck1, cck2, len1);
+#endif
       ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
 			 cksum::Cksum::CtorStyle::raw);
       break;

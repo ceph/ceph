@@ -53,6 +53,8 @@ namespace {
   std::string dolor =
     R"(Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.)";
 
+std::string lacrimae = dolor + dolor;
+
 TEST(RGWCksum, Output)
 {
   if (gen_test_data) {
@@ -67,6 +69,11 @@ TEST(RGWCksum, Output)
     std::cout << "writing dolor text to /tmp/dolor " << std::endl;
     of.open("/tmp/dolor", o_mode);
     of << dolor;
+    of.close();
+
+    std::cout << "writing lacrimae text to /tmp/lacrimae " << std::endl;
+    of.open("/tmp/lacrimae", o_mode);
+    of << lacrimae;
     of.close();
   }
 }
@@ -304,8 +311,6 @@ TEST(RGWCksum, DigestSTR)
 
 TEST(RGWCksum, DigestBL)
 {
-  std::string lacrimae = dolor + dolor;
-
   ceph::buffer::list dolor_bl;
   for ([[maybe_unused]] const auto& ix : {1, 2}) {
     dolor_bl.push_back(
@@ -401,33 +406,46 @@ TEST(RGWCksum, CRC64NVME1)
 TEST(RGWCksum, CRC64NVME2)
 {
   auto t = cksum::Type::crc64nvme;
-  DigestVariant dv = rgw::cksum::digest_factory(t);
-  Digest *digest = get_digest(dv);
-  ASSERT_NE(digest, nullptr);
 
-  digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  /* digest 1 */
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest *digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
 
-  auto cksum = rgw::cksum::finalize_digest(digest, t);
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
 
   /* the armored value produced by awscliv2 2.24.5 */
-  ASSERT_EQ(cksum.to_armor(), "wiBA+PSv41M=");
+  ASSERT_EQ(cksum1.to_armor(), "wiBA+PSv41M=");
+
+  /* digest 2 */
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  digest2->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
+
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  /* the armored value produced by awscliv2 2.24.5 */
+  ASSERT_EQ(cksum2.to_armor(), "oa2U66pdPLk=");
 }
 
 #if 1
 TEST(RGWCksum, CRC64NVME_COMBINE1)
 {
   auto t = cksum::Type::crc64nvme;
-  DigestVariant dv = rgw::cksum::digest_factory(t);
 
-  Digest* digest1 = get_digest(dv);
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
   ASSERT_NE(digest1, nullptr);
 
   digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
   auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
 
-  std::string lacrimae = dolor + dolor;
-
-  Digest* digest2 = get_digest(dv);
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
   ASSERT_NE(digest2, nullptr);
 
   digest2->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
