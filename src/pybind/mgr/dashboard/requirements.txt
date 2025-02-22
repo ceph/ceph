@@ -11,5 +11,3 @@ pyyaml
 natsort
 setuptools
 jsonpatch
-grpcio
-grpcio-tools
