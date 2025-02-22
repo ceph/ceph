@@ -246,7 +246,9 @@ namespace rgw { namespace cksum {
       parse_cksum_type_hdr(hdr_name) != Type::none;
   } /* is_cksum_hdr */
 
-  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* mem, size_t len);
+  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* data, size_t len);
+
+  std::optional<uint64_t> diag_get_crc(const Cksum ck1);
 
   std::optional<rgw::cksum::Cksum>
   combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2);

@@ -23,10 +23,23 @@ extern "C" {
 
 namespace rgw::cksum {
 
-  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* mem, size_t len)
+  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* data, size_t len)
   {
     crc = crc64nvme_bit(0, NULL, 0);
-    return crc64nvme_bit(crc, mem, len);
+    return crc64nvme_bit(crc, data, len);
+  }
+
+  std::optional<uint64_t> diag_get_crc(const Cksum ck1)
+  {
+    std::optional<uint64_t> res;
+    if (!ck1.combinable()) {
+      goto out;
+    }
+    uint64_t crc;
+    memcpy(&crc, (char*) ck1.digest.data(), sizeof(crc));
+    res = crc;
+  out:
+    return res;
   }
 
   std::optional<rgw::cksum::Cksum>

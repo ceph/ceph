@@ -403,6 +403,29 @@ TEST(RGWCksum, CRC64NVME1)
   ASSERT_TRUE(crc == 0x9A2DF64B8E9E517E);
 }
 
+TEST(RGWCksum, CRC64NVME_UNDIGEST)
+{
+  auto t = cksum::Type::crc64nvme;
+
+  /* digest 1 */
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest *digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  digest1->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
+
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint64_t crc1 = *diag_get_crc(cksum1);
+  if constexpr (std::endian::native != std::endian::big) {
+    crc1 = rgw::digest::byteswap(crc1);
+  }
+
+  uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
+				  lacrimae.length(), 0ULL);
+  ASSERT_EQ(crc1, crc2);
+}
+
 TEST(RGWCksum, CRC64NVME2)
 {
   auto t = cksum::Type::crc64nvme;

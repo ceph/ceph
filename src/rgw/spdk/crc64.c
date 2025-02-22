@@ -252,8 +252,8 @@ uint64_t crc64_nvme_combine(uint64_t crc64_1, uint64_t crc64_2, size_t len1)
 {
   uint64_t xi_mod;
   struct crc64_desc crc64_c;
-  uint64_t poly = 0xad93d23594c93659ull;
-  
+  uint64_t poly = 0xad93d23594c93659ull; // maybe this is wrong?
+
   gen_crc64_refl_consts(poly, &crc64_c);
   xi_mod = calc64_refl_xi_mod(len1, &crc64_c);
   crc64_1 = crc64_refl_shiftx(crc64_1, xi_mod, &crc64_c);
