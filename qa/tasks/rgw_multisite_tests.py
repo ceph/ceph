@@ -71,15 +71,18 @@ class RGWMultisiteTests(Task):
 
         # create test account/user
         log.info('creating test user..')
-        user = multisite.User('rgw-multisite-test-user', account='RGW11111111111111111')
-        arg = ['--account-id', user.account]
-        arg += master_zone.zone_args()
-        master_zone.cluster.admin(['account', 'create'] + arg)
+        user = multisite.User('rgw-multisite-test-user')
         user.create(master_zone, ['--display-name', 'TestUser',
                                   '--gen-access-key', '--gen-secret'])
+        
+        # create alt user
+        log.info('creating alt user..')
+        alt_user = multisite.User('rgw-multisite-test-alt-user')
+        alt_user.create(master_zone, ['--display-name', 'AltUser',
+                                      '--gen-access-key', '--gen-secret'])
 
         config = self.config.get('config', {})
-        tests.init_multi(realm, user, tests.Config(**config))
+        tests.init_multi(realm, user, alt_user, tests.Config(**config))
         tests.realm_meta_checkpoint(realm)
 
     def begin(self):
