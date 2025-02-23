@@ -1514,9 +1514,9 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
   }
   bufferlist bl;
   ratelimit_info.encode(bl);
-  rgw::sal::Attrs attr;
-  attr[RGW_ATTR_RATELIMIT] = bl;
-  r = bucket->merge_and_store_attrs(dpp(), attr, null_yield);
+  rgw::sal::Attrs attrs = bucket->get_attrs();
+  attrs[RGW_ATTR_RATELIMIT] = bl;
+  r = bucket->merge_and_store_attrs(dpp(), attrs, null_yield);
   if (r < 0) {
     cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1553,9 +1553,9 @@ int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
   }
   bufferlist bl;
   ratelimit_info.encode(bl);
-  rgw::sal::Attrs attr;
-  attr[RGW_ATTR_RATELIMIT] = bl;
-  int r = user->merge_and_store_attrs(dpp(), attr, null_yield);
+  rgw::sal::Attrs attrs = user->get_attrs();
+  attrs[RGW_ATTR_RATELIMIT] = bl;
+  int r = user->merge_and_store_attrs(dpp(), attrs, null_yield);
   if (r < 0) {
     cerr << "ERROR: failed writing user instance info: " << cpp_strerror(-r) << std::endl;
     return -r;
