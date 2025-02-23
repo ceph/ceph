@@ -1,0 +1,40 @@
+#include "tracing/tracing-common.h"
+#include "include/rados/librados.h"
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(
+    osdc,
+    objecter_send_op,
+    TP_ARGS(
+	uint64_t, tid,
+	int, target_osd,
+	const char*, base_oid_name,
+	size_t, base_oid_name_len,
+	uint64_t, target_pool,
+	const char*, ops_str,
+	size_t, ops_str_len,
+	size_t, op_indata_total,
+	size_t, op_outdata_total
+    ),
+    TP_FIELDS(
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int, target_osd, target_osd)
+        ctf_sequence_text(char, base_oid_name, base_oid_name, size_t, base_oid_name_len)
+	ctf_sequence_text(char, ops_str, ops_str, size_t, ops_str_len)
+        ctf_integer(size_t, op_indata_total, op_indata_total)
+        ctf_integer(size_t, op_outdata_total, op_outdata_total)
+    )
+)
+
+TRACEPOINT_EVENT(
+    osdc,
+    objecter_finish_op,
+    TP_ARGS(
+	uint64_t, tid,
+	int, target_osd
+    ),
+    TP_FIELDS(
+        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int, target_osd, target_osd)
+    )
+)
