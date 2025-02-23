@@ -133,7 +133,12 @@ class AsyncJobs(threading.Thread):
         # lock, cv for kickstarting jobs
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
+        # cv for job cancelation
+        self.waiting = False
+
+        # Indicates whether or not entire async job machinery is being shutdown.
         self.stopping = threading.Event()
+
         self.cancel_cv = threading.Condition(self.lock)
         self.nr_concurrent_jobs = nr_concurrent_jobs
         self.name_pfx = name_pfx
