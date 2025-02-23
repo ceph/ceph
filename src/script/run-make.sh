@@ -52,6 +52,16 @@ function prepare() {
     local which_pkg="which"
     if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
+
+        if in_jenkins; then
+            if ! type clang-19 > /dev/null 2>&1 ; then
+                ci_debug "Getting clang-19"
+                wget https://download.ceph.com/qa/llvm.sh
+                chmod +x llvm.sh
+                $DRY_RUN sudo ./llvm.sh 19
+                rm llvm.sh
+            fi
+        fi
     fi
 
     if test -f ./install-deps.sh ; then
