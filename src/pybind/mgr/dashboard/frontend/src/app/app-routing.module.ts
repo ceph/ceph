@@ -461,6 +461,10 @@ const routes: Routes = [
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
               {
+                path: `share/${URLVerbs.EDIT}/:clusterId/:shareId`,
+                component: SmbShareFormComponent,
+              },
+              {
                 path: `ad/${URLVerbs.CREATE}`,
                 component: SmbJoinAuthFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }

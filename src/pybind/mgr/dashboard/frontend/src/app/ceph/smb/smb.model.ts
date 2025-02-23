@@ -141,3 +141,5 @@ export const JOIN_AUTH_RESOURCE = 'ceph.smb.join.auth' as const;
 export const USERSGROUPS_RESOURCE = 'ceph.smb.usersgroups' as const;
 
 export const PROVIDER = 'samba-vfs';
+
+export const SHARE_URL = '/cephfs/smb/share/';
