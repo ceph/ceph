@@ -93,7 +93,8 @@ namespace rgw::putobj {
 	auto hv = env.get(hk.c_str());
 	if (hv) {
 	  return
-	    GetHeaderCksumResult(cksum::Cksum(cksum_type, hv),
+	    GetHeaderCksumResult(cksum::Cksum(cksum_type, hv,
+				   cksum::Cksum::CtorStyle::from_armored),
 				 std::string_view(hv, std::strlen(hv)));
 	}
       }
@@ -114,7 +115,8 @@ namespace rgw::putobj {
       auto hv = env.get(hk.c_str());
       if (hv) {
 	return
-	  GetHeaderCksumResult(cksum::Cksum(cksum_type, hv),
+	  GetHeaderCksumResult(cksum::Cksum(cksum_type, hv,
+				 cksum::Cksum::CtorStyle::from_armored),
 			       std::string_view(hv, std::strlen(hv)));
       }
     }
