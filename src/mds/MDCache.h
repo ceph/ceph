@@ -26,6 +26,7 @@
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/elist.h"
+#include "include/rados/rados_types.hpp"
 
 #include "messages/MCacheExpire.h"
 #include "messages/MClientQuota.h"
@@ -1159,6 +1160,17 @@ private:
   OpenFileTable open_file_table;
 
   double export_ephemeral_random_max = 0.0;
+
+  struct SnapSetContext { /* not to be confused with SnapContext */
+    int r;
+    uint64_t objectid;
+    librados::snap_set_t snaps;
+  };
+
+  void file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
+		      MDSContext *ctx);
+  void aggreggate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
+			    CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish);
 
  protected:
   // track leader requests whose peers haven't acknowledged commit
