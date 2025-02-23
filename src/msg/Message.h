@@ -18,9 +18,12 @@
 #include <concepts>
 #include <cstdlib>
 #include <ostream>
+#include <sstream>
 #include <string_view>
 
 #include <boost/intrusive/list.hpp>
+
+#include <fmt/core.h> // for FMT_VERSION
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
 #endif
@@ -30,7 +33,6 @@
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
 #include "common/ref.h"
-#include "common/debug.h"
 #include "common/zipkin_trace.h"
 #include "common/tracer.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...

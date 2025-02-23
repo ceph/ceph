@@ -11,6 +11,7 @@
 #include "include/random.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthSessionHandler.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
