@@ -663,6 +663,7 @@ enum class BucketSyncState : uint8_t {
   Full,
   Incremental,
   Stopped,
+  NotApplicable,
 };
 inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
   switch (s) {
@@ -670,6 +671,7 @@ inline std::ostream& operator<<(std::ostream& out, const BucketSyncState& s) {
   case BucketSyncState::Full: out << "full"; break;
   case BucketSyncState::Incremental: out << "incremental"; break;
   case BucketSyncState::Stopped: out << "stopped"; break;
+  case BucketSyncState::NotApplicable: out << "not-applicable"; break;
   }
   return out;
 }

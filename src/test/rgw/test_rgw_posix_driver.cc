@@ -1326,7 +1326,7 @@ TEST_F(POSIXBucketTest, ObjectWrite)
   req_context rctx{env->dpp, null_yield, nullptr};
 
   ret = writer->complete(ofs, etag, &mtime, real_time(), attrs, std::nullopt,
-                         real_time(), nullptr, nullptr, nullptr, nullptr,
+                         real_time(), nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, rctx, 0);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(object->get_size(), ofs);
@@ -1386,7 +1386,7 @@ public:
     req_context rctx{env->dpp, null_yield, nullptr};
     ret = writer->complete(write_size, etag, &mtime, real_time(), attrs,
                            std::nullopt, real_time(), nullptr, nullptr, nullptr,
-                           nullptr, nullptr, rctx, 0);
+                           nullptr, nullptr, nullptr, rctx, 0);
     EXPECT_EQ(ret, 0);
 
     return obj;
@@ -1567,7 +1567,7 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   bufferlist addbl;
   encode(addattr, addbl);
 
-  ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp);
+  ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp, nullptr, 0);
   EXPECT_EQ(ret, 0);
 
   EXPECT_EQ(object->get_attrs().size(), 4);
@@ -1576,7 +1576,7 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
-  ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield);
+  ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield, nullptr, 0);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(object->get_attrs().size(), 3);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
@@ -1688,7 +1688,7 @@ public:
 
     ret = writer->complete(ofs, part_name, &mtime, real_time(), attrs,
                            std::nullopt, real_time(), nullptr, nullptr, nullptr,
-                           nullptr, nullptr, rctx, 0);
+                           nullptr, nullptr, nullptr, rctx, 0);
     EXPECT_EQ(ret, 0);
 
     return ofs;
@@ -1769,7 +1769,7 @@ TEST_F(POSIXMPObjectTest, MPUploadWrite)
 
   ret = writer->complete(ofs, etag, &mtime, real_time(), attrs, std::nullopt,
                          real_time(), nullptr, nullptr, nullptr, nullptr,
-                         nullptr, rctx, 0);
+                         nullptr, nullptr, rctx, 0);
   EXPECT_EQ(ret, 0);
 
   sf::path tp{bp / "root" / testname / mpname / "part-00001" };
@@ -1939,7 +1939,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
 
   ret = writer->complete(ofs, etag, &mtime, real_time(), attrs, std::nullopt,
                          real_time(), nullptr, nullptr, nullptr, nullptr,
-                         nullptr, rctx, 0);
+                         nullptr, nullptr, rctx, 0);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(object->get_size(), ofs);
 
@@ -1995,7 +1995,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
 
   ret = writer->complete(ofs, etag, &mtime, real_time(), attrs, std::nullopt,
                          real_time(), nullptr, nullptr, nullptr, nullptr,
-                         nullptr, rctx, 0);
+                         nullptr, nullptr, rctx, 0);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(obj2->get_size(), ofs);
 
@@ -2072,7 +2072,7 @@ public:
     req_context rctx{env->dpp, null_yield, nullptr};
     ret = writer->complete(write_size, etag, &mtime, real_time(), attrs,
                            std::nullopt, real_time(), nullptr, nullptr, nullptr,
-                           nullptr, nullptr, rctx, 0);
+                           nullptr, nullptr, nullptr, rctx, 0);
     EXPECT_EQ(ret, 0);
 
     return object;
@@ -2461,7 +2461,7 @@ public:
 
     ret = writer->complete(ofs, part_name, &mtime, real_time(), attrs,
                            std::nullopt, real_time(), nullptr, nullptr, nullptr,
-                           nullptr, nullptr, rctx, 0);
+                           nullptr, nullptr, nullptr, rctx, 0);
     EXPECT_EQ(ret, 0);
 
     return ofs;

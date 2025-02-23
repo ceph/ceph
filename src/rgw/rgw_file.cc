@@ -2021,7 +2021,7 @@ namespace rgw {
 
     op_ret = processor->complete(state->obj_size, etag, &mtime, real_time(), attrs,
                                  rgw::cksum::no_cksum, (delete_at ? *delete_at : real_time()),
-				 if_match, if_nomatch, nullptr, nullptr, nullptr,
+				 if_match, if_nomatch, nullptr, nullptr, nullptr, nullptr,
 				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret != 0) {
       /* revert attr updates */

@@ -1879,14 +1879,16 @@ class DB {
           bool canceled;
           const std::string *user_data;
           rgw_zone_set *zones_trace;
+          rgw_log_op_info *log_op_info;
           bool modify_tail;
           bool completeMultipart;
           bool appendable;
 
           MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
           remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
-          if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-          modify_tail(false),  completeMultipart(false), appendable(false) {}
+          if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr),
+          zones_trace(nullptr), log_op_info(nullptr),
+          modify_tail(false), completeMultipart(false), appendable(false) {}
         } meta;
 
         explicit Write(DB::Object *_target) : target(_target) {}
@@ -1918,10 +1920,11 @@ class DB {
           ceph::real_time mtime; /* for setting delete marker mtime */
           bool high_precision_time;
           rgw_zone_set *zones_trace;
+          rgw_log_op_info *log_op_info;
           bool abortmp;
           uint64_t parts_accounted_size;
 
-          DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr), abortmp(false), parts_accounted_size(0) {}
+          DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr), log_op_info(nullptr), abortmp(false), parts_accounted_size(0) {}
         } params;
 
         struct DeleteResult {

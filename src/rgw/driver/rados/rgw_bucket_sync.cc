@@ -14,7 +14,7 @@
 using namespace std;
 
 ostream& operator<<(ostream& os, const rgw_sync_bucket_entity& e) {
-  os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << ",az=" << (int)e.all_zones << "}";
+  os << "{b=" << rgw_sync_bucket_entities::bucket_key(e.bucket) << ",z=" << e.zone.value_or(rgw_zone_id()) << "}";
   return os;
 }
 
@@ -155,8 +155,6 @@ void rgw_sync_group_pipe_map::init(const DoutPrefixProvider *dpp,
   bucket = _bucket;
   default_flow = _default_flow;
   pall_zones = _pall_zones;
-
-  rgw_sync_bucket_entity zb(zone, bucket);
 
   status = group.status;
 
@@ -732,8 +730,6 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
 
   rgw_sync_bucket_pipes pipes;
   pipes.id = "all";
-  pipes.source.all_zones = true;
-  pipes.dest.all_zones = true;
 
   group.pipes.emplace_back(std::move(pipes));
 
@@ -741,6 +737,18 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
   group.status = rgw_sync_policy_group::Status::ENABLED;
 
   *ppolicy = std::move(policy);
+}
+
+RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(CephContext *_cct,
+                                                       const rgw_zone_id& effective_zone,
+                                                       RGWSI_Bucket_Sync *_bucket_sync_svc,
+                                                       const rgw_sync_policy_info& _sync_policy) : bucket_sync_svc(_bucket_sync_svc),
+                                                                                                   zone_id(effective_zone),
+                                                                                                   sync_policy(_sync_policy) {
+  // This constructor is called only for remote zonegroups that read objects.
+  // Therefore, zone_svc is used solely for obtaining the context, and other properties are disregarded.
+  zone_svc = new RGWSI_Zone(_cct);
+  flow_mgr.reset(new RGWBucketSyncFlowManager(_cct, zone_id, nullopt, nullptr));
 }
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
@@ -984,17 +992,34 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
-bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags) const {
-  if (bucket_exports_data()) {
-    for (auto& entry : target_pipes.pipe_map) {
-      auto& filter = entry.second.params.source.filter;
-      if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
-	return true;
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags, std::set<rgw_zone_id>* log_zones) const {
+  if (!bucket_exports_data()) {
+    return false;
+  }
+
+  const auto& pipe_map = target_pipes.pipe_map;
+
+  for (const auto& [_, pipe] : pipe_map) {
+    const auto& filter = pipe.params.source.filter;
+
+    if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
+      if (unlikely(!log_zones)) {
+        // early return if we only need to check if an object exports
+        return true;
+      }
+
+      if (likely(pipe.dest.zone.has_value())) {
+        log_zones->insert(*pipe.dest.zone);
+      } else {
+        // we have a wildcard zone, need to check all zones
+        // clear the log_zones and return true so all zones from the handler be used
+        log_zones->clear();
+        return true;
       }
     }
   }
 
-  return false;
+  return log_zones ? !log_zones->empty() : false;
 }
 
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
@@ -1019,4 +1044,3 @@ bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
 {
   return bucket_is_sync_target();
 }
-

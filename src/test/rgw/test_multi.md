@@ -12,9 +12,9 @@ This will assume a configuration file called `/path/to/ceph/src/test/rgw/test_mu
 To use a different configuration file, set the `RGW_MULTI_TEST_CONF` environment variable to point to that file. Here is an example of configuration file:
 ```
 [DEFAULT]
-num_zonegroup=1
+num_zonegroups=1
 num_zones=3
-gateway_per_zone=1
+gateways_per_zone=1
 no_bootstrap=false
 log_level=5
 ```

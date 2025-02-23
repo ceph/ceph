@@ -3242,3 +3242,142 @@ get_iam_policy_from_attr(CephContext* cct,
     return boost::none;
   }
 }
+
+int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, optional_yield y, RGWObjTags& obj_tags)
+{
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+
+  bufferlist tags_bl;
+  int ret = rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read obj tags, ret=" << ret << dendl;
+    return ret;
+  }
+
+  try {
+    auto iter = tags_bl.cbegin();
+    obj_tags.decode(iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int should_log_op(RGWBucketSyncPolicyHandlerRef& policy_handler,
+                  const std::string& object_name, const RGWObjTags& tagset,
+                  rgw_log_op_info& log_op_info)
+{
+  std::set<rgw_zone_id> log_zones;
+  if (!policy_handler->bucket_exports_object(object_name, tagset, &log_zones)) {
+    return false;
+  }
+
+  log_op_info.zones = policy_handler->get_target_zones();
+  log_op_info.log_zones = std::move(log_zones);
+
+  return true;
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  const std::string& object_name, const RGWObjTags& tagset,
+                  const DoutPrefixProvider *dpp, optional_yield y,
+                  rgw_log_op_info& log_op_info)
+{
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  int ret = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &policy_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to read sync policy for bucket=" << bucket << " ret=" << ret << dendl;
+    return ret;
+  } else if (!policy_handler) { // no policy, no logging
+    return false;
+  }
+
+  return should_log_op(policy_handler, object_name, tagset, log_op_info);
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  const std::string& object_name, const rgw::sal::Attrs& obj_attrs,
+                  const DoutPrefixProvider *dpp, optional_yield y,
+                  rgw_log_op_info& log_op_info)
+{
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  int ret = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &policy_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to read sync policy for bucket=" << bucket << " ret=" << ret << dendl;
+    return ret;
+  } else if (!policy_handler) { // no policy, no logging
+    return false;
+  }
+
+  RGWObjTags obj_tags;
+  const auto& tags = obj_attrs.find(RGW_ATTR_TAGS);
+  if (tags != obj_attrs.end()) {
+    try {
+      bufferlist::const_iterator iter{&tags->second};
+      obj_tags.decode(iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    }
+  }
+
+  return should_log_op(policy_handler, object_name, obj_tags, log_op_info);
+}
+
+int should_log_op(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                  rgw::sal::Object *object,
+                  const DoutPrefixProvider *dpp, optional_yield y,
+                  rgw_log_op_info& log_op_info)
+{
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  int ret = driver->get_sync_policy_handler(dpp, std::nullopt, bucket, &policy_handler, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed to read sync policy for bucket=" << bucket << " ret=" << ret << dendl;
+    return ret;
+  } else if (!policy_handler) { // no policy, no logging
+    return false;
+  }
+
+  RGWObjTags obj_tags;
+  if (int ret = read_obj_tags(dpp, object, y, obj_tags); ret < 0 && ret != -ENODATA) {
+    return ret;
+  }
+
+  return should_log_op(policy_handler, object->get_name(), obj_tags, log_op_info);
+}
+
+int list_zonegroup_zones(rgw::sal::Driver* driver, const std::string& zonegroup,
+                         const DoutPrefixProvider *dpp, optional_yield y,
+                         std::set<rgw_zone_id>& zones)
+{
+  std::unique_ptr<rgw::sal::ZoneGroup> zg;
+  int r = driver->get_zonegroup(zonegroup, &zg);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to get zonegroup info for zonegroup=" << zonegroup << " ret=" << r << dendl;
+    return r;
+  }
+
+  std::list<std::string> zone_ids;
+  if (r = zg->list_zones(zone_ids); r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to list zones for zonegroup=" << zonegroup << " ret=" << r << dendl;
+    return r;
+  }
+
+  zones = std::set<rgw_zone_id>(zone_ids.begin(), zone_ids.end());
+  return 0;
+}
+
+int list_bucket_zones(rgw::sal::Driver* driver, const rgw_bucket& bucket,
+                      const DoutPrefixProvider *dpp, optional_yield y,
+                      std::set<rgw_zone_id>& zones)
+{
+  std::unique_ptr<rgw::sal::Bucket> b;
+  int r = driver->load_bucket(dpp, bucket, &b, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to load bucket info for bucket=" << bucket << " ret=" << r << dendl;
+    return r;
+  }
+
+  return list_zonegroup_zones(driver, b->get_info().zonegroup, dpp, y, zones);
+}

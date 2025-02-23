@@ -301,7 +301,7 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
 
   // use the master zone's endpoints
   auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
-                          std::move(creds), zg->second.id, zg->second.api_name};
+                          std::move(creds), site.get_zone().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
   int ret = conn.forward_iam_request(dpp, req, nullptr, max_response_size,
