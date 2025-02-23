@@ -27,6 +27,7 @@
 SET_SUBSYS(osd);
 
 using std::vector;
+using namespace std::string_literals;
 
 namespace crimson::osd {
 
@@ -327,15 +328,13 @@ seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
   }
 }
 
-const char** OSDSingletonState::get_tracked_conf_keys() const
+std::vector<std::string> OSDSingletonState::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "osd_max_backfills",
-    "osd_min_recovery_priority",
-    "osd_max_trimming_pgs",
-    nullptr
+  return {
+    "osd_max_backfills"s,
+    "osd_min_recovery_priority"s,
+    "osd_max_trimming_pgs"s
   };
-  return KEYS;
 }
 
 void OSDSingletonState::handle_conf_change(

@@ -76,6 +76,8 @@ using std::vector;
 using crimson::common::local_conf;
 using crimson::os::FuturizedStore;
 
+using namespace std::string_literals;
+
 namespace crimson::osd {
 
 OSD::OSD(int id, uint32_t nonce,
@@ -964,13 +966,9 @@ void OSD::handle_authentication(const EntityName& name,
   }
 }
 
-const char** OSD::get_tracked_conf_keys() const
+std::vector<std::string> OSD::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "osd_beacon_report_interval",
-    nullptr
-  };
-  return KEYS;
+  return {"osd_beacon_report_interval"s};
 }
 
 void OSD::handle_conf_change(
