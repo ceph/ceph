@@ -2194,7 +2194,9 @@ void MDSRank::boot_create()
     snapserver->save(fin.new_sub());
   }
 
-  ceph_assert(g_conf()->mds_kill_create_at != 1);
+  //ceph_assert(g_conf()->mds_kill_create_at != 1);
+  if (g_conf()->mds_kill_create_at == 1)
+    _exit(120);
 
   // ok now journal it
   auto sle = mdcache->create_subtree_map();
