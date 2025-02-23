@@ -1008,21 +1008,7 @@ namespace rgw::dedup {
 
     ldpp_dout(dpp, 1) << __func__ << (dry_run ?"::DRY RUN":"::FULL DEDUP") << dendl;
     int dedup_type = (dry_run ? DEDUP_TYPE_DRY_RUN : DEDUP_TYPE_FULL);
-#if 1
     ret = swap_epoch(dpp, ioctx, &old_epoch, dedup_type, 0, 0);
-#else
-    dedup_epoch_t new_epoch = { old_epoch.serial + 1, dedup_type, ceph_clock_now(), 0, 0};
-    bufferlist old_epoch_bl, new_epoch_bl;
-    encode(old_epoch, old_epoch_bl);
-    encode(new_epoch, new_epoch_bl);
-    ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, old_epoch_bl}};
-    std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
-    librados::ObjectWriteOperation op;
-    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
-    ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
-    std::string oid(DEDUP_EPOCH_TOKEN);
-    ret = ioctx.operate(oid, &op);
-#endif
     if (ret == 0) {
       ldpp_dout(dpp, 1) << __func__ << "::Epoch object was reset" << dendl;
       dedup_control(store, dpp, URGENT_MSG_RESTART);

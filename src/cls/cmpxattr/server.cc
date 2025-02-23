@@ -136,7 +136,8 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
   // if arrived here all keys in the cmp_pairs passed check
   // overwrite all key/values in the set_pairs
   for (const auto& [key, value] : op.set_pairs) {
-    int ret = cls_cxx_setxattr(hctx, key.c_str(), &value);
+    auto inbl = const_cast<ceph::bufferlist *>(&value);
+    int ret = cls_cxx_setxattr(hctx, key.c_str(), inbl);
     if (ret == 0) {
       CLS_LOG(20, "%s:: successful set xattr key=%s", __func__, key.c_str());
     }
