@@ -2,6 +2,12 @@ overrides:
   ceph:
     log-ignorelist:
       - \(MON_DOWN\)
+      - OSD_DOWN
+      - PG_DEGRADED
+      - mons down
+      - pgs degraded
+      - pg degraded
+      - nodeep-scrub flag\(s\) set
 tasks:
 - install:
     branch: reef
