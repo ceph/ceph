@@ -222,6 +222,9 @@ public:
   std::set<int>             pending_metadata_rm;
   std::map<int, failure_info_t> failure_info;
   std::map<int,utime_t>    down_pending_out;  // osd down -> out
+  std::set<int>             ignore_subtree_osds;
+  std::set<int>             pending_ignore_subtree;
+  std::set<int>             pending_cancel_ignore_subtree;
   bool priority_convert = false;
   std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
   std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
@@ -245,6 +248,7 @@ public:
   utime_t get_grace_time(utime_t now, int target_osd, failure_info_t& fi) const;
   bool is_failure_stale(utime_t now, failure_info_t& fi) const;
   void force_failure(int target_osd, int by);
+  bool ignore_subtree_when_mark_down(int target_osd);
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
@@ -441,6 +445,8 @@ private:
   bool prepare_mark_me_down(MonOpRequestRef op);
   void process_failures();
   void take_all_failures(std::list<MonOpRequestRef>& ls);
+  bool preprocess_ignore_subtree(MonOpRequestRef op);
+  bool prepare_ignore_subtree(MonOpRequestRef op);
 
   bool preprocess_mark_me_dead(MonOpRequestRef op);
   bool prepare_mark_me_dead(MonOpRequestRef op);
