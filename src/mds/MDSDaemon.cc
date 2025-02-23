@@ -12,6 +12,8 @@
  *
  */
 
+#include "MDSDaemon.h"
+
 #include <unistd.h>
 
 #include "include/compat.h"
@@ -38,7 +40,6 @@
 
 #include "MDSMap.h"
 
-#include "MDSDaemon.h"
 #include "Server.h"
 #include "Locker.h"
 
@@ -51,6 +52,8 @@
 #include "auth/AuthAuthorizeHandler.h"
 #include "auth/RotatingKeyRing.h"
 #include "auth/KeyRing.h"
+
+#include "messages/MRemoveSnaps.h"
 
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"

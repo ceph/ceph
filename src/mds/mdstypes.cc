@@ -4,9 +4,11 @@
 #include "mdstypes.h"
 #include "include/cephfs/types.h"
 #include "MDSContext.h"
+#include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
 
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>

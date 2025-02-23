@@ -6,14 +6,11 @@
 
 #include <map>
 
-#include "include/types.h"
-
-#include "msg/msg_types.h"
+#include "mdstypes.h" // for mds_rank_t
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
-#include "messages/MMDSPing.h"
-
-#include "mdstypes.h"
+#include "include/types.h" // for version_t
+#include "msg/msg_types.h" // for entity_addrvec_t
 
 class MDSRank;
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#include "MDSRank.h"
 #include "MDLog.h"
+#include "MDSRank.h"
 #include "MDCache.h"
 #include "LogEvent.h"
 #include "MDSContext.h"
@@ -21,6 +21,7 @@
 #include "osdc/Journaler.h"
 #include "mds/JournalPointer.h"
 
+#include "common/debug.h"
 #include "common/entity_name.h"
 #include "common/perf_counters.h"
 #include "common/Cond.h"

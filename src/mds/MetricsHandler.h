@@ -4,21 +4,33 @@
 #ifndef CEPH_MDS_METRICS_HANDLER_H
 #define CEPH_MDS_METRICS_HANDLER_H
 
+#include <map>
 #include <thread>
 #include <utility>
-#include <boost/variant.hpp>
 
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
-#include "include/common_fwd.h"
-#include "include/cephfs/metrics/Types.h"
-
-#include "messages/MMDSPing.h"
-#include "messages/MClientMetrics.h"
 
 #include "MDSPerfMetricTypes.h"
 
+#include <boost/optional.hpp>
+#include <boost/variant/static_visitor.hpp>
+
+struct CapInfoPayload;
+struct ReadLatencyPayload;
+struct WriteLatencyPayload;
+struct MetadataLatencyPayload;
+struct DentryLeasePayload;
+struct OpenedFilesPayload;
+struct PinnedIcapsPayload;
+struct OpenedInodesPayload;
+struct ReadIoSizesPayload;
+struct WriteIoSizesPayload;
+struct UnknownPayload;
+class MClientMetrics;
+class MDSMap;
 class MDSRank;
+class MMDSPing;
 class Session;
 
 class MetricsHandler : public Dispatcher {

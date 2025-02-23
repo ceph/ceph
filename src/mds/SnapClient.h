@@ -15,12 +15,14 @@
 #ifndef CEPH_SNAPCLIENT_H
 #define CEPH_SNAPCLIENT_H
 
+#include <map>
+#include <set>
 #include <string_view>
 
 #include "MDSTableClient.h"
 #include "snap.h"
-#include "MDSContext.h"
 
+class MDSContext;
 class MDSRank;
 class LogSegment;
 
