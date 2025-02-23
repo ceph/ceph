@@ -369,7 +369,7 @@ static seastar::future<> run(
                   return seastar::smp::invoke_on_all([&report, this] {
                     auto &server = container().local();
                     server.get_report(report.reports[seastar::this_shard_id()]);
-                  }).then([&report, this] {
+                  }).then([&report] {
                     auto now = mono_clock::now();
                     auto prv = report.start_time;
                     report.start_time = now;
@@ -417,7 +417,7 @@ static seastar::future<> run(
               });
             }
           );
-        }).then([this] {
+        }).then([] {
           logger().info("report is stopped!");
         }).forward_to(std::move(pr_report));
       }

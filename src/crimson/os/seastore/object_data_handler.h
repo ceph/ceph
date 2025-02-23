@@ -13,6 +13,7 @@
 #include "crimson/os/seastore/onode.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -77,7 +78,7 @@ private:
   mutable std::optional<ceph::bufferptr> ptr = std::nullopt;
 };
 
-struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
+struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   using Ref = TCachedExtentRef<ObjectDataBlock>;
 
   std::vector<block_delta_t> delta = {};
@@ -88,11 +89,11 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   overwrite_buf_t cached_overwrites;
 
   explicit ObjectDataBlock(ceph::bufferptr &&ptr)
-    : LogicalCachedExtent(std::move(ptr)) {}
+    : LogicalChildNode(std::move(ptr)) {}
   explicit ObjectDataBlock(const ObjectDataBlock &other, share_buffer_t s)
-    : LogicalCachedExtent(other, s), modified_region(other.modified_region) {}
+    : LogicalChildNode(other, s), modified_region(other.modified_region) {}
   explicit ObjectDataBlock(extent_len_t length)
-    : LogicalCachedExtent(length) {}
+    : LogicalChildNode(length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new ObjectDataBlock(*this, share_buffer_t{}));

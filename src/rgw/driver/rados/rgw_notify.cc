@@ -23,6 +23,8 @@
 #include <chrono>
 #include <fmt/format.h>
 
+#include <unordered_map>
+
 #define dout_subsys ceph_subsys_rgw_notification
 
 namespace rgw::notify {
@@ -49,8 +51,8 @@ struct persistency_tracker {
 };
 
 using queues_t = std::set<std::string>;
-using entries_persistency_tracker = ceph::unordered_map<std::string, persistency_tracker>;
-using queues_persistency_tracker = ceph::unordered_map<std::string, entries_persistency_tracker>;
+using entries_persistency_tracker = std::unordered_map<std::string, persistency_tracker>;
+using queues_persistency_tracker = std::unordered_map<std::string, entries_persistency_tracker>;
 using rgw::persistent_topic_counters::CountersManager;
 
 // use mmap/mprotect to allocate 128k coroutine stacks

@@ -39,6 +39,7 @@
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/util.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/PriorityCache.h"
@@ -2076,7 +2077,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 
   {
     std::lock_guard l(cache->lock);
-    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
+    auto p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
       cache->logger->inc(l_bluestore_onode_misses);
@@ -2121,9 +2122,8 @@ void BlueStore::OnodeSpace::rename(
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
-  po = onode_map.find(old_oid);
-  pn = onode_map.find(new_oid);
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
   ceph_assert(po != pn);
 
   ceph_assert(po != onode_map.end());
@@ -5277,7 +5277,7 @@ void BlueStore::Collection::split_cache(
 // MempoolThread
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.MempoolThread(" << this << ") "
+#define dout_prefix *_dout << "bluestore.MempoolThread "
 #undef dout_context
 #define dout_context store->cct
 
@@ -5404,6 +5404,23 @@ void *BlueStore::MempoolThread::entry()
     interval_stats_trim = false;
 
     store->refresh_perf_counters();
+    uint64_t period = store->cct->_conf.get_val<uint64_t>("bluestore_fragmentation_check_period");
+    if (period != 0 && store->alloc) {
+      auto now = mono_clock::now();
+      timespan elapsed = now - last_fragmentation_check;
+      if (elapsed > make_timespan(period)) {
+        last_fragmentation_check = now;
+        double score;
+        score = store->alloc->get_fragmentation_score();
+        store->logger->set(l_bluestore_fragmentation, score * 1e6);
+        now = mono_clock::now();
+        elapsed = now - last_fragmentation_check;
+        auto seconds = elapsed.count() * 1e-9;
+        dout(0) << std::fixed << std::setprecision(6)
+          << "fragmentation_score=" << score << " took=" << seconds << "s" << dendl;
+      }
+    }
+
     auto wait = ceph::make_timespan(
       store->cct->_conf->bluestore_cache_trim_interval);
     cond.wait_for(l, wait);
@@ -12129,7 +12146,7 @@ void BlueStore::_check_no_per_pg_or_pool_omap_alert()
 BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 {
   std::shared_lock l(coll_lock);
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+  auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
@@ -13243,9 +13260,7 @@ int BlueStore::list_collections(vector<coll_t>& ls)
 {
   std::shared_lock l(coll_lock);
   ls.reserve(coll_map.size());
-  for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
-       p != coll_map.end();
-       ++p)
+  for (auto p = coll_map.begin(); p != coll_map.end(); ++p)
     ls.push_back(p->first);
   return 0;
 }
@@ -15109,9 +15124,6 @@ void BlueStore::_kv_finalize_thread()
 
       // this is as good a place as any ...
       _reap_collections();
-      logger->set(l_bluestore_fragmentation,
-	(uint64_t)(alloc ? alloc->get_fragmentation() * 1000 : 0));
-
       log_latency("kv_final",
 	l_bluestore_kv_final_lat,
 	mono_clock::now() - start,
@@ -17520,9 +17532,6 @@ int BlueStore::_do_write_v2(
   o->extent_map.fault_range(db, offset, length);
   BlueStore::Writer wr(this, txc, &wctx, o);
   wr.do_write(offset, bl);
-  o->extent_map.compress_extent_map(offset, length);
-  o->extent_map.dirty_range(offset, length);
-  o->extent_map.maybe_reshard(offset, offset + length);
   return r;
 }
 
@@ -19104,6 +19113,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_COMPRESSION",
       s0);
+  }
+  if (logger->get(l_bluestore_fragmentation) >
+    cct->_conf.get_val<double>("bluestore_warn_on_free_fragmentation") * 1e6) {
+    alerts.emplace("BLUESTORE_FREE_FRAGMENTATION",
+      fmt::format("{0:.6f}", logger->get(l_bluestore_fragmentation) * 1e-6));
   }
 }
 

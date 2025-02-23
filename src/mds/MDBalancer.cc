@@ -440,8 +440,8 @@ int MDBalancer::localize_balancer()
   /* success: store the balancer in memory and set the version. */
   if (!r) {
     if (ret_t == std::cv_status::timeout) {
-      mds->objecter->op_cancel(tid, -CEPHFS_ECANCELED);
-      return -CEPHFS_ETIMEDOUT;
+      mds->objecter->op_cancel(tid, -ECANCELED);
+      return -ETIMEDOUT;
     }
     bal_code.assign(lua_src.to_str());
     bal_version.assign(oid.name);
@@ -966,7 +966,7 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* mantle doesn't know about cluster size, so check target len here */
   if ((int) state.targets.size() != cluster_size)
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   else if (ret)
     return ret;
 

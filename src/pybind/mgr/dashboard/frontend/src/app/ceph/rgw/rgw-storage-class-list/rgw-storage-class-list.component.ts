@@ -3,30 +3,30 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
-import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import {
-  StorageClass,
-  CLOUD_TIER,
-  ZoneGroup,
-  TierTarget,
-  Target,
-  ZoneGroupDetails
-} from '../models/rgw-storage-class.model';
+import { StorageClass, ZoneGroupDetails } from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { FinishedTask } from '~/app/shared/models/finished-task';
 import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
+import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
+
+import { Router } from '@angular/router';
+
+const BASE_URL = 'rgw/tiering';
 
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
-  styleUrls: ['./rgw-storage-class-list.component.scss']
+  styleUrls: ['./rgw-storage-class-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[];
@@ -41,7 +41,9 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     private cdsModalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
-    private rgwStorageClassService: RgwStorageClassService
+    private rgwStorageClassService: RgwStorageClassService,
+    private router: Router,
+    private urlBuilder: URLBuilderService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -77,6 +79,13 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     ];
     this.tableActions = [
       {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
@@ -90,18 +99,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
-
-          const tierObj = data.zonegroups.flatMap((zoneGroup: ZoneGroup) =>
-            zoneGroup.placement_targets
-              .filter((target: Target) => target.tier_targets)
-              .flatMap((target: Target) =>
-                target.tier_targets
-                  .filter((tierTarget: TierTarget) => tierTarget.val.tier_type === CLOUD_TIER)
-                  .map((tierTarget: TierTarget) => {
-                    return this.getTierTargets(tierTarget, zoneGroup.name, target.name);
-                  })
-              )
-          );
+          const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           this.storageClassList.push(...tierObj);
           resolve();
         },
@@ -112,20 +110,10 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     });
   }
 
-  getTierTargets(tierTarget: TierTarget, zoneGroup: string, targetName: string) {
-    if (tierTarget.val.tier_type !== CLOUD_TIER) return null;
-    return {
-      zonegroup_name: zoneGroup,
-      placement_target: targetName,
-      storage_class: tierTarget.val.storage_class,
-      ...tierTarget.val.s3
-    };
-  }
-
   removeStorageClassModal() {
     const storage_class = this.selection.first().storage_class;
     const placement_target = this.selection.first().placement_target;
-    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Tiering Storage Class`,
       itemNames: [storage_class],
       actionDescription: 'remove',

@@ -13,6 +13,7 @@ import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Permissions } from '~/app/shared/models/permissions';
+import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-user-details',
@@ -81,6 +82,11 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
       // Load the user/bucket quota of the selected user.
       this.rgwUserService.getQuota(this.user.uid).subscribe((resp: object) => {
+        _.extend(this.user, resp);
+      });
+
+      // Load the user rate limit of the selected user.
+      this.rgwUserService.getUserRateLimit(this.user.uid).subscribe((resp: RgwRateLimitConfig) => {
         _.extend(this.user, resp);
       });
 

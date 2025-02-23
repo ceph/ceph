@@ -265,6 +265,39 @@ class SMBJoinAuthTest(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody(self._join_auths['resources'])
 
+    def test_create_join_auth(self):
+        mock_simplified = Mock()
+        mock_simplified.to_simplified.return_value = json.dumps(self._join_auths['resources'][0])
+        mgr.remote = Mock(return_value=mock_simplified)
+
+        _join_auth_data = {'join_auth': self._join_auths['resources'][0]}
+
+        self._post(self._endpoint, _join_auth_data)
+        self.assertStatus(201)
+        self.assertInJsonBody(json.dumps(self._join_auths['resources'][0]))
+
+    def test_delete(self):
+        _res = {
+            "resource_type": "ceph.smb.join.auth",
+            "auth_id": "join1-admin",
+            "intent": "removed",
+            "auth": {
+                "username": "Administrator",
+                "password": "Passw0rd"
+            }
+        }
+        _res_simplified = {
+            "resource_type": "ceph.smb.join.auth",
+            "auth_id": "join1-admin",
+            "intent": "removed"
+        }
+
+        mgr.remote = Mock(return_value=Mock(return_value=_res))
+        mgr.remote.return_value.one.return_value.to_simplified = Mock(return_value=_res)
+        self._delete(f'{self._endpoint}/join1-admin')
+        self.assertStatus(204)
+        mgr.remote.assert_called_once_with('smb', 'apply_resources', json.dumps(_res_simplified))
+
 
 class SMBUsersgroupsTest(ControllerTestCase):
     _endpoint = '/api/smb/usersgroups'
@@ -319,3 +352,36 @@ class SMBUsersgroupsTest(ControllerTestCase):
         self._get(self._endpoint)
         self.assertStatus(200)
         self.assertJsonBody(self._usersgroups['resources'])
+
+    def test_create_usersgroups(self):
+        mock_simplified = Mock()
+        mock_simplified.to_simplified.return_value = json.dumps(self._usersgroups['resources'][0])
+        mgr.remote = Mock(return_value=mock_simplified)
+
+        _usersgroups_data = {'usersgroups': self._usersgroups['resources'][0]}
+
+        self._post(self._endpoint, _usersgroups_data)
+        self.assertStatus(201)
+        self.assertInJsonBody(json.dumps(self._usersgroups['resources'][0]))
+
+    def test_delete(self):
+        _res = {
+            "resource_type": "ceph.smb.usersgroups",
+            "users_groups_id": "ug1",
+            "intent": "removed",
+            "auth": {
+                "username": "Administrator",
+                "password": "Passw0rd"
+            }
+        }
+        _res_simplified = {
+            "resource_type": "ceph.smb.usersgroups",
+            "users_groups_id": "ug1",
+            "intent": "removed"
+        }
+
+        mgr.remote = Mock(return_value=Mock(return_value=_res))
+        mgr.remote.return_value.one.return_value.to_simplified = Mock(return_value=_res)
+        self._delete(f'{self._endpoint}/ug1')
+        self.assertStatus(204)
+        mgr.remote.assert_called_once_with('smb', 'apply_resources', json.dumps(_res_simplified))

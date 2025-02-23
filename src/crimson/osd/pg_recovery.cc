@@ -531,10 +531,10 @@ void PGRecovery::enqueue_push(
 {
   logger().info("{}: obj={} v={} peers={}", __func__, obj, v, peers);
   auto &peering_state = pg->get_peering_state();
-  peering_state.prepare_backfill_for_missing(obj, v, peers);
   auto [recovering, added] = pg->get_recovery_backend()->add_recovering(obj);
   if (!added)
     return;
+  peering_state.prepare_backfill_for_missing(obj, v, peers);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");

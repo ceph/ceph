@@ -2,21 +2,27 @@
   <div *ngIf="user">
     <div *ngIf="keys.length">
       <legend i18n>Keys</legend>
-      <cd-table [data]="keys"
-                [columns]="keysColumns"
-                columnMode="flex"
-                selectionType="single"
-                forceIdentifier="true"
-                (updateSelection)="updateKeysSelection($event)">
-        <cd-table-actions class="table-actions"
-                          [permission]="{read: true}"
-                          [selection]="selection"
-                          [tableActions]="tableAction"></cd-table-actions>
+      <cd-table
+        [data]="keys"
+        [columns]="keysColumns"
+        columnMode="flex"
+        selectionType="single"
+        forceIdentifier="true"
+        (updateSelection)="updateKeysSelection($event)"
+      >
+        <cd-table-actions
+          class="table-actions"
+          [permission]="{ read: true }"
+          [selection]="selection"
+          [tableActions]="tableAction"
+        ></cd-table-actions>
       </cd-table>
     </div>
 
     <legend i18n>Details</legend>
-    <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+    <table
+      class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+    >
       <tbody>
         <tr>
           <td i18n
@@ -56,7 +62,7 @@
         <tr>
           <td i18n
               class="bold">Maximum buckets</td>
-          <td>{{ user.max_buckets | map:maxBucketsMap }}</td>
+          <td>{{ user.max_buckets | map: maxBucketsMap }}</td>
         </tr>
         <tr *ngIf="user.subusers && user.subusers.length">
           <td i18n
@@ -71,15 +77,13 @@
           <td i18n
               class="bold">Capabilities</td>
           <td>
-            <div *ngFor="let cap of user.caps">
-              {{ cap.type }} ({{ cap.perm }})
-            </div>
+            <div *ngFor="let cap of user.caps">{{ cap.type }} ({{ cap.perm }})</div>
           </td>
         </tr>
         <tr *ngIf="user.mfa_ids?.length">
           <td i18n
               class="bold">MFAs(Id)</td>
-          <td>{{ user.mfa_ids | join}}</td>
+          <td>{{ user.mfa_ids | join }}</td>
         </tr>
       </tbody>
     </table>
@@ -87,7 +91,9 @@
     <!-- User quota -->
     <div *ngIf="user.user_quota">
       <legend i18n>User quota</legend>
-      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+      <table
+        class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+      >
         <tbody>
           <tr>
             <td i18n
@@ -99,7 +105,9 @@
                 class="bold">Maximum size</td>
             <td *ngIf="!user.user_quota.enabled">-</td>
             <td *ngIf="user.user_quota.enabled && user.user_quota.max_size <= -1"
-                i18n>Unlimited</td>
+                i18n>
+              Unlimited
+            </td>
             <td *ngIf="user.user_quota.enabled && user.user_quota.max_size > -1">
               {{ user.user_quota.max_size | dimlessBinary }}
             </td>
@@ -109,7 +117,9 @@
                 class="bold">Maximum objects</td>
             <td *ngIf="!user.user_quota.enabled">-</td>
             <td *ngIf="user.user_quota.enabled && user.user_quota.max_objects <= -1"
-                i18n>Unlimited</td>
+                i18n>
+              Unlimited
+            </td>
             <td *ngIf="user.user_quota.enabled && user.user_quota.max_objects > -1">
               {{ user.user_quota.max_objects }}
             </td>
@@ -121,7 +131,9 @@
     <!-- Bucket quota -->
     <div *ngIf="user.bucket_quota">
       <legend i18n>Bucket quota</legend>
-      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+      <table
+        class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+      >
         <tbody>
           <tr>
             <td i18n
@@ -133,7 +145,9 @@
                 class="bold">Maximum size</td>
             <td *ngIf="!user.bucket_quota.enabled">-</td>
             <td *ngIf="user.bucket_quota.enabled && user.bucket_quota.max_size <= -1"
-                i18n>Unlimited</td>
+                i18n>
+              Unlimited
+            </td>
             <td *ngIf="user.bucket_quota.enabled && user.bucket_quota.max_size > -1">
               {{ user.bucket_quota.max_size | dimlessBinary }}
             </td>
@@ -143,13 +157,22 @@
                 class="bold">Maximum objects</td>
             <td *ngIf="!user.bucket_quota.enabled">-</td>
             <td *ngIf="user.bucket_quota.enabled && user.bucket_quota.max_objects <= -1"
-                i18n>Unlimited</td>
+                i18n>
+              Unlimited
+            </td>
             <td *ngIf="user.bucket_quota.enabled && user.bucket_quota.max_objects > -1">
               {{ user.bucket_quota.max_objects }}
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+    <!-- User Rate Limit -->
+    <div *ngIf="user.user_ratelimit">
+      <cd-rgw-rate-limit-details
+        [rateLimitConfig]="user.user_ratelimit"
+        [type]="'user'"
+      ></cd-rgw-rate-limit-details>
     </div>
   </div>
 </ng-container>

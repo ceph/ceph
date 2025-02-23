@@ -1285,6 +1285,7 @@ def _generate_config(
                     'printing': 'bsd',
                     'printcap name': '/dev/null',
                     'disable spoolss': 'Yes',
+                    'smbd profiling level': 'on',
                 }
             },
             cluster.cluster_id: {

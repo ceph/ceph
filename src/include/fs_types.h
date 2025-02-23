@@ -13,50 +13,6 @@
 
 class JSONObj;
 
-#define CEPHFS_EBLOCKLISTED    108
-#define CEPHFS_EPERM           1
-#define CEPHFS_ESTALE          116
-#define CEPHFS_ENOSPC          28
-#define CEPHFS_ETIMEDOUT       110
-#define CEPHFS_EIO             5
-#define CEPHFS_ENOTCONN        107
-#define CEPHFS_EEXIST          17
-#define CEPHFS_EINTR           4
-#define CEPHFS_EINVAL          22
-#define CEPHFS_EBADF           9
-#define CEPHFS_EROFS           30
-#define CEPHFS_EAGAIN          11
-#define CEPHFS_EACCES          13
-#define CEPHFS_ELOOP           40
-#define CEPHFS_EISDIR          21
-#define CEPHFS_ENOENT          2
-#define CEPHFS_ENOTDIR         20
-#define CEPHFS_ENAMETOOLONG    36
-#define CEPHFS_EBUSY           16
-#define CEPHFS_EDQUOT          122
-#define CEPHFS_EFBIG           27
-#define CEPHFS_ERANGE          34
-#define CEPHFS_ENXIO           6
-#define CEPHFS_ECANCELED       125
-#define CEPHFS_ENODATA         61
-#define CEPHFS_EOPNOTSUPP      95
-#define CEPHFS_EXDEV           18
-#define CEPHFS_ENOMEM          12
-#define CEPHFS_ENOTRECOVERABLE 131
-#define CEPHFS_ENOSYS          38
-#define CEPHFS_EWOULDBLOCK     CEPHFS_EAGAIN
-#define CEPHFS_ENOTEMPTY       39
-#define CEPHFS_EDEADLK         35
-#define CEPHFS_EDEADLOCK       CEPHFS_EDEADLK
-#define CEPHFS_EDOM            33
-#define CEPHFS_EMLINK          31
-#define CEPHFS_ETIME           62
-#define CEPHFS_EOLDSNAPC       85
-#define CEPHFS_EFAULT          14
-#define CEPHFS_EISCONN         106
-#define CEPHFS_EMULTIHOP       72
-#define CEPHFS_EINPROGRESS     115
-
 // taken from linux kernel: include/uapi/linux/fcntl.h
 #define CEPHFS_AT_FDCWD        -100    /* Special value used to indicate
                                           openat should use the current

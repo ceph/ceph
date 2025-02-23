@@ -46,9 +46,6 @@ extern "C" {
 #include <ostream>
 #include <iomanip>
 
-
-#include "include/unordered_map.h"
-
 #include "object.h"
 #include "intarith.h"
 
@@ -296,8 +293,8 @@ inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_
 /*
  * comparators for stl containers
  */
-// for ceph::unordered_map:
-//   ceph::unordered_map<const char*, long, hash<const char*>, eqstr> vals;
+// for std::unordered_map:
+//   std::unordered_map<const char*, long, hash<const char*>, eqstr> vals;
 struct eqstr
 {
   bool operator()(const char* s1, const char* s2) const
@@ -561,30 +558,40 @@ __s32  hostos_to_ceph_errno(__s32 e);
 #endif
 
 struct errorcode32_t {
-  int32_t code;
+  using code_t = __s32;
+  code_t code;
 
   errorcode32_t() : code(0) {}
   // cppcheck-suppress noExplicitConstructor
-  explicit errorcode32_t(int32_t i) : code(i) {}
+  explicit errorcode32_t(code_t i) : code(i) {}
 
-  operator int() const  { return code; }
-  int* operator&()      { return &code; }
-  errorcode32_t& operator=(int32_t i) {
+  operator code_t() const  { return code; }
+  code_t* operator&()      { return &code; }
+  errorcode32_t& operator=(code_t i) {
     code = i;
     return *this;
   }
   bool operator==(const errorcode32_t&) const = default;
   auto operator<=>(const errorcode32_t&) const = default;
 
+  inline code_t get_host_to_wire() const {
+    return hostos_to_ceph_errno(code);
+  }
+
+  inline void set_wire_to_host(code_t host_code) {
+    code = ceph_to_hostos_errno(host_code);
+  }
+
   void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
-    __s32 newcode = hostos_to_ceph_errno(code);
-    encode(newcode, bl);
+    auto new_code = get_host_to_wire();
+    encode(new_code, bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
-    decode(code, bl);
-    code = ceph_to_hostos_errno(code);
+    code_t newcode;
+    decode(newcode, bl);
+    set_wire_to_host(newcode);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_int("code", code);

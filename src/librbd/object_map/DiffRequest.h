@@ -9,6 +9,7 @@
 #include "common/ceph_mutex.h"
 #include "librbd/object_map/Types.h"
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 
 struct Context;
 

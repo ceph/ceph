@@ -119,6 +119,29 @@ Example::
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
     &ClientID=app-jee-jsp"
 
+RemoveClientIDFromOpenIDConnectProvider
+----------------------------------
+
+Remove a client id from the list of existing client ids registered while creating an OpenIDConnectProvider.
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``OpenIDConnectProviderArn``
+
+:Description: ARN of the IDP which is returned by the Create API.
+:Type: String
+
+``ClientID``
+
+:Description: Client ID to remove from the existing OpenIDConnectProvider.
+:Type: String
+
+Example::
+  POST "<hostname>?Action=Action=RemoveClientIDFromOpenIDConnectProvider
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &ClientID=app-jee-jsp"
+
 UpdateOpenIDConnectProviderThumbprint
 -------------------------------------
 

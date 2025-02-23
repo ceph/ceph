@@ -5,6 +5,8 @@
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -20,11 +22,7 @@ public:
   template <typename... T>
   LBAMapping(T&&... t)
     : BtreeNodeMapping<laddr_t, paddr_t>(std::forward<T>(t)...)
-  {
-    if (!parent->is_pending()) {
-      this->child_pos = {parent, pos};
-    }
-  }
+  {}
 
   // An lba pin may be indirect, see comments in lba_manager/btree/btree_lba_manager.h
   virtual bool is_indirect() const = 0;
@@ -34,10 +32,10 @@ public:
   // The start offset of the pin, must be 0 if the pin is not indirect
   virtual extent_len_t get_intermediate_offset() const = 0;
 
-  virtual get_child_ret_t<LogicalCachedExtent>
+  virtual get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
   get_logical_extent(Transaction &t) = 0;
 
-  void link_child(ChildableCachedExtent *c) {
+  void link_child(LogicalChildNode *c) {
     ceph_assert(child_pos);
     child_pos->link_child(c);
   }
@@ -57,7 +55,8 @@ public:
   virtual ~LBAMapping() {}
 protected:
   virtual LBAMappingRef _duplicate(op_context_t<laddr_t>) const = 0;
-  std::optional<child_pos_t> child_pos = std::nullopt;
+  std::optional<child_pos_t<
+    lba_manager::btree::LBALeafNode>> child_pos = std::nullopt;
 };
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);

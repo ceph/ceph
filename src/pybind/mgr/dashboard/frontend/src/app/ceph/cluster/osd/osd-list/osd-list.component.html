@@ -8,7 +8,7 @@
       <cd-table [data]="osds"
                 (fetchData)="getOsdList($event)"
                 [columns]="columns"
-                selectionType="multiClick"
+                selectionType="single"
                 [hasDetails]="true"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"

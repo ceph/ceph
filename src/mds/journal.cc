@@ -319,14 +319,12 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   touched_sessions.clear();
 
   // pending commit atids
-  for (map<int, ceph::unordered_set<version_t> >::iterator p = pending_commit_tids.begin();
+  for (auto p = pending_commit_tids.begin();
        p != pending_commit_tids.end();
        ++p) {
     MDSTableClient *client = mds->get_table_client(p->first);
     ceph_assert(client);
-    for (ceph::unordered_set<version_t>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
+    for (auto q = p->second.begin(); q != p->second.end(); ++q) {
       dout(10) << "try_to_expire " << get_mdstable_name(p->first) << " transaction " << *q 
 	       << " pending commit (not yet acked), waiting" << dendl;
       ceph_assert(!client->has_committed(*q));

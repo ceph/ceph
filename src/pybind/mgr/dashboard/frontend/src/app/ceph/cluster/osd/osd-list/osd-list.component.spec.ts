@@ -16,7 +16,7 @@ import { CoreModule } from '~/app/core/core.module';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -501,7 +501,7 @@ describe('OsdListComponent', () => {
     });
 
     it.skip('opens all critical confirmation modals', () => {
-      const modalClass = CriticalConfirmationModalComponent;
+      const modalClass = DeleteConfirmationModalComponent;
       mockSafeToDestroy();
       expectOpensModal('Mark Lost', modalClass);
       expectOpensModal('Purge', modalClass);

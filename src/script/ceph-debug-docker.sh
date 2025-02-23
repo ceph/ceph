@@ -96,7 +96,7 @@ function main {
     pushd "$T"
     case "$env" in
         centos:stream|centos:stream9)
-            env=centos:stream9
+            env=quay.io/centos/centos:stream9
             distro="centos/9"
             ;;
         centos:stream8)
@@ -154,7 +154,7 @@ EOF
                     ceph_debuginfo="ceph-base-debuginfo"
                     debuginfo=/etc/yum.repos.d/CentOS-Stream-Debuginfo.repo
                     ;;
-                centos:stream9)
+                quay.io/centos/centos:stream9)
                     python_bindings="python3-rados python3-cephfs"
                     base_debuginfo="glibc-debuginfo"
                     ceph_debuginfo="ceph-base-debuginfo"

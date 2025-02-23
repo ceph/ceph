@@ -339,11 +339,11 @@ class TestNVMEOFService:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     def test_nvmeof_config(self, _get_name, _run_cephadm, cephadm_module: CephadmOrchestrator):
 
-        nvmeof_daemon_id = 'testpool.test.qwert'
         pool = 'testpool'
+        group = 'mygroup'
+        nvmeof_daemon_id = f'{pool}.{group}.test.qwert'
         tgt_cmd_extra_args = '--cpumask=0xFF --msg-mempool-size=524288'
         default_port = 5500
-        group = 'mygroup'
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_name.return_value = nvmeof_daemon_id
 
@@ -421,12 +421,13 @@ conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
+qos_timeslice_in_usecs = 0
 
 [monitor]
 timeout = 1.0\n"""
 
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, NvmeofServiceSpec(service_id=pool,
+            with with_service(cephadm_module, NvmeofServiceSpec(service_id=f'{pool}.{group}',
                                                                 tgt_cmd_extra_args=tgt_cmd_extra_args,
                                                                 group=group,
                                                                 pool=pool)):
@@ -437,14 +438,14 @@ timeout = 1.0\n"""
                     [],
                     stdin=json.dumps({
                         "fsid": "fsid",
-                        "name": "nvmeof.testpool.test.qwert",
+                        "name": "nvmeof.testpool.mygroup.test.qwert",
                         "image": "",
                         "deploy_arguments": [],
                         "params": {
                             "tcp_ports": [5500, 4420, 8009, 10008]
                         },
                         "meta": {
-                            "service_name": "nvmeof.testpool",
+                            "service_name": "nvmeof.testpool.mygroup",
                             "ports": [5500, 4420, 8009, 10008],
                             "ip": None,
                             "deployed_by": [],
@@ -455,7 +456,7 @@ timeout = 1.0\n"""
                         },
                         "config_blobs": {
                             "config": "",
-                            "keyring": "[client.nvmeof.testpool.test.qwert]\nkey = None\n",
+                            "keyring": "[client.nvmeof.testpool.mygroup.test.qwert]\nkey = None\n",
                             "files": {
                                 "ceph-nvmeof.conf": nvmeof_gateway_conf
                             }
@@ -464,6 +465,70 @@ timeout = 1.0\n"""
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):
+        nvmeof_spec_group1 = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            group='testgroup',
+            pool='testpool'
+        )
+        nvmeof_spec_also_group1 = NvmeofServiceSpec(
+            service_id='testpool2.testgroup',
+            group='testgroup',
+            pool='testpool2'
+        )
+        with with_host(cephadm_module, 'test'):
+            out = cephadm_module._apply_service_spec(nvmeof_spec_group1)
+            assert out == 'Scheduled nvmeof.testpool.testgroup update...'
+            nvmeof_specs = cephadm_module.spec_store.get_by_service_type('nvmeof')
+            assert len(nvmeof_specs) == 1
+            assert nvmeof_specs[0].spec.service_name() == 'nvmeof.testpool.testgroup'
+            with pytest.raises(
+                OrchestratorError,
+                match='Cannot create nvmeof service with group testgroup. That group is already '
+                      'being used by the service nvmeof.testpool.testgroup'
+            ):
+                cephadm_module._apply_service_spec(nvmeof_spec_also_group1)
+            assert len(cephadm_module.spec_store.get_by_service_type('nvmeof')) == 1
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_service_id_matches_group_on_apply(self, cephadm_module: CephadmOrchestrator):
+        matching_nvmeof_spec_group_service_id = NvmeofServiceSpec(
+            service_id='pool1.right_group',
+            group='right_group',
+            pool='pool1'
+        )
+        mismatch_nvmeof_spec_group_service_id = NvmeofServiceSpec(
+            service_id='pool2.wrong_group',
+            group='right_group',
+            pool='pool2'
+        )
+        matching_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
+            service_id='pool3.right.group',
+            group='right.group',
+            pool='pool3'
+        )
+        mismatch_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
+            service_id='pool4.wrong.group',
+            group='right.group',
+            pool='pool4'
+        )
+        with with_host(cephadm_module, 'test'):
+            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id)
+            with pytest.raises(
+                OrchestratorError,
+                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
+                      'group name \'right_group\' and service id \'pool2.wrong_group\''
+            ):
+                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id)
+            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id_with_dot)
+            with pytest.raises(
+                OrchestratorError,
+                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
+                      'group name \'right.group\' and service id \'pool4.wrong.group\''
+            ):
+                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id_with_dot)
 
 
 class TestMonitoring:
@@ -2447,7 +2512,11 @@ class TestIngressService:
         haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
             CephadmDaemonDeploySpec(host='host1', daemon_id='ingress', service_name=ispec.service_name()))
 
-        assert haproxy_generated_conf[0] == haproxy_expected_conf
+        haproxy_generated_conf = haproxy_generated_conf[0]
+        gen_config_lines = [line.rstrip() for line in haproxy_generated_conf['files']['haproxy.cfg'].splitlines()]
+        exp_config_line = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+
+        assert gen_config_lines == exp_config_line
 
         # swapping order now, should still pick out the one with the higher rank_generation
         # in this case both nfs are rank 0, so it should only take the one with rank_generation 1 a.k.a
@@ -2458,10 +2527,13 @@ class TestIngressService:
         ]
         _get_daemons_by_service.return_value = nfs_daemons
 
-        haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
+        haproxy_generated_conf, _ = service_registry.get_service('ingress').haproxy_generate_config(
             CephadmDaemonDeploySpec(host='host1', daemon_id='ingress', service_name=ispec.service_name()))
 
-        assert haproxy_generated_conf[0] == haproxy_expected_conf
+        gen_config_lines = [line.rstrip() for line in haproxy_generated_conf['files']['haproxy.cfg'].splitlines()]
+        exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+
+        assert gen_config_lines == exp_config_lines
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2591,7 +2663,10 @@ class TestIngressService:
                         }
                 }
 
-                assert haproxy_generated_conf[0] == haproxy_expected_conf
+                gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
+                exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+
+                assert gen_config_lines == exp_config_lines
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_ssl_rgw(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2719,7 +2794,9 @@ class TestIngressService:
                         }
                 }
 
-                assert haproxy_generated_conf[0] == haproxy_expected_conf
+                gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
+                exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+                assert gen_config_lines == exp_config_lines
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_ingress_config_multi_vips(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -2835,7 +2912,7 @@ class TestIngressService:
                                 'http-request use-service prometheus-exporter if { path /metrics }\n    '
                                 'monitor-uri /health\n'
                                 '\nfrontend frontend\n    '
-                                'bind [::]:8089\n    '
+                                'bind [::]:8089 v4v6\n    '
                                 'default_backend backend\n\n'
                                 'backend backend\n    '
                                 'option forwardfor\n    '
@@ -3251,7 +3328,7 @@ class TestIngressService:
             '\n'
             'NFSv4 {\n'
             '        Delegations = false;\n'
-            "        RecoveryBackend = 'rados_cluster';\n"
+            '        RecoveryBackend = "rados_cluster";\n'
             '        Minor_Versions = 1, 2;\n'
             f'        Server_Scope = {cephadm_module._cluster_fsid}-foo\n'
             '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
@@ -3259,7 +3336,7 @@ class TestIngressService:
             '\n'
             'RADOS_KV {\n'
             '        UserId = "nfs.foo.test.0.0";\n'
-            '        nodeid = "nfs.foo.None";\n'
+            '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
             '}\n'
@@ -3353,13 +3430,16 @@ class TestIngressService:
                 service_name=ispec.service_name(),
             ),
         )
-        assert haproxy_generated_conf == haproxy_expected_conf
+        gen_config_lines = [line.rstrip() for line in haproxy_generated_conf['files']['haproxy.cfg'].splitlines()]
+        exp_config_lines = [line.rstrip() for line in haproxy_expected_conf['files']['haproxy.cfg'].splitlines()]
+        assert gen_config_lines == exp_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
             CephadmDaemonDeploySpec(
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
+                rank=0,
             ),
         )
         assert nfs_generated_conf == nfs_expected_conf
@@ -3722,10 +3802,12 @@ class TestSMB:
             'name': 'smb.tango.briskly',
             'image': '',
             'deploy_arguments': [],
-            'params': {},
+            'params': {
+                "tcp_ports": [445, 9922]
+            },
             'meta': {
                 'service_name': 'smb',
-                'ports': [],
+                'ports': [445, 9922],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,
@@ -3785,10 +3867,12 @@ class TestSMB:
             'name': 'smb.tango.briskly',
             'image': '',
             'deploy_arguments': [],
-            'params': {},
+            'params': {
+                'tcp_ports': [445, 9922]
+            },
             'meta': {
                 'service_name': 'smb',
-                'ports': [],
+                'ports': [445, 9922],
                 'ip': None,
                 'deployed_by': [],
                 'rank': None,

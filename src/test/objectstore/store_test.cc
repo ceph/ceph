@@ -45,7 +45,6 @@
 #include "common/pretty_binary.h"
 #include "include/stringify.h"
 #include "include/coredumpctl.h"
-#include "include/unordered_map.h"
 #include "os/kv.h"
 #include "store_test_fixture.h"
 

@@ -5,7 +5,7 @@ import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -174,7 +174,7 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
 
   deleteAction() {
     const groupNames = this.selection.selected.map((policy: any) => policy.groupName);
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: this.selection.hasSingleSelection
         ? $localize`Policy Group`
         : $localize`Policy Groups`,

@@ -17,6 +17,8 @@
 #include "Objecter.h"
 #include "Striper.h"
 
+#include <unordered_map>
+
 class WritebackHandler;
 
 enum {
@@ -418,7 +420,7 @@ class ObjectCacher {
   void *flush_set_callback_arg;
 
   // indexed by pool_id
-  std::vector<ceph::unordered_map<sobject_t, Object*> > objects;
+  std::vector<std::unordered_map<sobject_t, Object*>> objects;
 
   std::list<Context*> waitfor_read;
 

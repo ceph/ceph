@@ -120,6 +120,7 @@ export class ActionLabelsI18n {
   SET: string;
   SUBMIT: string;
   SHOW: string;
+  TIERING: string;
   TRASH: string;
   UNPROTECT: string;
   UNSET: string;
@@ -206,6 +207,7 @@ export class ActionLabelsI18n {
     this.ROLLBACK = $localize`Rollback`;
     this.SCRUB = $localize`Scrub`;
     this.SHOW = $localize`Show`;
+    this.TIERING = $localize`Tiering`;
     this.TRASH = $localize`Move to Trash`;
     this.UNPROTECT = $localize`Unprotect`;
     this.CHANGE = $localize`Change`;

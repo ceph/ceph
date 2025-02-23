@@ -55,7 +55,7 @@ export class SmbService {
   createShare(requestModel: ShareRequestModel) {
     return this.http.post(`${this.baseURL}/share`, requestModel);
   }
-
+ 
   getShare(cluster_id: string, share_id: string) {
     return this.http.get(`${this.baseURL}/share/${cluster_id}/${share_id}`);
   }

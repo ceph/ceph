@@ -24,7 +24,8 @@
 #include "include/int_types.h"
 #include "include/types.h"
 #include "include/fs_types.h"
-#include "include/unordered_map.h"
+
+#include <unordered_map>
 
 // We're only converting errors defined in errno.h, not standard Windows
 // system error codes that are usually retrievied using GetLastErrorCode().
@@ -47,6 +48,11 @@ __u32 ceph_to_hostos_errno_unsigned(__u32 r)
     case 9: return EBADF;
     case 10: return ECHILD;
     // same as EWOULDBLOCK
+    // need to be careful of treating EWOULDBLOCK same way as EAGAIN
+    // in errno.h (in Windows) the EWOULDBLOCK is set to 140, while EAGAIN is 11
+    // In the cephfs client tests we changed assertions that expected EWOULDBLOCK to EAGAIN,
+    // since MDS returns EAGAIN for all cases. EWOULBLOCK originally was used with socket context,
+    // so semantically it makes sense to use EAGAIN for operations that indicate some possible waiting/retry
     case 11: return EAGAIN;
     case 12: return ENOMEM;
     case 13: return EACCES;
@@ -597,57 +603,4 @@ std::string win32_lasterror_str()
 {
   DWORD err = ::GetLastError();
   return win32_strerror(err);
-}
-
-static const ceph::unordered_map<int,NTSTATUS> cephfs_errno_to_ntstatus = {
-  {CEPHFS_EBLOCKLISTED,    STATUS_SYSTEM_SHUTDOWN},
-  {CEPHFS_EPERM,           STATUS_ACCESS_DENIED},
-  {CEPHFS_ESTALE,          STATUS_INVALID_HANDLE},
-  {CEPHFS_ENOSPC,          STATUS_DISK_FULL},
-  {CEPHFS_ETIMEDOUT,       STATUS_TIMEOUT},
-  {CEPHFS_EIO,             STATUS_DATA_ERROR},
-  {CEPHFS_ENOTCONN,        STATUS_CONNECTION_DISCONNECTED},
-  {CEPHFS_EEXIST,          STATUS_OBJECT_NAME_COLLISION},
-  {CEPHFS_EINTR,           STATUS_RETRY},
-  {CEPHFS_EINVAL,          STATUS_INVALID_PARAMETER},
-  {CEPHFS_EBADF,           STATUS_INVALID_HANDLE},
-  {CEPHFS_EROFS,           STATUS_MEDIA_WRITE_PROTECTED},
-  {CEPHFS_EAGAIN,          STATUS_RETRY},
-  {CEPHFS_EACCES,          STATUS_ACCESS_DENIED},
-  {CEPHFS_ELOOP,           STATUS_TOO_MANY_LINKS},
-  {CEPHFS_EISDIR,          STATUS_FILE_IS_A_DIRECTORY},
-  {CEPHFS_ENOENT,          STATUS_OBJECT_NAME_NOT_FOUND},
-  {CEPHFS_ENOTDIR,         STATUS_NOT_A_DIRECTORY},
-  {CEPHFS_ENAMETOOLONG,    STATUS_NAME_TOO_LONG},
-  {CEPHFS_EBUSY,           STATUS_DEVICE_BUSY},
-  {CEPHFS_EDQUOT,          STATUS_QUOTA_EXCEEDED},
-  {CEPHFS_EFBIG,           STATUS_FILE_TOO_LARGE},
-  {CEPHFS_ERANGE,          STATUS_INVALID_PARAMETER},
-  {CEPHFS_ENXIO,           STATUS_NOT_FOUND},
-  {CEPHFS_ECANCELED,       STATUS_REQUEST_CANCELED},
-  {CEPHFS_ENODATA,         STATUS_NOT_FOUND},
-  {CEPHFS_EOPNOTSUPP,      STATUS_NOT_SUPPORTED},
-  {CEPHFS_EXDEV,           STATUS_NOT_SAME_DEVICE},
-  {CEPHFS_ENOMEM,          STATUS_NO_MEMORY},
-  {CEPHFS_ENOTRECOVERABLE, STATUS_INTERNAL_ERROR},
-  {CEPHFS_ENOSYS,          STATUS_NOT_IMPLEMENTED},
-  {CEPHFS_ENOTEMPTY,       STATUS_DIRECTORY_NOT_EMPTY},
-  {CEPHFS_EDEADLK,         STATUS_POSSIBLE_DEADLOCK},
-  {CEPHFS_EDOM,            STATUS_INVALID_PARAMETER},
-  {CEPHFS_EMLINK,          STATUS_TOO_MANY_LINKS},
-  {CEPHFS_ETIME,           STATUS_TIMEOUT},
-  {CEPHFS_EOLDSNAPC,       STATUS_DATA_ERROR}
-};
-
-__u32 cephfs_errno_to_ntstatus_map(int cephfs_errno)
-{
-  cephfs_errno = abs(cephfs_errno);
-
-  if (cephfs_errno == 0)
-    return 0;
-
-  auto it = cephfs_errno_to_ntstatus.find(cephfs_errno);
-  if (it != cephfs_errno_to_ntstatus.end())
-    return it->second;
-  return STATUS_INTERNAL_ERROR;
 }

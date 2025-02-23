@@ -8,6 +8,9 @@ import { FormArray, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrModule } from 'ngx-toastr';
 import { ComboBoxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
 import { AUTHMODE } from '../smb.model';
+import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
+import { of } from 'rxjs';
+import { By } from '@angular/platform-browser';
 
 describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
@@ -87,5 +90,17 @@ describe('SmbClusterFormComponent', () => {
   it('should delete domain', () => {
     component.deleteDomainSettingsModal();
     expect(component).toBeTruthy();
+  });
+
+  it('should get usersgroups resources on user authmode', () => {
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.User);
+    component.usersGroups$ = of([FOO_USERSGROUPS]);
+    fixture.whenStable().then(() => {
+      const options = fixture.debugElement.queryAll(By.css('select option'));
+
+      expect(options.length).toBe(1);
+      expect(options[0].nativeElement.value).toBe('foo');
+      expect(options[0].nativeElement.textContent).toBe('foo');
+    });
   });
 });

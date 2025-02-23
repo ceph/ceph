@@ -54,8 +54,6 @@ function TEST_scrub_test() {
     local OSDS=3
     local objects=15
 
-    TESTDATA="testdata.$$"
-
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x --mgr_stats_period=1 || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
@@ -71,12 +69,12 @@ function TEST_scrub_test() {
     wait_for_clean || return 1
     poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
 
-    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    local testdata_file=$(file_with_random_data 1032)
     for i in `seq 1 $objects`
     do
-        rados -p $poolname put obj${i} $TESTDATA
+        rados -p $poolname put obj${i} $testdata_file || return 1
     done
-    rm -f $TESTDATA
+    rm -f $testdata_file
 
     local primary=$(get_primary $poolname obj1)
     local otherosd=$(get_not_primary $poolname obj1)
@@ -87,10 +85,9 @@ function TEST_scrub_test() {
       local anotherosd="2"
     fi
 
-    CORRUPT_DATA="corrupt-data.$$"
-    dd if=/dev/urandom of=$CORRUPT_DATA bs=512 count=1
-    objectstore_tool $dir $anotherosd obj1 set-bytes $CORRUPT_DATA
-    rm -f $CORRUPT_DATA
+    local corrupt_data_file=$(file_with_random_data 512)
+    objectstore_tool $dir $anotherosd obj1 set-bytes $corrupt_data_file || return 1
+    rm -f $corrupt_data_file
 
     local pgid="${poolid}.0"
     pg_deep_scrub "$pgid" || return 1
@@ -694,7 +691,7 @@ function wait_initial_scrubs() {
     ceph tell osd.* config set osd_scrub_min_interval 7200
     ceph tell osd.* config set osd_deep_scrub_interval 14400
     ceph tell osd.* config set osd_max_scrubs 32
-    ceph tell osd.* config set osd_scrub_sleep 0
+    ceph tell osd.* config set osd_scrub_sleep 1
     ceph tell osd.* config set osd_shallow_scrub_chunk_max 10
     ceph tell osd.* config set osd_scrub_chunk_max 10
 
@@ -709,8 +706,8 @@ function wait_initial_scrubs() {
 
     tout=20
     while [ $tout -gt 0 ] ; do
-      sleep 0.5
-      (( extr_dbg >= 2 )) && ceph pg dump pgs --format=json-pretty | \
+      sleep 1
+      (( extr_dbg >= 1 )) && ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
       not_done=$(ceph pg dump pgs --format=json-pretty | \
         jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})' | wc -l )
@@ -722,6 +719,8 @@ function wait_initial_scrubs() {
       echo "Still waiting for $not_done PGs to finish initial scrubs (timeout $tout)"
       tout=$((tout - 1))
     done
+    ceph pg dump pgs --format=json-pretty | \
+      jq '.pg_stats | map(select(.last_scrub_duration == 0)) | map({pgid: .pgid, last_scrub_duration: .last_scrub_duration})'
     (( tout == 0 )) && return 1
     return 0
 }
@@ -749,7 +748,7 @@ function TEST_abort_periodic_for_operator() {
     )
     local extr_dbg=1 # note: 3 and above leave some temp files around
 
-    standard_scrub_wpq_cluster "$dir" cluster_conf 3 || return 1
+    standard_scrub_wpq_cluster "$dir" cluster_conf 2 || return 1
     local poolid=${cluster_conf['pool_id']}
     local poolname=${cluster_conf['pool_name']}
     echo "Pool: $poolname : $poolid"

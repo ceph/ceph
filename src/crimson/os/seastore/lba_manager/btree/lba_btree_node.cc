@@ -12,6 +12,7 @@
 
 #include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 #include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 SET_SUBSYS(seastore_lba);
 
@@ -27,7 +28,7 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
              << ")";
 }
 
-std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
+std::ostream &LBALeafNode::print_detail(std::ostream &out) const
 {
   out << ", size=" << this->get_size()
       << ", meta=" << this->get_meta()
@@ -36,7 +37,7 @@ std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
   if (this->my_tracker) {
     out << ", my_tracker->parent=" << (void*)this->my_tracker->get_parent().get();
   }
-  return out << ", root_block=" << (void*)this->root_block.get();
+  return out << ", root_block=" << (void*)this->parent_of_root.get();
 }
 
 void LBALeafNode::resolve_relative_addrs(paddr_t base)
@@ -84,6 +85,46 @@ BtreeLBAMappingRef LBALeafNode::get_mapping(
     iter.get_offset(),
     val,
     lba_node_meta_t{laddr, (laddr + val.len).checked_to_laddr(), 0});
+}
+
+void LBALeafNode::update(
+  internal_const_iterator_t iter,
+  lba_map_val_t val)
+{
+  LOG_PREFIX(LBALeafNode::update);
+  SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}",
+    this->pending_for_transaction,
+    iter.get_offset());
+  this->on_modify();
+  if (val.pladdr.is_paddr()) {
+    val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
+  }
+  return this->journal_update(
+    iter,
+    val,
+    this->maybe_get_delta_buffer());
+}
+
+LBALeafNode::internal_const_iterator_t LBALeafNode::insert(
+  internal_const_iterator_t iter,
+  laddr_t addr,
+  lba_map_val_t val)
+{
+  LOG_PREFIX(LBALeafNode::insert);
+  SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
+    this->pending_for_transaction,
+    iter.get_offset(),
+    addr);
+  this->on_modify();
+  if (val.pladdr.is_paddr()) {
+    val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
+  }
+  this->journal_insert(
+    iter,
+    addr,
+    val,
+    this->maybe_get_delta_buffer());
+  return iter;
 }
 
 }

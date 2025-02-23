@@ -48,7 +48,7 @@ class NFSService(CephService):
                     if daemon_id is not None:
                         self.fence(daemon_id)
                 del rank_map[rank]
-                nodeid = f'{spec.service_name()}.{rank}'
+                nodeid = f'{rank}'
                 self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
                 self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
                 self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
@@ -82,7 +82,7 @@ class NFSService(CephService):
 
         deps: List[str] = []
 
-        nodeid = f'{daemon_spec.service_name}.{daemon_spec.rank}'
+        nodeid = f'{daemon_spec.rank}'
 
         nfs_idmap_conf = '/etc/ganesha/idmap.conf'
 

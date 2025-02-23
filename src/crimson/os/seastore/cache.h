@@ -18,6 +18,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/linked_tree_node.h"
 
 namespace crimson::os::seastore::backref {
 class BtreeBackrefManager;
@@ -25,15 +26,6 @@ class BtreeBackrefManager;
 
 namespace crimson::os::seastore {
 
-template <
-  typename node_key_t,
-  typename node_val_t,
-  typename internal_node_t,
-  typename leaf_node_t,
-  typename pin_t,
-  size_t node_size,
-  bool leaf_has_children>
-class FixedKVBtree;
 class BackrefManager;
 class SegmentProvider;
 
@@ -109,7 +101,7 @@ class SegmentProvider;
  * - TRACE: DEBUG details
  * - seastore_t logs
  */
-class Cache {
+class Cache : public ExtentTransViewRetriever {
 public:
   using base_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
@@ -194,7 +186,7 @@ public:
     return t.root;
   }
 
-  void account_absent_access(Transaction::src_t src) {
+  void account_absent_access(Transaction::src_t src) final {
     ++(get_by_src(stats.cache_absent_by_src, src));
     ++stats.access.cache_absent;
   }
@@ -432,7 +424,7 @@ public:
 
   bool is_viewable_extent_stable(
     Transaction &t,
-    CachedExtentRef extent)
+    CachedExtentRef extent) final
   {
     assert(extent);
     auto view = extent->get_transactional_view(t);
@@ -441,7 +433,7 @@ public:
 
   bool is_viewable_extent_data_stable(
     Transaction &t,
-    CachedExtentRef extent)
+    CachedExtentRef extent) final
   {
     assert(extent);
     auto view = extent->get_transactional_view(t);
@@ -451,7 +443,7 @@ public:
   get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,
-    CachedExtentRef extent)
+    CachedExtentRef extent) final
   {
     assert(extent->is_valid());
 
@@ -527,18 +519,6 @@ public:
     ).then_interruptible([p_extent] {
       return get_extent_iertr::make_ready_future<CachedExtentRef>(
         CachedExtentRef(p_extent));
-    });
-  }
-
-  template <typename T>
-  get_extent_iertr::future<TCachedExtentRef<T>>
-  get_extent_viewable_by_trans(
-    Transaction &t,
-    TCachedExtentRef<T> extent)
-  {
-    return get_extent_viewable_by_trans(t, CachedExtentRef(extent.get())
-    ).si_then([](auto p_extent) {
-      return p_extent->template cast<T>();
     });
   }
 

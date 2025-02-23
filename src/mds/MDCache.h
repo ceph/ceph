@@ -18,6 +18,7 @@
 #include <chrono>
 #include <string_view>
 #include <thread>
+#include <unordered_map>
 
 #include "common/DecayCounter.h"
 #include "common/MemoryModel.h"
@@ -598,7 +599,7 @@ private:
       MDSInternalContext(c->mds), cache(c), finisher(_finisher) {}
     ~C_MDS_QuiescePath() {
       if (finisher) {
-        finisher->complete(-CEPHFS_ECANCELED);
+        finisher->complete(-ECANCELED);
         finisher = nullptr;
       }
     }
@@ -1293,7 +1294,7 @@ private:
   void repair_dirfrag_stats_work(const MDRequestRef& mdr);
   void rdlock_dirfrags_stats_work(const MDRequestRef& mdr);
 
-  ceph::unordered_map<inodeno_t,CInode*> inode_map;  // map of head inodes by ino
+  std::unordered_map<inodeno_t, CInode*> inode_map;  // map of head inodes by ino
   std::map<vinodeno_t, CInode*> snap_inode_map;  // map of snap inodes by ino
   CInode *root = nullptr; // root inode
   CInode *myin = nullptr; // .ceph/mds%d dir
@@ -1315,7 +1316,7 @@ private:
   std::map<CInode*,std::list<std::pair<CDir*,CDir*> > > projected_subtree_renames;  // renamed ino -> target dir
 
   // -- requests --
-  ceph::unordered_map<metareqid_t, MDRequestRef> active_requests;
+  std::unordered_map<metareqid_t, MDRequestRef> active_requests;
 
   // -- recovery --
   std::set<mds_rank_t> recovery_set;

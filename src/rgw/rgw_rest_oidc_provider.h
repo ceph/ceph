@@ -75,6 +75,18 @@ public:
   RGWOpType get_type() override { return RGW_OP_ADD_CLIENTID_TO_OIDC_PROVIDER; }
 };
 
+class RGWRemoveCientIdFromOIDCProvider : public RGWRestOIDCProvider {
+  std::string url;
+  std::string client_id;
+public:
+  RGWRemoveCientIdFromOIDCProvider();
+
+  int init_processing(optional_yield y);
+  void execute(optional_yield y) override;
+  const char* name() const override { return "remove_client_id_from_oidc_provider"; }
+  RGWOpType get_type() override { return RGW_OP_REMOVE_CLIENTID_FROM_OIDC_PROVIDER; }
+};
+
 class RGWUpdateOIDCProviderThumbprint : public RGWRestOIDCProvider {
   std::string url;
   std::vector<std::string> thumbprints;

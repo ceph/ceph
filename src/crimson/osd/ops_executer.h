@@ -383,6 +383,8 @@ public:
         snapc) {
   }
 
+  ~OpsExecuter();
+
   template <class Func>
   struct RollbackHelper;
 

@@ -58,9 +58,9 @@ frontend stats
 
 frontend frontend
 {% if spec.ssl_cert %}
-    bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem
+    bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem {{ v4v6_flag }}
 {% else %}
-    bind {{ ip }}:{{ frontend_port }}
+    bind {{ ip }}:{{ frontend_port }} {{ v4v6_flag }}
 {% endif %}
     default_backend backend
 

@@ -3,6 +3,7 @@ import { Component, Input, OnChanges } from '@angular/core';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
 import * as xml2js from 'xml2js';
+import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 
 @Component({
   selector: 'cd-rgw-bucket-details',
@@ -12,10 +13,16 @@ import * as xml2js from 'xml2js';
 export class RgwBucketDetailsComponent implements OnChanges {
   @Input()
   selection: any;
-
+  lifecycleProgress: string;
+  lifecycleProgressMap = new Map<string, { description: string; color: string }>([
+    ['UNINITIAL', { description: $localize`The process has not run yet`, color: 'cool-gray' }],
+    ['PROCESSING', { description: $localize`The process is currently running`, color: 'cyan' }],
+    ['COMPLETE', { description: $localize`The process has completed`, color: 'green' }]
+  ]);
   lifecycleFormat: 'json' | 'xml' = 'json';
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
+  bucketRateLimit: RgwRateLimitConfig;
 
   constructor(private rgwBucketService: RgwBucketService) {}
 
@@ -30,6 +37,20 @@ export class RgwBucketDetailsComponent implements OnChanges {
         this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
         if (this.selection.replication?.['Rule']?.['Status']) {
           this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
+        }
+        if (this.selection.lifecycle_progress?.length > 0) {
+          this.selection.lifecycle_progress.forEach(
+            (progress: { bucket: string; status: string; started: string }) => {
+              if (progress.bucket.includes(this.selection.bucket)) {
+                this.lifecycleProgress = progress.status;
+              }
+            }
+          );
+        }
+      });
+      this.rgwBucketService.getBucketRateLimit(this.selection.bid).subscribe((resp: any) => {
+        if (resp && resp.bucket_ratelimit !== undefined) {
+          this.bucketRateLimit = resp.bucket_ratelimit;
         }
       });
     }
