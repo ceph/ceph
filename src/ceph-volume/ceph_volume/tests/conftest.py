@@ -1,6 +1,7 @@
 import os
 import pytest
-from mock.mock import patch, PropertyMock, create_autospec, Mock
+import argparse
+from unittest.mock import patch, PropertyMock, create_autospec, Mock, MagicMock
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util import device
@@ -29,14 +30,14 @@ class Capture(object):
 
 class Factory(object):
 
-    def __init__(self, **kw):
+    def __init__(self, **kw: Any) -> None:
         for k, v in kw.items():
             setattr(self, k, v)
 
 
 @pytest.fixture
-def factory():
-    return Factory
+def factory() -> Callable[..., argparse.Namespace]:
+    return argparse.Namespace
 
 def objectstore_bluestore_factory(**kw):
     o = objectstore.bluestore.BlueStore([])
@@ -70,29 +71,29 @@ def mock_lv_device_generator():
         return dev
     return mock_lv
 
-def mock_device(name='foo',
-                vg_name='vg_foo',
-                vg_size=None,
-                lv_name='lv_foo',
-                lv_size=None,
-                path='foo',
-                lv_path='',
-                number_lvs=0):
+def mock_device(**kw: Any) -> MagicMock:
+    number_lvs = kw.get('number_lvs', 0)
+    default_values = {
+        'vg_size': [21474836480],
+        'lv_size': kw.get('vg_size', [21474836480]),
+        'path': f"/dev/{kw.get('path', 'foo')}",
+        'vg_name': 'vg_foo',
+        'lv_name': 'lv_foo',
+        'symlink': None,
+        'available_lvm': True,
+        'vg_free': kw.get('vg_size', [21474836480]),
+        'lvs': [],
+        'lv_path': f"/dev/{kw.get('vg_name', 'vg_foo')}/{kw.get('lv_name', 'lv_foo')}",
+        'vgs': [lvm.VolumeGroup(vg_name=kw.get('vg_name', 'vg_foo'), lv_name=kw.get('lv_name', 'lv_foo'))],
+    }
+    for key, value in default_values.items():
+        kw.setdefault(key, value)
+
     dev = create_autospec(device.Device)
-    if vg_size is None:
-        dev.vg_size = [21474836480]
-    if lv_size is None:
-        lv_size = dev.vg_size
-    dev.lv_size = lv_size
-    dev.path = f'/dev/{path}'
-    dev.vg_name = f'{vg_name}'
-    dev.lv_name = f'{lv_name}'
-    dev.lv_path = lv_path if lv_path else f'/dev/{dev.vg_name}/{dev.lv_name}'
-    dev.symlink = None
-    dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
-    dev.available_lvm = True
-    dev.vg_free = dev.vg_size
-    dev.lvs = []
+
+    for k, v in kw.items():
+        dev.__dict__[k] = v
+
     for n in range(0, number_lvs):
         dev.lvs.append(lvm.Volume(vg_name=f'{dev.vg_name}{n}',
                                   lv_name=f'{dev.lv_name}-{n}',

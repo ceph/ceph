@@ -1187,8 +1187,56 @@ class BlockSysFs:
         """
         self.path: str = path
         self.name: str = os.path.basename(os.path.realpath(self.path))
-        self.sys_dev_block: str = sys_dev_block
+        self.sys_dev_block_dir: str = sys_dev_block
         self.sys_block: str = sys_block
+
+    def _get_sysfs_file_content(self, path: str) -> str:
+        """
+        Reads the content of a sysfs file.
+
+        Args:
+            path (str): The relative path to the sysfs file.
+
+        Returns:
+            str: The content of the file as a string, stripped of leading/trailing whitespace.
+        """
+        content: str = ''
+        _path: str = os.path.join(self.sys_dev_block_path, path)
+        with open(_path, 'r') as f:
+            content = f.read().strip()
+        return content
+
+    @property
+    def blocks(self) -> int:
+        """
+        Retrieves the number of blocks of the block device.
+
+        Returns:
+            int: The total number of blocks.
+        """
+        result: str = self._get_sysfs_file_content('size')
+        return int(result)
+
+    @property
+    def logical_block_size(self) -> int:
+        """
+        Retrieves the logical block size of the block device.
+
+        Returns:
+            int: The logical block size in bytes.
+        """
+        result: str = self._get_sysfs_file_content('queue/logical_block_size')
+        return int(result)
+
+    @property
+    def size(self) -> int:
+        """
+        Calculates the total size of the block device in bytes.
+
+        Returns:
+            int: The total size of the block device in bytes.
+        """
+        return self.blocks * self.logical_block_size
 
     @property
     def is_partition(self) -> bool:
@@ -1198,7 +1246,7 @@ class BlockSysFs:
         Returns:
             bool: True if it is a partition, False otherwise.
         """
-        path: str = os.path.join(self.get_sys_dev_block_path, 'partition')
+        path: str = os.path.join(self.sys_dev_block_path, 'partition')
         return os.path.exists(path)
 
     @property
@@ -1210,13 +1258,13 @@ class BlockSysFs:
             List[str]: A list of holders (other devices) associated with this block device.
         """
         result: List[str] = []
-        path: str = os.path.join(self.get_sys_dev_block_path, 'holders')
+        path: str = os.path.join(self.sys_dev_block_path, 'holders')
         if os.path.exists(path):
             result = os.listdir(path)
         return result
 
     @property
-    def get_sys_dev_block_path(self) -> str:
+    def sys_dev_block_path(self) -> str:
         """
         Gets the sysfs path for the current block device.
 
@@ -1224,9 +1272,9 @@ class BlockSysFs:
             str: The sysfs path corresponding to this block device.
         """
         sys_dev_block_path: str = ''
-        devices: List[str] = os.listdir(self.sys_dev_block)
+        devices: List[str] = os.listdir(self.sys_dev_block_dir)
         for device in devices:
-            path = os.path.join(self.sys_dev_block, device)
+            path = os.path.join(self.sys_dev_block_dir, device)
             if os.path.realpath(path).split('/')[-1:][0] == self.name:
                 sys_dev_block_path = path
         return sys_dev_block_path

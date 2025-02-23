@@ -19,9 +19,9 @@ device_list_template = """
   * {path: <25} {size: <10} {state}"""
 
 
-def ensure_disjoint_device_lists(data: List[str],
-                                 db: Optional[List[str]] = None,
-                                 wal: Optional[List[str]] = None) -> None:
+def ensure_disjoint_device_lists(data: List[device.Device],
+                                 db: Optional[List[device.Device]] = None,
+                                 wal: Optional[List[device.Device]] = None) -> None:
     if db is None:
         db = []
     if wal is None:
@@ -341,6 +341,10 @@ class Batch(object):
             self.parser.print_help()
             raise SystemExit(0)
 
+        self.args.has_block_db_size_without_db_devices = (
+            self.args.block_db_size is not None and not self.args.db_devices
+        )
+
         if (self.args.auto and not self.args.db_devices and not
             self.args.wal_devices):
             self._sort_rotational_disks()
@@ -393,7 +397,10 @@ class Batch(object):
         functions.
         '''
         devices = self.args.devices
-        fast_devices = self.args.db_devices
+        if self.args.block_db_size is not None:
+            fast_devices = self.args.db_devices or self.args.devices
+        else:
+            fast_devices = self.args.db_devices
         very_fast_devices = self.args.wal_devices
         plan = []
         phys_devs, lvm_devs = separate_devices_from_lvs(devices)
@@ -436,10 +443,20 @@ class Batch(object):
                 len(very_fast_allocations), num_osds))
             exit(1)
 
-        for osd in plan:
-            if fast_devices:
-                osd.add_fast_device(*fast_allocations.pop(),
-                                    type_=fast_type)
+        if fast_devices:
+            fast_alloc: Optional[tuple[str, float, disk.Size, int]] = None
+            for osd in plan:
+                if self.args.has_block_db_size_without_db_devices:
+                    for i, _fast_alloc in enumerate(fast_allocations):
+                        if osd.data.path == _fast_alloc[0]:
+                            fast_alloc = fast_allocations.pop(i)
+                            break
+                else:
+                    fast_alloc = fast_allocations.pop() if fast_allocations else None
+
+                if fast_alloc:
+                    osd.add_fast_device(*fast_alloc, type_=fast_type)
+
             if very_fast_devices and self.args.objectstore == 'bluestore':
                 osd.add_very_fast_device(*very_fast_allocations.pop())
         return plan
@@ -580,34 +597,48 @@ class Batch(object):
             return {k: str(v) for k, v in self._get_osd_plan().items()}
 
 def get_physical_osds(devices: List[device.Device], args: argparse.Namespace) -> List[Batch.OSD]:
-    '''
-    Goes through passed physical devices and assigns OSDs
-    '''
-    data_slots = args.osds_per_device
-    if args.data_slots:
-        data_slots = max(args.data_slots, args.osds_per_device)
-    rel_data_size = args.data_allocate_fraction / data_slots
-    mlogger.debug('relative data size: {}'.format(rel_data_size))
+    """
+    Goes through passed physical devices and assigns OSDs.
+    """
+    data_slots = max(args.data_slots, args.osds_per_device) if args.data_slots else args.osds_per_device
     ret = []
+
     for dev in devices:
-        if dev.available_lvm:
-            dev_size = dev.vg_size[0]
-            abs_size = disk.Size(b=int(dev_size * rel_data_size))
-            free_size = dev.vg_free[0]
-            for _ in range(args.osds_per_device):
-                if abs_size > free_size:
-                    break
-                free_size -= abs_size.b
-                osd_id = None
-                if args.osd_ids:
-                    osd_id = args.osd_ids.pop()
-                ret.append(Batch.OSD(dev.path,
-                                     rel_data_size,
-                                     abs_size,
-                                     args.osds_per_device,
-                                     osd_id,
-                                     'dmcrypt' if args.dmcrypt else None,
-                                     dev.symlink))
+        if not dev.available_lvm:
+            continue
+
+        total_dev_size = dev.vg_size[0]
+        dev_size = total_dev_size
+        rel_data_size = args.data_allocate_fraction / data_slots
+
+        if args.has_block_db_size_without_db_devices:
+            all_db_space = args.block_db_size * data_slots
+            dev_size -= all_db_space.b.as_int()
+
+        abs_size = disk.Size(b=int(dev_size * rel_data_size))
+
+        if args.has_block_db_size_without_db_devices:
+            rel_data_size = abs_size / disk.Size(b=total_dev_size)
+
+        free_size = dev.vg_free[0]
+
+        for _ in range(args.osds_per_device):
+            if abs_size.b > free_size:
+                break
+
+            free_size -= abs_size.b
+            osd_id = args.osd_ids.pop() if args.osd_ids else None
+
+            ret.append(Batch.OSD(
+                dev.path,
+                rel_data_size,
+                abs_size,
+                args.osds_per_device,
+                osd_id,
+                'dmcrypt' if args.dmcrypt else None,
+                dev.symlink
+            ))
+
     return ret
 
 def get_lvm_osds(lvs: List[device.Device], args: argparse.Namespace) -> List[Batch.OSD]:

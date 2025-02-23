@@ -1,7 +1,7 @@
 # type: ignore
 import pytest
 from .data_list import ceph_bluestore_tool_show_label_output
-from mock.mock import patch, Mock
+from unittest.mock import patch, Mock
 from ceph_volume.devices import raw
 
 # Sample lsblk output is below that overviews the test scenario. (--json output for reader clarity)
