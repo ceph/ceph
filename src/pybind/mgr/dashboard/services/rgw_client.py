@@ -9,6 +9,7 @@ import os
 import re
 import time
 import uuid
+import xmltodict
 import xml.etree.ElementTree as ET  # noqa: N814
 from collections import defaultdict
 from enum import Enum
@@ -716,22 +717,15 @@ class RgwClient(RestClient):
     def get_lifecycle(self, bucket_name, request=None):
         # pylint: disable=unused-argument
         try:
-            decoded_request = request(raw_content=True).decode("utf-8")  # type: ignore
-            result = {
-                'LifecycleConfiguration':
-                json.loads(
-                    decoded_request,
-                    object_pairs_hook=RgwClient._handle_rules
-                )
-            }
+            result = request(raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            return xmltodict.parse(result)
         except RequestException as e:
             if e.content:
-                content = json_str_to_object(e.content)
+                content = xmltodict.parse(e.content)
                 if content.get(
                         'Code') == 'NoSuchLifecycleConfiguration':
                     return None
             raise DashboardException(msg=str(e), component='rgw')
-        return result
 
     @staticmethod
     def dict_to_xml(data):

@@ -13,3 +13,4 @@ setuptools
 jsonpatch
 grpcio
 grpcio-tools
+xmltodict
