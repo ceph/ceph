@@ -43,15 +43,17 @@ struct DiffContext {
   uint64_t from_snap_id;
   uint64_t end_snap_id;
   OrderedThrottle throttle;
+  bool from_parent;
 
   template <typename I>
   DiffContext(I &image_ctx, DiffIterate<>::Callback callback,
               void *callback_arg, bool _whole_object, bool _include_parent,
-              uint64_t _from_snap_id, uint64_t _end_snap_id)
+              uint64_t _from_snap_id, uint64_t _end_snap_id, bool _from_parent)
     : callback(callback), callback_arg(callback_arg),
       whole_object(_whole_object), include_parent(_include_parent),
       from_snap_id(_from_snap_id), end_snap_id(_end_snap_id),
-      throttle(image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"), true) {
+      throttle(image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"), true),
+      from_parent(_from_parent) {
   }
 };
 
@@ -75,6 +77,9 @@ public:
     }
     if (m_diff_context.whole_object) {
       list_snaps_flags |= io::LIST_SNAPS_FLAG_WHOLE_OBJECT;
+    }
+    if (m_diff_context.from_parent) {
+      list_snaps_flags |= io::LIST_SNAPS_FLAG_CALC_DIFF_FROM_PARENT;
     }
     auto req = io::ImageDispatchSpec::create_list_snaps(
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
@@ -196,11 +201,12 @@ int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
 } // anonymous namespace
 
 template <typename I>
-int DiffIterate<I>::diff_iterate(I *ictx,
+int DiffIterate<I>::diff_iterate_base(I *ictx,
 				 const cls::rbd::SnapshotNamespace& from_snap_namespace,
 				 const char *fromsnapname,
                                  uint64_t off, uint64_t len,
                                  bool include_parent, bool whole_object,
+                                 bool from_parent,
                                  int (*cb)(uint64_t, size_t, int, void *),
                                  void *arg) {
   ldout(ictx->cct, 10) << "from_snap_namespace=" << from_snap_namespace
@@ -209,10 +215,15 @@ int DiffIterate<I>::diff_iterate(I *ictx,
                        << ", len=" << len
                        << ", include_parent=" << include_parent
                        << ", whole_object=" << whole_object
+                       << ", from_parent=" << from_parent
                        << dendl;
 
   if (!ictx->data_ctx.is_valid()) {
     return -ENODEV;
+  }
+
+  if (from_parent && fromsnapname) {
+    return -EINVAL;
   }
 
   // ensure previous writes are visible to listsnaps
@@ -261,9 +272,34 @@ int DiffIterate<I>::diff_iterate(I *ictx,
   }
 
   DiffIterate command(*ictx, from_snap_namespace, fromsnapname, off, len,
-		      include_parent, whole_object, cb, arg);
+		      include_parent, whole_object, from_parent, cb, arg);
   r = command.execute();
   return r;
+}
+
+template <typename I>
+int DiffIterate<I>::diff_iterate(I *ictx,
+				 const cls::rbd::SnapshotNamespace& from_snap_namespace,
+				 const char *fromsnapname,
+                                 uint64_t off, uint64_t len,
+                                 bool include_parent, bool whole_object,
+                                 int (*cb)(uint64_t, size_t, int, void *),
+                                 void *arg)
+{
+    return diff_iterate_base(ictx, from_snap_namespace, fromsnapname,
+                             off, len, include_parent, whole_object,
+                             false, cb, arg);
+}
+
+template <typename I>
+int DiffIterate<I>::diff_iterate_from_parent(I *ictx,
+                                 uint64_t off, uint64_t len,
+                                 int (*cb)(uint64_t, size_t, int, void *),
+                                 void *arg)
+{
+    return diff_iterate_base(ictx, cls::rbd::UserSnapshotNamespace(), NULL,
+                             off, len, true, false,
+                             true, cb, arg);
 }
 
 template <typename I>
@@ -321,6 +357,9 @@ int DiffIterate<I>::execute() {
     // no diff.
     return 0;
   }
+  if (!m_image_ctx.parent && m_from_parent) {
+    m_from_parent = false;
+  }
 
   int r;
   bool fast_diff_enabled = false;
@@ -355,7 +394,7 @@ int DiffIterate<I>::execute() {
           ldout(cct, 10) << " first getting parent diff" << dendl;
           DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr,
                                   parent_extents[0].first,
-                                  parent_extents[0].second, true, true,
+                                  parent_extents[0].second, true, true, false,
                                   &simple_diff_cb, &parent_diff);
           r = diff_parent.execute();
           if (r < 0) {
@@ -371,7 +410,7 @@ int DiffIterate<I>::execute() {
                 << " to " << end_size << dendl;
   DiffContext diff_context(m_image_ctx, m_callback, m_callback_arg,
                            m_whole_object, m_include_parent, from_snap_id,
-                           end_snap_id);
+                           end_snap_id, m_from_parent);
 
   uint64_t period = m_image_ctx.get_stripe_period();
   uint64_t off = m_offset;

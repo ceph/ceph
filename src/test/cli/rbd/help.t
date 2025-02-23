@@ -714,7 +714,7 @@
   rbd help diff
   usage: rbd diff [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                   [--snap <snap>] [--from-snap <from-snap>] [--whole-object] 
-                  [--format <format>] [--pretty-format] 
+                  [--from-parent] [--format <format>] [--pretty-format] 
                   <image-or-snap-spec> 
   
   Print extents that differ since a previous snap, or image creation.
@@ -731,6 +731,7 @@
     --snap arg            snapshot name
     --from-snap arg       snapshot starting point
     --whole-object        compare whole object
+    --from-parent         diff with parent
     --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
   
