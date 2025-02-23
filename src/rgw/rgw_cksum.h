@@ -50,7 +50,7 @@ namespace rgw { namespace cksum {
 
   static constexpr uint16_t FLAG_NONE =      0x0000;
   static constexpr uint16_t FLAG_AWS_CKSUM = 0x0001;
-  static constexpr uint16_t FLAG_LINEAR_COMBINE = 0x0002;
+  static constexpr uint16_t FLAG_CRC =       0x0002;
 
   class Desc
   {
@@ -85,15 +85,14 @@ namespace rgw { namespace cksum {
     static constexpr std::array<Desc, 9> checksums =
     {
       Desc(Type::none, "none", 0, FLAG_NONE),
-      Desc(Type::crc32, "crc32", 4, FLAG_AWS_CKSUM),
-      Desc(Type::crc32c, "crc32c", 4, FLAG_AWS_CKSUM),
+      Desc(Type::crc32, "crc32", 4, FLAG_AWS_CKSUM|FLAG_CRC),
+      Desc(Type::crc32c, "crc32c", 4, FLAG_AWS_CKSUM|FLAG_CRC),
       Desc(Type::xxh3, "xxh3", 8, FLAG_NONE),
       Desc(Type::sha1, "sha1", 20, FLAG_AWS_CKSUM),
       Desc(Type::sha256, "sha256", 32, FLAG_AWS_CKSUM),
       Desc(Type::sha512, "sha512", 64, FLAG_NONE),
       Desc(Type::blake3, "blake3", 32, FLAG_NONE),
-      Desc(Type::crc64nvme, "crc64nvme", 8,
-	   FLAG_AWS_CKSUM|FLAG_LINEAR_COMBINE),
+      Desc(Type::crc64nvme, "crc64nvme", 8, FLAG_AWS_CKSUM|FLAG_CRC),
     };
 
     static constexpr uint16_t max_digest_size = 64;
@@ -135,8 +134,8 @@ namespace rgw { namespace cksum {
       return (Cksum::checksums[uint16_t(type)]).aws();
     }
 
-    const bool combinable() const {
-      return (Cksum::checksums[uint16_t(type)]).flags & FLAG_LINEAR_COMBINE;
+    const bool crc() const {
+      return (Cksum::checksums[uint16_t(type)]).flags & FLAG_CRC;
     }
 
     std::string aws_name() const {
@@ -188,6 +187,37 @@ namespace rgw { namespace cksum {
       std::string hs;
       const auto& ckd = checksums[uint16_t(type)];
       return fmt::format("{{{}}}{}", ckd.name, to_base64());
+    }
+
+
+    using crc_type = std::variant<uint32_t, uint64_t>;
+
+    std::optional<crc_type> get_crc() const {
+      std::optional<crc_type> res;
+      const auto& ckd = checksums[uint16_t(type)];
+      if (!crc()) {
+	goto out;
+      }
+      switch(ckd.digest_size) {
+      case 4:
+	{
+	  uint32_t crc;
+	  memcpy(&crc, (char*) digest.data(), sizeof(crc));
+	  res = crc;
+	}
+	break;
+      case 8:
+	{
+	  uint64_t crc;
+	  memcpy(&crc, (char*) digest.data(), sizeof(crc));
+	  res = crc;
+	}
+	break;
+      default:
+	break;
+      }
+    out:
+      return res;
     }
 
     void encode(buffer::list& bl) const {
@@ -246,13 +276,10 @@ namespace rgw { namespace cksum {
       parse_cksum_type_hdr(hdr_name) != Type::none;
   } /* is_cksum_hdr */
 
-  uint64_t diag_crc64_nvme_madler(uint64_t crc, const char* data, size_t len);
+  uint64_t diag_crc64nvme_madler(uint64_t crc, const char* data, size_t len);
 
-  uint64_t diag_crc64_combine_madler(uint64_t crc1, uint64_t crc2,
-				     uint64_t len);
-
-  std::optional<uint64_t> diag_get_crc(const Cksum ck1);
-
+  uint64_t diag_crc64nvme_combine_madler(uint64_t crc1, uint64_t crc2,
+					 uint64_t len);
   std::optional<rgw::cksum::Cksum>
   combine_crc_cksum(const Cksum ck1, const Cksum ck2, uintmax_t len2);
 

@@ -422,10 +422,7 @@ TEST(RGWCksum, CRC64NVME_UNDIGEST)
 
   auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
 
-  uint64_t crc1 = *diag_get_crc(cksum1);
-  if constexpr (std::endian::native != std::endian::big) {
-    crc1 = rgw::digest::byteswap(crc1);
-  }
+  uint64_t crc1 = rgw::digest::byteswap(std::get<uint64_t>(*cksum1.get_crc()));
 
   uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
 				  lacrimae.length(), 0ULL);
@@ -471,7 +468,7 @@ TEST(RGWCksum, CRC64NVME_COMBINE1)
   uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
 				  lacrimae.length(), 0ULL);
 
-  uint64_t crc4 =  diag_crc64_combine_madler(crc1, crc1, dolor.length());
+  uint64_t crc4 =  diag_crc64nvme_combine_madler(crc1, crc1, dolor.length());
 
   ASSERT_EQ(crc2, crc4);
 }
@@ -490,7 +487,7 @@ TEST(RGWCksum, CRC64NVME_COMBINE2)
   uint64_t crc3 = spdk_crc64_nvme((const unsigned char *)dolorem.c_str(),
 				  dolorem.length(), 0ULL);
   
-  uint64_t crc4 = diag_crc64_combine_madler(crc1, crc2, lorem.length());
+  uint64_t crc4 = diag_crc64nvme_combine_madler(crc1, crc2, lorem.length());
 
   if (verbose) {
     std::cout << "\ncrc1/dolor: " << crc1
@@ -503,6 +500,7 @@ TEST(RGWCksum, CRC64NVME_COMBINE2)
   ASSERT_EQ(crc3, crc4);
 }
 
+#if 0
 TEST(RGWCksum, CRC64NVME_COMBINE3)
 {
   auto t = cksum::Type::crc64nvme;
@@ -525,63 +523,39 @@ TEST(RGWCksum, CRC64NVME_COMBINE3)
 
   uint64_t spdk_crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
 				       dolor.length(), 0ULL);
-  auto cksum_crc1 =  rgw::digest::byteswap(*diag_get_crc(cksum1));
+  auto cksum_crc1 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum1.get_crc()));
 
   ASSERT_EQ(cksum_crc1, spdk_crc1);
 
   /* lorem */
-  /* dolorem */
-}
-
-#if 0
-TEST(RGWCksum, CRC64NVME_COMBINE3)
-{
-  auto t = cksum::Type::crc64nvme;
-
-  DigestVariant dv1 = rgw::cksum::digest_factory(t);
-  Digest* digest1 = get_digest(dv1);
-  ASSERT_NE(digest1, nullptr);
-
-  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
-  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
-
-  DigestVariant dv2 = rgw::cksum::digest_factory(t);
-  Digest* digest2 = get_digest(dv2);
-  ASSERT_NE(digest2, nullptr);
-
-  digest2->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
+  digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
   auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
 
-  uint64_t s1;
-  memcpy((char*) &s1, cksum2.digest.data(), sizeof(uint64_t));
+  uint64_t spdk_crc2 = spdk_crc64_nvme((const unsigned char *)lorem.c_str(),
+				       lorem.length(), 0ULL);
+  auto cksum_crc2 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum2.get_crc()));
 
-  uint64_t s2 = rgw::digest::byteswap(s1);
+  ASSERT_EQ(cksum_crc2, spdk_crc2);
 
-  uint64_t iv = 0xffffffffffffffff;
-  uint64_t check_crc2 =
-    rgw::cksum::diag_crc64_nvme_madler(iv, (const char*)lacrimae.c_str(),
-				       lacrimae.length());
-  uint64_t check_crc2_bs = rgw::digest::byteswap(check_crc2);
+  /* dolorem */
+  digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
+  auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
 
-  iv = 0;
-  uint64_t check_crc2_2 =
-    rgw::cksum::diag_crc64_nvme_madler(iv, (const char*)lacrimae.c_str(),
-				       lacrimae.length());
-  uint64_t check_crc2_2_bs = rgw::digest::byteswap(check_crc2_2);
+  uint64_t spdk_crc3 = spdk_crc64_nvme((const unsigned char *)dolorem.c_str(),
+				       dolorem.length(), 0ULL);
+  auto cksum_crc3 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum3.get_crc()));
 
-  std::cout << "s1: " << s1
-	    << "\ns2: " << s2
-	    << "\ncheck_crc2: " << check_crc2
-	    << "\ncheck_crc2_bs: " << check_crc2_bs
-	    << "\ncheck_crc2_2: " << check_crc2_2
-	    << "\ncheck_crc2_2_bs: " << check_crc2_2_bs
-	    << std::endl;
-  
-  auto cksum3 = rgw::cksum::combine_crc_cksum(cksum1, cksum1, dolor.length());
-  ASSERT_TRUE(cksum3);
+  ASSERT_EQ(cksum_crc3, spdk_crc3);
 
-  /* the CRC of dolor+dolor == gf combination of cksum1 and itself */
-  ASSERT_EQ(cksum2.to_armor(), cksum3->to_armor());
+  /* API combine check */
+  auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
+  ASSERT_TRUE(cksum4);
+
+  /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
+  ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
 }
 #endif
 

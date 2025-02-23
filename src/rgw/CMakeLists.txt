@@ -58,6 +58,8 @@ set(librgw_common_srcs
   services/svc_zone_utils.cc
   spdk/crc64.c
   madler/crc64nvme.c
+  madler/crc32iso_hdlc.c
+  madler/crc32iscsi.c
   rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
