@@ -1036,7 +1036,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       op_ret = get_system_versioning_params(s, &epoch, NULL);
       ldpp_dout(dpp, 20) << "getting versioning params tier placement handle cloud tier" << op_ret << dendl;
       if (op_ret < 0) {
-	ldpp_dout(dpp, 20) << "failed to get versioning params, op_ret = " << op_ret << dendl;
+        ldpp_dout(dpp, 20) << "failed to get versioning params, op_ret = " << op_ret << dendl;
         s->err.message = "failed to restore object";
         return op_ret;
       }
@@ -1216,7 +1216,7 @@ void RGWPutObjTags::execute(optional_yield y)
   }
 
   s->object->set_atomic();
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
   }
@@ -6244,7 +6244,7 @@ void RGWPutACLs::execute(optional_yield y)
   if (!rgw::sal::Object::empty(s->object.get())) {
     s->object->set_atomic();
     //if instance is empty, we should modify the latest object
-    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this);
+    op_ret = s->object->modify_obj_attrs(RGW_ATTR_ACL, bl, s->yield, this, rgw::sal::FLAG_LOG_OP);
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
@@ -8826,7 +8826,7 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
   }
 
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this, rgw::sal::FLAG_LOG_OP);
 
   return;
 }
@@ -8931,7 +8931,7 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
   bufferlist bl;
   obj_legal_hold.encode(bl);
   //if instance is empty, we should modify the latest object
-  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this);
+  op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_LEGAL_HOLD, bl, s->yield, this, rgw::sal::FLAG_LOG_OP);
   return;
 }
 

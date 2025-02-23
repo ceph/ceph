@@ -1080,9 +1080,9 @@ int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 }
 
 int FilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-				   optional_yield y, const DoutPrefixProvider* dpp)
+				   optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
 {
-  return next->modify_obj_attrs(attr_name, attr_val, y, dpp);
+  return next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
 }
 
 int FilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
