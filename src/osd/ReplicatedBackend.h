@@ -148,7 +148,8 @@ public:
 
   void objects_read_async(
     const hobject_t &hoid,
-    const std::list<std::pair<ECCommon::ec_align_t,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
 	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false) override;
@@ -438,7 +439,7 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    ObjectStore::Transaction opt, localt;
+    ObjectStore::Transaction localt;
     
     RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
@@ -457,7 +458,8 @@ private:
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t unused) const final {
     return logical_size;
   }
 };

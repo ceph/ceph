@@ -102,39 +102,119 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int stripe_width) cons
   }
 }
 
-int ErasureCodeJerasure::encode_chunks(const set<int> &want_to_encode,
-				       map<int, bufferlist> *encoded)
+int ErasureCodeJerasure::encode_chunks(const shard_id_map<bufferptr> &in,
+                                       shard_id_map<bufferptr> &out)
 {
-  char *chunks[k + m];
-  for (int i = 0; i < k + m; i++)
-    chunks[i] = (*encoded)[i].c_str();
-  jerasure_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
+  char *chunks[k + m]; //TODO don't use variable length arrays
+  memset(chunks, 0, sizeof(char*) * (k + m));
+  uint64_t size = 0;
+
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = ptr.c_str();
+  }
+
+  char *zeros = nullptr;
+
+  for (shard_id_t i; i < k + m; ++i) {
+    if (in.contains(i) || out.contains(i)) continue;
+
+    if (zeros == nullptr) {
+      zeros = (char*)malloc(size);
+      memset(zeros, 0, size);
+    }
+
+    chunks[static_cast<int>(i)] = zeros;
+  }
+
+  jerasure_encode(&chunks[0], &chunks[k], size);
+
+  if (zeros != nullptr) free(zeros);
+
   return 0;
 }
 
-int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
-				       const map<int, bufferlist> &chunks,
-				       map<int, bufferlist> *decoded)
+
+int ErasureCodeJerasure::decode_chunks(const shard_id_set &want_to_read,
+                                  shard_id_map<bufferptr> &in,
+                                  shard_id_map<bufferptr> &out)
 {
-  unsigned blocksize = (*chunks.begin()).second.length();
+  unsigned int size = 0;
+  shard_id_set erasures_set;
+  shard_id_set to_free;
+  erasures_set.insert_range(shard_id_t(0), k + m);
   int erasures[k + m + 1];
   int erasures_count = 0;
   char *data[k];
   char *coding[m];
-  for (int i =  0; i < k + m; i++) {
-    if (chunks.find(i) == chunks.end()) {
-      erasures[erasures_count] = i;
-      erasures_count++;
-    }
-    if (i < k)
-      data[i] = (*decoded)[i].c_str();
-    else
-      coding[i - k] = (*decoded)[i].c_str();
-  }
-  erasures[erasures_count] = -1;
+  memset(data, 0, sizeof(char*) * k);
+  memset(coding, 0, sizeof(char*) * m);
 
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+    }
+    erasures_set.erase(shard);
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+    }
+  }
+
+  for (int i = 0; i < k + m; i++) {
+    char **buf = i < k ? &data[i] : &coding[i - k];
+    if (*buf == nullptr) {
+      *buf = (char *)malloc(size);
+      to_free.insert(shard_id_t(i));
+    }
+  }
+
+  for (auto && shard : erasures_set) {
+    erasures[erasures_count++] = static_cast<int>(shard);
+  }
+
+
+  erasures[erasures_count] = -1;
   ceph_assert(erasures_count > 0);
-  return jerasure_decode(erasures, data, coding, blocksize);
+  int r = jerasure_decode(erasures, data, coding, size);
+  for (auto & shard : to_free) {
+    int i = static_cast<int>(shard);
+    char **buf = i < k ? &data[i] : &coding[i - k];
+    free(*buf);
+    *buf = nullptr;
+  }
+  return r;
+}
+
+void ErasureCodeJerasure::encode_delta(const bufferptr &old_data,
+                                       const bufferptr &new_data,
+                                       bufferptr *delta)
+{
+  if (&old_data != delta) {
+    memcpy(delta->c_str(), old_data.c_str(), delta->length());
+  }
+  char * new_data_p = const_cast<char*>(new_data.c_str());
+  char * delta_p = delta->c_str();
+  galois_region_xor(new_data_p, delta_p, delta->length());
 }
 
 bool ErasureCodeJerasure::is_prime(int value)
@@ -150,6 +230,85 @@ bool ErasureCodeJerasure::is_prime(int value)
     if (value == prime55[i])
       return true;
   return false;
+}
+
+void ErasureCodeJerasure::matrix_apply_delta(const shard_id_map<bufferptr> &in,
+                                             shard_id_map<bufferptr> &out,
+                                             int k, int w, int *matrix)
+{
+  auto first = in.begin();
+  const unsigned blocksize = first->second.length();
+
+  for (auto const& [datashard, databuf] : in) {
+    if (datashard < k) {
+      for (auto const& [codingshard, codingbuf] : out) {
+        if (codingshard >= k) {
+          ceph_assert(codingbuf.length() == blocksize);
+          char* input_data = const_cast<char*>(databuf.c_str());
+          char* output_data = const_cast<char*>(codingbuf.c_str());
+          if (static_cast<int>(codingshard) == k) {
+            galois_region_xor(input_data, output_data, blocksize);
+          }
+          else {
+            switch (w) {
+              case 8:  
+                galois_w08_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
+                break;
+              case 16: 
+                galois_w16_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
+                break;
+              case 32: 
+                galois_w32_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
+                break;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void ErasureCodeJerasure::do_scheduled_ops(char **ptrs, int **operations, int packetsize, int s, int d)
+{
+  char *sptr;
+  char *dptr;
+  int op;
+
+  for (op = 0; operations[op][0] >= 0; op++) {    
+    if (operations[op][0] == s && operations[op][2] == d) {
+      sptr = ptrs[0] + operations[op][1]*packetsize;
+      dptr = ptrs[1] + operations[op][3]*packetsize;
+      galois_region_xor(sptr, dptr, packetsize);
+    }
+  }
+}
+
+void ErasureCodeJerasure::schedule_apply_delta(const shard_id_map<bufferptr> &in,
+                                               shard_id_map<bufferptr> &out,
+                                               int k, int w, int packetsize,
+                                               int ** simple_schedule)
+{
+  auto first = in.begin();
+  unsigned int blocksize = first->second.length();
+
+  for (auto const& [datashard, databuf] : in) {
+    if (datashard < k) {
+      for (auto const& [codingshard, codingbuf] : out) {
+        if (codingshard >= k) {
+          ceph_assert(codingbuf.length() == blocksize);
+          char * ptr_copy[2];
+          ptr_copy[0] = const_cast<char*>(databuf.c_str());
+          ptr_copy[1] = const_cast<char*>(codingbuf.c_str());
+          unsigned int done;
+          for (done = 0; done < blocksize; done += (packetsize*w)) {
+            do_scheduled_ops(ptr_copy, simple_schedule, packetsize, static_cast<int>(datashard), static_cast<int>(codingshard));
+            ptr_copy[0] += (packetsize*w);
+            ptr_copy[1] += (packetsize*w);
+          }
+        }
+      }
+    }
+  }
 }
 
 // 
@@ -169,6 +328,12 @@ int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
 {
   return jerasure_matrix_decode(k, m, w, matrix, 1,
 				erasures, data, coding, blocksize);
+}
+
+void ErasureCodeJerasureReedSolomonVandermonde::apply_delta(const shard_id_map<bufferptr> &in,
+                                                            shard_id_map<bufferptr> &out)
+{
+  matrix_apply_delta(in, out, k, w, matrix);
 }
 
 unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment() const
@@ -219,6 +384,12 @@ int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
 							 int blocksize)
 {
   return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
+}
+
+void ErasureCodeJerasureReedSolomonRAID6::apply_delta(const shard_id_map<bufferptr> &in,
+                                                      shard_id_map<bufferptr> &out)
+{
+  matrix_apply_delta(in, out, k, w, matrix);
 }
 
 unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment() const
@@ -275,6 +446,12 @@ int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
 				       erasures, data, coding, blocksize, packetsize, 1);
 }
 
+void ErasureCodeJerasureCauchy::apply_delta(const shard_id_map<bufferptr> &in,
+                                            shard_id_map<bufferptr> &out)
+{
+  schedule_apply_delta(in, out, k, w, packetsize, simple_schedule);
+}
+
 unsigned ErasureCodeJerasureCauchy::get_alignment() const
 {
   if (per_chunk_alignment) {
@@ -305,6 +482,7 @@ void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
 {
   bitmatrix = jerasure_matrix_to_bitmatrix(k, m, w, matrix);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+  simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
 
 ErasureCodeJerasureCauchy::~ErasureCodeJerasureCauchy() 
@@ -313,6 +491,8 @@ ErasureCodeJerasureCauchy::~ErasureCodeJerasureCauchy()
     free(bitmatrix);
   if (schedule)
     jerasure_free_schedule(schedule);
+  if (simple_schedule)
+    jerasure_free_schedule(simple_schedule);
 }
 
 // 
@@ -344,6 +524,8 @@ ErasureCodeJerasureLiberation::~ErasureCodeJerasureLiberation()
     free(bitmatrix);
   if (schedule)
     jerasure_free_schedule(schedule);
+  if (simple_schedule)
+    jerasure_free_schedule(simple_schedule);
 }
 
 void ErasureCodeJerasureLiberation::jerasure_encode(char **data,
@@ -361,6 +543,12 @@ int ErasureCodeJerasureLiberation::jerasure_decode(int *erasures,
 {
   return jerasure_schedule_decode_lazy(k, m, w, bitmatrix, erasures, data,
 				       coding, blocksize, packetsize, 1);
+}
+
+void ErasureCodeJerasureLiberation::apply_delta(const shard_id_map<bufferptr> &in,
+                                                shard_id_map<bufferptr> &out)
+{
+  schedule_apply_delta(in, out, k, w, packetsize, simple_schedule);
 }
 
 unsigned ErasureCodeJerasureLiberation::get_alignment() const
@@ -451,6 +639,7 @@ void ErasureCodeJerasureLiberation::prepare()
 {
   bitmatrix = liberation_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+  simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
 
 // 
@@ -475,6 +664,7 @@ void ErasureCodeJerasureBlaumRoth::prepare()
 {
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+  simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
 
 // 
@@ -512,4 +702,5 @@ void ErasureCodeJerasureLiber8tion::prepare()
 {
   bitmatrix = liber8tion_coding_bitmatrix(k);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+  simple_schedule = jerasure_dumb_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }

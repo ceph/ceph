@@ -68,17 +68,17 @@ unsigned int ErasureCodeShec::get_chunk_size(unsigned int stripe_width) const
   return padded_length / k;
 }
 
-int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
-				       const set<int> &available_chunks,
-				       set<int> *minimum_chunks)
+int ErasureCodeShec::_minimum_to_decode(const shard_id_set &want_to_read,
+				       const shard_id_set &available_chunks,
+				       shard_id_set *minimum_chunks)
 {
   if (!minimum_chunks) return -EINVAL;
 
-  for (set<int>::iterator it = available_chunks.begin(); it != available_chunks.end(); ++it){
+  for (shard_id_set::const_iterator it = available_chunks.begin(); it != available_chunks.end(); ++it){
     if (*it < 0 || k+m <= *it) return -EINVAL;
   }
 
-  for (set<int>::iterator it = want_to_read.begin(); it != want_to_read.end(); ++it){
+  for (shard_id_set::const_iterator it = want_to_read.begin(); it != want_to_read.end(); ++it){
     if (*it < 0 || k+m <= *it) return -EINVAL;
   }
 
@@ -91,16 +91,12 @@ int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
   memset(minimum, 0, sizeof(minimum));
   (*minimum_chunks).clear();
 
-  for (set<int>::const_iterator i = want_to_read.begin();
-       i != want_to_read.end();
-       ++i) {
-    want[*i] = 1;
+  for (shard_id_t shard : want_to_read) {
+    want[static_cast<int>(shard)] = 1;
   }
 
-  for (set<int>::const_iterator i = available_chunks.begin();
-       i != available_chunks.end();
-       ++i) {
-    avails[*i] = 1;
+  for (shard_id_t shard : available_chunks) {
+    avails[static_cast<int>(shard)] = 1;
   }
 
   {
@@ -116,19 +112,19 @@ int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
   }
 
   for (int i = 0; i < k + m; i++) {
-    if (minimum[i] == 1) minimum_chunks->insert(i);
+    if (minimum[i] == 1) minimum_chunks->insert(shard_id_t(i));
   }
 
   return 0;
 }
 
-int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
-						 const map<int, int> &available,
-						 set<int> *minimum_chunks)
+int ErasureCodeShec::minimum_to_decode_with_cost(const shard_id_set &want_to_read,
+						 const shard_id_map<int> &available,
+						 shard_id_set *minimum_chunks)
 {
-  set <int> available_chunks;
+  shard_id_set available_chunks;
 
-  for (map<int, int>::const_iterator i = available.begin();
+  for (shard_id_map<int>::const_iterator i = available.begin();
        i != available.end();
        ++i)
     available_chunks.insert(i->first);
@@ -136,117 +132,90 @@ int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
   return _minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
 }
 
-int ErasureCodeShec::encode(const set<int> &want_to_encode,
-			    const bufferlist &in,
-			    map<int, bufferlist> *encoded)
+int ErasureCodeShec::encode_chunks(const shard_id_map<bufferptr> &in,
+                                   shard_id_map<bufferptr> &out)
 {
-  unsigned int k = get_data_chunk_count();
-  unsigned int m = get_chunk_count() - k;
-  bufferlist out;
+  char *chunks[k + m]; //TODO don't use variable length arrays
+  memset(chunks, 0, sizeof(char*) * (k + m));
+  uint64_t size = 0;
 
-  if (!encoded || !encoded->empty()){
-    return -EINVAL;
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
   }
 
-  int err = encode_prepare(in, *encoded);
-  if (err)
-    return err;
-  encode_chunks(want_to_encode, encoded);
-  for (unsigned int i = 0; i < k + m; i++) {
-    if (want_to_encode.count(i) == 0)
-      encoded->erase(i);
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = ptr.c_str();
   }
+
+  char *zeros = nullptr;
+
+  for (shard_id_t i; i < k + m; ++i) {
+    if (in.contains(i) || out.contains(i)) continue;
+
+    if (zeros == nullptr) {
+      zeros = (char*)malloc(size);
+      memset(zeros, 0, size);
+    }
+
+    chunks[static_cast<int>(i)] = zeros;
+  }
+
+  shec_encode(&chunks[0], &chunks[k], size);
+
+  if (zeros != nullptr) free(zeros);
+
   return 0;
 }
 
-int ErasureCodeShec::encode_chunks(const set<int> &want_to_encode,
-				   map<int, bufferlist> *encoded)
+int ErasureCodeShec::decode_chunks(const shard_id_set &want_to_read,
+                                   shard_id_map<bufferptr> &in,
+				   shard_id_map<bufferptr> &out)
 {
-  char *chunks[k + m];
-  for (int i = 0; i < k + m; i++){
-    chunks[i] = (*encoded)[i].c_str();
-  }
-  shec_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
-  return 0;
-}
-
-int ErasureCodeShec::_decode(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded)
-{
-  vector<int> have;
-
-  if (!decoded || !decoded->empty()){
-    return -EINVAL;
-  }
-  if (!want_to_read.empty() && chunks.empty()) {
-    // i need to get the blocksize from the first element of chunks
-    return -1;
-  }
-
-  have.reserve(chunks.size());
-  for (map<int, bufferlist>::const_iterator i = chunks.begin();
-       i != chunks.end();
-       ++i) {
-    have.push_back(i->first);
-  }
-  if (includes(
-	have.begin(), have.end(), want_to_read.begin(), want_to_read.end())) {
-    for (set<int>::iterator i = want_to_read.begin();
-	 i != want_to_read.end();
-	 ++i) {
-      (*decoded)[*i] = chunks.find(*i)->second;
-    }
-    return 0;
-  }
-  unsigned int k = get_data_chunk_count();
-  unsigned int m = get_chunk_count() - k;
-  unsigned blocksize = (*chunks.begin()).second.length();
-  for (unsigned int i =  0; i < k + m; i++) {
-    if (chunks.find(i) == chunks.end()) {
-      bufferlist tmp;
-      bufferptr ptr(buffer::create_aligned(blocksize, SIMD_ALIGN));
-      tmp.push_back(ptr);
-      tmp.claim_append((*decoded)[i]);
-      (*decoded)[i].swap(tmp);
-    } else {
-      (*decoded)[i] = chunks.find(i)->second;
-      (*decoded)[i].rebuild_aligned(SIMD_ALIGN);
-    }
-  }
-  return decode_chunks(want_to_read, chunks, decoded);
-}
-
-int ErasureCodeShec::decode_chunks(const set<int> &want_to_read,
-				   const map<int, bufferlist> &chunks,
-				   map<int, bufferlist> *decoded)
-{
-  unsigned blocksize = (*chunks.begin()).second.length();
+  unsigned int size = 0;
   int erased[k + m];
   int erased_count = 0;
   int avails[k + m];
   char *data[k];
   char *coding[m];
 
-  for (int i = 0; i < k + m; i++) {
-    erased[i] = 0;
-    if (chunks.find(i) == chunks.end()) {
-      if (want_to_read.count(i) > 0) {
-	erased[i] = 1;
-	erased_count++;
-      }
-      avails[i] = 0;
-    } else {
-      avails[i] = 1;
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = ptr.c_str();
     }
-    if (i < k)
-      data[i] = (*decoded)[i].c_str();
-    else
-      coding[i - k] = (*decoded)[i].c_str();
+    else {
+      coding[static_cast<int>(shard) - k] = ptr.c_str();
+    }
+    avails[static_cast<int>(shard)] = 1;
+    erased[static_cast<int>(shard)] = 0;
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = ptr.c_str();
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = ptr.c_str();
+    }
+    avails[static_cast<int>(shard)] = 0;
+    if (want_to_read.count(shard) > 0) {
+      erased[static_cast<int>(shard)] = 1;
+      erased_count++;
+    }
+    else {
+      erased[static_cast<int>(shard)] = 0;
+    }
   }
 
   if (erased_count > 0) {
-    return shec_decode(erased, avails, data, coding, blocksize);
+    return shec_decode(erased, avails, data, coding, size);
   } else {
     return 0;
   }
@@ -270,6 +239,48 @@ int ErasureCodeShecReedSolomonVandermonde::shec_decode(int *erased,
 					    int blocksize)
 {
   return shec_matrix_decode(erased, avails, data, coding, blocksize);
+}
+
+void ErasureCodeShecReedSolomonVandermonde::encode_delta(const bufferptr &old_data,
+                                                         const bufferptr &new_data,
+                                                         bufferptr *delta)
+{
+  if (&old_data != delta) {
+    memcpy(delta->c_str(), old_data.c_str(), delta->length());
+  }
+  char * new_data_p = const_cast<char*>(new_data.c_str());
+  char * delta_p = delta->c_str();
+  galois_region_xor(new_data_p, delta_p, delta->length());
+}
+
+void ErasureCodeShecReedSolomonVandermonde::apply_delta(const shard_id_map<bufferptr> &in,
+                                                        shard_id_map<bufferptr> &out)
+{
+  auto first = in.begin();
+  const unsigned blocksize = first->second.length();
+
+  for (auto const& [datashard, databuf] : in) {
+    if (datashard < k) {
+      for (auto const& [codingshard, codingbuf] : out) {
+        if (codingshard >= k) {
+          ceph_assert(codingbuf.length() == blocksize);
+          char* input_data = const_cast<char*>(databuf.c_str());
+          char* output_data = const_cast<char*>(codingbuf.c_str());
+          switch (w) {
+            case 8:
+              galois_w08_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
+              break;
+            case 16:
+              galois_w16_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (static_cast<int>(codingshard) - k))], blocksize, output_data, 1);
+              break;
+            case 32:
+              galois_w32_region_multiply(input_data, matrix[static_cast<int>(datashard) + (k * (int(codingshard) - k))], blocksize, output_data, 1);
+              break;
+          }
+        }
+      }
+    }
+  }
 }
 
 unsigned ErasureCodeShecReedSolomonVandermonde::get_alignment() const

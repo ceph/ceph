@@ -178,8 +178,9 @@
   usage: rbd bench [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                    [--io-size <io-size>] [--io-threads <io-threads>] 
                    [--io-total <io-total>] [--io-pattern <io-pattern>] 
-                   [--rw-mix-read <rw-mix-read>] 
-                   [--pattern-byte <pattern-byte>] --io-type <io-type> 
+                   [--io-start <io-start>]
+                   [--rw-mix-read <rw-mix-read>]
+                   [--pattern-byte <pattern-byte>] --io-type <io-type>
                    <image-spec> 
   
   Simple benchmark.
@@ -196,10 +197,12 @@
     --io-threads arg     ios in flight [default: 16]
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand, seq, or full-seq) [default: seq]
+    --io-start arg       start offset for seq or full-seq IO [default: 0]
     --rw-mix-read arg    read proportion in readwrite (<= 100) [default: 50]
     --pattern-byte arg   which byte value to write (integer between 0-255, rand
                          or rand-str [default: rand]
-    --io-type arg        IO type (read, write, or readwrite(rw))
+    --io-type arg        IO type (read, write, readwrite(rw), write_zeroes or
+                         discard)
   
   rbd help children
   usage: rbd children [--pool <pool>] [--namespace <namespace>] 
@@ -229,10 +232,10 @@
   
   rbd help clone
   usage: rbd clone [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                   [--snap <snap>] [--snap-id <snap-id>] 
-                   [--dest-pool <dest-pool>] [--dest-namespace <dest-namespace>] 
-                   [--dest <dest>] [--order <order>] 
-                   [--object-size <object-size>] 
+                   [--snap <snap>] [--snap-id <snap-id>]
+                   [--dest-pool <dest-pool>] [--dest-namespace <dest-namespace>]
+                   [--dest <dest>] [--order <order>]
+                   [--object-size <object-size>]
                    [--image-feature <image-feature>] [--image-shared] 
                    [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
                    [--data-pool <data-pool>] 
@@ -980,23 +983,23 @@
     --image-id arg        image id
   
   rbd help group info
-  usage: rbd group info [--pool <pool>] [--namespace <namespace>] 
-                        [--group <group>] [--format <format>] [--pretty-format] 
-                        <group-spec> 
-  
+  usage: rbd group info [--pool <pool>] [--namespace <namespace>]
+                        [--group <group>] [--format <format>] [--pretty-format]
+                        <group-spec>
+
   Show information about a group.
-  
+
   Positional arguments
     <group-spec>         group specification
                          (example: [<pool-name>/[<namespace>/]]<group-name>)
-  
+
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
     --group arg          group name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
-  
+
   rbd help group list
   usage: rbd group list [--pool <pool>] [--namespace <namespace>] 
                         [--format <format>] [--pretty-format] 
@@ -1075,18 +1078,18 @@
     --ignore-quiesce-error  ignore quiesce hook error
   
   rbd help group snap info
-  usage: rbd group snap info [--pool <pool>] [--namespace <namespace>] 
-                             [--group <group>] [--snap <snap>] 
-                             [--format <format>] [--pretty-format] 
-                             <group-snap-spec> 
-  
+  usage: rbd group snap info [--pool <pool>] [--namespace <namespace>]
+                             [--group <group>] [--snap <snap>]
+                             [--format <format>] [--pretty-format]
+                             <group-snap-spec>
+
   Show information about a group snapshot.
-  
+
   Positional arguments
     <group-snap-spec>    group specification
                          (example:
                          [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
-  
+
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
@@ -1094,7 +1097,7 @@
     --snap arg           snapshot name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
-  
+
   rbd help group snap list
   usage: rbd group snap list [--format <format>] [--pretty-format] 
                              [--pool <pool>] [--namespace <namespace>] 
@@ -1832,8 +1835,8 @@
   rbd help mirror pool enable
   usage: rbd mirror pool enable [--pool <pool>] [--namespace <namespace>] 
                                 [--site-name <site-name>] 
-                                [--remote-namespace <remote-namespace>] 
-                                <pool-spec> <mode> 
+                                [--remote-namespace <remote-namespace>]
+                                <pool-spec> <mode>
   
   Enable RBD mirroring in a pool or namespace.
   

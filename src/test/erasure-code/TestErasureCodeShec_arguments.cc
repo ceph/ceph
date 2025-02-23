@@ -39,7 +39,7 @@ unsigned int count_num = 0;
 unsigned int unexpected_count = 0;
 unsigned int value_count = 0;
 
-map<set<int>,set<set<int> > > shec_table;
+map<shard_id_set,set<shard_id_set>> shec_table;
 
 constexpr int getint(std::initializer_list<int> is) {
   int a = 0;
@@ -50,8 +50,8 @@ constexpr int getint(std::initializer_list<int> is) {
 }
 
 void create_table_shec432() {
-  set<int> table_key,vec_avails;
-  set<set<int> > table_value;
+  shard_id_set table_key, vec_avails;
+  set<shard_id_set> table_value;
 
   for (int want_count = 0; want_count < 7; ++want_count) {
     for (unsigned want = 1; want < (1<<7); ++want) {
@@ -63,7 +63,7 @@ void create_table_shec432() {
       {
         for (int i = 0; i < 7; ++i) {
           if (want & (1 << i)) {
-            table_key.insert(i);
+            table_key.insert(shard_id_t(i));
           }
         }
       }
@@ -110,7 +110,7 @@ void create_table_shec432() {
         vec_avails.clear();
         for (int j = 0; j < 7; ++j) {
           if (vec[i] & (1 << j)) {
-            vec_avails.insert(j);
+            vec_avails.insert(shard_id_t(j));
           }
         }
         table_value.insert(vec_avails);
@@ -120,17 +120,17 @@ void create_table_shec432() {
   }
 }
 
-bool search_table_shec432(set<int> want_to_read, set<int> available_chunks) {
-  set<set<int> > tmp;
-  set<int> settmp;
+bool search_table_shec432(shard_id_set want_to_read, shard_id_set available_chunks) {
+  set<shard_id_set > tmp;
+  shard_id_set settmp;
   bool found;
 
   tmp = shec_table.find(want_to_read)->second;
-  for (set<set<int> >::iterator itr = tmp.begin();itr != tmp.end(); ++itr) {
+  for (set<shard_id_set >::iterator itr = tmp.begin();itr != tmp.end(); ++itr) {
     found = true;
     value_count = 0;
     settmp = *itr;
-    for (set<int>::iterator setitr = settmp.begin();setitr != settmp.end(); ++setitr) {
+    for (shard_id_set::const_iterator setitr = settmp.begin();setitr != settmp.end(); ++setitr) {
       if (!available_chunks.count(*setitr)) {
         found = false;
       }
@@ -192,20 +192,20 @@ TEST(ParameterTest, combination_all)
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
 	    "0123"//128
   );
-  set<int> want_to_encode;
+  shard_id_set want_to_encode;
   for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
-    want_to_encode.insert(i);
+    want_to_encode.insert(shard_id_t(i));
   }
 
-  map<int, bufferlist> encoded;
+  shard_id_map<bufferlist> encoded(shec->get_chunk_count());
   result = shec->encode(want_to_encode, in, &encoded);
   EXPECT_EQ(0, result);
   EXPECT_EQ(i_k+i_m, (int)encoded.size());
-  EXPECT_EQ(c_size, encoded[0].length());
+  EXPECT_EQ(c_size, encoded[shard_id_t(0)].length());
   bufferlist out1;
   //out1 is "encoded"
   for (unsigned int i = 0; i < encoded.size(); ++i) {
-    out1.append(encoded[i]);
+    out1.append(encoded[shard_id_t(i)]);
   }
   EXPECT_FALSE(out1 == in);
 
@@ -225,22 +225,22 @@ TEST(ParameterTest, combination_all)
 
       do {
         do {
-	  set<int> want_to_read, available_chunks;
-	  map<int, bufferlist> inchunks;
+	  shard_id_set want_to_read, available_chunks;
+	  shard_id_map<bufferlist> inchunks(shec->get_chunk_count());
           for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
 	    if (array_want_to_read[i]) {
-	      want_to_read.insert(i);
+	      want_to_read.insert(shard_id_t(i));
 	    }
             if (array_available_chunks[i]) {
-              available_chunks.insert(i);
-              inchunks.insert(make_pair(i,encoded[i]));
+              available_chunks.insert(shard_id_t(i));
+              inchunks.insert(shard_id_t(i), encoded[shard_id_t(i)]);
             }
           }
 
-	  map<int, vector<pair<int,int>>> minimum_chunks;
-	  map<int, bufferlist> decoded;
+	  shard_id_set minimum_chunks;
+	  shard_id_map<bufferlist> decoded(shec->get_chunk_count());
           result = shec->minimum_to_decode(want_to_read, available_chunks,
-				           &minimum_chunks);
+				           minimum_chunks, nullptr);
           int dresult = shec->decode(want_to_read, inchunks, &decoded,
 				     shec->get_chunk_size(kObjectSize));
           ++count_num;
@@ -251,13 +251,13 @@ TEST(ParameterTest, combination_all)
 	    EXPECT_EQ(0u, minimum_chunks.size());
             EXPECT_EQ(0, dresult);
             EXPECT_EQ(0u, decoded.size());
-            EXPECT_EQ(0u, decoded[0].length());
+            EXPECT_EQ(0u, decoded[shard_id_t(0)].length());
             if (result != 0 || dresult != 0) {
               ++unexpected_count;
             }
           } else {
             // want - avail
-	    set<int> want_to_read_without_avails;
+	    shard_id_set want_to_read_without_avails;
             for (auto chunk : want_to_read) {
               if (!available_chunks.count(chunk)) {
                 want_to_read_without_avails.insert(chunk);
@@ -276,8 +276,8 @@ TEST(ParameterTest, combination_all)
                 if (array_want_to_read[i]) {
 		  bufferlist usable;
                   usable.substr_of(in, c_size * i, c_size);
-                  int cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
-                  EXPECT_EQ(c_size, decoded[i].length());
+                  int cmp = memcmp(decoded[shard_id_t(i)].c_str(), usable.c_str(), c_size);
+                  EXPECT_EQ(c_size, decoded[shard_id_t(i)].length());
                   EXPECT_EQ(0, cmp);
                   if (cmp != 0) {
                     ++unexpected_count;
@@ -306,12 +306,12 @@ TEST(ParameterTest, combination_all)
                   if (array_want_to_read[i]) {
 		    bufferlist usable;
                     usable.substr_of(in, c_size * i, c_size);
-                    int cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
-                    EXPECT_EQ(c_size, decoded[i].length());
+                    int cmp = memcmp(decoded[shard_id_t(i)].c_str(), usable.c_str(), c_size);
+                    EXPECT_EQ(c_size, decoded[shard_id_t(i)].length());
                     EXPECT_EQ(0, cmp);
                     if (cmp != 0) {
                       ++unexpected_count;
-                      std::cout << "decoded[" << i << "] = " << decoded[i].c_str() << std::endl;
+                      std::cout << "decoded[" << i << "] = " << decoded[shard_id_t(i)].c_str() << std::endl;
                       std::cout << "usable = " << usable.c_str() << std::endl;
                       std::cout << "want_to_read    :" << want_to_read << std::endl;
                       std::cout << "available_chunks:" << available_chunks << std::endl;
