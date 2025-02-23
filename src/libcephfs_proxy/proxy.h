@@ -9,7 +9,11 @@
 #include <stdbool.h>
 
 #define LIBCEPHFSD_MAJOR 0
+
+// Legacy version without negotiation support
 #define LIBCEPHFSD_MINOR 2
+// Current version with negotiation support
+#define LIBCEPHFSD_MINOR_NEG 3
 
 #define LIBCEPHFS_LIB_CLIENT 0xe3e5f0e8 // 'ceph' xor 0x80808080
 
@@ -20,6 +24,17 @@
 
 #define container_of(_ptr, _type, _field) \
 	((_type *)((uintptr_t)(_ptr) - offset_of(_type, _field)))
+
+enum {
+	/* Support for ceph_ll_nonblocking_readv_writev */
+	PROXY_FEAT_ASYNC_IO = 0x00000001,
+
+	/* Mask of all features requiring the asynchronous callback handling. */
+	PROXY_FEAT_ASYNC_CBK = 0x00000001,
+
+	/* Mask of all supported/known features. */
+	PROXY_FEAT_ALL = 0x00000001
+};
 
 struct _list;
 typedef struct _list list_t;
@@ -44,6 +59,12 @@ typedef struct _proxy_manager proxy_manager_t;
 
 struct _proxy_link;
 typedef struct _proxy_link proxy_link_t;
+
+struct _proxy_link_negotiate;
+typedef struct _proxy_link_negotiate proxy_link_negotiate_t;
+
+struct _proxy_async;
+typedef struct _proxy_async proxy_async_t;
 
 typedef int32_t (*proxy_output_write_t)(proxy_output_t *);
 typedef int32_t (*proxy_output_full_t)(proxy_output_t *);
