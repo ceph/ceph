@@ -548,26 +548,27 @@ struct RGWZoneGroupPlacementTier {
   std::string tier_type;
   std::string storage_class;
   bool retain_head_object = false;
-  bool allow_read_through = false;
-  uint64_t read_through_restore_days = 1;
 
   struct _tier {
     RGWZoneGroupPlacementTierS3 s3;
   } t;
 
+  bool allow_read_through = false;
+  uint64_t read_through_restore_days = 1;
+
   int update_params(const JSONFormattable& config);
   int clear_params(const JSONFormattable& config);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(tier_type, bl);
     encode(storage_class, bl);
     encode(retain_head_object, bl);
-    encode(allow_read_through, bl);
-    encode(read_through_restore_days, bl);
     if (tier_type == "cloud-s3") {
       encode(t.s3, bl);
     }
+    encode(allow_read_through, bl);
+    encode(read_through_restore_days, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -576,12 +577,22 @@ struct RGWZoneGroupPlacementTier {
     decode(tier_type, bl);
     decode(storage_class, bl);
     decode(retain_head_object, bl);
-    if (struct_v >= 2) {
+    if (struct_v == 1) {
+      if (tier_type == "cloud-s3") {
+        decode(t.s3, bl);
+      }
+    } else if (struct_v == 2) {
       decode(allow_read_through, bl);
       decode(read_through_restore_days, bl);
-    }
-    if (tier_type == "cloud-s3") {
-      decode(t.s3, bl);
+      if (tier_type == "cloud-s3") {
+        decode(t.s3, bl);
+      }
+    } else if (struct_v >= 3) {
+      if (tier_type == "cloud-s3") {
+        decode(t.s3, bl);
+      }
+      decode(allow_read_through, bl);
+      decode(read_through_restore_days, bl);
     }
     DECODE_FINISH(bl);
   }
