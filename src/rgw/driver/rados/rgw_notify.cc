@@ -114,7 +114,7 @@ private:
       librados::ObjectReadOperation op;
       queues_t queues_chunk;
       op.omap_get_keys2(start_after, max_chunk, &queues_chunk, &more, &rval);
-      const auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), Q_LIST_OBJECT_NAME, &op, nullptr, y);
+      const auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), Q_LIST_OBJECT_NAME, std::move(op), nullptr, y);
       if (ret == -ENOENT) {
         // queue list object was not created - nothing to do
         return 0;
@@ -280,7 +280,7 @@ private:
         "" /*no tag*/);
       cls_2pc_queue_expire_reservations(op, stale_time);
       // check ownership and do reservation cleanup in one batch
-      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, yield);
+      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, std::move(op), yield);
       if (ret == -ENOENT) {
         // queue was deleted
         ldpp_dout(this, 10) << "INFO: queue: " << queue_name
@@ -312,7 +312,7 @@ private:
     op.assert_exists();
     rados::cls::lock::unlock(&op, queue_name+"_lock", lock_cookie);
     auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
-    const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+    const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), yield);
     if (ret == -ENOENT) {
       ldpp_dout(this, 10) << "INFO: queue: " << queue_name
         << ". was removed. nothing to unlock" << dendl;
@@ -405,7 +405,7 @@ private:
           "" /*no tag*/);
         cls_2pc_queue_list_entries(op, start_marker, max_elements, &obl, &rval);
         // check ownership and list entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, yield);
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), nullptr, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           topics_persistency_tracker.erase(queue_name);
@@ -535,7 +535,7 @@ private:
           "" /*no tag*/);
         cls_2pc_queue_remove_entries(op, end_marker, entries_to_remove);
         // check ownership and deleted entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), yield);
         if (ret == -ENOENT) {
           // queue was deleted
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name
@@ -598,8 +598,9 @@ private:
           cls_2pc_reservation::id_t reservation_id;
           buffer::list obl;
           int rval;
+          op = librados::ObjectWriteOperation();
           cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), yield, librados::OPERATION_RETURNVEC);
           if (ret < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
             return;
@@ -610,8 +611,9 @@ private:
             return;
           }
 
+          op = librados::ObjectWriteOperation();
           cls_2pc_queue_commit(op, migration_vector, reservation_id);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), yield);
           reservation_id = cls_2pc_reservation::NO_ID;
           if (ret < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
@@ -685,7 +687,7 @@ private:
               failover_time,
               LOCK_FLAG_MAY_RENEW);
 
-        ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
+        ret = rgw_rados_operate(this, rados_ioctx, queue_name, std::move(op), yield);
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " owned (locked) by another daemon" << dendl;
@@ -856,7 +858,7 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
   librados::ObjectWriteOperation op;
   op.create(true);
   cls_2pc_queue_init(op, topic_queue, MAX_QUEUE_SIZE);
-  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, std::move(op), y);
   if (ret == -EEXIST) {
     // queue already exists - nothing to do
     ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
@@ -870,8 +872,9 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
 
   bufferlist empty_bl;
   std::map<std::string, bufferlist> new_topic{{topic_queue, empty_bl}};
+  op = librados::ObjectWriteOperation();
   op.omap_set(new_topic);
-  ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
+  ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, std::move(op), y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to add queue: " << topic_queue << " to queue list. error: " << ret << dendl;
     return ret;
@@ -883,7 +886,7 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
 int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y) {
   librados::ObjectWriteOperation op;
   op.remove();
-  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, std::move(op), y);
   if (ret == -ENOENT) {
     // queue already removed - nothing to do
     ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already removed. nothing to do" << dendl;
@@ -896,8 +899,9 @@ int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rado
   }
 
   std::set<std::string> topic_to_remove{{topic_queue}};
+  op = librados::ObjectWriteOperation();
   op.omap_rm_keys(topic_to_remove);
-  ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
+  ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, std::move(op), y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove queue: " << topic_queue << " from queue list. error: " << ret << dendl;
     return ret;
@@ -1143,7 +1147,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(
             res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
-            &op, res.yield, librados::OPERATION_RETURNVEC);
+            std::move(op), res.yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
           ldpp_dout(res.dpp, 1)
               << "ERROR: failed to reserve notification on queue: "
@@ -1209,7 +1213,7 @@ int publish_commit(rgw::sal::Object* obj,
         cls_2pc_queue_abort(op, topic.res_id);
         auto ret = rgw_rados_operate(
 	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-	  queue_name, &op,
+	  queue_name, std::move(op),
 	  res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
@@ -1221,10 +1225,11 @@ int publish_commit(rgw::sal::Object* obj,
         // now try to make a bigger one
 	buffer::list obl;
         int rval;
+        op = librados::ObjectWriteOperation();
         cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
         ret = rgw_rados_operate(
 	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-          queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
+          queue_name, std::move(op), res.yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: "
 			    << queue_name
@@ -1295,7 +1300,7 @@ int publish_abort(reservation_t& res) {
     cls_2pc_queue_abort(op, topic.res_id);
     const auto ret = rgw_rados_operate(
       res.dpp, res.store->getRados()->get_notif_pool_ctx(),
-      queue_name, &op, res.yield);
+      queue_name, std::move(op), res.yield);
     if (ret < 0) {
       ldpp_dout(res.dpp, 1) << "ERROR: failed to abort reservation: "
 			    << topic.res_id <<

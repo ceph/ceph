@@ -98,7 +98,7 @@ int RGWSI_Cls::MFA::create_mfa(const DoutPrefixProvider *dpp, const rgw_user& us
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::create(&op, config);
-  r = obj.operate(dpp, &op, y);
+  r = obj.operate(dpp, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
     return r;
@@ -122,7 +122,7 @@ int RGWSI_Cls::MFA::remove_mfa(const DoutPrefixProvider *dpp,
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::remove(&op, id);
-  r = obj.operate(dpp, &op, y);
+  r = obj.operate(dpp, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
     return r;
@@ -206,7 +206,7 @@ int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, co
   }
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::set(&op, entries);
-  r = obj.operate(dpp, &op, y);
+  r = obj.operate(dpp, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
     return r;
@@ -277,7 +277,7 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   utime_t t(ut);
   cls_log_add(op, t, section, key, bl);
 
-  return obj.operate(dpp, &op, y);
+  return obj.operate(dpp, std::move(op), y);
 }
 
 int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp, 
@@ -298,7 +298,7 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   cls_log_add(op, entries, monotonic_inc);
 
   if (!completion) {
-    r = obj.operate(dpp, &op, y);
+    r = obj.operate(dpp, std::move(op), y);
   } else {
     r = obj.aio_operate(completion, &op);
   }
@@ -332,7 +332,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
 
   bufferlist obl;
 
-  int ret = obj.operate(dpp, &op, &obl, y);
+  int ret = obj.operate(dpp, std::move(op), &obl, y);
   if (ret < 0)
     return ret;
 
@@ -357,7 +357,7 @@ int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp,
 
   bufferlist obl;
 
-  int ret = obj.operate(dpp, &op, &obl, y);
+  int ret = obj.operate(dpp, std::move(op), &obl, y);
   if (ret < 0)
     return ret;
 
@@ -409,7 +409,7 @@ int RGWSI_Cls::TimeLog::trim(const DoutPrefixProvider *dpp,
   cls_log_trim(op, st, et, from_marker, to_marker);
 
   if (!completion) {
-    r = obj.operate(dpp, &op, y);
+    r = obj.operate(dpp, std::move(op), y);
   } else {
     r = obj.aio_operate(completion, &op);
   }
