@@ -11900,6 +11900,7 @@ next:
       .max_groups = max_groups,
       .max_access_keys = max_access_keys,
       .max_buckets = max_buckets,
+      .purge_data = purge_data,
     };
 
     std::string err_msg;
