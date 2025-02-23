@@ -1,6 +1,5 @@
 # ceph_test_object_map
 add_executable(ceph_test_object_map
-  test_object_map.cc
   KeyValueDBMemory.cc
   )
 add_ceph_unittest(ceph_test_object_map)
