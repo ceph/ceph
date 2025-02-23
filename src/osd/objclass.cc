@@ -335,7 +335,7 @@ int cls_cxx_getxattrs(cls_method_context_t hctx, map<string, bufferlist> *attrse
 }
 
 int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
-                     const bufferlist *inbl)
+		     bufferlist *inbl)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   vector<OSDOp> nops(1);
