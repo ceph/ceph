@@ -501,7 +501,10 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       }
     }
 
-    if (checksum_mode) {
+    // omit the stored full-object checksum headers if a Range is requested
+    // TODO: detect when a Range coincides with a single part of a multipart
+    // upload, and return its part checksum?
+    if (checksum_mode && !range_str) {
       if (auto i = attrs.find(RGW_ATTR_CKSUM); i != attrs.end()) {
 	try {
 	  rgw::cksum::Cksum cksum;
