@@ -137,9 +137,9 @@ ceph::bufferlist BufferSpace::get_buffer(extent_len_t offset, extent_len_t lengt
   assert(offset >= i_offset);
   assert(i_bl.length() > 0);
   assert(offset + length <= i_offset + i_bl.length());
-  ceph::bufferlist res;
+  ceph::bufferlist_rw res;
   res.substr_of(i_bl, offset - i_offset, length);
-  return res;
+  return res.as_const_bl();
 }
 
 load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
@@ -155,10 +155,10 @@ load_ranges_t BufferSpace::load_ranges(extent_len_t offset, extent_len_t length)
 
   // returns whether to proceed main-loop or not
   auto f_merge_next_check_hole = [this, &next, &range_offset, &range_length](
-      ceph::bufferlist& previous_bl,
+      ceph::bufferlist_rw& previous_bl,
       extent_len_t hole_length,
       extent_len_t next_offset,
-      const ceph::bufferlist& next_bl) {
+      const ceph::bufferlist_rw& next_bl) {
     range_length -= hole_length;
     previous_bl.append(next_bl);
     if (range_length <= next_bl.length()) {
@@ -281,7 +281,7 @@ ceph::bufferptr_rw BufferSpace::to_full_ptr(extent_len_t length)
     i_buf.rebuild();
   }
   assert(i_buf.get_num_buffers() == 1);
-  ceph::bufferptr ptr(i_buf.front());
+  ceph::bufferptr_rw ptr(i_buf.front());
   assert(ptr.is_page_aligned());
   assert(ptr.length() == length);
   buffer_map.clear();

@@ -1313,6 +1313,12 @@ struct error_code;
       return const_iterator(this, _len, _buffers.end(), 0);
     }
 
+    const ptr_rw& front() const { return _buffers.front(); }
+    const ptr_rw& back() const { return _buffers.back(); }
+    unsigned get_num_buffers() const { return list::get_num_buffers(); }
+    bool is_contiguous() const { return list::is_contiguous(); }
+    void rebuild() { return list::rebuild(); }
+
     // regular list (ro) overload SHALL NOT be available
     void substr_of(const list_rw& other, unsigned off, unsigned len) {
       list::substr_of(static_cast<const list&>(other), off, len);

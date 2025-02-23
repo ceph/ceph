@@ -194,7 +194,7 @@ struct load_ranges_t {
 
 /// manage small chunks of extent
 class BufferSpace {
-  using map_t = std::map<extent_len_t, ceph::bufferlist>;
+  using map_t = std::map<extent_len_t, ceph::bufferlist_rw>;
 public:
   BufferSpace() = default;
 
@@ -215,7 +215,7 @@ private:
   // load_ranges_t and bl
   static void create_hole_append_bl(
       load_ranges_t& ret,
-      ceph::bufferlist& bl,
+      ceph::bufferlist_rw& bl,
       extent_len_t hole_offset,
       extent_len_t hole_length) {
     ceph::bufferptr_rw hole_ptr = create_extent_ptr_rand(hole_length);
@@ -232,7 +232,7 @@ private:
       extent_len_t hole_length,
       const map_t::const_iterator& next_it) {
     assert(!buffer_map.contains(hole_offset));
-    ceph::bufferlist bl;
+    ceph::bufferlist_rw bl;
     create_hole_append_bl(ret, bl, hole_offset, hole_length);
     auto it = buffer_map.insert(
         next_it, std::pair{hole_offset, std::move(bl)});
