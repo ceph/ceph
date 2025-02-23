@@ -144,7 +144,7 @@ class CephService(object):
                 counter['unit'] = mgr._unit_to_str(value['units'])
             else:
                 counter['value'] = mgr.get_latest(
-                    service_type, service_id, key)
+                    service_type, service_id, key, "", "", [])
                 counter['unit'] = ''
             counters.append(counter)
 

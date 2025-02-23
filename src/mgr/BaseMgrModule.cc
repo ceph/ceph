@@ -655,12 +655,15 @@ get_latest_counter(BaseMgrModule *self, PyObject *args)
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
+  char *counter_name = nullptr;
+  char *sub_counter_name = nullptr;
+  std::vector<std::pair<std::string_view, std::string_view>> *labels = nullptr;
   if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
   return self->py_modules->get_latest_counter_python(
-      svc_name, svc_id, counter_path);
+      svc_name, svc_id, counter_path, counter_name, sub_counter_name, {});
 }
 
 static PyObject*
@@ -674,6 +677,19 @@ get_perf_schema(BaseMgrModule *self, PyObject *args)
   }
 
   return self->py_modules->get_perf_schema_python(type_str, svc_id);
+}
+
+static PyObject*
+get_perf_schema_labeled(BaseMgrModule *self, PyObject *args)
+{
+  char *type_str = nullptr;
+  char *svc_id = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:get_perf_schema_labeled", &type_str,
+                                                    &svc_id)) {
+    return nullptr;
+  }
+
+  return self->py_modules->get_perf_schema_labeled_python(type_str, svc_id);
 }
 
 static PyObject*
@@ -1481,6 +1497,9 @@ PyMethodDef BaseMgrModule_methods[] = {
     "Get the latest performance counter"},
 
   {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
+    "Get the performance counter schema"},
+
+  {"_ceph_get_perf_schema_labeled", (PyCFunction)get_perf_schema_labeled, METH_VARARGS,
     "Get the performance counter schema"},
 
   {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version, METH_NOARGS,
