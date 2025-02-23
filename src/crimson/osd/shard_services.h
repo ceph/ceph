@@ -25,6 +25,7 @@
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 namespace crimson::net {
   class Messenger;
@@ -197,6 +198,8 @@ class PerShardState {
   }
 
   OSDSuperblock per_shard_superblock;
+  std::list<OSDPerfMetricQuery> m_perf_queries;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
 
 public:
   PerShardState(
