@@ -2805,14 +2805,17 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
 
 void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
-				std::optional<rgw::BucketIndexType> type) {
+				std::optional<rgw::BucketIndexType> type,
+				std::optional<uint32_t> shards) {
   layout.current_index.gen = 0;
   layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
 
   layout.current_index.layout.type =
     type.value_or(rgw::BucketIndexType::Normal);
 
-  if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
+  if (shards) {
+    layout.current_index.layout.normal.num_shards = *shards;
+  } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
     layout.current_index.layout.normal.num_shards =
       cct->_conf->rgw_override_bucket_index_max_shards;
   } else {
@@ -2842,7 +2845,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
       bci.info.layout = rgw::BucketLayout{};
       init_default_bucket_layout(dpp->get_cct(), bci.info.layout,
 				 svc_zone->get_zone(),
-				 std::nullopt);
+				 std::nullopt, std::nullopt);
     }
   }
 

@@ -2362,6 +2362,8 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
                             const std::optional<std::string>& swift_ver_location,
                             const std::optional<RGWQuotaInfo>& quota,
                             std::optional<ceph::real_time> creation_time,
+                            std::optional<rgw::BucketIndexType> index_type,
+                            std::optional<uint32_t> index_shards,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
@@ -2392,8 +2394,11 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
     }
 
     if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
       init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
-                                 zone_placement->index_type);
+                                 index_type, index_shards);
     }
 
     info.requester_pays = false;

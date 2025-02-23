@@ -3196,6 +3196,13 @@ void RGWListBucket::execute(optional_yield y)
     return;
   }
 
+  if (const auto& current_index = s->bucket->get_info().layout.current_index;
+      current_index.layout.type == rgw::BucketIndexType::Indexless) {
+    s->err.message = "Indexless buckets cannot be listed";
+    op_ret = -ERR_METHOD_NOT_ALLOWED;
+    return;
+  }
+
   if (allow_unordered && !delimiter.empty()) {
     ldpp_dout(this, 0) <<
       "ERROR: unordered bucket listing requested with a delimiter" << dendl;
@@ -6257,6 +6264,13 @@ void RGWPutACLs::execute(optional_yield y)
 
 void RGWPutLC::execute(optional_yield y)
 {
+  if (const auto& current_index = s->bucket->get_info().layout.current_index;
+      current_index.layout.type == rgw::BucketIndexType::Indexless) {
+    s->err.message = "Indexless buckets do not support lifecycle policy";
+    op_ret = -ERR_METHOD_NOT_ALLOWED;
+    return;
+  }
+
   bufferlist bl;
   
   RGWLifecycleConfiguration_S3 config(s->cct);
