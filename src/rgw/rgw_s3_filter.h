@@ -8,11 +8,15 @@
 
 class XMLObj;
 
+using KeyNegativeFilterMap = std::map<std::string, bool>;
+
 struct rgw_s3_key_filter {
   bool operator==(const rgw_s3_key_filter& rhs) const = default;
   std::string prefix_rule;
   std::string suffix_rule;
   std::string regex_rule;
+
+  KeyNegativeFilterMap negative_filter_map;
 
   bool has_content() const;
 
@@ -21,18 +25,22 @@ struct rgw_s3_key_filter {
   void dump_xml(Formatter *f) const;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
       encode(prefix_rule, bl);
       encode(suffix_rule, bl);
       encode(regex_rule, bl);
+      encode(negative_filter_map, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
       decode(prefix_rule, bl);
       decode(suffix_rule, bl);
       decode(regex_rule, bl);
+      if(struct_v >= 2) {
+        decode(negative_filter_map, bl);
+      }
     DECODE_FINISH(bl);
   }
 };
@@ -43,7 +51,8 @@ using KeyMultiValueMap = std::multimap<std::string, std::string>;
 
 struct rgw_s3_key_value_filter {
   KeyValueMap kv;
-
+  KeyNegativeFilterMap negative_filter_map;
+  
   bool has_content() const;
 
   void dump(Formatter *f) const;
@@ -51,13 +60,17 @@ struct rgw_s3_key_value_filter {
   void dump_xml(Formatter *f) const;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
       encode(kv, bl);
+      encode(negative_filter_map, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
       decode(kv, bl);
+      if(struct_v >= 2) {
+        decode(negative_filter_map, bl);
+      }
     DECODE_FINISH(bl);
   }
 };
