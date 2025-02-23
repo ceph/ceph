@@ -89,17 +89,13 @@ struct OSDRestrictions {
   /// rolled a dice, and decided not to scrub in this tick
   bool random_backoff_active{false};
 
-  /// the OSD is performing recovery & osd_repair_during_recovery is 'true'
-  bool allow_requested_repair_only:1{false};
-
   /// the CPU load is high. No regular scrubs are allowed.
   bool cpu_overloaded:1{false};
 
   /// outside of allowed scrubbing hours/days
   bool restricted_time:1{false};
 
-  /// the OSD is performing a recovery, osd_scrub_during_recovery is 'false',
-  /// and so is osd_repair_during_recovery
+  /// the OSD is performing a recovery & osd_scrub_during_recovery is 'false'
   bool recovery_in_progress:1{false};
 };
 static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
@@ -193,13 +189,12 @@ struct formatter<Scrub::OSDRestrictions> {
   auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "<{}.{}.{}.{}.{}.{}>",
+	ctx.out(), "<{}.{}.{}.{}.{}>",
 	conds.max_concurrency_reached ? "max-scrubs" : "",
 	conds.random_backoff_active ? "backoff" : "",
 	conds.cpu_overloaded ? "high-load" : "",
 	conds.restricted_time ? "time-restrict" : "",
-	conds.recovery_in_progress ? "recovery" : "",
-	conds.allow_requested_repair_only ? "repair-only" : "");
+	conds.recovery_in_progress ? "recovery" : "");
   }
 };
 
