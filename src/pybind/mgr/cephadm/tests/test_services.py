@@ -1008,7 +1008,7 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ips", lambda _: ['::1'])
     def test_prometheus_config_security_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1), rgw_frontend_type='beast')
@@ -1070,6 +1070,7 @@ class TestMonitoring:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
 
@@ -1078,6 +1079,7 @@ class TestMonitoring:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=haproxy
 
@@ -1090,17 +1092,6 @@ class TestMonitoring:
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
 
-                  - job_name: 'nvmeof'
-                    http_sd_configs:
-                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
-
-                  - job_name: 'nfs'
-                    http_sd_configs:
-                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nfs
-
-                  - job_name: 'smb'
-                    http_sd_configs:
-                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=smb
 
                 """).lstrip()
 
@@ -1144,7 +1135,7 @@ class TestMonitoring:
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ips", lambda _: ['::1'])
     @patch("cephadm.services.monitoring.password_hash", lambda password: 'prometheus_password_hash')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch('cephadm.cert_mgr.CertMgr.generate_cert', lambda instance, fqdn, ip: ('mycert', 'mykey'))
@@ -1170,6 +1161,7 @@ class TestMonitoring:
                 },
             })
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
+                    with_service(cephadm_module, CephExporterSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, s) as _, \
                     with_service(cephadm_module, AlertManagerSpec('alertmanager')) as _, \
                     with_service(cephadm_module, IngressSpec(service_id='ingress',
@@ -1210,7 +1202,7 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
-                        key_file:  prometheus.key
+                        key_file: prometheus.key
                       path_prefix: '/'
                       http_sd_configs:
                         - url: https://[::1]:8765/sd/prometheus/sd-config?service=alertmanager
@@ -1220,7 +1212,7 @@ class TestMonitoring:
                           tls_config:
                             ca_file: root_cert.pem
                             cert_file: prometheus.crt
-                            key_file:  prometheus.key
+                            key_file: prometheus.key
 
                 scrape_configs:
                   - job_name: 'ceph'
@@ -1234,6 +1226,8 @@ class TestMonitoring:
                     scheme: https
                     tls_config:
                       ca_file: root_cert.pem
+                      cert_file: prometheus.crt
+                      key_file: prometheus.key
                     honor_labels: true
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=mgr-prometheus
@@ -1243,7 +1237,7 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
-                        key_file:  prometheus.key
+                        key_file: prometheus.key
 
                   - job_name: 'node'
                     relabel_configs:
@@ -1254,7 +1248,8 @@ class TestMonitoring:
                     tls_config:
                       ca_file: root_cert.pem
                       cert_file: prometheus.crt
-                      key_file:  prometheus.key
+                      key_file: prometheus.key
+                    honor_labels: true
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
                       basic_auth:
@@ -1263,7 +1258,7 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
-                        key_file:  prometheus.key
+                        key_file: prometheus.key
 
                   - job_name: 'haproxy'
                     relabel_configs:
@@ -1273,6 +1268,9 @@ class TestMonitoring:
                     scheme: https
                     tls_config:
                       ca_file: root_cert.pem
+                      cert_file: prometheus.crt
+                      key_file: prometheus.key
+                    honor_labels: true
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=haproxy
                       basic_auth:
@@ -1281,17 +1279,19 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
-                        key_file:  prometheus.key
+                        key_file: prometheus.key
 
                   - job_name: 'ceph-exporter'
                     relabel_configs:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
-                    honor_labels: true
                     scheme: https
                     tls_config:
                       ca_file: root_cert.pem
+                      cert_file: prometheus.crt
+                      key_file: prometheus.key
+                    honor_labels: true
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
                       basic_auth:
@@ -1300,52 +1300,8 @@ class TestMonitoring:
                       tls_config:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
-                        key_file:  prometheus.key
+                        key_file: prometheus.key
 
-                  - job_name: 'nvmeof'
-                    honor_labels: true
-                    scheme: https
-                    tls_config:
-                      ca_file: root_cert.pem
-                    http_sd_configs:
-                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
-                      basic_auth:
-                        username: sd_user
-                        password: sd_password
-                      tls_config:
-                        ca_file: root_cert.pem
-                        cert_file: prometheus.crt
-                        key_file:  prometheus.key
-
-                  - job_name: 'nfs'
-                    honor_labels: true
-                    scheme: https
-                    tls_config:
-                      ca_file: root_cert.pem
-                    http_sd_configs:
-                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=nfs
-                      basic_auth:
-                        username: sd_user
-                        password: sd_password
-                      tls_config:
-                        ca_file: root_cert.pem
-                        cert_file: prometheus.crt
-                        key_file:  prometheus.key
-
-                  - job_name: 'smb'
-                    honor_labels: true
-                    scheme: https
-                    tls_config:
-                      ca_file: root_cert.pem
-                    http_sd_configs:
-                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=smb
-                      basic_auth:
-                        username: sd_user
-                        password: sd_password
-                      tls_config:
-                        ca_file: root_cert.pem
-                        cert_file: prometheus.crt
-                        key_file:  prometheus.key
 
                 """).lstrip()
 
@@ -1384,8 +1340,8 @@ class TestMonitoring:
                             'retention_time': '15d',
                             'retention_size': '0',
                             'ip_to_bind_to': '',
-                            'web_config': '/etc/prometheus/web.yml',
-                            "use_url_prefix": False
+                            "use_url_prefix": False,
+                            'web_config': '/etc/prometheus/web.yml'
                         },
                     }),
                     error_ok=True,
