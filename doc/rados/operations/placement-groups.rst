@@ -659,22 +659,28 @@ command of the following form:
 
    ceph osd pool set {pool-name} pg_num {pg_num}
 
-If you increase the number of PGs, your cluster will not rebalance until you
-increase the number of PGs for placement (``pgp_num``). The ``pgp_num``
-parameter specifies the number of PGs that are to be considered for placement
-by the CRUSH algorithm. Increasing ``pg_num`` splits the PGs in your cluster,
-but data will not be migrated to the newer PGs until ``pgp_num`` is increased.
-The ``pgp_num`` parameter should be equal to the ``pg_num`` parameter. To
-increase the number of PGs for placement, run a command of the following form:
+Since the Nautilus release, Ceph automatically steps ``pgp_num`` for a pool
+whenever ``pg_num`` is changed, either by the PG autoscaler or manually. Admins
+generally do not need to touch ``pgp_num`` directly, but can monitor progress
+with ``watch ceph osd pool ls detail``. When ``pg_num`` is changed, the value
+of ``pgp_num`` is stepped slowly so that the cost of splitting or merging PGs
+is amortized over time to minimize performance impact.
+
+Increasing ``pg_num`` splits the PGs in your cluster, but data will not be
+migrated to the newer PGs until ``pgp_num`` is increased. 
+
+It is possible to manually set the ``pgp_num`` parameter. The ``pgp_num``
+parameter should be equal to the ``pg_num`` parameter. To increase the number
+of PGs for placement, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph osd pool set {pool-name} pgp_num {pgp_num}
 
-If you decrease the number of PGs, then ``pgp_num`` is adjusted automatically.
-In releases of Ceph that are Nautilus and later (inclusive), when the
-``pg_autoscaler`` is not used, ``pgp_num`` is automatically stepped to match
-``pg_num``. This process manifests as periods of remapping of PGs and of
+If you decrease or increase the number of PGs, then ``pgp_num`` is adjusted
+automatically. In releases of Ceph that are Nautilus and later (inclusive),
+when the ``pg_autoscaler`` is not used, ``pgp_num`` is automatically stepped to
+match ``pg_num``. This process manifests as periods of remapping of PGs and of
 backfill, and is expected behavior and normal.
 
 .. _rados_ops_pgs_get_pg_num:
