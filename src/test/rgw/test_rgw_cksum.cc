@@ -471,11 +471,8 @@ TEST(RGWCksum, CRC64NVME_COMBINE1)
   uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
 				  lacrimae.length(), 0ULL);
 
-  uint64_t crc3 = crc64_nvme_combine(crc1, crc1, dolor.length());
-
   uint64_t crc4 =  diag_crc64_combine_madler(crc1, crc1, dolor.length());
 
-  // ASSERT_EQ(crc2, crc3);
   ASSERT_EQ(crc2, crc4);
 }
 

@@ -66,14 +66,8 @@ namespace rgw::cksum {
 	 * defined byte order before combining */
 	auto cck1 = rgw::digest::byteswap(*diag_get_crc(ck1));
 	auto cck2 = rgw::digest::byteswap(*diag_get_crc(ck2));
-#if 1
 	/* madler crcany */
 	auto cck3 = crc64nvme_comb(cck1, cck2, len1);
-#else
-	/* XXXX kill this and the failing combine logic */
-	/* spdk */
-	cck3 = crc64_nvme_combine(cck1, cck2, len1);
-#endif
 	ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
 			   cksum::Cksum::CtorStyle::raw);
       }

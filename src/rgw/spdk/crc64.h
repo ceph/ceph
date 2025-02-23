@@ -33,8 +33,6 @@ extern "C" {
  */
 uint64_t spdk_crc64_nvme(const void *buf, size_t len, uint64_t crc);
 
-uint64_t crc64_nvme_combine(uint64_t crc64_1, uint64_t crc64_2, size_t len1);
-
 #ifdef __cplusplus
 }
 #endif
