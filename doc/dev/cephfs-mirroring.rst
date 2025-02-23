@@ -158,7 +158,7 @@ To list file system mirror peers use::
 
 To configure a directory for mirroring, use::
 
-  $ ceph fs snapshot mirror add <fs_name> <path>
+  $ ceph fs snapshot mirror add <fs_name> <path> [<sync_from_snapshot>]
 
 To stop a mirroring directory snapshots use::
 
@@ -183,6 +183,10 @@ disallowed to be added for mirroring::
 
 Commands to check directory mapping (to mirror daemons) and directory distribution are
 detailed in `Mirror Daemon Status` section.
+
+Adding a directory starts mirroring of the already existing snapshots of a directory,
+starting from the first snapshot (by default) and follows the order of snapshot creation.
+``sync_from_snapshot`` option is used to start mirroring from a specified snapshot.
 
 Bootstrap Peers
 ---------------

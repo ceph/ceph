@@ -189,7 +189,7 @@ To configure a directory for mirroring, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph fs snapshot mirror add <fs_name> <path>
+   ceph fs snapshot mirror add <fs_name> <path> [<sync_from_snapshot>]
 
 To list the configured directories, run a command of the following form:
 
@@ -228,6 +228,10 @@ subdirectories or ancestor directories is disallowed::
 The :ref:`Mirroring Status<cephfs_mirroring_mirroring_status>` section contains
 information about the commands for checking the directory mapping (to mirror
 daemons) and for checking the directory distribution. 
+
+Adding a directory starts mirroring of the already existing snapshots of a directory,
+starting from the first snapshot (by default) and follows the order of snapshot creation.
+``sync_from_snapshot`` option is used to start mirroring from a specified snapshot.
 
 .. _cephfs_mirroring_bootstrap_peers:
 
