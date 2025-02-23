@@ -19,6 +19,8 @@
 
 extern "C" {
 #include "madler/crc64nvme.h"
+#include "madler/crc32iso_hdlc.h"
+#include "madler/crc32iscsi.h"
 #include "spdk/crc64.h"
 } // extern "C"
 
@@ -46,7 +48,7 @@ namespace rgw::cksum {
     }
 
     switch(ck1.type) {
-    case rgw::cksum::Type::crc64nvme:
+    case cksum::Type::crc64nvme:
       {
 	/* due to AWS (and other) convention, the at-rest
 	 * digest is byteswapped (on LE?);  restore the
@@ -58,6 +60,31 @@ namespace rgw::cksum {
 	/* madler crcany */
 	auto cck3 = crc64nvme_comb(cck1, cck2, len1);
 	/* and byteswap */
+	cck3 = rgw::digest::byteswap(cck3);
+	/* convert to a Cksum, no ascii armor */
+	ck3 = Cksum(ck1.type, (char*) &cck3, Cksum::CtorStyle::raw);
+      }
+      break;
+    case cksum::Type::crc32:
+    case cksum::Type::crc32c:
+      {
+	uint32_t cck3;
+	auto cck1 =
+	  rgw::digest::byteswap(std::get<uint32_t>(*ck1.get_crc()));
+	auto cck2 =
+	  rgw::digest::byteswap(std::get<uint32_t>(*ck2.get_crc()));
+	/* madler crcany */
+	switch (ck1.type) {
+	case cksum::Type::crc32:
+	  cck3 =  crc32iso_hdlc_comb(cck1, cck2, len1);
+	  break;
+	case cksum::Type::crc32c:
+	  cck3 =  crc32iscsi_comb(cck1, cck2, len1);
+	  break;
+	default:
+	  break;
+	}
+        /* and byteswap */
 	cck3 = rgw::digest::byteswap(cck3);
 	/* convert to a Cksum, no ascii armor */
 	ck3 = Cksum(ck1.type, (char*) &cck3, Cksum::CtorStyle::raw);

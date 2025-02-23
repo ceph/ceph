@@ -500,7 +500,6 @@ TEST(RGWCksum, CRC64NVME_COMBINE2)
   ASSERT_EQ(crc3, crc4);
 }
 
-#if 1
 TEST(RGWCksum, CRC64NVME_COMBINE3)
 {
   auto t = cksum::Type::crc64nvme;
@@ -571,7 +570,6 @@ TEST(RGWCksum, CRC64NVME_COMBINE3)
   /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
   ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
 }
-#endif
 
 TEST(RGWCksum, CtorUnarmor)
 {
