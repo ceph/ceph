@@ -1250,7 +1250,7 @@ options:
   type: bool
   level: advanced
   desc: Call bind(2) on client sockets
-  default: false
+  default: true
   with_legacy: true
 - name: ms_tcp_listen_backlog
   type: int
