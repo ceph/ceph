@@ -155,8 +155,9 @@ private:
 
   std::string rgw_script;
   int read_script();
+  std::unique_ptr<lua_state_guard> initialize_lguard_state();
 
-public:
+ public:
   Background(rgw::sal::Driver* _driver,
       CephContext* _cct,
       rgw::sal::LuaManager* _lua_manager,
