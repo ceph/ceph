@@ -11,10 +11,10 @@
 
 #include "common/Cond.h"
 #include "common/Finisher.h"
+#include "common/snap_types.h" // for class SnapContext
 #include "common/Thread.h"
 #include "common/zipkin_trace.h"
 
-#include "Objecter.h"
 #include "Striper.h"
 
 #include <unordered_map>

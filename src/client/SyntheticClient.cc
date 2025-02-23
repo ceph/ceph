@@ -20,6 +20,7 @@
 
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "SyntheticClient.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"

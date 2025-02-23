@@ -23,7 +23,9 @@
 
 #include "include/types.h"
 #include "include/stringify.h"
+#include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "MemStore.h"
 #include "include/compat.h"
 

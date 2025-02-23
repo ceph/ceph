@@ -16,8 +16,12 @@
 #include <functional>
 #include <mutex>
 #include <condition_variable>
+#include <deque>
 #include <set>
+#include <optional>
 #include <queue>
+#include <unordered_map>
+#include <unordered_set>
 
 struct QuiesceClusterMembership {
   static const QuiesceInterface::PeerId INVALID_MEMBER;

@@ -15,21 +15,19 @@
 #ifndef SCRUBSTACK_H_
 #define SCRUBSTACK_H_
 
-#include "CDir.h"
-#include "CDentry.h"
 #include "CInode.h"
-#include "MDSContext.h"
 #include "ScrubHeader.h"
 
 #include "common/LogClient.h"
 #include "common/Cond.h"
 #include "common/ceph_time.h"
 #include "include/elist.h"
-#include "messages/MMDSScrub.h"
-#include "messages/MMDSScrubStats.h"
 
 class MDCache;
+class MMDSScrub;
+class MMDSScrubStats;
 class Finisher;
+class CDir;
 
 class ScrubStack {
 public:

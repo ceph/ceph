@@ -17,10 +17,10 @@
 
 #include "MDSTableServer.h"
 #include "snap.h"
-
-#include "messages/MRemoveSnaps.h"
+#include "include/encoding_set.h"
 
 class MDSRank;
+class MRemoveSnaps;
 class MonClient;
 
 class SnapServer : public MDSTableServer {

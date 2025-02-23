@@ -15,7 +15,7 @@
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
 
-#include "include/cephfs/metrics/Types.h"
+#include <string>
 
 class feature_bitset_t;
 namespace ceph {

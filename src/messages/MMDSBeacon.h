@@ -20,6 +20,7 @@
 #include "msg/Message.h"
 #include "messages/PaxosServiceMessage.h"
 
+#include "include/encoding_vector.h"
 #include "include/types.h"
 
 #include "mds/MDSMap.h"

@@ -13,6 +13,7 @@
  */
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "osdc/Journaler.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
@@ -39,6 +40,9 @@
 #include "events/ELid.h"
 
 #include "include/denc.h"
+#include "include/encoding_small_vector.h" // for encoding frag_vec_t
+#include "include/encoding_tuple.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/stringify.h"
 
 #include "LogSegment.h"
@@ -49,6 +53,7 @@
 #include "Server.h"
 #include "Migrator.h"
 #include "Mutation.h"
+#include "SnapRealm.h"
 
 #include "InoTable.h"
 #include "MDSTableClient.h"
@@ -365,6 +370,13 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     ceph_assert(g_conf()->mds_kill_journal_expire_at != 5);
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
+}
+
+void LogSegment::purge_inodes_finish(interval_set<inodeno_t>& inos){
+  purging_inodes.subtract(inos);
+  if (NULL != purged_cb &&
+      purging_inodes.empty())
+    purged_cb->complete(0);
 }
 
 // -----------------------

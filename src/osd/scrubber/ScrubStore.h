@@ -6,6 +6,9 @@
 #include "osd/osd_types_fmt.h"
 #include "osd/SnapMapper.h"  // for OSDriver
 
+#include <string>
+#include <vector>
+
 namespace librados {
 struct object_id_t;
 }

@@ -4,6 +4,8 @@
 #include "inode_backtrace.h"
 
 #include "common/Formatter.h"
+#include "include/container_ios.h"
+#include "include/encoding_vector.h"
 
 /* inode_backpointer_t */
 
@@ -160,4 +162,12 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
   if (*divergent)
     *equivalent = false;
   return comparator;
+}
+
+std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib) {
+  return out << "<" << ib.dirino << "/" << ib.dname << " v" << ib.version << ">";
+}
+
+std::ostream& operator<<(std::ostream& out, const inode_backtrace_t& it) {
+  return out << "(" << it.pool << ")" << it.ino << ":" << it.ancestors << "//" << it.old_pools;
 }

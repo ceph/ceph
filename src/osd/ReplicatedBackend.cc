@@ -11,8 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "common/errno.h"
 #include "ReplicatedBackend.h"
+#include "common/debug.h"
+#include "common/errno.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGPCT.h"
 #include "messages/MOSDRepOp.h"
@@ -25,6 +26,8 @@
 #include "include/util.h"
 #include "OSD.h"
 #include "osd_tracer.h"
+
+#include <sstream>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd

@@ -3,9 +3,14 @@
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
+#include <list>
+#include <iosfwd>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "mdstypes.h"
+#include "include/types.h" // for version_t
 
 namespace ceph {
   class Formatter;
@@ -41,9 +46,7 @@ inline bool operator==(const inode_backpointer_t& l, const inode_backpointer_t& 
 	return l.dirino == r.dirino && l.version == r.version && l.dname == r.dname;
 }
 
-inline std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib) {
-  return out << "<" << ib.dirino << "/" << ib.dname << " v" << ib.version << ">";
-}
+std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib);
 
 /*
  * inode_backtrace_t is a complete ancestor backtraces for a given inode.
@@ -85,9 +88,7 @@ struct inode_backtrace_t {
 };
 WRITE_CLASS_ENCODER(inode_backtrace_t)
 
-inline std::ostream& operator<<(std::ostream& out, const inode_backtrace_t& it) {
-  return out << "(" << it.pool << ")" << it.ino << ":" << it.ancestors << "//" << it.old_pools;
-}
+std::ostream& operator<<(std::ostream& out, const inode_backtrace_t& it);
 
 inline bool operator==(const inode_backtrace_t& l,
                        const inode_backtrace_t& r) {

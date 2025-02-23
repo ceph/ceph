@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include <iosfwd>
 
@@ -93,25 +94,12 @@ public:
   CrushWrapper() {
     create();
   }
-  ~CrushWrapper() {
-    if (crush)
-      crush_destroy(crush);
-    choose_args_clear();
-  }
+  ~CrushWrapper();
 
   crush_map *get_crush_map() { return crush; }
 
   /* building */
-  void create() {
-    if (crush)
-      crush_destroy(crush);
-    crush = crush_create();
-    choose_args_clear();
-    ceph_assert(crush);
-    have_rmaps = false;
-
-    set_tunables_default();
-  }
+  void create();
 
   /// true if any buckets that aren't straw2
   bool has_non_straw2_buckets() const;

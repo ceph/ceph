@@ -16,6 +16,7 @@
 #define SNAPMAPPER_H
 
 #include <cstring>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>

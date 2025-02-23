@@ -13,6 +13,12 @@
 
 #include <unordered_map>
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
 #define BUFFER_MEMORY_WEIGHT CEPH_PAGE_SHIFT  // memory usage of BufferHead, count in (1<<n)
 				 /// while holding the lock
