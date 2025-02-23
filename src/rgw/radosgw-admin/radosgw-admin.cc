@@ -43,15 +43,6 @@ extern "C" {
 
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
-#include "tools/rbd/ArgumentTypes.h"
-#include "tools/rbd/Shell.h"
-#include "tools/rbd/Utils.h"
-#include "include/types.h"
-#include "include/stringify.h"
-#include "common/errno.h"
-#include "common/Formatter.h"
-#include "common/TextTable.h"
-
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
