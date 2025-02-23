@@ -1,5 +1,6 @@
-enum KmsProviders {
-  Vault = 'vault'
+export enum KMS_PROVIDER {
+  VAULT = 'vault',
+  KMIP = 'kmip'
 }
 
 enum AuthMethods {
@@ -12,26 +13,19 @@ enum SecretEngines {
   Transit = 'transit'
 }
 
-enum sseS3 {
-  SSE_S3 = 'AES256'
-}
-
-enum sseKms {
-  SSE_KMS = 'aws:kms'
+export enum ENCRYPTION_TYPE {
+  SSE_S3 = 's3',
+  SSE_KMS = 'kms'
 }
 
 interface RgwBucketEncryptionModel {
-  kmsProviders: KmsProviders[];
+  kmsProviders: KMS_PROVIDER[];
   authMethods: AuthMethods[];
   secretEngines: SecretEngines[];
-  SSE_S3: sseS3;
-  SSE_KMS: sseKms;
 }
 
 export const rgwBucketEncryptionModel: RgwBucketEncryptionModel = {
-  kmsProviders: [KmsProviders.Vault],
+  kmsProviders: [KMS_PROVIDER.VAULT, KMS_PROVIDER.KMIP],
   authMethods: [AuthMethods.Token, AuthMethods.Agent],
-  secretEngines: [SecretEngines.KV, SecretEngines.Transit],
-  SSE_S3: sseS3.SSE_S3,
-  SSE_KMS: sseKms.SSE_KMS
+  secretEngines: [SecretEngines.KV, SecretEngines.Transit]
 };

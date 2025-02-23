@@ -16,8 +16,9 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
-import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { ENCRYPTION_TYPE } from '../models/rgw-bucket-encryption';
+import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-config-keys';
 
 @Component({
   selector: 'cd-rgw-configuration-page',
@@ -46,7 +47,7 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
   bsModalRef: NgbModalRef;
   filteredEncryptionConfigValues: {};
   excludeProps: any[] = [];
-  disableCreate = false;
+  disableCreate = true;
   allEncryptionValues: any;
 
   constructor(
@@ -98,12 +99,13 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
     this.excludeProps.push('unique_id');
   }
 
-  getBackend(encryptionData: { [x: string]: any[] }, encryptionType: string) {
-    return new Set(encryptionData[encryptionType].map((item) => item.backend));
-  }
-
-  areAllAllowedBackendsPresent(allowedBackends: any[], backendsSet: Set<any>) {
-    return allowedBackends.every((backend) => backendsSet.has(backend));
+  getBackend(encryptionData: VaultConfig | KmipConfig, encryptionType: ENCRYPTION_TYPE) {
+    const backendSet = new Set(Object.keys(encryptionData[encryptionType]));
+    const result =
+      encryptionType === ENCRYPTION_TYPE.SSE_KMS
+        ? backendSet.has('kmip') && backendSet.has('vault')
+        : backendSet.has('vault');
+    return result;
   }
 
   openRgwConfigModal(edit: boolean) {
@@ -136,19 +138,24 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
     super.setExpandedRow(expandedRow);
   }
 
+  flattenData(data: any) {
+    const combinedArray: any[] = [];
+    for (const kmsData of Object.values(data.kms)) {
+      combinedArray.push(kmsData);
+    }
+    for (const s3Data of Object.values(data.s3)) {
+      combinedArray.push(s3Data);
+    }
+    return combinedArray;
+  }
+
   fetchData() {
     this.rgwBucketService.getEncryptionConfig().subscribe((data: any) => {
       this.allEncryptionValues = data;
-      const allowedBackends = rgwBucketEncryptionModel.kmsProviders;
-
-      const kmsBackends = this.getBackend(data, 'SSE_KMS');
-      const s3Backends = this.getBackend(data, 'SSE_S3');
-
-      const allKmsBackendsPresent = this.areAllAllowedBackendsPresent(allowedBackends, kmsBackends);
-      const allS3BackendsPresent = this.areAllAllowedBackendsPresent(allowedBackends, s3Backends);
-
-      this.disableCreate = allKmsBackendsPresent && allS3BackendsPresent;
-      this.encryptionConfigValues = Object.values(data).flat();
+      const kmsBackends = this.getBackend(data, ENCRYPTION_TYPE.SSE_KMS);
+      const s3Backends = this.getBackend(data, ENCRYPTION_TYPE.SSE_S3);
+      this.disableCreate = kmsBackends && s3Backends;
+      this.encryptionConfigValues = this.flattenData(data);
     });
   }
 }
