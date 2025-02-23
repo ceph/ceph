@@ -1473,7 +1473,7 @@ class PunchHoleFixture : public BlueStoreFixture
       blob_like.offset, a2phase(blob_like.offset), blob_like.length, b);
     onode->extent_map.extent_map.insert(*ext);
     b->get_ref(coll.get(), a2phase(blob_like.offset), blob_like.length);
-    bb.mark_used(a2phase(blob_like.offset), blob_like.length);
+    bb.mark_used(a2phase(blob_like.offset), blob_like.length, bb.get_csum_chunk_size());
 
     //when shared is triggered, select how much is will be shared
     bool do_shared = shared_denom !=0 && rand() % shared_denom < shared_nom;
@@ -1713,7 +1713,7 @@ public:
                                             num_aus * au_size, b);
           onode.onode->extent_map.extent_map.insert(*ext);
           b->get_ref(coll.get(), empty_aus * au_size, num_aus * au_size);
-          bb.mark_used(empty_aus * au_size, num_aus * au_size);
+          bb.mark_used(empty_aus * au_size, num_aus * au_size, bb.get_csum_chunk_size());
         };
 
     size_t off_blob_aligned = p2align(off, blob_size);
@@ -2511,7 +2511,7 @@ TEST(ExtentMap, dup_extent_map)
   auto *ext1 = new BlueStore::Extent(ext1_offs, ext1_boffs, ext1_len, b1);
   em1.extent_map.insert(*ext1);
   b1->get_ref(coll.get(), ext1->blob_offset, ext1->length);
-  _b1.mark_used(ext1->blob_offset, ext1->length);
+  _b1.mark_used(ext1->blob_offset, ext1->length, _b1.get_csum_chunk_size());
 
   ///////////////////////////
   // constructing onode2 which is a full clone from onode1
@@ -3051,23 +3051,25 @@ TEST(bluestore_blob_t, unused) {
     extents.emplace_back(0x1a560000, min_alloc_size);
     b.allocated(p2align(suggested_boff, min_alloc_size), 0 /*no matter*/,
                 extents);
-    b.mark_used(offset, length);
-    ASSERT_FALSE(b.is_unused(offset, length));
+    uint32_t cal_chunk = round_up_to(b.get_logical_length()/(sizeof(bluestore_blob_t::unused_t) * 8), 1u<<12);
+    uint32_t chunk_size = std::max(uint32_t(1u<<12), cal_chunk);
+    b.mark_used(offset, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset, length, chunk_size));
 
     // _do_write_small 0x2000~1000
     offset = 0x2000;
     length = 0x1000;
-    b.add_unused(0, 0x10000);
-    ASSERT_TRUE(b.is_unused(offset, length));
-    b.mark_used(offset, length);
-    ASSERT_FALSE(b.is_unused(offset, length));
+    b.add_unused(0, 0x10000, chunk_size);
+    ASSERT_TRUE(b.is_unused(offset, length, chunk_size));
+    b.mark_used(offset, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset, length, chunk_size));
 
     // _do_write_small 0xc000~2000
     offset = 0xc000;
     length = 0x2000;
-    ASSERT_TRUE(b.is_unused(offset, length));
-    b.mark_used(offset, length);
-    ASSERT_FALSE(b.is_unused(offset, length));
+    ASSERT_TRUE(b.is_unused(offset, length, chunk_size));
+    b.mark_used(offset, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset, length, chunk_size));
   }
 
   {
@@ -3082,17 +3084,19 @@ TEST(bluestore_blob_t, unused) {
     extents.emplace_back(0x1a560000, min_alloc_size);
     b.allocated(p2align(suggested_boff, min_alloc_size), 0 /*no matter*/,
                 extents);
-    b.add_unused(0, offset);
-    b.add_unused(offset + length, min_alloc_size * 2 - offset - length);
-    b.mark_used(offset, length);
-    ASSERT_FALSE(b.is_unused(offset, length));
+    uint32_t cal_chunk = round_up_to(b.get_logical_length()/(sizeof(bluestore_blob_t::unused_t) * 8), 1u<<12);
+    uint32_t chunk_size = std::max(uint32_t(1u<<12), cal_chunk);
+    b.add_unused(0, offset, chunk_size);
+    b.add_unused(offset + length, min_alloc_size * 2 - offset - length, chunk_size);
+    b.mark_used(offset, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset, length, chunk_size));
 
     // _do_write_small 0x15000~3000
     offset = 0x15000;
     length = 0x3000;
-    ASSERT_TRUE(b.is_unused(offset, length));
-    b.mark_used(offset, length);
-    ASSERT_FALSE(b.is_unused(offset, length));
+    ASSERT_TRUE(b.is_unused(offset, length, chunk_size));
+    b.mark_used(offset, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset, length, chunk_size));
   }
 
   {
@@ -3111,24 +3115,25 @@ TEST(bluestore_blob_t, unused) {
     PExtentVector extents;
     extents.emplace_back(0x410000, min_alloc_size);
     b.allocated(p2align(offset0, min_alloc_size), min_alloc_size, extents);
-    b.add_unused(0, min_alloc_size * 3);
-    b.mark_used(offset0, length);
-    ASSERT_FALSE(b.is_unused(offset0, length));
-    ASSERT_TRUE(b.is_unused(offset, length));
+    uint32_t chunk_size = unused_granularity;
+    b.add_unused(0, min_alloc_size * 3, chunk_size);
+    b.mark_used(offset0, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset0, length, chunk_size));
+    ASSERT_TRUE(b.is_unused(offset, length, chunk_size));
 
     extents.clear();
     extents.emplace_back(0x430000, min_alloc_size);
     b.allocated(p2align(offset, min_alloc_size), min_alloc_size, extents);
-    b.mark_used(offset, length);
-    ASSERT_FALSE(b.is_unused(offset0, length));
-    ASSERT_FALSE(b.is_unused(offset, length));
-    ASSERT_FALSE(b.is_unused(offset, unused_granularity));
+    b.mark_used(offset, length, chunk_size);
+    ASSERT_FALSE(b.is_unused(offset0, length, chunk_size));
+    ASSERT_FALSE(b.is_unused(offset, length, chunk_size));
+    ASSERT_FALSE(b.is_unused(offset, unused_granularity, chunk_size));
 
     ASSERT_TRUE(
-        b.is_unused(0, offset / unused_granularity * unused_granularity));
-    ASSERT_TRUE(b.is_unused(offset + length, offset0 - offset - length));
+        b.is_unused(0, offset / unused_granularity * unused_granularity, chunk_size));
+    ASSERT_TRUE(b.is_unused(offset + length, offset0 - offset - length, chunk_size));
     auto end0_aligned = round_up_to(offset0 + length, unused_granularity);
-    ASSERT_TRUE(b.is_unused(end0_aligned, min_alloc_size * 3 - end0_aligned));
+    ASSERT_TRUE(b.is_unused(end0_aligned, min_alloc_size * 3 - end0_aligned, chunk_size));
   }
 }
 // This UT is primarily intended to show how repair procedure
@@ -3140,15 +3145,16 @@ TEST(bluestore_blob_t, wrong_map_bl_in_51682) {
   {
     bluestore_blob_t b;
     uint64_t min_alloc_size = 4 << 10; // 64 kB
-
     b.allocated_test(bluestore_pextent_t(0x17ba000, 4 * min_alloc_size));
     b.allocated_test(bluestore_pextent_t(0x17bf000, 4 * min_alloc_size));
     b.allocated_test(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
                                          1 * min_alloc_size));
     b.allocated_test(bluestore_pextent_t(0x153c44d000, 7 * min_alloc_size));
 
-    b.mark_used(0, 0x8000);
-    b.mark_used(0x9000, 0x7000);
+    uint32_t cal_chunk = round_up_to(b.get_logical_length()/(sizeof(bluestore_blob_t::unused_t) * 8), 1u<<12);
+    uint32_t chunk_size = std::max(uint32_t(1u<<12), cal_chunk);
+    b.mark_used(0, 0x8000, chunk_size);
+    b.mark_used(0x9000, 0x7000, chunk_size);
 
     string s(0x7000, 'a');
     bufferlist bl;
