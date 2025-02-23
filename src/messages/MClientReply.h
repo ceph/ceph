@@ -115,6 +115,8 @@ struct DirStat {
 };
 
 struct InodeStat {
+  using optmetadata_singleton_client_t = optmetadata_singleton<optmetadata_client_t<std::allocator>,std::allocator>;
+
   vinodeno_t vino;
   uint32_t rdev = 0;
   version_t version = 0;
@@ -149,10 +151,16 @@ struct InodeStat {
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;
 
+  optmetadata_multiton<optmetadata_singleton_client_t,std::allocator> optmetadata;
+
  public:
   InodeStat() {}
   InodeStat(ceph::buffer::list::const_iterator& p, const uint64_t features) {
     decode(p, features);
+  }
+
+  void print(std::ostream& os) const {
+    os << "InodeStat(... " << optmetadata << ")";
   }
 
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
@@ -220,6 +228,9 @@ struct InodeStat {
       if (struct_v >= 7) {
         decode(fscrypt_auth, p);
         decode(fscrypt_file, p);
+      }
+      if (struct_v >= 8) {
+        decode(optmetadata, p);
       }
       DECODE_FINISH(p);
     }

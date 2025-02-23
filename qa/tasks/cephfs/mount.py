@@ -23,6 +23,14 @@ log = logging.getLogger(__name__)
 
 UMOUNT_TIMEOUT = 300
 
+class NoSuchAttributeError(SystemError):
+    pass
+class InvalidArgumentError(SystemError):
+    pass
+class DirectoryNotEmptyError(SystemError):
+    pass
+class OperationNotPermittedError(SystemError):
+    pass
 
 class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
@@ -1564,7 +1572,23 @@ class CephFSMountBase(object):
             # gives you [''] instead of []
             return []
 
-    def removexattr(self, path, key, **kwargs):
+    def _convert_attr_error(self, p, e):
+        stderr = p.stderr.getvalue()
+        log.error("attr: %s", stderr)
+        if "No such attribute" in stderr:
+            raise NoSuchAttributeError()
+        elif "Invalid" in stderr:
+            raise InvalidArgumentError()
+        elif "Permission" in stderr:
+            raise PermissionError()
+        elif "Directory not empty" in stderr:
+            raise DirectoryNotEmptyError()
+        elif "Operation not permitted" in stderr:
+            raise OperationNotPermittedError()
+        else:
+            raise e
+
+    def removexattr(self, path, key, helpfulexception=False, **kwargs):
         """
         Wrap setfattr removal.
 
@@ -1576,9 +1600,18 @@ class CephFSMountBase(object):
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False
-        self.run_shell(**kwargs)
+        kwargs['wait'] = False
+        p = self.run_shell(**kwargs)
+        try:
+            p.wait()
+        except CommandFailedError as e:
+            if helpfulexception:
+                return self._convert_attr_error(p, e)
+            else:
+                raise
+        return str(p.stdout.getvalue())
 
-    def setfattr(self, path, key, val, **kwargs):
+    def setfattr(self, path, key, val, helpfulexception=False, **kwargs):
         """
         Wrap setfattr.
 
@@ -1591,9 +1624,19 @@ class CephFSMountBase(object):
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False
-        return self.run_shell(**kwargs)
+        kwargs['wait'] = False
+        p = self.run_shell(**kwargs)
+        try:
+            p.wait()
+        except CommandFailedError as e:
+            if helpfulexception:
+                return self._convert_attr_error(p, e)
+            else:
+                raise
+        return str(p.stdout.getvalue())
 
-    def getfattr(self, path, attr, **kwargs):
+
+    def getfattr(self, path, attr, helpfulexception=False, **kwargs):
         """
         Wrap getfattr: return the values of a named xattr on one file, or
         None if the attribute is not found.
@@ -1609,11 +1652,13 @@ class CephFSMountBase(object):
         try:
             p.wait()
         except CommandFailedError as e:
-            if e.exitstatus == 1 and "No such attribute" in p.stderr.getvalue():
-                return None
+            if helpfulexception:
+                return self._convert_attr_error(p, e)
             else:
-                raise
-
+                if e.exitstatus == 1 and "No such attribute" in p.stderr.getvalue():
+                    return None
+                else:
+                    raise
         return str(p.stdout.getvalue())
 
     def df(self):

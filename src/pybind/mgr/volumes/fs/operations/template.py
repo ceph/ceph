@@ -40,6 +40,7 @@ class SubvolumeOpType(Enum):
     CREATE                = 'create'
     REMOVE                = 'rm'
     REMOVE_FORCE          = 'rm-force'
+    CHARMAP               = 'charmap'
     PIN                   = 'pin'
     LIST                  = 'ls'
     GETPATH               = 'getpath'

@@ -4556,6 +4556,7 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
 			  const LeaseStat& ls)
 {
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    dout(25) << "encode lease reply encoding: " << ls << dendl;
     ENCODE_START(2, 1, bl);
     encode(ls.mask, bl);
     encode(ls.duration_ms, bl);
@@ -4564,6 +4565,7 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
     ENCODE_FINISH(bl);
   }
   else {
+    dout(25) << "encode lease NO reply encoding: " << ls << dendl;
     encode(ls.mask, bl);
     encode(ls.duration_ms, bl);
     encode(ls.seq, bl);

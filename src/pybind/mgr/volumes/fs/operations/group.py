@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import cephfs
 
 from .snapshot_util import mksnap, rmsnap
+from .charmap_util import charmap_get, charmap_set, charmap_rm
 from .pin_util import pin
 from .template import GroupTemplate
 from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir, has_subdir
@@ -77,6 +78,15 @@ class Group(GroupTemplate):
 
     def pin(self, pin_type, pin_setting):
         return pin(self.fs, self.path, pin_type, pin_setting)
+
+    def charmap_set(self, setting, value):
+        return charmap_set(self.fs, self.path, setting, value)
+
+    def charmap_rm(self):
+        return charmap_rm(self.fs, self.path)
+
+    def charmap_get(self, setting):
+        return charmap_get(self.fs, self.path, setting)
 
     def create_snapshot(self, snapname):
         snappath = os.path.join(self.path,
