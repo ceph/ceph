@@ -1248,6 +1248,13 @@ class RgwZonegroup(RESTController):
         result = multisite_instance.get_zonegroup(zonegroup_name)
         return result
 
+    @Endpoint('GET')
+    @ReadPermission
+    def get_placement_target_by_placement_id(self, placement_id):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_placement_by_placement_id(placement_id)
+        return result
+
     @Endpoint('DELETE', path='storage-class')
     @DeletePermission
     def remove_storage_class(self, placement_id: str, storage_class: str):
@@ -1261,6 +1268,13 @@ class RgwZonegroup(RESTController):
     def storage_class(self, zone_group, placement_targets: List[Dict[str, str]] = []):
         multisite_instance = RgwMultisite()
         result = multisite_instance.add_placement_targets(zone_group, placement_targets)
+        return result
+
+    @Endpoint('PUT', path='storage-class')
+    @CreatePermission
+    def editStorageClass(self, zone_group, placement_targets: List[Dict[str, str]] = None):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.modify_placement_targets(zone_group, placement_targets)
         return result
 
     @Endpoint()

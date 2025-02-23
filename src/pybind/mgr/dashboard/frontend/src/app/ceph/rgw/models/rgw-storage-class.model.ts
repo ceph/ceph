@@ -9,6 +9,7 @@ export interface StorageClass {
   endpoint: string;
   region: string;
   placement_target: string;
+  zonegroup_name?: string;
 }
 
 export interface StorageClassDetails {
@@ -71,14 +72,15 @@ export interface S3Details {
   multipart_min_part_size: number;
   multipart_sync_threshold: number;
   host_style: boolean;
+  retain_head_object?: boolean;
 }
 
 export interface RequestModel {
   zone_group: string;
-  placement_targets: PlacementTarget[];
+  placement_targets: PlacementTargets[];
 }
 
-export interface PlacementTarget {
+export interface PlacementTargets {
   tags: string[];
   placement_id: string;
   storage_class: string;
@@ -93,6 +95,13 @@ export interface PlacementTarget {
     multipart_sync_threshold: number;
     multipart_min_part_size: number;
   };
+}
+
+export interface PlacementTarget {
+  name: string;
+  storage_classes: string[];
+  tags: string[];
+  tier_targets: TierTarget[];
 }
 
 export const CLOUD_TIER = 'cloud-s3';

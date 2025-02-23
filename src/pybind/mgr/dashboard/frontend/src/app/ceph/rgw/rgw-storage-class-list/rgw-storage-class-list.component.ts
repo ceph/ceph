@@ -21,7 +21,6 @@ import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { Router } from '@angular/router';
 
 const BASE_URL = 'rgw/tiering';
-
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
@@ -77,6 +76,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
+    const getStorageUri = () =>
+      this.selection.first() &&
+      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
+        this.selection.first().placement_target
+      )}/${encodeURI(this.selection.first().storage_class)}`;
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -90,6 +94,12 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.removeStorageClassModal()
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        routerLink: () => [`/rgw/tiering/edit/${getStorageUri()}`]
       }
     ];
   }
