@@ -139,7 +139,10 @@ class HostPlacementSpec(NamedTuple):
         return host_spec
 
     def validate(self) -> None:
-        assert_valid_host(self.hostname)
+        try:
+            assert_valid_host(self.hostname)
+        except SpecValidationError as e:
+            print(e.args)
 
 
 HostPatternType = Union[str, None, Dict[str, Union[str, bool, None]], "HostPattern"]
