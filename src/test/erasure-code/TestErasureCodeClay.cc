@@ -61,45 +61,45 @@ TEST(ErasureCodeClay, DISABLED_encode_decode)
   bufferlist in;
   in.push_back(in_ptr);
   int want_to_encode[] = { 0, 1, 2, 3 };
-  map<int, bufferlist> encoded;
-  EXPECT_EQ(0, clay.encode(set<int>(want_to_encode, want_to_encode+4),
+  shard_id_map<bufferlist> encoded(clay.get_chunk_count());
+  EXPECT_EQ(0, clay.encode(shard_id_set(want_to_encode, want_to_encode+4),
 			   in,
 			   &encoded));
   EXPECT_EQ(4u, encoded.size());
-  unsigned length =  encoded[0].length();
-  EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), length));
-  EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str() + length,
+  unsigned length =  encoded[shard_id_t(0)].length();
+  EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), length));
+  EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str() + length,
                       in.length() - length));
 
 
   // all chunks are available
   {
     int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, clay._decode(set<int>(want_to_decode, want_to_decode+2),
+    shard_id_map<bufferlist> decoded(clay.get_chunk_count());
+    EXPECT_EQ(0, clay._decode(shard_id_set(want_to_decode, want_to_decode+2),
 			      encoded,
 			      &decoded));
     EXPECT_EQ(2u, decoded.size()); 
-    EXPECT_EQ(length, decoded[0].length());
-    EXPECT_EQ(0, memcmp(decoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, memcmp(decoded[1].c_str(), in.c_str() + length,
+    EXPECT_EQ(length, decoded[shard_id_t(0)].length());
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(0)].c_str(), in.c_str(), length));
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(1)].c_str(), in.c_str() + length,
 			in.length() - length));
   }
 
   // check all two chunks missing possibilities and recover them
-  for (int i=1; i<4; i++) {
-    for (int j=0; j<i; j++) {
-      map<int, bufferlist> degraded = encoded;
+  for (shard_id_t i(1); i<4; ++i) {
+    for (shard_id_t j(0); j<i; ++j) {
+      shard_id_map<bufferlist> degraded = encoded;
       degraded.erase(j);
       degraded.erase(i);
       EXPECT_EQ(2u, degraded.size());
-      int want_to_decode[] = {j,i};
-      map<int, bufferlist> decoded;
-      EXPECT_EQ(0, clay._decode(set<int>(want_to_decode, want_to_decode+2),
+      shard_id_t want_to_decode[] = {j,i};
+      shard_id_map<bufferlist> decoded(clay.get_chunk_count());
+      EXPECT_EQ(0, clay._decode(shard_id_set(want_to_decode, want_to_decode+2),
 				degraded,
 				&decoded));
       EXPECT_EQ(4u, decoded.size()); 
-      EXPECT_EQ(length, decoded[j].length());
+      EXPECT_EQ(length, decoded[shard_id_t(j)].length());
       EXPECT_EQ(0, memcmp(decoded[j].c_str(), encoded[j].c_str(), length));
       EXPECT_EQ(0, memcmp(decoded[i].c_str(), encoded[i].c_str(), length));
     }
@@ -107,26 +107,27 @@ TEST(ErasureCodeClay, DISABLED_encode_decode)
   //check for all one chunk missing possibilities
   int sc_size = length/clay.sub_chunk_no;
   int avail[] = {0,1,2,3};
-  for (int i=0; i < 4; i++) {
-    set<int> want_to_read;
+  for (shard_id_t i(0); i < 4; ++i) {
+    shard_id_set want_to_read;
     want_to_read.insert(i);
-    set<int> available(avail, avail+4);
+    shard_id_set available(avail, avail+4);
     available.erase(i);
-    map<int, vector<pair<int,int>>> minimum;
-    EXPECT_EQ(0, clay.minimum_to_decode(want_to_read, available, &minimum));
-    map<int, bufferlist> helper;
-    for (map<int, vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
+    shard_id_set minimum_set;
+    shard_id_map<vector<pair<int,int>>> minimum(clay.get_chunk_count());
+    EXPECT_EQ(0, clay.minimum_to_decode(want_to_read, available, minimum_set, &minimum));
+    shard_id_map<bufferlist> helper(clay.get_chunk_count());
+    for (shard_id_map<vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
       for(vector<pair<int,int>>::iterator ind=h->second.begin(); ind != h->second.end(); ++ind) {
 	bufferlist temp;
-	temp.substr_of(encoded[h->first], ind->first*sc_size, ind->second*sc_size);
+	temp.substr_of(encoded[shard_id_t(h->first)], ind->first*sc_size, ind->second*sc_size);
 	helper[h->first].append(temp);
       }
     }
-    for (map<int, vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
+    for (shard_id_map<vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
       EXPECT_EQ(length/clay.q, helper[h->first].length());
     }
     EXPECT_EQ(3u, helper.size());
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(clay.get_chunk_count());
     EXPECT_EQ(0, clay.decode(want_to_read, helper, &decoded, length));
     EXPECT_EQ(1u, decoded.size());
     EXPECT_EQ(0, memcmp(decoded[i].c_str(), encoded[i].c_str(), length));
@@ -159,54 +160,54 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_aloof_nodes)
   bufferlist in;
   in.push_back(in_ptr);
   int want_to_encode[] = { 0, 1, 2, 3, 4, 5 };
-  map<int, bufferlist> encoded;
-  EXPECT_EQ(0, clay.encode(set<int>(want_to_encode, want_to_encode+6),
+  shard_id_map<bufferlist> encoded(clay.get_chunk_count());
+  EXPECT_EQ(0, clay.encode(shard_id_set(want_to_encode, want_to_encode+6),
 			   in,
 			   &encoded));
   EXPECT_EQ(6u, encoded.size());
-  unsigned length =  encoded[0].length();
+  unsigned length =  encoded[shard_id_t(0)].length();
   if (in.length() < length) {
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
   } else if (in.length() <= 2*length ) {
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
-    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str()+length, in.length()-length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str()+length, in.length()-length));
   } else {
     EXPECT_EQ(1, in.length() <= 3*length);
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
-    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str()+length, length));
-    EXPECT_EQ(0, memcmp(encoded[2].c_str(), in.c_str()+2*length, in.length()-2*length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str()+length, length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(2)].c_str(), in.c_str()+2*length, in.length()-2*length));
   }
 
   // all chunks are available
   {
     int want_to_decode[] = { 0, 1, 2 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, clay._decode(set<int>(want_to_decode, want_to_decode+3),
+    shard_id_map<bufferlist> decoded(clay.get_chunk_count());
+    EXPECT_EQ(0, clay._decode(shard_id_set(want_to_decode, want_to_decode+3),
 			      encoded,
 			      &decoded));
     EXPECT_EQ(3u, decoded.size()); 
-    EXPECT_EQ(length, decoded[0].length());
-    EXPECT_EQ(0, memcmp(decoded[0].c_str(), encoded[0].c_str(), length));
-    EXPECT_EQ(0, memcmp(decoded[1].c_str(), encoded[1].c_str(), length));
-    EXPECT_EQ(0, memcmp(decoded[2].c_str(), encoded[2].c_str(), length));
+    EXPECT_EQ(length, decoded[shard_id_t(0)].length());
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(0)].c_str(), encoded[shard_id_t(0)].c_str(), length));
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(1)].c_str(), encoded[shard_id_t(1)].c_str(), length));
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(2)].c_str(), encoded[shard_id_t(2)].c_str(), length));
   }
 
   // check all three chunks missing possibilities and recover them
-  for (int i=2; i<6; i++) {
-    for (int j=1; j<i; j++) {
-      for(int k=0; k<j; k++) {
-	map<int, bufferlist> degraded = encoded;
+  for (shard_id_t i(2); i<6; ++i) {
+    for (shard_id_t j(1); j<i; ++j) {
+      for(shard_id_t k(0); k<j; ++k) {
+	shard_id_map<bufferlist> degraded = encoded;
 	degraded.erase(k);
 	degraded.erase(j);
 	degraded.erase(i);
 	EXPECT_EQ(3u, degraded.size());
-	int want_to_decode[] = {k,j,i};
-	map<int, bufferlist> decoded;
-	EXPECT_EQ(0, clay._decode(set<int>(want_to_decode, want_to_decode+3),
+	shard_id_t want_to_decode[] = {k,j,i};
+	shard_id_map<bufferlist> decoded(clay.get_chunk_count());
+	EXPECT_EQ(0, clay._decode(shard_id_set(want_to_decode, want_to_decode+3),
 				  degraded,
 				  &decoded));
 	EXPECT_EQ(6u, decoded.size()); 
-	EXPECT_EQ(length, decoded[j].length());
+	EXPECT_EQ(length, decoded[shard_id_t(j)].length());
 	EXPECT_EQ(0, memcmp(decoded[k].c_str(), encoded[k].c_str(), length));
 	EXPECT_EQ(0, memcmp(decoded[j].c_str(), encoded[j].c_str(), length));
 	EXPECT_EQ(0, memcmp(decoded[i].c_str(), encoded[i].c_str(), length));
@@ -216,27 +217,28 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_aloof_nodes)
   //check for all one chunk missing possibilities
   int sc_size = length/clay.sub_chunk_no;
   int avail[] = {0,1,2,3,4,5};
-  for (int i=0; i < 6; i++) {
+  for (shard_id_t i(0); i < 6; ++i) {
     vector<pair<int,int>> repair_subchunks;
-    map<int, vector<pair<int,int>>> minimum;
-    set<int> want_to_read;
+    shard_id_set minimum_set;
+    shard_id_map<vector<pair<int,int>>> minimum(clay.get_chunk_count());
+    shard_id_set want_to_read;
     want_to_read.insert(i);
-    set<int> available(avail, avail+6);
+    shard_id_set available(avail, avail+6);
     available.erase(i);
-    clay.minimum_to_decode(want_to_read, available, &minimum);
-    map<int, bufferlist> helper;
-    for (map<int, vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
+    clay.minimum_to_decode(want_to_read, available, minimum_set, &minimum);
+    shard_id_map<bufferlist> helper(clay.get_chunk_count());
+    for (shard_id_map<vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
       for(vector<pair<int,int>>::iterator ind=h->second.begin(); ind != h->second.end(); ++ind) {
 	bufferlist temp;
-	temp.substr_of(encoded[h->first], ind->first*sc_size, ind->second*sc_size);
+	temp.substr_of(encoded[shard_id_t(h->first)], ind->first*sc_size, ind->second*sc_size);
 	helper[h->first].append(temp);
       }
     }  
-    for (map<int, vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
+    for (shard_id_map<vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
       EXPECT_EQ(length/clay.q, helper[h->first].length());
     }
     EXPECT_EQ((unsigned)clay.d, helper.size());
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(clay.get_chunk_count());
     EXPECT_EQ(0, clay.decode(want_to_read, helper, &decoded, length));
     EXPECT_EQ(1u, decoded.size());
     EXPECT_EQ(0, memcmp(decoded[i].c_str(), encoded[i].c_str(), length));
@@ -271,60 +273,60 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_shortening_case)
   bufferlist in;
   in.push_back(in_ptr);
   int want_to_encode[] = { 0, 1, 2, 3, 4, 5, 6 };
-  map<int, bufferlist> encoded;
-  EXPECT_EQ(0, clay.encode(set<int>(want_to_encode, want_to_encode+7),
+  shard_id_map<bufferlist> encoded(clay.get_chunk_count());
+  EXPECT_EQ(0, clay.encode(shard_id_set(want_to_encode, want_to_encode+7),
 			   in,
 			   &encoded));
   EXPECT_EQ(7u, encoded.size());
-  unsigned length =  encoded[0].length();
+  unsigned length =  encoded[shard_id_t(0)].length();
   if (in.length() < length) {
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
   } else if (in.length() <= 2*length) {
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
-    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str()+length, in.length()-length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str()+length, in.length()-length));
   } else if (in.length() <= 3*length) {
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
-    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str()+length, length));
-    EXPECT_EQ(0, memcmp(encoded[2].c_str(), in.c_str()+2*length, in.length()-2*length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str()+length, length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(2)].c_str(), in.c_str()+2*length, in.length()-2*length));
   } else {
     EXPECT_EQ(1, in.length() <= 4*length);
-    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), in.length()));
-    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str()+length, length));
-    EXPECT_EQ(0, memcmp(encoded[2].c_str(), in.c_str()+2*length, length));
-    EXPECT_EQ(0, memcmp(encoded[3].c_str(), in.c_str()+3*length, in.length()-3*length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(0)].c_str(), in.c_str(), in.length()));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(1)].c_str(), in.c_str()+length, length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(2)].c_str(), in.c_str()+2*length, length));
+    EXPECT_EQ(0, memcmp(encoded[shard_id_t(3)].c_str(), in.c_str()+3*length, in.length()-3*length));
   }
 
   // all chunks are available
   {
     int want_to_decode[] = { 0, 1, 2, 3 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, clay._decode(set<int>(want_to_decode, want_to_decode+4),
+    shard_id_map<bufferlist> decoded(clay.get_chunk_count());
+    EXPECT_EQ(0, clay._decode(shard_id_set(want_to_decode, want_to_decode+4),
 			      encoded,
 			      &decoded));
     EXPECT_EQ(4u, decoded.size()); 
-    EXPECT_EQ(length, decoded[0].length());
-    EXPECT_EQ(0, memcmp(decoded[0].c_str(), encoded[0].c_str(), length));
-    EXPECT_EQ(0, memcmp(decoded[1].c_str(), encoded[1].c_str(), length));
-    EXPECT_EQ(0, memcmp(decoded[2].c_str(), encoded[2].c_str(), length));
-    EXPECT_EQ(0, memcmp(decoded[3].c_str(), encoded[3].c_str(), length));
+    EXPECT_EQ(length, decoded[shard_id_t(0)].length());
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(0)].c_str(), encoded[shard_id_t(0)].c_str(), length));
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(1)].c_str(), encoded[shard_id_t(1)].c_str(), length));
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(2)].c_str(), encoded[shard_id_t(2)].c_str(), length));
+    EXPECT_EQ(0, memcmp(decoded[shard_id_t(3)].c_str(), encoded[shard_id_t(3)].c_str(), length));
   }
 
   // check all three chunks missing possibilities and recover them
-  for (int i=2; i<7; i++) {
-    for (int j=1; j<i; j++) {
-      for(int k=0; k<j; k++) {
-	map<int, bufferlist> degraded = encoded;
+  for (shard_id_t i(2); i<7; ++i) {
+    for (shard_id_t j(1); j<i; ++j) {
+      for(shard_id_t k(0); k<j; ++k) {
+	shard_id_map<bufferlist> degraded = encoded;
 	degraded.erase(k);
 	degraded.erase(j);
 	degraded.erase(i);
 	EXPECT_EQ(4u, degraded.size());
-	int want_to_decode[] = {k,j,i};
-	map<int, bufferlist> decoded;
-	EXPECT_EQ(0, clay._decode(set<int>(want_to_decode, want_to_decode+3),
+	shard_id_t want_to_decode[] = {k,j,i};
+	shard_id_map<bufferlist> decoded(clay.get_chunk_count());
+	EXPECT_EQ(0, clay._decode(shard_id_set(want_to_decode, want_to_decode+3),
 				  degraded,
 				  &decoded));
 	EXPECT_EQ(7u, decoded.size()); 
-	EXPECT_EQ(length, decoded[j].length());
+	EXPECT_EQ(length, decoded[shard_id_t(j)].length());
 	EXPECT_EQ(0, memcmp(decoded[k].c_str(), encoded[k].c_str(), length));
 	EXPECT_EQ(0, memcmp(decoded[j].c_str(), encoded[j].c_str(), length));
 	EXPECT_EQ(0, memcmp(decoded[i].c_str(), encoded[i].c_str(), length));
@@ -334,30 +336,31 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_shortening_case)
   //check for all one chunk missing possibilities
   int sc_size = length/clay.sub_chunk_no;
   int avail[] = {0,1,2,3,4,5,6};
-  for (int i=0; i < 7; i++) {
+  for (shard_id_t i(0); i < 7; ++i) {
     vector<pair<int,int>> repair_subchunks;
-    map<int, vector<pair<int,int>>> minimum;
-    set<int> want_to_read;
+    shard_id_set minimum_set;
+    shard_id_map<vector<pair<int,int>>> minimum(clay.get_chunk_count());
+    shard_id_set want_to_read;
     want_to_read.insert(i);
-    set<int> available(avail, avail+7);
+    shard_id_set available(avail, avail+7);
     available.erase(i);
-    clay.minimum_to_decode(want_to_read, available, &minimum);
-    map<int, bufferlist> helper;
-    for (map<int, vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
+    clay.minimum_to_decode(want_to_read, available, minimum_set, &minimum);
+    shard_id_map<bufferlist> helper(clay.get_chunk_count());
+    for (shard_id_map<vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
       for(vector<pair<int,int>>::iterator ind=h->second.begin(); ind != h->second.end(); ++ind) {
 	bufferlist temp;
-	temp.substr_of(encoded[h->first], ind->first*sc_size, ind->second*sc_size);
+	temp.substr_of(encoded[shard_id_t(h->first)], ind->first*sc_size, ind->second*sc_size);
 	helper[h->first].append(temp);
       }
     }  
-    for (map<int, vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
+    for (shard_id_map<vector<pair<int,int>>>::iterator h=minimum.begin(); h!= minimum.end(); ++h) {
       EXPECT_EQ(length/clay.q, helper[h->first].length());
     }
     EXPECT_EQ(static_cast<size_t>(clay.d), helper.size());
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(clay.get_chunk_count());
     EXPECT_EQ(0, clay.decode(want_to_read, helper, &decoded, length));
     EXPECT_EQ(1u, decoded.size());
-    EXPECT_EQ(length, decoded[i].length());
+    EXPECT_EQ(length, decoded[shard_id_t(i)].length());
     EXPECT_EQ(0, memcmp(decoded[i].c_str(), encoded[i].c_str(), length));
   }
 }
@@ -374,9 +377,9 @@ TEST(ErasureCodeClay, minimum_to_decode)
   // If trying to read nothing, the minimum is empty.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
     EXPECT_EQ(0, clay._minimum_to_decode(want_to_read,
 					 available_chunks,
@@ -387,11 +390,11 @@ TEST(ErasureCodeClay, minimum_to_decode)
   // There is no way to read a chunk if none are available.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(0);
+    want_to_read.insert(shard_id_t(0));
 
     EXPECT_EQ(-EIO, clay._minimum_to_decode(want_to_read,
 					    available_chunks,
@@ -401,12 +404,12 @@ TEST(ErasureCodeClay, minimum_to_decode)
   // Reading a subset of the available chunks is always possible.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(0);
-    available_chunks.insert(0);
+    want_to_read.insert(shard_id_t(0));
+    available_chunks.insert(shard_id_t(0));
 
     EXPECT_EQ(0, clay._minimum_to_decode(want_to_read,
 					 available_chunks,
@@ -418,13 +421,13 @@ TEST(ErasureCodeClay, minimum_to_decode)
   // chunks available.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(0);
-    want_to_read.insert(1);
-    available_chunks.insert(0);
+    want_to_read.insert(shard_id_t(0));
+    want_to_read.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(0));
 
     EXPECT_EQ(-EIO, clay._minimum_to_decode(want_to_read,
 					    available_chunks,
@@ -440,21 +443,21 @@ TEST(ErasureCodeClay, minimum_to_decode)
   // of CPU and memory.
   //
   {
-    set<int> want_to_read;
-    set<int> available_chunks;
-    set<int> minimum;
+    shard_id_set want_to_read;
+    shard_id_set available_chunks;
+    shard_id_set minimum;
 
-    want_to_read.insert(1);
-    want_to_read.insert(3);
-    available_chunks.insert(0);
-    available_chunks.insert(2);
-    available_chunks.insert(3);
+    want_to_read.insert(shard_id_t(1));
+    want_to_read.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(0));
+    available_chunks.insert(shard_id_t(2));
+    available_chunks.insert(shard_id_t(3));
 
     EXPECT_EQ(0, clay._minimum_to_decode(want_to_read,
 					 available_chunks,
 					 &minimum));
     EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(0u, minimum.count(3));
+    EXPECT_EQ(0u, minimum.count(shard_id_t(3)));
   }
 }
 
@@ -473,16 +476,16 @@ TEST(ErasureCodeClay, encode)
     // it is not properly aligned, it is padded with zeros.
     //
     bufferlist in;
-    map<int,bufferlist> encoded;
+    shard_id_map<bufferlist> encoded(clay.get_chunk_count());
     int want_to_encode[] = { 0, 1, 2, 3 };
     int trail_length = 1;
     in.append(string(aligned_object_size + trail_length, 'X'));
-    EXPECT_EQ(0, clay.encode(set<int>(want_to_encode, want_to_encode+4),
+    EXPECT_EQ(0, clay.encode(shard_id_set(want_to_encode, want_to_encode+4),
 			     in,
 			     &encoded));
     EXPECT_EQ(4u, encoded.size());
-    char *last_chunk = encoded[1].c_str();
-    int length =encoded[1].length();
+    char *last_chunk = encoded[shard_id_t(1)].c_str();
+    int length =encoded[shard_id_t(1)].length();
     EXPECT_EQ('X', last_chunk[0]);
     EXPECT_EQ('\0', last_chunk[length - trail_length]);
   }
@@ -497,9 +500,9 @@ TEST(ErasureCodeClay, encode)
     // valgrind (there is no leak).
     //
     bufferlist in;
-    map<int,bufferlist> encoded;
-    set<int> want_to_encode;
-    want_to_encode.insert(0);
+    shard_id_map<bufferlist> encoded(clay.get_chunk_count());
+    shard_id_set want_to_encode;
+    want_to_encode.insert(shard_id_t(0));
     int trail_length = 1;
     in.append(string(aligned_object_size + trail_length, 'X'));
     EXPECT_EQ(0, clay.encode(want_to_encode, in, &encoded));

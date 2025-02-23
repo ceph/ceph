@@ -114,7 +114,7 @@ int do_test_plugin_exists(const std::vector<const char*> &args) {
   std::lock_guard l{instance.lock};
   int r = instance.load(
     args[0], g_conf().get_val<std::string>("erasure_code_dir"), &plugin, &ss);
-  std::cerr << ss.str() << endl;
+  std::cerr << ss.str() << std::endl;
   return r;
 }
 
@@ -270,8 +270,10 @@ int do_decode(const std::vector<const char*> &args) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
-    auto chunk = static_cast<ssize_t>(chunk_mapping.size()) > shard ?
-      chunk_mapping[shard] : shard;
+    // NOTE: This is being migrated to use optimised EC adn will be cleaned uo
+    //       in a later PR.
+    auto chunk = chunk_mapping.size() > shard ?
+      static_cast<int>(chunk_mapping[shard]) : shard;
     want_to_read.insert(chunk);
   }
 

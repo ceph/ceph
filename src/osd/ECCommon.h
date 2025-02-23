@@ -21,6 +21,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
+#include "ECTypes.h"
 #if WITH_SEASTAR
 #include "ExtentCache.h"
 #include "crimson/osd/object_context.h"
@@ -46,176 +47,13 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 
 #include "ECTransaction.h"
 #include "ExtentCache.h"
+#include "ECListener.h"
 
 //forward declaration
 struct ECSubWrite;
 struct PGLog;
 
-// ECListener -- an interface decoupling the pipelines from
-// particular implementation of ECBackend (crimson vs cassical).
-// https://stackoverflow.com/q/7872958
-struct ECListener {
-  virtual ~ECListener() = default;
-  virtual const OSDMapRef& pgb_get_osdmap() const = 0;
-  virtual epoch_t pgb_get_osdmap_epoch() const = 0;
-  virtual const pg_info_t &get_info() const = 0;
-  /**
-   * Called when a pull on soid cannot be completed due to
-   * down peers
-   */
-  // XXX
-  virtual void cancel_pull(
-    const hobject_t &soid) = 0;
-
-#ifndef WITH_SEASTAR
-  // XXX
-  virtual pg_shard_t primary_shard() const = 0;
-  virtual bool pgb_is_primary() const = 0;
-
-  /**
-   * Called when a read from a std::set of replicas/primary fails
-   */
-  virtual void on_failed_pull(
-    const std::set<pg_shard_t> &from,
-    const hobject_t &soid,
-    const eversion_t &v
-    ) = 0;
-
-     /**
-      * Called with the transaction recovering oid
-      */
-     virtual void on_local_recover(
-       const hobject_t &oid,
-       const ObjectRecoveryInfo &recovery_info,
-       ObjectContextRef obc,
-       bool is_delete,
-       ceph::os::Transaction *t
-       ) = 0;
-
-  /**
-   * Called when transaction recovering oid is durable and
-   * applied on all replicas
-   */
-  virtual void on_global_recover(
-    const hobject_t &oid,
-    const object_stat_sum_t &stat_diff,
-    bool is_delete
-    ) = 0;
-
-  /**
-   * Called when peer is recovered
-   */
-  virtual void on_peer_recover(
-    pg_shard_t peer,
-    const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info
-    ) = 0;
-
-  virtual void begin_peer_recover(
-    pg_shard_t peer,
-    const hobject_t oid) = 0;
-
-  virtual bool pg_is_repair() const = 0;
-
-     virtual ObjectContextRef get_obc(
-       const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
-
-     virtual bool check_failsafe_full() = 0;
-     virtual hobject_t get_temp_recovery_object(const hobject_t& target,
-						eversion_t version) = 0;
-     virtual bool pg_is_remote_backfilling() = 0;
-     virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
-     //virtual void pg_sub_local_num_bytes(int64_t num_bytes) = 0;
-     virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
-     //virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
-     virtual void inc_osd_stat_repaired() = 0;
-
-   virtual void add_temp_obj(const hobject_t &oid) = 0;
-   virtual void clear_temp_obj(const hobject_t &oid) = 0;
-     virtual epoch_t get_last_peering_reset_epoch() const = 0;
-#endif
-
-  // XXX
-#ifndef WITH_SEASTAR
-  virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
-    GenContext<ThreadPool::TPHandle&> *c) = 0;
-
-  virtual void schedule_recovery_work(
-    GenContext<ThreadPool::TPHandle&> *c,
-    uint64_t cost) = 0;
-#endif
-
-  virtual epoch_t get_interval_start_epoch() const = 0;
-  virtual const std::set<pg_shard_t> &get_acting_shards() const = 0;
-  virtual const std::set<pg_shard_t> &get_backfill_shards() const = 0;
-  virtual const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_loc_shards()
-    const = 0;
-
-  virtual const std::map<pg_shard_t,
-			 pg_missing_t> &get_shard_missing() const = 0;
-  virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const = 0;
-#if 1
-  virtual const pg_missing_const_i * maybe_get_shard_missing(
-    pg_shard_t peer) const = 0;
-  virtual const pg_info_t &get_shard_info(pg_shard_t peer) const = 0;
-#endif
-  virtual ceph_tid_t get_tid() = 0;
-  virtual pg_shard_t whoami_shard() const = 0;
-#if 0
-  int whoami() const {
-    return whoami_shard().osd;
-  }
-  spg_t whoami_spg_t() const {
-    return get_info().pgid;
-  }
-#endif
-  // XXX
-  virtual void send_message_osd_cluster(
-    std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
-
-  virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
-
-  // RMWPipeline
-  virtual const pg_pool_t &get_pool() const = 0;
-  virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
-  // XXX
-  virtual bool should_send_op(
-    pg_shard_t peer,
-    const hobject_t &hoid) = 0;
-  virtual const std::map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
-  virtual spg_t primary_spg_t() const = 0;
-  virtual const PGLog &get_log() const = 0;
-  virtual DoutPrefixProvider *get_dpp() = 0;
-  // XXX
-  virtual void apply_stats(
-     const hobject_t &soid,
-     const object_stat_sum_t &delta_stats) = 0;
-
-  // new batch
-  virtual bool is_missing_object(const hobject_t& oid) const = 0;
-  virtual void add_local_next_event(const pg_log_entry_t& e) = 0;
-  virtual void log_operation(
-    std::vector<pg_log_entry_t>&& logv,
-    const std::optional<pg_hit_set_history_t> &hset_history,
-    const eversion_t &trim_to,
-    const eversion_t &roll_forward_to,
-    const eversion_t &pg_committed_to,
-    bool transaction_applied,
-    ceph::os::Transaction &t,
-    bool async = false) = 0;
-  virtual void op_applied(
-    const eversion_t &applied_version) = 0;
-};
-
 struct ECCommon {
-  struct ec_align_t {
-    uint64_t offset;
-    uint64_t size;
-    uint32_t flags;
-  };
-  friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
-
   struct ec_extent_t {
     int err;
     extent_map emap;
@@ -285,7 +123,7 @@ struct ECCommon {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<ECCommon::ec_align_t> to_read,
+      std::list<ec_align_t> to_read,
       std::set<int> wanted_to_read) = 0;
 
     virtual void finish(int priority) && = 0;
@@ -740,12 +578,6 @@ std::ostream &operator<<(std::ostream &lhs,
 std::ostream &operator<<(std::ostream &lhs,
 			 const ECCommon::RMWPipeline::Op &rhs);
 
-template <> struct fmt::formatter<ECCommon::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
-
 template <class F, class G>
 void ECCommon::ReadPipeline::check_recovery_sources(
   const OSDMapRef& osdmap,
@@ -844,14 +676,8 @@ void ECCommon::ReadPipeline::filter_read_op(
   }
 }
 
-// Error inject interfaces
-std::string ec_inject_read_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
-std::string ec_inject_write_error(const ghobject_t& o, const int64_t type, const int64_t when, const int64_t duration);
-std::string ec_inject_clear_read_error(const ghobject_t& o, const int64_t type);
-std::string ec_inject_clear_write_error(const ghobject_t& o, const int64_t type);
-bool ec_inject_test_read_error0(const ghobject_t& o);
-bool ec_inject_test_read_error1(const ghobject_t& o);
-bool ec_inject_test_write_error0(const hobject_t& o,const osd_reqid_t& reqid);
-bool ec_inject_test_write_error1(const ghobject_t& o);
-bool ec_inject_test_write_error2(const hobject_t& o);
-bool ec_inject_test_write_error3(const hobject_t& o);
+template <> struct fmt::formatter<ECCommon::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
