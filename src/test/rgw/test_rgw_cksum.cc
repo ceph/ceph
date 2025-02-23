@@ -578,6 +578,81 @@ TEST(RGWCksum, CRC64NVME_COMBINE3)
   ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
 } /* crc64nvme */
 
+TEST(RGWCksum, CRC32_COMBINE3)
+{
+  auto t = cksum::Type::crc32;
+
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  DigestVariant dv3 = rgw::cksum::digest_factory(t);
+  Digest* digest3 = get_digest(dv3);
+  ASSERT_NE(digest3, nullptr);
+
+  /* dolor */
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint32_t madler_crc1 =
+    crc32iso_hdlc_word(0U, (const unsigned char *)dolor.c_str(),
+		       dolor.length());
+
+  auto cksum_crc1 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum1.get_crc()));
+
+  ASSERT_EQ(cksum_crc1, madler_crc1);
+
+  /* lorem */
+  digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  uint32_t madler_crc2 =
+    crc32iso_hdlc_word(0U, (const unsigned char *)lorem.c_str(),
+		       lorem.length());
+  auto cksum_crc2 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum2.get_crc()));
+
+  ASSERT_EQ(cksum_crc2, madler_crc2);
+
+  /* dolorem */
+  digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
+  auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
+
+  uint32_t madler_crc3 =
+    crc32iso_hdlc_word(0U, (const unsigned char *)dolorem.c_str(),
+		       dolorem.length());
+  auto cksum_crc3 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum3.get_crc()));
+
+  ASSERT_EQ(cksum_crc3, madler_crc3);
+
+  /* API combine check */
+  auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
+  ASSERT_TRUE(cksum4);
+
+  auto cksum_crc4 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum4->get_crc()));
+
+  if (verbose) {
+    std::cout << "\ncrc1/dolor spdk: " << madler_crc1
+	      << " cksum_crc1: " << cksum_crc1
+	      << "\ncrc2/lorem spdk: " << madler_crc2
+      	      << " cksum_crc2: " << cksum_crc2
+	      << "\ncrc3/dolorem spdk: " << madler_crc3
+      	      << " cksum_crc3: " << cksum_crc3
+	      << "\ncrc4/crc1+crc2: " << cksum_crc4
+	      << std::endl;
+  }
+
+  /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
+  ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
+} /* crc32 */
+
 TEST(RGWCksum, CRC32C_COMBINE3)
 {
   auto t = cksum::Type::crc32c;
