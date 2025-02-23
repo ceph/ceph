@@ -20,7 +20,7 @@
 #include "common/scrub_types.h"
 #include "ReplicatedBackend.h"
 #include "osd/scrubber/ScrubStore.h"
-#include "ECBackend.h"
+#include "ECSwitch.h"
 #include "PGBackend.h"
 #include "OSD.h"
 #include "erasure-code/ErasureCodePlugin.h"
@@ -591,7 +591,7 @@ PGBackend *PGBackend::build_pg_backend(
       &ec_impl,
       &ss);
     ceph_assert(ec_impl);
-    return new ECBackend(
+    return new ECSwitch(
       l,
       coll,
       ch,
