@@ -85,12 +85,17 @@ void OSDECProfileGetReply::dump(Formatter* f) const {
   encode_json("crush-osds-per-failure-domain", crush_osds_per_failure_domain,
               f);
   encode_json("crush-root", crush_root, f);
-  encode_json("jerasure-per-chunk-alignment", jerasure_per_chunk_alignment, f);
+  encode_json("plugin", plugin, f);
   encode_json("k", k, f);
   encode_json("m", m, f);
-  encode_json("plugin", plugin, f);
-  encode_json("technique", technique, f);
+  encode_json("l", l, f);
   encode_json("w", w, f);
+  encode_json("c", c, f);
+  encode_json("packetsize", packetsize, f);
+  encode_json("technique", technique, f);
+  encode_json("layers", layers, f);
+  encode_json("mapping", mapping, f);
+  encode_json("jerasure-per-chunk-alignment", jerasure_per_chunk_alignment, f);
 }
 
 void OSDECProfileGetReply::decode_json(JSONObj* obj) {
@@ -101,24 +106,31 @@ void OSDECProfileGetReply::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("crush-osds-per-failure-domain",
                            crush_osds_per_failure_domain, obj);
   JSONDecoder::decode_json("crush-root", crush_root, obj);
-  JSONDecoder::decode_json("jerasure-per-chunk-alignment",
-                           jerasure_per_chunk_alignment, obj);
+  JSONDecoder::decode_json("plugin", plugin, obj);
   JSONDecoder::decode_json("k", k, obj);
   JSONDecoder::decode_json("m", m, obj);
-  JSONDecoder::decode_json("plugin", plugin, obj);
-  JSONDecoder::decode_json("technique", technique, obj);
+  JSONDecoder::decode_json("l", l, obj);
   JSONDecoder::decode_json("w", w, obj);
+  JSONDecoder::decode_json("c", c, obj);
+  JSONDecoder::decode_json("packetsize", packetsize, obj);
+  JSONDecoder::decode_json("technique", technique, obj);
+  JSONDecoder::decode_json("layers", layers, obj);
+  JSONDecoder::decode_json("mapping", mapping, obj);
+  JSONDecoder::decode_json("jerasure-per-chunk-alignment",
+                           jerasure_per_chunk_alignment, obj);
 }
 
 void OSDECProfileSetRequest::dump(Formatter* f) const {
   encode_json("prefix", "osd erasure-code-profile set", f);
   encode_json("name", name, f);
   encode_json("profile", profile, f);
+  encode_json("force", force, f);
 }
 
 void OSDECProfileSetRequest::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("profile", profile, obj);
+  JSONDecoder::decode_json("force", force, obj);
 }
 
 void OSDECPoolCreateRequest::dump(Formatter* f) const {
