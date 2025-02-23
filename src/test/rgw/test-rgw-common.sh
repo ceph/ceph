@@ -75,6 +75,12 @@ function rgw_admin {
   echo "$mrun $1 radosgw-admin"
 }
 
+function rgw_rados {
+  [ $# -lt 1 ] && echo "rgw_rados() needs 1 param" && exit 1
+
+  echo "$mrun $1 rados"
+}
+
 function rgw {
   [ $# -lt 2 ] && echo "rgw() needs at least 2 params" && exit 1
 
@@ -159,6 +165,12 @@ function call_rgw_admin {
   cid=$1
   shift 1
   x $(rgw_admin $cid) "$@"
+}
+
+function call_rgw_rados {
+  cid=$1
+  shift 1
+  x $(rgw_rados $cid) "$@"
 }
 
 function get_mstart_parameters {
