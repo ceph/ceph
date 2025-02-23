@@ -27,11 +27,12 @@ auto RGWSyncModuleInstance::alloc_bucket_meta_handler(librados::Rados& rados,
 auto RGWSyncModuleInstance::alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver,
                                                                RGWSI_Zone* svc_zone,
                                                                RGWSI_Bucket* svc_bucket,
-                                                               RGWSI_BucketIndex* svc_bi)
+                                                               RGWSI_BucketIndex* svc_bi,
+                                                               RGWDataChangesLog *svc_datalog)
     -> std::unique_ptr<RGWMetadataHandler>
 {
   return create_bucket_instance_metadata_handler(driver, svc_zone,
-                                                 svc_bucket, svc_bi);
+                                                 svc_bucket, svc_bi, svc_datalog);
 }
 
 RGWStatRemoteObjCBCR::RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
