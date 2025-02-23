@@ -493,14 +493,14 @@ TEST(RGWCksum, CRC64NVME_COMBINE2)
     std::cout << "\ncrc1/dolor: " << crc1
 	      << "\ncrc2/lorem: " << crc2
 	      << "\ncrc3/dolorem: " << crc3
-	      << "\ncrc4/crc1+crc3: " << crc4
+	      << "\ncrc4/crc1+crc2: " << crc4
 	      << std::endl;
   }
 
   ASSERT_EQ(crc3, crc4);
 }
 
-#if 0
+#if 1
 TEST(RGWCksum, CRC64NVME_COMBINE3)
 {
   auto t = cksum::Type::crc64nvme;
@@ -553,6 +553,20 @@ TEST(RGWCksum, CRC64NVME_COMBINE3)
   /* API combine check */
   auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
   ASSERT_TRUE(cksum4);
+
+  auto cksum_crc4 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum4->get_crc()));
+
+  if (verbose) {
+    std::cout << "\ncrc1/dolor spdk: " << spdk_crc1
+	      << " cksum_crc1: " << cksum_crc1
+	      << "\ncrc2/lorem spdk: " << spdk_crc2
+      	      << " cksum_crc2: " << cksum_crc2
+	      << "\ncrc3/dolorem spdk: " << spdk_crc3
+      	      << " cksum_crc3: " << cksum_crc3
+	      << "\ncrc4/crc1+crc2: " << cksum_crc4
+	      << std::endl;
+  }
 
   /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
   ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());

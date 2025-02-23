@@ -57,8 +57,10 @@ namespace rgw::cksum {
 	  rgw::digest::byteswap(std::get<uint64_t>(*ck2.get_crc()));
 	/* madler crcany */
 	auto cck3 = crc64nvme_comb(cck1, cck2, len1);
-	ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
-			   cksum::Cksum::CtorStyle::raw);
+	/* and byteswap */
+	cck3 = rgw::digest::byteswap(cck3);
+	/* convert to a Cksum, no ascii armor */
+	ck3 = Cksum(ck1.type, (char*) &cck3, Cksum::CtorStyle::raw);
       }
       break;
     default:
