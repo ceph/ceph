@@ -1605,11 +1605,11 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon')
-    def _daemon_action(self, action: DaemonAction, name: str) -> HandleCommandResult:
+    def _daemon_action(self, action: DaemonAction, name: str, force: bool = False) -> HandleCommandResult:
         """Start, stop, restart, redeploy, reconfig, or rotate-key for a specific daemon"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
-        completion = self.daemon_action(action.value, name)
+        completion = self.daemon_action(action.value, name, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

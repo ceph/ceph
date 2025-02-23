@@ -394,11 +394,19 @@ class TestCephadm(object):
                 assert wait(cephadm_module,
                             c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
-                for what in ('start', 'stop', 'restart'):
+                for what in ('start', 'stop'):
                     c = cephadm_module.daemon_action(what, d_name)
                     assert wait(cephadm_module,
                                 c) == F"Scheduled to {what} {d_name} on host 'test'"
 
+                for what in ('start', 'stop', 'restart'):
+                    c = cephadm_module.daemon_action(what, d_name, force=True)
+                    assert wait(cephadm_module,
+                                c) == F"Scheduled to {what} {d_name} on host 'test'"
+
+                with pytest.raises(OrchestratorError, match=f"Unable to restart daemon {d_name}"):
+                    c = cephadm_module.daemon_action('restart', d_name)
+                    wait(cephadm_module, c)
                 # Make sure, _check_daemons does a redeploy due to monmap change:
                 cephadm_module._store['_ceph_get/mon_map'] = {
                     'modified': datetime_to_str(datetime_now()),
