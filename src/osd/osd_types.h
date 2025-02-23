@@ -3294,7 +3294,7 @@ WRITE_CLASS_ENCODER(pg_fast_info_t)
  * the might_have_unfound set
  */
 class PastIntervals {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
 #else
   using OSDMapRef = std::shared_ptr<const OSDMap>;

@@ -79,7 +79,7 @@ public:
    * @param journal path (or other descriptor) for journal (optional)
    * @param flags which filestores should check if applicable
    */
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   static std::unique_ptr<ObjectStore> create(
     CephContext *cct,
     const std::string& type,

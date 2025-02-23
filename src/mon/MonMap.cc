@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include <seastar/core/fstream.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/net/dns.hh>
@@ -39,7 +39,7 @@ using std::vector;
 using ceph::DNSResolver;
 using ceph::Formatter;
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 namespace {
   seastar::logger& logger()
   {
@@ -767,7 +767,7 @@ void MonMap::check_health(health_check_map_t *checks) const
   }
 }
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 
 seastar::future<> MonMap::read_monmap(const std::string& monmap)
 {
@@ -904,7 +904,7 @@ seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf
   }
 }
 
-#else  // WITH_SEASTAR
+#else  // WITH_CRIMSON
 
 int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 {
@@ -1030,4 +1030,4 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   calc_legacy_ranks();
   return 0;
 }
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON

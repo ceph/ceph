@@ -20,7 +20,7 @@
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_CRIMSON
 #include <seastar/util/log.hh>
 #include "crimson/common/log.h"
 #include "crimson/common/config_proxy.h"
@@ -139,7 +139,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 // generic macros
 #define dout_prefix *_dout
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_CRIMSON
 #define dout_impl(cct, sub, v)                                          \
   do {                                                                  \
     if (crimson::common::local_conf()->subsys.should_gather(sub, v)) {  \
@@ -190,7 +190,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
     _dout_cct->_log->submit_entry(std::move(_dout_e));                  \
   }                                                                     \
   } while (0)
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON
 
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix

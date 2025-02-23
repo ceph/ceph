@@ -34,15 +34,15 @@ ARCH=$(uname -m)
 
 
 function munge_ceph_spec_in {
-    local with_seastar=$1
+    local with_crimson=$1
     shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if $with_seastar; then
-        sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
+    if $with_crimson; then
+        sed -i -e 's/%bcond_with crimson/%bcond_without crimson/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -376,7 +376,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         sysutils/fusefs-libs \
     exit
 else
-    [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
+    [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
