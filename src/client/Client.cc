@@ -1016,13 +1016,21 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 {
   Inode *in;
   bool was_new = false;
-  auto [it, b] = inode_map.try_emplace(st->vino);
-  if (!b) {
+  auto it = inode_map.find(st->vino);
+  if (it != inode_map.end()) {
     in = it->second;
     ldout(cct, 12) << __func__ << " had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
   } else {
+    if (st->vino.snapid == CEPH_SNAPDIR) {
+      auto head_vino = vinodeno_t(st->vino.ino, CEPH_NOSNAP);
+      /* should have already been looked up */
+      ceph_assert(inode_map.contains(head_vino));
+      in = open_snapdir(inode_map[head_vino]);
+      return in;
+    }
+
     in = new Inode(this, st->vino, &st->layout);
-    it->second = in;
+    inode_map.emplace(st->vino, in);
 
     if (use_faked_inos())
       _assign_faked_ino(in);
