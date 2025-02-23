@@ -1059,6 +1059,10 @@ class CephadmServe:
                 self.mgr.remote('progress', 'fail', progress_id, str(e))
             raise
         finally:
+            # perform required post actions
+            if self.mgr.requires_post_actions:
+                svc.daemon_check_post(list(self.mgr.requires_post_actions))
+                self.mgr.requires_post_actions.clear()
             if self.mgr.spec_store.needs_configuration(spec.service_name()):
                 svc.config(spec)
                 self.mgr.spec_store.mark_configured(spec.service_name())
@@ -1074,7 +1078,6 @@ class CephadmServe:
     def _check_daemons(self) -> None:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
-        daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
@@ -1108,10 +1111,6 @@ class CephadmServe:
                     self.log.debug(
                         f'Agent {dd.name()} could not be checked in _check_daemons: {e}')
                 continue
-
-            # These daemon types require additional configs after creation
-            if dd.daemon_type in REQUIRES_POST_ACTIONS:
-                daemons_post[dd.daemon_type].append(dd)
 
             if service_registry.get_service(daemon_type_to_service(dd.daemon_type)).get_active_daemon(
                self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
@@ -1179,26 +1178,9 @@ class CephadmServe:
                 except OrchestratorError as e:
                     self.log.exception(e)
                     self.mgr.events.from_orch_error(e)
-                    if dd.daemon_type in daemons_post:
-                        del daemons_post[dd.daemon_type]
-                    # continue...
                 except Exception as e:
                     self.log.exception(e)
                     self.mgr.events.for_daemon_from_exception(dd.name(), e)
-                    if dd.daemon_type in daemons_post:
-                        del daemons_post[dd.daemon_type]
-                    # continue...
-
-        # do daemon post actions
-        for daemon_type, daemon_descs in daemons_post.items():
-            run_post = False
-            for d in daemon_descs:
-                if d.name() in self.mgr.requires_post_actions:
-                    self.mgr.requires_post_actions.remove(d.name())
-                    run_post = True
-            if run_post:
-                service_registry.get_service(daemon_type_to_service(
-                    daemon_type)).daemon_check_post(daemon_descs)
 
     def _purge_deleted_services(self) -> None:
         self.log.debug('_purge_deleted_services')
@@ -1468,7 +1450,7 @@ class CephadmServe:
                             DaemonDescriptionStatus.starting, 'starting')
                         self.mgr.cache.add_daemon(daemon_spec.host, sd)
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
-                            self.mgr.requires_post_actions.add(daemon_spec.name())
+                            self.mgr.requires_post_actions.add(sd)
                     self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
 
                 if daemon_spec.daemon_type != 'agent':
