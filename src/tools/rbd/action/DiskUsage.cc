@@ -33,17 +33,11 @@ static int disk_usage_callback(uint64_t offset, size_t len, int exists,
 
 static int get_image_disk_usage(const std::string& name,
                                 const std::string& snap_name,
-                                const std::string& from_snap_name,
+                                uint64_t from_snap_id,
                                 librbd::Image &image,
                                 bool exact,
                                 uint64_t size,
                                 uint64_t *used_size){
-
-  const char* from = NULL;
-  if (!from_snap_name.empty()) {
-    from = from_snap_name.c_str();
-  }
-
   uint64_t flags;
   int r = image.get_flags(&flags);
   if (r < 0) {
@@ -56,16 +50,14 @@ static int get_image_disk_usage(const std::string& name,
          << (snap_name.empty() ? "" : "@" + snap_name) << ". "
          << "operation may be slow." << std::endl;
   }
-
   *used_size = 0;
-  r = image.diff_iterate2(from, 0, size, false, !exact,
+  r = image.diff_iterate3(from_snap_id, 0, size, false, !exact,
                           &disk_usage_callback, used_size);
   if (r < 0) {
     std::cerr << "rbd: failed to iterate diffs: " << cpp_strerror(r)
               << std::endl;
     return r;
   }
-
   return 0;
 }
 
@@ -171,15 +163,10 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       continue;
     }
 
-    snap_list.erase(remove_if(snap_list.begin(),
-                              snap_list.end(),
-                              boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
-                    snap_list.end());
-
     bool found_from_snap = (from_snapname == nullptr);
     bool found_snap = (snapname == nullptr);
     bool found_from = (from_snapname == nullptr);
-    std::string last_snap_name;
+    uint64_t last_snap_id = 0;
     std::sort(snap_list.begin(), snap_list.end(),
               boost::bind(&librbd::snap_info_t::id, _1) <
                 boost::bind(&librbd::snap_info_t::id, _2));
@@ -214,22 +201,25 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
 
     uint64_t image_full_used_size = 0;
-
+    librbd::Image snap_image;
+    r = rbd.open_read_only(io_ctx, snap_image, image_spec.name.c_str(),
+                           nullptr);
+    if (r < 0) {
+      std::cerr << "rbd: error opening image " << image_spec.name << ": "
+                << cpp_strerror(r) << std::endl;
+      goto out;
+    }
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
          snap_list.begin(); snap != snap_list.end(); ++snap) {
-      librbd::Image snap_image;
-      r = rbd.open_read_only(io_ctx, snap_image, image_spec.name.c_str(),
-                             snap->name.c_str());
+      r = snap_image.snap_set_by_id(snap->id);
       if (r < 0) {
-        std::cerr << "rbd: error opening snapshot " << image_spec.name << "@"
-                  << snap->name << ": " << cpp_strerror(r) << std::endl;
+        std::cerr << "rbd: error setting snapshot id" << snap->id << ": "
+                  << cpp_strerror(r) << std::endl;
         goto out;
       }
-
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
-
-        r = get_image_disk_usage(image_spec.name, snap->name, last_snap_name, snap_image, exact, snap->size, &used_size);
+        r = get_image_disk_usage(image_spec.name, snap->name, last_snap_id, snap_image, exact, snap->size, &used_size);
         if (r < 0) {
           goto out;
         }
@@ -254,11 +244,11 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       if (snapname != nullptr && snap->name == snapname) {
         break;
       }
-      last_snap_name = snap->name;
+      last_snap_id = snap->id;
     }
 
     if (snapname == NULL) {
-      r = get_image_disk_usage(image_spec.name, "", last_snap_name, image, exact, info.size, &used_size);
+      r = get_image_disk_usage(image_spec.name, "", last_snap_id, image, exact, info.size, &used_size);
       if (r < 0) {
         goto out;
       }

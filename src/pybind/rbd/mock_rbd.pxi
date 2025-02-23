@@ -778,6 +778,14 @@ cdef nogil:
                              nogil except? -9000,
                          void *arg) except? -9000:
         pass
+ 
+    int rbd_diff_iterate3(rbd_image_t image, uint64_t from_snap_id,
+                         uint64_t ofs, uint64_t len,
+                         uint8_t include_parent, uint8_t whole_object,
+                         int (*cb)(uint64_t, size_t, int, void *)
+                             nogil except? -9000,
+                         void *arg) except? -9000:
+        pass
 
     int rbd_flush(rbd_image_t image):
         pass
