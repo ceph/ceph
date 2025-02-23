@@ -1833,7 +1833,7 @@
   usage: rbd mirror pool enable [--pool <pool>] [--namespace <namespace>] 
                                 [--site-name <site-name>] 
                                 [--remote-namespace <remote-namespace>] 
-                                <pool-spec> <mode> 
+                                <pool-spec> [<mode>] 
   
   Enable RBD mirroring in a pool or namespace.
   

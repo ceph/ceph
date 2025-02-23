@@ -194,6 +194,8 @@ def _get_pool_stats(pool_names):
             mirror_mode = "image"
         elif mirror_mode == rbd.RBD_MIRROR_MODE_POOL:
             mirror_mode = "pool"
+        elif mirror_mode == rbd.RBD_MIRROR_MODE_CONFIG:
+            mirror_mode = "config"
         else:
             mirror_mode = "unknown"
 
@@ -487,7 +489,8 @@ class RbdMirroringPoolMode(RESTController):
     MIRROR_MODES = {
         rbd.RBD_MIRROR_MODE_DISABLED: 'disabled',
         rbd.RBD_MIRROR_MODE_IMAGE: 'image',
-        rbd.RBD_MIRROR_MODE_POOL: 'pool'
+        rbd.RBD_MIRROR_MODE_POOL: 'pool',
+        rbd.RBD_MIRROR_MODE_CONFIG: 'config'
     }
 
     @handle_rbd_mirror_error()

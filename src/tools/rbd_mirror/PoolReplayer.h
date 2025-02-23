@@ -108,6 +108,8 @@ private:
 
   void update_namespace_replayers();
   int list_mirroring_namespaces(std::map<std::string, std::string> *namespaces);
+  bool remote_namespace_pair_matches(std::string local_name,
+                                     std::string remote_name);
 
   void namespace_replayer_acquire_leader(const std::string &name,
                                          Context *on_finish);
@@ -219,8 +221,9 @@ private:
   std::unique_ptr<remote_pool_poller::Listener> m_remote_pool_poller_listener;
   std::unique_ptr<RemotePoolPoller<ImageCtxT>> m_remote_pool_poller;
 
-  std::unique_ptr<NamespaceReplayer<ImageCtxT>> m_default_namespace_replayer;
+//  std::unique_ptr<NamespaceReplayer<ImageCtxT>> m_default_namespace_replayer;
   std::map<std::string, NamespaceReplayer<ImageCtxT> *> m_namespace_replayers;
+  bool m_init_done = false;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;
