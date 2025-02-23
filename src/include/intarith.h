@@ -111,6 +111,38 @@ constexpr inline T p2roundup(T x, T align) {
   return -(-x & -align);
 }
 
+/*
+ * return log2(x) rounded up
+ * x must be of unsigned type
+ * for x == 0 gives unexpected value
+ * eg, p2log_ceil(0x1234) == 13 (2^13 = 0x2000)
+ * eg, p2log_ceil(0x1fff) == 13 (2^13 = 0x2000)
+ * eg, p2log_ceil(0x2000) == 13 (2^13 = 0x2000)
+ * eg, p2log_ceil(1)      == 0  (2^0 = 1)
+ * eg, p2log_ceil(0)      == 8 * sizeof(x)
+ */
+template<typename T>
+constexpr inline signed char p2log_ceil(T x) {
+  static_assert(std::is_unsigned_v<T> == true);
+  return 8 * sizeof(T) - std::countl_zero(T(x - 1));
+}
+
+/*
+ * return log2(x) rounded down
+ * x must be of unsigned type
+ * For x == 0 it gives unexpected value
+ * eg, p2log_floor(0x1234U)  == 12 (2^12 = 0x1000)
+ * eg, p2log_floor(0x1fffU)  == 12 (2^12 = 0x1000)
+ * eg, p2log_floor(0x2000UL) == 13 (2^13 = 0x2000)
+ * eg, p2log_floor(1)        == 0  (2^0 = 1)
+ * eg, p2log_floor(0)        == -1
+ */
+template<typename T>
+constexpr inline signed char p2log_floor(T x) {
+  static_assert(std::is_unsigned_v<T> == true);
+  return 8 * sizeof(T) - std::countl_zero(x) - 1;
+}
+
 // count bits (set + any 0's that follow)
 template<std::integral T>
 unsigned cbits(T v) {

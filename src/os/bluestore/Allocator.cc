@@ -227,7 +227,8 @@ void Allocator::release(const PExtentVector& release_vec)
  * Final score is obtained by proportion between score that would have been obtained
  * in condition of absolute fragmentation and score in no fragmentation at all.
  */
-double Allocator::get_fragmentation_score()
+
+static void push_next_scale(std::vector<double>& scales)
 {
   // this value represents how much worth is 2X bytes in one chunk then in X + X bytes
   static const double double_size_worth_small = 1.2;
@@ -236,43 +237,54 @@ double Allocator::get_fragmentation_score()
   static const size_t small_chunk_p2 = 20; // 1MB
   static const size_t huge_chunk_p2 = 27; // 128MB
   // for chunks 1MB - 128MB penalty coeffs are linearly weighted 1.2 (at small) ... 1 (at huge)
-  static std::vector<double> scales{1};
-  double score_sum = 0;
+  auto ss = scales.size();
+  double scale = double_size_worth_small;
+  if (ss >= huge_chunk_p2) {
+    scale = double_size_worth_huge;
+  } else if (ss > small_chunk_p2) {
+    // linear decrease 1.2 ... 1
+    scale = (double_size_worth_huge * (ss - small_chunk_p2) +
+             double_size_worth_small * (huge_chunk_p2 - ss)) /
+            (huge_chunk_p2 - small_chunk_p2);
+  }
+  scales.push_back(scales[scales.size() - 1] * scale);
+}
+
+double Allocator::get_score(size_t v)
+{
+  size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
+  while (score_scaled.size() <= sc + 1) {
+    //unlikely expand scales vector
+    push_next_scale(score_scaled);
+  }
+  size_t sc_shifted = size_t(1) << sc;
+  double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
+  // linear extrapolation in its scale grade
+  double score = (sc_shifted    ) * score_scaled[sc]   * (1-x) +
+                 (sc_shifted * 2) * score_scaled[sc+1] * x;
+  return score;
+}
+
+double Allocator::get_fragmentation_score_raw()
+{
+  double score_raw = 0;
   size_t sum = 0;
-
-  auto get_score = [&](size_t v) -> double {
-    size_t sc = sizeof(v) * 8 - std::countl_zero(v) - 1; //assign to grade depending on log2(len)
-    while (scales.size() <= sc + 1) {
-      //unlikely expand scales vector
-      auto ss = scales.size();
-      double scale = double_size_worth_small;
-      if (ss >= huge_chunk_p2) {
-	scale = double_size_worth_huge;
-      } else if (ss > small_chunk_p2) {
-	// linear decrease 1.2 ... 1
-	scale = (double_size_worth_huge * (ss - small_chunk_p2) + double_size_worth_small * (huge_chunk_p2 - ss)) /
-	  (huge_chunk_p2 - small_chunk_p2);
-      }
-      scales.push_back(scales[scales.size() - 1] * scale);
-    }
-    size_t sc_shifted = size_t(1) << sc;
-    double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
-    // linear extrapolation in its scale grade
-    double score = (sc_shifted    ) * scales[sc]   * (1-x) +
-                   (sc_shifted * 2) * scales[sc+1] * x;
-    return score;
-  };
-
   auto iterated_allocation = [&](size_t off, size_t len) {
     ceph_assert(len > 0);
-    score_sum += get_score(len);
+    score_raw += get_score(len);
     sum += len;
   };
   foreach(iterated_allocation);
+  return score_raw;
+}
+double Allocator::get_fragmentation_score()
+{
+  double score_nom = get_fragmentation_score_raw();
+  size_t free_size = get_free();
 
-  double ideal = get_score(sum);
-  double terrible = (sum / block_size) * get_score(block_size);
-  return (ideal - score_sum) / (ideal - terrible);
+  double ideal = get_score(free_size);
+  double terrible = (free_size / block_size) * get_score(block_size);
+  return (ideal - score_nom) / (ideal - terrible);
 }
 
 /*************
@@ -311,4 +323,221 @@ void Allocator::FreeStateHistogram::foreach(
       b.total, b.aligned, b.alloc_units);
     ++i;
   }
+}
+
+class FastScore::SocketHook : public AdminSocketHook
+{
+  FastScore* fscore;
+  friend class FastScore;
+  int call(std::string_view command, const cmdmap_t &cmdmap, const bufferlist &,
+           Formatter *f, std::ostream &errss, bufferlist &out) override
+  {
+    // no need to check the command, we only registered one
+    std::stringstream ss;
+    fscore->debug_check(ss);
+    out.append(ss);
+    return 0;
+  };
+
+public:
+  SocketHook(FastScore* fscore)
+  : fscore(fscore)
+  {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    if (!admin_socket) return;
+    admin_socket->register_command(
+      fmt::format("bluestore allocator score {} debug",fscore->alloc->get_name()), this,
+      "perform various tests on fast allocator calculation, compare against slow method");
+  }
+  ~SocketHook() {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    if (!admin_socket) return;
+    admin_socket->unregister_commands(this);
+  }
+};
+
+FastScore::FastScore(CephContext* cct, Allocator* alloc)
+  : alloc(alloc)
+  , alloc_size(alloc->get_block_size())
+  , buckets()
+  , asok_hook(new FastScore::SocketHook(this))
+{
+  while ((int64_t)1 << alloc->score_scaled.size() <= alloc->get_capacity() * 2) {
+    push_next_scale(alloc->score_scaled);
+  }
+}
+FastScore::~FastScore() {}
+
+// Splits input length into scale factor and value <0-1)
+// Input: length   ;size of free space that has just been added or removed
+// Output: first   ;log2 of length that determines a lower bucket for interpolation
+//       : second  ;value that is <0,1) location between lower and higher(lower+1) bucket,
+//                 ;it is multiplied by (1<<sc) to keep integer representation
+inline std::pair<uint8_t, uint64_t>
+  FastScore::split_by_log2(uint64_t length)
+{
+  size_t v = length;
+  ceph_assert(v > 0);
+  uint8_t sc = p2log_floor(v);
+  // If we strip highest bit from v we get:
+  // v = x + (1 << sc) with x = <0-1) * (1 << sc)
+  // In notable border condition, for v == 1 we get x == 0.
+  size_t x = v - ((uint64_t)1 << sc);
+  return std::make_pair(sc, x);
+}
+
+inline bool FastScore::close_enough(double a, double b)
+{
+  return abs((a - b) / (a + b)) < 1.0e-6;
+}
+
+void FastScore::now_free(uint64_t offset, uint64_t length)
+{
+  if (check_allocated) {
+    debug_allocated.insert(offset / alloc_size, length / alloc_size);
+  }
+  auto [sc, x] = split_by_log2(length);
+  buckets[sc]     += ((uint64_t)1 << sc) - x;
+  buckets[sc + 1] += 2 * x;
+  // *2 above deceives to be divergent from get_score()
+  // We do not scale by 2^n when reconstructing score from buckets,
+  // so it needs to be adjusted here.
+  if (check_drag_score) {
+    score_sum_drag +=
+      alloc->score_scaled[sc] * (((uint64_t)1 << sc) - x) +
+      alloc->score_scaled[sc+1] * 2 * x;
+  }
+}
+
+void FastScore::now_occupied(uint64_t offset, uint64_t length)
+{
+  if (check_allocated) {
+    debug_allocated.erase(offset / alloc_size, length / alloc_size);
+  }
+  auto [sc, x] = split_by_log2(length);
+  buckets[sc]     -= ((uint64_t)1 << sc) - x;
+  buckets[sc + 1] -= 2 * x;
+  if (check_drag_score) {
+    score_sum_drag -=
+      alloc->score_scaled[sc] * (((uint64_t)1 << sc) - x) +
+      alloc->score_scaled[sc+1] * 2 * x;
+  }
+}
+
+double FastScore::get_fragmentation_score_raw()
+{
+  double score_raw = 0;
+  size_t v = 1;
+  while ((int64_t)1 << v < alloc->get_capacity() * 2) {
+    score_raw += alloc->score_scaled[v] * buckets[v];
+    v++;
+  }
+  return score_raw;
+}
+
+void FastScore::debug_check(std::ostream& ss) {
+#ifdef LOCAL_DOUBLE_PRINT
+#error This is local macro, just change name.
+#endif
+#define LOCAL_DOUBLE_PRINT(line) { \
+  lgeneric_subdout(g_ceph_context, bluestore, 0) << line << dendl; \
+  ss << line << std::endl; }
+
+  if (check_buckets) {
+    std::array<int64_t, 64> buckets_redone = {0}; // bits in uint64_t
+    std::array<int64_t, 64> buckets_copied = {0};
+    bool do_once = true;
+    auto iterated_allocation = [&](size_t off, size_t len) {
+      if (do_once) {
+        buckets_copied = buckets;
+        do_once = false;
+      }
+      ceph_assert(len > 0);
+      auto [sc, x] = split_by_log2(len);
+      buckets_redone[sc] += ((uint64_t)1 << sc) - x;
+      buckets_redone[sc + 1] += 2 * x;
+    };
+    alloc->foreach (iterated_allocation);
+    bool buckets_exact = true;
+    for (size_t i = 0; i < 64; i++) {
+      if (buckets_redone[i] != buckets_copied[i])
+        buckets_exact = false;
+      if (!buckets_exact) {
+        LOCAL_DOUBLE_PRINT(
+          "FAIL, bucket " << i << " redone=" << buckets_redone[i]
+          << " != copy=" << buckets_copied[i]);
+      }
+    }
+    if (buckets_exact) {
+        LOCAL_DOUBLE_PRINT("PASS, buckets match");
+    }
+    ceph_assert(!assert_on_verify || buckets_exact);
+  }
+  double score_slow = 0;
+  double score_fast = 0;
+  if (check_drag_score || check_slow) {
+    score_slow = alloc->Allocator::get_fragmentation_score_raw();
+    score_fast = get_fragmentation_score_raw();
+    LOCAL_DOUBLE_PRINT(
+      fmt::format("fast={:.15} slow={:.15} drag={:.15}", score_fast, score_slow, score_sum_drag)
+    );
+  }
+  if (check_drag_score) {
+    ceph_assert(!assert_on_verify || close_enough(score_slow, score_sum_drag));
+  }
+  if (check_slow) {
+    ceph_assert(!assert_on_verify || close_enough(score_slow, score_fast));
+  }
+  if (check_allocated) {
+    // assume that iterate extents will provide non-overlapping extents
+    // check that we contain all listed ranges
+    // check that our size matches iterated size
+    bool do_once = true;
+    interval_set<uint32_t> debug_copy;
+    interval_set<uint32_t> alloc_copy;
+    alloc->foreach ([&](uint64_t offset, uint64_t length) {
+      if (do_once) {
+        // snapshot here because we need allocator's lock
+        debug_copy = debug_allocated;
+        do_once = false;
+      }
+      alloc_copy.insert(offset / alloc_size, length / alloc_size);
+    });
+
+    auto it_d = debug_copy.begin();
+    auto it_a = alloc_copy.begin();
+    uint32_t fails = 0;
+    while (it_d != debug_copy.end() && it_a != alloc_copy.end()) {
+      if (it_d.get_start() != it_a.get_start() &&
+          it_d.get_len() != it_a.get_len()) {
+        LOCAL_DOUBLE_PRINT(
+          "FAIL " << fails << std::hex
+          << " alloc=0x" << it_a.get_start() * alloc_size << "~" << it_a.get_len() * alloc_size
+          << " debug=0x" << it_d.get_start() * alloc_size << "~" << it_d.get_len() * alloc_size
+        );
+        if (it_d.get_start() <= it_a.get_start())
+          ++it_d;
+        if (it_d.get_start() >= it_a.get_start())
+          ++it_a;
+        fails++;
+        if (fails == 1000)
+          break;
+      } else {
+        ++it_d;
+        ++it_a;
+      }
+    }
+    if (it_d != debug_copy.end() || it_a != alloc_copy.end()) {
+      fails++;
+    }
+    if (fails != 0) {
+      LOCAL_DOUBLE_PRINT(
+        "FAIL, allocator diverges from now_free/now_occupied");
+    } else {
+      LOCAL_DOUBLE_PRINT(
+        "PASS, tracking allocations ok");
+    }
+    ceph_assert(!assert_on_verify || fails == 0);
+  }
+#undef LOCAL_DOUBLE_PRINT
 }
