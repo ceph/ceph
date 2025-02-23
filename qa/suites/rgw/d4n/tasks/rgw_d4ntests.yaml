@@ -13,8 +13,6 @@ tasks:
     client.0:
       - sudo chmod 0777 /var/lib/ceph
       - sudo chmod 0777 /var/lib/ceph/radosgw
-- d4ntests:
-    client.0:
 - workunit:
     clients:
       client.0:
