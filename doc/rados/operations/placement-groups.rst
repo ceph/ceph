@@ -160,10 +160,14 @@ The output will resemble the following::
   ``off``, or ``warn``.
 
 - **BULK** determines whether the pool is ``bulk``. It has a value of ``True``
-  or ``False``. A ``bulk`` pool is expected to be large and should initially
+  or ``False``. A pool with the ``bulk`` flag enabled
+  is expected to be large and should initially
   have a large number of PGs so that performance does not suffer]. On the other
   hand, a pool that is not ``bulk`` is expected to be small (for example, a
-  ``.mgr`` pool or a meta pool).
+  ``.mgr`` pool or a meta pool).  Additionally this flag is useful for pools
+  including RGW index and CephFS metadata that may experience low performance
+  due to their op workloads being nonlinear compared to their data size,
+  complementing the ``BIAS`` PG autoscaler value.
 
 .. note::
 
