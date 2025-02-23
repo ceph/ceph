@@ -185,6 +185,12 @@ struct LBALeafNode
 
   static constexpr extent_types_t TYPE = extent_types_t::LADDR_LEAF;
 
+#ifndef NDEBUG
+  bool validate_child(
+    const base_child_node_t &child,
+    internal_const_iterator_t key);
+#endif
+
   void update(
     internal_const_iterator_t iter,
     lba_map_val_t val) final;
