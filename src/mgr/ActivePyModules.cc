@@ -70,7 +70,8 @@ ActivePyModules::ActivePyModules(
   cmd_finisher.start();
 }
 
-ActivePyModules::~ActivePyModules() = default;
+ActivePyModules::~ActivePyModules()
+{ py_module_registry.cleanup_perf_counters(); }
 
 void ActivePyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
