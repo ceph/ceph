@@ -34,7 +34,7 @@ std::pair<bufferlist, std::vector<snapid_t>> create_object_snapset(
   encode(sns, bl);
 
   // extract the set of object snaps
-  return {bl, sns.snaps};
+  return {bl, sns.clones};
 }
 
 RealObjsConfList ScrubGenerator::make_real_objs_conf(
