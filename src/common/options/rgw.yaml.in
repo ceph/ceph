@@ -2864,6 +2864,23 @@ options:
   with_legacy: true
 # extra keys that may be used for aws:kms
 # defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
+- name: rgw_crypt_s3_kms_cache_enabled
+  type: bool
+  level: advanced
+  desc: Enable SSE-KMS encryption key cache.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_s3_kms_cache_max_size
+  type: int
+  level: advanced
+  desc: Maximum number of SSE-KMS secrets cached.
+    Each key needs 32 byte (AES-256) + overhead in memory
+  default: 128
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_crypt_s3_kms_encryption_keys
   type: str
   level: dev

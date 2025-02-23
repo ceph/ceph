@@ -6,6 +6,8 @@
  */
 
 #include <sys/stat.h>
+#include "common/ceph_crypto.h"
+#include "common/shared_cache.hpp"
 #include "include/str_map.h"
 #include "common/safe_io.h"
 #include "rgw/rgw_crypt.h"
@@ -16,8 +18,10 @@
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
+#include <optional>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
+#include "rgw_perf_counters.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1087,11 +1091,65 @@ static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 }
+
 class KMSContext : public SSEContext {
-  CephContext *cct;
-public:
-  KMSContext(CephContext*_cct) : cct{_cct} {};
+  CephContext* cct;
+
+ public:
+  struct KMSCachedSecret {
+    std::string secret;
+    ~KMSCachedSecret() {
+      ::ceph::crypto::zeroize_for_security(secret.data(), secret.length());
+    }
+  };
+
+  using KMSSecretCache = SharedLRU<std::string, KMSCachedSecret>;
+  KMSContext(CephContext* _cct) : cct{_cct} {};
   ~KMSContext() override {};
+
+  static KMSSecretCache& secrets_cache(CephContext* cct) {
+    static bool initialized = false;
+    static SharedLRU<std::string, KMSCachedSecret> instance(nullptr, 0);
+    if (!initialized) {
+      instance.set_cct(cct);
+      instance.set_size(cct->_conf->rgw_crypt_s3_kms_cache_max_size);
+      initialized = true;
+    }
+    return instance;
+  }
+
+  std::optional<std::string> maybe_get_cached_secret(const std::string& id) {
+    if (!cct->_conf->rgw_crypt_s3_kms_cache_enabled) {
+      return nullopt;
+    }
+    if (auto secret = secrets_cache(cct).lookup(id)) {
+      if (perfcounter) perfcounter->inc(l_rgw_kms_cache_hit);
+      return secret->secret;
+    } else {
+      if (perfcounter) perfcounter->inc(l_rgw_kms_cache_miss);
+      return nullopt;
+    }
+  }
+
+  void cache_secret(const std::string& id, const std::string& secret) {
+    auto packaged = new KMSCachedSecret{.secret = secret};
+    bool existed = false;
+    secrets_cache(cct).add(id, packaged, &existed);
+    if (existed) {
+      delete packaged;
+    }
+    if (perfcounter)
+      perfcounter->set(l_rgw_kms_cache_size, secrets_cache(cct).get_count());
+  }
+
+  void purge_cached_secret(const std::string& id) {
+    secrets_cache(cct).purge(id);
+  }
+
+  bool cache_enabled() {
+    return cct->_conf->rgw_crypt_s3_kms_cache_enabled;
+  }
+
   const std::string & backend() override {
     return cct->_conf->rgw_crypt_s3_kms_backend;
   };
@@ -1180,25 +1238,40 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
-  if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
-    return get_actual_key_from_barbican(dpp, key_id, y, actual_key);
+  const auto maybe_cached_key = kctx.maybe_get_cached_secret(key_id);
+  if (maybe_cached_key.has_value()) {
+    actual_key = maybe_cached_key.value();
+    return 0;
   }
 
-  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
-    return reconstitute_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
-  }
+  const int ret = [&]() {
+    if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
+      return get_actual_key_from_barbican(dpp, key_id, y, actual_key);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
-    return get_actual_key_from_kmip(dpp, key_id, y, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
+      return reconstitute_actual_key_from_vault(
+          dpp, kctx, attrs, y, actual_key);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
-    std::string key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
-    return get_actual_key_from_conf(dpp, key_id, key_selector, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
+      return get_actual_key_from_kmip(dpp, key_id, y, actual_key);
+    }
 
-  ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: " << kms_backend << dendl;
-  return -EINVAL;
+    if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
+      std::string key_selector =
+          get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+      return get_actual_key_from_conf(dpp, key_id, key_selector, actual_key);
+    }
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: "
+                      << kms_backend << dendl;
+    return -EINVAL;
+  }();
+
+  if (kctx.cache_enabled() && ret == 0) {
+      kctx.cache_secret(key_id, actual_key);
+  }
+  return ret;
 }
 
 int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
