@@ -56,28 +56,32 @@ bool DataGenerator::validate(bufferlist& bufferlist, uint64_t offset,
 ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
   uint64_t block_size = m_model.get_block_size();
   char buffer[block_size];
+  SeedBytes seed = m_model.get_seed(block_offset);
+  if (seed != 0) {
+    std::mt19937_64 random_generator(seed);
+    uint64_t rand1 = random_generator();
+    uint64_t rand2 = random_generator();
 
-  std::mt19937_64 random_generator(m_model.get_seed(block_offset));
-  uint64_t rand1 = random_generator();
-  uint64_t rand2 = random_generator();
+    constexpr size_t generation_length = sizeof(uint64_t);
 
-  constexpr size_t generation_length = sizeof(uint64_t);
+    for (uint64_t i = 0; i < block_size;
+         i += (2 * generation_length), rand1++, rand2--) {
+      std::memcpy(buffer + i, &rand1, generation_length);
+      std::memcpy(buffer + i + generation_length, &rand2, generation_length);
+    }
 
-  for (uint64_t i = 0; i < block_size;
-       i += (2 * generation_length), rand1++, rand2--) {
-    std::memcpy(buffer + i, &rand1, generation_length);
-    std::memcpy(buffer + i + generation_length, &rand2, generation_length);
+    size_t remainingBytes = block_size % (generation_length * 2);
+    if (remainingBytes > generation_length) {
+      size_t remainingBytes2 = remainingBytes - generation_length;
+      std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+      std::memcpy(buffer + block_size - remainingBytes2, &rand2,
+                  remainingBytes2);
+    } else if (remainingBytes > 0) {
+      std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
+    }
+  } else {
+    std::memset(buffer, 0, block_size);
   }
-
-  size_t remainingBytes = block_size % (generation_length * 2);
-  if (remainingBytes > generation_length) {
-    size_t remainingBytes2 = remainingBytes - generation_length;
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
-    std::memcpy(buffer + block_size - remainingBytes2, &rand2, remainingBytes2);
-  } else if (remainingBytes > 0) {
-    std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
-  }
-
   return ceph::bufferptr(buffer, block_size);
 }
 
@@ -159,10 +163,12 @@ ceph::bufferptr HeaderedSeededRandomGenerator::generate_block(
   ceph::bufferptr bufferptr =
       SeededRandomGenerator::generate_block(block_offset);
 
-  std::memcpy(bufferptr.c_str() + uniqueIdStart(), &unique_run_id,
-              uniqueIdLength());
-  std::memcpy(bufferptr.c_str() + seedStart(), &seed, seedLength());
-  std::memcpy(bufferptr.c_str() + timeStart(), &current_time, timeLength());
+  if (seed != 0) {
+    std::memcpy(bufferptr.c_str() + uniqueIdStart(), &unique_run_id,
+                uniqueIdLength());
+    std::memcpy(bufferptr.c_str() + seedStart(), &seed, seedLength());
+    std::memcpy(bufferptr.c_str() + timeStart(), &current_time, timeLength());
+  }
 
   return bufferptr;
 }
