@@ -104,7 +104,8 @@ set(common_srcs
   pretty_binary.cc
   utf8.c
   util.cc
-  version.cc)
+  version.cc
+  tcp_info.cc)
 
 if(WITH_SYSTEMD)
   list(APPEND common_srcs
