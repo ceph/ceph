@@ -216,6 +216,35 @@ struct bluefs_shared_alloc_context_t {
   }
 };
 
+/*
+  Class debug_point is a helper intended for inserting debug tracepoints
+  in a least intrusive way.
+  The intention is to minimize both visual and code footprints.
+
+  In code, it should look like:
+  debug_async_compact(1);
+
+  Which should translate to:
+  if (debug_async_compact) debug_async_compact(1);
+
+  And in release builds be eliminated completely.
+*/
+template <class T>
+class debug_point {
+public:
+  debug_point() : m_func(nullptr) {};
+  debug_point(T&& func)
+  : m_func(func) {}
+  template<typename... Arg>
+  void operator()(Arg... arg) { if (m_func) m_func(std::forward<Arg...>(arg...)); }
+  void operator=(T&& func) { m_func = std::move(func);}
+  void operator=(T& func) { m_func = func;}
+private:
+  T m_func;
+};
+
+
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -776,6 +805,7 @@ public:
   }
   uint64_t debug_get_dirty_seq(FileWriter *h);
   bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
+  debug_point<std::function<void(int)>> debug_async_compact;
   void trim_free_space(const std::string& type, std::ostream& outss);
 
 private:
