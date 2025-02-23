@@ -19,21 +19,21 @@ void rgw_s3_key_filter::dump(Formatter *f) const {
     f->open_object_section("");
     ::encode_json("Name", "prefix", f);
     ::encode_json("Value", prefix_rule, f);
-    ::encode_json("Type", negative_filter == true ? "IN" : "OUT", f);
+    ::encode_json("Type", negative_filter == true ? "OUT" : "IN", f);
     f->close_section();
   }
   if (!suffix_rule.empty()) {
     f->open_object_section("");
     ::encode_json("Name", "suffix", f);
     ::encode_json("Value", suffix_rule, f);
-    ::encode_json("Type", negative_filter == true ? "IN" : "OUT", f);
+    ::encode_json("Type", negative_filter == true ? "OUT" : "IN", f);
     f->close_section();
   }
   if (!regex_rule.empty()) {
     f->open_object_section("");
     ::encode_json("Name", "regex", f);
     ::encode_json("Value", regex_rule, f);
-    ::encode_json("Type", negative_filter == true ? "IN" : "OUT", f);
+    ::encode_json("Type", negative_filter == true ? "OUT" : "IN", f);
     f->close_section();
   }
   f->close_section();
@@ -48,21 +48,21 @@ bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
   auto suffix_not_set = true;
   auto regex_not_set = true;
   std::string name;
+  std::string type; 
 
   while ((o = iter.get_next())) {
     RGWXMLDecoder::decode_xml("Name", name, o, throw_if_missing);
+    if(RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing))
+      negative_filter = type == "IN" ? false : true;
     if (name == "prefix" && prefix_not_set) {
       prefix_not_set = false;
       RGWXMLDecoder::decode_xml("Value", prefix_rule, o, throw_if_missing);
-      negative_filter = RGWXMLDecoder::decode_xml("Type", negative_filter, o, !throw_if_missing);
     } else if (name == "suffix" && suffix_not_set) {
       suffix_not_set = false;
       RGWXMLDecoder::decode_xml("Value", suffix_rule, o, throw_if_missing);
-      negative_filter = RGWXMLDecoder::decode_xml("Type", negative_filter, o, !throw_if_missing);
     } else if (name == "regex" && regex_not_set) {
       regex_not_set = false;
       RGWXMLDecoder::decode_xml("Value", regex_rule, o, throw_if_missing);
-      negative_filter = RGWXMLDecoder::decode_xml("Type", negative_filter, o, !throw_if_missing);
     } else {
       throw RGWXMLDecoder::err("invalid/duplicate S3Key filter rule name: '" + name + "'");
     }
