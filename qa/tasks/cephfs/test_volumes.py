@@ -473,6 +473,43 @@ class TestVolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
 
+    def test_volume_create_with_both_pool_names(self):
+        v = self._gen_vol_name()
+        meta = 'meta4521'
+        data = 'data4521'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.run_ceph_cmd(f'fs volume create {v} --data-pool {data} '
+                          f'--meta-pool {data}')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'metadata pool: {meta}')
+                self.assertIn(f'datadata pool: [{data} ]')
+
+    def test_volume_create_pass_data_pool_name(self):
+        v = self._gen_vol_name()
+        data = 'data4521'
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.run_ceph_cmd(f'fs volume create {v} --data-pool {data} ')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'datadata pool: [{data} ]')
+
+    def test_volume_create_pass_meta_pool_name(self):
+        v = self._gen_vol_name()
+        meta = 'meta4521'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'fs volume create {v} --meta-pool {meta}')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'metadata pool: {meta}')
+
     def test_volume_ls(self):
         """
         That the existing and the newly created volumes can be listed and
