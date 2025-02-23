@@ -54,7 +54,7 @@ High Availability for mgmt-gateway service
 
 In addition to providing high availability for the underlying backend services, the mgmt-gateway
 service itself can be configured for high availability, ensuring that the system remains resilient
-even if certain core components for the service fail.
+even if certain core components for the service fail, including the `mgmt-gateway` itself.
 
 Multiple mgmt-gateway instances can be deployed in an active/standby configuration using keepalived
 for seamless failover. The `oauth2-proxy` service can be deployed as multiple stateless instances,
@@ -65,9 +65,14 @@ In this setup, the underlying internal services follow the same high availabilit
 directly accessing the `mgmt-gateway` internal endpoint, services use the virtual IP specified in the spec.
 This ensures that the high availability mechanism for `mgmt-gateway` is transparent to other services.
 
-Example Configuration for High Availability
+The simplest and recommended way to deploy the mgmt-gateway in high availability mode is by using labels. To
+run the ``mgmt-gateway`` in HA mode users can either use the cephadm command line as follows:
 
-To deploy the mgmt-gateway in a high availability setup, here is an example of the specification files required:
+.. prompt:: bash #
+
+    ceph orch apply mgmt-gateway --virtual_ip 192.168.100.220 --enable-auth=true --placement="label:mgmt"
+
+Or provide specification files as following:
 
 `mgmt-gateway` Configuration:
 
@@ -80,7 +85,8 @@ To deploy the mgmt-gateway in a high availability setup, here is an example of t
       enable_auth: true
       virtual_ip: 192.168.100.220
 
-`Ingress` Configuration for Keepalived:
+In addition, the user must configure an `Ingress` service to provide virtual IP functionality for
+the `mgmt-gateway`. For example:
 
 .. code-block:: yaml
 
@@ -94,9 +100,11 @@ To deploy the mgmt-gateway in a high availability setup, here is an example of t
 
 The number of deployed instances is determined by the number of hosts with the mgmt label.
 The ingress is configured in `keepalive_only` mode, with labels ensuring that any changes to
-the mgmt-gateway daemons are replicated to the corresponding keepalived instances. Additionally,
-the `virtual_ip` parameter must be identical in both specifications.
+the `mgmt-gateway` daemons are replicated to the corresponding keepalived instances.
 
+.. note::
+
+    The `virtual_ip` parameter must be identical in both the ingress and mgmt-gateway specifications.
 
 Accessing services with mgmt-gateway
 ====================================
