@@ -1645,6 +1645,19 @@ We encourage you to fix this by making the weights even on both dividing buckets
 This can be done by making sure the combined weight of the OSDs on each dividing
 bucket are the same.
 
+NONEXISTENT_MON_CRUSH_LOC_STRETCH_MODE
+______________________________________
+
+The CRUSH location specified for the monitor must belong to one of the dividing
+buckets when stretch mode is enabled. With the ``tiebreaker`` monitor being the
+only exception.
+
+This warning suggests that one or more monitors have a CRUSH location that does
+not belong to any of the dividing buckets in stretch mode.
+
+We encourage you to fix this by making sure the CRUSH location of the monitor
+belongs to one of the dividing buckets.
+
 NVMeoF Gateway
 --------------
 
