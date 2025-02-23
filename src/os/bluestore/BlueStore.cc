@@ -6702,13 +6702,18 @@ int BlueStore::_read_bdev_label(
     decode(expected_crc, p);
   }
   catch (ceph::buffer::error& e) {
-    derr << __func__ << " " << path.c_str() << " data at " << std::hex << disk_position
-      << std::dec << ", " << "unable to decode label " << dendl;
+    // We can still get here in non-erroneous scenarios,
+    // hence do not log that as an error
+    dout(0) << __func__ << " " << path.c_str() << " data at 0x" << std::hex << disk_position
+      << std::dec << ", " << "unable to decode label "
+      << dendl;
     return -ENOENT;
   }
   if (crc != expected_crc) {
-    derr << __func__ << " bad crc on label, expected " << expected_crc
-	 << " != actual " << crc << dendl;
+    // We can still get here in non-erroneousscenarios,
+    // hence do not log that as an error
+    dout(0) << __func__ << " bad crc on label, expected " << expected_crc
+	    << " != actual " << crc << dendl;
     return -EIO;
   }
   dout(10) << __func__ << " got " << *label << dendl;
@@ -6813,7 +6818,9 @@ int BlueStore::_read_multi_bdev_label(
     return -ENOENT;
   }
   done:
-  dout(10) << __func__ << " got " << *out_label << dendl;
+  dout(10) << __func__ << " got " << *out_label
+           << (all_labels_valid ? " all labels valid " : " some labels missing ")
+           << dendl;
   return all_labels_valid ? 0 : 1;
 }
 
@@ -6828,6 +6835,7 @@ void BlueStore::_main_bdev_label_try_reserve()
   ceph_assert(bdev_label_multi == true);
   vector<uint64_t> candidate_positions;
   vector<uint64_t> accepted_positions;
+  dout(20) << __func__ << " input " << bdev_label_valid_locations << dendl;
   uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
   for (uint64_t location : bdev_label_valid_locations) {
     if (location != BDEV_FIRST_LABEL_POSITION) {
@@ -6861,6 +6869,7 @@ void BlueStore::_main_bdev_label_try_reserve()
          << " occupied by BlueStore object or BlueFS file, disabling" << dendl;
     std::erase(bdev_label_valid_locations, candidate_positions[i]);
   }
+  dout(20) << __func__ << " result " << bdev_label_valid_locations << dendl;
 }
 
 void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
@@ -6955,12 +6964,34 @@ int BlueStore::_check_main_bdev_label()
         ++valid_locations;
       }
     }
-    if (valid_locations != bdev_label_valid_locations.size()) {
-      derr << __func__ << " not all labels read properly" << dendl;
+    if (valid_locations > bdev_label_valid_locations.size()) {
+      derr << __func__ << " not all labels read properly, "
+           << valid_locations << "!=" << bdev_label_valid_locations.size()
+           << dendl;
       return -EIO;
     }
   }
   return 0;
+}
+
+int BlueStore::read_bdev_label_at_pos(
+  CephContext* cct,
+  const std::string &bdev_path,
+  uint64_t disk_position,
+  bluestore_bdev_label_t *label)
+{
+  unique_ptr<BlockDevice> bdev(BlockDevice::create(
+    cct, bdev_path, nullptr, nullptr, nullptr, nullptr));
+  if (!bdev) {
+    return -EIO;
+  }
+  bdev->set_no_exclusive_lock();
+  int r = bdev->open(bdev_path);
+  if (r < 0)
+    return r;
+  r = _read_bdev_label(cct, bdev.get(), bdev_path, label, disk_position);
+  bdev->close();
+  return r;
 }
 
 int BlueStore::read_bdev_label(
@@ -7296,7 +7327,16 @@ int BlueStore::_init_alloc()
 	return -ENOTRECOVERABLE;
       }
     }
+    if (before_expansion_bdev_size > 0 &&
+        before_expansion_bdev_size < bdev_label.size) {
+      // we grow the allocation range, must reflect it in the allocation file
+      alloc->init_add_free(before_expansion_bdev_size,
+                           bdev_label.size - before_expansion_bdev_size);
+      need_to_destage_allocation_file = true;    
+    }
   }
+  before_expansion_bdev_size = 0;
+
   dout(1) << __func__
           << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
           << std::hex
@@ -8926,99 +8966,132 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
-int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
-{
-  bluestore_bdev_label_t label;
-  int r = _read_bdev_label(cct, bdev, path, &label);
-  if (r < 0) {
-    derr << "unable to read label for " << path << ": "
-          << cpp_strerror(r) << dendl;
-  } else {
-    label.size = size;
-    r = _write_bdev_label(cct, bdev, path, label);
-    if (r < 0) {
-      derr << "unable to write label for " << path << ": "
-            << cpp_strerror(r) << dendl;
-    }
-  }
-  return r;
-}
-
 int BlueStore::expand_devices(ostream& out)
 {
+  // let's open in read-only mode first to be able to recover
+  // from the out-of-space state at DB/shared volume(s)
+  // Opening in R/W mode might cause extra space allocation
+  // which is effectively a show stopper for volume expansion.
   int r = _open_db_and_around(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
+  // updating dedicated devices first
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
-    if (devid == bluefs_layout.shared_bdev ) {
+    if (devid == bluefs_layout.shared_bdev) {
       continue;
     }
-    uint64_t size = bluefs->get_block_device_size(devid);
+    auto my_bdev = bluefs->get_block_device(devid);
+    uint64_t size = my_bdev ? my_bdev->get_size() : 0;
     if (size == 0) {
       // no bdev
       continue;
     }
-
-    out << devid
-	<<" : expanding " << " to 0x" << size << std::dec << std::endl;
-    string p = get_device_path(devid);
-    const char* path = p.c_str();
-    if (path == nullptr) {
-      derr << devid
-	    <<": can't find device path " << dendl;
-      continue;
-    }
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
-        out << devid
-          << " : size label updated to " << size
-          << std::endl;
-      }
-    }
-  }
-  uint64_t size0 = fm->get_size();
-  uint64_t size = bdev->get_size();
-  if (size0 < size) {
-    out << bluefs_layout.shared_bdev
-      << " : expanding " << " from 0x" << std::hex
-      << size0 << " to 0x" << size << std::dec << std::endl;
-    _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
-      }
-      if (bdev_label_multi) {
-        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-        for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
-            bdev_label_valid_locations.push_back(loc);
+    if (my_bdev->supported_bdev_label()) {
+      string my_path = get_device_path(devid);
+      bluestore_bdev_label_t my_label;
+      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      if (r < 0) {
+        derr << "unable to read label for " << my_path << ": "
+              << cpp_strerror(r) << dendl;
+        continue;
+      } else {
+        if (size == my_label.size) {
+          // no need to expand
+          out << devid
+	      << " : nothing to do, skipped"
+	      << std::endl;
+          continue;
+        } else if (size < my_label.size) {
+          // something weird in bdev label
+          out << devid
+	      <<" : ERROR: bdev label is above device size, skipped"
+	      << std::endl;
+          continue;
+        } else {
+          my_label.size = size;
+          out << devid
+	      << " : Expanding to 0x" << std::hex << size
+	      << std::dec << "(" << byte_u_t(size) << ")"
+	      << std::endl;
+          r = _write_bdev_label(cct, my_bdev, my_path, my_label);
+          if (r < 0) {
+            derr << "unable to write label for " << my_path << ": "
+                  << cpp_strerror(r) << dendl;
+          } else {
+            out << devid
+                << " : size updated to 0x" << std::hex << size
+                << std::dec << "(" << byte_u_t(size) << ")"
+                << std::endl;
           }
         }
-        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
       }
     }
-    _close_db_and_around();
-
-    // mount in read/write to sync expansion changes
-    if (bdev_label_multi) {
-      // We need not do fsck, because we can be broken - size is increased,
-      // but we might not have labels set.
-      cct->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
-    }
-    r = _mount();
-    ceph_assert(r == 0);
-    if (fm && fm->is_null_manager()) {
-      // we grow the allocation range, must reflect it in the allocation file
-      alloc->init_add_free(size0, size - size0);
-      need_to_destage_allocation_file = true;
-    }
-    umount();
-  } else {
-    _close_db_and_around();
   }
+  // now proceed with a shared device
+  uint64_t size0 = fm->get_size();
+  uint64_t size = bdev->get_size();
+  auto devid = bluefs_layout.shared_bdev;
+  auto aligned_size = p2align(size, min_alloc_size);
+  if (aligned_size == size0) {
+    // no need to expand
+    out << devid
+        << " : nothing to do, skipped"
+        << std::endl;
+  } else if (aligned_size < size0) {
+    // something weird in bdev label
+    out << devid
+        << " : ERROR: previous device size is above the current one, skipped"
+	<< std::endl;
+  } else {
+    auto my_path = get_device_path(devid);
+    out << devid
+	<<" : Expanding to 0x" << std::hex << size
+	<< std::dec << "(" << byte_u_t(size) << ")"
+	<< std::endl;  
+    r = _write_out_fm_meta(size);
+    if (r != 0) {
+      derr << "unable to write out fm meta for " << my_path << ": "
+           << cpp_strerror(r) << dendl;
+    } else if (bdev->supported_bdev_label()) {
+      bdev_label.size = size;
+      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      for (uint64_t loc : bdev_label_positions) {
+        if ((loc >= size0) && (loc + lsize <= size)) {
+          bdev_label_valid_locations.push_back(loc);
+          if (!bdev_label_multi) {
+            break;
+          }
+        }
+      }
+      r = _write_bdev_label(cct, bdev, my_path,
+        bdev_label, bdev_label_valid_locations);
+      if (r != 0) {
+        derr << "unable to write label(s) for " << my_path << ": "
+             << cpp_strerror(r) << dendl;
+      }
+    }
+    if (r == 0) {
+      out << devid
+          << " : size updated to 0x" << std::hex << size
+          << std::dec << "(" << byte_u_t(size) << ")"
+          << std::endl;
+      _close_db_and_around();
+
+       //
+      // Mount in read/write to sync expansion changes
+      // and make sure everything is all right.
+      //
+      before_expansion_bdev_size = size0; // preserve orignal size to permit
+                                          // following _db_open_and_around()
+                                          // do some post-init stuff on opened
+                                          // allocator.
+
+      r = _open_db_and_around(false);
+      ceph_assert(r == 0);
+    }
+  }
+  _close_db_and_around();
   return r;
 }
 
@@ -10782,7 +10855,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   if (bdev->supported_bdev_label() && bdev_label_multi) {
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t location = bdev_label_positions[i];
-      if (location + BDEV_LABEL_BLOCK_SIZE > bdev->get_size()) {
+      if (location + BDEV_LABEL_BLOCK_SIZE > bdev_label.size) {
         continue;
       }
       if (std::find(
@@ -10805,7 +10878,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   if (bluefs) {
     interval_set<uint64_t> bluefs_extents;
-
     bluefs->foreach_block_extents(
       bluefs_layout.shared_bdev,
       [&](uint64_t start, uint32_t len) {
@@ -10849,7 +10921,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t position = bdev_label_positions[i];
       uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
-      if (position + length <= bdev->get_size()) {
+      if (position + length <= bdev_label.size) {
         apply_for_bitset_range(position, length, alloc_size, used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset& bs) {
             bs.set(pos);
