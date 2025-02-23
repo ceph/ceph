@@ -610,7 +610,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
 inline void BlueStore::Writer::_schedule_io_masked(
   uint64_t disk_position,
   bufferlist data,
-  bluestore_blob_t::unused_t mask,
+  uint64_t mask,
   uint32_t chunk_size)
 {
   if (test_write_divertor == nullptr) {
@@ -771,7 +771,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
     uint32_t data_size = want_subau_end - want_subau_begin;
     bufferlist data_at_left = split_left(data, data_size);
     bd.real_length -= data_size;
-    uint32_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
+    uint64_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
     _blob_put_data_subau(b, in_blob_offset, data_at_left);
     // transfer do disk
     _schedule_io_masked(subau_disk_offset, data_at_left, mask, chunk_size);
@@ -844,7 +844,7 @@ void BlueStore::Writer::_try_reuse_allocated_r(
     uint32_t data_size = want_subau_end - want_subau_begin;
     bufferlist data_at_right = split_right(data, data.length() - data_size);
     bd.real_length -= data_size;
-    uint32_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
+    uint64_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
     _blob_put_data_subau(b, in_blob_offset, data_at_right);
     //transfer to disk
     _schedule_io_masked(subau_disk_offset, data_at_right, mask, chunk_size);
