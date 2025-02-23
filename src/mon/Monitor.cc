@@ -544,6 +544,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
   return compat;
 }
 
@@ -2542,6 +2543,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_SQUID));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_TENTACLE)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_TENTACLE));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_TENTACLE));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_TENTACLE);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2582,6 +2590,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_SQUID)) {
     required_features |= CEPH_FEATUREMASK_SERVER_SQUID;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_TENTACLE)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_TENTACLE;
   }
 
   // monmap
@@ -4350,8 +4361,9 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       auto q = rr->request_bl.cbegin();
+      // for features see forward_request_leader()
       PaxosServiceMessage *req =
-	(PaxosServiceMessage *)decode_message(cct, 0, q);
+	(PaxosServiceMessage *)decode_message(cct, 0, q, CEPH_FEATURES_ALL);
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
@@ -4849,7 +4861,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   stringstream ss;
   f->flush(ss);
   encode(ss.str(), payload);
-  reply->set_payload(payload);
+  reply->set_payload(std::move(payload));
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
   m->get_connection()->send_message(reply);
 }

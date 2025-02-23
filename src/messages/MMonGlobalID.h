@@ -31,7 +31,7 @@ public:
     out << "global_id  (" << old_max_id << ")";
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

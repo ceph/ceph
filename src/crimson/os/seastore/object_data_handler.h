@@ -43,7 +43,7 @@ public:
   void add(const block_delta_t &b) {
     changes.push_back(b);
   }
-  void apply_changes_to(bufferptr &b) const {
+  void apply_changes_to(bufferptr_rw &b) const {
     assert(!changes.empty());
     for (auto p : changes) {
       auto iter = p.bl.cbegin();
@@ -51,21 +51,21 @@ public:
     }
     changes.clear();
   }
-  const bufferptr &get_cached_bptr(const bufferptr &_ptr) const {
+  const bufferptr_rw &get_cached_bptr(const bufferptr_rw &_ptr) const {
     apply_changes_to_cache(_ptr);
     return *ptr;
   }
-  bufferptr &get_cached_bptr(const bufferptr &_ptr) {
+  bufferptr_rw &get_cached_bptr(const bufferptr_rw &_ptr) {
     apply_changes_to_cache(_ptr);
     return *ptr;
   }
-  bufferptr &&move_cached_bptr() {
+  bufferptr_rw &&move_cached_bptr() {
     assert(has_cached_bptr());
     apply_changes_to(*ptr);
     return std::move(*ptr);
   }
 private:
-  void apply_changes_to_cache(const bufferptr &_ptr) const {
+  void apply_changes_to_cache(const bufferptr_rw &_ptr) const {
     assert(!is_empty());
     if (!has_cached_bptr()) {
       ptr = ceph::buffer::copy(_ptr.c_str(), _ptr.length());
@@ -75,7 +75,7 @@ private:
     }
   }
   mutable std::vector<block_delta_t> changes = {};
-  mutable std::optional<ceph::bufferptr> ptr = std::nullopt;
+  mutable std::optional<ceph::bufferptr_rw> ptr = std::nullopt;
 };
 
 struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
@@ -88,7 +88,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   // to provide the local modified view during transaction
   overwrite_buf_t cached_overwrites;
 
-  explicit ObjectDataBlock(ceph::bufferptr &&ptr)
+  explicit ObjectDataBlock(ceph::bufferptr_rw &&ptr)
     : LogicalChildNode(std::move(ptr)) {}
   explicit ObjectDataBlock(const ObjectDataBlock &other, share_buffer_t s)
     : LogicalChildNode(other, s), modified_region(other.modified_region) {}
@@ -145,7 +145,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     delta.clear();
   }
 
-  bufferptr &get_bptr() override {
+  bufferptr_rw &get_bptr() override {
     if (cached_overwrites.is_empty()) {
       return CachedExtent::get_bptr();
     } else {
@@ -153,7 +153,7 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     }
   }
 
-  const bufferptr &get_bptr() const override {
+  const bufferptr_rw &get_bptr() const override {
     if (cached_overwrites.is_empty()) {
       return CachedExtent::get_bptr();
     } else {

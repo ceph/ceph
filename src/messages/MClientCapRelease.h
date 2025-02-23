@@ -25,7 +25,7 @@ class MClientCapRelease final : public SafeMessage {
     out << "client_cap_release(" << caps.size() << ")";
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);

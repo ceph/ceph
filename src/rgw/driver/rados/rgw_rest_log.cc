@@ -332,7 +332,7 @@ void RGWOp_MDLog_Notify::execute(optional_yield y) {
     return;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   ldpp_dout(this, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
@@ -781,7 +781,7 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
     return;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   ldpp_dout(this, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
@@ -830,7 +830,7 @@ void RGWOp_DATALog_Notify2::execute(optional_yield y) {
     return;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;

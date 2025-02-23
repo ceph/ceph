@@ -66,7 +66,7 @@ public:
     encode(crush_loc, payload);
     encode(force_loc, payload);
   }
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

@@ -46,7 +46,7 @@ public:
   }
 
   // marshalling
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);

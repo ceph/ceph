@@ -1378,6 +1378,7 @@ CtPtr ProtocolV2::handle_message() {
 		<< " envelope type=" << current_header.type
 		<< " src " << peer_name
 		<< " off " << current_header.data_off
+		<< " features " << connection->get_features()
                 << dendl;
 
   INTERCEPT(16);
@@ -1398,10 +1399,11 @@ CtPtr ProtocolV2::handle_message() {
 	                 ceph_le32(0), ceph_le64(0), current_header.flags};
 
   Message *message = decode_message(cct, 0, header, footer,
-      msg_frame.front(),
-      msg_frame.middle(),
+      std::move(msg_frame.front()),
+      std::move(msg_frame.middle()),
       msg_frame.data(),
-      connection);
+      connection,
+      connection->get_features());
   if (!message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();

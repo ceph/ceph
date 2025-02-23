@@ -1765,8 +1765,8 @@ CEPH_RADOS_API void rados_getxattrs_end(rados_xattrs_iter_t iter);
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_omap_get_next(rados_omap_iter_t iter,
-                                       char **key,
-                                       char **val,
+                                       const char **key,
+                                       const char **val,
                                        size_t *len);
 
 /**
@@ -1791,8 +1791,8 @@ CEPH_RADOS_API int rados_omap_get_next(rados_omap_iter_t iter,
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_omap_get_next2(rados_omap_iter_t iter,
-                                       char **key,
-                                       char **val,
+                                       const char **key,
+                                       const char **val,
                                        size_t *key_len,
                                        size_t *val_len);
 
@@ -2393,7 +2393,7 @@ typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notify_id,
 				 uint64_t handle,
 				 uint64_t notifier_id,
-				 void *data,
+				 const void *data,
 				 size_t data_len);
 
 /**

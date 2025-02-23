@@ -17155,7 +17155,7 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
     auto it = in->xattrs.find(ACL_EA_ACCESS);
     if (it != in->xattrs.end()) {
       const bufferptr& access_acl = it->second;
-      bufferptr acl(access_acl.c_str(), access_acl.length());
+      bufferptr_rw acl(access_acl.c_str(), access_acl.length());
       r = posix_acl_access_chmod(acl, mode);
       if (r < 0)
 	goto out;
@@ -17188,7 +17188,7 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
       map<string, bufferptr> xattrs;
 
       const bufferptr& default_acl = it->second;
-      bufferptr acl(default_acl.c_str(), default_acl.length());
+      bufferptr_rw acl(default_acl.c_str(), default_acl.length());
       r = posix_acl_inherit_mode(acl, mode);
       if (r < 0)
 	goto out;

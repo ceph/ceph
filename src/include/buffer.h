@@ -118,6 +118,8 @@ struct error_code;
   /// enable/disable tracking of cached crcs
   void track_cached_crc(bool b);
 
+  void throw_end_of_buffer();
+
   /*
    * an abstract raw buffer.  with a reference count.
    */
@@ -129,6 +131,7 @@ struct error_code;
   class raw_claimed_char;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
+  class raw_zeros;
   class raw_claim_buffer;
 
 
@@ -164,22 +167,17 @@ struct error_code;
    */
   class CEPH_BUFFER_API ptr {
     friend class list;
+
   protected:
-    raw *_raw;
-    unsigned _off, _len;
-  private:
-
-    void release();
-
-    template<bool is_const>
+    template<class PtrT, bool is_const>
     class iterator_impl {
-      const ptr *bp;     ///< parent ptr
+      std::conditional_t<is_const, const PtrT*, PtrT*> bp; ///< parent ptr
       const char *start; ///< starting pointer into bp->c_str()
       const char *pos;   ///< pointer into bp->c_str()
       const char *end_ptr;   ///< pointer to bp->end_c_str()
       const bool deep;   ///< if true, do not allow shallow ptr copies
 
-      iterator_impl(typename std::conditional<is_const, const ptr*, ptr*>::type p,
+      iterator_impl(std::conditional_t<is_const, const PtrT*, PtrT*> p,
 		    size_t offset, bool d)
 	: bp(p),
 	  start(p->c_str() + offset),
@@ -189,6 +187,7 @@ struct error_code;
       {}
 
       friend class ptr;
+      friend class ptr_rw;
 
     public:
       using pointer = typename std::conditional<is_const, const char*, char *>::type;
@@ -197,17 +196,22 @@ struct error_code;
 	*this += n;
 	return r;
       }
-      ptr get_ptr(size_t len) {
+      PtrT get_ptr(size_t len) {
 	if (deep) {
 	  return buffer::copy(get_pos_add(len), len);
 	} else {
 	  size_t off = pos - bp->c_str();
 	  *this += len;
-	  return ptr(*bp, off, len);
+	  return PtrT(*bp, off, len);
 	}
       }
 
-      iterator_impl& operator+=(size_t len);
+      iterator_impl& operator+=(size_t len) {
+	pos += len;
+	if (pos > end_ptr)
+	  throw_end_of_buffer();
+	return *this;
+      }
 
       const char *get_pos() {
 	return pos;
@@ -225,9 +229,13 @@ struct error_code;
       }
     };
 
+    raw *_raw;
+    unsigned _off, _len;
+
+    void release();
+
   public:
-    using const_iterator = iterator_impl<true>;
-    using iterator = iterator_impl<false>;
+    using const_iterator = iterator_impl<ptr, true>;
 
     ptr() : _raw(nullptr), _off(0), _len(0) {}
     ptr(ceph::unique_leakable_ptr<raw> r);
@@ -238,21 +246,18 @@ struct error_code;
     ptr(ptr&& p) noexcept;
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r);
-    ptr& operator= (const ptr& p);
-    ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
       // BE CAREFUL: this destructor is called also for hypercombined ptr_node.
       // After freeing underlying raw, `*this` can become inaccessible as well!
       release();
     }
 
-    bool have_raw() const { return _raw ? true:false; }
+    ptr& operator= (const ptr& p);
+    ptr& operator= (ptr&& p) noexcept;
 
+    bool have_raw() const { return _raw ? true:false; }
     void swap(ptr& other) noexcept;
 
-    iterator begin(size_t offset=0) {
-      return iterator(this, offset, false);
-    }
     const_iterator begin(size_t offset=0) const {
       return const_iterator(this, offset, false);
     }
@@ -283,16 +288,13 @@ struct error_code;
 
     // accessors
     const char *c_str() const;
-    char *c_str();
     const char *end_c_str() const;
-    char *end_c_str();
     unsigned length() const { return _len; }
     unsigned offset() const { return _off; }
     unsigned start() const { return _off; }
     unsigned end() const { return _off + _len; }
     unsigned unused_tail_length() const;
     const char& operator[](unsigned n) const;
-    char& operator[](unsigned n);
 
     const char *raw_c_str() const;
     unsigned raw_length() const;
@@ -303,6 +305,7 @@ struct error_code;
     unsigned wasted() const;
 
     int cmp(const ptr& o) const;
+    bool is_zero_fast() const;
     bool is_zero() const;
 
     // modifiers
@@ -322,6 +325,61 @@ struct error_code;
 #endif
       _len = l;
     }
+  };
+
+  class CEPH_BUFFER_API ptr_rw : public ptr {
+    friend class list;
+    friend class ptr_node; // for ptr(bp, off, len)
+  private:
+    ptr_rw(const ptr& p, unsigned o, unsigned l);
+    ptr_rw(const ptr& p);
+    ptr_rw(ptr&& p) noexcept;
+
+  public:
+    using const_iterator = iterator_impl<ptr_rw, true>;
+    using iterator = iterator_impl<ptr_rw, false>;
+
+    ptr_rw() : ptr() {}
+    ptr_rw(ceph::unique_leakable_ptr<raw> r);
+    // cppcheck-suppress noExplicitConstructor
+    ptr_rw(unsigned l);
+    ptr_rw(const char *d, unsigned l);
+    ptr_rw(const ptr_rw& p);
+    ptr_rw(ptr_rw&& p) noexcept;
+    ptr_rw(const ptr_rw& p, unsigned o, unsigned l);
+    ptr_rw(const ptr_rw& p, ceph::unique_leakable_ptr<raw> r);
+    ptr_rw& operator= (const ptr_rw& p);
+    ptr_rw& operator= (ptr_rw&& p) noexcept;
+
+    void swap(ptr_rw& other) noexcept;
+
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset, false);
+    }
+    iterator begin(size_t offset=0) {
+      return iterator(this, offset, false);
+    }
+    const_iterator cbegin() const {
+      return begin();
+    }
+    const_iterator begin_deep(size_t offset=0) const {
+      return const_iterator(this, offset, true);
+    }
+    // accessors
+    const char *c_str() const {
+      return ptr::c_str();
+    }
+    const char *end_c_str() const {
+      return ptr::end_c_str();
+    }
+    const char& operator[](unsigned n) const {
+      return ptr::operator[](n);
+    }
+
+    // modifiers
+    char& operator[](unsigned n);
+    char *c_str();
+    char *end_c_str();
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
@@ -341,7 +399,6 @@ struct error_code;
     /// convert to temporary_buffer, stealing the ptr as its deleter
     operator seastar::temporary_buffer<char>() &&;
 #endif // HAVE_SEASTAR
-
   };
 
 
@@ -354,7 +411,7 @@ struct error_code;
     }
   };
 
-  class ptr_node : public ptr_hook, public ptr {
+  class ptr_node : public ptr_hook, public ptr_rw {
   public:
     struct cloner {
       ptr_node* operator()(const ptr_node& clone_this);
@@ -390,12 +447,14 @@ struct error_code;
     friend list;
 
     template <class... Args>
-    ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
+    ptr_node(Args&&... args) : ptr_rw(std::forward<Args>(args)...) {
     }
     ptr_node(const ptr_node&) = default;
 
     ptr& operator= (const ptr& p) = delete;
     ptr& operator= (ptr&& p) noexcept = delete;
+    ptr_rw& operator= (const ptr_rw& p) = delete;
+    ptr_rw& operator= (ptr_rw&& p) noexcept = delete;
     ptr_node& operator= (const ptr_node& p) = delete;
     ptr_node& operator= (ptr_node&& p) noexcept = delete;
     void swap(ptr& other) noexcept = delete;
@@ -624,9 +683,7 @@ struct error_code;
       }
     };
 
-    class iterator;
-
-  private:
+  protected:
     // my private bits
     buffers_t _buffers;
 
@@ -668,7 +725,7 @@ struct error_code;
       iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
 	: bl(l), ls(&bl->_buffers), p(ip), off(o), p_off(po) {}
-      iterator_impl(const list::iterator& i);
+      iterator_impl(const iterator_impl<false>& i);
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
@@ -685,7 +742,6 @@ struct error_code;
       char operator*() const;
       iterator_impl& operator+=(unsigned o);
       iterator_impl& operator++();
-      ptr get_current_ptr() const;
       bool is_pointing_same_raw(const ptr& other) const;
 
       bl_t& get_bl() const { return *bl; }
@@ -695,8 +751,8 @@ struct error_code;
       void copy(unsigned len, char *dest);
       // deprecated, use copy_deep()
       void copy(unsigned len, ptr &dest) __attribute__((deprecated));
-      void copy_deep(unsigned len, ptr &dest);
-      void copy_shallow(unsigned len, ptr &dest);
+      ptr_rw copy_deep(unsigned len);
+      ptr copy_shallow(unsigned len);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       template<typename A>
@@ -727,16 +783,7 @@ struct error_code;
 
   public:
     typedef iterator_impl<true> const_iterator;
-
-    class CEPH_BUFFER_API iterator : public iterator_impl<false> {
-    public:
-      iterator() = default;
-      iterator(bl_t *l, unsigned o=0);
-      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
-      // copy data in
-      void copy_in(unsigned len, const char *src, bool crc_reset = true);
-      void copy_in(unsigned len, const list& otherl);
-    };
+    typedef const_iterator iterator;
 
     struct reserve_t {
       char* bp_data;
@@ -916,7 +963,7 @@ struct error_code;
       return page_aligned_appender(this, min_pages);
     }
 
-  private:
+  protected:
     // always_empty_bptr has no underlying raw but its _len is always 0.
     // This is useful for e.g. get_append_buffer_unused_tail_length() as
     // it allows to avoid conditionals on hot paths.
@@ -928,6 +975,8 @@ struct error_code;
     ptr& get_append_buffer() {
       return *_carriage;
     }
+
+    static ptr always_zeroed_bptr;
 
   public:
     // cons/des
@@ -984,8 +1033,8 @@ struct error_code;
 
     uint64_t get_wasted_space() const;
     unsigned get_num_buffers() const { return _num; }
-    const ptr_node& front() const { return _buffers.front(); }
-    const ptr_node& back() const { return _buffers.back(); }
+    const ptr& front() const { return _buffers.front(); }
+    const ptr& back() const { return _buffers.back(); }
 
     int get_mempool() const;
     void reassign_to_mempool(int pool);
@@ -996,7 +1045,6 @@ struct error_code;
     }
 
     const buffers_t& buffers() const { return _buffers; }
-    buffers_t& mut_buffers() { return _buffers; }
     void swap(list& other) noexcept;
     unsigned length() const {
 #if 0
@@ -1170,7 +1218,8 @@ struct error_code;
      * get a char
      */
     const char& operator[](unsigned n) const;
-    char *c_str();
+    char* data(); // may return null if bl contains non-writeable buffers
+    const char *c_str();
     std::string to_str() const;
 
     void substr_of(const list& other, unsigned off, unsigned len);
@@ -1227,6 +1276,98 @@ struct error_code;
     static list static_from_string(std::string& s);
   };
 
+  class list_rw : list {
+  public:
+    using list::const_iterator;
+
+    class CEPH_BUFFER_API iterator : public iterator_impl<false> {
+    public:
+      iterator() = default;
+      iterator(list_rw *l, unsigned o=0);
+      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
+      // copy data in
+      void copy_in(unsigned len, const char *src, bool crc_reset = true);
+      void copy_in(unsigned len, const list& otherl);
+    };
+
+    list_rw() : list() {
+    }
+    list_rw(const list_rw& other)
+      : list(static_cast<const list&>(other)) {
+    }
+
+    iterator begin(size_t offset=0) {
+      return iterator(this, offset);
+    }
+    iterator end() {
+      return iterator(this, _len, _buffers.end(), 0);
+    }
+
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset);
+    }
+    const_iterator cbegin(size_t offset=0) const {
+      return begin(offset);
+    }
+    const_iterator end() const {
+      return const_iterator(this, _len, _buffers.end(), 0);
+    }
+
+    const ptr_rw& front() const { return _buffers.front(); }
+    const ptr_rw& back() const { return _buffers.back(); }
+    bool is_contiguous() const { return list::is_contiguous(); }
+    void rebuild() { return list::rebuild(); }
+
+    // regular list (ro) overload SHALL NOT be available
+    void substr_of(const list_rw& other, unsigned off, unsigned len) {
+      list::substr_of(static_cast<const list&>(other), off, len);
+    }
+
+    void clear() noexcept {
+      list::clear();
+    }
+
+    // regular list (ro) overload SHALL NOT be available
+    void swap(list_rw& other) noexcept {
+      list::swap(static_cast<list&>(other));
+    }
+    unsigned length() const {
+      return list::length();
+    }
+    // regular ptr (ro) overload SHALL NOT be available
+    void append(const ptr_rw& bp) {
+      list::append(static_cast<const ptr&>(bp));
+    }
+    // regular list (ro) overload SHALL NOT be available
+    void append(const list_rw& bl) {
+      list::append(static_cast<const list&>(bl));
+    }
+    void append(const char *data, unsigned len) {
+      list::append(data, len);
+    }
+    void append(const char* s) {
+      list::append(s);
+    }
+    void append_zero(unsigned len);
+    uint32_t crc32c(uint32_t crc) const {
+      return list::crc32c(crc);
+    }
+    list as_new_bl() const {
+      return *this;
+    }
+    const list& as_const_bl() const {
+      return *this;
+    }
+    const char& operator[](unsigned n) const {
+      return list::operator[](n);
+    }
+    const char *c_str() {
+      return list::c_str();
+    }
+
+    // SHALL NOT be used apart of unit tests
+    static list_rw& from_ro_unsafe(list& target);
+  };
 } // inline namespace v15_2_0
 
   /*
@@ -1251,6 +1392,11 @@ struct error_code;
   };
 
 inline bool operator==(const bufferlist &lhs, const bufferlist &rhs) {
+  if (lhs.length() != rhs.length())
+    return false;
+  return std::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
+inline bool operator==(const bufferlist_rw &lhs, const bufferlist_rw &rhs) {
   if (lhs.length() != rhs.length())
     return false;
   return std::equal(lhs.begin(), lhs.end(), rhs.begin());

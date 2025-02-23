@@ -53,7 +53,7 @@ bool DataGenerator::validate(bufferlist& bufferlist, uint64_t offset,
   return bufferlist.contents_equal(generate_data(offset, length));
 }
 
-ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
+ceph::bufferptr_rw SeededRandomGenerator::generate_block(uint64_t block_offset) {
   uint64_t block_size = m_model.get_block_size();
   char buffer[block_size];
 
@@ -78,7 +78,7 @@ ceph::bufferptr SeededRandomGenerator::generate_block(uint64_t block_offset) {
     std::memcpy(buffer + block_size - remainingBytes, &rand1, remainingBytes);
   }
 
-  return ceph::bufferptr(buffer, block_size);
+  return ceph::bufferptr_rw(buffer, block_size);
 }
 
 ceph::bufferptr SeededRandomGenerator::generate_wrong_block(
@@ -148,7 +148,7 @@ uint64_t HeaderedSeededRandomGenerator::generate_unique_run_id() {
   return random_generator();
 }
 
-ceph::bufferptr HeaderedSeededRandomGenerator::generate_block(
+ceph::bufferptr_rw HeaderedSeededRandomGenerator::generate_block(
     uint64_t block_offset) {
   SeedBytes seed = m_model.get_seed(block_offset);
   TimeBytes current_time =
@@ -156,7 +156,7 @@ ceph::bufferptr HeaderedSeededRandomGenerator::generate_block(
           std::chrono::system_clock::now().time_since_epoch())
           .count();
 
-  ceph::bufferptr bufferptr =
+  ceph::bufferptr_rw bufferptr =
       SeededRandomGenerator::generate_block(block_offset);
 
   std::memcpy(bufferptr.c_str() + uniqueIdStart(), &unique_run_id,

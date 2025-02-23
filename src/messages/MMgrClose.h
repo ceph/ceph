@@ -15,7 +15,7 @@ public:
   std::string daemon_name;
   std::string service_name;  // optional; otherwise infer from entity type
 
-  void decode_payload() override
+  void decode_payload(uint64_t) override
   {
     using ceph::decode;
     auto p = payload.cbegin();

@@ -105,7 +105,7 @@ public:
     if (type == REQUEST) out << " prio: " << priority;
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(pgid.pgid, p);

@@ -22,8 +22,8 @@ inline uint8_t get_header_size() {
   return sizeof(HeaderHelper);
 }
 
-inline uint32_t get_data_len(char* buf) {
-  HeaderHelper* header = reinterpret_cast<HeaderHelper*>(buf);
+inline uint32_t get_data_len(const char* buf) {
+  const HeaderHelper* header = reinterpret_cast<const HeaderHelper*>(buf);
   return header->len;
 }
 }  //  namespace

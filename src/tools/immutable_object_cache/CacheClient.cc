@@ -201,7 +201,7 @@ namespace immutable_obj_cache {
   void CacheClient::read_reply_header() {
     ldout(m_cct, 20) << dendl;
     /* create new head buffer for every reply */
-    bufferptr bp_head(buffer::create(get_header_size()));
+    bufferptr_rw bp_head(buffer::create(get_header_size()));
     auto raw_ptr = bp_head.c_str();
 
     boost::asio::async_read(m_dm_socket,
@@ -213,7 +213,7 @@ namespace immutable_obj_cache {
                   boost::asio::placeholders::bytes_transferred));
   }
 
-  void CacheClient::handle_reply_header(bufferptr bp_head,
+  void CacheClient::handle_reply_header(bufferptr_rw bp_head,
          const boost::system::error_code& ec,
          size_t bytes_transferred) {
     ldout(m_cct, 20) << dendl;
@@ -226,12 +226,12 @@ namespace immutable_obj_cache {
 
     uint32_t data_len = get_data_len(bp_head.c_str());
 
-    bufferptr bp_data(buffer::create(data_len));
+    bufferptr_rw bp_data(buffer::create(data_len));
     read_reply_data(std::move(bp_head), std::move(bp_data), data_len);
   }
 
-  void CacheClient::read_reply_data(bufferptr&& bp_head,
-                                    bufferptr&& bp_data,
+  void CacheClient::read_reply_data(bufferptr_rw&& bp_head,
+                                    bufferptr_rw&& bp_data,
                                     const uint64_t data_len) {
     ldout(m_cct, 20) << dendl;
     auto raw_ptr = bp_data.c_str();
@@ -243,8 +243,8 @@ namespace immutable_obj_cache {
                   boost::asio::placeholders::bytes_transferred));
   }
 
-  void CacheClient::handle_reply_data(bufferptr bp_head,
-                                      bufferptr bp_data,
+  void CacheClient::handle_reply_data(bufferptr_rw bp_head,
+                                      bufferptr_rw bp_data,
                                       const uint64_t data_len,
                                       const boost::system::error_code& ec,
                                       size_t bytes_transferred) {
@@ -411,9 +411,9 @@ namespace immutable_obj_cache {
     }
 
     uint64_t data_len = get_data_len(m_bp_header.c_str());
-    bufferptr bp_data(buffer::create(data_len));
+    auto bp_data = buffer::ptr_node::create(buffer::create(data_len));
 
-    ret = boost::asio::read(m_dm_socket, boost::asio::buffer(bp_data.c_str(),
+    ret = boost::asio::read(m_dm_socket, boost::asio::buffer(bp_data->c_str(),
                             data_len), ec);
     if (ec || ret != data_len) {
       fault(ASIO_ERROR_READ, ec);
@@ -422,7 +422,7 @@ namespace immutable_obj_cache {
 
     bufferlist data_buffer;
     data_buffer.append(m_bp_header);
-    data_buffer.append(std::move(bp_data));
+    data_buffer.push_back(std::move(bp_data));
     ObjectCacheRequest* req = decode_object_cache_request(data_buffer);
     if (req->type == RBDSC_REGISTER_REPLY) {
       m_session_work.store(true);

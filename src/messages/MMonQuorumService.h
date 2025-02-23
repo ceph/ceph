@@ -60,7 +60,7 @@ public:
     ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 
-  void decode_payload() override {
+  void decode_payload(uint64_t) override {
     ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 

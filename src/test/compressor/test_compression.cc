@@ -123,12 +123,10 @@ TEST_P(CompressorTest, big_round_trip_randomish)
       orig.append(alphabet[rand() % 10]);
     }
   } else {
-    bufferptr bp(len);
-    char *p = bp.c_str();
+    char *p = orig.append_hole(len).c_str();
     for (unsigned i=0; i<len; ++i) {
       p[i] = alphabet[rand() % 10];
     }
-    orig.append(bp);
   }
   bufferlist compressed;
   std::optional<int32_t> compressor_message;

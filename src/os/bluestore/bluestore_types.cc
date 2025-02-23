@@ -1324,10 +1324,10 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     ceph_assert(blob_offset % csum_order == 0);
     size_t pos = (blob_offset / csum_order) * get_csum_value_size();
     // deep copy csum data
-    bufferptr old;
+    bufferptr_rw old;
     old.swap(csum_data);
-    rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
-    csum_data = bufferptr(old.c_str(), pos);
+    rb.csum_data = bufferptr_rw(old.c_str() + pos, old.length() - pos);
+    csum_data = bufferptr_rw(old.c_str(), pos);
   }
 }
 
@@ -1341,10 +1341,10 @@ void bluestore_blob_t::dup(const bluestore_blob_t& from)
   csum_type = from.csum_type;
   csum_chunk_order = from.csum_chunk_order;
   if (from.csum_data.length()) {
-    csum_data = ceph::buffer::ptr(from.csum_data.c_str(), from.csum_data.length());
+    csum_data = ceph::buffer::ptr_rw(from.csum_data.c_str(), from.csum_data.length());
     csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
   } else {
-    csum_data = ceph::buffer::ptr();
+    csum_data = ceph::buffer::ptr_rw();
   }
 }
 

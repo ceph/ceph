@@ -94,7 +94,7 @@ namespace crimson::os::seastore::collection_manager {
 struct CollectionNode : LogicalChildNode {
   using CollectionNodeRef = TCachedExtentRef<CollectionNode>;
 
-  explicit CollectionNode(ceph::bufferptr &&ptr)
+  explicit CollectionNode(ceph::bufferptr_rw &&ptr)
     : LogicalChildNode(std::move(ptr)) {}
   explicit CollectionNode(extent_len_t length)
     : LogicalChildNode(length) {}

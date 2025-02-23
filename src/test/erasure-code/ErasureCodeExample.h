@@ -98,13 +98,13 @@ public:
     unsigned int chunk_length = get_chunk_size(in.length());
     bufferlist out(in);
     unsigned int width = get_chunk_count() * get_chunk_size(in.length());
-    bufferptr pad(width - in.length());
-    pad.zero(0, get_data_chunk_count());
-    out.push_back(pad);
+    auto pad = buffer::ptr_node::create(buffer::create(width - in.length()));
+    pad->zero(0, get_data_chunk_count());
+    out.push_back(std::move(pad));
     //
     // compute the coding chunk with first chunk ^ second chunk
     //
-    char *p = out.c_str();
+    char *p = out.data();
     for (unsigned i = 0; i < chunk_length; i++)
       p[i + CODING_CHUNK * chunk_length] =
         p[i + FIRST_DATA_CHUNK * chunk_length] ^
@@ -163,7 +163,7 @@ public:
         const char *a = k->second.front().c_str();
         ++k;
         const char *b = k->second.front().c_str();
-        bufferptr chunk(chunk_length);
+        bufferptr_rw chunk(chunk_length);
 	char *c = chunk.c_str();
         for (unsigned j = 0; j < chunk_length; j++) {
           c[j] = a[j] ^ b[j];
