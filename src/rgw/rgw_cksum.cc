@@ -60,19 +60,23 @@ namespace rgw::cksum {
 
     switch(ck1.type) {
     case rgw::cksum::Type::crc64nvme:
-      uint64_t cck1, cck2, cck3;
-      memcpy(&cck1, (char*) ck1.digest.data(), sizeof(cck1));
-      memcpy(&cck2, (char*) ck2.digest.data(), sizeof(cck2));
-
-#if 0
-      /* madler crcany */
-      cck3 = crc64nvme_comb(cck1, cck2, len1);
+      {
+	/* due to AWS (and other) convention, the at-rest
+	 * digest is byteswapped (on LE?);  restore the
+	 * defined byte order before combining */
+	auto cck1 = rgw::digest::byteswap(*diag_get_crc(ck1));
+	auto cck2 = rgw::digest::byteswap(*diag_get_crc(ck2));
+#if 1
+	/* madler crcany */
+	auto cck3 = crc64nvme_comb(cck1, cck2, len1);
 #else
-      /* spdk */
-      cck3 = crc64_nvme_combine(cck1, cck2, len1);
+	/* XXXX kill this and the failing combine logic */
+	/* spdk */
+	cck3 = crc64_nvme_combine(cck1, cck2, len1);
 #endif
-      ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
-			 cksum::Cksum::CtorStyle::raw);
+	ck3 = cksum::Cksum(ck1.type, (char*) &cck3,
+			   cksum::Cksum::CtorStyle::raw);
+      }
       break;
     default:
       break;

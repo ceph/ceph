@@ -54,6 +54,7 @@ namespace {
     R"(Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.)";
 
 std::string lacrimae = dolor + dolor;
+std::string dolorem = dolor + lorem;
 
 TEST(RGWCksum, Output)
 {
@@ -74,6 +75,11 @@ TEST(RGWCksum, Output)
     std::cout << "writing lacrimae text to /tmp/lacrimae " << std::endl;
     of.open("/tmp/lacrimae", o_mode);
     of << lacrimae;
+    of.close();
+
+    std::cout << "writing dolorem text to /tmp/dolorem " << std::endl;
+    of.open("/tmp/dolorem", o_mode);
+    of << dolorem;
     of.close();
   }
 }
@@ -476,7 +482,6 @@ TEST(RGWCksum, CRC64NVME_COMBINE1)
 TEST(RGWCksum, CRC64NVME_COMBINE2)
 {
   /* do crc64nvme and combining by hand, non-uniform strings */
-  std::string dolorem = dolor + lorem;
 
   uint64_t crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
 				  dolor.length(), 0ULL);
@@ -499,6 +504,36 @@ TEST(RGWCksum, CRC64NVME_COMBINE2)
   }
 
   ASSERT_EQ(crc3, crc4);
+}
+
+TEST(RGWCksum, CRC64NVME_COMBINE3)
+{
+  auto t = cksum::Type::crc64nvme;
+
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  DigestVariant dv3 = rgw::cksum::digest_factory(t);
+  Digest* digest3 = get_digest(dv3);
+  ASSERT_NE(digest3, nullptr);
+
+  /* dolor */
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint64_t spdk_crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
+				       dolor.length(), 0ULL);
+  auto cksum_crc1 =  rgw::digest::byteswap(*diag_get_crc(cksum1));
+
+  ASSERT_EQ(cksum_crc1, spdk_crc1);
+
+  /* lorem */
+  /* dolorem */
 }
 
 #if 0
