@@ -16,7 +16,7 @@ import { of } from 'rxjs';
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -38,6 +38,7 @@ import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-rbd-snapshot-list',
@@ -325,7 +326,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   deleteSnapshotModal() {
     const snapshotName = this.selection.selected[0].name;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`RBD snapshot`,
       itemNames: [snapshotName],
       submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)

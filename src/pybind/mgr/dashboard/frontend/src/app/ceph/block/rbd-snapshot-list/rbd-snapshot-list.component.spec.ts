@@ -10,7 +10,6 @@ import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
@@ -29,6 +28,7 @@ import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 
 describe('RbdSnapshotListComponent', () => {
   let component: RbdSnapshotListComponent;
@@ -67,7 +67,7 @@ describe('RbdSnapshotListComponent', () => {
         TaskListService
       ]
     },
-    [CriticalConfirmationModalComponent]
+    [DeleteConfirmationModalComponent]
   );
 
   beforeEach(() => {

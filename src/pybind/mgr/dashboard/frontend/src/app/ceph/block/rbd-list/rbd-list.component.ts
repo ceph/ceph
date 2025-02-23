@@ -8,7 +8,7 @@ import { RbdService } from '~/app/shared/api/rbd.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableStatus } from '~/app/shared/classes/table-status';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -33,6 +33,7 @@ import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RBDImageFormat, RbdModel } from './rbd-model';
 
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 const BASE_URL = 'block/rbd';
 
 @Component({
@@ -427,9 +428,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageName = this.selection.first().name;
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'RBD',
-      itemNames: [imageSpec],
+      itemNames: [imageSpec.imageName],
       bodyTemplate: this.deleteTpl,
       bodyContext: {
         hasSnapshots: this.hasSnapshots(),
@@ -451,7 +453,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageName = this.selection.first().name;
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'RBD',
       itemNames: [imageSpec],
       actionDescription: 'resync',
@@ -533,7 +535,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       this.selection.first().name
     );
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       actionDescription: 'remove scheduling on',
       itemDescription: $localize`image`,
       itemNames: [`${imageName}`],

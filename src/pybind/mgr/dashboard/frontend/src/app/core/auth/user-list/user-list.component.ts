@@ -4,9 +4,10 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { UserService } from '~/app/shared/api/user.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -173,7 +174,8 @@ export class UserListComponent implements OnInit {
       return;
     }
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'User',
       itemNames: [username],
       submitAction: () => this.deleteUser(username)
