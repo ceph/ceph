@@ -16,8 +16,8 @@
 #include <vector>
 #include <sstream>
 
-#include "ECTransaction.h"
-#include "ECUtil.h"
+#include "ECTransactionL.h"
+#include "ECUtilL.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 
@@ -34,16 +34,17 @@ using ceph::decode;
 using ceph::encode;
 using ceph::ErasureCodeInterfaceRef;
 
+namespace ECLegacy {
 static void encode_and_write(
   pg_t pgid,
   const hobject_t &oid,
-  const ECUtil::stripe_info_t &sinfo,
+  const ECUtilL::stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ecimpl,
   const set<int> &want,
   uint64_t offset,
   bufferlist bl,
   uint32_t flags,
-  ECUtil::HashInfoRef hinfo,
+  ECUtilL::HashInfoRef hinfo,
   extent_map &written,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   DoutPrefixProvider *dpp)
@@ -54,16 +55,16 @@ static void encode_and_write(
   ceph_assert(bl.length());
 
   map<int, bufferlist> buffers;
-  int r = ECUtil::encode(
+  int r = ECUtilL::encode(
     sinfo, ecimpl, bl, want, &buffers);
   ceph_assert(r == 0);
 
   written.insert(offset, bl.length(), bl);
 
   ldpp_dout(dpp, 20) << __func__ << ": " << oid
-		     << " new_size "
-		     << offset + bl.length()
-		     << dendl;
+                     << " new_size "
+                     << offset + bl.length()
+                     << dendl;
 
   if (offset >= before_size) {
     ceph_assert(offset == before_size);
@@ -94,12 +95,12 @@ static void encode_and_write(
   }
 }
 
-void ECTransaction::generate_transactions(
+void ECTransactionL::generate_transactions(
   PGTransaction* _t,
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
-  const ECUtil::stripe_info_t &sinfo,
+  const ECUtilL::stripe_info_t &sinfo,
   const map<hobject_t,extent_map> &partial_extents,
   vector<pg_log_entry_t> &entries,
   map<hobject_t,extent_map> *written_map,
@@ -144,7 +145,7 @@ void ECTransaction::generate_transactions(
 	ceph_assert(oid.is_temp());
       }
 
-      ECUtil::HashInfoRef hinfo;
+      ECUtilL::HashInfoRef hinfo;
       {
 	auto iter = hash_infos.find(oid);
 	ceph_assert(iter != hash_infos.end());
@@ -190,7 +191,7 @@ void ECTransaction::generate_transactions(
       ceph_assert(hinfo);
       bufferlist old_hinfo;
       encode(*hinfo, old_hinfo);
-      xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
+      xattr_rollback[ECUtilL::get_hinfo_key()] = old_hinfo;
 
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
 	ceph_assert(entry);
@@ -370,7 +371,7 @@ void ECTransaction::generate_transactions(
       if (op.alloc_hint) {
 	/* logical_to_next_chunk_offset() scales down both aligned and
 	   * unaligned offsets
-	   
+
 	   * we don't bother to roll this back at this time for two reasons:
 	   * 1) it's advisory
 	   * 2) we don't track the old value */
@@ -378,7 +379,7 @@ void ECTransaction::generate_transactions(
 	  op.alloc_hint->expected_object_size);
 	uint64_t write_size = sinfo.logical_to_next_chunk_offset(
 	  op.alloc_hint->expected_write_size);
-	
+
 	for (auto &&st : *transactions) {
 	  st.second.set_alloc_hint(
 	    coll_t(spg_t(pgid, st.first)),
@@ -451,7 +452,7 @@ void ECTransaction::generate_transactions(
 	      restore_from,
 	      restore_len,
 	      restore_from);
-	    
+
 	  }
 	} else {
 	  ldpp_dout(dpp, 20) << "generate_transactions: not saving extents"
@@ -650,9 +651,10 @@ void ECTransaction::generate_transactions(
 	  i.second.setattr(
 	    coll_t(spg_t(pgid, i.first)),
 	    ghobject_t(oid, ghobject_t::NO_GEN, i.first),
-	    ECUtil::get_hinfo_key(),
+	    ECUtilL::get_hinfo_key(),
 	    hbuf);
 	}
       }
     });
+}
 }

@@ -2996,8 +2996,8 @@ int OSDMap::calc_pg_role(pg_shard_t who, const vector<int>& acting)
       }
     }
   } else {
-    if (who.shard < nrep && acting[who.shard] == who.osd) {
-      return who.shard;
+    if (who.shard < nrep && acting[static_cast<int>(who.shard)] == who.osd) {
+      return static_cast<int>(who.shard);
     }
   }
   return -1;
