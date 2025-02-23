@@ -55,9 +55,14 @@ struct _rangeset_base {
 
 
 template <class T>
-class rangeset_iterator :
-  public std::iterator<std::input_iterator_tag, T>
+class rangeset_iterator
 {
+    using iterator_category = std::input_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
+
   //typedef typename map<T,T>::iterator mapit;
 
   map<T,T> ranges;
