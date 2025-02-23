@@ -28,10 +28,13 @@
 #include "os/kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Formatter.h"
 #include "common/pretty_binary.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_kstore
