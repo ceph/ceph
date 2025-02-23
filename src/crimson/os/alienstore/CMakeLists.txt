@@ -48,6 +48,7 @@ set(alien_store_srcs
   alien_log.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/AllocatorBase.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BtreeAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Btree2Allocator.cc
