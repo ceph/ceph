@@ -121,7 +121,7 @@ public:
   /**
    * Set newly created pg
    */
-  void pg_created(spg_t pgid, Ref<PG> pg);
+  void pg_created(spg_t pgid, Ref<PG> pg, bool is_split);
 
   /**
    * Add newly loaded pg

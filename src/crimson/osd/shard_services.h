@@ -125,6 +125,11 @@ class PerShardState {
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
+  seastar::future<std::set<std::pair<spg_t, epoch_t>>> identify_splits(
+    ShardServices &shard_services,
+    Ref<PG> pg,
+    cached_map_t cur_map,
+    epoch_t epoch);
 
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
@@ -188,6 +193,7 @@ class PerShardState {
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
   seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+  seastar::future<> update_shard_pg_num_history(pool_pg_num_history_t pg_num_history);
 
   // Time state
   const ceph::mono_time startup_time;
@@ -197,6 +203,8 @@ class PerShardState {
   }
 
   OSDSuperblock per_shard_superblock;
+
+  pool_pg_num_history_t per_shard_pg_num_history;
 
 public:
   PerShardState(
@@ -333,8 +341,9 @@ private:
                     epoch_t e, bufferlist&& bl);
   void store_inc_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
-  seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
+  seastar::future<std::map<epoch_t, local_cached_map_t>> store_maps(
+    ceph::os::Transaction& t,
+    epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 };
 
@@ -476,6 +485,10 @@ public:
   };
   shard_stats_t report_stats() {
     return {get_reactor_utilization()};
+  }
+
+  auto get_or_create_pg(spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
   }
 
   auto remove_pg(spg_t pgid) {
