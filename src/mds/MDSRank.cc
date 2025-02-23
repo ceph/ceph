@@ -3344,7 +3344,7 @@ int MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::ostrea
     bool got = cmd_getval(cmdmap, "path", path);
     if (!got) {
       ss << "missing path";
-      return -CEPHFS_EINVAL;
+      return -EINVAL;
     }
   }
 

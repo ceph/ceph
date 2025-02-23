@@ -10704,7 +10704,7 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
 int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 {
   if (iovcnt < 0)
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
@@ -11021,7 +11021,7 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 {
   if (iovcnt < 0)
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
@@ -11035,9 +11035,6 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     if (fh->flags & O_PATH)
         return -EBADF;
 #endif
-    if(iovcnt < 0) {
-      return -EINVAL;
-    }
     loff_t totallen = 0;
     for (unsigned i = 0; i < iovcnt; i++) {
         totallen += iov[i].iov_len;
