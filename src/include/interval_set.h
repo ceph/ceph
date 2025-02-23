@@ -30,9 +30,10 @@
  * flat_map and btree_map).
  */
 
-template<typename T, template<typename, typename, typename ...> class C = std::map>
+template<typename T, template<typename, typename, typename ...> class C = std::map, bool strict = true>
 class interval_set {
  public:
+  enum UnittestType { test_strict = strict }; // Required by test_interval_set.cc
   using Map = C<T, T>;
   using value_type = typename Map::value_type;
   using offset_type = T;
@@ -506,7 +507,8 @@ class interval_set {
    * @param pstart (optional) returns the start of the resulting interval
    * @param plen (optional) returns the length of the resulting interval.
    */
-  void insert(T start, T len, T *pstart=0, T *plen=0) {
+  void insert(T start, T len, T *pstart=0, T *plen=0) requires (strict)
+  {
     //cout << "insert " << start << "~" << len << endl;
     ceph_assert(len > 0);
     _size += len;
@@ -538,6 +540,7 @@ class interval_set {
 	    *plen = p->second;
           m.erase(n);
         } else {
+          ceph_assert(n == m.end() || start + len < n->first);
 	  if (plen)
 	    *plen = p->second;
 	}
@@ -612,6 +615,11 @@ class interval_set {
     _size += new_len;
   }
 
+  void insert(T start, T len) requires(!strict)
+  {
+    union_insert(start, len);
+  }
+
   void swap(interval_set& other) {
     m.swap(other.m);
     std::swap(_size, other._size);
@@ -632,7 +640,7 @@ class interval_set {
    * interval in *this.
    */
   void erase(T start, T len,
-    std::function<bool(T, T)> claim) {
+    std::function<bool(T, T)> claim = {}) requires (strict) {
     auto p = find_inc_m(start);
 
     _size -= len;
@@ -666,7 +674,7 @@ class interval_set {
    * functions like subtract). It can cope with any overlaps and will erase
    * multiple. entries.
    */
-  void erase(T start, T len) {
+  void erase(T start, T len) requires(!strict) {
     T begin = start;
     T end = start + len;
 
@@ -700,8 +708,9 @@ class interval_set {
   }
 
   /** This general erase method erases after a particular offset.
- */
-  void erase_after(T start) {
+  */
+  void erase_after(T start) requires(!strict)
+  {
     T begin = start;
 
     auto p = find_inc_m(begin);
@@ -724,7 +733,7 @@ class interval_set {
     }
   }
 
-  void subtract(const interval_set &a) {
+  void subtract(const interval_set &a) requires (!strict) {
     if (empty() || a.empty()) return;
 
     auto start = range_start();
@@ -735,6 +744,12 @@ class interval_set {
          ap != a.m.end() && ap->first <= end;
         ++ap) {
       erase(ap->first, ap->second);
+    }
+  }
+
+  void subtract(const interval_set &a) requires (strict) {
+    for (const auto& [start, len] : a.m) {
+      erase(start, len);
     }
   }
 

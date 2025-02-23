@@ -16,16 +16,22 @@
 
 #include <gtest/gtest.h>
 #include <boost/container/flat_map.hpp>
+
 #include "include/interval_set.h"
 #include "include/btree_map.h"
 
 using namespace ceph;
 
+/* This define implements the following logic:
+ * if (interval set has strict=true) expect that ceph will panic.
+ * else expect that ceph will not panic and execute the second clause.
+ */
+#define ASSERT_STRICT_DEATH(s, e) if constexpr (ISet::test_strict) ASSERT_DEATH(s, ""); else { s; e; }
+
 typedef uint64_t IntervalValueType;
 
 template<typename T>  // tuple<type to test on, test array size>
 class IntervalSetTest : public ::testing::Test {
-
  public:
   typedef T ISet;
 };
@@ -33,13 +39,17 @@ class IntervalSetTest : public ::testing::Test {
 typedef ::testing::Types<
   interval_set<IntervalValueType>,
   interval_set<IntervalValueType, btree::btree_map>,
-  interval_set<IntervalValueType, boost::container::flat_map>
+  interval_set<IntervalValueType, boost::container::flat_map>,
+  interval_set<IntervalValueType, std::map, false>,
+  interval_set<IntervalValueType, btree::btree_map, false>,
+  interval_set<IntervalValueType, boost::container::flat_map, false>
   > IntervalSetTypes;
 
 TYPED_TEST_SUITE(IntervalSetTest, IntervalSetTypes);
 
 TYPED_TEST(IntervalSetTest, compare) {
   typedef typename TestFixture::ISet ISet;
+
   ISet iset1, iset2;
   ASSERT_TRUE(iset1 == iset1);
   ASSERT_TRUE(iset1 == iset2);
@@ -215,183 +225,183 @@ TYPED_TEST(IntervalSetTest, intersects) {
 
 TYPED_TEST(IntervalSetTest, insert_erase) {
   typedef typename TestFixture::ISet ISet;
-  ISet iset1, iset2;
-  IntervalValueType start, len;
-  
-  iset1.insert(3, 5, &start, &len);
-  ASSERT_EQ(3, start);
-  ASSERT_EQ(5, len);
-  ASSERT_EQ(1, iset1.num_intervals());
-  ASSERT_EQ(5, iset1.size());
+  if constexpr (ISet::test_strict) {
+    ISet iset1, iset2;
+    IntervalValueType start, len;
 
-  //adding standalone interval
-  iset1.insert(15, 10, &start, &len);
-  ASSERT_EQ(15, start);
-  ASSERT_EQ(10, len);
-  ASSERT_EQ(2, iset1.num_intervals());
-  ASSERT_EQ(15, iset1.size());
+    iset1.insert(3, 5, &start, &len);
+    ASSERT_EQ(3, start);
+    ASSERT_EQ(5, len);
+    ASSERT_EQ(1, iset1.num_intervals());
+    ASSERT_EQ(5, iset1.size());
 
-  //adding leftmost standalone interval
-  iset1.insert(1, 1, &start, &len);
-  ASSERT_EQ(1, start);
-  ASSERT_EQ(1, len);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(16, iset1.size());
+    //adding standalone interval
+    iset1.insert(15, 10, &start, &len);
+    ASSERT_EQ(15, start);
+    ASSERT_EQ(10, len);
+    ASSERT_EQ(2, iset1.num_intervals());
+    ASSERT_EQ(15, iset1.size());
 
-  //adding leftmost adjucent interval
-  iset1.insert(0, 1, &start, &len);
-  ASSERT_EQ(0, start);
-  ASSERT_EQ(2, len);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(17, iset1.size());
+    //adding leftmost standalone interval
+    iset1.insert(1, 1, &start, &len);
+    ASSERT_EQ(1, start);
+    ASSERT_EQ(1, len);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(16, iset1.size());
 
-  //adding interim interval that merges leftmost and subseqent intervals
-  iset1.insert(2, 1, &start, &len);
-  ASSERT_EQ(0, start);
-  ASSERT_EQ(8, len);
-  ASSERT_EQ(2, iset1.num_intervals());
-  ASSERT_EQ(18, iset1.size());
+    //adding leftmost adjucent interval
+    iset1.insert(0, 1, &start, &len);
+    ASSERT_EQ(0, start);
+    ASSERT_EQ(2, len);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(17, iset1.size());
 
-  //adding rigtmost standalone interval 
-  iset1.insert(30, 5, &start, &len);
-  ASSERT_EQ(30, start);
-  ASSERT_EQ(5, len);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(23, iset1.size());
+    //adding interim interval that merges leftmost and subseqent intervals
+    iset1.insert(2, 1, &start, &len);
+    ASSERT_EQ(0, start);
+    ASSERT_EQ(8, len);
+    ASSERT_EQ(2, iset1.num_intervals());
+    ASSERT_EQ(18, iset1.size());
 
-  //adding rigtmost adjusent interval 
-  iset1.insert(35, 10, &start, &len);
-  ASSERT_EQ(30, start);
-  ASSERT_EQ(15, len );
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(33, iset1.size());
+    //adding rigtmost standalone interval
+    iset1.insert(30, 5, &start, &len);
+    ASSERT_EQ(30, start);
+    ASSERT_EQ(5, len);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(23, iset1.size());
 
-  //adding interim interval that merges with the interval preceeding the rightmost
-  iset1.insert(25, 1, &start, &len);
-  ASSERT_EQ(15, start);
-  ASSERT_EQ(11, len);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(34, iset1.size());
+    //adding rigtmost adjusent interval
+    iset1.insert(35, 10, &start, &len);
+    ASSERT_EQ(30, start);
+    ASSERT_EQ(15, len );
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(33, iset1.size());
 
-  //adding interim interval that merges with the rightmost and preceeding intervals
-  iset1.insert(26, 4, &start, &len);
-  ASSERT_EQ(15, start);
-  ASSERT_EQ(30, len);
-  ASSERT_EQ(2, iset1.num_intervals());
-  ASSERT_EQ(38, iset1.size());
+    //adding interim interval that merges with the interval preceeding the rightmost
+    iset1.insert(25, 1, &start, &len);
+    ASSERT_EQ(15, start);
+    ASSERT_EQ(11, len);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(34, iset1.size());
 
-  //and finally build single interval filling the gap at  8-15 using different interval set
-  iset2.insert( 8, 1 );
-  iset2.insert( 14, 1 );
-  iset2.insert( 9, 4 );
-  iset1.insert( iset2 );
-  iset1.insert(13, 1, &start, &len);
-  ASSERT_EQ(0, start);
-  ASSERT_EQ(45, len);
-  ASSERT_EQ(1, iset1.num_intervals());
-  ASSERT_EQ(45, iset1.size());
+    //adding interim interval that merges with the rightmost and preceeding intervals
+    iset1.insert(26, 4, &start, &len);
+    ASSERT_EQ(15, start);
+    ASSERT_EQ(30, len);
+    ASSERT_EQ(2, iset1.num_intervals());
+    ASSERT_EQ(38, iset1.size());
 
-  //now reverses the process using subtract & erase
-  iset1.subtract( iset2 );
-  iset1.erase(13, 1);
-  ASSERT_EQ( 2, iset1.num_intervals() );
-  ASSERT_EQ(38, iset1.size());
-  ASSERT_TRUE( iset1.contains( 7, 1 ));
-  ASSERT_FALSE( iset1.contains( 8, 7 ));
-  ASSERT_TRUE( iset1.contains( 15, 1 ));
-  ASSERT_TRUE( iset1.contains( 26, 4 ));
+    //and finally build single interval filling the gap at  8-15 using different interval set
+    iset2.insert( 8, 1 );
+    iset2.insert( 14, 1 );
+    iset2.insert( 9, 4 );
+    iset1.insert( iset2 );
+    iset1.insert(13, 1, &start, &len);
+    ASSERT_EQ(0, start);
+    ASSERT_EQ(45, len);
+    ASSERT_EQ(1, iset1.num_intervals());
+    ASSERT_EQ(45, iset1.size());
 
-  iset1.erase(26, 4);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(34, iset1.size());
-  ASSERT_TRUE( iset1.contains( 7, 1 ));
-  ASSERT_FALSE( iset1.intersects( 8, 7 ));
-  ASSERT_TRUE( iset1.contains( 15, 1 ));
-  ASSERT_TRUE( iset1.contains( 25, 1 ));
-  ASSERT_FALSE( iset1.contains( 26, 4 ));
-  ASSERT_TRUE( iset1.contains( 30, 1 ));
+    //now reverses the process using subtract & erase
+    iset1.subtract( iset2 );
+    iset1.erase(13, 1);
+    ASSERT_EQ( 2, iset1.num_intervals() );
+    ASSERT_EQ(38, iset1.size());
+    ASSERT_TRUE( iset1.contains( 7, 1 ));
+    ASSERT_FALSE( iset1.contains( 8, 7 ));
+    ASSERT_TRUE( iset1.contains( 15, 1 ));
+    ASSERT_TRUE( iset1.contains( 26, 4 ));
 
-  iset1.erase(25, 1);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(33, iset1.size());
-  ASSERT_TRUE( iset1.contains( 24, 1 ));
-  ASSERT_FALSE( iset1.contains( 25, 1 ));
-  ASSERT_FALSE( iset1.intersects( 26, 4 ));
-  ASSERT_TRUE( iset1.contains( 30, 1 ));
-  ASSERT_TRUE( iset1.contains( 35, 10 ));
+    iset1.erase(26, 4);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(34, iset1.size());
+    ASSERT_TRUE( iset1.contains( 7, 1 ));
+    ASSERT_FALSE( iset1.intersects( 8, 7 ));
+    ASSERT_TRUE( iset1.contains( 15, 1 ));
+    ASSERT_TRUE( iset1.contains( 25, 1 ));
+    ASSERT_FALSE( iset1.contains( 26, 4 ));
+    ASSERT_TRUE( iset1.contains( 30, 1 ));
 
-  iset1.erase(35, 10);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(23, iset1.size());
-  ASSERT_TRUE( iset1.contains( 30, 5 ));
-  ASSERT_TRUE( iset1.contains( 34, 1 ));
-  ASSERT_FALSE( iset1.contains( 35, 10 ));
-  ASSERT_FALSE(iset1.contains( 45, 1 ));
+    iset1.erase(25, 1);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(33, iset1.size());
+    ASSERT_TRUE( iset1.contains( 24, 1 ));
+    ASSERT_FALSE( iset1.contains( 25, 1 ));
+    ASSERT_FALSE( iset1.intersects( 26, 4 ));
+    ASSERT_TRUE( iset1.contains( 30, 1 ));
+    ASSERT_TRUE( iset1.contains( 35, 10 ));
 
-  iset1.erase(30, 5);
-  ASSERT_EQ(2, iset1.num_intervals());
-  ASSERT_EQ(18, iset1.size());
-  ASSERT_TRUE( iset1.contains( 2, 1 ));
-  ASSERT_TRUE( iset1.contains( 24, 1 ));
-  ASSERT_FALSE( iset1.contains( 25, 1 ));
-  ASSERT_FALSE( iset1.contains( 29, 1 ));
-  ASSERT_FALSE( iset1.contains( 30, 5 ));
-  ASSERT_FALSE( iset1.contains( 35, 1 ));
+    iset1.erase(35, 10);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(23, iset1.size());
+    ASSERT_TRUE( iset1.contains( 30, 5 ));
+    ASSERT_TRUE( iset1.contains( 34, 1 ));
+    ASSERT_FALSE( iset1.contains( 35, 10 ));
+    ASSERT_FALSE(iset1.contains( 45, 1 ));
 
-  iset1.erase(2, 1);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ( iset1.size(), 17 );
-  ASSERT_TRUE( iset1.contains( 0, 1 ));
-  ASSERT_TRUE( iset1.contains( 1, 1 ));
-  ASSERT_FALSE( iset1.contains( 2, 1 ));
-  ASSERT_TRUE( iset1.contains( 3, 1 ));
-  ASSERT_TRUE( iset1.contains( 15, 1 ));
-  ASSERT_FALSE( iset1.contains( 25, 1 ));
+    iset1.erase(30, 5);
+    ASSERT_EQ(2, iset1.num_intervals());
+    ASSERT_EQ(18, iset1.size());
+    ASSERT_TRUE( iset1.contains( 2, 1 ));
+    ASSERT_TRUE( iset1.contains( 24, 1 ));
+    ASSERT_FALSE( iset1.contains( 25, 1 ));
+    ASSERT_FALSE( iset1.contains( 29, 1 ));
+    ASSERT_FALSE( iset1.contains( 30, 5 ));
+    ASSERT_FALSE( iset1.contains( 35, 1 ));
 
-  iset1.erase( 0, 1);
-  ASSERT_EQ(3, iset1.num_intervals());
-  ASSERT_EQ(16, iset1.size());
-  ASSERT_FALSE( iset1.contains( 0, 1 ));
-  ASSERT_TRUE( iset1.contains( 1, 1 ));
-  ASSERT_FALSE( iset1.contains( 2, 1 ));
-  ASSERT_TRUE( iset1.contains( 3, 1 ));
-  ASSERT_TRUE( iset1.contains( 15, 1 ));
+    iset1.erase(2, 1);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ( iset1.size(), 17 );
+    ASSERT_TRUE( iset1.contains( 0, 1 ));
+    ASSERT_TRUE( iset1.contains( 1, 1 ));
+    ASSERT_FALSE( iset1.contains( 2, 1 ));
+    ASSERT_TRUE( iset1.contains( 3, 1 ));
+    ASSERT_TRUE( iset1.contains( 15, 1 ));
+    ASSERT_FALSE( iset1.contains( 25, 1 ));
 
-  iset1.erase(1, 1);
-  ASSERT_EQ(2, iset1.num_intervals());
-  ASSERT_EQ(15, iset1.size());
-  ASSERT_FALSE( iset1.contains( 1, 1 ));
-  ASSERT_TRUE( iset1.contains( 15, 10 ));
-  ASSERT_TRUE( iset1.contains( 3, 5 ));
+    iset1.erase( 0, 1);
+    ASSERT_EQ(3, iset1.num_intervals());
+    ASSERT_EQ(16, iset1.size());
+    ASSERT_FALSE( iset1.contains( 0, 1 ));
+    ASSERT_TRUE( iset1.contains( 1, 1 ));
+    ASSERT_FALSE( iset1.contains( 2, 1 ));
+    ASSERT_TRUE( iset1.contains( 3, 1 ));
+    ASSERT_TRUE( iset1.contains( 15, 1 ));
 
-  iset1.erase(15, 10);
-  ASSERT_EQ(1, iset1.num_intervals());
-  ASSERT_EQ(5, iset1.size());
-  ASSERT_FALSE( iset1.contains( 1, 1 ));
-  ASSERT_FALSE( iset1.contains( 15, 10 ));
-  ASSERT_FALSE( iset1.contains( 25, 1 ));
-  ASSERT_TRUE( iset1.contains( 3, 5 ));
+    iset1.erase(1, 1);
+    ASSERT_EQ(2, iset1.num_intervals());
+    ASSERT_EQ(15, iset1.size());
+    ASSERT_FALSE( iset1.contains( 1, 1 ));
+    ASSERT_TRUE( iset1.contains( 15, 10 ));
+    ASSERT_TRUE( iset1.contains( 3, 5 ));
 
-  iset1.erase( 3, 1);
-  ASSERT_EQ(1, iset1.num_intervals());
-  ASSERT_EQ(4, iset1.size());
-  ASSERT_FALSE( iset1.contains( 1, 1 ));
-  ASSERT_FALSE( iset1.contains( 15, 10 ));
-  ASSERT_FALSE( iset1.contains( 25, 1 ));
-  ASSERT_TRUE( iset1.contains( 4, 4 ));
-  ASSERT_FALSE( iset1.contains( 3, 5 ));
+    iset1.erase(15, 10);
+    ASSERT_EQ(1, iset1.num_intervals());
+    ASSERT_EQ(5, iset1.size());
+    ASSERT_FALSE( iset1.contains( 1, 1 ));
+    ASSERT_FALSE( iset1.contains( 15, 10 ));
+    ASSERT_FALSE( iset1.contains( 25, 1 ));
+    ASSERT_TRUE( iset1.contains( 3, 5 ));
 
-  iset1.erase( 4, 4);
-  ASSERT_EQ(0, iset1.num_intervals());
-  ASSERT_EQ(0, iset1.size());
-  ASSERT_FALSE( iset1.contains( 1, 1 ));
-  ASSERT_FALSE( iset1.contains( 15, 10 ));
-  ASSERT_FALSE( iset1.contains( 25, 1 ));
-  ASSERT_FALSE( iset1.contains( 3, 4 ));
-  ASSERT_FALSE( iset1.contains( 3, 5 ));
-  ASSERT_FALSE( iset1.contains( 4, 4 ));
+    iset1.erase( 3, 1);
+    ASSERT_EQ(1, iset1.num_intervals());
+    ASSERT_EQ(4, iset1.size());
+    ASSERT_FALSE( iset1.contains( 1, 1 ));
+    ASSERT_FALSE( iset1.contains( 15, 10 ));
+    ASSERT_FALSE( iset1.contains( 25, 1 ));
+    ASSERT_TRUE( iset1.contains( 4, 4 ));
+    ASSERT_FALSE( iset1.contains( 3, 5 ));
 
-
+    iset1.erase( 4, 4);
+    ASSERT_EQ(0, iset1.num_intervals());
+    ASSERT_EQ(0, iset1.size());
+    ASSERT_FALSE( iset1.contains( 1, 1 ));
+    ASSERT_FALSE( iset1.contains( 15, 10 ));
+    ASSERT_FALSE( iset1.contains( 25, 1 ));
+    ASSERT_FALSE( iset1.contains( 3, 4 ));
+    ASSERT_FALSE( iset1.contains( 3, 5 ));
+    ASSERT_FALSE( iset1.contains( 4, 4 ));
+  }
 }
 
 TYPED_TEST(IntervalSetTest, intersect_of) {
@@ -1235,7 +1245,7 @@ TYPED_TEST(IntervalSetTest, align) {
   }
 }
 
-TYPED_TEST(IntervalSetTest, union_insert) {
+TYPED_TEST(IntervalSetTest, not_strict_insert) {
   // Tests targetted at refactor allowing over-lapping inserts.
   typedef typename TestFixture::ISet ISet;
 
@@ -1243,21 +1253,19 @@ TYPED_TEST(IntervalSetTest, union_insert) {
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(1, 4);
-    iset1.union_insert(1, 4);
-    iset2.union_insert(1, 4);
+    iset1.insert(1, 4);
+    iset2.insert(1, 4);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(1, 4), ASSERT_TRUE(iset1 == iset2));
   }
 
   // Adjacent before
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(1, 2);
-    iset2.union_insert(1, 6);
-
+    iset1.insert(3, 4);
+    iset2.insert(1, 6);
+    iset1.insert(1, 2);
     ASSERT_TRUE(iset1 == iset2);
   }
 
@@ -1265,32 +1273,28 @@ TYPED_TEST(IntervalSetTest, union_insert) {
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(2, 2);
-    iset2.union_insert(2, 5);
+    iset1.insert(3, 4);
+    iset2.insert(2, 5);
+    ASSERT_STRICT_DEATH(iset1.insert(2, 2), ASSERT_TRUE(iset1 == iset2));
 
-    ASSERT_TRUE(iset1 == iset2);
   }
 
   // Overlap before - two units.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(2, 3);
-    iset2.union_insert(2, 5);
-
-    ASSERT_TRUE(iset1 == iset2);
+    iset1.insert(3, 4);
+    iset2.insert(2, 5);
+    ASSERT_STRICT_DEATH(iset1.insert(2, 3), ASSERT_TRUE(iset1 == iset2));
   }
 
   // Adjacent after
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(7, 2);
-    iset2.union_insert(3, 6);
-
+    iset1.insert(3, 4);
+    iset2.insert(3, 6);
+    iset1.insert(7, 2);
     ASSERT_TRUE(iset1 == iset2);
   }
 
@@ -1298,242 +1302,226 @@ TYPED_TEST(IntervalSetTest, union_insert) {
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(6, 2);
-    iset2.union_insert(3, 5);
-
-    ASSERT_TRUE(iset1 == iset2);
+    iset1.insert(3, 4);
+    iset2.insert(3, 5);
+    ASSERT_STRICT_DEATH(iset1.insert(6, 2), ASSERT_TRUE(iset1 == iset2));
   }
 
   // Overlap after - two units.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(5, 3);
-    iset2.union_insert(3, 5);
+    iset1.insert(3, 4);
+    iset2.insert(3, 5);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(5, 3), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert entirely contains existing.
+  // insert entirely contains existing.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(2, 6);
-    iset2.union_insert(2, 6);
+    iset1.insert(3, 4);
+    iset2.insert(2, 6);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(2, 6), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert entirely contained within existing
+  // insert entirely contained within existing
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(4, 2);
-    iset2.union_insert(3, 4);
+    iset1.insert(3, 4);
+    iset2.insert(3, 4);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(4, 2), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert joins exactly
+  // insert joins exactly
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(10, 4);
-    iset1.union_insert(6, 4);
-    iset2.union_insert(2, 12);
+    iset1.insert(2, 4);
+    iset1.insert(10, 4);
+    iset2.insert(2, 12);
 
+    iset1.insert(6, 4);
     ASSERT_TRUE(iset1 == iset2);
   }
 
-  // union_insert join - overlaps before
+  // insert join - overlaps before
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(10, 4);
-    iset1.union_insert(5, 5);
-    iset2.union_insert(2, 12);
+    iset1.insert(2, 4);
+    iset1.insert(10, 4);
+    iset2.insert(2, 12);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(5, 5), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join - overlaps after
+  // insert join - overlaps after
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(10, 4);
-    iset1.union_insert(6, 5);
-    iset2.union_insert(2, 12);
+    iset1.insert(2, 4);
+    iset1.insert(10, 4);
+    iset2.insert(2, 12);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(6, 5), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join - overlaps before and after
+  // insert join - overlaps before and after
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(10, 4);
-    iset1.union_insert(5, 7);
-    iset2.union_insert(2, 12);
+    iset1.insert(2, 4);
+    iset1.insert(10, 4);
+    iset2.insert(2, 12);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(5, 7), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join multiple - start/start.
+  // insert join multiple - start/start.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(2, 22);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(2, 22), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join multiple - start/middle.
+  // insert join multiple - start/middle.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(2, 23);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(2, 23), ASSERT_TRUE(iset1 == iset2));
   }
-  // union_insert join multiple - start/end.
+  // insert join multiple - start/end.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(2, 26);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(2, 26), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join multiple - middle/start.
+  // insert join multiple - middle/start.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(3, 21);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(3, 21), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join multiple - middle/middle.
+  // insert join multiple - middle/middle.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(3, 22);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(3, 22), ASSERT_TRUE(iset1 == iset2));
   }
-  // union_insert join multiple - middle/end.
+  // insert join multiple - middle/end.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(3, 25);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(3, 25), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join multiple - end/start.
+  // insert join multiple - end/start.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(6, 18);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(6, 18), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert join multiple - start/middle.
+  // insert join multiple - start/middle.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(6, 19);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(6, 19), ASSERT_TRUE(iset1 == iset2));
   }
-  // union_insert join multiple - start/end.
+  // insert join multiple - start/end.
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(2, 4);
-    iset1.union_insert(8, 4);
-    iset1.union_insert(16, 4);
-    iset1.union_insert(24, 4);
-    iset1.union_insert(6, 22);
+    iset1.insert(2, 4);
+    iset1.insert(8, 4);
+    iset1.insert(16, 4);
+    iset1.insert(24, 4);
 
-    iset2.union_insert(2, 26);
+    iset2.insert(2, 26);
 
-    ASSERT_TRUE(iset1 == iset2);
+    ASSERT_STRICT_DEATH(iset1.insert(6, 22), ASSERT_TRUE(iset1 == iset2));
   }
 
-  // union_insert entirely contained within existing
+  // insert entirely contained within existing
+  if constexpr (!ISet::test_strict)
   {
     ISet iset1, iset2;
 
-    iset1.union_insert(0x3000,  0xd000);
-    iset1.union_insert(0x11000, 0xf000);
-    iset1.union_insert(0x20000, 0x9000);
-    iset1.union_insert(0x9000,  0x1000);
-    iset1.union_insert(0xa000,  0x1000);
-    iset1.union_insert(0xb000,  0x1000);
-    iset1.union_insert(0x18000, 0x1000);
-    iset1.union_insert(0x19000, 0x1000);
-    iset1.union_insert(0xc000,  0x4000);
-    iset1.union_insert(0x10000, 0x8000);
-    iset1.union_insert(0x10000, 0x1000);
-    iset2.union_insert(0x2c000, 0x10000);
+    iset1.insert(0x3000,  0xd000);
+    iset1.insert(0x11000, 0xf000);
+    iset1.insert(0x20000, 0x9000);
+    iset1.insert(0x9000,  0x1000);
+    iset1.insert(0xa000,  0x1000);
+    iset1.insert(0xb000,  0x1000);
+    iset1.insert(0x18000, 0x1000);
+    iset1.insert(0x19000, 0x1000);
+    iset1.insert(0xc000,  0x4000);
+    iset1.insert(0x10000, 0x8000);
+    iset1.insert(0x10000, 0x1000);
+    iset2.insert(0x2c000, 0x10000);
 
     iset2.intersection_of(iset1);
 
@@ -1548,10 +1536,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(4, 4);
-    iset1.erase(1, 2);
     iset2.union_insert(4, 4);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(1, 2), ASSERT_EQ(iset1, iset2));
   }
 
   // erase before miss by 0
@@ -1559,10 +1545,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(1, 2);
     iset2.union_insert(3, 4);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(1, 2), ASSERT_EQ(iset1, iset2));
   }
 
   // erase overlapping start by 1
@@ -1570,10 +1554,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(1, 3);
     iset2.union_insert(4, 3);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(1, 3), ASSERT_EQ(iset1, iset2));
   }
 
   // erase overlapping start by 2
@@ -1581,10 +1563,9 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(1, 4);
     iset2.union_insert(5, 2);
 
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(1, 4), ASSERT_EQ(iset1, iset2));
   }
 
   // erase overlapping to end
@@ -1592,9 +1573,7 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(1, 6);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(1, 6), ASSERT_EQ(iset1, iset2));
   }
 
   // erase overlapping past end
@@ -1602,9 +1581,7 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(1, 7);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(1, 7), ASSERT_EQ(iset1, iset2));
   }
 
   // erase middle (split)
@@ -1612,10 +1589,9 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(4, 2);
     iset2.union_insert(3, 1);
     iset2.union_insert(6, 1);
-
+    iset1.erase(4, 2);
     ASSERT_EQ(iset1, iset2);
   }
 
@@ -1624,9 +1600,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(4, 3);
     iset2.union_insert(3, 1);
-
+    iset1.erase(4, 3);
     ASSERT_EQ(iset1, iset2);
   }
 
@@ -1635,10 +1610,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(4, 4);
     iset2.union_insert(3, 1);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(4, 4), ASSERT_EQ(iset1, iset2));
   }
 
   // erase after
@@ -1646,10 +1619,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(7, 1);
     iset2.union_insert(3, 4);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(7, 1), ASSERT_EQ(iset1, iset2));
   }
 
   // erase after + 1
@@ -1657,10 +1628,8 @@ TYPED_TEST(IntervalSetTest, erase) {
     ISet iset1, iset2;
 
     iset1.union_insert(3, 4);
-    iset1.erase(8, 1);
     iset2.union_insert(3, 4);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(8, 1), ASSERT_EQ(iset1, iset2));
   }
 
   // erase between
@@ -1669,11 +1638,9 @@ TYPED_TEST(IntervalSetTest, erase) {
 
     iset1.union_insert(3, 4);
     iset1.union_insert(10, 4);
-    iset1.erase(8, 1);
     iset2.union_insert(3, 4);
     iset2.union_insert(10, 4);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(8, 1), ASSERT_EQ(iset1, iset2));
   }
 
   // erase multiple
@@ -1682,9 +1649,7 @@ TYPED_TEST(IntervalSetTest, erase) {
 
     iset1.union_insert(3, 4);
     iset1.union_insert(10, 4);
-    iset1.erase(3, 11);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(3, 11), ASSERT_EQ(iset1, iset2));
   }
 
   // erase many
@@ -1695,9 +1660,7 @@ TYPED_TEST(IntervalSetTest, erase) {
     iset1.union_insert(5, 1);
     iset1.union_insert(7, 1);
     iset1.union_insert(9, 1);
-    iset1.erase(2, 9);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(2, 9), ASSERT_EQ(iset1, iset2));
   }
 
   // erase many with border
@@ -1709,11 +1672,9 @@ TYPED_TEST(IntervalSetTest, erase) {
     iset1.union_insert(5, 1);
     iset1.union_insert(7, 1);
     iset1.union_insert(9, 1);
-    iset1.erase(2, 6);
     iset2.union_insert(1, 1);
     iset2.union_insert(9, 1);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(2, 6), ASSERT_EQ(iset1, iset2));
   }
 
   // erase many splitting begin and end
@@ -1725,109 +1686,109 @@ TYPED_TEST(IntervalSetTest, erase) {
     iset1.union_insert(8, 1);
     iset1.union_insert(10, 1);
     iset1.union_insert(12, 4);
-    iset1.erase(4, 11);
     iset2.union_insert(1, 1);
     iset2.union_insert(3, 1);
     iset2.union_insert(15, 1);
-
-    ASSERT_EQ(iset1, iset2);
+    ASSERT_STRICT_DEATH(iset1.erase(4, 11), ASSERT_EQ(iset1, iset2));
   }
 }
 
 TYPED_TEST(IntervalSetTest, erase_after)
 {
   typedef typename TestFixture::ISet ISet;
-  // Overlap whole thing.
-  {
-    ISet iset1, iset2;
+  if constexpr (!ISet::test_strict) {
+    // Overlap whole thing.
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(4, 4);
-    iset1.erase_after(1);
+      iset1.union_insert(4, 4);
+      iset1.erase_after(1);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase overlapping to end
-  {
-    ISet iset1, iset2;
+    // erase overlapping to end
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(4, 4);
-    iset1.erase_after(4);
+      iset1.union_insert(4, 4);
+      iset1.erase_after(4);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase overlap end
-  {
-    ISet iset1, iset2;
+    // erase overlap end
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.erase_after(4);
-    iset2.union_insert(3, 1);
+      iset1.union_insert(3, 4);
+      iset1.erase_after(4);
+      iset2.union_insert(3, 1);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase after
-  {
-    ISet iset1, iset2;
+    // erase after
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.erase_after(7);
-    iset2.union_insert(3, 4);
+      iset1.union_insert(3, 4);
+      iset1.erase_after(7);
+      iset2.union_insert(3, 4);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase between
-  {
-    ISet iset1, iset2;
+    // erase between
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(10, 4);
-    iset1.erase_after(8);
-    iset2.union_insert(3, 4);
+      iset1.union_insert(3, 4);
+      iset1.union_insert(10, 4);
+      iset1.erase_after(8);
+      iset2.union_insert(3, 4);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase multiple
-  {
-    ISet iset1, iset2;
+    // erase multiple
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(3, 4);
-    iset1.union_insert(10, 4);
-    iset1.erase_after(3);
+      iset1.union_insert(3, 4);
+      iset1.union_insert(10, 4);
+      iset1.erase_after(3);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase many
-  {
-    ISet iset1, iset2;
+    // erase many
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(3, 1);
-    iset1.union_insert(5, 1);
-    iset1.union_insert(7, 1);
-    iset1.union_insert(9, 1);
-    iset1.erase_after(2);
+      iset1.union_insert(3, 1);
+      iset1.union_insert(5, 1);
+      iset1.union_insert(7, 1);
+      iset1.union_insert(9, 1);
+      iset1.erase_after(2);
 
-    ASSERT_EQ(iset1, iset2);
-  }
+      ASSERT_EQ(iset1, iset2);
+    }
 
-  // erase many with border
-  {
-    ISet iset1, iset2;
+    // erase many with border
+    {
+      ISet iset1, iset2;
 
-    iset1.union_insert(1, 1);
-    iset1.union_insert(3, 1);
-    iset1.union_insert(5, 1);
-    iset1.union_insert(7, 1);
-    iset1.union_insert(9, 1);
-    iset1.erase_after(2);
-    iset2.union_insert(1, 1);
+      iset1.union_insert(1, 1);
+      iset1.union_insert(3, 1);
+      iset1.union_insert(5, 1);
+      iset1.union_insert(7, 1);
+      iset1.union_insert(9, 1);
+      iset1.erase_after(2);
+      iset2.union_insert(1, 1);
 
-    ASSERT_EQ(iset1, iset2);
+      ASSERT_EQ(iset1, iset2);
+    }
   }
 }
 
@@ -1859,9 +1820,7 @@ TYPED_TEST(IntervalSetTest, subtract) {
   {
     ISet iset1, iset2, iset3;
     iset2.union_insert(1, 1);
-    iset1.subtract(iset2);
-
-    ASSERT_EQ(iset1, iset3);
+    ASSERT_STRICT_DEATH(iset1.subtract(iset2), ASSERT_EQ(iset1, iset3));
   }
 
   // Subtract many span.
@@ -1877,10 +1836,9 @@ TYPED_TEST(IntervalSetTest, subtract) {
     iset2.union_insert(1, 4);
     iset2.union_insert(7, 3);
 
-    iset1.subtract(iset2);
-
     iset3.union_insert(5, 1);
-    ASSERT_EQ(iset1, iset3);
+
+    ASSERT_STRICT_DEATH(iset1.subtract(iset2), ASSERT_EQ(iset1, iset3));
   }
 
   // Subtract with larger sizes and exact overlaps
@@ -1894,11 +1852,11 @@ TYPED_TEST(IntervalSetTest, subtract) {
     iset1.union_insert(40, 4);
 
     iset2.union_insert(20, 25);
-    iset1.subtract(iset2);
+
 
     iset3.union_insert(0, 5);
     iset3.union_insert(10, 5);
 
-    ASSERT_EQ(iset1, iset3);
+    ASSERT_STRICT_DEATH(iset1.subtract(iset2), ASSERT_EQ(iset1, iset3));
   }
 }
