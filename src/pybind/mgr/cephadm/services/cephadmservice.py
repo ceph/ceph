@@ -1058,12 +1058,15 @@ class RgwService(CephService):
             })
 
         if spec.zonegroup_hostnames:
+            san_list = spec.zonegroup_hostnames or []
+            hostnames_with_wildcard = san_list + [f"*.{h}" for h in san_list]
+
             zg_update_cmd = {
                 'prefix': 'rgw zonegroup modify',
                 'realm_name': spec.rgw_realm,
                 'zonegroup_name': spec.rgw_zonegroup,
                 'zone_name': spec.rgw_zone,
-                'hostnames': spec.zonegroup_hostnames,
+                'hostnames': hostnames_with_wildcard,
             }
             logger.debug(f'rgw cmd: {zg_update_cmd}')
             ret, out, err = self.mgr.check_mon_command(zg_update_cmd)
@@ -1094,10 +1097,13 @@ class RgwService(CephService):
                 port = ports[0]
 
         if spec.generate_cert:
+            san_list = spec.zonegroup_hostnames or []
+            custom_san_list = san_list + [f"*.{h}" for h in san_list]
+
             cert, key = self.mgr.cert_mgr.generate_cert(
                 daemon_spec.host,
                 self.mgr.inventory.get_addr(daemon_spec.host),
-                custom_san_list=spec.zonegroup_hostnames
+                custom_san_list=custom_san_list
             )
             pem = ''.join([key, cert])
             ret, out, err = self.mgr.check_mon_command({
