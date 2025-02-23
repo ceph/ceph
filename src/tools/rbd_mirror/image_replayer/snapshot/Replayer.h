@@ -99,6 +99,21 @@ public:
     return m_image_spec;
   }
 
+  void prune_snapshot(uint64_t snap_id) {
+    std::unique_lock locker(m_lock);
+    m_prune_snap_ids_by_gr.insert(snap_id);
+  }
+
+  void set_remote_snap_id_end_limit(uint64_t snap_id) {
+    std::unique_lock locker(m_lock);
+    m_remote_group_image_snap_id = snap_id;
+  }
+
+  uint64_t get_remote_snap_id_end_limit() {
+    std::unique_lock locker(m_lock);
+    return m_remote_group_image_snap_id;
+  }
+
 private:
   /**
    * @verbatim
@@ -132,8 +147,14 @@ private:
    *    |                       v                     | |
    *    |                 GET_REMOTE_IMAGE_STATE      | |
    *    |                       |                     | |
+   *    |                       v (skip if no group)  | |
+   *    |                 CREATE_GROUP_SNAP_START     | |
+   *    |                       |                     | |
    *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
+   *    |                       |                     | |
+   *    |                       v (skip if no group)  | |
+   *    |                 CREATE_GROUP_SNAP_FINISH    | |
    *    |                       |                     | |
    *    |                       v (skip if not needed)| |
    *    |                 UPDATE_MIRROR_IMAGE_STATE   | |
@@ -232,7 +253,12 @@ private:
   std::string m_remote_mirror_peer_uuid;
   uint64_t m_remote_snap_id_start = 0;
   uint64_t m_remote_snap_id_end = CEPH_NOSNAP;
+  uint64_t m_remote_group_image_snap_id = CEPH_NOSNAP;
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
+
+  int64_t m_local_group_pool_id = -1;
+  std::string m_local_group_id;
+  std::string m_local_group_snap_id;
 
   librbd::mirror::snapshot::ImageState m_image_state;
   DeepCopyHandler* m_deep_copy_handler = nullptr;
@@ -250,6 +276,8 @@ private:
   utime_t m_snapshot_replay_start;
 
   uint32_t m_pending_snapshots = 0;
+  std::set<uint64_t> m_prune_snap_ids;
+  std::set<uint64_t> m_prune_snap_ids_by_gr; // added by group replayer
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
@@ -269,7 +297,7 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void prune_non_primary_snapshot(uint64_t snap_id);
+  void prune_non_primary_snapshot(Context* on_finish, uint64_t snap_id);
   void handle_prune_non_primary_snapshot(int r);
 
   void copy_snapshots();
