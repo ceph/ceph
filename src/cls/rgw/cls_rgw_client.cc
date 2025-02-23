@@ -356,6 +356,7 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   call.delimiter = delimiter;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
+  call.want_header = (num_entries == 0);
   encode(call, in);
 
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
@@ -830,7 +831,8 @@ public:
     } catch (ceph::buffer::error& err) {
       r = -EIO;
     }
-    cb->handle_response(r, ret.dir.header);
+    ceph_assert(ret.dir.header.has_value());
+    cb->handle_response(r, *ret.dir.header);
   }
 };
 
@@ -840,6 +842,7 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, const string& oid,
   bufferlist in, out;
   rgw_cls_list_op call;
   call.num_entries = 0;
+  call.want_header = true;
   encode(call, in);
   ObjectReadOperation op;
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
