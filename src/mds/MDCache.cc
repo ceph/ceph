@@ -577,8 +577,10 @@ void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, 
   } else {
     predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_DIR, 1);
     journal_dirty_inode(mut.get(), &le->metablob, in);
+    //TODO: A referent inode for system file ??
     dn->push_projected_linkage(in->ino(), in->d_type());
-    le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type());
+    dout(10) << __func__ << " add remote dentry " << *dn << dendl;
+    le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type(), 0, nullptr);
     le->metablob.add_root(true, in);
   }
   if (mdir)
@@ -1663,7 +1665,15 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	dn->first = dir_follows+1;
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDir *dir = dn->dir;
-	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
+          /* TODO: No need to cow referent inode. So just the remote dentry is prepared,
+           * journalled and added to dirty_cow_dentries list. But when the journal is
+           * replayed. How does this play out ? Test this out.
+	   */
+	  if (mds->mdsmap->allow_referent_inodes()) {
+            dout(10) << __func__ << " lookout-1 - Adding dentry as remote for journal when referent inode feature is enabled !!! "
+	             << " dentry " << *dn << " first " << oldfirst << " last " << dir_follows << dendl;
+	  }
+	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
 	  dout(10) << " olddn " << *olddn << dendl;
 	  ceph_assert(dir->is_projected());
 	  olddn->set_projected_version(dir->get_projected_version());
@@ -1748,8 +1758,16 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
     } else {
-      ceph_assert(dnl->is_remote());
-      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
+      ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
+      /* TODO: No need to cow referent inode. So just the remote dentry is prepared,
+       * journalled and added to dirty_cow_dentries list. But when the journal is
+       * replayed. How does this play out ? Test this out.
+       */
+      if (mds->mdsmap->allow_referent_inodes()) {
+        dout(10) << __func__ << " lookout-2 - Adding dentry as remote for journal when referent inode feature is enabled !!! "
+	         << " dentry " << *dn << " first " << oldfirst << " last " << follows << dendl;
+      }
+      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
       olddn->set_projected_version(dir->get_projected_version());
@@ -4326,8 +4344,9 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
       rejoin->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
                                 dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
-				dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
-				dnl->is_remote() ? dnl->get_remote_d_type():0, 
+				(dnl->is_remote() || dnl->is_referent_remote())? dnl->get_remote_ino():inodeno_t(0),
+		                dnl->is_referent_remote() ? dnl->get_referent_inode()->ino():inodeno_t(0),
+				(dnl->is_remote() || dnl->is_referent_remote())? dnl->get_remote_d_type():0,
 				dn->get_replica_nonce(),
 				dn->lock.get_state());
       dn->state_set(CDentry::STATE_REJOINING);
@@ -4548,7 +4567,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
       if (ack) 
 	ack->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
                                dn->first, dn->last,
-			       dnl->get_inode()->ino(), inodeno_t(0), 0, 
+			       dnl->get_inode()->ino(), inodeno_t(0), inodeno_t(0), 0,
 			       dnonce, dn->lock.get_replica_state());
 
       // inode
@@ -4797,8 +4816,22 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	  dn = dir->lookup(ss.name, ss.snapid);
         }
         if (!dn) {
-	  if (d.is_remote()) {
-	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
+	  if (d.is_remote() || d.is_referent_remote()) {
+	    CInode *ref_in = nullptr;
+	    if (d.is_referent_remote()) {
+	      // TODO: ss.snapid for referent inode ? Since it's not snapped, always use
+	      // default CEPH_NOSNAP. Validate this by testing.
+	      ref_in = get_inode(d.referent_ino);
+	      if (!ref_in) {
+	        dout(20) << __func__ << " rejoin:  referent inode not found in memory for dentry " << *dn << " inventing " << dendl;
+		ref_in = rejoin_invent_inode(d.referent_ino, CEPH_NOSNAP);
+                ref_in->set_remote_ino(d.remote_ino);
+	      }
+	      dout(20) << __func__ << " rejoin: referent inode invented " << *ref_in << " for dentry " << *dn << dendl;
+	    } else {
+	      dout(20) << __func__ << " rejoin: add remote inode for dentry " << *dn << dendl;
+	    }
+	    dn = dir->add_remote_dentry(ss.name, ref_in, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
 	  } else if (d.is_null()) {
 	    dn = dir->add_null_dentry(ss.name, d.first, ss.snapid);
 	  } else {
@@ -5067,6 +5100,14 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 	    dout(10) << " had bad linkage for " << *dn <<  dendl;
 	    dir->unlink_inode(dn);
 	  }
+        } else if (dnl->is_referent_remote()) {
+	  if (!q.second.is_referent_remote() ||
+	      q.second.remote_ino != dnl->get_remote_ino() ||
+	      q.second.remote_d_type != dnl->get_remote_d_type() ||
+	      q.second.referent_ino != dnl->get_referent_ino()) {
+	    dout(10) << __func__ << " had bad referent remote linkage for " << *dn <<  dendl;
+	    dir->unlink_inode(dn);
+	  }
         } else {
 	  if (!q.second.is_null())
 	    dout(10) << " had bad linkage for " << *dn <<  dendl;
@@ -5076,6 +5117,24 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 	if (dnl->is_null() && !q.second.is_null()) {
 	  if (q.second.is_remote()) {
 	    dn->dir->link_remote_inode(dn, q.second.remote_ino, q.second.remote_d_type);
+	  } else if (q.second.is_referent_remote()) {
+	    CInode *ref_in = get_inode(q.second.referent_ino, CEPH_NOSNAP);
+	    if (!ref_in) {
+	      // barebones inode;
+	      ref_in = new CInode(this, false, 2, CEPH_NOSNAP);
+	      auto _inode = ref_in->_get_inode();
+	      _inode->ino = q.second.referent_ino;
+	      _inode->mode = S_IFREG;
+	      _inode->layout = default_file_layout;
+	      add_inode(ref_in);
+	      dout(10) << __func__ << " add inode " << *ref_in << dendl;
+	    } else if (ref_in->get_parent_dn()) {
+	      dout(10) << __func__ << " had bad referent linkage for " << *(ref_in->get_parent_dn())
+		       << ", unlinking referent inode" << *ref_in << dendl;
+	      ref_in->get_parent_dir()->unlink_inode(ref_in->get_parent_dn());
+	    }
+	    dn->dir->link_referent_inode(dn, ref_in, q.second.remote_ino, q.second.remote_d_type);
+	    isolated_inodes.erase(ref_in);
 	  } else {
 	    CInode *in = get_inode(q.second.ino, q.first.snapid);
 	    if (!in) {
@@ -5992,14 +6051,18 @@ bool MDCache::open_undef_inodes_dirfrags()
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
   for (auto& dir : rejoin_undef_dirfrags) {
     ceph_assert(dir->get_version() == 0);
-    fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
+    // No need to fetch if the dir is already complete
+    if (!dir->is_complete())
+      fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
   }
 
   if (g_conf().get_val<bool>("mds_dir_prefetch")) {
     for (auto& in : rejoin_undef_inodes) {
       ceph_assert(!in->is_base());
       ceph_assert(in->get_parent_dir());
-      fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
+      // No need to fetch if the dir is already complete
+      if (!in->get_parent_dir()->is_complete())
+        fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
     }
   } else {
     for (auto& in : rejoin_undef_inodes) {
@@ -6173,8 +6236,9 @@ void MDCache::rejoin_send_acks()
 	  it->second->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
                                            dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
-					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
-					   dnl->is_remote() ? dnl->get_remote_d_type():0,
+					   (dnl->is_remote() || dnl->is_referent_remote()) ? dnl->get_remote_ino():inodeno_t(0),
+		                           dnl->is_referent_remote() ? dnl->get_referent_inode()->ino():inodeno_t(0),
+					   (dnl->is_remote() || dnl->is_referent_remote()) ? dnl->get_remote_d_type():0,
 					   ++r.second,
 					   dn->lock.get_replica_state());
 	  // peer missed MDentrylink message ?
@@ -7076,6 +7140,12 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
   if (dnl->is_remote()) {
     // just unlink.
     dir->unlink_inode(dn, false);
+  } else if (dnl->is_referent_remote()) {
+    // expire the referent inode too.
+    CInode *ref_in = dnl->get_referent_inode();
+    ceph_assert(ref_in);
+    if (trim_inode(dn, ref_in, con, expiremap))
+      return true; // purging stray instead of trimming
   } else if (dnl->is_primary()) {
     // expire the inode, too.
     CInode *in = dnl->get_inode();
@@ -7294,7 +7364,8 @@ void MDCache::trim_non_auth()
       // add back into lru (at the top)
       auth_list.push_back(dn);
 
-      if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
+      if ((dnl->is_remote() || dnl->is_referent_remote()) &&
+	  dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
     } else {
       // non-auth.  expire.
@@ -7306,9 +7377,15 @@ void MDCache::trim_non_auth()
       if (dnl->is_remote()) {
 	dir->unlink_inode(dn, false);
       } 
-      else if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
-	dout(10) << " removing " << *in << dendl;
+      else if (dnl->is_primary() || dnl->is_referent_remote()) {
+	CInode *in = nullptr;
+	if (dnl->is_referent_remote()) {
+          in = dnl->get_referent_inode();
+	  dout(10) << __func__ << " removing referent inode " << *in << dendl;
+	} else {
+          in = dnl->get_inode();
+	  dout(10) << __func__ << " removing inode " << *in << dendl;
+	}
 	auto&& ls = in->get_dirfrags();
 	for (const auto& subdir : ls) {
 	  ceph_assert(!subdir->is_subtree_root());
@@ -7428,8 +7505,16 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
     } else { // just remove it
       dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
-      if (dnl->is_remote())
+      if (dnl->is_remote() || dnl->is_referent_remote()) {
         dir->unlink_inode(dn, false);
+	if (dnl->is_referent_remote()) {
+          // remove referent inode
+	  CInode *ref_in = dnl->get_referent_inode();
+          dout(20) << __func__ << " removing referent inode " << ref_in << dendl;
+          remove_inode(ref_in);
+	  ceph_assert(!dir->has_bloom());
+	}
+      }
       dir->remove_dentry(dn);
     }
   }
@@ -8563,7 +8648,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       // do we have inode?
       CInode *in = dnl->get_inode();
       if (!in) {
-        ceph_assert(dnl->is_remote());
+        ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
         // do i have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
@@ -8852,11 +8937,19 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
   if (dnl->is_primary())
     return dnl->inode;
 
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
   CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
-    dout(7) << "get_dentry_inode linking in remote in " << *in << dendl;
-    dn->link_remote(dnl, in);
+    CInode *ref_in = dnl->get_referent_inode();
+    if (dnl->is_referent_remote())
+      ceph_assert(ref_in);
+    if (ref_in) {
+      dout(7) << __func__ << " linking in referent remote in " << *in << "referent " << *ref_in << dendl;
+      dn->link_remote(dnl, in, ref_in);
+    } else {
+      dout(7) << __func__ << " linking in remote in " << *in << dendl;
+      dn->link_remote(dnl, in);
+    }
     return in;
   } else {
     dout(10) << "get_dentry_inode on remote dn, opening inode for " << *dn << dendl;
@@ -8895,7 +8988,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext 
 {
   if (r < 0) {
     CDentry::linkage_t *dnl = dn->get_projected_linkage();
-    if (dnl->is_remote() && dnl->get_remote_ino() == ino) {
+    if ((dnl->is_remote() || dnl->is_referent_remote()) && dnl->get_remote_ino() == ino) {
       dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
       dn->state_set(CDentry::STATE_BADREMOTEINO);
 
@@ -10725,6 +10818,17 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
 	dout(7) << *dnl->get_inode() << " is frozen, non-empty reply, stopping" << dendl;
 	break;
       }
+    } else if (dnl->is_referent_remote() && dnl->get_referent_inode()->is_frozen_inode()) {
+      if (tailitem && dis->is_path_locked()) {
+	dout(7) << __func__ << " allowing discovery of frozen tail referent inode" << *dnl->get_referent_inode() << dendl;
+      } else if (reply->is_empty()) {
+	dout(7) << __func__ << *dnl->get_referent_inode() << " referent inode is frozen, empty reply, waiting" << dendl;
+	dnl->get_referent_inode()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+	return;
+      } else {
+	dout(7) << __func__ << *dnl->get_referent_inode() << " referent inode is frozen, non-empty reply, stopping" << dendl;
+	break;
+      }
     }
 
     // add dentry
@@ -10733,6 +10837,15 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
     encode_replica_dentry(dn, from, reply->trace);
     dout(7) << "handle_discover added dentry " << *dn << dendl;
     
+    // add referent inode
+    if (dnl->is_referent_remote()) {
+      CInode *referent_inode = dnl->get_referent_inode();
+      ceph_assert(referent_inode->is_auth());
+
+      encode_replica_inode(referent_inode, from, reply->trace, mds->mdsmap->get_up_features());
+      dout(7) << "handle_discover added referent inode " << *referent_inode << dendl;
+    }
+
     if (!dnl->is_primary()) break;  // stop on null or remote link.
     
     // add inode
@@ -10919,7 +11032,7 @@ void MDCache::encode_replica_dir(CDir *dir, mds_rank_t to, bufferlist& bl)
 
 void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(dn->get_name(), bl);
   encode(dn->last, bl);
 
@@ -10932,6 +11045,7 @@ void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
   bool need_recover = mds->get_state() < MDSMap::STATE_ACTIVE;
   encode(need_recover, bl);
   encode(dn->alternate_name, bl);
+  encode(dn->linkage.referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -11041,10 +11155,17 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
     decode(alternate_name, p);
   }
 
+  inodeno_t referent_ino;
+  if (struct_v >= 3) {
+    decode(referent_ino, p);
+  }
+
   if (is_new) {
     dn->set_alternate_name(std::move(alternate_name));
-    if (rino)
+    if (rino && !referent_ino)
       dir->link_remote_inode(dn, rino, rdtype);
+    else if (rino && referent_ino)
+      dir->link_null_referent_inode(dn, referent_ino, rino, rdtype);
     if (need_recover)
       dn->lock.mark_need_recover();
   } else {
@@ -11076,7 +11197,12 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     else if (in->is_mdsdir())
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
     dout(10) << __func__ << " added " << *in << dendl;
-    if (dn) {
+    if (dn && dn->get_linkage()->get_referent_ino() > 0) {
+      dout(10) << __func__ << " linking referent inode " << *in << dendl;
+      ceph_assert(!dn->get_linkage()->get_referent_inode());
+      ceph_assert(dn->get_linkage()->get_referent_ino() == in->ino());
+      dn->dir->link_referent_inode(dn, in, dn->get_linkage()->get_remote_ino(), dn->get_linkage()->get_remote_d_type());
+    } else if (dn) {
       ceph_assert(dn->get_linkage()->is_null());
       dn->dir->link_primary_inode(dn, in);
     }
@@ -11085,9 +11211,13 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     in->_decode_base(p);
     in->_decode_locks_state_for_replica(p, false);
     dout(10) << __func__ << " had " << *in << dendl;
+    if (dn && dn->get_linkage()->get_referent_ino() > 0) {
+      if (!dn->get_linkage()->is_referent_remote() || dn->get_linkage()->get_referent_inode() != in)
+        dout(10) << __func__ << " different referent inode linkage in dentry " << *dn << " inode " << *in << dendl;
+    }
   }
 
-  if (dn) {
+  if (dn && !dn->get_linkage()->is_referent_remote()) {
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << __func__ << " different linkage in dentry " << *dn << dendl;
   }
@@ -13447,7 +13577,7 @@ void MDCache::repair_dirfrag_stats_work(const MDRequestRef& mdr)
 	frag_info.nsubdirs++;
       else
 	frag_info.nfiles++;
-    } else if (dnl->is_remote())
+    } else if (dnl->is_remote() || dnl->is_referent_remote())
       frag_info.nfiles++;
   }
 
