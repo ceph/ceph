@@ -3883,7 +3883,10 @@ paths:
             schema:
               properties:
                 entities:
-                  type: string
+                  description: List of entities to export
+                  items:
+                    type: string
+                  type: array
               required:
               - entities
               type: object
