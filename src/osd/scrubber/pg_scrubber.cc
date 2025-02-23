@@ -2256,20 +2256,6 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     }
   }
 
-  // if only explicitly requested repairing is allowed - skip other types
-  // of scrubbing
-  if (osd_restrictions.allow_requested_repair_only &&
-      ScrubJob::observes_recovery(trgt.urgency())) {
-    dout(10) << __func__
-	     << ": skipping this PG as repairing was not explicitly "
-		"requested for it"
-	     << dendl;
-    requeue_penalized(
-	s_or_d, delay_both_targets_t::yes, delay_cause_t::scrub_params,
-	clock_now);
-    return schedule_result_t::target_specific_failure;
-  }
-
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
   if (!reserve_local(trgt)) {

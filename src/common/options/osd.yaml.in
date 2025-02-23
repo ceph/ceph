@@ -211,12 +211,6 @@ options:
   level: advanced
   desc: Asserts that no clone-objects were added to a snap after we start trimming it
   default: false
-- name: osd_repair_during_recovery
-  type: bool
-  level: advanced
-  desc: Allow requested repairing when PGs on the OSD are undergoing recovery
-  default: false
-  with_legacy: true
 - name: osd_scrub_begin_hour
   type: int
   level: advanced
