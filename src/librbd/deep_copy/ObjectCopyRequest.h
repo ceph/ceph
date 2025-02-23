@@ -146,7 +146,7 @@ private:
   void compute_zero_ops();
 
   void compute_dst_object_may_exist();
-
+  uint64_t compute_starting_end_size();
   void finish(int r);
 };
 
