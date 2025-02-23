@@ -24,3 +24,6 @@ overrides:
         valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
   s3tests:
     calling-format: subdomain
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999
