@@ -96,6 +96,9 @@ public:
     BackfillListener& backfill_listener;
     std::unique_ptr<PeeringFacade> peering_state;
     std::unique_ptr<PGFacade> pg;
+    void post_event(const sc::event_base &e) {
+      sc::state_machine<BackfillMachine, Initial>::post_event(e);
+    }
   };
 
 private:
@@ -297,6 +300,10 @@ public:
     const eversion_t &v,
     const std::vector<pg_shard_t> &peers);
 
+
+  void post_event(boost::intrusive_ptr<const sc::event_base> evt) {
+    backfill_machine.post_event(*std::move(evt));
+  }
 
   bool is_triggered() const {
     return backfill_machine.triggering_event() != nullptr;

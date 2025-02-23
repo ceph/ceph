@@ -477,17 +477,6 @@ void PGRecovery::_committed_pushed_object(epoch_t epoch,
   }
 }
 
-template <class EventT>
-void PGRecovery::start_backfill_recovery(const EventT& evt)
-{
-  using BackfillRecovery = crimson::osd::BackfillRecovery;
-  std::ignore = pg->get_shard_services().start_operation<BackfillRecovery>(
-    static_cast<crimson::osd::PG*>(pg),
-    pg->get_shard_services(),
-    pg->get_osdmap_epoch(),
-    evt);
-}
-
 void PGRecovery::request_replica_scan(
   const pg_shard_t& target,
   const hobject_t& begin,
@@ -520,7 +509,8 @@ void PGRecovery::request_primary_scan(
   ).then_interruptible([this] (BackfillInterval bi) {
     logger().debug("request_primary_scan:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
-    start_backfill_recovery(BackfillState::PrimaryScanned{ std::move(bi) });
+    backfill_state->process_event(
+      BackfillState::PrimaryScanned{ std::move(bi) }.intrusive_from_this());
   });
 }
 
@@ -542,7 +532,13 @@ void PGRecovery::enqueue_push(
   }).then_interruptible([this, obj] {
     logger().debug("enqueue_push:{}", __func__);
     using BackfillState = crimson::osd::BackfillState;
-    start_backfill_recovery(BackfillState::ObjectPushed(std::move(obj)));
+    if (backfill_state->is_triggered()) {
+      backfill_state->post_event(
+       BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
+    } else {
+      backfill_state->process_event(
+       BackfillState::ObjectPushed(std::move(obj)).intrusive_from_this());
+    }
   });
 }
 
@@ -643,8 +639,6 @@ void PGRecovery::backfilled()
 
 void PGRecovery::backfill_suspended()
 {
-  // We are not creating a new BackfillRecovery request here, as we
-  // need to cancel the backfill synchronously (before this method returns).
   using BackfillState = crimson::osd::BackfillState;
   backfill_state->process_event(
     BackfillState::SuspendBackfill{}.intrusive_from_this());
@@ -673,13 +667,7 @@ void PGRecovery::on_activate_complete()
 void PGRecovery::on_backfill_reserved()
 {
   logger().debug("{}", __func__);
-  // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
-  // will be set after on_backfill_reserved() returns.
-  // Backfill needs to take this into consideration when scheduling
-  // events -- they must be mutually exclusive with PeeringEvent
-  // instances. Otherwise the execution might begin without having
-  // the state updated.
-  ceph_assert(!pg->get_peering_state().is_backfilling());
+  ceph_assert(pg->get_peering_state().is_backfilling());
   // let's be lazy with creating the backfill stuff
   using BackfillState = crimson::osd::BackfillState;
   if (!backfill_state) {
@@ -694,5 +682,6 @@ void PGRecovery::on_backfill_reserved()
   // it may be we either start a completely new backfill (first
   // event since last on_activate_complete()) or to resume already
   // (but stopped one).
-  start_backfill_recovery(BackfillState::Triggered{});
+  backfill_state->process_event(
+    BackfillState::Triggered{}.intrusive_from_this());
 }

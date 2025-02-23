@@ -52,10 +52,9 @@ private:
 
 /// represent a recovery initiated for serving a client request
 ///
-/// unlike @c PglogBasedRecovery and @c BackfillRecovery,
-/// @c UrgentRecovery is not throttled by the scheduler. and it
-/// utilizes @c RecoveryBackend directly to recover the unreadable
-/// object.
+/// unlike @c PglogBasedRecovery, @c UrgentRecovery is not throttled
+/// by the scheduler. and it utilizes @c RecoveryBackend directly to
+/// recover the unreadable object.
 class UrgentRecovery final : public BackgroundRecoveryT<UrgentRecovery> {
 public:
   UrgentRecovery(
@@ -107,49 +106,9 @@ private:
   bool cancelled = false;
 };
 
-class BackfillRecovery final : public BackgroundRecoveryT<BackfillRecovery> {
-public:
-
-  template <class EventT>
-  BackfillRecovery(
-    Ref<PG> pg,
-    ShardServices &ss,
-    epoch_t epoch_started,
-    const EventT& evt);
-
-  PipelineHandle& get_handle() { return handle; }
-
-  std::tuple<
-    OperationThrottler::BlockingEvent,
-    PGPeeringPipeline::Process::BlockingEvent
-  > tracking_events;
-
-private:
-  boost::intrusive_ptr<const boost::statechart::event_base> evt;
-  PipelineHandle handle;
-
-  static PGPeeringPipeline &peering_pp(PG &pg);
-  interruptible_future<bool> do_recovery() override;
-};
-
-template <class EventT>
-BackfillRecovery::BackfillRecovery(
-  Ref<PG> pg,
-  ShardServices &ss,
-  const epoch_t epoch_started,
-  const EventT& evt)
-  : BackgroundRecoveryT(
-      std::move(pg),
-      ss,
-      epoch_started,
-      crimson::osd::scheduler::scheduler_class_t::background_best_effort),
-    evt(evt.intrusive_from_this())
-{}
-
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::osd::BackfillRecovery> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::osd::PglogBasedRecovery> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::osd::UrgentRecovery> : fmt::ostream_formatter {};
 template <class T> struct fmt::formatter<crimson::osd::BackgroundRecoveryT<T>> : fmt::ostream_formatter {};
