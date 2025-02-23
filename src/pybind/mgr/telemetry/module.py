@@ -824,11 +824,37 @@ class Module(MgrModule):
         #           "value": 88814109
         #       },
         #   },
+
+
+        """
+        "mon.b":{
+            "bluestore": [
+                {
+                    "labels": {},
+                    "counters": {
+                        "kv_flush_lat": {
+                            "description": "bluestore.kv_flush_lat",
+                            "nick": "kfsl",
+                            "type": 5,
+                            "priority": 8,
+                            "units": 1,
+                            "value": 14814406948,
+                            "count": 141
+                        },
+                    }
+                },
+            ]
+        }
+        
+        """
         perf_counters = self.get_unlabeled_perf_counters()
 
         # Initialize 'result' dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
+        
+        # TODO: Naveen: Have a similar type as above
+        result_labeled = defaultdict(dict)
 
         # 'separated' mode
         anonymized_daemon_dict = {}
@@ -849,6 +875,97 @@ class Module(MgrModule):
                     result[daemon_type]['num_combined_daemons'] = 1
                 else:
                     result[daemon_type]['num_combined_daemons'] += 1
+            
+            """
+            collection is "AsyncMessenger::Worker"
+
+            collection_result in the value of the key
+            
+            "AsyncMessenger::Worker": [
+                {
+                    "labels": {
+                        "id": "0"
+                    },
+                    "counters": {
+                        "msgr_connection_idle_timeouts": {
+                            "description": "AsyncMessenger::Worker",
+                            "type": 10,
+                            "priority": 5,
+                            "units": 1,
+                            "value": 0
+                        },
+                        "msgr_connection_ready_timeouts": {
+                            "description": "AsyncMessenger::Worker",
+                            "type": 10,
+                            "priority": 5,
+                            "units": 1,
+                            "value": 0
+                        }
+                    }
+                }
+            ]
+            """
+            for collection, sub_collection_list in perf_counters_by_daemon.items():
+
+                # Debug log for empty keys. This initially was a problem for prioritycache
+                # perf counters, where the col_0 was empty for certain mon counters:
+                #
+                # "mon.a": {                  instead of    "mon.a": {
+                #      "": {                                     "prioritycache": {
+                #        "cache_bytes": {...},                          "cache_bytes": {...},
+                #
+                # This log is here to detect any future instances of a similar issue.
+                if (daemon == "") or (collection == ""):
+                    self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
+                    continue
+
+                result_labeled[daemon][collection] = []
+
+                for sub_collection in sub_collection_list:
+                    sub_collection_result = defaultdict(dict)
+                    sub_collection_result['labels'] = sub_collection['labels']
+
+                    for sub_collection_counter_name, sub_collection_counter_value in sub_collection['counters'].items():
+                        if mode == 'seperated':
+                            # Add value to result
+                            sub_collection_result['counters'][sub_collection_counter_name]['value'] = \
+                                sub_collection_counter_value['value']
+
+                            # Check that 'count' exists, as not all counters have a count field.
+                            if 'count' in sub_collection_counter_value:
+                                sub_collection_result['counters'][sub_collection_counter_name]['count'] = \
+                                        sub_collection_counter_value[collection]['count']
+                        
+                        elif mode == 'aggregated':
+                            # Not every rgw daemon has the same schema. Specifically, each rgw daemon
+                            # has a uniquely-named collection that starts off identically (i.e.
+                            # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
+                            # This bit of code combines these unique counters all under one rgw instance.
+                            # Without this check, the schema would remain separeted out in the final report.
+                            if collection[0:11] == "objecter-0x":
+                                collection = "objecter-0x"
+
+                            # Check that the value can be incremented. In some cases,
+                            # the files are of type 'pair' (real-integer-pair, integer-integer pair).
+                            # In those cases, the value is a dictionary, and not a number.
+                            #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
+                            if isinstance(sub_collection_counter_value['value'], numbers.Number):
+                                sub_collection_result['counters'][sub_collection_counter_name]['value'] += \
+                                        sub_collection_counter_value['value']
+
+                            # Check that 'count' exists, as not all counters have a count field.
+                            if 'count' in sub_collection_counter_value:
+                                sub_collection_result['counters'][sub_collection_counter_name]['count'] += \
+                                        sub_collection_counter_value[collection]['count']
+                        
+                    result_labeled[daemon][collection].append(sub_collection_result)    
+                
+                self.log.debug('telemetry perf counter labeled json: {}'.format(json.dumps(result_labeled)))
+
+                if mode == 'separated':
+                    # for debugging purposes only, this data is never reported
+                    self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
+                        
 
             for collection in perf_counters_by_daemon:
                 # Split the collection to avoid redundancy in final report; i.e.:
