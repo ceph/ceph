@@ -41,20 +41,20 @@ tasks:
         echo "Check with each rgw stopped in turn..."
         for rgw in `ceph orch ps | grep ^rgw.foo. | awk '{print $1}'`; do
           ceph orch daemon stop $rgw
-          while ! ceph orch ps | grep $rgw | grep stopped; do sleep 1 ; done
-          while ! curl http://{{VIP0}}:9000/ ; do sleep 1 ; done
+          timeout 300 bash -c "while ! ceph orch ps | grep $rgw | grep stopped; do echo 'Waiting for $rgw to stop'; ceph orch ps --daemon-type rgw; ceph health detail; sleep 5 ; done"
+          timeout 300 bash -c "while ! curl http://{{VIP0}}:9000/ ; do echo 'Waiting for http://{{VIP0}}:9000/ to be available'; sleep 1 ; done"
           ceph orch daemon start $rgw
-          while ! ceph orch ps | grep $rgw | grep running; do sleep 1 ; done
+          timeout 300 bash -c "while ! ceph orch ps | grep $rgw | grep running; do echo 'Waiting for $rgw to start'; ceph orch ps --daemon-type rgw; ceph health detail; sleep 5 ; done"
         done
 
         # stop each haproxy in turn
         echo "Check with each haproxy down in turn..."
         for haproxy in `ceph orch ps | grep ^haproxy.rgw.foo. | awk '{print $1}'`; do
           ceph orch daemon stop $haproxy
-          while ! ceph orch ps | grep $haproxy | grep stopped; do sleep 1 ; done
-          while ! curl http://{{VIP0}}:9000/ ; do sleep 1 ; done
+          timeout 300 bash -c "while ! ceph orch ps | grep $haproxy | grep stopped; do echo 'Waiting for $haproxy to stop'; ceph orch ps --daemon-type haproxy; ceph health detail; sleep 5 ; done"
+          timeout 300 bash -c "while ! curl http://{{VIP0}}:9000/ ; do echo 'Waiting for http://{{VIP0}}:9000/ to be available'; sleep 1 ; done"
           ceph orch daemon start $haproxy
-          while ! ceph orch ps | grep $haproxy | grep running; do sleep 1 ; done
+          timeout 300 bash -c "while ! ceph orch ps | grep $haproxy | grep running; do echo 'Waiting for $haproxy to start'; ceph orch ps --daemon-type haproxy; ceph health detail; sleep 5 ; done"
         done
 
-        while ! curl http://{{VIP0}}:9000/ ; do sleep 1 ; done
+        timeout 300 bash -c "while ! curl http://{{VIP0}}:9000/ ; do echo 'Waiting for http://{{VIP0}}:9000/ to be available'; sleep 1 ; done"
