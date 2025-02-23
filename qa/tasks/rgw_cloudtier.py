@@ -28,6 +28,8 @@ class RGWCloudTier(Task):
               cloud_target_storage_class:
               cloud_retain_head_object:
               cloud_target_path:
+              cloud_allow_read_through:
+              cloud_read_through_restore_days:
               cloudtier_user:
                 cloud_secret:
                 cloud_access_key:
@@ -64,6 +66,8 @@ class RGWCloudTier(Task):
                 cloud_target_path = client_config.get('cloud_target_path')
                 cloud_target_storage_class = client_config.get('cloud_target_storage_class')
                 cloud_retain_head_object = client_config.get('cloud_retain_head_object')
+                cloud_allow_read_through = client_config.get('cloud_allow_read_through')
+                cloud_read_through_restore_days = client_config.get('cloud_read_through_restore_days')
 
                 cloudtier_user = client_config.get('cloudtier_user')
                 cloud_access_key = cloudtier_user.get('cloud_access_key')
@@ -79,7 +83,9 @@ class RGWCloudTier(Task):
                 tier_config_params = "endpoint=" + endpoint.url() + \
                            ",access_key=" + cloud_access_key + \
                             ",secret=" + cloud_secret + \
-                            ",retain_head_object=" + cloud_retain_head_object
+                            ",retain_head_object=" + cloud_retain_head_object +\
+                            ",allow_read_through=" + cloud_allow_read_through +\
+                            ",read_through_restore_days=" + cloud_read_through_restore_days
 
                 if (cloud_target_path != None):
                     tier_config_params += ",target_path=" + cloud_target_path
