@@ -7,6 +7,7 @@
 #include <iostream>
 #include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/scoped_ptr.hpp>
+#include <boost/random/mersenne_twister.hpp>
 #include <gtest/gtest.h>
 
 #include "common/Cond.h"
