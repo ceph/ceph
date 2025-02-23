@@ -100,19 +100,9 @@ describe('RgwBucketService', () => {
     expect(req.request.method).toBe('PUT');
   });
 
-  it('should call delete, with purgeObjects = true', () => {
+  it('should call delete', () => {
     service.delete('foo').subscribe();
-    const req = httpTesting.expectOne(
-      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&purge_objects=true`
-    );
-    expect(req.request.method).toBe('DELETE');
-  });
-
-  it('should call delete, with purgeObjects = false', () => {
-    service.delete('foo', false).subscribe();
-    const req = httpTesting.expectOne(
-      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&purge_objects=false`
-    );
+    const req = httpTesting.expectOne(`api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}`);
     expect(req.request.method).toBe('DELETE');
   });
 
