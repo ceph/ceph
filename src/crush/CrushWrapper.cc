@@ -30,6 +30,25 @@ using ceph::decode_nohead;
 using ceph::encode;
 using ceph::Formatter;
 
+CrushWrapper::~CrushWrapper()
+{
+  if (crush)
+    crush_destroy(crush);
+  choose_args_clear();
+}
+
+void CrushWrapper::create()
+{
+  if (crush)
+    crush_destroy(crush);
+  crush = crush_create();
+  choose_args_clear();
+  ceph_assert(crush);
+  have_rmaps = false;
+
+  set_tunables_default();
+}
+
 bool CrushWrapper::has_non_straw2_buckets() const
 {
   for (int i=0; i<crush->max_buckets; ++i) {
