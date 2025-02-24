@@ -227,10 +227,15 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     std::swap(span, s->trace);
   }
   if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
-      dout(2) << "overriding permissions due to admin operation" << dendl;
+    if (!s->auth.identity->evals_passed_uid_perm()) {
+      // system user is allowed to do anything only if rgwx-uid is not present
+      if (s->system_request) {
+        dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+        dout(2) << "overriding permissions due to admin operation" << dendl;
+      } else {
+        return ret;
+      }
     } else {
       return ret;
     }
