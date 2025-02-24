@@ -184,7 +184,7 @@ namespace cls::cmpxattr {
   }
 
   //---------------------------------------------------------------------------
-  TEST_F(CmpXattr, cmp_set_vals_u64_two_sets)
+  TEST_F(CmpXattr, cmp_set_vals_u64_existing_set_nonexisting_set)
   {
     const std::string oid = __PRETTY_FUNCTION__;
     ComparisonMap cmp_pairs;
@@ -207,6 +207,7 @@ namespace cls::cmpxattr {
       for (uint32_t i = 0; i < cmp_pairs.size(); i++) {
 	std::string key = std::to_string(i);
 	EXPECT_EQ(cmp_pairs[key], vals[key]);
+	EXPECT_EQ(set_pairs.contains(key), false);
       }
     }
 
@@ -222,6 +223,166 @@ namespace cls::cmpxattr {
 	EXPECT_EQ(set_pairs[key2], vals[key2]);
       }
     }
+  }
+
+  //---------------------------------------------------------------------------
+  TEST_F(CmpXattr, cmp_set_vals_u64_two_sets)
+  {
+    const std::string oid = __PRETTY_FUNCTION__;
+    ComparisonMap cmp_pairs;
+    std::map<std::string, bufferlist> old_pairs;
+    std::map<std::string, bufferlist> set_pairs;
+    librados::ObjectWriteOperation op;
+    for (uint32_t i = 0; i < max_keys; i++) {
+      std::string key1 = std::to_string(i);
+      std::string key2 = std::to_string(i+max_keys);
+      const bufferlist val1 = u64_buffer(i);
+      const bufferlist val2 = u64_buffer(i*5);
+      const bufferlist val3 = u64_buffer(i*7);
+      cmp_pairs.emplace(key1, val1);
+      old_pairs.emplace(key2, val2);
+      set_pairs.emplace(key2, val3);
+
+      op.setxattr(key1.c_str(), val1);
+      op.setxattr(key2.c_str(), val2);
+    }
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+    {
+      std::map<std::string, bufferlist> vals;
+      ASSERT_EQ(0, ioctx.getxattrs(oid, vals));
+      ASSERT_EQ(vals.size(), cmp_pairs.size() + old_pairs.size());
+      for (uint32_t i = 0; i < cmp_pairs.size(); i++) {
+	std::string key1 = std::to_string(i);
+	std::string key2 = std::to_string(i+max_keys);
+	EXPECT_EQ(cmp_pairs[key1], vals[key1]);
+	EXPECT_EQ(old_pairs[key2], vals[key2]);
+      }
+    }
+
+    ASSERT_EQ(0, do_cmp_vals_set_vals(oid, Mode::U64, Op::EQ, cmp_pairs, set_pairs));
+    {
+      std::map<std::string, bufferlist> vals;
+      ASSERT_EQ(0, ioctx.getxattrs(oid, vals));
+      ASSERT_EQ(vals.size(), cmp_pairs.size() + set_pairs.size());
+      for (uint32_t i = 0; i < set_pairs.size(); i++) {
+	std::string key1 = std::to_string(i);
+	std::string key2 = std::to_string(i+max_keys);
+	EXPECT_EQ(cmp_pairs[key1], vals[key1]);
+	EXPECT_EQ(set_pairs[key2], vals[key2]);
+      }
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  TEST_F(CmpXattr, cmp_set_vals_u64_existing_set_nonexisting_set_fail)
+  {
+    const std::string oid = __PRETTY_FUNCTION__;
+    ComparisonMap cmp_pairs;
+    std::map<std::string, bufferlist> set_pairs;
+    librados::ObjectWriteOperation op;
+    for (uint32_t i = 0; i < max_keys; i++) {
+      std::string key1 = std::to_string(i);
+      std::string key2 = std::to_string(i+max_keys);
+      const bufferlist val1 = u64_buffer(i);
+      const bufferlist val2 = u64_buffer(i*5);
+      cmp_pairs.emplace(key1, val1);
+      set_pairs.emplace(key2, val2);
+      op.setxattr(key1.c_str(), val1);
+    }
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+    {
+      std::map<std::string, bufferlist> vals;
+      ASSERT_EQ(0, ioctx.getxattrs(oid, vals));
+      ASSERT_EQ(vals.size(), cmp_pairs.size());
+      for (uint32_t i = 0; i < cmp_pairs.size(); i++) {
+	std::string key = std::to_string(i);
+	EXPECT_EQ(cmp_pairs[key], vals[key]);
+	EXPECT_EQ(set_pairs.contains(key), false);
+      }
+    }
+
+    // randomly select one key from the cmp_set and change it val to a different one
+    unsigned idx = std::rand() % cmp_pairs.size();
+    std::string key_to_fail = std::to_string(idx);
+    const bufferlist wrong_val = u64_buffer(idx+1);
+    cmp_pairs[key_to_fail] = wrong_val;
+
+    // the cmp will fail so no new values will; be set
+    do_cmp_vals_set_vals(oid, Mode::U64, Op::EQ, cmp_pairs, set_pairs);
+    // fix the cmp_pairs
+    cmp_pairs[key_to_fail] = u64_buffer(idx);
+
+    // make sure nothing was changed
+    {
+      std::map<std::string, bufferlist> vals;
+      ASSERT_EQ(0, ioctx.getxattrs(oid, vals));
+      ASSERT_EQ(vals.size(), cmp_pairs.size());
+      for (uint32_t i = 0; i < cmp_pairs.size(); i++) {
+	std::string key = std::to_string(i);
+	EXPECT_EQ(cmp_pairs[key], vals[key]);
+	EXPECT_EQ(set_pairs.contains(key), false);
+      }
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  TEST_F(CmpXattr, cmp_set_vals_u64_two_sets_fail)
+  {
+    const std::string oid = __PRETTY_FUNCTION__;
+    ComparisonMap cmp_pairs;
+    std::map<std::string, bufferlist> old_pairs;
+    std::map<std::string, bufferlist> set_pairs;
+    librados::ObjectWriteOperation op;
+    for (uint32_t i = 0; i < max_keys; i++) {
+      std::string key1 = std::to_string(i);
+      std::string key2 = std::to_string(i+max_keys);
+      const bufferlist val1 = u64_buffer(i);
+      const bufferlist val2 = u64_buffer(i*5);
+      const bufferlist val3 = u64_buffer(i*7);
+      cmp_pairs.emplace(key1, val1);
+      old_pairs.emplace(key2, val2);
+      set_pairs.emplace(key2, val3);
+
+      op.setxattr(key1.c_str(), val1);
+      op.setxattr(key2.c_str(), val2);
+    }
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+    {
+      std::map<std::string, bufferlist> vals;
+      ASSERT_EQ(0, ioctx.getxattrs(oid, vals));
+      ASSERT_EQ(vals.size(), cmp_pairs.size() + old_pairs.size());
+      for (uint32_t i = 0; i < cmp_pairs.size(); i++) {
+	std::string key1 = std::to_string(i);
+	std::string key2 = std::to_string(i+max_keys);
+	EXPECT_EQ(cmp_pairs[key1], vals[key1]);
+	EXPECT_EQ(old_pairs[key2], vals[key2]);
+      }
+    }
+
+    // randomly select one key from the cmp_set and change it val to a different one
+    unsigned idx = std::rand() % cmp_pairs.size();
+    std::string key_to_fail = std::to_string(idx);
+    const bufferlist wrong_val = u64_buffer(idx+1);
+    cmp_pairs[key_to_fail] = wrong_val;
+
+    // the cmp will fail so no new values will; be set
+    do_cmp_vals_set_vals(oid, Mode::U64, Op::EQ, cmp_pairs, set_pairs);
+    // fix the cmp_pairs
+    cmp_pairs[key_to_fail] = u64_buffer(idx);
+
+    // make sure nothing was changed
+    {
+      std::map<std::string, bufferlist> vals;
+      ASSERT_EQ(0, ioctx.getxattrs(oid, vals));
+      ASSERT_EQ(vals.size(), cmp_pairs.size() + old_pairs.size());
+      for (uint32_t i = 0; i < cmp_pairs.size(); i++) {
+	std::string key1 = std::to_string(i);
+	std::string key2 = std::to_string(i+max_keys);
+	EXPECT_EQ(cmp_pairs[key1], vals[key1]);
+	EXPECT_EQ(old_pairs[key2], vals[key2]);
+      }
+    }
+
   }
 
   //---------------------------------------------------------------------------
