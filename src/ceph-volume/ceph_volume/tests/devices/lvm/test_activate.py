@@ -5,7 +5,7 @@ from ceph_volume.api import lvm as api
 from ceph_volume.tests.conftest import Capture
 from ceph_volume import objectstore
 #from ceph_volume.util.prepare import create_key
-from mock import patch, call
+from unittest.mock import patch, call
 from argparse import Namespace
 
 class Args(object):
