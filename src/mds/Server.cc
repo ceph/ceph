@@ -7580,14 +7580,15 @@ class C_MDS_link_remote_finish : public ServerLogContext {
   bool inc;
   CDentry *dn;
   CInode *targeti;
+  CInode *referenti;
   version_t dpv;
 public:
-  C_MDS_link_remote_finish(Server *s, const MDRequestRef& r, bool i, CDentry *d, CInode *ti) :
-    ServerLogContext(s, r), inc(i), dn(d), targeti(ti),
+  C_MDS_link_remote_finish(Server *s, const MDRequestRef& r, bool i, CDentry *d, CInode *ti, CInode *ri) :
+    ServerLogContext(s, r), inc(i), dn(d), targeti(ti), referenti(ri),
     dpv(d->get_projected_version()) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_link_remote_finish(mdr, inc, dn, targeti, dpv);
+    server->_link_remote_finish(mdr, inc, dn, targeti, referenti, dpv);
   }
 };
 
@@ -7596,6 +7597,17 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   dout(10) << "_link_remote " 
 	   << (inc ? "link ":"unlink ")
 	   << *dn << " to " << *targeti << dendl;
+
+  CInode *newi = nullptr;
+
+  // create referent inode. Don't re-create on retry
+  if (mds->mdsmap->allow_referent_inodes() && inc) {
+    if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
+      newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), targeti->inode->mode, nullptr, true);
+    else
+      newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
+    ceph_assert(newi);
+  }
 
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   mds_rank_t linkauth = targeti->authority().first;
@@ -7617,6 +7629,7 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     auto req = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->op_stamp = mdr->get_op_stamp();
+
     if (auto& desti_srnode = mdr->more()->desti_srnode)
       encode(*desti_srnode, req->desti_snapbl);
     mds->send_message_mds(req, linkauth);
@@ -7648,11 +7661,27 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   }
 
   if (inc) {
-    dn->pre_dirty();
+    version_t dnpv = dn->pre_dirty();
+
+    //referent inode stuff
+    if (newi) {
+      auto _inode = newi->_get_inode();
+      _inode->version = dnpv;
+      _inode->update_backtrace();
+    }
+
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
-    // TODO: Pass referent inode upon creation. It's adding just remote dentry now
-    le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), 0, nullptr); // new remote
-    dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+
+    if (newi) {
+      dout(20) << __func__ << " calling metablob add_remote_dentry with referent_ino= " << newi->ino() << dendl;
+      le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), newi->ino(), newi); // new remote
+      // journal allocated referent inode.
+      journal_allocated_inos(mdr, &le->metablob);
+      dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
+    } else {
+      le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type(), inodeno_t(0), nullptr); // new remote
+      dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+    }
   } else {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
@@ -7662,11 +7691,11 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   }
 
   journal_and_reply(mdr, (inc ? targeti : nullptr), dn, le,
-		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
+		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti, newi));
 }
 
 void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
-				 CDentry *dn, CInode *targeti,
+				 CDentry *dn, CInode *targeti, CInode *referenti,
 				 version_t dpv)
 {
   dout(10) << "_link_remote_finish "
@@ -7684,6 +7713,12 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
     if (!dnl->get_inode())
       dn->link_remote(dnl, targeti);
     dn->mark_dirty(dpv, mdr->ls);
+
+    if (referenti) {
+      // dirty referent inode
+      referenti->mark_dirty(mdr->ls);
+      referenti->mark_dirty_parent(mdr->ls, true);
+    }
   } else {
     // unlink main dentry
     dn->get_dir()->unlink_inode(dn);
