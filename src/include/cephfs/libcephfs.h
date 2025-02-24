@@ -2039,6 +2039,16 @@ int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
                                int fd, const struct fscrypt_policy_v2 *policy);
 
 /**
+ * Checks to see if encryption is set on a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param enctag, if set on dir, will return non-nullptr
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_is_encrypted(struct ceph_mount_info *cmount,
+                      int fd, char* enctag);
+/**
  * Fill file_attr_out with content of i_flags
  * @param cmount the ceph mount handle to use.
  * @param fd open directory file descriptor

@@ -18526,6 +18526,28 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
   return 0;
 }
 
+int Client::is_encrypted(int fd, UserPerm& perms, char* enctag)
+{
+  Fh *f = get_filehandle(fd);
+  if (!f) {
+    return -EBADF;
+  }
+
+  Inode *in = f->inode.get();
+  if (in->is_encrypted()) {
+    int r = ll_getxattr(in, "user.ceph.subvolume.enctag", enctag, sizeof(enctag), perms);
+    // dir can be encrypted and xattr DNE if it isn't setup via mgr subvolume
+    // this is an expected scenario
+    if (r < 0) {
+      enctag = nullptr;
+    }
+
+    return 0;
+  }
+  enctag = nullptr;
+  return -EINVAL;
+}
+
 int Client::get_fscrypt_key_status(fscrypt_get_key_status_arg* arg) {
   ceph_fscrypt_key_identifier kid;
   int r = kid.init(arg->key_spec);

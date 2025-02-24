@@ -2543,6 +2543,15 @@ extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
   return cmount->get_client()->set_fscrypt_policy_v2(fd, *policy);
 }
 
+extern "C" int ceph_is_encrypted(struct ceph_mount_info *cmount,
+                                          int fd, char* enctag)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  return cmount->get_client()->is_encrypted(fd, cmount->default_perms, enctag);
+}
+
 
 // This is deprecated, use ceph_ll_register_callbacks2 instead.
 extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,

@@ -388,6 +388,7 @@ public:
   int get_inode_flags(int fd, int* file_attr_out);
 
   int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
+  int is_encrypted(int fd, UserPerm& perms, char* enctag);
 
   int mds_command(
     const std::string &mds_spec,
