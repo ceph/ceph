@@ -165,22 +165,26 @@ class QOSBandwidthControl(object):
             result.values[QOSParams.client_rw_bw.value] = self.client_rw_bw
         return result
 
-    def to_dict(self) -> Dict[str, Any]:
+    @staticmethod
+    def bw_for_to_dict(bandwidth: int, ret_bw_in_bytes: bool = False) -> str:
+        return bytes_to_human(bandwidth) if not ret_bw_in_bytes else str(bandwidth)
+
+    def to_dict(self, ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
         r: dict[str, Any] = {}
         r[QOSParams.enable_bw_ctrl.value] = self.enable_bw_ctrl
         r[QOSParams.combined_bw_ctrl.value] = self.combined_bw_ctrl
         if self.export_writebw:
-            r[QOSParams.export_writebw.value] = bytes_to_human(self.export_writebw)
+            r[QOSParams.export_writebw.value] = self.bw_for_to_dict(self.export_writebw, ret_bw_in_bytes)
         if self.export_readbw:
-            r[QOSParams.export_readbw.value] = bytes_to_human(self.export_readbw)
+            r[QOSParams.export_readbw.value] = self.bw_for_to_dict(self.export_readbw, ret_bw_in_bytes)
         if self.client_writebw:
-            r[QOSParams.client_writebw.value] = bytes_to_human(self.client_writebw)
+            r[QOSParams.client_writebw.value] = self.bw_for_to_dict(self.client_writebw, ret_bw_in_bytes)
         if self.client_readbw:
-            r[QOSParams.client_readbw.value] = bytes_to_human(self.client_readbw)
+            r[QOSParams.client_readbw.value] = self.bw_for_to_dict(self.client_readbw, ret_bw_in_bytes)
         if self.export_rw_bw:
-            r[QOSParams.export_rw_bw.value] = bytes_to_human(self.export_rw_bw)
+            r[QOSParams.export_rw_bw.value] = self.bw_for_to_dict(self.export_rw_bw, ret_bw_in_bytes)
         if self.client_rw_bw:
-            r[QOSParams.client_rw_bw.value] = bytes_to_human(self.client_rw_bw)
+            r[QOSParams.client_rw_bw.value] = self.bw_for_to_dict(self.client_rw_bw, ret_bw_in_bytes)
         return r
 
     def qos_bandwidth_checks(self, qos_type: QOSType) -> None:
@@ -327,12 +331,12 @@ class QOS(object):
             result.values.update(res.values)
         return result
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
         r: Dict[str, Any] = {}
         r[QOSParams.enable_qos.value] = self.enable_qos
         if self.cluster_op and self.qos_type:
             r[QOSParams.qos_type.value] = self.qos_type.name
-        if self.bw_obj and (res := self.bw_obj.to_dict()):
+        if self.bw_obj and (res := self.bw_obj.to_dict(ret_bw_in_bytes)):
             r.update(res)
         if self.ops_obj and (res := self.ops_obj.to_dict()):
             r.update(res)

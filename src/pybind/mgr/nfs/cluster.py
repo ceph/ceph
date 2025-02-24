@@ -479,11 +479,11 @@ class NFSCluster:
             log.exception(f"Setting NFS-Ganesha QOS bandwidth control config failed for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
-    def get_cluster_qos(self, cluster_id: str) -> Dict[str, Any]:
+    def get_cluster_qos(self, cluster_id: str, ret_bw_in_bytes: bool = False) -> Dict[str, Any]:
         try:
             if cluster_id in available_clusters(self.mgr):
                 qos_obj = self.get_cluster_qos_config(cluster_id)
-                return qos_obj.to_dict() if qos_obj else {}
+                return qos_obj.to_dict(ret_bw_in_bytes) if qos_obj else {}
             raise ClusterNotFound()
         except Exception as e:
             log.exception(f"Fetching NFS-Ganesha QOS bandwidth control config failed for {cluster_id}")
