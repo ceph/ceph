@@ -61,6 +61,7 @@ class TestBatch(object):
                        block_db_slots=1,
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
                       )
         b = batch.Batch([])
         b.args = args
@@ -111,6 +112,7 @@ class TestBatch(object):
                        block_db_slots=1.0,
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
                       )
         b = batch.Batch([])
         b.args = args
@@ -141,6 +143,7 @@ class TestBatch(object):
                        block_db_slots=5,
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
+                       has_block_db_size_without_db_devices=None
                       )
         b = batch.Batch([])
         b.args = args
@@ -189,7 +192,8 @@ class TestBatch(object):
                        dmcrypt=False,
                        data_allocate_fraction=1.0,
                        block_db_size=None,
-                       db_devices=[])
+                       db_devices=[],
+                       has_block_db_size_without_db_devices=None)
         osds = batch.get_physical_osds(mock_devices_available, args)
         assert len(osds) == len(mock_devices_available) * osds_per_device
 
@@ -205,7 +209,8 @@ class TestBatch(object):
                        dmcrypt=False,
                        data_allocate_fraction=data_allocate_fraction,
                        block_db_size=None,
-                       db_devices=[])
+                       db_devices=[],
+                       has_block_db_size_without_db_devices=None)
         osds = batch.get_physical_osds(mock_devices_available, args)
         for osd in osds:
             assert osd.data[1] == data_allocate_fraction / osds_per_device
@@ -223,7 +228,8 @@ class TestBatch(object):
                        dmcrypt=False,
                        data_allocate_fraction=data_allocate_fraction,
                        block_db_size=None,
-                       db_devices=[])
+                       db_devices=[],
+                       has_block_db_size_without_db_devices=None)
         osds = batch.get_physical_osds(mock_devices_available, args)
         for osd, dev in zip(osds, mock_devices_available):
             assert osd.data[2] == int(dev.vg_size[0] * (data_allocate_fraction / osds_per_device))
