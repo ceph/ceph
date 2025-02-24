@@ -11371,6 +11371,8 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
         return w;
     } else {
         bufferlist bl;
+        // if zerocopy, blp can't be null due to the check above
+        // so the read will be into the memory provided by caller
         int64_t r = _read(fh, offset, totallen, blp ? blp : &bl,
                           onfinish);
         ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;

@@ -2058,6 +2058,7 @@ public:
     : buf(), io_info(io_info) {}
   struct ceph_ll_readv_writev_buffer buf;
 private:
+  // no ownership on io_info. should be released by the caller
   struct ceph_ll_io_info *io_info;
   void complete(int r) override {
     finish(r); // fills in io_info->result which may be different than r
@@ -2148,6 +2149,8 @@ extern "C" int64_t ceph_ll_readv_writev(class ceph_mount_info *cmount,
       io_info->iov = buf->iov;
       // This is a zero-copy read, set up for returning zero copy buffer
       io_info->release = ceph_ll_readv_writev_release;
+      // the caller is responsible to call the io_info->release(io_info->release_data)
+      // when ready
       io_info->release_data = buf;
     } else {
       copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &buf->bl,
