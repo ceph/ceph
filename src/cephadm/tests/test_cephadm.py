@@ -644,6 +644,7 @@ class TestCephAdm(object):
                 'expected': 'quay.io/ceph/ceph@sha256:939a46c06b334e094901560c8346de33c00309e3e3968a2db240eb4897c6a508',
             },
             # ceph images in local store do not match running instance
+            # return a valid ceph image
             {
                 'container_info': _container_info(
                     'a1bb549714b8f007c6a4e29c758689cf9e8e69f2e0f51180506492974b90a972',
@@ -657,7 +658,7 @@ class TestCephAdm(object):
 quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185|dad864ee21e9|pacific|2022-03-23 16:29:19 +0000 UTC
                     '''
                 ),
-                'expected': None,
+                'expected': 'quay.ceph.io/ceph-ci/ceph@sha256:87f200536bb887b36b959e887d5984dd7a3f008a23aa1f283ab55d48b22c6185',
             },
             # ceph image in store have been pulled (new image) since daemon started
             {
@@ -686,7 +687,11 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
         out = params.get('images_output', '')
         expected = params.get('expected', None)
         funkypatch.patch('cephadmlib.call_wrappers.call').return_value = out, '', 0
-        funkypatch.patch('cephadm.get_container_info').return_value = cinfo
+        funkypatch.patch('cephadmlib.listing_updaters.CoreStatusUpdater')().expand.return_value = {
+            '_container_info': cinfo,
+            'name': 'mon.foo',
+        }
+        funkypatch.patch('cephadmlib.listing.daemons_matching').return_value = [0] if cinfo else []
         image = _cephadm.infer_local_ceph_image(
             ctx, ctx.container_engine
         )
@@ -840,6 +845,7 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
     ):
         import cephadmlib.listing
         import cephadmlib.daemon_identity
+        from cephadmlib.container_lookup import get_container_info
 
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeef'
@@ -873,12 +879,14 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
             'cephadmlib.container_types.get_container_stats'
         ).return_value = cinfo
         assert (
-            _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
+            get_container_info(ctx, daemon_filter, by_name) == output
         )
 
     def test_get_container_info_daemon_down(self, funkypatch):
         import cephadmlib.listing
         import cephadmlib.daemon_identity
+        from cephadmlib.container_lookup import get_container_info
+
         funkypatch.patch('cephadmlib.systemd.check_unit').return_value = (True, 'stopped', '')
         funkypatch.patch('cephadmlib.call_wrappers.call').side_effect = ValueError
         _get_stats_by_name = funkypatch.patch('cephadmlib.container_engines.parsed_container_image_stats')
@@ -947,7 +955,7 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
         # redundant
         _get_stats_by_name.return_value = expected_container_info
 
-        assert _cephadm.get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
+        assert get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
         assert not _get_stats.called, 'only get_container_stats_by_image_name should have been called'
 
         # If there is one down and one up daemon of the same name, it should use the up one
@@ -966,7 +974,7 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
             start='the_past',
             version='')
 
-        assert _cephadm.get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
+        assert get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
 
     def test_should_log_to_journald(self):
         from cephadmlib import context_getters
