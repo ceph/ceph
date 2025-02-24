@@ -63,6 +63,7 @@ ClientRequest::ClientRequest(
   : shard_services(&_shard_services),
     l_conn(std::move(conn)),
     m(std::move(m)),
+    begin_time(std::chrono::steady_clock::now()),
     instance_handle(new instance_handle_t)
 {}
 
@@ -525,6 +526,7 @@ ClientRequest::do_process(
     co_return;
   }
 
+  size_t inb = 0, outb = 0;
   {
     auto all_completed = interruptor::now();
     if (ret) {
@@ -540,6 +542,7 @@ ClientRequest::do_process(
       // simply return the error below, leaving all_completed alone
     } else {
       auto submitted = interruptor::now();
+      inb = ox.get_bytes_written();
       std::tie(submitted, all_completed) = co_await pg->submit_executer(
 	std::move(ox), m->ops);
       co_await std::move(submitted);
@@ -573,9 +576,15 @@ ClientRequest::do_process(
 	  reply->set_result(osdop.rval);
 	  break;
 	}
+        outb += osdop.outdata.length();
       }
     }
 
+    pg->add_client_request_lat(
+      *this,
+      inb,
+      outb,
+      utime_t{std::chrono::steady_clock::now() - begin_time});
     reply->set_enoent_reply_versions(
       pg->peering_state.get_info().last_update,
       pg->peering_state.get_info().last_user_version);

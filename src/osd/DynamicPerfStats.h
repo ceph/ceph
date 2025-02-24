@@ -7,8 +7,6 @@
 #include "include/random.h"
 #include "messages/MOSDOp.h"
 #include "mgr/OSDPerfMetricTypes.h"
-#include "osd/OSD.h"
-#include "osd/OpRequest.h"
 
 class DynamicPerfStats {
 public:
@@ -54,7 +52,8 @@ public:
     return !data.empty();
   }
 
-  void add(const OSDService *osd, const pg_info_t &pg_info, const OpRequest& op,
+  template <typename OpRequest>
+  void add(int osd, const pg_info_t &pg_info, const OpRequest& op,
            uint64_t inb, uint64_t outb, const utime_t &latency) {
 
     auto update_counter_fnc =
@@ -111,18 +110,22 @@ public:
         };
 
     auto get_subkey_fnc =
-        [&osd, &pg_info, &op](const OSDPerfMetricSubKeyDescriptor &d,
+        [osd, &pg_info, &op](const OSDPerfMetricSubKeyDescriptor &d,
                               OSDPerfMetricSubKey *sub_key) {
           ceph_assert(d.is_supported());
 
-          auto m = op.get_req<MOSDOp>();
+          auto m = op.template get_req<MOSDOp>();
           std::string match_string;
           switch(d.type) {
           case OSDPerfMetricSubKeyType::CLIENT_ID:
             match_string = stringify(m->get_reqid().name);
             break;
           case OSDPerfMetricSubKeyType::CLIENT_ADDRESS:
+#ifdef WITH_SEASTAR
+	    match_string = stringify(op.get_connection()->get_peer_addr());
+#else
             match_string = stringify(m->get_connection()->get_peer_addr());
+#endif
             break;
           case OSDPerfMetricSubKeyType::POOL_ID:
             match_string = stringify(m->get_spg().pool());
@@ -131,7 +134,7 @@ public:
             match_string = m->get_hobj().nspace;
             break;
           case OSDPerfMetricSubKeyType::OSD_ID:
-            match_string = stringify(osd->get_nodeid());
+            match_string = stringify(osd);
             break;
           case OSDPerfMetricSubKeyType::PG_ID:
             match_string = stringify(pg_info.pgid);
