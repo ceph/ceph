@@ -11361,11 +11361,13 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
 
 void MDCache::encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   inodeno_t ino = dnl->get_remote_ino();
   encode(ino, bl);
   __u8 d_type = dnl->get_remote_d_type();
   encode(d_type, bl);
+  inodeno_t referent_ino = dnl->get_referent_ino();
+  encode(referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -11377,7 +11379,14 @@ void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::cons
   decode(ino, p);
   decode(d_type, p);
   dout(10) << __func__ << "  remote " << ino << " " << d_type << dendl;
-  dir->link_remote_inode(dn, ino, d_type);
+  inodeno_t referent_ino;
+  if (struct_v >= 2) {
+    decode(referent_ino, p);
+  }
+  if (referent_ino > 0)
+    dir->link_null_referent_inode(dn, referent_ino, ino, d_type);
+  else
+    dir->link_remote_inode(dn, ino, d_type);
   DECODE_FINISH(p);
 }
 
@@ -11406,6 +11415,11 @@ void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
 		      mds->mdsmap->get_up_features());
     } else if (dnl->is_remote()) {
       encode_remote_dentry_link(dnl, m->bl);
+    } else if (dnl->is_referent_remote()) {
+      dout(10) << __func__ << "  referent remote " << *dnl->get_referent_inode() << dendl;
+      encode_remote_dentry_link(dnl, m->bl);
+      encode_replica_inode(dnl->get_referent_inode(), p.first, m->bl,
+		      mds->mdsmap->get_up_features());
     } else
       ceph_abort();   // aie, bad caller!
     mds->send_message_mds(m, p.first);
@@ -11434,13 +11448,16 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
   auto p = m->bl.cbegin();
   MDSContext::vec finished;
   if (dn) {
+    CInode *in = nullptr;
     if (m->get_is_primary()) {
       // primary link.
-      CInode *in = nullptr;
       decode_replica_inode(in, p, dn, finished);
     } else {
       // remote link, easy enough.
       decode_remote_dentry_link(dir, dn, p);
+      // decode referent inode and link it, only if it's referent
+      if (dn->get_linkage()->get_referent_ino() > 0)
+        decode_replica_inode(in, p, dn, finished);
     }
   } else {
     ceph_abort();
