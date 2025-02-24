@@ -236,6 +236,8 @@ private:
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
+  seastar::future<> set_perf_queries(const ConfigPayload &config_payload);
+  seastar::future<MetricPayload> get_perf_reports();
 private:
   crimson::common::gate_per_shard gate;
 
