@@ -15,6 +15,7 @@ from .. import deployment_utils
 from .. import file_utils
 from ..call_wrappers import call, CallVerbosity
 from ceph.cephadm.images import DefaultImages
+from ..constants import DEFAULT_IMAGE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_engines import Podman
 from ..container_types import (
@@ -43,6 +44,7 @@ _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
 class Features(enum.Enum):
     DOMAIN = 'domain'
     CLUSTERED = 'clustered'
+    CEPHFS_PROXY = 'cephfs-proxy'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -94,6 +96,7 @@ class Config:
     cluster_public_addrs: List[ClusterPublicIP] = dataclasses.field(
         default_factory=list
     )
+    proxy_image: str = ''
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
@@ -126,7 +129,10 @@ class ContainerCommon:
         return {}
 
     def envs_list(self) -> List[str]:
-        return []
+        """Wrapper for .envs() that returns a list of `key=value` strings
+        for all env vars.
+        """
+        return [f'{k}={v}' for (k, v) in self.envs().items()]
 
     def args(self) -> List[str]:
         return []
@@ -162,9 +168,6 @@ class SambaContainerCommon(ContainerCommon):
             # samba container specific variant
             environ['NODE_NUMBER'] = environ['RANK']
         return environ
-
-    def envs_list(self) -> List[str]:
-        return [f'{k}={v}' for (k, v) in self.envs().items()]
 
     def args(self) -> List[str]:
         args = []
@@ -270,6 +273,23 @@ class SMBMetricsContainer(ContainerCommon):
         args = []
         if self.cfg.metrics_port > 0:
             args.append(f'--port={self.cfg.metrics_port}')
+        return args
+
+
+class CephFSProxyContainer(ContainerCommon):
+    def name(self) -> str:
+        return 'proxy'
+
+    def args(self) -> List[str]:
+        return []
+
+    def container_args(self) -> List[str]:
+        args = super().container_args()
+        # Set the working directory to something that libcephfsd can create
+        # O_TMPFILE style temporary files in (aka. not overlayfs on centos9).
+        # We already need to map in /run so reuse that (for now).
+        args.append('--workdir=/run')
+        args.append('--entrypoint=/usr/sbin/libcephfsd')
         return args
 
 
@@ -425,6 +445,7 @@ class SMB(ContainerDaemonForm):
         vhostname = configs.get('virtual_hostname', '')
         metrics_image = configs.get('metrics_image', '')
         metrics_port = int(configs.get('metrics_port', '0'))
+        proxy_image = configs.get('proxy_image', '')
         cluster_meta_uri = configs.get('cluster_meta_uri', '')
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
         cluster_public_addrs = configs.get('cluster_public_addrs', [])
@@ -445,6 +466,13 @@ class SMB(ContainerDaemonForm):
             # the cluster/instanced id to the system hostname
             hname = socket.getfqdn()
             vhostname = f'{instance_id}-{hname}'
+        # if the proxy is not to be deployed don't set the image
+        # if the proxy is to be deployed use the supplied image or
+        # the default ceph image
+        if Features.CEPHFS_PROXY.value not in instance_features:
+            proxy_image = ''
+        elif not proxy_image:
+            proxy_image = DEFAULT_IMAGE
         _public_addrs = [
             ClusterPublicIP.convert(v) for v in cluster_public_addrs
         ]
@@ -472,6 +500,7 @@ class SMB(ContainerDaemonForm):
             cluster_meta_uri=cluster_meta_uri,
             cluster_lock_uri=cluster_lock_uri,
             cluster_public_addrs=_public_addrs,
+            proxy_image=proxy_image,
         )
         self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
@@ -524,6 +553,11 @@ class SMB(ContainerDaemonForm):
         metrics_port = self._cfg.metrics_port
         if metrics_image and metrics_port > 0:
             ctrs.append(SMBMetricsContainer(self._cfg, metrics_image))
+
+        if self._cfg.proxy_image:
+            ctrs.append(
+                CephFSProxyContainer(self._cfg, self._cfg.proxy_image)
+            )
 
         if self._cfg.clustered:
             init_ctrs += [

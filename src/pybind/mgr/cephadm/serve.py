@@ -1653,7 +1653,7 @@ class CephadmServe:
         # Skip the image check for daemons deployed that are not ceph containers
         if not str(entity).startswith(bypass_image):
             if not image and entity is not cephadmNoImage:
-                image = self.mgr._get_container_image(
+                image = self.mgr.get_container_image(
                     entity,
                     use_current_daemon_image=use_current_daemon_image
                 )
