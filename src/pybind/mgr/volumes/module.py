@@ -142,7 +142,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false '
                    'name=namespace_isolated,type=CephBool,req=false '
-                   'name=earmark,type=CephString,req=false ',
+                   'name=earmark,type=CephString,req=false '
+                   'name=enctag,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -296,6 +297,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=sub_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
             'desc': "Remove earmark from a subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume enctag get '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get encryption tag for a subvolume",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs subvolume enctag set '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=enctag,type=CephString ',
+            'desc': "Set encryption tag for a subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume enctag rm '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Remove encryption tag from a subvolume",
             'perm': 'rw'
         },
         {
@@ -680,7 +706,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         gid=cmd.get('gid', None),
                                         mode=cmd.get('mode', '755'),
                                         namespace_isolated=cmd.get('namespace_isolated', False),
-                                        earmark=cmd.get('earmark', None))
+                                        earmark=cmd.get('earmark', None),
+                                        enctag=cmd.get('enctag', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
@@ -807,6 +834,25 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_earmark_rm(self, inbuf, cmd):
         return self.vc.clear_earmark(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_enctag_get(self, inbuf, cmd):
+        return self.vc.get_enctag(vol_name=cmd['vol_name'],
+                                   sub_name=cmd['sub_name'],
+                                   group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_enctag_set(self, inbuf, cmd):
+        return self.vc.set_enctag(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None),
+                                      enctag=cmd['enctag'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_enctag_rm(self, inbuf, cmd):
+        return self.vc.clear_enctag(vol_name=cmd['vol_name'],
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
 
