@@ -915,10 +915,10 @@ class ExportMgr:
             log.exception(f"Setting NFS-Ganesha QOS bandwidth control failed for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
 
-    def get_export_qos(self, cluster_id: str, pseudo_path: str) -> Dict[str, int]:
+    def get_export_qos(self, cluster_id: str, pseudo_path: str, ret_bw_in_bytes: bool = False) -> Dict[str, int]:
         try:
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
-            return export_obj.qos_block.to_dict() if export_obj.qos_block else {}
+            return export_obj.qos_block.to_dict(ret_bw_in_bytes) if export_obj.qos_block else {}
         except Exception as e:
             log.exception(f"Failed to get QOS configuration for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
