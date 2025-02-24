@@ -142,6 +142,10 @@ class CephadmServe:
 
     def _check_certificates(self) -> None:
 
+        if self.mgr.certificate_check_period == 0:
+            # certificate check has been disabled by the user
+            return
+
         # Check certificates if:
         # - This is the first time (startup, last_certificates_check is None)
         # - Or the elapsed time is greater than or equal to the configured check period
