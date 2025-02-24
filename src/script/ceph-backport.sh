@@ -20,6 +20,8 @@ set -e
 #     ceph-backport.sh --troubleshooting | less
 #
 
+CEPH_UPSTREAM=https://github.com/ceph/ceph.git
+
 full_path="$0"
 
 SCRIPT_VERSION="16.0.0.6848"
@@ -258,7 +260,7 @@ function cherry_pick_phase {
     fi
 
     set -x
-    git fetch "$upstream_remote" "refs/heads/${milestone}"
+    git fetch "$CEPH_UPSTREAM" "refs/heads/${milestone}"
 
     if git show-ref --verify --quiet "refs/heads/$local_branch" ; then
         if [ "$FORCE" ] ; then
@@ -292,7 +294,7 @@ function cherry_pick_phase {
         git checkout -b "$local_branch" FETCH_HEAD
     fi
 
-    git fetch "$upstream_remote" "$merge_commit_sha"
+    git fetch "$CEPH_UPSTREAM" "$merge_commit_sha"
 
     set +x
     maybe_restore_set_x
@@ -554,10 +556,6 @@ function init_redmine_key {
     fi
 }
 
-function init_upstream_remote {
-    upstream_remote="${upstream_remote:-$(maybe_deduce_remote upstream)}"
-}
-
 function interactive_setup_routine {
     local default_val
     local original_github_token
@@ -637,15 +635,13 @@ function interactive_setup_routine {
     echo "---------------------------------------------------------------------"
     echo "Searching \"git remote -v\" for remote repos"
     echo
-    init_upstream_remote
     init_fork_remote
     vet_remotes
-    echo "Upstream remote is \"$upstream_remote\""
+    echo "Upstream remote is \"$CEPH_UPSTREAM\""
     echo "Fork remote is \"$fork_remote\""
     [ "$setup_ok" ] || abort_due_to_setup_problem
     [ "$github_token" ] || assert_fail "github_token not set, even after completing Steps 1-3 of interactive setup"
     [ "$github_user" ] || assert_fail "github_user not set, even after completing Steps 1-3 of interactive setup"
-    [ "$upstream_remote" ] || assert_fail "upstream_remote not set, even after completing Steps 1-3 of interactive setup"
     [ "$fork_remote" ] || assert_fail "fork_remote not set, even after completing Steps 1-3 of interactive setup"
     echo
     echo "---------------------------------------------------------------------"
@@ -682,7 +678,6 @@ function interactive_setup_routine {
     fi
     [ "$github_token" ] || assert_fail "github_token not set, even after completing Steps 1-4 of interactive setup"
     [ "$github_user" ] || assert_fail "github_user not set, even after completing Steps 1-4 of interactive setup"
-    [ "$upstream_remote" ] || assert_fail "upstream_remote not set, even after completing Steps 1-4 of interactive setup"
     [ "$fork_remote" ] || assert_fail "fork_remote not set, even after completing Steps 1-4 of interactive setup"
     [ "$redmine_key" ] || assert_fail "redmine_key not set, even after completing Steps 1-4 of interactive setup"
     [ "$redmine_user_id" ] || assert_fail "redmine_user_id not set, even after completing Steps 1-4 of interactive setup"
@@ -1267,13 +1262,6 @@ function vet_prs_for_milestone {
 }
 
 function vet_remotes {
-    if [ "$upstream_remote" ] ; then
-        verbose "Upstream remote is $upstream_remote"
-    else
-        error "Cannot auto-determine upstream remote"
-        "(Could not find any upstream remote in \"git remote -v\")"
-        false
-    fi
     if [ "$fork_remote" ] ; then
         verbose "Fork remote is $fork_remote"
     else
@@ -1295,14 +1283,12 @@ function vet_setup {
     local redmine_user_id_display
     local github_endpoint_display
     local github_user_display
-    local upstream_remote_display
     local fork_remote_display
     local redmine_key_display
     local github_token_display
     debug "Entering vet_setup with argument $argument"
     if [ "$argument" = "--report" ] || [ "$argument" = "--normal-operation" ] ; then
         [ "$github_token" ] && [ "$setup_ok" ] && set_github_user_from_github_token quiet
-        init_upstream_remote
         [ "$github_token" ] && [ "$setup_ok" ] && init_fork_remote
         vet_remotes
         [ "$redmine_key" ] && set_redmine_user_from_redmine_key
@@ -1329,7 +1315,6 @@ function vet_setup {
     redmine_user_id_display="${redmine_user_id:-$not_set}"
     github_endpoint_display="${github_endpoint:-$not_set}"
     github_user_display="${github_user:-$not_set}"
-    upstream_remote_display="${upstream_remote:-$not_set}"
     fork_remote_display="${fork_remote:-$not_set}"
     test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint "not set"
     test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id "could not be determined"
@@ -1337,7 +1322,6 @@ function vet_setup {
     test "$github_endpoint"  || failed_mandatory_var_check github_endpoint "not set"
     test "$github_user"      || failed_mandatory_var_check github_user "could not be determined"
     test "$github_token"     || failed_mandatory_var_check github_token "not set"
-    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote "could not be determined"
     test "$fork_remote"      || failed_mandatory_var_check fork_remote "could not be determined"
     if [ "$argument" = "--report" ] || [ "$argument" == "--interactive" ] ; then
         read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
@@ -1347,7 +1331,7 @@ redmine_key      $redmine_key_display
 github_endpoint  $github_endpoint
 github_user      $github_user_display
 github_token     $github_token_display
-upstream_remote  $upstream_remote_display
+upstream_remote  $CEPH_UPSTREAM
 fork_remote      $fork_remote_display
 EOM
         log bare
@@ -1365,7 +1349,6 @@ EOM
         verbose "github_endpoint  $github_endpoint_display"
         verbose "github_user      $github_user_display"
         verbose "github_token     $github_token_display"
-        verbose "upstream_remote  $upstream_remote_display"
         verbose "fork_remote      $fork_remote_display"
     fi
     if [ "$argument" = "--report" ] || [ "$argument" = "--interactive" ] ; then
