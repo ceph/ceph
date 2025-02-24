@@ -119,6 +119,7 @@ enum {
   s3GetObjectVersionAttributes,
   s3ReplicateDelete,
   s3ReplicateObject,
+  s3GetObjectVersionForReplication,
   s3ReplicateTags,
   s3All,
 
@@ -260,6 +261,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3ListBucketMultipartUploads:
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
+  case s3GetObjectVersionForReplication:
     return RGW_PERM_READ;
 
   case s3AbortMultipartUpload:

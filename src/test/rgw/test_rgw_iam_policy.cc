@@ -80,6 +80,7 @@ using rgw::IAM::s3GetObjectAttributes;
 using rgw::IAM::s3GetObjectVersionAttributes;
 using rgw::IAM::s3GetPublicAccessBlock;
 using rgw::IAM::s3GetReplicationConfiguration;
+using rgw::IAM::s3GetObjectVersionForReplication;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucketMultipartUploads;
@@ -452,6 +453,7 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetBucketPublicAccessBlock] = 1;
   act2[s3GetPublicAccessBlock] = 1;
   act2[s3GetBucketEncryption] = 1;
+  act2[s3GetObjectVersionForReplication] = 1;
 
   EXPECT_EQ(p->statements[2].action, act2);
   EXPECT_EQ(p->statements[2].notaction, None);
@@ -524,6 +526,7 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetBucketPublicAccessBlock] = 1;
   s3allow[s3GetPublicAccessBlock] = 1;
   s3allow[s3GetBucketEncryption] = 1;
+  s3allow[s3GetObjectVersionForReplication] = 1;
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
@@ -920,6 +923,7 @@ TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
   act[s3GetPublicAccessBlock] = 1;
   act[s3GetBucketPublicAccessBlock] = 1;
   act[s3GetBucketEncryption] = 1;
+  act[s3GetObjectVersionForReplication] = 1;
   // s3:List*
   act[s3ListMultipartUploadParts] = 1;
   act[s3ListBucket] = 1;
