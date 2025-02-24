@@ -1,0 +1,24 @@
+<ng-container *ngIf="selection">
+  <nav ngbNav
+       #nav="ngbNav"
+       id="tabset-multi-cluster-details"
+       class="nav-tabs"
+       cdStatefulTab="multi-cluster-details">
+    <ng-container ngbNavItem="performance-details"
+                  *ngIf="permissions.grafana.read">
+      <a ngbNavLink
+         routerLink="performance-details"
+         i18n>Performance Details</a>
+      <ng-template ngbNavContent>
+        <cd-grafana i18n-title
+                    title="Cluster details"
+                    [grafanaPath]="'ceph-cluster?var-cluster=' + selectedClusterFsid"
+                    [type]="'metrics'"
+                    uid="edtb0oxdq"
+                    grafanaStyle="four">
+        </cd-grafana>
+      </ng-template>
+    </ng-container>
+  </nav>
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>
