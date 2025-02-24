@@ -1,7 +1,7 @@
 import pytest
 import stat
 from ceph_volume.util import disk
-from mock.mock import patch, Mock, MagicMock, mock_open
+from unittest.mock import patch, Mock, MagicMock, mock_open
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 
@@ -587,6 +587,9 @@ class TestBlockSysFs(TestCase):
         self.fs.create_file('/fake-area/bar2/holders/dm-0')
         self.fs.create_file('/fake-area/foo/holders/dm-1')
         self.fs.create_file('/fake-area/bar2/partition', contents='2')
+        self.fs.create_file('/fake-area/foo/size', contents='1024')
+        self.fs.create_file('/fake-area/foo/queue/logical_block_size', contents='512')
+        self.fs.create_file('/fake-area/foo/random-data', contents='some-random data\n')
         self.fs.create_dir('/sys/dev/block')
         self.fs.create_dir('/sys/block/foo')
         self.fs.create_symlink('/sys/dev/block/8:0', '/fake-area/foo')
@@ -597,12 +600,28 @@ class TestBlockSysFs(TestCase):
     def test_init(self) -> None:
         b = disk.BlockSysFs('/dev/foo')
         assert b.path == '/dev/foo'
-        assert b.sys_dev_block == '/sys/dev/block'
+        assert b.sys_dev_block_dir == '/sys/dev/block'
         assert b.sys_block == '/sys/block'
+
+    def test_get_sysfs_file_content(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b._get_sysfs_file_content('random-data') == 'some-random data'
+
+    def test_blocks(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.blocks == 1024
+
+    def test_logical_block_size(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.logical_block_size == 512
+
+    def test_size(self) -> None:
+        b = disk.BlockSysFs('/dev/foo')
+        assert b.size == 524288
 
     def test_get_sys_dev_block_path(self) -> None:
         b = disk.BlockSysFs('/dev/foo')
-        assert b.get_sys_dev_block_path == '/sys/dev/block/8:0'
+        assert b.sys_dev_block_path == '/sys/dev/block/8:0'
 
     def test_is_partition_true(self) -> None:
         b = disk.BlockSysFs('/dev/bar2')

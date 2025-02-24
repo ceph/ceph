@@ -1,5 +1,5 @@
 from ceph_volume.util import encryption
-from mock.mock import call, patch, Mock, MagicMock
+from unittest.mock import call, patch, Mock, MagicMock
 from typing import Any
 import base64
 import pytest
