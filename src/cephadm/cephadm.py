@@ -89,6 +89,7 @@ from cephadmlib.container_engines import (
     check_container_engine,
     find_container_engine,
     normalize_container_id,
+    parsed_container_image_list,
     parsed_container_mem_usage,
     pull_command,
     registry_login,
@@ -477,16 +478,11 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
 
     :return: The most recent local ceph image (already pulled)
     """
-    # '|' special character is used to separate the output fields into:
-    #  - Repository@digest
-    #  - Image Id
-    #  - Image Tag
-    #  - Image creation date
-    out, _, _ = call_throws(ctx,
-                            [container_path, 'images',
-                             '--filter', 'label=ceph=True',
-                             '--filter', 'dangling=false',
-                             '--format', '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'])
+    images = parsed_container_image_list(
+        ctx,
+        filters=['dangling=false', 'label=ceph=True'],
+        container_path=container_path,
+    )
 
     container_info = None
     daemon_name = ctx.name if ('name' in ctx and ctx.name and '.' in ctx.name) else None
@@ -497,14 +493,12 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
             logger.debug(f"Using container info for daemon '{daemon}'")
             break
 
-    for image in out.splitlines():
-        if image and not image.isspace():
-            (digest, image_id, tag, created_date) = image.lstrip().split('|')
-            if container_info is not None and image_id not in container_info.image_id:
-                continue
-            if digest and not digest.endswith('@'):
-                logger.info(f"Using ceph image with id '{image_id}' and tag '{tag}' created on {created_date}\n{digest}")
-                return digest
+    for image in images:
+        if container_info is not None and image.image_id not in container_info.image_id:
+            continue
+        if image.digest:
+            logger.info(f"Using ceph image with id '{image.image_id}' and tag '{image.tag}' created on {image.created}\n{image.name}")
+            return image.name
     if container_info is not None:
         logger.warning(f"Not using image '{container_info.image_id}' as it's not in list of non-dangling images with ceph=True label")
     return None
