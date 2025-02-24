@@ -1831,13 +1831,6 @@ extern bool verify_object_permission(
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
 extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
-extern bool verify_object_permission_no_policy(
-  const DoutPrefixProvider* dpp,
-  req_state * const s,
-  const RGWAccessControlPolicy& user_acl,
-  const RGWAccessControlPolicy& bucket_acl,
-  const RGWAccessControlPolicy& object_acl,
-  int perm);
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s,
 					       int perm);
 extern int verify_object_lock(
