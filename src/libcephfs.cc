@@ -2127,13 +2127,13 @@ extern "C" void ceph_ll_readv_writev_release(void *release_data)
   delete buf;
 }
 
-extern "C" void ceph_ll_readv_writev(class ceph_mount_info *cmount,
+extern "C" int64_t ceph_ll_readv_writev(class ceph_mount_info *cmount,
 				     struct ceph_ll_io_info *io_info)
 {
   ceph_ll_readv_writev_buffer *buf = new ceph_ll_readv_writev_buffer;
 
   if (!io_info->write && io_info->zerocopy) {
-    ceph_assert(io_info->iovcnt == 1);
+    return -CEPHFS_EINVAL;
   }
 
   io_info->result = (cmount->get_client()->ll_preadv_pwritev(
@@ -2162,6 +2162,7 @@ extern "C" void ceph_ll_readv_writev(class ceph_mount_info *cmount,
     delete buf;
 
   io_info->callback(io_info);
+  return io_info->result;
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)
