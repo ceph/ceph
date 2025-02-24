@@ -26,6 +26,6 @@ Feature: CephFS Management
         And I select a row "test_cephfs"
         And I click on "Remove" button from the table actions
         Then I should see the carbon modal
-        And I check the tick box in carbon modal
+        And I confirm the resource "test_cephfs"
         And I click on "Remove File System" button
         Then I should not see a row with "test_cephfs"

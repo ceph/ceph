@@ -29,7 +29,7 @@ Feature: Cluster expansion host addition
         When I select a row "<hostname>"
         And I click on "Remove" button from the table actions
         Then I should see the carbon modal
-        And I check the tick box in carbon modal
+        And I confirm the resource "<hostname>"
         And I click on "Remove Host" button
         And I should not see a row with "<hostname>"
 

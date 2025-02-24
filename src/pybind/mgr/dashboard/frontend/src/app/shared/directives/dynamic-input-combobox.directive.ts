@@ -38,10 +38,7 @@ export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.searchSubscription = this.searchSubject
-      .pipe(
-        debounceTime(DEBOUNCE_TIMER),
-        distinctUntilChanged()
-      )
+      .pipe(debounceTime(DEBOUNCE_TIMER), distinctUntilChanged())
       .subscribe((searchString) => {
         // Already selected items should be selected in the dropdown
         // even if the items are updated again
@@ -52,15 +49,13 @@ export class DynamicInputComboboxDirective implements OnInit, OnDestroy {
           return { ...item, selected };
         });
 
-        const exists = this.items.some(
-          (item: ComboBoxItem) => item.content === searchString
-        );
+        const exists = this.items.some((item: ComboBoxItem) => item.content === searchString);
 
-      if (!exists) {
-        this.items = this.items.concat({ content: searchString, name: searchString });
-      }
-      this.updatedItems.emit(this.items);
-      this.combBoxService.emit({ searchString });
+        if (!exists) {
+          this.items = this.items.concat({ content: searchString, name: searchString });
+        }
+        this.updatedItems.emit(this.items);
+        this.combBoxService.emit({ searchString });
       });
   }
 

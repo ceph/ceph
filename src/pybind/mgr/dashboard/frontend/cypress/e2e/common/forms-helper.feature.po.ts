@@ -74,6 +74,10 @@ Then('I check the tick box in carbon modal', () => {
   cy.get('cds-modal input#confirmation_input').click({ force: true });
 });
 
+Then('I confirm the resource {string}', (name: string) => {
+  cy.get('cds-modal input#resource_name').type(name);
+});
+
 And('I confirm to {string}', (action: string) => {
   cy.contains('cd-modal button', action).click();
   cy.get('cd-modal').should('not.exist');

@@ -5,8 +5,7 @@ import { Component, EventEmitter } from '@angular/core';
 import { ComboBoxItem } from '../models/combo-box.model';
 
 @Component({
-  template: `<div cdDynamicInputCombobox
-                  [items]="[]"></div>`,
+  template: `<div cdDynamicInputCombobox [items]="[]"></div>`
 })
 class MockComponent {
   items: ComboBoxItem[] = [{ content: 'Item1', name: 'Item1' }];
@@ -16,18 +15,15 @@ class MockComponent {
 }
 
 describe('DynamicInputComboboxDirective', () => {
-
-  let component: MockComponent;
   let fixture: ComponentFixture<MockComponent>;
   let directive: DynamicInputComboboxDirective;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [DynamicInputComboboxDirective, MockComponent],
+      declarations: [DynamicInputComboboxDirective, MockComponent]
     }).compileComponents();
 
     fixture = TestBed.createComponent(MockComponent);
-    component = fixture.componentInstance;
 
     directive = fixture.debugElement.children[0].injector.get(DynamicInputComboboxDirective);
     fixture.detectChanges();
@@ -50,11 +46,13 @@ describe('DynamicInputComboboxDirective', () => {
   }));
 
   it('should not unselect selected items', fakeAsync(() => {
-    const selectedItems: ComboBoxItem[] = [{
-      content: 'selectedItem',
-      name: 'selectedItem',
-      selected: true
-    }];
+    const selectedItems: ComboBoxItem[] = [
+      {
+        content: 'selectedItem',
+        name: 'selectedItem',
+        selected: true
+      }
+    ];
 
     directive.items = selectedItems;
 
@@ -66,5 +64,5 @@ describe('DynamicInputComboboxDirective', () => {
 
     expect(directive.items[0].content).toBe(selectedItems[0].content);
     expect(directive.items[0].selected).toBeTruthy();
-  }))
+  }));
 });
