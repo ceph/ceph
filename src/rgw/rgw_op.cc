@@ -1103,21 +1103,43 @@ int RGWGetObj::verify_permission(optional_yield y)
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
 
-  if (get_torrent) {
-    if (s->object->get_instance().empty()) {
-      action = rgw::IAM::s3GetObjectTorrent;
-    } else {
-      action = rgw::IAM::s3GetObjectVersionTorrent;
+  // for system requests, assume replication context and validate replication permissions.
+  // non-impersonated or standard system requests will be handled in rgw_process_authenticated().
+  const bool is_replication_request = s->system_request;
+
+  if (is_replication_request) {
+    // check for s3:GetObject(Version)Acl permission
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectAcl : rgw::IAM::s3GetObjectVersionAcl;
+    if (!verify_object_permission(this, s, action)) {
+      s->err.message = fmt::format("missing {} permission", rgw::IAM::action_bit_string(action));
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
     }
+
+    // check for s3:GetObjectForReplication permission
+    // for versioned buckets, sync requests include `versionId`; for non-versioned, they don't.
+    // so s3:GetObjectForReplication doesn't help to be introduced as it doesn't add any value.
+    action = rgw::IAM::s3GetObjectVersionForReplication;
+    if (verify_object_permission(this, s, action)) {
+      return 0;
+    }
+
+    // fallback to s3:GetObject(Version) permission
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
+  } else if (get_torrent) {
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTorrent : rgw::IAM::s3GetObjectVersionTorrent;
   } else {
-    if (s->object->get_instance().empty()) {
-      action = rgw::IAM::s3GetObject;
-    } else {
-      action = rgw::IAM::s3GetObjectVersion;
-    }
+    action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
   }
 
   if (!verify_object_permission(this, s, action)) {
+    s->err.message = fmt::format("missing {} permission", rgw::IAM::action_bit_string(action));
+
+    if (is_replication_request) {
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+    }
+
     return -EACCES;
   }
 
