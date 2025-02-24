@@ -7495,6 +7495,9 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
     _inode->version = dnpv;
     _inode->update_backtrace();
 
+    pi.inode->add_referent_ino(newi->ino());
+    dout(20) << __func__ << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << newi->ino() << dendl;
+
     /* NOTE: layout, rstat accounting and snapshot related inode updates are not
      * required and hence not done for referent inodes.
      */
