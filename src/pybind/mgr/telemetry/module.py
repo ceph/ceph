@@ -847,14 +847,25 @@ class Module(MgrModule):
         }
         
         """
-        perf_counters = self.get_unlabeled_perf_counters()
+        # perf_counters = self.get_unlabeled_perf_counters()
+        perf_counters = self.get_labeled_perf_counters()
 
         # Initialize 'result' dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
             lambda: defaultdict(lambda: defaultdict(int))))
         
+        
+        
         # TODO: Naveen: Have a similar type as above
-        result_labeled = defaultdict(dict)
+        result_labeled = defaultdict(lambda: defaultdict(dict))
+
+        # result_labeled: Dict[str, Dict[str, List[Dict[str, Dict[str, Dict[str, int]]]]]] = defaultdict(
+        #     lambda: defaultdict(
+        #         lambda: defaultdict(
+        #             lambda: defaultdict(int)
+        #         )
+        #     )
+        # )
 
         # 'separated' mode
         anonymized_daemon_dict = {}
@@ -907,6 +918,9 @@ class Module(MgrModule):
             """
             for collection, sub_collection_list in perf_counters_by_daemon.items():
 
+                self.log.debug("telemetry collection: {}".format(collection))
+                self.log.debug("telemetry sub_collection_list: {}".format(json.dumps(sub_collection_list)))
+
                 # Debug log for empty keys. This initially was a problem for prioritycache
                 # perf counters, where the col_0 was empty for certain mon counters:
                 #
@@ -922,21 +936,35 @@ class Module(MgrModule):
                 result_labeled[daemon][collection] = []
 
                 for sub_collection in sub_collection_list:
-                    sub_collection_result = defaultdict(dict)
+                    
+                    self.log.debug("telemetry sub_collection in sub_collection_list: {}".format(json.dumps(sub_collection)))
+
+                    sub_collection_result = defaultdict(lambda: defaultdict(dict))
                     sub_collection_result['labels'] = sub_collection['labels']
 
                     for sub_collection_counter_name, sub_collection_counter_value in sub_collection['counters'].items():
-                        if mode == 'seperated':
+
+                        self.log.debug("telemetry sub_collection in sub_collection_counter_name: {}".format(json.dumps(sub_collection_counter_name)))
+                        self.log.debug("telemetry sub_collection in sub_collection_counter_value: {}".format(json.dumps(sub_collection_counter_value)))
+                        self.log.debug("telemetry  mode: {}, {}, {}, {}, {}".format(mode, type(mode), type('seperated'), mode == 'seperated', mode.strip() == 'seperated'.strip()))
+                        
+
+                        if mode == 'separated':
+                            self.log.debug("telemetry in mode: seperated")
                             # Add value to result
                             sub_collection_result['counters'][sub_collection_counter_name]['value'] = \
                                 sub_collection_counter_value['value']
+                            self.log.debug("telemetry counter value updated: seperated")
 
                             # Check that 'count' exists, as not all counters have a count field.
                             if 'count' in sub_collection_counter_value:
                                 sub_collection_result['counters'][sub_collection_counter_name]['count'] = \
-                                        sub_collection_counter_value[collection]['count']
+                                        sub_collection_counter_value['count']
+
+                            self.log.debug("telemetry seperated sub_collection_result: {}".format(json.dumps(sub_collection_result['counters'][sub_collection_counter_name])))
                         
                         elif mode == 'aggregated':
+                            self.log.debug("telemetry in mode: agregated")
                             # Not every rgw daemon has the same schema. Specifically, each rgw daemon
                             # has a uniquely-named collection that starts off identically (i.e.
                             # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
@@ -952,12 +980,20 @@ class Module(MgrModule):
                             if isinstance(sub_collection_counter_value['value'], numbers.Number):
                                 sub_collection_result['counters'][sub_collection_counter_name]['value'] += \
                                         sub_collection_counter_value['value']
+                            
+                            self.log.debug("telemetry counter value updated: agreegated")
 
                             # Check that 'count' exists, as not all counters have a count field.
                             if 'count' in sub_collection_counter_value:
                                 sub_collection_result['counters'][sub_collection_counter_name]['count'] += \
-                                        sub_collection_counter_value[collection]['count']
-                        
+                                        sub_collection_counter_value['count']
+                            
+                            self.log.debug("telemetry agrregrated sub_collection_result: {}".format(json.dumps(sub_collection_result['counters'][sub_collection_counter_name])))
+
+                        else:
+                            self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
+                            return {}
+                    
                     result_labeled[daemon][collection].append(sub_collection_result)    
                 
                 self.log.debug('telemetry perf counter labeled json: {}'.format(json.dumps(result_labeled)))
@@ -967,62 +1003,62 @@ class Module(MgrModule):
                     self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
                         
 
-            for collection in perf_counters_by_daemon:
-                # Split the collection to avoid redundancy in final report; i.e.:
-                #   bluestore.kv_flush_lat, bluestore.kv_final_lat -->
-                #   bluestore: kv_flush_lat, kv_final_lat
-                col_0, col_1 = collection.split('.')
+            # for collection in perf_counters_by_daemon:
+            #     # Split the collection to avoid redundancy in final report; i.e.:
+            #     #   bluestore.kv_flush_lat, bluestore.kv_final_lat -->
+            #     #   bluestore: kv_flush_lat, kv_final_lat
+            #     col_0, col_1 = collection.split('.')
 
-                # Debug log for empty keys. This initially was a problem for prioritycache
-                # perf counters, where the col_0 was empty for certain mon counters:
-                #
-                # "mon.a": {                  instead of    "mon.a": {
-                #      "": {                                     "prioritycache": {
-                #        "cache_bytes": {...},                          "cache_bytes": {...},
-                #
-                # This log is here to detect any future instances of a similar issue.
-                if (daemon == "") or (col_0 == "") or (col_1 == ""):
-                    self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
+            #     # Debug log for empty keys. This initially was a problem for prioritycache
+            #     # perf counters, where the col_0 was empty for certain mon counters:
+            #     #
+            #     # "mon.a": {                  instead of    "mon.a": {
+            #     #      "": {                                     "prioritycache": {
+            #     #        "cache_bytes": {...},                          "cache_bytes": {...},
+            #     #
+            #     # This log is here to detect any future instances of a similar issue.
+            #     if (daemon == "") or (col_0 == "") or (col_1 == ""):
+            #         self.log.debug("Instance of an empty key: {}{}".format(daemon, collection))
 
-                if mode == 'separated':
-                    # Add value to result
-                    result[daemon][col_0][col_1]['value'] = \
-                            perf_counters_by_daemon[collection]['value']
+            #     if mode == 'separated':
+            #         # Add value to result
+            #         result[daemon][col_0][col_1]['value'] = \
+            #                 perf_counters_by_daemon[collection]['value']
 
-                    # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in perf_counters_by_daemon[collection]:
-                        result[daemon][col_0][col_1]['count'] = \
-                                perf_counters_by_daemon[collection]['count']
-                elif mode == 'aggregated':
-                    # Not every rgw daemon has the same schema. Specifically, each rgw daemon
-                    # has a uniquely-named collection that starts off identically (i.e.
-                    # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
-                    # This bit of code combines these unique counters all under one rgw instance.
-                    # Without this check, the schema would remain separeted out in the final report.
-                    if col_0[0:11] == "objecter-0x":
-                        col_0 = "objecter-0x"
+            #         # Check that 'count' exists, as not all counters have a count field.
+            #         if 'count' in perf_counters_by_daemon[collection]:
+            #             result[daemon][col_0][col_1]['count'] = \
+            #                     perf_counters_by_daemon[collection]['count']
+            #     elif mode == 'aggregated':
+            #         # Not every rgw daemon has the same schema. Specifically, each rgw daemon
+            #         # has a uniquely-named collection that starts off identically (i.e.
+            #         # "objecter-0x...") then diverges (i.e. "...55f4e778e140.op_rmw").
+            #         # This bit of code combines these unique counters all under one rgw instance.
+            #         # Without this check, the schema would remain separeted out in the final report.
+            #         if col_0[0:11] == "objecter-0x":
+            #             col_0 = "objecter-0x"
 
-                    # Check that the value can be incremented. In some cases,
-                    # the files are of type 'pair' (real-integer-pair, integer-integer pair).
-                    # In those cases, the value is a dictionary, and not a number.
-                    #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
-                    if isinstance(perf_counters_by_daemon[collection]['value'], numbers.Number):
-                        result[daemon_type][col_0][col_1]['value'] += \
-                                perf_counters_by_daemon[collection]['value']
+            #         # Check that the value can be incremented. In some cases,
+            #         # the files are of type 'pair' (real-integer-pair, integer-integer pair).
+            #         # In those cases, the value is a dictionary, and not a number.
+            #         #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
+            #         if isinstance(perf_counters_by_daemon[collection]['value'], numbers.Number):
+            #             result[daemon_type][col_0][col_1]['value'] += \
+            #                     perf_counters_by_daemon[collection]['value']
 
-                    # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in perf_counters_by_daemon[collection]:
-                        result[daemon_type][col_0][col_1]['count'] += \
-                                perf_counters_by_daemon[collection]['count']
-                else:
-                    self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
-                    return {}
+            #         # Check that 'count' exists, as not all counters have a count field.
+            #         if 'count' in perf_counters_by_daemon[collection]:
+            #             result[daemon_type][col_0][col_1]['count'] += \
+            #                     perf_counters_by_daemon[collection]['count']
+            #     else:
+            #         self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
+            #         return {}
 
-        if mode == 'separated':
-            # for debugging purposes only, this data is never reported
-            self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
+        # if mode == 'separated':
+        #     # for debugging purposes only, this data is never reported
+        #     self.log.debug('Anonymized daemon mapping for telemetry perf_counters (anonymized: real): {}'.format(anonymized_daemon_dict))
 
-        return result
+        return result_labeled
 
     def get_active_channels(self) -> List[str]:
         r = []

@@ -2492,7 +2492,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         value.
         """
 
-        result = defaultdict(dict)  # type: Dict[str, dict]
+        result_labeled = defaultdict(dict)   # type: Dict[str, dict]
 
         for server in self.list_servers():
             for service in cast(List[ServiceInfoT], server['services']):
@@ -2517,50 +2517,150 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
                 # Value is returned in a potentially-multi-service format,
                 # get just the service we're asking about
-                svc_full_name = "{0}.{1}".format(
+                labeled_svc_full_name = "{0}.{1}".format(
                     service['type'], service['id'])
-                schema = schemas[svc_full_name]
+                labeled_schema = labeled_schemas[labeled_svc_full_name]
 
-                # Populate latest values
-                for counter_path, counter_schema in schema.items():
-                    # self.log.debug("{0}: {1}".format(
-                    #     counter_path, json.dumps(counter_schema)
-                    # ))
-                    priority = counter_schema['priority']
-                    assert isinstance(priority, int)
-                    if priority < prio_limit:
-                        continue
+                """
+                counter schema looks like: 
+                {
+                    "AsyncMessenger::Worker": [
+                        {
+                            "labels": {
+                                "id": "0"
+                            },
+                            "counters": {
+                                "msgr_connection_idle_timeouts": {
+                                    "description": "Number of connections closed due to idleness",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                },
+                                "msgr_connection_ready_timeouts": {
+                                    "description": "Number of not yet ready connections declared as dead",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                }
+                            }
+                        }
+                    ]
+                }
+                
+                """
+                
+                # service_path: osd.0
+                for service_path, counter_schema in labeled_schemas.items():
+                    self.log.debug('service_path: {}'.format(service_path))
+                    self.log.debug('labeled counter schema json: {}'.format(json.dumps(counter_schema)))
+                    
 
-                    tp = counter_schema['type']
-                    assert isinstance(tp, int)
-                    counter_info = dict(counter_schema)
-                    # Also populate count for the long running avgs
-                    if tp & self.PERFCOUNTER_LONGRUNAVG:
-                        v, c = self.get_latest_avg(
-                            service['type'],
-                            service['id'],
-                            counter_path,
-                            "",
-                            "",
-                            []
-                        )
-                        counter_info['value'], counter_info['count'] = v, c
-                        result[svc_full_name][counter_path] = counter_info
-                    else:
-                        counter_info['value'] = self.get_latest(
-                            service['type'],
-                            service['id'],
-                            counter_path,
-                            "",
-                            "",
-                            []
-                        )
+                    # counter_path: AsyncMessenger::Worker
+                    for counter_path, sub_counters_list in counter_schema.items():
+                        result_labeled[labeled_svc_full_name][counter_path] = []
+                        self.log.debug('counter_path: {}'.format(counter_path))
+                        sub_counter_labels = []
+                        """
+                        sub_counters look like:
 
-                    result[svc_full_name][counter_path] = counter_info
+                        {
+                            "labels": {
+                                "id": "0"
+                            },
+                            "counters": {
+                                "msgr_connection_idle_timeouts": {
+                                    "description": "Number of connections closed due to idleness",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                },
+                                "msgr_connection_ready_timeouts": {
+                                    "description": "Number of not yet ready connections declared as dead",
+                                    "type": 10,
+                                    "priority": 5,
+                                    "units": 1
+                                }
+                            }
+                        }
+                        """
 
-        self.log.debug("returning {0} counter".format(len(result)))
+                        """
+                        counter_path: osd_scrub_sh_ec
+                        sub_counter_labels: [('level', 'shallow'), ('pooltype', 'ec')]
+                        sub_counter_name: successful_scrubs_elapsed
+                        sub_counter_schema json: {"description": "osd_scrub_sh_ec", "type": 5, "priority": 8, "units": 1}
+                        sub_counter_name: write_blocked_by_scrub
+                        sub_counter_schema json: {"description": "osd_scrub_sh_ec", "type": 10, "priority": 8, "units": 1}
 
-        return result
+                        counter_path: osd_scrub_sh_repl
+                        sub_counter_labels: [('level', 'shallow'), ('pooltype', 'replicated')]
+                        sub_counter_name: successful_scrubs
+                        sub_counter_schema json: {"description": "osd_scrub_sh_repl", "type": 10, "priority": 8, "units": 1}
+                        sub_counter_name: successful_scrubs_elapsed
+                        sub_counter_schema json: {"description": "osd_scrub_sh_repl", "type": 5, "priority": 8, "units": 1}
+                        sub_counter_name: write_blocked_by_scrub
+                        sub_counter_schema json: {"description": "osd_scrub_sh_repl", "type": 10, "priority": 8, "units": 1}
+
+                        counter_path: osd
+                        sub_counter_labels: []
+                        sub_counter_name: numpg
+                        sub_counter_schema json: {"description": "osd.numpg", "nick": "pgs", "type": 2, "priority": 5, "units": 1}
+                        sub_counter_name: numpg_removing
+                        sub_counter_schema json: {"description": "osd.numpg_removing", "nick": "pgsr", "type": 2, "priority": 5, "units": 1}
+
+
+                        """
+                        for sub_counter in sub_counters_list:
+                            sub_counter_info = dict(sub_counter)
+
+                            for label_key, label_value in sub_counter["labels"].items():
+                                sub_counter_labels.append((label_key, label_value))
+                            
+                            self.log.debug('sub_counter_labels: {}'.format(sub_counter_labels))
+
+                            for sub_counter_name, sub_counter_schema in sub_counter["counters"].items():
+                                self.log.debug('sub_counter_name: {}'.format(sub_counter_name))
+                                self.log.debug('sub_counter_schema json: {}'.format(json.dumps(sub_counter_schema)))
+
+                                # HACK: This will be used when sub_counter_labels is empty in with_perf_counter
+                                counter_path_without_labels = counter_path + "." + sub_counter_name
+
+                                priority = sub_counter_schema['priority']
+                                assert isinstance(priority, int)
+                                if priority < prio_limit:
+                                    continue
+
+                                tp = sub_counter_schema['type']
+                                assert isinstance(tp, int)
+                                
+                                # Also populate count for the long running avgs
+                                if tp & self.PERFCOUNTER_LONGRUNAVG:
+                                    v, c = self.get_latest_avg(
+                                        service['type'],
+                                        service['id'],
+                                        counter_path_without_labels,
+                                        counter_path,
+                                        sub_counter_name,
+                                        sub_counter_labels,
+                                    )
+                                    sub_counter_info['counters'][sub_counter_name]['value'] = v 
+                                    sub_counter_info['counters'][sub_counter_name]['count'] = c
+                                    
+                                else:
+                                    sub_counter_info['counters'][sub_counter_name]['value'] = self.get_latest(
+                                        service['type'],
+                                        service['id'],
+                                        counter_path_without_labels,
+                                        counter_path,
+                                        sub_counter_name,
+                                        sub_counter_labels
+                                    )
+                            
+                            result_labeled[labeled_svc_full_name][counter_path].append(sub_counter_info)
+
+        self.log.debug("returning {0} counter".format(len(result_labeled)))
+
+        return result_labeled
 
     @API.expose
     def set_uri(self, uri: str) -> None:
