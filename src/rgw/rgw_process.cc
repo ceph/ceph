@@ -227,9 +227,9 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     std::swap(span, s->trace);
   }
   if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+    // system requests may impersonate another user/role for permission checks
+    // so only rely on is_admin_of() to override permissions
+    if (s->auth.identity->is_admin_of(s->user->get_id())) {
       dout(2) << "overriding permissions due to admin operation" << dendl;
     } else {
       return ret;
