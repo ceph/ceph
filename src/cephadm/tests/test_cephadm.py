@@ -673,13 +673,11 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
 <none>@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29|1b58ca4f6dfd|<none>|2025-01-16 22:53:46 +0000 UTC
                     '''
                 ),
-                'expected': '<none>@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',  # YIKES!
+                'expected': '1b58ca4f6dfd',  # YIKES!
             },
         ],
     )
-    @mock.patch('os.listdir', return_value=[])
-    @mock.patch('cephadm.logger')
-    def test_infer_local_ceph_image(self, _logger, _listdir, params):
+    def test_infer_local_ceph_image(self, params, funkypatch):
         ctx = _cephadm.CephadmContext()
         ctx.fsid = '00000000-0000-0000-0000-0000deadbeez'
         ctx.container_engine = mock_podman()
@@ -687,12 +685,12 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
         cinfo = params.get('container_info', None)
         out = params.get('images_output', '')
         expected = params.get('expected', None)
-        with mock.patch('cephadm.call_throws', return_value=(out, '', '')):
-            with mock.patch('cephadm.get_container_info', return_value=cinfo):
-                image = _cephadm.infer_local_ceph_image(
-                    ctx, ctx.container_engine
-                )
-                assert image == expected
+        funkypatch.patch('cephadmlib.call_wrappers.call').return_value = out, '', 0
+        funkypatch.patch('cephadm.get_container_info').return_value = cinfo
+        image = _cephadm.infer_local_ceph_image(
+            ctx, ctx.container_engine
+        )
+        assert image == expected
 
     @pytest.mark.parametrize('daemon_filter, by_name, daemon_list, container_stats, output',
         [
