@@ -169,7 +169,7 @@ def with_cephadm_ctx(
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch('cephadmlib.net_utils.attempt_bind'))
         stack.enter_context(mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'))
-        stack.enter_context(mock.patch('cephadm.get_container_info', return_value=None))
+        stack.enter_context(mock.patch('cephadmlib.container_lookup.get_container_info', return_value=None))
         stack.enter_context(mock.patch('cephadm.is_available', return_value=True))
         stack.enter_context(mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}))
         stack.enter_context(mock.patch('cephadm.logger'))
