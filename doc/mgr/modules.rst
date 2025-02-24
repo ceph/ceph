@@ -505,7 +505,7 @@ function. This will result in a circular locking exception.
 .. automethod:: MgrModule.list_servers
 .. automethod:: MgrModule.get_metadata
 .. automethod:: MgrModule.get_daemon_status
-.. automethod:: MgrModule.get_perf_schema
+.. automethod:: MgrModule.get_perf_schema ## ASK: Naveen: Do we need to update this file?
 .. automethod:: MgrModule.get_counter
 .. automethod:: MgrModule.get_mgr_id
 .. automethod:: MgrModule.get_daemon_health_metrics
