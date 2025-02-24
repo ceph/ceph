@@ -175,41 +175,7 @@ PglogBasedRecovery::do_recovery()
   });
 }
 
-PGPeeringPipeline &BackfillRecovery::peering_pp(PG &pg)
-{
-  return pg.peering_request_pg_pipeline;
-}
-
-BackfillRecovery::interruptible_future<bool>
-BackfillRecovery::do_recovery()
-{
-  LOG_PREFIX(BackfillRecovery::do_recovery);
-  DEBUGDPPI("{}", *pg, __func__);
-
-  if (pg->has_reset_since(epoch_started)) {
-    DEBUGDPPI("{}: pg got reset since epoch_started={}",
-		*pg, __func__, epoch_started);
-    return seastar::make_ready_future<bool>(false);
-  }
-  // TODO: limits
-  return enter_stage<interruptor>(
-    // process_event() of our boost::statechart machine is non-reentrant.
-    // with the backfill_pipeline we protect it from a second entry from
-    // the implementation of BackfillListener.
-    // additionally, this stage serves to synchronize with PeeringEvent.
-    peering_pp(*pg).process
-  ).then_interruptible([this] {
-    pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
-    return handle.complete();
-  }).then_interruptible([] {
-    return seastar::make_ready_future<bool>(false);
-  }).finally([this] {
-    handle.exit();
-  });
-}
-
 template class BackgroundRecoveryT<UrgentRecovery>;
 template class BackgroundRecoveryT<PglogBasedRecovery>;
-template class BackgroundRecoveryT<BackfillRecovery>;
 
 } // namespace crimson::osd
