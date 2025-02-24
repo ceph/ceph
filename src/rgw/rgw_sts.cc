@@ -145,7 +145,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   buffer::list input, enc_output;
   encode(token, input);
 
-  if (ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
+  if (ret = keyhandler->encrypt(cct, input, enc_output, &error); ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: Encrypting session token returned an error !" << dendl;
     return ret;
   }
