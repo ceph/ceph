@@ -1486,14 +1486,14 @@ NFS_CORE_PARAM {
 
     @pytest.mark.parametrize("qos_type, params, positive_tc", [
         (QOSType['PerShare'], {'max_export_iops': 10000}, True),
-        (QOSType['PerClient'], {'max_client_iops': 20000}, True),
-        (QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 40000}, True),
+        (QOSType['PerClient'], {'max_client_iops': 15000}, True),
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 14000}, True),
         # negative testing
         (QOSType['PerShare_PerClient'], {'max_export_iops': 1000}, False),
         (QOSType['PerShare'], {'max_client_iops': 10000}, False),
         (QOSType['PerShare'], {}, False),
         (QOSType['PerClient'], {'max_export_iops': 2000, 'max_client_iops': 1000}, False),
-        (QOSType['PerShare_PerClient'], {'max_export_iops': 10}, False)
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 9}, False)
         ])
     def test_cluster_qos_ops(self, qos_type, params, positive_tc):
         self._do_mock_test(self._do_test_cluster_qos_ops, qos_type, params, positive_tc)
@@ -1532,13 +1532,13 @@ NFS_CORE_PARAM {
 
     @pytest.mark.parametrize("qos_type, clust_params", [
         (QOSType['PerShare'], {'max_export_iops': 10000}),
-        (QOSType['PerClient'], {'max_client_iops': 20000}),
-        (QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 40000})
+        (QOSType['PerClient'], {'max_client_iops': 2000}),
+        (QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 4000})
         ])
     @pytest.mark.parametrize("export_params", [
         ({'max_export_iops': 10000}),
-        ({'max_client_iops': 20000}),
-        ({'max_export_iops': 3000, 'max_client_iops': 40000})
+        ({'max_client_iops': 2000}),
+        ({'max_export_iops': 3000, 'max_client_iops': 4000})
         ])
     def test_export_qos_ops(self, qos_type, clust_params, export_params):
         self._do_mock_test(self._do_test_export_qos_ops, qos_type, clust_params, export_params)
@@ -1582,10 +1582,10 @@ NFS_CORE_PARAM {
         (QOSType['PerShare'], {'export_writebw': '100MB', 'export_readbw': '200MB'}, 
          QOSType['PerShare'], {'max_export_iops': 10000}, True),
         (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'},
-         QOSType['PerClient'], {'max_client_iops': 20000}, True),
+         QOSType['PerClient'], {'max_client_iops': 2000}, True),
         (QOSType['PerShare_PerClient'],
          {'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'},
-         QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 40000}, True),
+         QOSType['PerShare_PerClient'], {'max_export_iops': 3000, 'max_client_iops': 4000}, True),
         # negative TCs
         (QOSType['PerShare'], {'export_writebw': '100MB', 'export_readbw': '200MB'}, QOSType['PerClient'], {}, False),
         (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'}, QOSType['PerShare'], {}, False),
@@ -1656,14 +1656,14 @@ NFS_CORE_PARAM {
     @pytest.mark.parametrize("qos_type, clust_bw_params, clust_ops_params", [
         # positive TCs
         (QOSType['PerShare'], {'export_writebw': '100MB', 'export_readbw': '200MB'}, {'max_export_iops': 10000}),
-        (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_client_iops': 20000}),
+        (QOSType['PerClient'], {'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_client_iops': 2000}),
         (QOSType['PerShare_PerClient'],
-         {'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_export_iops': 3000, 'max_client_iops': 40000})
+         {'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_export_iops': 3000, 'max_client_iops': 4000})
     ])
     @pytest.mark.parametrize("export_bw_params, export_ops_params", [
         ({'export_writebw': '100MB', 'export_readbw': '200MB'}, {'max_export_iops': 10000}),
-        ({'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_client_iops': 20000}),
-        ({'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_export_iops': 3000, 'max_client_iops': 40000})
+        ({'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_client_iops': 12000}),
+        ({'export_writebw': '100MB', 'export_readbw': '200MB', 'client_writebw': '300MB', 'client_readbw': '400MB'}, {'max_export_iops': 3000, 'max_client_iops': 4000})
         ])
     def test_export_qos_bw_ops(self, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params):
         self._do_mock_test(self._do_test_export_qos_bw_ops, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params)
