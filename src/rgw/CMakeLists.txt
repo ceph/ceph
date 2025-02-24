@@ -500,6 +500,7 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   list(APPEND radosgw_admin_srcs rgw_flight.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_RADOS)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin
   legacy-option-headers
@@ -510,6 +511,7 @@ target_link_libraries(radosgw-admin
   global ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+endif()
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -517,7 +519,9 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   target_link_libraries(radosgw-admin ${ARROW_LIBRARIES} ${ARROW_FLIGHT_LIBRARIES})
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_RADOS)
 install(TARGETS radosgw-admin DESTINATION bin)
+endif()
 
 set(radosgw_es_srcs
   rgw_es_main.cc)
@@ -539,6 +543,7 @@ target_link_libraries(radosgw-token
   global)
 install(TARGETS radosgw-token DESTINATION bin)
 
+if(WITH_RADOSGW_RADOS)
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
@@ -549,6 +554,7 @@ target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   global ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
+endif()
 
 set(radosgw_polparser_srcs
   rgw_polparser.cc)

@@ -118,7 +118,9 @@ int RGWPeriod::update(const DoutPrefixProvider *dpp, optional_yield y)
     }
   }
 
-  ret = period_config.read(dpp, sysobj_svc, realm_id, y);
+  // TODO: rewrite with config store
+//  ret = period_config.read(dpp, sysobj_svc, realm_id, y);
+  ret = -1;
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "ERROR: failed to read period config: "
         << cpp_strerror(ret) << dendl;

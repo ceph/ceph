@@ -219,11 +219,12 @@ int rgw::AppMain::init_storage()
   }
   env.cfgstore = cfgstore.get();
 
-  int r = site.load(dpp, null_yield, cfgstore.get());
+  //TODO: rewrite without site
+  /*int r = site.load(dpp, null_yield, cfgstore.get());
   if (r < 0) {
     return r;
   }
-  env.site = &site;
+  env.site = &site;*/
 
   auto run_gc =
     (g_conf()->rgw_enable_gc_threads &&
@@ -243,10 +244,11 @@ int rgw::AppMain::init_storage()
 
   need_context_pool();
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
-  env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
+  // TODO: rewrite without site
+  /*env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
 	  *context_pool,
-	  site,
+	  site, // site is a rados specific class
           run_gc,
           run_lc,
           run_quota,
@@ -256,7 +258,7 @@ int rgw::AppMain::init_storage()
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
     return -EIO;
-  }
+  }*/
   return 0;
 } /* init_storage */
 

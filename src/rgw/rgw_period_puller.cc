@@ -70,7 +70,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
   // try to read the period from rados
   period.set_id(period_id);
   period.set_epoch(0);
-  int r = period.init(dpp, cct, svc.sysobj, y);
+  int r = period.init(dpp, cct, /*svc.sysobj,*/ y);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
       // can't pull if we're the master

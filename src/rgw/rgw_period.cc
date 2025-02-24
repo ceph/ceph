@@ -12,18 +12,21 @@ std::string period_info_oid_prefix = "periods.";
 #define FIRST_EPOCH 1
 
 int RGWPeriod::init(const DoutPrefixProvider *dpp, 
-                    CephContext *_cct, RGWSI_SysObj *_sysobj_svc,
+                    CephContext *_cct, /*RGWSI_SysObj *_sysobj_svc,*/
 		    optional_yield y, bool setup_obj)
 {
   cct = _cct;
-  sysobj_svc = _sysobj_svc;
+  //TODO: rewrite without svc_obj
+//  sysobj_svc = _sysobj_svc;
 
   if (!setup_obj)
     return 0;
 
   if (id.empty()) {
     RGWRealm realm(realm_id);
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
+    //TODO: rewrite without svc_obj
+//    int ret = realm.init(dpp, cct, sysobj_svc, y);
+    int ret = -1;
     if (ret < 0) {
       ldpp_dout(dpp, 4) << "RGWPeriod::init failed to init realm  id " << realm_id << " : " <<
 	cpp_strerror(-ret) << dendl;
@@ -45,18 +48,21 @@ int RGWPeriod::init(const DoutPrefixProvider *dpp,
   return read_info(dpp, y);
 }
 
-int RGWPeriod::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc,
+int RGWPeriod::init(const DoutPrefixProvider *dpp, CephContext *_cct, /*RGWSI_SysObj *_sysobj_svc,*/
 		    const string& period_realm_id, optional_yield y, bool setup_obj)
 {
   cct = _cct;
-  sysobj_svc = _sysobj_svc;
+  //TODO: rewrite without svc_obj
+//  sysobj_svc = _sysobj_svc;
 
   realm_id = period_realm_id;
 
   if (!setup_obj)
     return 0;
 
-  return init(dpp, _cct, _sysobj_svc, y, setup_obj);
+  //TODO: rewrite without svc_obj
+//  return init(dpp, _cct, _sysobj_svc, y, setup_obj);
+  return -1;
 }
 
 const string& RGWPeriod::get_latest_epoch_oid() const
@@ -127,10 +133,11 @@ int RGWPeriod::set_latest_epoch(const DoutPrefixProvider *dpp,
   using ceph::encode;
   encode(info, bl);
 
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
+//  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
+//  return sysobj.wop()
+//               .set_exclusive(exclusive)
+//               .write(dpp, bl, y);
+  return -1;
 }
 
 int RGWPeriod::read_info(const DoutPrefixProvider *dpp, optional_yield y)
@@ -139,8 +146,10 @@ int RGWPeriod::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 
   bufferlist bl;
 
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_period_oid()});
-  int ret = sysobj.rop().read(dpp, &bl, y);
+  //TODO: rewrite without svc_obj
+//  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_period_oid()});
+//  int ret = sysobj.rop().read(dpp, &bl, y);
+  int ret = -1;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -167,10 +176,12 @@ int RGWPeriod::store_info(const DoutPrefixProvider *dpp, bool exclusive, optiona
   using ceph::encode;
   encode(*this, bl);
 
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
+  //TODO: rewrite without svc_obj
+//  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
+//  return sysobj.wop()
+//               .set_exclusive(exclusive)
+//               .write(dpp, bl, y);
+  return -1;
 }
 
 int RGWPeriod::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
@@ -206,7 +217,8 @@ int RGWPeriod::reflect(const DoutPrefixProvider *dpp, optional_yield y)
 {
   for (auto& iter : period_map.zonegroups) {
     RGWZoneGroup& zg = iter.second;
-    zg.reinit_instance(cct, sysobj_svc);
+    //TODO: rewrite without svc_obj
+//    zg.reinit_instance(cct, sysobj_svc);
     int r = zg.write(dpp, false, y);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to store zonegroup info for zonegroup=" << iter.first << ": " << cpp_strerror(-r) << dendl;
@@ -222,12 +234,13 @@ int RGWPeriod::reflect(const DoutPrefixProvider *dpp, optional_yield y)
     }
   }
 
-  int r = period_config.write(dpp, sysobj_svc, realm_id, y);
+  // TODO: rewrite code with configstore
+  /*int r = period_config.write(dpp, sysobj_svc, realm_id, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store period config: "
         << cpp_strerror(-r) << dendl;
     return r;
-  }
+  }*/
   return 0;
 }
 
@@ -313,8 +326,10 @@ int RGWPeriod::read_latest_epoch(const DoutPrefixProvider *dpp,
 
   rgw_pool pool(get_pool(cct));
   bufferlist bl;
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  int ret = sysobj.rop().read(dpp, &bl, y);
+  //TODO: rewrite without svc_obj
+//  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
+//  int ret = sysobj.rop().read(dpp, &bl, y);
+  int ret = -1;
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;

@@ -32,8 +32,13 @@ class RGWMetadataHandler;
 class RGWSI_User;
 
 // generate a random secret access key of SECRET_KEY_LEN=40
-void rgw_generate_secret_key(CephContext* cct,
-                             std::string& secret_key);
+inline void rgw_generate_secret_key(CephContext* cct,
+                             std::string& secret_key)
+{
+  char secret_key_buf[SECRET_KEY_LEN + 1];
+  gen_rand_alphanumeric_plain(cct, secret_key_buf, sizeof(secret_key_buf));
+  secret_key = secret_key_buf;
+}
 
 // generate a unique random access key id of PUBLIC_ID_LEN=20
 int rgw_generate_access_key(const DoutPrefixProvider* dpp,

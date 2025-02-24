@@ -1505,7 +1505,10 @@ namespace rgw::sal {
   }
 
   const std::string& DBStore::get_compression_type(const rgw_placement_rule& rule) {
-    return zone.get_rgw_params().get_compression_type(rule);
+    // TODO: move RGWZoneParams from rados
+//    return zone.get_rgw_params().get_compression_type(rule);
+      std::string dummy_str = "";
+      return dummy_str;
   }
 
   bool DBStore::valid_placement(const rgw_placement_rule& rule)

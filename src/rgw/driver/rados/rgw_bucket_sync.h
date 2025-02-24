@@ -282,6 +282,7 @@ static inline std::ostream& operator<<(std::ostream& os, const RGWBucketSyncFlow
   return os;
 }
 
+// TODO: move to RGW directory
 class RGWBucketSyncPolicyHandler {
   bool legacy_config{false};
   const RGWBucketSyncPolicyHandler *parent{nullptr};

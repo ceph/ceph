@@ -64,7 +64,8 @@ int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclu
   RGWPeriod period;
   if (current_period.empty()) {
     /* create new period for the realm */
-    ret = period.init(dpp, cct, sysobj_svc, id, y, false);
+    //TODO: without sysobj_svc
+    ret = period.init(dpp, cct, /*sysobj_svc,*/ id, y, false);
     if (ret < 0 ) {
       return ret;
     }
@@ -75,7 +76,8 @@ int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclu
     }
   } else {
     period = RGWPeriod(current_period, 0);
-    int ret = period.init(dpp, cct, sysobj_svc, id, y);
+    //TODO: without sysobj_svc
+    int ret = period.init(dpp, cct, /*sysobj_svc,*/ id, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to init period " << current_period << dendl;
       return ret;
@@ -110,18 +112,22 @@ int RGWRealm::create_control(const DoutPrefixProvider *dpp, bool exclusive, opti
   auto pool = rgw_pool{get_pool(cct)};
   auto oid = get_control_oid();
   bufferlist bl;
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
+  // TODO: remove sysobj_svc
+//  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
+//  return sysobj.wop()
+//               .set_exclusive(exclusive)
+//               .write(dpp, bl, y);
+  return -1;
 }
 
 int RGWRealm::delete_control(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto pool = rgw_pool{get_pool(cct)};
   auto obj = rgw_raw_obj{pool, get_control_oid()};
-  auto sysobj = sysobj_svc->get_obj(obj);
-  return sysobj.wop().remove(dpp, y);
+  //TODO: remove sysobj_svc
+//  auto sysobj = sysobj_svc->get_obj(obj);
+//  return sysobj.wop().remove(dpp, y);
+  return -1;
 }
 
 rgw_pool RGWRealm::get_pool(CephContext *cct) const
@@ -191,8 +197,10 @@ string RGWRealm::get_control_oid() const
 int RGWRealm::notify_zone(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y)
 {
   rgw_pool pool{get_pool(cct)};
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_control_oid()});
-  int ret = sysobj.wn().notify(dpp, bl, 0, nullptr, y);
+  // TODO: remove sysobj
+//  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_control_oid()});
+//  int ret = sysobj.wn().notify(dpp, bl, 0, nullptr, y);
+  int ret = -1;
   if (ret < 0) {
     return ret;
   }
@@ -228,7 +236,8 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   epoch_t epoch = 0;
 
   RGWPeriod period(period_id, epoch);
-  int r = period.init(dpp, cct, sysobj_svc, get_id(), y);
+  //TODO: without sysobj_svc
+  int r = period.init(dpp, cct, /*sysobj_svc,*/ get_id(), y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "WARNING: period init failed: " << cpp_strerror(-r) << " ... skipping" << dendl;
     return r;

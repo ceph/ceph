@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 #include "rgw_rest_ratelimit.h"
+#include "rgw_sal_config.h"
+
 class RGWOp_Ratelimit_Info : public RGWRESTOp {
 int check_caps(const RGWUserCaps& caps) override {
   return caps.check_cap("ratelimit", RGW_CAP_READ);
@@ -99,7 +101,8 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     flusher.flush();
   }
   if (global) {
-    std::string realm_id = driver->get_zone()->get_realm_id();
+    // TODO: change it to configstore
+    /*std::string realm_id = driver->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;
     op_ret = period_config.read(this, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm_id, y);
     if (op_ret && op_ret != -ENOENT) {
@@ -112,7 +115,7 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     encode_json("user_ratelimit", period_config.user_ratelimit, s->formatter);
     encode_json("anonymous_ratelimit", period_config.anon_ratelimit, s->formatter);
     s->formatter->close_section();
-    flusher.flush();
+    flusher.flush();*/
     return;
   }
   op_ret = -EINVAL;
@@ -304,7 +307,16 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
   }
   if (global) {
     std::string realm_id = driver->get_zone()->get_realm_id();
-    RGWPeriodConfig period_config;
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    std::unique_ptr<rgw::sal::ConfigStore> cfgstore = DriverManager::create_config_store(this, config_store_type);
+    if (!cfgstore) {
+      ldpp_dout(this, 0) << "couldn't init config storage provider" << dendl;
+      return;
+    }
+    RGWRealm info;
+    op_ret = cfgstore->read_realm_by_id(s, y, realm_id, info, nullptr);
+    // TODO: complete the code rewriting
+    /*RGWPeriodConfig period_config;
     op_ret = period_config.read(s, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm_id, y);
     if (op_ret && op_ret != -ENOENT) {
       ldpp_dout(this, 0) << "Error on period config read" << dendl;
@@ -336,7 +348,7 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
       period_config.user_ratelimit = ratelimit_info;
       op_ret = period_config.write(s, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm_id, y);
       return;
-    }
+    }*/
   }
   op_ret = -EINVAL;
   return;

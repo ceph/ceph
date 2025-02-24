@@ -317,6 +317,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
+//TODO: move to RGW directory
 struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string api_name;
   std::list<std::string> endpoints;
@@ -484,6 +485,7 @@ struct RGWPeriodMap
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
+//TODO: move from rados
 struct RGWPeriodConfig
 {
   RGWQuota quota;
@@ -516,12 +518,6 @@ struct RGWPeriodConfig
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-
-  // the period config must be stored in a local object outside of the period,
-  // so that it can be used in a default configuration where no realm/period
-  // exists
-  int read(const DoutPrefixProvider *dpp, RGWSI_SysObj *sysobj_svc, const std::string& realm_id, optional_yield y);
-  int write(const DoutPrefixProvider *dpp, RGWSI_SysObj *sysobj_svc, const std::string& realm_id, optional_yield y);
 
   static std::string get_oid(const std::string& realm_id);
   static rgw_pool get_pool(CephContext *cct);
@@ -644,6 +640,7 @@ WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
  * RGWPeriod::predecessor_uuid field, thus creating a "linked
  * list"-like structure of RGWPeriods back to the cluster's creation.
  */
+//TODO: move to RGW directory
 class RGWPeriod
 {
 public:
@@ -660,7 +657,8 @@ public:
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct{nullptr};
-  RGWSI_SysObj *sysobj_svc{nullptr};
+  //TODO: not sure if it is ok to remove
+//  RGWSI_SysObj *sysobj_svc{nullptr};
 
   int read_info(const DoutPrefixProvider *dpp, optional_yield y);
   int read_latest_epoch(const DoutPrefixProvider *dpp,
@@ -764,7 +762,11 @@ public:
 
   int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, optional_yield y,
 	    bool setup_obj = true);
-  int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);  
+  int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);
+
+  int init(const DoutPrefixProvider *dpp, CephContext *_cct, const std::string &period_realm_id, optional_yield y,
+           bool setup_obj = true);
+  int init(const DoutPrefixProvider *dpp, CephContext *_cct, optional_yield y, bool setup_obj = true);
 
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
   int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
