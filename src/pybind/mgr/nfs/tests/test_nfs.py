@@ -186,6 +186,18 @@ QOS_BLOCK {
         "enable_iops_control": False
     }
 
+    qos_cluster_dict_bw_in_bytes = {
+        "enable_bw_control": True,
+        "enable_qos": True,
+        "combined_rw_bw_control": False,
+        "max_client_read_bw": "4000000",
+        "max_client_write_bw": "3000000",
+        "max_export_read_bw": "2000000",
+        "max_export_write_bw": "1000000",
+        "qos_type": "PerShare_PerClient",
+        "enable_iops_control": False
+    }
+
     qos_export_dict = {
         "enable_bw_control": True,
         "enable_qos": True,
@@ -194,6 +206,16 @@ QOS_BLOCK {
         "max_client_write_bw": "3.0MB",
         "max_export_read_bw": "2.0MB",
         "max_export_write_bw": "1.0MB",
+        "enable_iops_control": False
+    }
+    qos_export_dict_bw_in_bytes = {
+        "enable_bw_control": True,
+        "enable_qos": True,
+        "combined_rw_bw_control": False,
+        "max_client_read_bw": "4000000",
+        "max_client_write_bw": "3000000",
+        "max_export_read_bw": "2000000",
+        "max_export_write_bw": "1000000",
         "enable_iops_control": False
     }
 
@@ -1354,16 +1376,17 @@ NFS_CORE_PARAM {
         assert qos.bw_obj.client_writebw == 3000000
         assert qos.bw_obj.client_readbw == 4000000
 
-    @pytest.mark.parametrize("qos_block, qos_dict", [
-        (qos_cluster_block, qos_cluster_dict),
-        (qos_export_block, qos_export_dict)
+    @pytest.mark.parametrize("qos_block, qos_dict, qos_dict_bw_in_bytes", [
+        (qos_cluster_block, qos_cluster_dict, qos_cluster_dict_bw_in_bytes),
+        (qos_export_block, qos_export_dict, qos_export_dict_bw_in_bytes)
         ])
-    def test_qos_from_block(self, qos_block, qos_dict):
+    def test_qos_from_block(self, qos_block, qos_dict, qos_dict_bw_in_bytes):
         blocks = GaneshaConfParser(qos_block).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
         qos = QOS.from_qos_block(blocks[0], True)
         assert qos.to_dict() == qos_dict
+        assert qos.to_dict(ret_bw_in_bytes=True) == qos_dict_bw_in_bytes
 
     def _do_test_cluster_qos_bw(self, qos_type, combined_bw_ctrl, params, positive_tc):
         nfs_mod = Module('nfs', '', '')
