@@ -96,7 +96,7 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
     if (ret < 0 && ret != -ENODATA) {
       CLS_LOG(4, "ERROR: %s: cls_cxx_getxattr() for key=%s ret=%d",
 	      __func__, key.c_str(), ret);
-      return -1;
+      return ret;
     } else {
       // ENODATA will generate an empty value bl
       cmp_values[key] = bl;
@@ -126,7 +126,15 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
     if (ret <= 0) {
       // unsuccessful comparison
       CLS_LOG(10, "%s:: failed compare key=%s ret=%d", __func__, key.c_str(), ret);
-      return -1;
+      if (ret < 0) {
+	return ret;
+      }
+      else {
+	// ret value of 0 is understood as false here for compare failure
+	// TBD: return a better error code to be able to distinguish from a
+	//      generic failure
+	return -1;
+      }
     }
 
     // successful comparison
