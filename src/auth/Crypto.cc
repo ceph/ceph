@@ -149,6 +149,7 @@ int CryptoRandom::open_urandom()
 // interface.
 
 std::size_t CryptoKeyHandler::encrypt(
+  CephContext *cct,
   const CryptoKeyHandler::in_slice_t& in,
   const CryptoKeyHandler::out_slice_t& out) const
 {
@@ -158,7 +159,7 @@ std::size_t CryptoKeyHandler::encrypt(
 
   ceph::bufferlist ciphertext;
   std::string error;
-  const int ret = encrypt(plaintext, ciphertext, &error);
+  const int ret = encrypt(cct, plaintext, ciphertext, &error);
   if (ret != 0 || !error.empty()) {
     throw std::runtime_error(std::move(error));
   }
@@ -173,6 +174,7 @@ std::size_t CryptoKeyHandler::encrypt(
 }
 
 std::size_t CryptoKeyHandler::decrypt(
+  CephContext *cct,
   const CryptoKeyHandler::in_slice_t& in,
   const CryptoKeyHandler::out_slice_t& out) const
 {
@@ -182,7 +184,7 @@ std::size_t CryptoKeyHandler::decrypt(
 
   ceph::bufferlist plaintext;
   std::string error;
-  const int ret = decrypt(ciphertext, plaintext, &error);
+  const int ret = decrypt(cct, ciphertext, plaintext, &error);
   if (ret != 0 || !error.empty()) {
     throw std::runtime_error(std::move(error));
   }
@@ -221,12 +223,12 @@ public:
   using CryptoKeyHandler::encrypt;
   using CryptoKeyHandler::decrypt;
 
-  int encrypt(const bufferlist& in,
+  int encrypt(CephContext *cct, const bufferlist& in,
 	       bufferlist& out, std::string *error) const override {
     out = in;
     return 0;
   }
-  int decrypt(const bufferlist& in,
+  int decrypt(CephContext *cct, const bufferlist& in,
 	      bufferlist& out, std::string *error) const override {
     out = in;
     return 0;
@@ -302,7 +304,7 @@ public:
     return 0;
   }
 
-  int encrypt(const ceph::bufferlist& in,
+  int encrypt(CephContext *cct, const ceph::bufferlist& in,
 	      ceph::bufferlist& out,
               std::string* /* unused */) const override {
     // we need to take into account the PKCS#7 padding. There *always* will
@@ -344,7 +346,7 @@ public:
     return 0;
   }
 
-  int decrypt(const ceph::bufferlist& in,
+  int decrypt(CephContext *cct, const ceph::bufferlist& in,
 	      ceph::bufferlist& out,
 	      std::string* /* unused */) const override {
     // PKCS#7 padding enlarges even empty plain-text to take 16 bytes.
@@ -376,7 +378,7 @@ public:
     return 0;
   }
 
-  std::size_t encrypt(const in_slice_t& in,
+  std::size_t encrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) const override {
     if (out.buf == nullptr) {
       // 16 + p2align(10, 16) -> 16
@@ -417,7 +419,7 @@ public:
     return main_encrypt_size + tail_encrypt_size;
   }
 
-  std::size_t decrypt(const in_slice_t& in,
+  std::size_t decrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) const override {
     if (in.length % AES_BLOCK_LEN != 0 || in.length < AES_BLOCK_LEN) {
       throw std::runtime_error("input not aligned to AES_BLOCK_LEN");
