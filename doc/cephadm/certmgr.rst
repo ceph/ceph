@@ -46,8 +46,8 @@ and applies renewal policies based on the certificate type and configured
 parameters. Cephadm provides several configuration options to manage certificate
 lifecycle and renewal:
 
-- **`mgr/cephadm/certificate_automated_rotation_enabled`** (default: `False`):
-  Disabled by default, this configuration option controls
+- **`mgr/cephadm/certificate_automated_rotation_enabled`** (default: `True`):
+  Enabled by default, this configuration option controls
   whether Cephadm automatically rotates certificates upon expiration. This helps
   ensure continuity and security without manual intervention. When disabled cephadm will
   still check periodically the certificates but instead of automatically renewing self-signed
@@ -58,7 +58,7 @@ lifecycle and renewal:
   and signed by the Cephadm root CA. This determines the validity period before
   renewal is required.
 
-- **`certificate_renewal_threshold_days`** (default: `30`, min: `10`, max:
+- **`mgr/cephadm/certificate_renewal_threshold_days`** (default: `30`, min: `10`, max:
   `90`): Defines the number of days before a certificate's expiration when
   Cephadm should initiate renewal. This ensures timely replacement before
   expiration occurs. This applies to both self-signed and user-provided
@@ -66,6 +66,10 @@ lifecycle and renewal:
   health error or warning alerting administrators about the upcoming renewal
   period proximity.
 
+- **`mgr/cephadm/certificate_check_period`** (default: `1`, min: `0`, max: `30`):
+  Specifies how often (in days) the certificate should be checked for validity.
+  This ensures timely detection of any issues related to certificate expiration.
+  Setting this to `0` disables the certificate check functionality.
 
 Certificate Health Monitoring
 =============================
@@ -201,11 +205,14 @@ To associate a certificate with a private key:
 
 .. prompt:: bash #
 
-   ceph orch certmgr cert-key set <entity> [--cert <value>] [--key <value>] [--service_name <value>] [--hostname <value>] [--force]
+   ceph orch certmgr cert-key set <entity> [--cert <value>] [--key <value>] [--service_name <value>] [--hostname <value>] [-i <cert-key-path>] [--force]
 
-Use this command to upload or replace an existing certificate/key pair for a
-certain service. Replace `<entiy-name>` with the actual certificate name from
-`ceph orch certmgr entity ls`.
+Use this command to upload or replace an existing certificate/key pair
+for a certain service. Replace `<entity-name>` with the actual
+certificate name from `ceph orch certmgr entity ls`. The -i option
+can be used to specify a file containing a combined certificate and
+key in PEM format. This file should include both the certificate and
+private key concatenated together.
 
 Setting a Certificate
 =====================

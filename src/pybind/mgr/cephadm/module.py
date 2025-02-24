@@ -413,7 +413,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'certificate_automated_rotation_enabled',
             type='bool',
-            default=False,
+            default=True,
             desc='This flag controls whether cephadm automatically rotates certificates upon expiration.',
         ),
         Option(
@@ -421,8 +421,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             type='int',
             default=1,  # Default to checking certificates once per day
             desc='Specifies how often (in days) the certificate should be checked for validity.',
-            min=1,
-            max=3,  # must be lesr than min of certificate_renewal_threshold_days
+            min=0,  # 0 will disable the certificate checking
+            max=30,  # must be less than the min of certificate_renewal_threshold_days.
         ),
         Option(
             'certificate_duration_days',
