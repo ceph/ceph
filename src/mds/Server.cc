@@ -5056,10 +5056,13 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // remote link?
     // better for the MDS to do the work, if we think the client will stat any of these files.
-    if (dnl->is_remote() && !in) {
+    if ((dnl->is_remote() || dnl->is_referent_remote()) && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
       if (in) {
-	dn->link_remote(dnl, in);
+        if (dnl->is_remote())
+          dn->link_remote(dnl, in);
+        else if (dnl->is_referent_remote())
+	  dn->link_remote(dnl, in, dnl->get_referent_inode());
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
