@@ -7897,6 +7897,12 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     auto req = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->op_stamp = mdr->get_op_stamp();
+    if (mds->mdsmap->allow_referent_inodes()) {
+      if (inc && newi)
+        req->referent_ino = newi->ino();
+    } else {
+      req->referent_ino = inodeno_t(0);
+    }
 
     if (auto& desti_srnode = mdr->more()->desti_srnode)
       encode(*desti_srnode, req->desti_snapbl);
@@ -8072,6 +8078,7 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   bool inc;
   bool adjust_realm = false;
   bool realm_projected = false;
+  inodeno_t referent_ino = mdr->peer_request->referent_ino;
   if (mdr->peer_request->get_op() == MMDSPeerRequest::OP_LINKPREP) {
     inc = true;
     pi.inode->nlink++;
@@ -8084,6 +8091,12 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
       targeti->record_snaprealm_parent_dentry(newsnap, target_realm, target_pdn, true);
       adjust_realm = true;
       realm_projected = true;
+    }
+    // Reverse link referent inode to the primary inode (targeti)
+    if (referent_ino > 0) {
+      pi.inode->add_referent_ino(referent_ino);
+      dout(20) << __func__ <<  " referent_inodes " << std::hex << pi.inode->get_referent_inodes()
+               << " referent ino added " << referent_ino << dendl;
     }
   } else {
     inc = false;
