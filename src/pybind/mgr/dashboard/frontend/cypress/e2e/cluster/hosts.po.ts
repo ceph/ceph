@@ -65,7 +65,7 @@ export class HostsPageHelper extends PageHelper {
   }
 
   remove(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname, 'hosts', true, false, true);
+    super.delete(hostname, this.columnIndex.hostname, 'hosts', true, false, true, true);
   }
 
   // Add or remove labels on a host, then verify labels in the table
