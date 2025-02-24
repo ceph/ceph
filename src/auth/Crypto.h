@@ -70,16 +70,20 @@ public:
 
   virtual ~CryptoKeyHandler() {}
 
-  virtual int encrypt(const ceph::buffer::list& in,
+  virtual int encrypt(CephContext *cct,
+                      const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const = 0;
-  virtual int decrypt(const ceph::buffer::list& in,
+  virtual int decrypt(CephContext *cct,
+                      const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const = 0;
 
   // TODO: provide nullptr in the out::buf to get/estimate size requirements?
   // Or maybe dedicated methods?
-  virtual std::size_t encrypt(const in_slice_t& in,
+  virtual std::size_t encrypt(CephContext *cct,
+                              const in_slice_t& in,
 			      const out_slice_t& out) const;
-  virtual std::size_t decrypt(const in_slice_t& in,
+  virtual std::size_t decrypt(CephContext *cct,
+                              const in_slice_t& in,
 			      const out_slice_t& out) const;
 
   sha256_digest_t hmac_sha256(const ceph::bufferlist& in) const;
@@ -160,27 +164,27 @@ public:
 	      ceph::buffer::list& out,
 	      std::string *error) const {
     ceph_assert(ckh); // Bad key?
-    return ckh->encrypt(in, out, error);
+    return ckh->encrypt(cct, in, out, error);
   }
   int decrypt(CephContext *cct, const ceph::buffer::list& in,
 	      ceph::buffer::list& out,
 	      std::string *error) const {
     ceph_assert(ckh); // Bad key?
-    return ckh->decrypt(in, out, error);
+    return ckh->decrypt(cct, in, out, error);
   }
 
   using in_slice_t = CryptoKeyHandler::in_slice_t;
   using out_slice_t = CryptoKeyHandler::out_slice_t;
 
-  std::size_t encrypt(CephContext*, const in_slice_t& in,
+  std::size_t encrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) {
     ceph_assert(ckh);
-    return ckh->encrypt(in, out);
+    return ckh->encrypt(cct, in, out);
   }
-  std::size_t decrypt(CephContext*, const in_slice_t& in,
+  std::size_t decrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) {
     ceph_assert(ckh);
-    return ckh->encrypt(in, out);
+    return ckh->encrypt(cct, in, out);
   }
 
   sha256_digest_t hmac_sha256(CephContext*, const ceph::buffer::list& in) {
