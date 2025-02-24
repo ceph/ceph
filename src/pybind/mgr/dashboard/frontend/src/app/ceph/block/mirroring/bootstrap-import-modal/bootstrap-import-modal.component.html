@@ -1,0 +1,109 @@
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Import Bootstrap Token</h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <form name="importBootstrapForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="importBootstrapForm"
+          novalidate>
+      <p>
+        <ng-container i18n>To import a bootstrap token which was created
+        by a peer site cluster, provide the local site's name, select
+        which pools will have mirroring enabled, provide the generated
+        token, and click&nbsp;<kbd>Import</kbd>.</ng-container>
+      </p>
+
+      <div class="form-item">
+        <cds-text-label for="siteName"
+                        i18n
+                        cdRequiredField="Site Name"
+                        [invalid]="!importBootstrapForm.controls['siteName'].valid && importBootstrapForm.controls['siteName'].dirty"
+                        [invalidText]="siteNameError"
+                        i18n-invalidText>Site Name
+          <input cdsText
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 [invalid]="!importBootstrapForm.controls['siteName'].valid && importBootstrapForm.controls['siteName'].dirty"
+                 autofocus>
+        </cds-text-label>
+        <ng-template #siteNameError>
+          <span *ngIf="importBootstrapForm.showError('siteName', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <div class="form-item">
+        <cds-select label="Direction"
+                    for="direction"
+                    name="direction"
+                    id="direction"
+                    formControlName="direction">
+          <option *ngFor="let direction of directions"
+                  [value]="direction.key">{{ direction.desc }}</option>
+        </cds-select>
+      </div>
+
+      <div class="form-item"
+           formGroupName="pools">
+        <fieldset>
+          <label class="cds--label"
+                 for="pools"
+                 i18n>Pools</label>
+          <ng-container *ngFor="let pool of pools">
+            <cds-checkbox i18n-label
+                          [id]="pool.name"
+                          [name]="pool.name"
+                          [formControlName]="pool.name">
+              {{ pool.name }}
+            </cds-checkbox>
+          </ng-container>
+        </fieldset>
+        <span *ngIf="importBootstrapForm.showError('pools', formDir, 'requirePool')"
+              class="invalid-feedback"
+              i18n>At least one pool is required.</span>
+      </div>
+
+      <div class="form-item">
+        <cds-textarea-label for="token"
+                            [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty)"
+                            [invalidText]="tokenError"
+                            cdRequiredField="Token"
+                            i18n>Token
+          <textarea cdsTextArea
+                    placeholder="Generated token..."
+                    i18n-placeholder
+                    id="token"
+                    formControlName="token"
+                    cols="200"
+                    rows="5"
+                    [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty)">
+          </textarea>
+        </cds-textarea-label>
+        <ng-template #tokenError>
+          <span *ngIf="importBootstrapForm.showError('token', formDir, 'required')"
+                class="invalid-feedback"
+                i18n>This field is required.</span>
+          <span *ngIf="importBootstrapForm.showError('token', formDir, 'invalidToken')"
+                class="invalid-feedback"
+                i18n>The token is invalid.</span>
+        </ng-template>
+      </div>
+    </form>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="import()"
+                        [form]="importBootstrapForm"
+                        [submitText]="actionLabels.SUBMIT"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

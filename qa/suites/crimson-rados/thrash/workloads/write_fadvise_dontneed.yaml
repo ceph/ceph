@@ -1,0 +1,8 @@
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
+    write_fadvise_dontneed: true
+    op_weights:
+      write: 100

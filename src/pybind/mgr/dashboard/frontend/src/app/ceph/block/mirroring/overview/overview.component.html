@@ -1,0 +1,86 @@
+<form name="rbdmirroringForm"
+      #formDir="ngForm"
+      [formGroup]="rbdmirroringForm"
+      novalidate>
+  <div class="form-item">
+    <div cdsCol
+         [columnNumbers]="{md: 4}"
+         class="d-flex">
+      <cds-text-label for="siteName"
+                      i18n>Site Name
+        <div class="cds-input-group">
+          <input type="text"
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 [attr.disabled]="!editing ? true : null"
+                 cdsText>
+          <cds-icon-button kind="ghost"
+                           size="md"
+                           (click)="updateSiteName()"
+                           [title]="editing ? 'Save' : 'Edit'">
+            <svg cdsIcon="edit"
+                 size="32"
+                 class="cds--btn__icon"
+                 *ngIf="!editing"></svg>
+            <svg cdsIcon="checkmark"
+                 size="32"
+                 class="cds--btn__icon"
+                 *ngIf="editing"></svg>
+          </cds-icon-button>
+          <cd-copy-2-clipboard-button [source]="siteName"
+                                      [byId]="false">
+          </cd-copy-2-clipboard-button>
+        </div>
+      </cds-text-label>
+    </div>
+    <div cdsCol="{md:5}">
+      <div class="d-flex flex-row-reverse gap-3">
+        <ng-container *ngFor="let action of tableActions">
+          <button type="button"
+                  [cdsButton]="action.buttonKind"
+                  [title]="action.name"
+                  (click)="action.click($event)"
+                  [disabled]="action.disable()"
+                  [attr.aria-label]="action.name"
+                  [attr.data-testid]="action.name"
+                  [preserveFragment]="action.preserveFragment ? '' : null">
+            <span i18n>{{ action.name }}</span>
+            <svg class="cds--btn__icon"
+                 [cdsIcon]="action.icon"
+                 size="16"></svg>
+          </button>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="row">
+  <div class="col-sm-6">
+    <legend i18n>Daemons</legend>
+    <div>
+      <cd-mirroring-daemons>
+      </cd-mirroring-daemons>
+    </div>
+  </div>
+
+  <div class="col-sm-6">
+    <legend i18n>Pools</legend>
+
+    <div>
+      <cd-mirroring-pools>
+      </cd-mirroring-pools>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-12">
+    <legend i18n>Images</legend>
+    <div>
+      <cd-mirroring-images>
+      </cd-mirroring-images>
+    </div>
+  </div>
+</div>
