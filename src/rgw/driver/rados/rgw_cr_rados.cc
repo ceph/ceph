@@ -112,7 +112,7 @@ int RGWAsyncGetSystemObj::_send_request(const DoutPrefixProvider *dpp)
 
   auto sysobj = svc_sysobj->get_obj(obj);
   return sysobj.rop()
-               .set_objv_tracker(&objv_tracker)
+               .set_objv_tracker(objv_tracker)
                .set_attrs(pattrs)
 	       .set_raw_attrs(raw_attrs)
                .read(dpp, &bl, null_yield);
@@ -122,11 +122,8 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(const DoutPrefixProvider *_dpp, RGWCo
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        bool want_attrs, bool raw_attrs)
   : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), svc_sysobj(_svc),
-    obj(_obj), want_attrs(want_attrs), raw_attrs(raw_attrs)
+    obj(_obj), want_attrs(want_attrs), raw_attrs(raw_attrs), objv_tracker(_objv_tracker)
 {
-  if (_objv_tracker) {
-    objv_tracker = *_objv_tracker;
-  }
 }
 
 int RGWSimpleRadosReadAttrsCR::send_request(const DoutPrefixProvider *dpp)
@@ -170,7 +167,7 @@ int RGWAsyncPutSystemObj::_send_request(const DoutPrefixProvider *dpp)
 {
   auto sysobj = svc->get_obj(obj);
   return sysobj.wop()
-               .set_objv_tracker(&objv_tracker)
+               .set_objv_tracker(objv_tracker)
                .set_exclusive(exclusive)
                .write_data(dpp, bl, null_yield);
 }
@@ -182,18 +179,15 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(const DoutPrefixProvider *_dpp,
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                      bool _exclusive, bufferlist _bl)
   : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), svc(_svc),
-    obj(_obj), exclusive(_exclusive), bl(std::move(_bl))
+    obj(_obj), exclusive(_exclusive), bl(std::move(_bl)), objv_tracker(_objv_tracker)
 {
-  if (_objv_tracker) {
-    objv_tracker = *_objv_tracker;
-  }
 }
 
 int RGWAsyncPutSystemObjAttrs::_send_request(const DoutPrefixProvider *dpp)
 {
   auto sysobj = svc->get_obj(obj);
   return sysobj.wop()
-               .set_objv_tracker(&objv_tracker)
+               .set_objv_tracker(objv_tracker)
                .set_exclusive(exclusive)
                .set_attrs(attrs)
                .write_attrs(dpp, null_yield);
@@ -204,11 +198,8 @@ RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(const DoutPrefixProvider *_
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                      map<string, bufferlist> _attrs, bool exclusive)
   : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), svc(_svc),
-    obj(_obj), attrs(std::move(_attrs)), exclusive(exclusive)
+    obj(_obj), attrs(std::move(_attrs)), exclusive(exclusive), objv_tracker(_objv_tracker)
 {
-  if (_objv_tracker) {
-    objv_tracker = *_objv_tracker;
-  }
 }
 
 

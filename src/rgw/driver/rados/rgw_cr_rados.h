@@ -332,7 +332,7 @@ public:
 
   bufferlist bl;
   std::map<std::string, bufferlist> attrs;
-  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker *objv_tracker;
 };
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
@@ -350,7 +350,7 @@ public:
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        bool _exclusive, bufferlist _bl);
 
-  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker *objv_tracker;
 };
 
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
@@ -367,7 +367,7 @@ public:
 			    RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
 			    std::map<std::string, bufferlist> _attrs, bool exclusive);
 
-  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker *objv_tracker;
 };
 
 class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
