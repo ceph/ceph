@@ -7442,7 +7442,7 @@ void Server::handle_client_link(const MDRequestRef& mdr)
   if (targeti->is_auth()) 
     _link_local(mdr, destdn, targeti, target_realm);
   else 
-    _link_remote(mdr, true, destdn, targeti);
+    _link_remote(mdr, true, destdn, targeti, nullptr);
   mds->balancer->maybe_fragment(dir, false);  
 }
 
@@ -7581,24 +7581,26 @@ class C_MDS_link_remote_finish : public ServerLogContext {
   CDentry *dn;
   CInode *targeti;
   CInode *referenti;
+  CDentry *straydn;
   version_t dpv;
 public:
-  C_MDS_link_remote_finish(Server *s, const MDRequestRef& r, bool i, CDentry *d, CInode *ti, CInode *ri) :
-    ServerLogContext(s, r), inc(i), dn(d), targeti(ti), referenti(ri),
+  C_MDS_link_remote_finish(Server *s, const MDRequestRef& r, bool i, CDentry *d, CInode *ti, CInode *ri, CDentry *sd) :
+    ServerLogContext(s, r), inc(i), dn(d), targeti(ti), referenti(ri), straydn(sd),
     dpv(d->get_projected_version()) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_link_remote_finish(mdr, inc, dn, targeti, referenti, dpv);
+    server->_link_remote_finish(mdr, inc, dn, targeti, referenti, straydn, dpv);
   }
 };
 
-void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti)
+void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti, CDentry *straydn)
 {
   dout(10) << "_link_remote " 
 	   << (inc ? "link ":"unlink ")
 	   << *dn << " to " << *targeti << dendl;
 
   CInode *newi = nullptr;
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
   // create referent inode. Don't re-create on retry
   if (mds->mdsmap->allow_referent_inodes() && inc) {
@@ -7689,20 +7691,49 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
       dn->push_projected_linkage(targeti->ino(), targeti->d_type());
     }
   } else {
-    dn->pre_dirty();
-    mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
-    mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
-    le->metablob.add_null_dentry(dn, true);
-    dn->push_projected_linkage();
+    if (dnl->is_referent_remote()) {
+      ceph_assert(straydn);
+      CInode *ref_in = dnl->get_referent_inode();
+      ceph_assert(ref_in->is_auth());
+
+      straydn->push_projected_linkage(ref_in);
+      dn->pre_dirty(); // the unlinked dentry
+
+      // referent remote link - to purge the referent inode created
+      auto pri = ref_in->project_inode(mdr);
+      {
+        std::string t;
+        dn->make_path_string(t, true);
+        pri.inode->stray_prior_path = std::move(t);
+      }
+      pri.inode->version = ref_in->pre_dirty();
+      // Purge enqueue requires inode to be primary and nlink to be 0
+      pri.inode->nlink = 0;
+      ref_in->state_set(CInode::STATE_ORPHAN);
+      mdcache->predirty_journal_parents(mdr, &le->metablob, ref_in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+      pri.inode->update_backtrace();
+      le->metablob.add_primary_dentry(straydn, ref_in, true, true);
+
+      mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
+      mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
+      le->metablob.add_null_dentry(dn, true);
+      dn->push_projected_linkage();
+    } else {
+      dn->pre_dirty();
+      mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
+      mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
+      le->metablob.add_null_dentry(dn, true);
+      dn->push_projected_linkage();
+    }
   }
 
   journal_and_reply(mdr, (inc ? targeti : nullptr), dn, le,
-		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti, newi));
+		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti, newi, straydn));
 }
 
 void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
 				 CDentry *dn, CInode *targeti, CInode *referenti,
-				 version_t dpv)
+				 CDentry *straydn, version_t dpv)
 {
   dout(10) << "_link_remote_finish "
 	   << (inc ? "link ":"unlink ")
@@ -7730,6 +7761,13 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
     dn->get_dir()->unlink_inode(dn);
     dn->pop_projected_linkage();
     dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
+
+    // relink as stray?
+    if (straydn) {
+      dout(20) << __func__ << " referent - straydn is " << *straydn << dendl;
+      straydn->pop_projected_linkage();
+      mdcache->touch_dentry_bottom(straydn);
+    }
   }
 
   mdr->apply();
@@ -7750,6 +7788,12 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
   if (!inc)
     // removing a new dn?
     dn->get_dir()->try_remove_unlinked_dn(dn);
+
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
+    // Tip off the MDCache that this dentry is a stray that
+    // might be elegible for purge.
+    mdcache->notify_stray(straydn);
+  }
 }
 
 
@@ -8264,8 +8308,8 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
     mds->locker->create_lock_cache(mdr, diri);
 
   // ok!
-  if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
-    _link_remote(mdr, false, dn, dnl->get_inode());
+  if ((dnl->is_remote() || dnl->is_referent_remote()) && !dnl->get_inode()->is_auth())
+    _link_remote(mdr, false, dn, dnl->get_inode(), straydn);
   else
     _unlink_local(mdr, dn, straydn);
 }
