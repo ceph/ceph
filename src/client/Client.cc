@@ -11338,7 +11338,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
     if (cct->_conf->client_oc && zerocopy) {
       // we don't support zerocopy with Objectcacher enabled
-      return -CEPHFS_EINVAL;
+      return -EINVAL;
     }
 
 #if defined(__linux__) && defined(O_PATH)

@@ -2033,7 +2033,7 @@ struct ceph_ll_readv_writev_buffer {
     if (iovmax != 0 && iovcnt > iovmax) {
       // TODO: refine the interface to accomodate for the buffer count exceeding
       //       the desired maximum iovec length.
-      return -CEPHFS_EINVAL;
+      return -EINVAL;
     }
     iov = new struct iovec [iovcnt];
     auto pb = std::cbegin(bl.buffers());
@@ -2133,8 +2133,8 @@ extern "C" int64_t ceph_ll_readv_writev(class ceph_mount_info *cmount,
 {
   ceph_ll_readv_writev_buffer *buf = new ceph_ll_readv_writev_buffer;
 
-  if (!io_info->write && io_info->zerocopy) {
-    return -CEPHFS_EINVAL;
+  if (!io_info->write && io_info->zerocopy && io_info->iovcnt != 1) {
+    return -EINVAL;
   }
 
   io_info->result = (cmount->get_client()->ll_preadv_pwritev(
