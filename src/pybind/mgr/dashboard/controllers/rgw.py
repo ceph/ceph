@@ -10,6 +10,7 @@ import cherrypy
 
 from .. import mgr
 from ..exceptions import DashboardException
+from ..model.rgw import KmipConfig, KmsProviders, VaultConfig
 from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
@@ -421,18 +422,8 @@ class RgwBucket(RgwRESTController):
                                              mfa_token_serial, mfa_token_pin)
 
     def _set_encryption(self, bid, encryption_type, key_id, daemon_name, owner):
-
         rgw_client = RgwClient.instance(owner, daemon_name)
         rgw_client.set_bucket_encryption(bid, key_id, encryption_type)
-
-    # pylint: disable=W0613
-    def _set_encryption_config(self, encryption_type, kms_provider, auth_method, secret_engine,
-                               secret_path, namespace, address, token, daemon_name, owner,
-                               ssl_cert, client_cert, client_key):
-
-        CephService.set_encryption_config(encryption_type, kms_provider, auth_method,
-                                          secret_engine, secret_path, namespace, address,
-                                          token, daemon_name, ssl_cert, client_cert, client_key)
 
     def _get_encryption(self, bucket_name, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
@@ -692,15 +683,27 @@ class RgwBucket(RgwRESTController):
             raise DashboardException(e, component='rgw')
 
     @RESTController.Collection(method='PUT', path='/setEncryptionConfig')
-    @allow_empty_body
-    def set_encryption_config(self, encryption_type=None, kms_provider=None, auth_method=None,
-                              secret_engine=None, secret_path='', namespace='', address=None,
-                              token=None, daemon_name=None, owner=None, ssl_cert=None,
-                              client_cert=None, client_key=None):
-        return self._set_encryption_config(encryption_type, kms_provider, auth_method,
-                                           secret_engine, secret_path, namespace,
-                                           address, token, daemon_name, owner, ssl_cert,
-                                           client_cert, client_key)
+    def set_encryption_config(self, encryption_type: Optional[str] = None,
+                              kms_provider: Optional[str] = None,
+                              config: Optional[Union[VaultConfig, KmipConfig]] = None,
+                              daemon_name: Optional[str] = None):
+        if encryption_type is None or daemon_name is None:
+            raise ValueError("Both 'encryption_type' and 'daemon_name' must be provided.")
+
+        if kms_provider == KmsProviders.VAULT.value:
+            config = config if config else VaultConfig(
+                addr="", auth="", prefix="", secret_engine=""
+            )
+        elif kms_provider == KmsProviders.KMIP.value:
+            config = config if config else KmipConfig(
+                addr=""
+            )
+        else:
+            raise ValueError("Invalid KMS provider specified.")
+
+        return CephService.set_encryption_config(
+            encryption_type, kms_provider, config, daemon_name
+        )
 
     @RESTController.Collection(method='GET', path='/getEncryption')
     @allow_empty_body
@@ -714,6 +717,7 @@ class RgwBucket(RgwRESTController):
 
     @RESTController.Collection(method='GET', path='/getEncryptionConfig')
     @allow_empty_body
+    # pylint: disable=W0613
     def get_encryption_config(self, daemon_name=None, owner=None):
         return CephService.get_encryption_config(daemon_name)
 

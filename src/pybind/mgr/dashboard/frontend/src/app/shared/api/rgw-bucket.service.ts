@@ -10,6 +10,7 @@ import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
+import { KmipConfig, VaultConfig } from '../models/rgw-encryption-config-keys';
 
 @cdEncode
 @Injectable({
@@ -222,36 +223,12 @@ export class RgwBucketService extends ApiClient {
     return bucketData['lock_retention_period_days'] || 0;
   }
 
-  setEncryptionConfig(
-    encryption_type: string,
-    kms_provider: string,
-    auth_method: string,
-    secret_engine: string,
-    secret_path: string,
-    namespace: string,
-    address: string,
-    token: string,
-    owner: string,
-    ssl_cert: string,
-    client_cert: string,
-    client_key: string
-  ) {
+  setEncryptionConfig(config: VaultConfig | KmipConfig) {
+    const reqBody = {
+      ...config
+    };
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        encryption_type: encryption_type,
-        kms_provider: kms_provider,
-        auth_method: auth_method,
-        secret_engine: secret_engine,
-        secret_path: secret_path,
-        namespace: namespace,
-        address: address,
-        token: token,
-        owner: owner,
-        ssl_cert: ssl_cert,
-        client_cert: client_cert,
-        client_key: client_key
-      });
-      return this.http.put(`${this.url}/setEncryptionConfig`, null, { params: params });
+      return this.http.put(`${this.url}/setEncryptionConfig`, reqBody, { params: params });
     });
   }
 
