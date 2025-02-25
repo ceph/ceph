@@ -1596,8 +1596,13 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     ceph::real_time mtime;
 
     buffer::list bl;
-    bl.append("copy_etag", 9);
-    rgw::sal::Attrs attrs{{RGW_ATTR_ETAG, std::move(bl)}};
+    {
+      bl.append("test_value", 10);
+      rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
+      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    }
+    bl.append("copy_value", 10);
+    rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
     
     std::string tag;
     
@@ -1679,12 +1684,12 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     getline(testFile, testData);
     EXPECT_EQ(testData, "test data");
 
-    // Ensure etag is not modified
+    // Ensure attr is not modified
     rgw_obj copyObj = destObj->get_obj();
     ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
-    buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-    EXPECT_EQ(etag.to_str(), "test_etag");  
+    buffer::list val = copyAttrs["user.rgw.test_attr"];
+    EXPECT_EQ(val.to_str(), "test_value");  
 
     testFile.close();
     conn->cancel();
@@ -1712,8 +1717,13 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     ceph::real_time mtime;
 
     buffer::list bl;
-    bl.append("copy_etag", 9);
-    rgw::sal::Attrs attrs{{RGW_ATTR_ETAG, std::move(bl)}};
+    {
+      bl.append("test_value", 10);
+      rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
+      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    }
+    bl.append("copy_value", 10);
+    rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
     
     std::string tag;
 
@@ -1795,12 +1805,12 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     getline(testFile, testData);
     EXPECT_EQ(testData, "test data");
 
-    // Ensure etag is merged 
+    // Ensure attr is merged 
     rgw_obj copyObj = destObj->get_obj();
     ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
-    buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-    EXPECT_EQ(etag.to_str(), "copy_etag");  
+    buffer::list val = copyAttrs["user.rgw.test_attr"];
+    EXPECT_EQ(val.to_str(), "copy_value");  
 
     testFile.close();
     conn->cancel();
@@ -1828,8 +1838,13 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     ceph::real_time mtime;
 
     buffer::list bl;
-    bl.append("copy_etag", 9);
-    rgw::sal::Attrs attrs{{RGW_ATTR_ETAG, std::move(bl)}};
+    {
+      bl.append("test_value", 10);
+      rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
+      obj->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    }
+    bl.append("copy_value", 10);
+    rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
     
     std::string tag;
     
@@ -1911,12 +1926,12 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     getline(testFile, testData);
     EXPECT_EQ(testData, "test data");
     
-    // Ensure etag is replaced
+    // Ensure attr is replaced
     rgw_obj copyObj = destObj->get_obj();
     ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
-    buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-    EXPECT_EQ(etag.to_str(), "copy_etag");  
+    buffer::list val = copyAttrs["user.rgw.test_attr"];
+    EXPECT_EQ(val.to_str(), "copy_value");  
 
     testFile.close();
     conn->cancel();
@@ -2331,8 +2346,13 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
     ceph::real_time mtime;
 
     buffer::list bl;
-    bl.append("copy_etag", 9);
-    rgw::sal::Attrs attrs{{RGW_ATTR_ETAG, std::move(bl)}};
+    {
+      bl.append("test_value", 10);
+      rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
+      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    }
+    bl.append("copy_value", 10);
+    rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
     
     std::string tag;
     
@@ -2410,12 +2430,12 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       std::string oid = instance + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
-      // Ensure etag is replaced
+      // Ensure attr is not modified
       rgw_obj copyObj = destObjEnabled->get_obj();
       ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
-      buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-      EXPECT_EQ(etag.to_str(), "test_etag");  
+      buffer::list val = copyAttrs["user.rgw.test_attr"];
+      EXPECT_EQ(val.to_str(), "test_value");  
 
       testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid);
       ASSERT_EQ(testFile.is_open(), true);
@@ -2426,6 +2446,9 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
     }
 
     put_version_suspended_object(testName, yield);
+    bl.append("test_value", 10);
+    rgw::sal::Attrs testAttrs{{"user.rgw.test_attr", std::move(bl)}};
+    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
 
     {
       std::string destNameSuspended = "dest_object_suspended";
@@ -2502,12 +2525,12 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       std::string oid = version + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
-      // Ensure etag is replaced
+      // Ensure attr is not modified
       rgw_obj copyObj = destObjSuspended->get_obj();
       ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
-      buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-      EXPECT_EQ(etag.to_str(), "test_etag");  
+      buffer::list val = copyAttrs["user.rgw.test_attr"];
+      EXPECT_EQ(val.to_str(), "test_value");  
 
       testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid);
       ASSERT_EQ(testFile.is_open(), true);
@@ -2543,8 +2566,13 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
     ceph::real_time mtime;
 
     buffer::list bl;
-    bl.append("copy_etag", 9);
-    rgw::sal::Attrs attrs{{RGW_ATTR_ETAG, std::move(bl)}};
+    {
+      bl.append("test_value", 10);
+      rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
+      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    }
+    bl.append("copy_value", 10);
+    rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
     
     std::string tag;
     
@@ -2622,12 +2650,12 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       std::string oid = instance + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
-      // Ensure etag is replaced
+      // Ensure attr is merged
       rgw_obj copyObj = destObjEnabled->get_obj();
       ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
-      buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-      EXPECT_EQ(etag.to_str(), "copy_etag");  
+      buffer::list val = copyAttrs["user.rgw.test_attr"];
+      EXPECT_EQ(val.to_str(), "copy_value");  
 
       testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid);
       ASSERT_EQ(testFile.is_open(), true);
@@ -2638,6 +2666,9 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
     }
 
     put_version_suspended_object(testName, yield);
+    bl.append("test_value", 10);
+    rgw::sal::Attrs testAttrs{{"user.rgw.test_attr", std::move(bl)}};
+    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
 
     {
       std::string destNameSuspended = "dest_object_suspended";
@@ -2714,12 +2745,12 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       std::string oid = version + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
-      // Ensure etag is replaced
+      // Ensure attr is merged  
       rgw_obj copyObj = destObjSuspended->get_obj();
       ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
-      buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-      EXPECT_EQ(etag.to_str(), "copy_etag");  
+      buffer::list val = copyAttrs["user.rgw.test_attr"];
+      EXPECT_EQ(val.to_str(), "copy_value");  
 
       testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid);
       ASSERT_EQ(testFile.is_open(), true);
@@ -2755,8 +2786,13 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
     ceph::real_time mtime;
 
     buffer::list bl;
-    bl.append("copy_etag", 9);
-    rgw::sal::Attrs attrs{{RGW_ATTR_ETAG, std::move(bl)}};
+    {
+      bl.append("test_value", 10);
+      rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
+      objEnabled->set_obj_attrs(env->dpp, &attrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
+    }
+    bl.append("copy_value", 10);
+    rgw::sal::Attrs attrs{{"user.rgw.test_attr", std::move(bl)}};
     
     std::string tag;
     
@@ -2834,12 +2870,12 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       std::string oid = instance + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
-      // Ensure etag is replaced
+      // Ensure attr is replaced
       rgw_obj copyObj = destObjEnabled->get_obj();
       ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
-      buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-      EXPECT_EQ(etag.to_str(), "copy_etag");  
+      buffer::list val = copyAttrs["user.rgw.test_attr"];
+      EXPECT_EQ(val.to_str(), "copy_value");  
 
       testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid);
       ASSERT_EQ(testFile.is_open(), true);
@@ -2850,6 +2886,9 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
     }
 
     put_version_suspended_object(testName, yield);
+    bl.append("test_value", 10);
+    rgw::sal::Attrs testAttrs{{"user.rgw.test_attr", std::move(bl)}};
+    objSuspended->set_obj_attrs(env->dpp, &testAttrs, nullptr, optional_yield{yield}, rgw::sal::FLAG_LOG_OP);
 
     {
       std::string destNameSuspended = "dest_object_suspended";
@@ -2926,12 +2965,12 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       std::string oid = version + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
-      // Ensure etag is replaced
+      // Ensure attr is replaced
       rgw_obj copyObj = destObjSuspended->get_obj();
       ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
-      buffer::list etag = copyAttrs[RGW_ATTR_ETAG];
-      EXPECT_EQ(etag.to_str(), "copy_etag");  
+      buffer::list val = copyAttrs["user.rgw.test_attr"];
+      EXPECT_EQ(val.to_str(), "copy_value");  
 
       testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid);
       ASSERT_EQ(testFile.is_open(), true);
