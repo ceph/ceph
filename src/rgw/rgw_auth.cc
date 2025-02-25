@@ -886,12 +886,10 @@ void rgw::auth::ImplicitTenants::recompute_value(const ConfigProxy& c)
   saved = v;
 }
 
-const char **rgw::auth::ImplicitTenants::get_tracked_conf_keys() const
+std::vector<std::string> rgw::auth::ImplicitTenants::get_tracked_keys()
+    const noexcept
 {
-  static const char *keys[] = {
-    "rgw_keystone_implicit_tenants",
-  nullptr };
-  return keys;
+  return {"rgw_keystone_implicit_tenants"s};
 }
 
 void rgw::auth::ImplicitTenants::handle_conf_change(const ConfigProxy& c,
