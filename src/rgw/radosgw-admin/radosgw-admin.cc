@@ -145,13 +145,12 @@ void usage()
   cout << "  user policy list attached        list attached managed policies\n";
   cout << "  caps add                         add user capabilities\n";
   cout << "  caps rm                          remove user capabilities\n";
-
   cout << "  dedup stats                      Collcet & display dedup statistics\n";
   cout << "  dedup abort                      Abort dedup\n";
+  cout << "  dedup restart dry                Restart dedup (dry run)\n";
   cout << "  dedup restart                    Restart dedup\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
-
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";

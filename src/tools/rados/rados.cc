@@ -55,8 +55,7 @@
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/hobject.h"
-#include "common/ceph_crypto.h"
-#include "rgw/rgw_dedup_epoch.h"
+
 #include "PoolDump.h"
 #include "RadosImport.h"
 
@@ -2759,15 +2758,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     else
       ret = 0;
-#if 0
-    if (attr_name == "refcount") {
-      cout << "\nattribute_name=" << attr_name << std::endl;
+
+    if (attr_name == "refcount")  {
       obj_refcount oref;
       auto p = bl.cbegin();
       decode(oref, p);
       for (auto itr = oref.refs.begin(); itr != oref.refs.end(); itr++) {
 	if (!itr->first.empty()) {
-	  cout << "::" << itr->first << "::" << std::endl;
+	  cout << itr->first << "::" << itr->second << std::endl;
 	}
 	else {
 	  cout << "wildcard reference::" << itr->second << std::endl;
@@ -2780,41 +2778,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	}
       }
     }
-    else if (attr_name == "user.rgw.shared_manifest")  {
-      cout << "\nattribute_name=" << attr_name << std::endl;
-      sha_digest_t<crypto::SHA1::digest_size> sha1;
-      try {
-	auto p = bl.cbegin();
-	decode(sha1, p);
-	cout << sha1.to_str() << std::endl;
-      }
-      catch (const buffer::error&) {
-	cout << "failed sha1 decode!" << std::endl;
-	return -1;
-      }
+    else {
+      string s(bl.c_str(), bl.length());
+      cout << s;
     }
-    else if (attr_name == rgw::dedup::RGW_DEDUP_ATTR_EPOCH)  {
-      cout << "\nattribute_name=" << attr_name << std::endl;
-      struct rgw::dedup::dedup_epoch_t epoch;
-      try {
-	auto p = bl.cbegin();
-	decode(epoch, p);
-	cout << epoch << std::endl;
-      }
-      catch (const buffer::error&) {
-	cout << "failed dedup_epoch_t decode!" << std::endl;
-	return -1;
-      }
-    }
-    return;
-#endif
-    string s(bl.c_str(), bl.length());
-    cout << s;
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
     if (!pool_name || nargs.size() < (obj_name ? 2 : 3)) {
       usage(cerr);
       return 1;
     }
+
     string attr_name(nargs[obj_name ? 1 : 2]);
     if (!obj_name) {
       obj_name = nargs[1];
