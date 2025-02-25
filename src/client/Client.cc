@@ -8183,7 +8183,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MODE) {
-    ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
+    ldout(cct,10) << "changing mode to " << std::oct << stx->stx_mode << dendl;
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
       in->ctime = ceph_clock_now();
