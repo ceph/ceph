@@ -1110,7 +1110,7 @@ class RgwClient(RestClient):
             params['push-endpoint'] = push_endpoint
         if OpaqueData:
             params['OpaqueData'] = OpaqueData
-        if persistent is not None:
+        if persistent:
             params['persistent'] = 'true' if persistent else 'false'
         if time_to_live:
             params['time_to_live'] = time_to_live
@@ -1120,9 +1120,9 @@ class RgwClient(RestClient):
             params['retry_sleep_duration'] = retry_sleep_duration
         if policy:
             params['Policy'] = policy
-        if verify_ssl is not None:
+        if verify_ssl:
             params['verify_ssl'] = 'true' if verify_ssl else 'false'
-        if cloud_events is not None:
+        if cloud_events:
             params['cloud_events'] = 'true' if cloud_events else 'false'
         if ca_location:
             params['ca_location'] = ca_location
@@ -1130,7 +1130,7 @@ class RgwClient(RestClient):
             params['amqp_exchange'] = amqp_exchange
         if amqp_ack_level:
             params['amqp_ack_level'] = amqp_ack_level
-        if use_ssl is not None:
+        if use_ssl:
             params['use_ssl'] = 'true' if use_ssl else 'false'
         if kafka_ack_level:
             params['kafka_ack_level'] = kafka_ack_level

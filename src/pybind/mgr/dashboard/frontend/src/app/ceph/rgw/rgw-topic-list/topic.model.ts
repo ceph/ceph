@@ -25,6 +25,7 @@ export interface ApiResponse {
 }
 
 export const ENDPOINTTYPE = {
+  Select: 'Select Endpoint Type',
   HTTP: 'HTTP',
   AMQP: 'AMQP',
   Kafka: 'KAFKA'

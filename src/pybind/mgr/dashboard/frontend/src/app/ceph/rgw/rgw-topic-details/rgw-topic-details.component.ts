@@ -11,7 +11,7 @@ export class RgwTopicDetailsComponent implements OnChanges {
   selection: TopicDetailModel;
   tenant: string;
   topicname: string;
-  policy: {};
+  policy?: {};
   constructor() {}
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['selection'] && this.selection) {

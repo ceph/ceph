@@ -74,12 +74,21 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       }
     ];
+    const getBucketUri = () =>
+      this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
+      name: this.actionLabels.EDIT
     };
 
     const deleteAction: CdTableAction = {
@@ -90,7 +99,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
       name: this.actionLabels.DELETE,
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
-    this.tableActions = [addAction, , deleteAction];
+    this.tableActions = [addAction, editAction, deleteAction];
     this.setTableRefreshTimeout();
   }
 

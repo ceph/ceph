@@ -1,4 +1,5 @@
   <div cdsCol
+       *cdFormLoading="loading"
        [columnNumbers]="{ md: 6 }">
   <form name="topicForm"
         #formDir="ngForm"
@@ -37,7 +38,9 @@
           *ngIf="owners !== null"
           value="null">-- Select a user --</option>
   <option *ngFor="let data of owners"
-          i18n>{{ data }}</option>
+          i18n
+          [value]="data"
+          >{{ data }}</option>
   </cds-select>
   <ng-template #ownerError>
     <span class="invalid-feedback"
@@ -746,7 +749,7 @@
   </ng-template>
   <ng-template #endpoint>
   <span>
-  Specify the endpoint URL for receiving push notifications.
+    Specify the endpoint URL for receiving push notifications.
   </span>
   </ng-template>
   </div>

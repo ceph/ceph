@@ -8,14 +8,14 @@ export interface CreateTopicModel {
   max_retries?: string;
   retry_sleep_duration?: string;
   policy: {} | string;
-  verify_ssl: boolean;
-  cloud_events: string;
+  verify_ssl?: boolean;
+  cloud_events?: string;
   ca_location: string;
-  amqp_exchange: string;
-  amqp_ack_level: string;
+  amqp_exchange?: string;
+  amqp_ack_level?: string;
   use_ssl?: boolean;
-  kafka_ack_level: string;
-  kafka_brokers: string;
+  kafka_ack_level?: string;
+  kafka_brokers?: string;
   mechanism?: string;
 }
 

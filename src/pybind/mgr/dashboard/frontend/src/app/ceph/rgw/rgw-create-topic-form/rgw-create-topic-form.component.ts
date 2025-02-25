@@ -6,15 +6,20 @@ import {
   OnInit,
   ViewChild
 } from '@angular/core';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { AMQPACKLEVEL, ENDPOINTTYPE, KAFKAACKLEVEL } from '../rgw-topic-list/topic.model';
+import {
+  AMQPACKLEVEL,
+  ENDPOINTTYPE,
+  KAFKAACKLEVEL,
+  TopicModel
+} from '../rgw-topic-list/topic.model';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CreateTopicModel, KAFKAMECHANISM } from './create-topic.model';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
@@ -49,16 +54,24 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   passwordhelperText: string;
   selectOwner: string;
   kafka_mechanism: string[] = [];
+  editing: boolean = false;
+  topicId: string;
+  fqdn: string;
+  topicArn: string;
   constructor(
     public actionLabels: ActionLabelsI18n,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
     private readonly changeDetectorRef: ChangeDetectorRef,
-    private rgwTopicService: RgwTopicService,
+    public rgwTopicService: RgwTopicService,
     private rgwUserService: RgwUserService,
-    private notificationService: NotificationService,
-    private router: Router
+    public notificationService: NotificationService,
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     super();
+    this.editing = this.router.url.startsWith(`/rgw/topic/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.resource = $localize`topic`;
   }
 
   ngAfterViewChecked(): void {
@@ -67,27 +80,51 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   }
 
   ngOnInit(): void {
-    const promises = {
-      owners: this.rgwUserService.enumerate()
-    };
-    this.action = this.actionLabels.CREATE;
-    this.resource = $localize`topic`;
-    this.createForm();
     this.endpointType = Object.values(ENDPOINTTYPE);
     this.amqp_ack_level = Object.values(AMQPACKLEVEL);
     this.kafka_ack_level = Object.values(KAFKAACKLEVEL);
-    forkJoin(promises).subscribe((data: any) => {
-      this.owners = (<string[]>data.owners).sort();
-    });
+    this.createForm();
+    this.topicId = this.editing ? this.router.url.split('/').pop() : '';
     this.passwordhelperText = 'Defalut password is guest';
     this.topicForm.get('user')?.valueChanges.subscribe(() => this.setMechanism());
     this.topicForm.get('password')?.valueChanges.subscribe(() => this.setMechanism());
     this.kafka_mechanism = Object.values(KAFKAMECHANISM);
+    const promises = {
+      owners: this.rgwUserService.enumerate()
+    };
+    forkJoin(promises).subscribe((data: any) => {
+      this.owners = (<string[]>data.owners).sort();
+      this.loadingReady();
+    });
+    if (this.editing) {
+      this.topicId = this.route.snapshot.paramMap.get('name');
+      this.loadTopicData(this.topicId);
+    } else {
+      this.loadingReady();
+    }
     this.setMechanism(); //
+  }
+  loadTopicData(_topicId: string) {
+    this.rgwTopicService.get(_topicId).subscribe((topic: TopicModel) => {
+      this.topicForm.get('name')?.disable();
+      let url = topic.dest.push_endpoint;
+      let endpointType = url.split('://')[0].toUpperCase();
+      if (endpointType === 'amqp' || 'amqps') {
+        endpointType = 'AMQP';
+      } else if (endpointType === 'https' || 'http') {
+        endpointType = 'HTTP';
+      } else {
+        endpointType = 'KAFKA';
+      }
+      this.selectedOption = endpointType;
+      this.extractValues(topic);
+      this.loadingReady();
+    });
   }
 
   createForm() {
     this.topicForm = new CdFormGroup({
+      owner: new UntypedFormControl('', { validators: [Validators.required] }),
       name: new UntypedFormControl(
         '',
         [Validators.required],
@@ -118,8 +155,7 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
       kafka_ack_level: new UntypedFormControl(),
       kafka_brokers: new UntypedFormControl(),
       mechanism: new UntypedFormControl(),
-      fqdn: new UntypedFormControl('', { validators: [Validators.required] }),
-      owner: new UntypedFormControl('', { validators: [Validators.required] })
+      fqdn: new UntypedFormControl('', { validators: [Validators.required] })
     });
   }
 
@@ -193,6 +229,7 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
     }
     mechanismControl?.setValue(defaultMechanism);
   }
+
   generatePushEndpoint(secureSsl?: boolean) {
     if (!this.selectedOption) {
       return;
@@ -238,16 +275,15 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
           generatedEndpoint = `kafka://${userKafka}:${passwordKafka}@${fqdnKafka}:${portKafka}`;
         } else if (kafkaBrokers) {
           generatedEndpoint = `kafka://${kafkaBrokers}`;
-        } else if (fqdnKafka && portKafka) {
+        } else {
           generatedEndpoint = `kafka://${fqdnKafka}:${portKafka}`;
         }
+
         break;
 
       default:
         break;
     }
-
-    // If a valid endpoint is generated, update the form's push_endpoint field
     if (generatedEndpoint) {
       this.topicForm.patchValue({ push_endpoint: generatedEndpoint });
     }
@@ -255,54 +291,138 @@ export class RgwCreateTopicFormComponent extends CdForm implements OnInit, After
   getTopicPolicy() {
     return this.topicForm.getValue('policy') || '{}';
   }
-  submitAction() {
-    const topicPolicy = this.getTopicPolicy();
-
-    let notificationTitle: string = '';
-    if (this.topicForm.invalid) {
-      return;
+  extractValues(topic: TopicModel) {
+    let url = topic.dest.push_endpoint;
+    let pushendpointUrl = this.convertFullUrlToObject(url);
+    if (pushendpointUrl.protocol === 'amqp:' || pushendpointUrl.protocol === 'amqps:') {
+      this.selectedOption = 'AMQP';
+    } else if (pushendpointUrl.protocol === 'https:' || pushendpointUrl.protocol === 'http:') {
+      this.selectedOption = 'HTTP';
+    } else {
+      this.selectedOption = 'KAFKA';
     }
-    const formvalue = this.topicForm.getRawValue();
+    this.topicForm.patchValue({ endpointType: this.selectedOption });
+    let pushendpointArg = topic.dest.push_endpoint_args;
+    const pushendpointAddarg = this.extractAdditionalValues(pushendpointArg);
 
-    const payload = {
-      name: formvalue.name,
-      owner: formvalue.owner,
-      daemon_name: '8000',
-      push_endpoint: formvalue.push_endpoint,
-      OpaqueData: formvalue.OpaqueData,
-      persistent: formvalue.persistent,
-      time_to_live: formvalue.time_to_live,
-      max_retries: formvalue.max_retries,
-      retry_sleep_duration: formvalue.retry_sleep_duration,
+    this.topicForm.patchValue({
+      name: topic.name,
+      owner: topic.owner,
+      push_endpoint: topic.dest.push_endpoint,
+      OpaqueData: topic.opaqueData,
+      persistent: topic.dest.persistent,
+      max_retries: topic.dest.max_retries,
+      time_to_live: topic.dest.time_to_live,
+      retry_sleep_duration: topic.dest.retry_sleep_duration,
+      policy: topic.policy,
+      port: pushendpointUrl.port,
+      fqdn: pushendpointUrl.hostname,
+      vhost: pushendpointUrl.pathname,
+      user: pushendpointUrl.username,
+      password: pushendpointUrl.password,
+      ca_location: pushendpointAddarg.ca_location,
+      mechanism: pushendpointAddarg.mechanism,
+      enable_ssl: pushendpointUrl.protocol === 'https:' ? true : false,
+      verify_ssl: pushendpointAddarg.verify_ssl,
+      cloud_events: pushendpointAddarg.cloud_events,
+      amqp_exchange: pushendpointAddarg.amqp_exchange,
+      amqp_ack_level: pushendpointAddarg.amqp_ack_level,
+      use_ssl: pushendpointAddarg.use_ssl,
+      kafka_ack_level: pushendpointAddarg.kafka_ack_level,
+      kafka_brokers: pushendpointAddarg.kafka_b
+    });
+  }
+
+  convertFullUrlToObject(url: string): any {
+    const urlObj = new URL(url);
+    let port = urlObj.port;
+    if (!port) {
+      port = urlObj.protocol === 'https:' ? '443' : urlObj.protocol === 'http:' ? '80' : '';
+    }
+    return {
+      protocol: urlObj.protocol, // e.g., 'https:'
+      hostname: urlObj.hostname, // e.g., 'example.com'
+      pathname: urlObj.pathname, // e.g., '/path/to/resource'
+      hash: urlObj.hash, // e.g., '#section1'
+      port: port, // e.g., '443' for HTTPS or '80' for HTTP
+      username: urlObj.username, // e.g., 'user'
+      password: urlObj.password // e.g., 'password'
+    };
+  }
+
+  extractAdditionalValues(str: string): { [key: string]: string } {
+    let obj: { [key: string]: string } = {};
+    let pairs = str.split('&');
+    pairs.forEach((pair) => {
+      let [key, value] = pair.split('=');
+      if (key && value) {
+        obj[key] = value;
+      }
+    });
+    return obj;
+  }
+
+  submitAction() {
+    if (this.topicForm.invalid || this.topicForm.pending) {
+      return this.topicForm.setErrors({ cdSubmitButton: true });
+    }
+
+    const formValue = this.topicForm.getRawValue(),
+      topicType = formValue.endpointType,
+      topicPolicy = this.getTopicPolicy();
+    let payload: CreateTopicModel = {
+      name: formValue.name,
+      owner: formValue.owner,
+      push_endpoint: formValue.push_endpoint,
+      OpaqueData: formValue.OpaqueData,
+      persistent: formValue.persistent,
+      time_to_live: formValue.time_to_live,
+      max_retries: formValue.max_retries,
+      retry_sleep_duration: formValue.retry_sleep_duration,
       policy: topicPolicy,
-      verify_ssl: formvalue.verify_ssl,
-      cloud_events: formvalue.cloud_events,
-      ca_location: formvalue.ca_location,
-      amqp_exchange: formvalue.amqp_exchange,
-      amqp_ack_level: formvalue.amqp_ack_level,
-      use_ssl: formvalue.use_ssl,
-      kafka_ack_level: formvalue.kafka_ack_level,
-      kafka_brokers: formvalue.kafka_brokers,
-      mechanism: formvalue.mechanism
+      ca_location: formValue.ca_location,
+      mechanism: formValue.mechanism
     };
 
-    notificationTitle = $localize`Topic created successfully`;
-    this.rgwTopicService.create(payload).subscribe({
-      next: (topic: CreateTopicModel) => {
-        this.topicForm.get('name').setValue(topic.name);
+    if (topicType === 'KAFKA') {
+      Object.assign(payload, {
+        use_ssl: formValue.use_ssl,
+        kafka_ack_level: formValue.kafka_ack_level,
+        kafka_brokers: formValue.kafka_brokers
+      });
+    } else if (topicType === 'AMQP') {
+      Object.assign(payload, {
+        verify_ssl: formValue.verify_ssl,
+        amqp_exchange: formValue.amqp_exchange,
+        amqp_ack_level: formValue.amqp_ack_level
+      });
+    } else if (topicType === 'HTTP') {
+      Object.assign(payload, {
+        verify_ssl: formValue.verify_ssl,
+        cloud_events: formValue.cloud_events
+      });
+    }
+
+    const notificationTitle = $localize`${
+      this.editing ? 'Topic updated successfully' : 'Topic created successfully'
+    }`;
+    const action = this.editing
+      ? this.rgwTopicService.create(payload)
+      : this.rgwTopicService.create(payload);
+
+    action.subscribe({
+      next: () => {
         this.notificationService.show(NotificationType.success, notificationTitle);
         this.goToListView();
       },
-      error: () => {
-        // Reset the 'Submit' button.
-        this.topicForm.setErrors({ cdSubmitButton: true });
-      }
+      error: () => this.topicForm.setErrors({ cdSubmitButton: true })
     });
   }
 
   goToListView() {
     this.router.navigate([`rgw/topic`]);
   }
+
   // Reset form values while maintaining the endpoint type
   reset() {
     this.topicForm.patchValue({ enable_ssl: true });
