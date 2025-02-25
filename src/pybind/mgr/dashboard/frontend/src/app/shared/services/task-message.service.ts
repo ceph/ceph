@@ -517,6 +517,9 @@ export class TaskMessageService {
     'smb/share/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.smbShare(metadata)
     ),
+    'smb/share/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.smbCluster(metadata)
+    ),
     'smb/share/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.smbShare(metadata)
     ),
