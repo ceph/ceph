@@ -15907,6 +15907,99 @@ paths:
       summary: Remove an smb share
       tags:
       - SMB
+    get:
+      description: "\n        Get an smb share by cluster and share id\n        "
+      parameters:
+      - description: Unique identifier for the cluster
+        in: path
+        name: cluster_id
+        required: true
+        schema:
+          type: string
+      - description: Unique identifier for the share
+        in: path
+        name: share_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  browseable:
+                    description: Indicates if the share is browseable
+                    type: boolean
+                  cephfs:
+                    description: Configuration for the CephFS share
+                    properties:
+                      path:
+                        description: Path within the CephFS file system
+                        type: string
+                      provider:
+                        description: Provider of the CephFS share, e.g., 'samba-vfs'
+                        type: string
+                      subvolume:
+                        description: Subvolume within the CephFS file system
+                        type: string
+                      subvolumegroup:
+                        description: Subvolume Group in CephFS file system
+                        type: string
+                      volume:
+                        description: Name of the CephFS file system
+                        type: string
+                    required:
+                    - volume
+                    - path
+                    - provider
+                    - subvolumegroup
+                    - subvolume
+                    type: object
+                  cluster_id:
+                    description: Unique identifier for the cluster
+                    type: string
+                  intent:
+                    description: Desired state of the resource, e.g., 'present' or
+                      'removed'
+                    type: string
+                  name:
+                    description: Name of the share
+                    type: string
+                  readonly:
+                    description: Indicates if the share is read-only
+                    type: boolean
+                  resource_type:
+                    description: ceph.smb.share
+                    type: string
+                  share_id:
+                    description: Unique identifier for the share
+                    type: string
+                required:
+                - resource_type
+                - cluster_id
+                - share_id
+                - intent
+                - name
+                - readonly
+                - browseable
+                - cephfs
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get an smb share
+      tags:
+      - SMB
   /api/smb/usersgroups:
     get:
       description: "\n        List all smb usersgroups resources\n\n        :return:\

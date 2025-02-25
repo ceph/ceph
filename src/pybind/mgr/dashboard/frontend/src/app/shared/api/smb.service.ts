@@ -56,6 +56,10 @@ export class SmbService {
     return this.http.post(`${this.baseURL}/share`, requestModel);
   }
 
+  getShare(cluster_id: string, share_id: string) {
+    return this.http.get(`${this.baseURL}/share/${cluster_id}/${share_id}`);
+  }
+
   deleteShare(clusterId: string, shareId: string): Observable<HttpResponse<null>> {
     return this.http.delete<null>(`${this.baseURL}/share/${clusterId}/${shareId}`, {
       observe: 'response'
