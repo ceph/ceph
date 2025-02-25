@@ -8335,6 +8335,13 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   if (pi.inode->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
 
+  // Remove referent inode from primary link
+  if (dnl->is_referent_remote()) {
+    pi.inode->remove_referent_ino(ref_in->ino());
+    dout(20) << __func__ << " referent_inodes " << std::hex << pi.inode->get_referent_inodes()
+             << " referent ino removed " << ref_in->ino() << dendl;
+  }
+
   if (mdr->more()->desti_srnode) {
     auto& desti_srnode = mdr->more()->desti_srnode;
     in->project_snaprealm(desti_srnode);
