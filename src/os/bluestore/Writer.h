@@ -70,7 +70,8 @@ public:
   volatile_statfs statfs_delta;
   uint32_t left_shard_bound;  // if sharding is in effect,
   uint32_t right_shard_bound; // do not cross this line
-
+  uint32_t left_affected_range;
+  uint32_t right_affected_range;
 private:
   BlueStore* bstore;
   TransContext* txc;
