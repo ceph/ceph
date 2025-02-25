@@ -801,6 +801,13 @@ void GroupReplayer<I>::handle_shut_down(int r) {
     m_state = STATE_STOPPED;
   }
 
+  if (r == -ENOENT) { // group removed
+    if (!m_resync_requested) {
+      set_finished(true);
+    }
+    unregister_admin_socket_hook();
+  }
+
   if (on_start != nullptr) {
     dout(10) << "on start finish complete, r=" << r << dendl;
     on_start->complete(r);
@@ -875,6 +882,8 @@ template <typename I>
 void GroupReplayer<I>::set_mirror_group_status_update(
     cls::rbd::MirrorGroupStatusState state, const std::string &desc) {
   dout(20) << "state=" << state << ", description=" << desc << dendl;
+
+  reregister_admin_socket_hook();
 
   cls::rbd::MirrorGroupSiteStatus local_status;
   local_status.state = state;
