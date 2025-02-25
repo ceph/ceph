@@ -1633,7 +1633,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         svc_name: str) -> Dict[str,
                                                Dict[str, Dict[str, Union[str, int]]]]:
         """
-        Called by the plugin to fetch perf counter schema info.
+        Called by the plugin to fetch unlabeled perf counter schema info.
         svc_name can be nullptr, as can svc_type, in which case
         they are wildcards
 
@@ -1642,6 +1642,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: list of dicts describing the counters requested
         """
         return self._ceph_get_unlabeled_perf_schema(svc_type, svc_name)
+    
+    @API.expose
+    def get_perf_schema(self,
+                        svc_type: str,
+                        svc_name: str) -> Dict[str,
+                                               Dict[str, Dict[str, Union[str, int]]]]:
+        """
+        Called by the plugin to fetch perf counter schema info.
+        svc_name can be nullptr, as can svc_type, in which case
+        they are wildcards
+
+        :param str svc_type:
+        :param str svc_name:
+        :return: list of dicts describing the counters requested
+        """
+        return self._ceph_get_perf_schema(svc_type, svc_name)
 
     def get_rocksdb_version(self) -> str:
         """

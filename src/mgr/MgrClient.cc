@@ -372,6 +372,7 @@ void MgrClient::_send_report()
         ldout(cct, 20) << " declare " << path << dendl;
         PerfCounterType type;
         type.path = path;
+        type.counter_name = data.name;
         if (data.description) {
           type.description = data.description;
         }
