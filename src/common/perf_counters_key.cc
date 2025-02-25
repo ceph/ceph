@@ -72,6 +72,11 @@ bool label_key_equal(const label_pair& lhs, const label_pair& rhs)
 {
   return lhs.first == rhs.first;
 }
+// remove empty pairs
+bool label_pair_remove(const label_pair& lhs)
+{
+  return (lhs.first.empty() && lhs.second.empty());
+}
 
 std::string create(std::string_view counter_name,
                    label_pair* begin, label_pair* end)
@@ -79,6 +84,8 @@ std::string create(std::string_view counter_name,
   // sort the input labels and remove duplicate keys
   std::sort(begin, end, label_key_less);
   end = std::unique(begin, end, label_key_equal);
+  // remove any empty labels
+  end = std::remove_if(begin, end, label_pair_remove);
 
   // calculate the total size and preallocate the buffer
   auto size = std::accumulate(begin, end,
@@ -103,6 +110,8 @@ std::string insert(const char* begin1, const char* end1,
   // sort the input labels and remove duplicate keys
   std::sort(begin2, end2, label_key_less);
   end2 = std::unique(begin2, end2, label_key_equal);
+  // remove any empty labels
+  end2 = std::remove_if(begin2, end2, label_pair_remove);
 
   // find the first delimiter that marks the end of the counter name
   auto pos = std::find(begin1, end1, DELIMITER);

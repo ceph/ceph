@@ -668,6 +668,43 @@ get_latest_unlabeled_counter(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+get_latest_counter(BaseMgrModule *self, PyObject *args)
+{
+  char *svc_name = nullptr;
+  char *svc_id = nullptr;
+  char *counter_name = nullptr;
+  char *sub_counter_name = nullptr;
+  PyObject *labels_list = nullptr; //labels = [("level", "deep"), ("pooltype", "ec")]
+  if (!PyArg_ParseTuple(args, "ssssO:get_latest_counter", &svc_name,
+                                                  &svc_id, &counter_name, &sub_counter_name,
+                                                  &labels_list)) {
+    return nullptr;
+  }
+
+  if (!PyList_Check(labels_list)) {
+    derr << __func__ << " labels_list not a list" << dendl;
+    Py_RETURN_FALSE;
+  }
+
+  std::vector<std::pair<std::string_view, std::string_view>> labels;
+  for (int i = 0; i < PyList_Size(labels_list); ++i) {
+    // Get the tuple element of labels list ("level", "deep")
+    PyObject *label_key_value = PyList_GET_ITEM(labels_list, i);
+
+    char *label_key = nullptr;
+    char *label_value = nullptr;
+    if (!PyArg_ParseTuple(label_key_value, "ss:label_pair", &label_key, &label_value)) {
+      derr << __func__ << " list item " << i << " not a size 2 tuple" << dendl;
+      continue;
+    }
+    labels.push_back(std::make_pair(label_key, label_value));
+  }
+
+  return self->py_modules->get_latest_counter_python(
+      svc_name, svc_id, counter_name, sub_counter_name, labels);
+}
+
+static PyObject*
 get_unlabeled_perf_schema(BaseMgrModule *self, PyObject *args)
 {
   char *type_str = nullptr;
@@ -1498,7 +1535,10 @@ PyMethodDef BaseMgrModule_methods[] = {
     "Get a performance counter"},
 
   {"_ceph_get_latest_unlabeled_counter", (PyCFunction)get_latest_unlabeled_counter, METH_VARARGS,
-    "Get the latest performance counter"},
+    "Get the latest value for unlabeled performance counter"},
+  
+  {"_ceph_get_latest_counter", (PyCFunction)get_latest_counter, METH_VARARGS,
+    "Get the latest value for performance counter"},
 
   {"_ceph_get_unlabeled_perf_schema", (PyCFunction)get_unlabeled_perf_schema, METH_VARARGS,
     "Get the performance counter schema which only includes the unlabeled counters"},
