@@ -115,7 +115,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     return -EIO;
   }
   bufferlist out_bl, in_bl, temp_in_bl;
-  bl.begin(bl_ofs).copy(bl_len, temp_in_bl);
+  bl.begin().copy(bl_len, temp_in_bl);
   bl_ofs = 0;
   int r = 0;
   if (waiting.length() != 0) {

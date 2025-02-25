@@ -5828,7 +5828,7 @@ public:
     }
     uint64_t read_len = bl_len;
     bufferlist copy;
-    bl.begin(bl_ofs).copy(bl_len, copy);
+    bl.begin().copy(read_len, copy);
     int ret = processor->process(std::move(copy), ofs);
     if (ret < 0) return ret;
     ofs += read_len;
