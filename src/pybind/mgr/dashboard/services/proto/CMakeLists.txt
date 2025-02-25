@@ -4,15 +4,16 @@
 
 # All three versions of the grpc_tools module (ubuntu22.04, centos9, latest) have "quirks" when asked to handle the existing NVME proto file.
 
-# The first if(NOT LIBPROTOC_VERSION) block below explains those differences by the flags that it sets which the generation block immediately after uses.
+# The if(NOT LIBPROTOC_VERSION) block below has been simplified to handle the Ubuntu case which relates to a version equal or lower than 3.12 in a "special" way
+# and to handle all the other cases in the same way.
 
 # This will generate the correct protoc versions based on the given OS system python3 grpc module.
 
 # Failing to find any module version it will just not generate anything but still continue the cmake build.
 
-# For any of the most recent gprc_tools it should just work provided there are no major differences in behaviour.
+# For any of the most recent gprc_tools it should just work provided there are no major semantic differences in behaviour.
 
-# This implementation should also be able to cope with repo updates to the `src/nvmeof/gateway` module.
+# This implementation will also be able to cope with repo updates to the `src/nvmeof/gateway` module.
 
 
 
@@ -49,11 +50,6 @@ set(CEPH_DASHBOARD_GATEWAY_PROTO_FILE dashboard/services/proto/gateway.proto)
 set(CEPH_DASHBOARD_PARENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../..")
 set(CEPH_NVME_GATEWAY_PROTO_FILE ${CEPH_DASHBOARD_PARENT_DIR}/../../../src/nvmeof/gateway/control/proto/gateway.proto)
 
-# Current versions of the grpc_tools.protoc module per OS
-set(UBUNTU_22_04_GRPC_TOOLS_VERSION "3.5.1")
-set(CENTOS_9_GRPC_TOOLS_VERSION "3.14.0")
-set(FEDORA_40_GRPC_TOOLS_VERSION "3.19.6")
-
 # Find the installed version of the grpc_tools module
 execute_process(
   COMMAND ${Python3_EXECUTABLE} -m grpc_tools.protoc --version
@@ -69,22 +65,16 @@ set(GRPC_TOOLS_NVME_PREPARE_SOURCE_MSG "copy verbatim source gateway.proto file"
 
 # Evaluate existing version and set toggles
 if(NOT LIBPROTOC_VERSION)
-  message(DEBUG "Unknown system. libprotoc '${LIBPROTOC_VERSION}' NOT FOUND")
+  message(DEBUG "Unknown grpc_tools version. libprotoc '${LIBPROTOC_VERSION}' NOT FOUND")
 
-elseif(LIBPROTOC_VERSION VERSION_LESS_EQUAL UBUNTU_22_04_GRPC_TOOLS_VERSION)
-  message(DEBUG "System likely to be Ubuntu 22.04 or earlier. libprotoc ${LIBPROTOC_VERSION}")
+elseif(LIBPROTOC_VERSION VERSION_LESS_EQUAL "3.12")
+  message(DEBUG "grpc_tools version less or equal than 3.12. libprotoc ${LIBPROTOC_VERSION}")
   set(GRPC_TOOLS_NVME_PREPARE_SOURCE_CMD sed 's|optional ||g' ${CEPH_NVME_GATEWAY_PROTO_FILE} > ${CEPH_DASHBOARD_GATEWAY_PROTO_FILE})
   set(GRPC_TOOLS_NVME_PREPARE_SOURCE_MSG "copy amended source gateway.proto file")
 
-elseif(LIBPROTOC_VERSION VERSION_LESS_EQUAL CENTOS_9_GRPC_TOOLS_VERSION)
-  message(DEBUG "System likely to be CentOS 9 or earlier. libprotoc ${LIBPROTOC_VERSION}")
+elseif(LIBPROTOC_VERSION VERSION_GREATER "3.12")
+  message(DEBUG "grpc_tools version bigger than 3.12. libprotoc ${LIBPROTOC_VERSION}")
   set(GRPC_TOOLS_EXPERIMENTAL_FLAG "--experimental_allow_proto3_optional")
-
-elseif(LIBPROTOC_VERSION VERSION_LESS FEDORA_40_GRPC_TOOLS_VERSION)
-  message(DEBUG "Unknown system. libprotoc ${LIBPROTOC_VERSION}")
-
-elseif(LIBPROTOC_VERSION VERSION_GREATER_EQUAL FEDORA_40_GRPC_TOOLS_VERSION)
-  message(DEBUG "Unknown system. Newer libprotoc ${LIBPROTOC_VERSION}")
 endif()
 
 # Protobuffer files generation
@@ -115,4 +105,4 @@ endif()
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/services
-  PATTERN ".*" EXCLUDE)
+  PATTERN "CMakeLists.txt" EXCLUDE)
