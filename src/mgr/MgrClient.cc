@@ -333,12 +333,6 @@ void MgrClient::_send_report()
         const PerfCounters::perf_counter_data_any_d &ctr,
         const PerfCounters &perf_counters)
     {
-      // FIXME: We don't send labeled perf counters to the mgr currently.
-      auto labels = ceph::perf_counters::key_labels(perf_counters.get_name());
-      if (labels.begin() != labels.end()) {
-        return false;
-      }
-
       return perf_counters.get_adjusted_priority(ctr.prio) >= (int)stats_threshold;
     };
 
