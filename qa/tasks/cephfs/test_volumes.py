@@ -3049,6 +3049,49 @@ class TestSubvolumes(TestVolumesHelper):
         normalization = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization")
         self.assertEqual(normalization.strip(), "nfd")
 
+    def test_subvolume_create_with_enctag(self):
+        # create subvolume with enctag
+        subvolume = self._gen_subvol_name()
+        enctag = "tag1"
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--enctag", enctag)
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+
+        # verify the enctag
+        get_enctag = self._fs_cmd("subvolume", "enctag", "get", self.volname, subvolume)
+        self.assertEqual(get_enctag.rstrip('\n'), enctag)
+
+    def test_subvolume_set_and_get_enctag(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # set enctag
+        enctag = "tag2"
+        self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag)
+
+        # get enctag
+        get_enctag = self._fs_cmd("subvolume", "enctag", "get", self.volname, subvolume)
+        self.assertEqual(get_enctag.rstrip('\n'), enctag)
+
+    def test_subvolume_clear_enctag(self):
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # set enctag
+        enctag = "tag3"
+        self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag)
+
+        # remove enctag
+        self._fs_cmd("subvolume", "enctag", "rm", self.volname, subvolume)
+
+        # get enctag
+        get_enctag = self._fs_cmd("subvolume", "enctag", "get", self.volname, subvolume)
+        self.assertEqual(get_enctag, "")
+
     def test_subvolume_expand(self):
         """
         That a subvolume can be expanded in size and its quota matches the expected size.
