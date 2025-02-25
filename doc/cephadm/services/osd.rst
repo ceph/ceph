@@ -236,7 +236,7 @@ After running the above command:
 
 * If you add new disks to the cluster, they will automatically be used to
   create new OSDs.
-* If you remove an OSD and clean the LVM physical volume, a new OSD will be
+* When you remove an OSD and clean the LVM physical volume, a new OSD will be
   created automatically.
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
@@ -420,11 +420,11 @@ Example command:
   ceph orch device zap my_hostname /dev/sdx
 
 .. note::
-    If the unmanaged flag is unset, cephadm automatically deploys drives that
-    match the OSDSpec.  For example, if you use the
-    ``all-available-devices`` option when creating OSDs, when you ``zap`` a
-    device the cephadm orchestrator automatically creates a new OSD in the
-    device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
+    If the ``unmanaged`` flag is not set, ``cephadm`` automatically deploys
+   drives that match the OSDSpec.  For example, if you specify the
+   ``all-available-devices`` option when creating OSDs, when you ``zap`` a
+   device the cephadm orchestrator automatically creates a new OSD in the
+   device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
 
 
 .. _osd_autotune:
@@ -625,7 +625,7 @@ To include disks that are less than or equal to 10G in size:
 
     size: ':10G'
 
-To include disks equal to or greater than 40G in size:
+To include drives equal to or greater than 666 GB in size:
 
 .. code-block:: yaml
 
@@ -762,7 +762,9 @@ However, we can improve it by reducing the filters on core properties of the dri
 
 Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
 
-If you know that drives with more than 2TB will always be the slower data devices, you can also filter by size:
+If you know that drives larger than 2 TB should always be used as data devices,
+and drives smaller than 2 TB should always be used as WAL/DB devices, you can
+filter by size:
 
 .. code-block:: yaml
 
@@ -884,7 +886,7 @@ You can use the 'placement' key in the layout to target certain nodes.
       data_devices:
         rotational: 1
       db_devices:
-        rotational: 0
+        rotational: 0           # All drives identified as SSDs
     ---
     service_type: osd
     service_id: disk_layout_b
@@ -971,9 +973,8 @@ It is also possible to specify directly device paths in specific hosts like the 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
 
-It's possible to specify the `crush_device_class` parameter within the
-DriveGroup spec, and it's applied to all the devices defined by the `paths`
-keyword:
+It is possible to specify a ``crush_device_class`` parameter to be applied to
+OSDs created on devices matched by the ``paths`` filter:
 
 .. code-block:: yaml
 
