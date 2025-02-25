@@ -106,6 +106,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 using namespace TOPNSPC::common;
+using namespace std::literals;
 
 using std::cout;
 using std::dec;
@@ -612,44 +613,42 @@ void Monitor::write_features(MonitorDBStore::TransactionRef t)
   t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
-const char** Monitor::get_tracked_conf_keys() const
+std::vector<std::string> Monitor::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "crushtool", // helpful for testing
-    "mon_election_timeout",
-    "mon_lease",
-    "mon_lease_renew_interval_factor",
-    "mon_lease_ack_timeout_factor",
-    "mon_accept_timeout_factor",
+  return {
+    "crushtool"s, // helpful for testing
+    "mon_election_timeout"s,
+    "mon_lease"s,
+    "mon_lease_renew_interval_factor"s,
+    "mon_lease_ack_timeout_factor"s,
+    "mon_accept_timeout_factor"s,
     // clog & admin clog
-    "clog_to_monitors",
-    "clog_to_syslog",
-    "clog_to_syslog_facility",
-    "clog_to_syslog_level",
-    "clog_to_graylog",
-    "clog_to_graylog_host",
-    "clog_to_graylog_port",
-    "mon_cluster_log_to_file",
-    "host",
-    "fsid",
+    "clog_to_monitors"s,
+    "clog_to_syslog"s,
+    "clog_to_syslog_facility"s,
+    "clog_to_syslog_level"s,
+    "clog_to_graylog"s,
+    "clog_to_graylog_host"s,
+    "clog_to_graylog_port"s,
+    "mon_cluster_log_to_file"s,
+    "host"s,
+    "fsid"s,
     // periodic health to clog
-    "mon_health_to_clog",
-    "mon_health_to_clog_interval",
-    "mon_health_to_clog_tick_interval",
+    "mon_health_to_clog"s,
+    "mon_health_to_clog_interval"s,
+    "mon_health_to_clog_tick_interval"s,
     // scrub interval
-    "mon_scrub_interval",
-    "mon_allow_pool_delete",
+    "mon_scrub_interval"s,
+    "mon_allow_pool_delete"s,
     // osdmap pruning - observed, not handled.
-    "mon_osdmap_full_prune_enabled",
-    "mon_osdmap_full_prune_min",
-    "mon_osdmap_full_prune_interval",
-    "mon_osdmap_full_prune_txsize",
+    "mon_osdmap_full_prune_enabled"s,
+    "mon_osdmap_full_prune_min"s,
+    "mon_osdmap_full_prune_interval"s,
+    "mon_osdmap_full_prune_txsize"s,
     // debug options - observed, not handled
-    "mon_debug_extra_checks",
-    "mon_debug_block_osdmap_trim",
-    NULL
+    "mon_debug_extra_checks"s,
+    "mon_debug_block_osdmap_trim"s
   };
-  return KEYS;
 }
 
 void Monitor::handle_conf_change(const ConfigProxy& conf,

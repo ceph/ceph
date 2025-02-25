@@ -1054,7 +1054,7 @@ private:
   static int check_features(MonitorDBStore *store);
 
   // config observer
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 
