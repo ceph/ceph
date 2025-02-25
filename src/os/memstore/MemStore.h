@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <shared_mutex> // for std::shared_lock
 #include <unordered_map>
 
 #include <boost/intrusive_ptr.hpp>
