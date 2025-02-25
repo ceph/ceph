@@ -651,12 +651,18 @@ def bc_build_rpm(ctx):
         topdir = (
             pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
         )
+    rpmbuild_args = [
+        'rpmbuild',
+        '--rebuild',
+        f'-D_topdir {topdir}',
+    ] + list(ctx.cli.rpmbuild_arg) + [str(srpm_path)]
+    rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"set -x; mkdir -p {topdir} && rpmbuild --rebuild -D'_topdir {topdir}' {srpm_path}",
+            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd}",
         ],
     )
     with ctx.user_command():
@@ -869,6 +875,12 @@ def parse_cli(build_step_names):
             "Do not try to build RPM packages that match the SHA of the current"
             " git checkout. Use any source RPM available."
         ),
+    )
+    parser.add_argument(
+        "--rpmbuild-arg",
+        '-R',
+        action="append",
+        help="Pass this extra argument to rpmbuild",
     )
     parser.add_argument(
         "--ceph-version",
