@@ -783,14 +783,15 @@ void BlueStore::Writer::_try_reuse_allocated_l(
       // we can just expand existing Extent
       it->length += (ref_end - want_subau_begin);
       dout(20) << __func__ << " expanded extent " << it->print(pp_mode) << dendl;
+      left_affected_range = it->logical_offset;
     } else {
       // new extent needed
       Extent *le = new Extent(
         want_subau_begin, in_blob_offset, ref_end - want_subau_begin, it->blob);
       dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
       emap.extent_map.insert(*le);
+      left_affected_range = le->logical_offset;
     }
-
     logical_offset += data_size;
     break;
   }
@@ -867,11 +868,13 @@ void BlueStore::Writer::_try_reuse_allocated_r(
       it->blob_offset -= (want_subau_end - want_subau_begin);
       it->length += (want_subau_end - want_subau_begin);
       dout(20) << __func__ << " expanded extent " << it->print(pp_mode) << dendl;
+      right_affected_range = it->logical_end();
     } else {
       Extent *le = new Extent(
         want_subau_begin, in_blob_offset, ref_end - want_subau_begin, it->blob);
       dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
       emap.extent_map.insert(*le);
+      right_affected_range = le->logical_end();
     }
     end_offset -= data_size;
     break;
@@ -1040,11 +1043,13 @@ void BlueStore::Writer::_do_put_blobs(
       if (left_b->logical_end() == logical_offset) {
         left_b->length += ref_end - logical_offset;
         dout(20) << __func__ << " expanded extent " << left_b->print(pp_mode) << dendl;
+        left_affected_range = std::min(left_affected_range, left_b->logical_offset);
       } else {
         Extent *le = new Extent(
           logical_offset, in_blob_offset, ref_end - logical_offset, left_b->blob);
         dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
         emap.insert(*le);
+        left_affected_range = std::min(left_affected_range, le->logical_offset);
       }
       bstore->logger->inc(l_bluestore_write_small);
       bstore->logger->inc(l_bluestore_write_small_bytes, ref_end - logical_offset);
@@ -1087,11 +1092,13 @@ void BlueStore::Writer::_do_put_blobs(
           right_b->blob_offset -= (data_end_offset - data_begin_offset);
           right_b->length += (data_end_offset - data_begin_offset);
           dout(20) << __func__ << " expanded extent " << right_b->print(pp_mode) << dendl;
+          right_affected_range = std::max(right_affected_range, right_b->logical_end());
         } else {
           Extent *le = new Extent(
             data_begin_offset, in_blob_offset, ref_end - data_begin_offset, right_b->blob);
           dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
           emap.insert(*le);
+          right_affected_range = std::max(right_affected_range, le->logical_end());
         }
         bd.erase(back_it); //TODO - or other way of limiting end
         bstore->logger->inc(l_bluestore_write_small);
@@ -1406,8 +1413,6 @@ void BlueStore::Writer::do_write(
   _collect_released_allocated();
   // update statfs
   txc->statfs_delta += statfs_delta;
-  onode->extent_map.dirty_range(location, data_end-location);
-  onode->extent_map.maybe_reshard(location, data_end);
   // note: compress extent is not needed; _try_reuse_allocated_* joins extents if possible
   // in other cases new blobs cannot be joined with existing ones
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;

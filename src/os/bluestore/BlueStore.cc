@@ -17656,9 +17656,13 @@ int BlueStore::_do_write_v2(
   BlueStore::Writer wr(this, txc, &wctx, o);
   uint64_t start = p2align(offset, min_alloc_size);
   uint64_t end = p2roundup(offset + length, min_alloc_size);
+  wr.left_affected_range = start;
+  wr.right_affected_range = end;
   std::tie(wr.left_shard_bound, wr.right_shard_bound) =
     o->extent_map.fault_range_ex(db, start, end - start);
   wr.do_write(offset, bl);
+  o->extent_map.dirty_range(wr.left_affected_range, wr.right_affected_range - wr.left_affected_range);
+  o->extent_map.maybe_reshard(wr.left_affected_range, wr.right_affected_range);
   return r;
 }
 
