@@ -7631,11 +7631,21 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     auto req = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->op_stamp = mdr->get_op_stamp();
+    // referent inode related
+    req->referent_ino = inodeno_t(0);
     if (mds->mdsmap->allow_referent_inodes()) {
-      if (inc && newi)
+      if (inc && newi) {
         req->referent_ino = newi->ino();
-    } else {
-      req->referent_ino = inodeno_t(0);
+        dout(20) << __func__ << " link - referent_ino= " << req->referent_ino << " sending over wire" << dendl;
+      }
+      else { //unlink
+        if (dnl->is_referent_remote()) {
+          CInode *ref_in = dnl->get_referent_inode();
+          ceph_assert(ref_in->is_auth());
+	  req->referent_ino = ref_in->ino();
+          dout(20) << __func__ << " unlink - referent_ino= " << req->referent_ino << " sending over wire" << dendl;
+        }
+      }
     }
 
     if (auto& desti_srnode = mdr->more()->desti_srnode)
@@ -7877,6 +7887,14 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   } else {
     inc = false;
     pi.inode->nlink--;
+
+    if (referent_ino > 0) {
+      // Remove referent inode from primary inode (targeti)
+      pi.inode->remove_referent_ino(referent_ino);
+      dout(20) << __func__ <<  " referent_inodes " << std::hex << pi.inode->get_referent_inodes()
+               << " referent ino removed " << referent_ino << dendl;
+    }
+
     if (targeti->is_projected_snaprealm_global()) {
       ceph_assert(mdr->peer_request->desti_snapbl.length());
       auto p = mdr->peer_request->desti_snapbl.cbegin();
