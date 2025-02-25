@@ -139,7 +139,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
       disable: () => !this.selection.hasSelection,
       name: this.actionLabels.TIERING
     };
-    this.tableActions = [addAction, editAction, deleteAction, tieringAction];
+    this.tableActions = [addAction, editAction, tieringAction, deleteAction];
     this.setTableRefreshTimeout();
   }
 
