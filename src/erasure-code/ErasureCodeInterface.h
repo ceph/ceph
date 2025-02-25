@@ -331,11 +331,10 @@ namespace ceph {
      * Return the minimum number of bytes that the plugin and technique
      * support for partial writes. This is the minimum size of update
      * to coding chunks that the particular technique supports.
-     * This will either be 1 or w * packetsize.
      *
      * @return minimum number of bytes.
      */
-    virtual unsigned int get_minimum_granularity() = 0;
+    virtual size_t get_minimum_granularity() = 0;
 
     /**
      * Encode the content of **in** and store the result in

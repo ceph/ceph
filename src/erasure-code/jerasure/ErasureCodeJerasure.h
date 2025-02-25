@@ -132,7 +132,7 @@ public:
   void apply_delta(const std::map<int, ceph::bufferptr> &in,
                    std::map <int, ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
-  unsigned int get_minimum_granularity() override
+  size_t get_minimum_granularity() override
   {
     return 1;
   }
@@ -168,7 +168,7 @@ public:
   void apply_delta(const std::map<int, ceph::bufferptr> &in,
                    std::map <int, ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
-  unsigned int get_minimum_granularity() override
+  size_t get_minimum_granularity() override
   {
     return 1;
   }
@@ -209,7 +209,7 @@ public:
   void apply_delta(const std::map<int, ceph::bufferptr> &in,
                    std::map <int, ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
-  unsigned int get_minimum_granularity() override
+  size_t get_minimum_granularity() override
   {
     return w * packetsize;
   }
@@ -266,7 +266,7 @@ public:
   void apply_delta(const std::map<int, ceph::bufferptr> &in,
                    std::map <int, ceph::bufferptr> &out) override;
   unsigned get_alignment() const override;
-  unsigned int get_minimum_granularity() override
+  size_t get_minimum_granularity() override
   {
     return w * packetsize;
   }

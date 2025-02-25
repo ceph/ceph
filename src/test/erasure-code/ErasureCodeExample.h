@@ -92,7 +92,7 @@ public:
     return ( object_size / DATA_CHUNKS ) + 1;
   }
 
-  unsigned int get_minimum_granularity() override {
+  size_t get_minimum_granularity() override {
     return 1;
   }
 

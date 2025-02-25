@@ -168,7 +168,7 @@ public:
 
   unsigned get_alignment() const override;
 
-  unsigned int get_minimum_granularity() override
+  size_t get_minimum_granularity() override
   {
     return 1;
   }
