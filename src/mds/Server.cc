@@ -7776,7 +7776,7 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
   if (inc)
     mdcache->send_dentry_link(dn, null_ref);
   else
-    mdcache->send_dentry_unlink(dn, NULL, null_ref);
+    mdcache->send_dentry_unlink(dn, straydn ? straydn : nullptr, null_ref);
   
   // bump target popularity
   mds->balancer->hit_inode(targeti, META_POP_IWR);
