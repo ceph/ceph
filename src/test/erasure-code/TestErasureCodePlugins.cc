@@ -66,7 +66,7 @@ public:
   void generate_chunk(bufferlist& bl)
   {
     ceph::util::random_number_generator<char> random_generator = ceph::util::random_number_generator<char>();
-    ceph::bufferptr b = buffer::create_aligned(chunk_size, 4096); //ceph::bufferptr(chunk_size);
+    ceph::bufferptr b = buffer::create_aligned(chunk_size, 4096);
     for (int i = 0; i < chunk_size; i++) {
       b[i] = random_generator();
     }
@@ -74,7 +74,7 @@ public:
   }
   void generate_chunk(bufferlist& bl, char c)
   {
-    ceph::bufferptr b = buffer::create_aligned(chunk_size, 4096); //ceph::bufferptr(chunk_size);
+    ceph::bufferptr b = buffer::create_aligned(chunk_size, 4096);
     for (int i = 0; i < chunk_size; i++) {
       b[i] = c;
     }
