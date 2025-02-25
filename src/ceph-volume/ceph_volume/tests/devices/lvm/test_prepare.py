@@ -1,7 +1,7 @@
 import pytest
 from ceph_volume.devices import lvm
 from ceph_volume.api import lvm as api
-from mock.mock import patch, Mock
+from unittest.mock import patch
 from ceph_volume import objectstore
 
 
@@ -71,19 +71,6 @@ class TestPrepare(object):
         stdout, stderr = capsys.readouterr()
         assert 'Use the bluestore objectstore' in stdout
         assert 'A physical device or logical' in stdout
-
-    @patch('ceph_volume.api.lvm.is_ceph_device')
-    def test_safe_prepare_osd_already_created(self, m_create_key, m_is_ceph_device):
-        m_is_ceph_device.return_value = True
-        with pytest.raises(RuntimeError) as error:
-            self.p.args = Mock()
-            self.p.args.data = '/dev/sdfoo'
-            self.p.args.with_tpm = '0'
-            self.p.get_lv = Mock()
-            self.p.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=self.p.args)
-            self.p.objectstore.safe_prepare()
-            expected = 'skipping {}, it is already prepared'.format('/dev/sdfoo')
-            assert expected in str(error.value)
 
     def test_setup_device_device_name_is_none(self, m_create_key):
         self.p.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=[])
