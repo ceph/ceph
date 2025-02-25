@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# clean-ci [--dry-run] [--since="relative date"] [--remote=remote]
+#
+# Cleanup the ceph-ci.git repository branch list by deleting any branch with a
+# HEAD commit date older than (by default) 3 months.
+
+set -e
+
+CEPH_CI=https://github.com/ceph/ceph-ci.git
+REMOTE=git@github.com:ceph/ceph-ci.git
+DRY_RUN=0
+SINCE="3 months ago"
+
+function eprintf {
+    formats="$1"
+    shift
+    printf "$formats"'\n' "$@" >&2
+}
+
+
+function delete_refs {
+    if [[ ${#TO_DELETE[@]} -gt 0 ]]; then
+        if [[ DRY_RUN -eq 0 ]]; then
+            eprintf 'Deleting refs: %s' "$*"
+            git push --quiet "$REMOTE" --delete "$@"
+        else
+            eprintf 'Would delete refs: %s' "$*"
+        fi
+    fi
+}
+
+function iterate_ci {
+    cutoff_date=$(date -d "$SINCE" +%s)
+
+    REFS=$(git ls-remote --refs --heads "$CEPH_CI")
+
+    # Fetch the refs, shallow
+    printf '%s' "$REFS" | \
+        cut -f2 | \
+        git fetch --quiet --depth=1 --refetch --filter=blob:none --stdin "$REMOTE"
+
+    declare -a TO_DELETE
+
+    # Examine each ref/commit
+    while read commit_ref; do
+        commit=$(cut -f1 <<<"$commit_ref")
+        ref=$(cut -f2 <<<"$commit_ref")
+
+        eprintf 'Examining %s (commit %s)' "$ref" "$commit"
+
+        commit_date=$(git log -1 --format="%ct" "$commit")
+
+        eprintf '\thas commit date: %s' $(date --iso-8601=sec --date="@$commit_date")
+
+        if (( commit_date < cutoff_date )); then
+            TO_DELETE+=("$ref")
+            if [[ DRY_RUN -eq 0 ]]; then
+                eprintf '\twill delete remote ref: %s' "$ref"
+            else
+                eprintf '\twould delete remote ref: %s' "$ref"
+            fi
+            if [[ ${#TO_DELETE[@]} -ge 100 ]]; then
+                delete_refs "${TO_DELETE[@]}"
+                TO_DELETE=()
+            fi
+        else
+            eprintf '\tNOT deleting: %s' "$ref"
+        fi
+    done <<<"$REFS"
+
+    delete_refs "${TO_DELETE[@]}"
+}
+
+function main {
+    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,dry-run,since:,remote:' -- "$@")
+
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                printf '%s: [--dry-run] [--since=<relative date>] [--remote=<remote>]\n' "$0"
+                printf '\t--since=<relative date> is the same as in date(3) --date switch\n'
+                printf '\t--remote=<remote> is the remote name for ceph-ci to fetch/push to, by default: %s\n' "$REMOTE"
+                exit 0
+                ;;
+            --dry-run)
+                DRY_RUN=1
+                shift
+                ;;
+            --since)
+                SINCE="$2"
+                shift 2
+                ;;
+            --remote)
+                REMOTE="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+    done
+
+    iterate_ci
+}
+
+main "$@"
