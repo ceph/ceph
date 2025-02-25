@@ -18,9 +18,10 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 
 #include "auth/Auth.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 namespace ceph::math {
 

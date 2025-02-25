@@ -5,7 +5,9 @@
 #define _MSG_ASYNC_PROTOCOL_V1_
 
 #include "Protocol.h"
+#include "AsyncConnection.h"
 
+struct AuthSessionHandler;
 class ProtocolV1;
 using CtPtr = Ct<ProtocolV1>*;
 
