@@ -2692,17 +2692,11 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
                   return ret;
                 }
                 //delete entry from ordered set of versions
-                std::string version = source->get_object_version();
-                if (!source->get_bucket()->versioning_enabled()) {
-                  version = "null";
-                }
+                std::string version = source->get_instance();
+                ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): Version to be deleted is: " << version << dendl;
                 ret = objDir->zrem(dpp, &dir_obj, version, y, true);
                 if (ret < 0) {
-                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue zrem request in object directory for: " << source->get_name() << ", ret=" << ret << dendl;
-                  return ret;
-                }
-                if (ret < 0) {
-                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to execute exec in block directory: " << "ret= " << ret << dendl;
+                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): zrem request failed in object directory for: " << source->get_name() << ", ret=" << ret << dendl;
                   return ret;
                 }
                 result.delete_marker = block.deleteMarker;
@@ -2788,7 +2782,6 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
       off_t fst = 0;
 
       do { // loop through the data blocks
-        std::string prefix = get_cache_block_prefix(source, version);
         if (fst >= lst) {
     break;
         }
