@@ -11,15 +11,20 @@ function(build_qatzip)
   set(configure_cmd env CC=${CMAKE_C_COMPILER} ./configure --prefix=${QATzip_INSTALL_DIR})
   # build a static library with -fPIC that we can link into crypto/compressor plugins
   list(APPEND configure_cmd --with-pic --enable-static --disable-shared)
+
+  set(CFLAGS "-Wno-error=strict-prototypes -Wno-error=unused-but-set-variable")
   if(QATDRV_INCLUDE_DIR)
     list(APPEND configure_cmd --with-ICP_ROOT=${QATDRV_INCLUDE_DIR})
   endif()
   if(QAT_INCLUDE_DIR)
-    list(APPEND configure_cmd CFLAGS=-I${QAT_INCLUDE_DIR})
+    list(APPEND CFLAGS -I${QAT_INCLUDE_DIR})
   endif()
   if(QAT_LIBRARY_DIR)
     list(APPEND configure_cmd LDFLAGS=-L${QAT_LIBRARY_DIR})
   endif()
+
+  list(JOIN CFLAGS " " CFLAGS)
+  list(APPEND configure_cmd CFLAGS=${CFLAGS})
 
   # clear the DESTDIR environment variable from debian/rules,
   # because it messes with the internal install paths of arrow's bundled deps
