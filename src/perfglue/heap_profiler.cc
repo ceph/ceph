@@ -12,6 +12,8 @@
  * 
  */
 
+#include "heap_profiler.h"
+
 #include "acconfig.h"
 
 // Use the newer gperftools header locations if available.
@@ -20,11 +22,12 @@
 #include <gperftools/heap-profiler.h>
 #include <gperftools/malloc_extension.h>
 
-#include "heap_profiler.h"
 #include "common/environment.h"
 #include "common/LogClient.h"
 #include "global/global_context.h"
 #include "common/debug.h"
+
+#include <iomanip>
 
 #define dout_context g_ceph_context
 
