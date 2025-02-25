@@ -24,6 +24,7 @@
 #include <cerrno>
 #include <algorithm>
 #include "common/debug.h"
+#include "common/strtol.h"
 #include "ErasureCodeShec.h"
 extern "C" {
 #include "jerasure/include/jerasure.h"
