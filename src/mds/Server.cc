@@ -8087,6 +8087,11 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDReques
     }
   } else {
     pi.inode->nlink++;
+    if (rollback.referent_ino) {
+      pi.inode->add_referent_ino(rollback.referent_ino);
+      dout(10) << __func__ << " referent_inodes " << std::hex << pi.inode->get_referent_inodes()
+               << " referent ino added " << rollback.referent_ino << dendl;
+    }
   }
 
   map<client_t,ref_t<MClientSnap>> splits;
