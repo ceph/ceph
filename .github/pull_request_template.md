@@ -49,7 +49,6 @@
 <details>
 <summary>Show available Jenkins commands</summary>
 
-- `jenkins retest this please`
 - `jenkins test classic perf` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-perf-classic/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-perf-pull-requests/config/definitions/ceph-perf-pull-requests.yml)
 - `jenkins test crimson perf` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-perf-crimson/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-perf-pull-requests/config/definitions/ceph-perf-pull-requests.yml)
 - `jenkins test signed` [Jenkins Job](https://jenkins.ceph.com/job/ceph-pr-commits/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pr-commits/config/definitions/ceph-pr-commits.yml)
@@ -60,9 +59,7 @@
 - `jenkins test dashboard cephadm` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-dashboard-cephadm-e2e/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-dashboard-cephadm-e2e/config/definitions/ceph-dashboard-cephadm-e2e.yml)
 - `jenkins test api` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-api/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-pr-api/config/definitions/ceph-pr-api.yml)
 - `jenkins test docs` [ReadTheDocs](https://readthedocs.org/projects/ceph/) | [Github Workflow Definition](https://github.com/ceph/ceph/blob/main/.readthedocs.yml)
-- `jenkins render docs`
 - `jenkins test ceph-volume all` [Jenkins Jobs](https://jenkins.ceph.com/view/ceph-volume%20PR/) | [Jenkins Jobs Definition](https://github.com/ceph/ceph-build/blob/main/ceph-volume-cephadm-prs/config/definitions/ceph-volume-pr.yml)
-- `jenkins test ceph-volume tox`
 - `jenkins test windows` [Jenkins Job](https://jenkins.ceph.com/job/ceph-windows-pull-requests/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-windows-pull-requests/config/definitions/ceph-windows-pull-requests.yml)
 - `jenkins test rook e2e` [Jenkins Job](https://jenkins.ceph.com/view/all/job/ceph-orchestrator-rook-e2e/) | [Jenkins Job Definition](https://github.com/ceph/ceph-build/blob/main/ceph-rook-e2e/config/definitions/ceph-orchestrator-rook-e2e.yml)
 </details>
