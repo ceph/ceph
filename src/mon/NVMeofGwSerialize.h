@@ -182,8 +182,8 @@ inline std::ostream& print_gw_created_t(
   {
     os << " " << state_itr.first <<": " << state_itr.second << ",";
   }
-
-  os << "]\n"<< MODULE_PREFFIX << "availability " << value.availability
+  os << "]\n"<< MODULE_PREFFIX << " entity-addr : " << value.addr_vect
+     << " availability " << value.availability
      << " full-startup " << value.performed_full_startup  << " ]";
 
   return os;
@@ -224,12 +224,16 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonStates value) {
 }
 
 inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
-  os << "NVMeofGwMap [ Created_gws: ";
-  for (auto& group_gws: value.created_gws) {
+  os <<  "\n" <<  MODULE_PREFFIX << "== NVMeofGwMap [ Created_gws: epoch "
+     << value.epoch;
+  for (auto& group_gws: value.gw_epoch) {
     os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
-       << " } -> { " << group_gws.second << " }";
+       << " } -> GW epoch: " << group_gws.second << " }";
   }
-  os << "]";
+  for (auto& group_gws: value.created_gws) {
+   os <<  "\n" <<  MODULE_PREFFIX  << "{ " << group_gws.first
+      << " } -> { " << group_gws.second << " }";
+  }
   return os;
 }
 
@@ -449,6 +453,9 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
   if (HAVE_FEATURE(features, NVMEOFHA)) {
     version = 2;
   }
+  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
+    version = 3;
+  }
   ENCODE_START(version, version, bl);
   encode ((uint32_t)gws.size(), bl); // number of gws in the group
   for (auto& gw : gws) {
@@ -492,6 +499,11 @@ inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
       }
     }
     encode(gw.second.nonce_map, bl, features);
+    if (version >= 3) {
+      dout(20) << "encode addr_vect and beacon_index" << dendl;
+      gw.second.addr_vect.encode(bl, features);
+      encode(gw.second.beacon_index, bl);
+    }
   }
   ENCODE_FINISH(bl);
 }
@@ -500,7 +512,7 @@ inline void decode(
   NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl) {
   gws.clear();
   uint32_t num_created_gws;
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   dout(20) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
   decode(num_created_gws, bl);
   dout(20) << "decode NvmeGwMonStates. num gws  " << num_created_gws << dendl;
@@ -573,6 +585,12 @@ inline void decode(
       }
     }
     decode(gw_created.nonce_map, bl);
+    if (struct_v >= 3) {
+      dout(20) << "decode addr_vect and beacon_index" << dendl;
+      gw_created.addr_vect.decode(bl);
+      decode(gw_created.beacon_index, bl);
+    }
+
     gws[gw_name] = gw_created;
   }
   if (struct_v == 1) {  //Fix allocations of states and blocklist_data
@@ -587,6 +605,36 @@ inline void decode(
       }
     }
   }
+  DECODE_FINISH(bl);
+}
+
+inline void encode(const std::map<NvmeGroupKey, epoch_t>& gw_epoch,
+                   ceph::bufferlist &bl) {
+  ENCODE_START(1, 1, bl);
+  encode ((uint32_t)gw_epoch.size(), bl); // number of groups
+  for (auto& group_epoch: gw_epoch) {
+    auto& group_key = group_epoch.first;
+    encode(group_key.first, bl); // pool
+    encode(group_key.second, bl); // group
+    encode(group_epoch.second, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+inline void decode(std::map<NvmeGroupKey, epoch_t>& gw_epoch,
+                   ceph::buffer::list::const_iterator &bl) {
+  gw_epoch.clear();
+  uint32_t ngroups;
+  DECODE_START(1, bl);
+  decode(ngroups, bl);
+  for(uint32_t i = 0; i<ngroups; i++){
+    std::string pool, group;
+    decode(pool, bl);
+    decode(group, bl);
+    epoch_t gepoch;
+    decode(gepoch, bl);
+    gw_epoch[std::make_pair(pool, group)] = gepoch;
+}
   DECODE_FINISH(bl);
 }
 
