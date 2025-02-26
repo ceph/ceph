@@ -4107,6 +4107,7 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
+  ldpp_dout(this, 0) << __func__ << " " << __LINE__ << "INFO: fst " << fst << " lst: " << lst << dendl;
   RGWPutObj_CB cb(this);
   RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
@@ -4162,8 +4163,9 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   ret = obj->range_to_ofs(obj_size, new_ofs, new_end);
   if (ret < 0)
     return ret;
-
+  ldpp_dout(this, 0) << __func__ << " " << __LINE__ << "INFO: new_ofs " << new_ofs << " new_end: " << new_end << dendl;
   filter->fixup_range(new_ofs, new_end);
+  ldpp_dout(this, 0) << __func__ << " " << __LINE__ << "INFO: new_ofs " << new_ofs << " new_end: " << new_end << dendl;
   ret = read_op->iterate(this, new_ofs, new_end, filter, s->yield);
 
   if (ret >= 0)
@@ -4421,12 +4423,15 @@ void RGWPutObj::execute(optional_yield y)
       op_ret = -ENOENT;
       return;
     }
+    ldpp_dout(this, 1) << "INFO: accounted size is " << obj->get_accounted_size() << dendl;
     lst = obj->get_accounted_size() - 1;
   } else {
     lst = copy_source_range_lst;
   }
   fst = copy_source_range_fst;
 
+  ldpp_dout(this, 1) << "INFO: fst is " << fst << dendl;
+  ldpp_dout(this, 1) << "INFO: lst is " << lst << dendl;
   // no filters by default
   rgw::sal::DataProcessor *filter = processor.get();
 
@@ -4907,6 +4912,7 @@ void RGWPostObj::execute(optional_yield y)
 
     s->obj_size = ofs;
     s->object->set_obj_size(ofs);
+    obj->set_obj_size(ofs);
 
 
     op_ret = s->bucket->check_quota(this, quota, s->obj_size, y);
