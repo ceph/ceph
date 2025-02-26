@@ -51,6 +51,76 @@ else:
                 logger.error('Failed to fetch the gateway groups: %s', e)
                 return None
 
+        @ReadPermission
+        @Endpoint('GET', '/version')
+        @map_model(model.GatewayVersion)
+        @handle_nvmeof_error
+        def version(self, gw_group: Optional[str] = None):
+            gw_info = NVMeoFClient(gw_group=gw_group).stub.get_gateway_info(
+                NVMeoFClient.pb2.get_gateway_info_req()
+            )
+            return NVMeoFClient.pb2.gw_version(status=gw_info.status,
+                                               error_message=gw_info.error_message,
+                                               version=gw_info.version)
+
+        @ReadPermission
+        @Endpoint('GET', '/log_level')
+        @map_model(model.GatewayLogLevelInfo)
+        @handle_nvmeof_error
+        def get_log_level(self, gw_group: Optional[str] = None):
+            gw_log_level = NVMeoFClient(gw_group=gw_group).stub.get_gateway_log_level(
+                NVMeoFClient.pb2.get_gateway_log_level_req()
+            )
+            return gw_log_level
+
+        @ReadPermission
+        @Endpoint('PUT', '/log_level')
+        @map_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def set_log_level(self, log_level: str, gw_group: Optional[str] = None):
+            log_level = log_level.lower()
+            gw_log_level = NVMeoFClient(gw_group=gw_group).stub.set_gateway_log_level(
+                NVMeoFClient.pb2.set_gateway_log_level_req(log_level=log_level)
+            )
+            return gw_log_level
+
+    @APIRouter("/nvmeof/spdk", Scope.NVME_OF)
+    @APIDoc("NVMe-oF SPDK Management API", "NVMe-oF SPDK")
+    class NVMeoFSpdk(RESTController):
+        @ReadPermission
+        @Endpoint('GET', '/log_level')
+        @map_model(model.SpdkNvmfLogFlagsAndLevelInfo)
+        @handle_nvmeof_error
+        def get_spdk_log_level(self, gw_group: Optional[str] = None):
+            spdk_log_level = NVMeoFClient(gw_group=gw_group).stub.get_spdk_nvmf_log_flags_and_level(
+                NVMeoFClient.pb2.get_spdk_nvmf_log_flags_and_level_req()
+            )
+            return spdk_log_level
+
+        @ReadPermission
+        @Endpoint('PUT', '/log_level')
+        @map_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def set_spdk_log_level(self, log_level: Optional[str] = None,
+                               print_level: Optional[str] = None, gw_group: Optional[str] = None):
+            log_level = log_level.upper() if log_level else None
+            print_level = print_level.upper() if print_level else None
+            spdk_log_level = NVMeoFClient(gw_group=gw_group).stub.set_gateway_log_level(
+                NVMeoFClient.pb2.set_spdk_nvmf_logs_req(log_level=log_level,
+                                                        print_level=print_level)
+            )
+            return spdk_log_level
+
+        @ReadPermission
+        @Endpoint('PUT', '/log_level/disable')
+        @map_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def disable_spdk_log_level(self, gw_group: Optional[str] = None):
+            spdk_log_level = NVMeoFClient(gw_group=gw_group).stub.disable_spdk_nvmf_logs(
+                NVMeoFClient.pb2.disable_spdk_nvmf_logs_req()
+            )
+            return spdk_log_level
+
     @APIRouter("/nvmeof/subsystem", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
     class NVMeoFSubsystem(RESTController):
