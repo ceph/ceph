@@ -465,7 +465,7 @@ public:
   }
 
   iterator_fut begin(op_context_t<node_key_t> c) const {
-    return lower_bound(c, 0);
+    return lower_bound(c, min_max_t<node_key_t>::min);
   }
   iterator_fut end(op_context_t<node_key_t> c) const {
     return upper_bound(c, min_max_t<node_key_t>::max);
