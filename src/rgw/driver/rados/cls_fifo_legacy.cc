@@ -80,7 +80,7 @@ int get_meta(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string&
 
   op.exec(fifo::op::CLASS, fifo::op::GET_META, in,
 	  &bl, nullptr);
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (r >= 0) try {
       fifo::op::get_meta_reply reply;
       auto iter = bl.cbegin();
@@ -153,7 +153,7 @@ int push_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string
   encode(pp, in);
   auto retval = 0;
   op.exec(fifo::op::CLASS, fifo::op::PUSH_PART, in, nullptr, &retval);
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y, lr::OPERATION_RETURNVEC);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y, lr::OPERATION_RETURNVEC);
   if (r < 0) {
     ldpp_dout(dpp, -1)
       << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -219,7 +219,7 @@ int list_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string
   encode(lp, in);
   cb::list bl;
   op.exec(fifo::op::CLASS, fifo::op::LIST_PART, in, &bl, nullptr);
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (r >= 0) try {
       fifo::op::list_part_reply reply;
       auto iter = bl.cbegin();
@@ -312,7 +312,7 @@ int get_part_info(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::st
   cb::list bl;
   encode(gpi, in);
   op.exec(fifo::op::CLASS, fifo::op::GET_PART_INFO, in, &bl, nullptr);
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
   if (r >= 0) try {
       fifo::op::get_part_info_reply reply;
       auto iter = bl.cbegin();
@@ -439,7 +439,7 @@ int FIFO::_update_meta(const DoutPrefixProvider *dpp, const fifo::update& update
   lr::ObjectWriteOperation op;
   bool canceled = false;
   update_meta(&op, version, update);
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (r >= 0 || r == -ECANCELED) {
     canceled = (r == -ECANCELED);
     if (!canceled) {
@@ -565,7 +565,7 @@ int FIFO::create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint
   part_init(&op, info.params);
   auto oid = info.part_oid(part_num);
   l.unlock();
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " part_init failed: r=" << r << " tid="
@@ -584,7 +584,7 @@ int FIFO::remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::uint
   std::unique_lock l(m);
   auto oid = info.part_oid(part_num);
   l.unlock();
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " remove failed: r=" << r << " tid="
@@ -1139,7 +1139,7 @@ int FIFO::trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t of
   const auto part_oid = info.part_oid(part_num);
   l.unlock();
   rgw::cls::fifo::trim_part(&op, ofs, exclusive);
-  auto r = rgw_rados_operate(dpp, ioctx, part_oid, &op, y);
+  auto r = rgw_rados_operate(dpp, ioctx, part_oid, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " trim_part failed: r=" << r << " tid=" << tid << dendl;
@@ -1214,7 +1214,7 @@ int FIFO::create(const DoutPrefixProvider *dpp, lr::IoCtx ioctx, std::string oid
   lr::ObjectWriteOperation op;
   create_meta(&op, oid, objv, oid_prefix, exclusive, max_part_size,
 	      max_entry_size);
-  auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+  auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " create_meta failed: r=" << r << dendl;

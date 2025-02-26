@@ -578,7 +578,7 @@ int MultipartObjectProcessor::complete(
   op.assert_exists();
   cls_rgw_mp_upload_part_info_update(op, p, info);
   cls_version_inc(op);
-  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
+  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, std::move(op), rctx.y);
   ldpp_dout(rctx.dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
 
   if (r == -EOPNOTSUPP) {
@@ -593,7 +593,7 @@ int MultipartObjectProcessor::complete(
     op.assert_exists(); // detect races with abort
     op.omap_set(m);
     cls_version_inc(op);
-    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
+    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, std::move(op), rctx.y);
   }
 
   if (r < 0) {

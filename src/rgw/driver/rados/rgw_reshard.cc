@@ -1400,7 +1400,7 @@ int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry,
 
   cls_rgw_reshard_add(op, entry, create_only);
 
-  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, &op, y);
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, std::move(op), y);
   if (create_only && ret == -EEXIST) {
     ldpp_dout(dpp, 20) <<
       "INFO: did not write reshard queue entry for oid=" <<
@@ -1495,7 +1495,7 @@ int RGWReshard::remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entr
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_remove(op, entry);
 
-  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, &op, y);
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, std::move(op), y);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to remove entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
     return ret;
