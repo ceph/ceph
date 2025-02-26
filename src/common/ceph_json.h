@@ -32,6 +32,7 @@
 #include <include/types.h>
 #include <include/ceph_fs.h>
 
+#include "common/strtol.h"
 #include "common/ceph_time.h"
 
 #include <fmt/format.h>
@@ -63,7 +64,6 @@ concept json_integer = requires
 {
  requires std::is_integral_v<T>;
  requires !std::is_same_v<T, bool>;
-
  requires !is_any_of<T, char, char8_t, char16_t, char32_t, wchar_t>();
 };
 
@@ -318,24 +318,15 @@ public:
 };
 
 template <typename IntegerT>
-requires ceph_json::detail::json_signed_integer<IntegerT> ||
-         ceph_json::detail::json_unsigned_integer<IntegerT>
+requires ceph_json::detail::json_integer<IntegerT> ||
 void decode_json_obj(IntegerT& val, JSONObj *obj)
-try
 {
- if constexpr (ceph_json::detail::json_signed_integer<IntegerT>)
-  val = stol(obj->get_data());
+ auto r = ceph::parse<IntegerT>(obj->get_data());
 
- if constexpr (ceph_json::detail::json_unsigned_integer<IntegerT>)
-  val = stoul(obj->get_data());
-}
-catch(const std::out_of_range& e)
-{
- throw JSONDecoder::err(fmt::format("failed to parse number: {}", e.what()));
-}
-catch(const std::invalid_argument& e)
-{
- throw JSONDecoder::err(fmt::format("failed to parse number: {}", e.what()));
+ if(std::errc() != r)
+  throw JSONDecoder::err(fmt::format("failed to parse number from JSON"));
+
+ val = *r;
 }
 
 template<class T>
