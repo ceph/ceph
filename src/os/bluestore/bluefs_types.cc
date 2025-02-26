@@ -75,9 +75,7 @@ void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
 }
 
 // bluefs_super_t
-bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {
-  bluefs_max_alloc_size.resize(BlueFS::MAX_BDEV, 0);
-}
+bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {}
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
@@ -88,7 +86,7 @@ void bluefs_super_t::encode(bufferlist& bl) const
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
-  encode(bluefs_max_alloc_size, bl);
+  encode(required_alloc_size, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -104,9 +102,9 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
     decode(memorized_layout, p);
   }
   if (struct_v >= 3) {
-    decode(bluefs_max_alloc_size, p);
+    decode(required_alloc_size, p);
   } else {
-    std::fill(bluefs_max_alloc_size.begin(), bluefs_max_alloc_size.end(), 0);
+    std::fill(required_alloc_size.begin(), required_alloc_size.end(), 0);
   }
   DECODE_FINISH(p);
 }
@@ -118,7 +116,7 @@ void bluefs_super_t::dump(Formatter *f) const
   f->dump_unsigned("version", version);
   f->dump_unsigned("block_size", block_size);
   f->dump_object("log_fnode", log_fnode);
-  for (auto& p : bluefs_max_alloc_size)
+  for (auto& p : required_alloc_size)
     f->dump_unsigned("max_alloc_size", p);
 }
 
@@ -137,7 +135,7 @@ ostream& operator<<(ostream& out, const bluefs_super_t& s)
 	     << " v " << s.version
 	     << " block_size 0x" << std::hex << s.block_size
 	     << " log_fnode 0x" << s.log_fnode
-	     << " max_alloc_size " << s.bluefs_max_alloc_size
+	     << " req_alloc_size " << s.required_alloc_size
 	     << std::dec << ")";
 }
 

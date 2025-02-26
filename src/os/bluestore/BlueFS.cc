@@ -668,6 +668,20 @@ void BlueFS::foreach_block_extents(
   }
 }
 
+// prepare alloc unit sizes for WAL, DB and SLOW
+// it is used only on mkfs, or upgrade from previous version
+void BlueFS::_super_prepare_alloc_sizes()
+{
+  super.required_alloc_size.resize(BDEV_REAL_CNT);
+  for (auto id : {BDEV_WAL, BDEV_DB, BDEV_SLOW}) {
+    super.required_alloc_size[id] = cct->_conf->bluefs_alloc_size;
+  }
+  if (has_shared_alloc()) {
+    ceph_assert(shared_alloc->alloc_unit != 0);
+    super.required_alloc_size[BDEV_SLOW] = shared_alloc->alloc_unit;
+  }
+}
+
 int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
 {
   dout(1) << __func__
@@ -684,6 +698,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   }
 
   _init_logger();
+  _super_prepare_alloc_sizes();
   _init_alloc();
 
   super.version = 0;
@@ -737,74 +752,46 @@ void BlueFS::_init_alloc()
 {
   dout(20) << __func__ << dendl;
 
-  // 'changed' should keep its previous value if no actual modification occurred
-  auto change_alloc_size = [this](uint64_t& max_alloc_size,
-                                  uint64_t new_alloc, bool& changed) {
-    if (max_alloc_size == 0 ||
-        (max_alloc_size > new_alloc && ((new_alloc & (new_alloc -1)) == 0))) {
-      max_alloc_size = new_alloc;
-      changed = true;
-      dout(5) << " changed alloc_size to 0x" << std::hex << new_alloc << dendl;
-    } else if (max_alloc_size != new_alloc) {
-      derr << " can not change current alloc_size 0x" << std::hex
-           << max_alloc_size << " to new alloc_size 0x" << new_alloc << dendl;
-    }
-  };
-
-  bool alloc_size_changed = false;
   size_t wal_alloc_size = 0;
   if (bdev[BDEV_WAL]) {
-    wal_alloc_size = cct->_conf->bluefs_alloc_size;
+    wal_alloc_size = super.required_alloc_size[BDEV_WAL];
+    ceph_assert(wal_alloc_size > 0);
     alloc_size[BDEV_WAL] = wal_alloc_size;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_WAL],
-                      wal_alloc_size, alloc_size_changed);
   }
   logger->set(l_bluefs_wal_alloc_unit, wal_alloc_size);
 
-
-  uint64_t shared_alloc_size = cct->_conf->bluefs_shared_alloc_size;
-  if (shared_alloc && shared_alloc->a) {
-    uint64_t unit = shared_alloc->a->get_block_size();
-    shared_alloc_size = std::max(
-      unit,
-      shared_alloc_size);
-    ceph_assert(0 == p2phase(shared_alloc_size, unit));
-  }
   if (bdev[BDEV_SLOW]) {
-    alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
-    alloc_size[BDEV_SLOW] = shared_alloc_size;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
-                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_SLOW],
-                      shared_alloc_size, alloc_size_changed);
+    // means that both SLOW and DB are present
+    size_t db_alloc_size = super.required_alloc_size[BDEV_DB];
+    ceph_assert(db_alloc_size > 0);
+    alloc_size[BDEV_DB] = db_alloc_size;
+    size_t slow_alloc_size = super.required_alloc_size[BDEV_SLOW];
+    ceph_assert(slow_alloc_size > 0);
+    alloc_size[BDEV_SLOW] = slow_alloc_size;
+    if (has_shared_alloc()) {
+      ceph_assert(slow_alloc_size == shared_alloc->alloc_unit);
+    }
   } else {
-    alloc_size[BDEV_DB] = shared_alloc_size;
+    // there is no DB and SLOW impersonates DB
+    size_t slow_alloc_size = super.required_alloc_size[BDEV_SLOW];
+    alloc_size[BDEV_DB] = slow_alloc_size;
     alloc_size[BDEV_SLOW] = 0;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
-                      shared_alloc_size, alloc_size_changed);
+    if (has_shared_alloc()) {
+      ceph_assert(slow_alloc_size == shared_alloc->alloc_unit);
+    } else {
+      ceph_assert(slow_alloc_size > 0);
+    }
   }
+
   logger->set(l_bluefs_db_alloc_unit, alloc_size[BDEV_DB]);
   logger->set(l_bluefs_slow_alloc_unit, alloc_size[BDEV_SLOW]);
-  // new wal and db devices are never shared
+
+  // temporary new wal and db devices are never shared
   if (bdev[BDEV_NEWWAL]) {
     alloc_size[BDEV_NEWWAL] = cct->_conf->bluefs_alloc_size;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_NEWWAL],
-                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
   }
-  if (alloc_size_changed) {
-    dout(1) << __func__ << " alloc_size changed, the new super is:" << super << dendl;
-    _write_super(BDEV_DB);
-  }
-
-  alloc_size_changed = false;
   if (bdev[BDEV_NEWDB]) {
     alloc_size[BDEV_NEWDB] = cct->_conf->bluefs_alloc_size;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_NEWDB],
-                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
-  }
-  if (alloc_size_changed) {
-    dout(1) << __func__ << " alloc_size changed, the new super is:" << super << dendl;
-    _write_super(BDEV_NEWDB);
   }
 
   for (unsigned id = 0; id < bdev.size(); ++id) {
@@ -812,7 +799,7 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
-    ceph_assert(super.bluefs_max_alloc_size[id]);
+    ceph_assert(id >= BDEV_REAL_CNT || super.required_alloc_size[id]);
     if (is_shared_alloc(id)) {
       dout(1) << __func__ << " shared, id " << id << std::hex
               << ", capacity 0x" << bdev[id]->get_size()
@@ -832,11 +819,11 @@ void BlueFS::_init_alloc()
               << ", capacity 0x" << bdev[id]->get_size()
               << ", reserved 0x" << block_reserved[id]
               << ", block size 0x" << alloc_size[id]
-              << ", max alloc size 0x" << super.bluefs_max_alloc_size[id]
+              << ", req alloc size 0x" << ((id < BDEV_REAL_CNT) ? super.required_alloc_size[id] : 0)
               << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				    bdev[id]->get_size(),
-				    super.bluefs_max_alloc_size[id],
+				    alloc_size[id],
 				    name);
       alloc[id]->init_add_free(
         block_reserved[id],
@@ -1044,7 +1031,11 @@ int BlueFS::mount()
     derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
     goto out;
   }
-
+  if (super.required_alloc_size.empty()) {
+    _super_prepare_alloc_sizes();
+    _write_super(BDEV_DB);
+    dout(0) << __func__ << " just upgraded superblock to v3" << dendl;
+  }
   // set volume selector if not provided before/outside
   if (vselector == nullptr) {
     vselector.reset(
@@ -3985,19 +3976,20 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   uint64_t hint = 0;
   int64_t need = len;
   bool shared = is_shared_alloc(id);
-  auto shared_unit = shared_alloc ? shared_alloc->alloc_unit : 0;
+  uint64_t pref_unit = cct->_conf->bluefs_shared_alloc_size;
   bool was_cooldown = false;
   if (alloc[id]) {
     if (!alloc_unit) {
-      alloc_unit = alloc_size[id];
+      // first, non-recursion enter to _allocate
+      alloc_unit = shared ? pref_unit : alloc_size[id];
     }
     // do not attempt shared_allocator with bluefs alloc unit
     // when cooling down, fallback to slow dev alloc unit.
-    if (shared && alloc_unit != shared_unit) {
+    if (shared && alloc_unit != alloc_size[id]) {
        if (duration_cast<seconds>(real_clock::now().time_since_epoch()).count() <
            cooldown_deadline) {
          logger->inc(l_bluefs_alloc_shared_size_fallbacks);
-         alloc_unit = shared_unit;
+         alloc_unit = pref_unit;
          was_cooldown = true;
        } else if (cooldown_deadline.fetch_and(0)) {
          // we might get false cooldown_deadline reset at this point
@@ -4046,8 +4038,8 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                << " unable to allocate 0x" << std::hex << need
 	       << " on bdev " << (int)id << std::dec << dendl;
     }
-    if (alloc[id] && shared && alloc_unit != shared_unit) {
-      alloc_unit = shared_unit;
+    if (alloc[id] && shared && alloc_unit != alloc_size[id]) {
+      alloc_unit = alloc_size[id];
       dout(20) << __func__ << " fallback to bdev "
 	       << (int)id
                << " with alloc unit 0x" << std::hex << alloc_unit

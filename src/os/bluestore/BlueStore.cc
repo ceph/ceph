@@ -7562,6 +7562,16 @@ int BlueStore::_minimal_open_bluefs(bool create)
   // shared device
   bfn = path + "/block";
   // never trim here
+  if (create) {
+    ceph_assert(shared_alloc.alloc_unit != 0);
+  } else {
+    string au_size_str;
+    int r = read_meta("bfm_bytes_per_block", &au_size_str);
+    ceph_assert(r == 0);
+    uint64_t au_size = std::stoul(au_size_str);
+    ceph_assert(au_size > 0);
+    shared_alloc.alloc_unit = au_size;
+  }
   r = bluefs->add_block_device(bluefs_layout.shared_bdev, bfn, false,
                                &shared_alloc);
   if (r < 0) {
