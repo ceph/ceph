@@ -603,6 +603,12 @@ void PGRecovery::update_peers_last_backfill(
 
 bool PGRecovery::budget_available() const
 {
+  return true;
+  // Comment out below code to progress recovery the below
+  // code is calling try_acquire_throttle_now but not releasing
+  // a throttle need to find a mechanism to release a throttle
+  // for more please refer the tracker https://tracker.ceph.com/issues/70180
+  /*
   crimson::osd::scheduler::params_t params =
     {1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort};
   auto &ss = pg->get_shard_services();
@@ -618,6 +624,7 @@ bool PGRecovery::budget_available() const
       BackfillState::ThrottleAcquired{}.intrusive_from_this());
   });
   return false;
+  */
 }
 
 void PGRecovery::on_pg_clean()
