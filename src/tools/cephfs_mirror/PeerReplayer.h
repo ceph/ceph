@@ -33,7 +33,8 @@ public:
   void shutdown();
 
   // add a directory to mirror queue
-  void add_directory(std::string_view dir_root, std::string_view sync_from_snapshot);
+  void add_directory(std::string_view dir_root, bool sync_latest_snapshot,
+                     std::string_view sync_from_snapshot);
 
   // remove a directory from queue
   void remove_directory(std::string_view dir_root);
@@ -154,6 +155,7 @@ private:
     boost::optional<double> last_sync_duration;
     boost::optional<uint64_t> last_sync_bytes; //last sync bytes for display in status
     uint64_t sync_bytes; //sync bytes counter, independently for each directory sync.
+    bool sync_latest_snapshot;
     std::string sync_from_snapshot;
 
     SnapSyncStat() {
@@ -164,10 +166,12 @@ private:
       renamed_snap_count = 0;
       last_synced = clock::zero();
       sync_bytes = 0;
+      sync_latest_snapshot = false;
       sync_from_snapshot = "";
     }
-    SnapSyncStat(const std::string_view& s): SnapSyncStat() {
-      sync_from_snapshot = s;
+    SnapSyncStat(bool sl, const std::string_view& sf): SnapSyncStat() {
+      sync_latest_snapshot = sl;
+      sync_from_snapshot = sf;
     }
   };
 
