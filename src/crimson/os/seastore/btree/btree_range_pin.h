@@ -14,7 +14,6 @@
 namespace crimson::os::seastore {
 class Cache;
 
-template <typename node_key_t>
 struct op_context_t {
   Cache &cache;
   Transaction &trans;
