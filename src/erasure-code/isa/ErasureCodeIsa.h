@@ -73,6 +73,10 @@ public:
         technique == "default"sv) {
       flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
     }
+    else if (technique != "cauchy"sv && m == 1)
+    {
+      flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
+    }
   }
 
   
