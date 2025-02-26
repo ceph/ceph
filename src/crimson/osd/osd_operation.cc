@@ -14,6 +14,7 @@ namespace {
   }
 }
 
+using namespace crimson::osd::scheduler;
 namespace crimson::osd {
 
 void OSDOperationRegistry::do_stop()
@@ -149,21 +150,48 @@ void OSDOperationRegistry::visit_ops_in_flight(std::function<void(const ClientRe
   }
 }
 
+
 OperationThrottler::OperationThrottler(ConfigProxy &conf)
-  : scheduler(crimson::osd::scheduler::make_scheduler(conf))
 {
   conf.add_observer(this);
+}
+
+void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &conf, bool is_rotational, int whoami)
+{
+  scheduler = crimson::osd::scheduler::make_scheduler(cct, conf, whoami, seastar::smp::count,
+            seastar::this_shard_id(), is_rotational, true);
   update_from_config(conf);
 }
 
-void OperationThrottler::wake()
-{
+seastar::future<> OperationThrottler::wake_set() {
+  WorkItem work_item;
   while (available() && !scheduler->empty()) {
-    auto item = scheduler->dequeue();
-    item.wake.set_value();
-    ++in_progress;
-    --pending;
+    work_item = scheduler->dequeue();
+    if (auto when_ready = std::get_if<double>(&work_item)) {
+      ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
+      auto now = ceph::real_clock::now();
+      auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
+      if (wait_duration.count() > 0) {
+        logger().info("No items ready. Retrying wake() in {} ms", wait_duration.count());
+        co_await seastar::sleep(wait_duration);
+      }
+      continue;
+    }
+    if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
+      item->wake.set_value();
+      ++in_progress;
+      --pending;
+
+    }
   }
+  co_return;
+}
+
+void OperationThrottler::wake() {
+  // Fire and forget, but ensure no parallel wake_impls via gate
+  (void)seastar::with_gate(wake_gate, [this] {
+    return wake_set();
+  });
 }
 
 void OperationThrottler::release_throttle()

@@ -519,7 +519,7 @@ PGRecovery::recover_object_with_throttle(
   auto releaser = co_await interruptor::make_interruptible(
     pg->get_shard_services().get_throttle(
       crimson::osd::scheduler::params_t{
-	1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort
+	1, 0, 0, SchedulerClass::background_best_effort
       }));
   DEBUGDPP("got throttle: {} {}", pg->get_dpp(), soid, need);
   co_await pg->get_recovery_backend()->recover_object(soid, need);

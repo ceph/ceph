@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <functional>
 #include <ostream>
 #include <map>
 #include <vector>
@@ -22,30 +23,16 @@
 #include "boost/variant.hpp"
 
 #include "dmclock/src/dmclock_server.h"
-
 #include "crimson/osd/scheduler/scheduler.h"
+#include "crimson/mon/MonClient.h"
+
 #include "common/config.h"
 #include "common/ceph_context.h"
-
+#include "common/mclock_common.h"
 
 namespace crimson::osd::scheduler {
 
-using client_id_t = uint64_t;
-using profile_id_t = uint64_t;
-
-struct client_profile_id_t {
-  client_id_t client_id;
-  profile_id_t profile_id;
-  auto operator<=>(const client_profile_id_t&) const = default;
-};
-
-
-struct scheduler_id_t {
-  scheduler_class_t class_id;
-  client_profile_id_t client_profile_id;
-  auto operator<=>(const scheduler_id_t&) const = default;
-};
-
+ 
 /**
  * Scheduler implementation based on mclock.
  *
@@ -53,26 +40,16 @@ struct scheduler_id_t {
  */
 class mClockScheduler : public Scheduler, md_config_obs_t {
 
-  class ClientRegistry {
-    std::array<
-      crimson::dmclock::ClientInfo,
-      static_cast<size_t>(scheduler_class_t::client)
-    > internal_client_infos = {
-      // Placeholder, gets replaced with configured values
-      crimson::dmclock::ClientInfo(1, 1, 1),
-      crimson::dmclock::ClientInfo(1, 1, 1)
-    };
+  crimson::common::CephContext *cct;
+  //const int whoami;
+  //const uint32_t num_shards;
+  //const int shard_id;
+  //const bool is_rotational;
+  unsigned cutoff_priority;
+  PerfCounters *logger;
 
-    crimson::dmclock::ClientInfo default_external_client_info = {1, 1, 1};
-    std::map<client_profile_id_t,
-	     crimson::dmclock::ClientInfo> external_client_infos;
-    const crimson::dmclock::ClientInfo *get_external_client(
-      const client_profile_id_t &client) const;
-  public:
-    void update_from_config(const ConfigProxy &conf);
-    const crimson::dmclock::ClientInfo *get_info(
-      const scheduler_id_t &id) const;
-  } client_registry;
+  ClientRegistry client_registry;
+  MclockConfig mclock_conf;
 
   using mclock_queue_t = crimson::dmclock::PullPriorityQueue<
     scheduler_id_t,
@@ -80,47 +57,74 @@ class mClockScheduler : public Scheduler, md_config_obs_t {
     true,
     true,
     2>;
+  using priority_t = unsigned;
+  using SubQueue = std::map<priority_t,
+	std::list<item_t>,
+	std::greater<priority_t>>;
   mclock_queue_t scheduler;
-  std::list<item_t> immediate;
+  /**
+   * high_priority
+   *
+   * Holds entries to be dequeued in strict order ahead of mClock
+   * Invariant: entries are never empty
+   */
+  SubQueue high_priority;
+  priority_t immediate_class_priority = std::numeric_limits<priority_t>::max();
 
   static scheduler_id_t get_scheduler_id(const item_t &item) {
     return scheduler_id_t{
       item.params.klass,
-	client_profile_id_t{
-	item.params.owner,
-	  0
-	  }
+      client_profile_id_t{
+        item.params.owner,
+        0
+      }
     };
   }
 
 public:
-  mClockScheduler(ConfigProxy &conf);
+  mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
+    int shard_id, bool is_rotational, bool init_perfcounter=true);
+  ~mClockScheduler() override;
+
+  /// Calculate scaled cost per item
+  uint32_t calc_scaled_cost(int cost);
+
+  // Helper method to display mclock queues
+  std::string display_queues() const;
 
   // Enqueue op in the back of the regular queue
   void enqueue(item_t &&item) final;
 
-  // Enqueue the op in the front of the regular queue
+  // Enqueue the op in the front of the high priority queue
   void enqueue_front(item_t &&item) final;
 
   // Return an op to be dispatch
-  item_t dequeue() final;
+  WorkItem dequeue() final;
 
   // Returns if the queue is empty
   bool empty() const final {
-    return immediate.empty() && scheduler.empty();
+    return scheduler.empty() && high_priority.empty();
   }
 
   // Formatted output of the queue
   void dump(ceph::Formatter &f) const final;
 
   void print(std::ostream &ostream) const final {
-    ostream << "mClockScheduler";
+    ostream << "mClockScheduer ";
+    ostream << ", cutoff=" << cutoff_priority;
   }
 
   std::vector<std::string> get_tracked_keys() const noexcept final;
 
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) final;
+
+  double get_cost_per_io() const {
+    return mclock_conf.get_cost_per_io();
+  }
+private:
+  // Enqueue the op to the high priority queue
+  void enqueue_high(unsigned prio, item_t &&item, bool front = false);
 };
 
 }

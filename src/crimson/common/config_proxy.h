@@ -152,9 +152,15 @@ public:
       }
     });
   }
+
   int get_val(std::string_view key, std::string *val) const {
     return get_config().get_val(*values, key, val);
   }
+
+  void set_val_default_sync(const std::string& key, const std::string& val) {
+    get_config().set_val_default(*values, obs_mgr, key, val);
+  }
+
   template<typename T>
   const T get_val(std::string_view key) const {
     return get_config().template get_val<T>(*values, key);

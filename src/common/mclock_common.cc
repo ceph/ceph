@@ -256,9 +256,15 @@ void MclockConfig::set_config_defaults_from_profile()
   }
   ceph_assert(nullptr != profile);
 
+  #ifdef WITH_CRIMSON
+  auto set_config = [&conf = cct->_conf](const char *key, auto val) {
+    return conf.set_val_default_sync(key, std::to_string(val));
+  };
+#else
   auto set_config = [&conf = cct->_conf](const char *key, auto val) {
     conf.set_val_default(key, std::to_string(val));
   };
+#endif
 
   set_config("osd_mclock_scheduler_client_res", profile->client.reservation);
   set_config("osd_mclock_scheduler_client_wgt", profile->client.weight);
@@ -283,8 +289,9 @@ void MclockConfig::set_config_defaults_from_profile()
   set_config(
     "osd_mclock_scheduler_background_best_effort_lim",
     profile->background_best_effort.limit);
-
+#ifndef WITH_CRIMSON
   cct->_conf.apply_changes(nullptr);
+#endif
 }
 
 void MclockConfig::set_osd_capacity_params_from_config()
@@ -477,6 +484,7 @@ void MclockConfig::mclock_handle_conf_change(const ConfigProxy& conf,
       // profile defaults by making one of the OSD shards remove the key from
       // config monitor store. Note: monc is included in the check since the
       // mock unit test currently doesn't initialize it.
+       #ifndef WITH_CRIMSON
       if (shard_id == 0 && monc) {
         static const std::vector<std::string> osds = {
           "osd",
@@ -497,13 +505,16 @@ void MclockConfig::mclock_handle_conf_change(const ConfigProxy& conf,
                    monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
         }
       }
+      #endif
     }
     // Alternatively, the QoS parameter, if set ephemerally for this OSD via
     // the 'daemon' or 'tell' interfaces must be removed.
+#ifndef WITH_CRIMSON
     if (!cct->_conf.rm_val(*key)) {
       dout(10) << __func__ << " Restored " << *key << " to default" << dendl;
       cct->_conf.apply_changes(nullptr);
     }
+#endif
   }
 }
 
