@@ -295,9 +295,13 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  r = _aio_start();
-  if (r < 0) {
-    goto out_fail;
+  if (size > 0) {
+    r = _aio_start();
+    if (r < 0) {
+      goto out_fail;
+    }
+  } else {
+    aio = false;
   }
 
   _discard_update_threads();
