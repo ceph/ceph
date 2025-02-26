@@ -1177,8 +1177,8 @@ def _generate_share(
     )
     try:
         ceph_vfs, proxy_val = {
-            CephFSStorageProvider.SAMBA_VFS_CLASSIC: ('ceph', ''),
-            CephFSStorageProvider.SAMBA_VFS_NEW: ('ceph_new', 'no'),
+            CephFSStorageProvider.SAMBA_VFS_CLASSIC: ('ceph_new', ''),
+            CephFSStorageProvider.SAMBA_VFS_NEW: ('ceph_new', 'yes'),
             CephFSStorageProvider.SAMBA_VFS_PROXIED: ('ceph_new', 'yes'),
         }[cephfs.provider.expand()]
     except KeyError:
@@ -1187,11 +1187,12 @@ def _generate_share(
         # smb.conf options
         'options': {
             'path': path,
-            "vfs objects": f"acl_xattr {ceph_vfs}",
+            "vfs objects": f"acl_xattr ceph_snapshots {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
             f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
             f'{ceph_vfs}:filesystem': cephfs.volume,
             f'{ceph_vfs}:user_id': cephx_entity,
+            f'{ceph_vfs}:snapdir': '.snap',
             'read only': ynbool(share.readonly),
             'browseable': ynbool(share.browseable),
             'kernel share modes': 'no',
