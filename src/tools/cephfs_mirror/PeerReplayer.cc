@@ -328,12 +328,14 @@ void PeerReplayer::shutdown() {
   m_remote_cluster.reset();
 }
 
-void PeerReplayer::add_directory(string_view dir_root, string_view sync_from_snapshot) {
-  dout(20) << ": dir_root=" << dir_root << ", sync_from_snapshot=" << sync_from_snapshot << dendl;
+void PeerReplayer::add_directory(string_view dir_root, bool sync_latest_snapshot,
+				 string_view sync_from_snapshot) {
+  dout(20) << ": dir_root=" << dir_root << ", sync_latest_snapshot=" << sync_latest_snapshot
+           << ", sync_from_snapshot=" << sync_from_snapshot << dendl;
 
   std::scoped_lock locker(m_lock);
   m_directories.emplace_back(dir_root);
-  m_snap_sync_stats.emplace(dir_root, SnapSyncStat(sync_from_snapshot));
+  m_snap_sync_stats.emplace(dir_root, SnapSyncStat(sync_latest_snapshot, sync_from_snapshot));
   m_cond.notify_all();
 }
 
@@ -519,6 +521,7 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     return r;
   }
 
+  auto sync_stat = m_snap_sync_stats.at(dir_root);
   std::set<std::string> snaps;
   auto entry = ceph_readdir(mnt, dirp);
   while (entry != NULL) {
@@ -532,7 +535,7 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
   }
 
   uint64_t snap_id_in = 0;
-  std::string snap_name = m_snap_sync_stats.at(dir_root).sync_from_snapshot;
+  std::string snap_name = sync_stat.sync_from_snapshot;
   if (!is_remote && !snap_name.empty()) {
     r = get_snap_id(dir_root, snap_name);
     if (r < 0) {
@@ -583,6 +586,18 @@ int PeerReplayer::build_snap_map(const std::string &dir_root,
     }
     if (snap_id >= snap_id_in) {
       snap_map->emplace(snap_id, snap);
+    }
+  }
+
+  if (!is_remote && sync_stat.sync_latest_snapshot) {
+    // Now we know the highest snap_id object emplaced.
+    // Reset the snap_map to the highest snap_id element.
+    if (!sync_stat.current_syncing_snap) { // skip if there's a sync in progress
+      auto it = snap_map->rbegin();
+      auto sid = it->first;
+      auto sname = it->second;
+      snap_map->clear();
+      snap_map->emplace(sid, sname);
     }
   }
 
@@ -1698,10 +1713,12 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
   }
 
-  r = propagate_snap_deletes(dir_root, snaps_deleted);
-  if (r < 0) {
-    derr << ": failed to propgate deleted snapshots" << dendl;
-    return r;
+  if (!m_snap_sync_stats.at(dir_root).sync_latest_snapshot) {
+    r = propagate_snap_deletes(dir_root, snaps_deleted);
+    if (r < 0) {
+      derr << ": failed to propgate deleted snapshots" << dendl;
+      return r;
+    }
   }
 
   r = propagate_snap_renames(dir_root, snaps_renamed);
