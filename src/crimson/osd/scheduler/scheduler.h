@@ -22,8 +22,8 @@
 namespace crimson::osd::scheduler {
 
 enum class scheduler_class_t : uint8_t {
-  background_best_effort = 0,
-  background_recovery,
+  background_recovery = 0,
+  background_best_effort,
   client,
   repop,
   immediate,
@@ -32,10 +32,10 @@ enum class scheduler_class_t : uint8_t {
 std::ostream &operator<<(std::ostream &, const scheduler_class_t &);
 
 using client_t = uint64_t;
-using cost_t = uint64_t;
 
 struct params_t {
-  cost_t cost = 1;
+  int cost = 1;
+  unsigned priority = 0;
   client_t owner;
   scheduler_class_t klass;
 };
@@ -43,8 +43,11 @@ struct params_t {
 struct item_t {
   params_t params;
   seastar::promise<> wake;
+  int get_cost() const { return params.cost; }
+  unsigned get_priority() const { return params.priority; }
 };
 
+using WorkItem = std::variant<std::monostate, item_t, double>;
 /**
  * Base interface for classes responsible for choosing
  * op processing order in the OSD.
@@ -62,7 +65,7 @@ public:
   virtual bool empty() const = 0;
 
   // Return next op to be processed
-  virtual item_t dequeue() = 0;
+  virtual WorkItem dequeue() = 0;
 
   // Dump formatted representation for the queue
   virtual void dump(ceph::Formatter &f) const = 0;
@@ -77,6 +80,7 @@ public:
 std::ostream &operator<<(std::ostream &lhs, const Scheduler &);
 using SchedulerRef = std::unique_ptr<Scheduler>;
 
-SchedulerRef make_scheduler(ConfigProxy &);
+SchedulerRef make_scheduler(CephContext *cct, ConfigProxy &, int whoami, uint32_t num_shards,
+                            int shard_id, bool is_rotational, bool perf_cnt);
 
 }

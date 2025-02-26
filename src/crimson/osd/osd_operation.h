@@ -354,6 +354,7 @@ public:
     return acquire_throttle(params);
   }
 
+  void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami);
 private:
   void dump_detail(Formatter *f) const final;
 
