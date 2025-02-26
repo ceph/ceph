@@ -97,4 +97,8 @@ export class SmbService {
       observe: 'response'
     });
   }
+
+  getCluster(cluster_id: string) {
+    return this.http.get(`${this.baseURL}/cluster/${cluster_id}`);
+  }
 }

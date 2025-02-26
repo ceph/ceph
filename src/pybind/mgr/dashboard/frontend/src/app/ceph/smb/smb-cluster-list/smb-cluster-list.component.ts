@@ -14,11 +14,11 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
-
+import { SMBCluster } from '../smb.model';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { SMBCluster } from '../smb.model';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -38,9 +38,10 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
-  selection = new CdTableSelection();
   smbClusters$: Observable<SMBCluster[]>;
   subject$ = new BehaviorSubject<SMBCluster[]>([]);
+  selection = new CdTableSelection();
+  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -73,8 +74,14 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
         permission: 'create',
         icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),
-
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        routerLink: () =>
+          this.selection.first() && this.urlBuilder.getEdit(this.selection.first().cluster_id)
       },
       {
         permission: 'delete',
@@ -95,7 +102,6 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
       )
     );
   }
-
   loadSMBCluster() {
     this.subject$.next([]);
   }
