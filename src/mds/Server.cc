@@ -9649,6 +9649,33 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
 	pi.inode->version = oldin->pre_dirty();
         tpi = pi.inode.get();
       }
+    } else if (destdnl->is_referent_remote()) { //non-linkmerge case
+      CInode *oldrefi = destdnl->get_referent_inode();
+      ceph_assert(straydn && oldrefi);  // moving to straydn.
+      dout(10) << " destdnl is referent. oldrefi " << *oldrefi << dendl;
+
+      // nlink-- targeti
+      if (oldin->is_auth()) {
+	auto pi = oldin->project_inode(mdr);
+	pi.inode->version = oldin->pre_dirty();
+        tpi = pi.inode.get();
+
+        // Remove referent inode from primary if destdnl exists and is referent
+        tpi->remove_referent_ino(oldrefi->ino());
+        dout(20) << "_rename_prepare destdnl exists and is referent, referent_inodes " << std::hex
+                 << tpi->get_referent_inodes() << " referent ino removed " << oldrefi->ino() << dendl;
+      }
+
+      // link--, and move referent inode
+      if (destdn->is_auth()) {
+	auto pi= oldrefi->project_inode(mdr); //project_snaprealm
+	pi.inode->version = straydn->pre_dirty(pi.inode->version);
+	//backtrace updation is not required
+        trpi = pi.inode.get();
+        trpi->nlink = 0;
+        oldrefi->state_set(CInode::STATE_ORPHAN);
+      }
+      straydn->push_projected_linkage(oldrefi);
     }
   } else if (linkmerge && destdnl->is_referent_remote()) {
       CInode *oldrefi = destdnl->get_referent_inode();
@@ -9872,6 +9899,23 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
 	mdcache->journal_cow_dentry(mdr.get(), metablob, oldin_pdn);
 	metablob->add_primary_dentry(oldin_pdn, oldin, true);
       }
+      // referent inode stuff
+      if (destdnl->is_referent_remote()) { //non-linkmerge case
+        CInode *oldrefi = destdnl->get_referent_inode();
+        ceph_assert(straydn);
+        ceph_assert(oldrefi);
+        if (destdn->is_auth()) {
+          // No snapshot on referent inode - Ignoring snaprealm projection
+          // Updating first is required here ? Mostly not required, keeping
+          // it for now.
+          straydn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+          metablob->add_primary_dentry(straydn, oldrefi, true, true);
+        } else if (force_journal_stray) {
+	  dout(10) << " forced journaling referent straydn " << *straydn << dendl;
+	  metablob->add_dir_context(straydn->get_dir());
+	  metablob->add_primary_dentry(straydn, oldrefi, true);
+        }
+      }
     }
   } else if (linkmerge && destdnl->is_referent_remote()) {
     CInode *oldrefi = destdnl->get_referent_inode();
@@ -10050,8 +10094,31 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
 	oldin->pop_and_dirty_projected_inode(mdr->ls, mdr);
 
       mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
-    } else if (destdnl->is_remote()) {
-      destdn->get_dir()->unlink_inode(destdn, false);
+    } else if (destdnl->is_remote() || destdnl->is_referent_remote()) {
+      if (destdnl->is_referent_remote()) { //non-linkmerge case
+        ceph_assert(straydn);
+        dout(10) << __func__ << " linkmerge:no referent straydn is " << *straydn << dendl;
+
+        // No snapshots on referent inodes - skipping snaprealm related stuff
+        // on referent inode
+	CInode *oldrefin = destdnl->get_referent_inode();
+	ceph_assert(oldrefin);
+
+        destdn->get_dir()->unlink_inode(destdn, false);
+
+        straydn->pop_projected_linkage();
+        if (mdr->is_peer() && !mdr->more()->peer_update_journaled)
+	  ceph_assert(!straydn->is_projected()); // no other projected
+
+        if (destdn->is_auth())
+	  oldrefin->pop_and_dirty_projected_inode(mdr->ls, mdr);
+
+        mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
+      } else if (destdnl->is_remote()) {
+        // This is already done for referent above.
+        destdn->get_dir()->unlink_inode(destdn, false);
+      }
+
       if (oldin->is_auth()) {
 	oldin->pop_and_dirty_projected_inode(mdr->ls, mdr);
       } else if (mdr->peer_request) {
