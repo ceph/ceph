@@ -64,7 +64,7 @@ protected:
   param_vec_t headers;
 
   long  req_timeout{0L};
-  long  req_connect_timeout{3L};
+  long  req_connect_timeout{0L};
 
   void init();
 
