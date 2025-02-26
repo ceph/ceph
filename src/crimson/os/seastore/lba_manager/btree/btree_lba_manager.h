@@ -21,7 +21,7 @@
 #include "crimson/os/seastore/cache.h"
 
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 
 namespace crimson::os::seastore {
 class LogicalCachedExtent;

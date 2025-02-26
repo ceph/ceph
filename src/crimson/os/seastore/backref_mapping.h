@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 
 namespace crimson::os::seastore {
 
