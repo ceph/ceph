@@ -2485,35 +2485,39 @@ public:
   string location_constraint;
 };
 
-class RGWCreateBucketConfig : public XMLObj
-{
-public:
-  RGWCreateBucketConfig() {}
-  ~RGWCreateBucketConfig() override {}
+// BucketIndex
+struct RGWCreateBucketIndex : XMLObj {
+  XMLObj* type = nullptr;
+  XMLObj* num_shards = nullptr;
+
+  bool xml_end(const char*) override {
+    type = find_first("Type");
+    num_shards = find_first("NumShards");
+    return true;
+  }
 };
 
-class RGWCreateBucketParser : public RGWXMLParser
-{
-  XMLObj *alloc_obj(const char *el) override {
-    return new XMLObj;
-  }
+// CreateBucketConfiguration
+struct RGWCreateBucketConfig : XMLObj {
+  XMLObj* location_constraint = nullptr;
+  RGWCreateBucketIndex* index = nullptr;
 
-public:
-  RGWCreateBucketParser() {}
-  ~RGWCreateBucketParser() override {}
-
-  bool get_location_constraint(string& zone_group) {
-    XMLObj *config = find_first("CreateBucketConfiguration");
-    if (!config)
-      return false;
-
-    XMLObj *constraint = config->find_first("LocationConstraint");
-    if (!constraint)
-      return false;
-
-    zone_group = constraint->get_data();
-
+  bool xml_end(const char*) override {
+    location_constraint = find_first("LocationConstraint");
+    index = static_cast<RGWCreateBucketIndex*>(find_first("BucketIndex"));
     return true;
+  }
+};
+
+class RGWCreateBucketParser : public RGWXMLParser {
+  XMLObj *alloc_obj(const char *el) override {
+    using namespace std::string_view_literals;
+    if (el == "CreateBucketConfiguration"sv) {
+      return new RGWCreateBucketConfig;
+    } else if (el == "BucketIndex"sv) {
+      return new RGWCreateBucketIndex;
+    }
+    return new XMLObj;
   }
 };
 
@@ -2561,13 +2565,54 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
 
-    if (!parser.get_location_constraint(location_constraint)) {
-      ldpp_dout(this, 0) << "provided input did not specify location constraint correctly" << dendl;
+    auto config = static_cast<RGWCreateBucketConfig*>(
+        parser.find_first("CreateBucketConfiguration"));
+    if (!config) {
+      s->err.message = "Missing required element CreateBucketConfiguration";
       return -EINVAL;
     }
 
-    ldpp_dout(this, 10) << "create bucket location constraint: "
-		      << location_constraint << dendl;
+    if (config->location_constraint) {
+      location_constraint = config->location_constraint->get_data();
+
+      ldpp_dout(this, 10) << "create bucket location constraint: "
+          << location_constraint << dendl;
+    }
+
+    if (config->index) {
+      if (!config->index->type) {
+        s->err.message = "Missing required element Type in BucketIndex";
+        return -EINVAL;
+      }
+      rgw::BucketIndexType type;
+      if (!parse(config->index->type->get_data(), type)) {
+        s->err.message = "Unknown Type in BucketIndex";
+        return -EINVAL;
+      }
+      createparams.index_type = type;
+
+      if (config->index->num_shards) {
+        if (type != rgw::BucketIndexType::Normal) {
+          s->err.message = "NumShards requires Type to be Normal";
+          return -EINVAL;
+        }
+        auto val = ceph::parse<uint32_t>(config->index->num_shards->get_data());
+        if (!val) {
+          s->err.message = "Failed to parse integer NumShards in BucketIndex";
+          return -EINVAL;
+        }
+        if (*val == 0) {
+          s->err.message = "NumShards must be greater than 0";
+          return -EINVAL;
+        }
+        const auto limit = s->cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards");
+        if (*val > limit) {
+          s->err.message = fmt::format("NumShards cannot exceed {}", limit);
+          return -EINVAL;
+        }
+        createparams.index_shards = val;
+      }
+    }
   }
 
   size_t pos = location_constraint.find(':');
