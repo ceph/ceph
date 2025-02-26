@@ -245,7 +245,7 @@ void NVMeofGwMonitorClient::send_beacon()
   auto group_key = std::make_pair(pool, group);
   NvmeGwClientState old_gw_state;
   // if already got gateway state in the map
-  if (get_gw_state("old map", map, group_key, name, old_gw_state))
+  if (first_beacon == false && get_gw_state("old map", map, group_key, name, old_gw_state))
     gw_availability = ok ? gw_availability_t::GW_AVAILABLE : gw_availability_t::GW_UNAVAILABLE;
   dout(10) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
@@ -277,7 +277,7 @@ void NVMeofGwMonitorClient::tick()
 
   disconnect_panic();
   send_beacon();
-
+  first_beacon = false;
   timer.add_event_after(
       g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period").count(),
       new LambdaContext([this](int r){

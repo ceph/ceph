@@ -89,6 +89,11 @@ options:
     receives a monitor group ID assignment before the gateway is fully up during
     initialization, a retry is required.
   default: 1000
+- name: mon_nvmeofgw_beacons_till_ack
+  type: uint
+  level: advanced
+  default: 15
+  desc: Number of beacons from MonClient before NVMeofGwMon sends ack-map to it
   services:
   - mon
 - name: mon_nvmeofgw_delete_grace
