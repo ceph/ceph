@@ -4024,7 +4024,12 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
   // XXX any better way to do this?
   if (xlock_srcdn && !srcdn->is_auth()) {
     CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
-    auth_pin_freeze = srcdnl->is_primary() ? srcdnl->get_inode() : nullptr;
+    if (srcdnl->is_primary())
+      auth_pin_freeze = srcdnl->get_inode();
+    else if (srcdnl->is_referent_remote())
+      auth_pin_freeze = srcdnl->get_referent_inode();
+    else
+      auth_pin_freeze = nullptr;
   }
   if (!mds->locker->acquire_locks(mdr, lov, auth_pin_freeze))
     return std::make_pair(nullptr, nullptr);
@@ -9142,7 +9147,13 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
       lov.add_xlock(&straydn->lock);
     }
 
-    CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : nullptr;
+    CInode *auth_pin_freeze = nullptr;
+    if (!srcdn->is_auth()) {
+      if (srcdnl->is_primary())
+	auth_pin_freeze = srci;
+      else if (srcdnl->is_referent_remote())
+	auth_pin_freeze = srcdnl->get_referent_inode();
+    }
     if (!mds->locker->acquire_locks(mdr, lov, auth_pin_freeze))
       return;
 
@@ -9349,6 +9360,12 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
       ceph_assert(mdr->more()->rename_inode == srci);
       _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
       return;
+    } else if (srcdnl->is_referent_remote() && !mdr->more()->is_ambiguous_auth) {
+      dout(10) << __func__ << " preparing ambiguous auth for source referent inode" << dendl;
+      ceph_assert(mdr->more()->is_remote_frozen_authpin);
+      ceph_assert(mdr->more()->rename_inode == srcdnl->get_referent_inode());
+      _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
+      return;
     }
   }
   
@@ -9528,8 +9545,13 @@ version_t Server::_rename_prepare_import(const MDRequestRef& mdr, CDentry *srcdn
 					 mdr->more()->cap_imports, updated_scatterlocks);
 
   // hack: force back to !auth and clean, temporarily
-  srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);
-  srcdnl->get_inode()->mark_clean();
+  if (srcdnl->is_referent_remote()) {
+    srcdnl->get_referent_inode()->state_clear(CInode::STATE_AUTH);
+    srcdnl->get_referent_inode()->mark_clean();
+  } else {
+    srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);
+    srcdnl->get_inode()->mark_clean();
+  }
 
   return oldpv;
 }
@@ -9719,7 +9741,39 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
         spi = pi.inode.get();
       }
     }
-  } else { // primary
+  } else if (srcdnl->is_referent_remote()) { // link referent
+    CInode *srcrefi = srcdnl->get_referent_inode();
+    if (!linkmerge) {
+      // destdn
+      if (destdn->is_auth()) {
+        version_t oldpv;
+        if (srcdn->is_auth())
+          oldpv = srcrefi->get_projected_version();
+        else
+	  oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
+
+        //srcrefi
+        auto rpi = srcrefi->project_inode(mdr);
+        rpi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
+        rpi.inode->update_backtrace();
+        // update ctime on referent inode (srpi = rpi.inode.get())? Not required for now.
+      }
+      destdn->push_projected_linkage(srcrefi, srci->ino(), srcrefi->ino());
+      // srci
+      if (srci->is_auth()) {
+	auto pi = srci->project_inode(mdr);
+	pi.inode->version = srci->pre_dirty();
+        spi = pi.inode.get();
+      }
+    } else {
+      dout(10) << " will merge referent remote onto primary link" << dendl;
+      if (destdn->is_auth()) {
+	auto pi = oldin->project_inode(mdr);
+	pi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->get_version());
+        spi = pi.inode.get();
+      }
+    }
+  } else { // srcdnl primary
     if (destdn->is_auth()) {
       version_t oldpv;
       if (srcdn->is_auth())
@@ -9943,8 +9997,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 
     if (destdn->is_auth())
-      // TODO: Pass referent inode upon creation. It's adding just remote dentry now
-      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type(), 0, nullptr);
+      metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type(), srcdnl->get_referent_ino(), srcdnl->get_referent_inode());
 
     if (srci->is_auth() ) { // it's remote
       if (mdr->peer_request) {
@@ -10013,6 +10066,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
     // processed after primary dentry.
     if (srcdnl->is_primary() && !srci->is_dir() && !destdn->is_auth())
       metablob->add_primary_dentry(srcdn, srci, true);
+    // TODO - if srcdnl->is_referent_remote() - journal referent inode as remote dentry ?
     metablob->add_null_dentry(srcdn, true);
   } else
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
@@ -10136,9 +10190,13 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
   // unlink src before we relink it at dest
   CInode *in = srcdnl->get_inode();
   ceph_assert(in);
+  bool srcdn_was_referent = srcdnl->is_referent_remote();
+  CInode *src_refin = srcdnl->get_referent_inode();
+  if (srcdn_was_referent)
+    ceph_assert(src_refin);
 
   bool srcdn_was_remote = srcdnl->is_remote();
-  if (!srcdn_was_remote) {
+  if (!(srcdn_was_remote || srcdn_was_referent)) {
     // if there is newly created snaprealm, need to split old snaprealm's
     // inodes_with_caps. So pop snaprealm before linkage changes.
     if (destdn->is_auth()) {
@@ -10158,16 +10216,62 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
   srcdn->get_dir()->unlink_inode(srcdn);
 
   // dest
-  if (srcdn_was_remote) {
+  if (srcdn_was_remote || srcdn_was_referent) {
     if (!linkmerge) {
       // destdn
       destdnl = destdn->pop_projected_linkage();
       if (mdr->is_peer() && !mdr->more()->peer_update_journaled)
 	ceph_assert(!destdn->is_projected()); // no other projected
 
-      destdn->link_remote(destdnl, in);
-      if (destdn->is_auth())
+      if (srcdn_was_remote)
+        destdn->link_remote(destdnl, in);
+      else if (srcdn_was_referent)
+        destdn->link_remote(destdnl, in, src_refin);
+
+      if (!srcdn->is_auth() && destdn->is_auth() && srcdn_was_referent) {
+        ceph_assert(mdr->more()->inode_import.length() > 0);
+
+        map<client_t,Capability::Import> imported_caps;
+
+        // finish cap imports
+        finish_force_open_sessions(mdr->more()->imported_session_map);
+        if (mdr->more()->cap_imports.count(destdnl->get_referent_inode())) {
+	  mdcache->migrator->finish_import_inode_caps(destdnl->get_referent_inode(),
+                                                      mdr->more()->srcdn_auth_mds, true,
+						      mdr->more()->imported_session_map,
+						      mdr->more()->cap_imports[destdnl->get_referent_inode()],
+						      imported_caps);
+        }
+
+        mdr->more()->inode_import.clear();
+        encode(imported_caps, mdr->more()->inode_import);
+
+        /* hack: add an auth pin for each xlock we hold. These were
+         * remote xlocks previously but now they're local and
+         * we're going to try and unpin when we xlock_finish. */
+
+        for (auto i = mdr->locks.lower_bound(&destdnl->get_referent_inode()->versionlock);
+             i !=  mdr->locks.end();
+	     ++i) {
+          SimpleLock *lock = i->lock;
+	  if (lock->get_parent() != destdnl->get_referent_inode())
+	    break;
+	  if (i->is_xlock() && !lock->is_locallock())
+	    mds->locker->xlock_import(lock);
+        }
+
+        // hack: fix auth bit
+        src_refin->state_set(CInode::STATE_AUTH);
+
+        mdr->clear_ambiguous_auth();
+      }
+
+      if (destdn->is_auth()) {
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+	if (srcdn_was_referent)
+	  src_refin->pop_and_dirty_projected_inode(mdr->ls, mdr);
+      }
+
       // in
       if (in->is_auth()) {
 	in->pop_and_dirty_projected_inode(mdr->ls, mdr);
@@ -10184,7 +10288,7 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
       dout(10) << "merging remote onto primary link" << dendl;
       oldin->pop_and_dirty_projected_inode(mdr->ls, mdr);
     }
-  } else { // primary
+  } else { // srcdnl primary
     if (linkmerge) {
       if (destdnl->is_referent_remote()) {
         dout(10) << __func__ << " merging primary onto referent link" << dendl;
@@ -10371,6 +10475,8 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   dout(10) << " srcdn " << *srcdn << dendl;
   mdr->pin(srcdn);
   mdr->pin(srci);
+  if (srcdnl->is_referent_remote())
+    mdr->pin(srcdnl->get_referent_inode());
 
   // stray?
   bool linkmerge = srcdnl->get_inode() == destdnl->get_inode();
@@ -10451,6 +10557,50 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
 	gather.set_finisher(new C_MDS_PeerRenameSessionsFlushed(this, mdr));
 	gather.activate();
       }
+    } else if (srcdnl->is_referent_remote() && !srcdnl->get_referent_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+      CInode *src_refi = srcdnl->get_referent_inode();
+      int allowance = 1; // 1 for the mdr auth_pin, no link lock and snap lock on referent inode
+      dout(10) << __func__ << " freezing src_refi " << *src_refi << " with allowance " << allowance << dendl;
+      bool frozen_inode = src_refi->freeze_inode(allowance);
+
+      // unfreeze auth pin after freezing the inode to avoid queueing waiters
+      if (src_refi->is_frozen_auth_pin())
+	mdr->unfreeze_auth_pin();
+
+      if (!frozen_inode) {
+	src_refi->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+
+      mdr->set_ambiguous_auth(src_refi);
+
+      if (mdr->peer_request->witnesses.size() > 1) {
+	dout(10) << " set src_refi ambiguous auth; providing srcdn replica list" << dendl;
+	reply_witness = true;
+      }
+
+      // make sure bystanders have received all lock related messages
+      for (set<mds_rank_t>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
+	if (*p == mdr->peer_to_mds ||
+	    (mds->is_cluster_degraded() &&
+	     !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)))
+	  continue;
+	auto notify = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, MMDSPeerRequest::OP_RENAMENOTIFY);
+	mds->send_message_mds(notify, *p);
+	mdr->more()->waiting_on_peer.insert(*p);
+      }
+
+      // make sure clients have received all cap related messages
+      set<client_t> export_client_set;
+      mdcache->migrator->get_export_client_set(src_refi, export_client_set);
+
+      MDSGatherBuilder gather(g_ceph_context);
+      flush_client_sessions(export_client_set, gather);
+      if (gather.has_subs()) {
+	mdr->more()->waiting_on_peer.insert(MDS_RANK_NONE);
+	gather.set_finisher(new C_MDS_PeerRenameSessionsFlushed(this, mdr));
+	gather.activate();
+      }
     }
 
     // is witness list sufficient?
@@ -10479,6 +10629,9 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   } else if (srcdnl->is_primary() && srcdn->authority() != destdn->authority()) {
     // set ambiguous auth for srci on witnesses
     mdr->set_ambiguous_auth(srcdnl->get_inode());
+  } else if (srcdnl->is_referent_remote() && srcdn->authority() != destdn->authority()) {
+    // set ambiguous auth for src_refi on witnesses
+    mdr->set_ambiguous_auth(srcdnl->get_referent_inode());
   }
 
   // encode everything we'd need to roll this back... basically, just the original state.
@@ -10612,6 +10765,30 @@ void Server::_logged_peer_rename(const MDRequestRef& mdr,
       srcdnl->get_inode()->mark_clean();
 
     dout(10) << " exported srci " << *srcdnl->get_inode() << dendl;
+  } else if (srcdn->is_auth() && srcdnl->is_referent_remote()) {
+    // set export bounds for CInode::encode_export()
+    if (reply) {
+      map<client_t,entity_inst_t> exported_client_map;
+      map<client_t, client_metadata_t> exported_client_metadata_map;
+      bufferlist inodebl;
+      mdcache->migrator->encode_export_inode(srcdnl->get_referent_inode(), inodebl,
+					     exported_client_map,
+					     exported_client_metadata_map);
+
+      encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
+      encode(exported_client_metadata_map, reply->inode_export);
+      reply->inode_export.claim_append(inodebl);
+      reply->inode_export_v = srcdnl->get_referent_inode()->get_version();
+    }
+
+    // remove mdr auth pin
+    mdr->auth_unpin(srcdnl->get_referent_inode());
+    mdr->more()->is_inode_exporter = true;
+
+    if (srcdnl->get_referent_inode()->is_dirty())
+      srcdnl->get_referent_inode()->mark_clean();
+
+    dout(10) << __func__ << " exported srcrefi " << *srcdnl->get_referent_inode() << dendl;
   }
 
   // apply
@@ -10642,11 +10819,25 @@ void Server::_commit_peer_rename(const MDRequestRef& mdr, int r,
 {
   dout(10) << "_commit_peer_rename " << *mdr << " r=" << r << dendl;
 
-  CInode *in = destdn->get_linkage()->get_inode();
+  CInode *in = nullptr;
+  /* If referent, 'in' is assigned a referent inode below. This is definitely
+   * true for the case of renaming src referent dnl but is this valid in
+   * all cases ?
+   *   - the remote inode is never migrated, so we are good with below condition
+       - migrated_stray applies to referent inodes ? The stray migration rename
+         is never a referent link. It's always a primary link. So add an assert
+	 to validate it.
+   */
+  if (destdn->get_linkage()->is_referent_remote())
+    in = destdn->get_linkage()->get_referent_inode();
+  else
+    in = destdn->get_linkage()->get_inode();
 
   inodeno_t migrated_stray;
-  if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray())
+  if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray()) {
+    ceph_assert(!destdn->get_linkage()->is_referent_remote());
     migrated_stray = in->ino();
+  }
 
   MDSContext::vec finished;
   if (r == 0) {
