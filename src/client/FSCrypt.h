@@ -283,6 +283,7 @@ public:
   int get_decrypted_symlink(const std::string& b64enc, std::string *decrypted);
 private:
   int get_encrypted_name_length(const int& plain_size) const;
+  int get_encrypted_symlink_length(const int& plain_size) const;
 };
 
 using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;
