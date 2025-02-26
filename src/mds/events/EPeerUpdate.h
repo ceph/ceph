@@ -74,6 +74,7 @@ struct rename_rollback {
     std::string dname;
     char remote_d_type;
     utime_t old_ctime;
+    inodeno_t referent_ino;
 
     drec() : remote_d_type((char)S_IFREG) {}
 
