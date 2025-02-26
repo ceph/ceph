@@ -175,7 +175,7 @@ bs::error_code log_remove(const DoutPrefixProvider *dpp,
 	librados::ObjectWriteOperation op;
 	op.remove();
 	auto part_oid = info.part_oid(j);
-	auto subr = rgw_rados_operate(dpp, ioctx, part_oid, &op, y);
+	auto subr = rgw_rados_operate(dpp, ioctx, part_oid, std::move(op), y);
 	if (subr < 0 && subr != -ENOENT) {
 	  if (!ec)
 	    ec = bs::error_code(-subr, bs::system_category());
@@ -203,7 +203,7 @@ bs::error_code log_remove(const DoutPrefixProvider *dpp,
     } else {
       op.remove();
     }
-    r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+    r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
     if (r < 0 && r != -ENOENT) {
       if (!ec)
 	ec = bs::error_code(-r, bs::system_category());
@@ -268,7 +268,7 @@ bs::error_code logback_generations::setup(const DoutPrefixProvider *dpp,
       lock.unlock();
 
       op.write_full(bl);
-      auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+      auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
       if (r < 0 && r != -EEXIST) {
 	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << ": failed writing oid=" << oid
@@ -404,7 +404,7 @@ auto logback_generations::read(const DoutPrefixProvider *dpp, optional_yield y) 
     cls_version_read(op, &v2);
     cb::list bl;
     op.read(0, 0, &bl, nullptr);
-    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y);
     if (r < 0) {
       if (r == -ENOENT) {
 	ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -446,7 +446,7 @@ bs::error_code logback_generations::write(const DoutPrefixProvider *dpp, entries
     cls_version_inc(op);
     auto oldv = version;
     l.unlock();
-    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
+    auto r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
     if (r == 0) {
       if (oldv != version) {
 	return { ECANCELED, bs::system_category() };
