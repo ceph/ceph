@@ -8881,6 +8881,8 @@ next:
         decode(rs, bl);
         formatter->dump_string("RestoreStatus", rgw::sal::rgw_restore_status_dump(rs));
         handled = true;
+      } else if (iter->first == RGW_ATTR_TRANSITION_TIME) {
+        handled = decode_dump<utime_t>("transition_time", bl, formatter.get());
       }
 
       if (!handled)
@@ -8898,6 +8900,8 @@ next:
         decode_dump<ceph::real_time>("user.rgw.replicated-at", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
         decode_dump<ceph::real_time>("user.rgw.restore-at", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_INTERNAL_MTIME) {
+        decode_dump<ceph::real_time>("user.rgw.rgw-internal-mtime", bl, formatter.get());
       } else {
         dump_string(iter->first.c_str(), iter->second, formatter.get());
       }

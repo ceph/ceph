@@ -4050,6 +4050,18 @@ struct obj_time_weight {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+    bufferlist bl;
+    if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
+      try {
+        auto iter = bl.cbegin();
+        real_time internal_mtime;
+        decode(internal_mtime, iter);
+        if (internal_mtime > mtime) {
+          mtime = internal_mtime;
+        }
+      } catch (buffer::error& err) {
+      }
+    }
   }
 };
 
@@ -4394,8 +4406,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
     ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                        prepend_meta, get_op, rgwx_stat,
+                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, &dst_zone_trace,
                         sync_cloudtiered, true,
                         &cb, &in_stream_req);
@@ -5305,7 +5316,8 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   if (ret < 0) {
     return ret;
   }
-
+  //set same old mtime as that of transition time
+  set_mtime = mtime;
   if (cb.get_data_len() != accounted_size) {
     ret = -EIO;
     ldpp_dout(dpp, -1) << "ERROR: object truncated during fetching, expected "
@@ -5323,7 +5335,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   {
     bufferlist bl;
     encode(restore_time, bl);
-    attrs[RGW_ATTR_RESTORE_TIME] = std::move(bl);
+    attrs[RGW_ATTR_RESTORE_TIME] = attrs[RGW_ATTR_INTERNAL_MTIME] = std::move(bl);
   }
 
   real_time delete_at = real_time();
@@ -5360,9 +5372,6 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_CLOUDTIER_STORAGE_CLASS] = std::move(bl);
       ldpp_dout(dpp, 20) << "Setting RGW_ATTR_CLOUDTIER_STORAGE_CLASS: " << tier_ctx.storage_class << dendl;
     }
-    //set same old mtime as that of transition time
-    set_mtime = mtime;
-
     // set tier-config only for temp restored objects, as
     // permanent copies will be treated as regular objects
     {
@@ -5371,6 +5380,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_CLOUD_TIER_TYPE] = t;
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
     }
+
+    // The temporary cloud restore object should not sync to other site
+    log_op = false;
 
   } else { // permanent restore
     {
@@ -5381,8 +5393,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_RESTORE_TYPE] = std::move(bl);
       ldpp_dout(dpp, 20) << "Permanent restore, object:" << dest_obj << dendl;
     }
-    //set mtime to now()
-    set_mtime = real_clock::now();
+    log_op = true;
   }
 
   {
@@ -7204,6 +7215,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       }
     }
   }
+
   if (conds.if_match || conds.if_nomatch) {
     r = get_attr(dpp, RGW_ATTR_ETAG, etag, y);
     if (r < 0)

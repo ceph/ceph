@@ -680,7 +680,8 @@ class MotrObject : public StoreObject {
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+                                 uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
@@ -1199,6 +1200,19 @@ struct obj_time_weight {
     mtime = state->mtime;
     zone_short_id = state->zone_short_id;
     pg_ver = state->pg_ver;
+    bufferlist bl;
+    if (state->get_attr(RGW_ATTR_INTERNAL_MTIME, bl)) {
+      try {
+        auto iter = bl.cbegin();
+        real_time internal_mtime;
+        decode(internal_mtime, iter);
+        if (internal_mtime > mtime) {
+          mtime = internal_mtime;
+        }
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 0) << "ERROR: couldn't decode RGW_ATTR_INTERNAL_MTIME" << dendl;
+      }
+    }
   }
 };
 
