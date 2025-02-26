@@ -44,7 +44,7 @@ template <
   typename pin_t,
   size_t node_size>
 class FixedKVBtree {
-  static constexpr size_t MAX_DEPTH = 16;
+  static constexpr size_t MAX_DEPTH = 8;
   using self_type = FixedKVBtree<
     node_key_t,
     node_val_t,
@@ -258,7 +258,8 @@ public:
       }
     };
     boost::container::static_vector<
-      node_position_t<internal_node_t>, MAX_DEPTH> internal;
+      node_position_t<internal_node_t>,
+      MAX_DEPTH> internal;
     node_position_t<leaf_node_t> leaf;
 
     bool at_boundary() const {
@@ -1800,7 +1801,7 @@ private:
         c.trans, root_block)->template cast<RootBlock>();
       get_root().set_location(nroot->get_paddr());
       get_root().set_depth(iter.get_depth());
-      ceph_assert(get_root().get_depth() <= MAX_FIXEDKVBTREE_DEPTH);
+      ceph_assert(get_root().get_depth() <= MAX_DEPTH);
       set_root_node(nroot);
     }
 
