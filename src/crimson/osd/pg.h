@@ -867,9 +867,23 @@ public:
     int *return_code,
     std::vector<pg_log_op_return_item_t> *op_returns) const;
   int get_recovery_op_priority() const {
-    int64_t pri = 0;
-    get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
-    return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
+    const std::string _type = this->shard_services.get_cct()->_conf.get_val<std::string>("osd_op_queue");
+    const std::string *type = &_type;
+    if (*type == "mclock_scheduler") {
+      if (peering_state.is_forced_recovery_or_backfill()) {
+        return peering_state.recovery_msg_priority_t::FORCED;
+      } else if (peering_state.is_undersized()) {
+        return peering_state.recovery_msg_priority_t::UNDERSIZED;
+      } else if (peering_state.is_degraded()) {
+        return peering_state.recovery_msg_priority_t::DEGRADED;
+      } else {
+        return peering_state.recovery_msg_priority_t::BEST_EFFORT;
+      }
+    } else {
+      int64_t pri = 0;
+      get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+      return  pri > 0 ? pri : crimson::common::local_conf()->osd_recovery_op_priority;
+    }
   }
   seastar::future<> mark_unfound_lost(int) {
     // TODO: see PrimaryLogPG::mark_all_unfound_lost()

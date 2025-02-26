@@ -7,6 +7,7 @@
 #include "common/hobject.h"
 #include "crimson/osd/backfill_state.h"
 #include "osd/osd_types_fmt.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
 
 SET_SUBSYS(osd);
 
@@ -310,11 +311,58 @@ bool BackfillState::Enqueuing::Enqueuing::all_emptied(
   return local_backfill_info.empty() && replicas_emptied;
 }
 
+int BackfillState::Enqueuing::process_backfill_attempt(auto & primary_bi)
+{
+
+  LOG_PREFIX(BackfillState::Enqueuing::process_backfill_attempt);
+  if (!backfill_listener().budget_available()) {
+    DEBUGDPP("throttle failed, turning to Waiting", pg());
+    post_event(RequestWaiting{});
+    return 1;
+  } else if (should_rescan_replicas(backfill_state().peer_backfill_info,
+                                    primary_bi)) {
+    // Count simultaneous scans as a single op and let those complete
+    post_event(RequestReplicasScanning{});
+    return 1;
+  }
+
+  if (all_emptied(primary_bi, backfill_state().peer_backfill_info)) {
+     return 2;
+  }
+  // Get object within set of peers to operate on and the set of targets
+  // for which that object applies.
+  if (const hobject_t check = \
+      earliest_peer_backfill(backfill_state().peer_backfill_info);
+      check < primary_bi.begin) {
+    // Don't increment ops here because deletions
+    // are cheap and not replied to unlike real recovery_ops,
+    // and we can't increment ops without requeueing ourself
+    // for recovery.
+    auto result = remove_on_peers(check);
+    trim_backfilled_object_from_intervals(std::move(result),
+                                          backfill_state().last_backfill_started,
+                                          backfill_state().peer_backfill_info);
+                                          backfill_listener().maybe_flush();
+  } else if (!primary_bi.empty()) {
+    auto result = update_on_peers(check);
+    trim_backfilled_object_from_intervals(std::move(result),
+                                          backfill_state().last_backfill_started,
+                                          backfill_state().peer_backfill_info);
+    primary_bi.pop_front();
+    backfill_listener().maybe_flush();
+    } else {
+      return 2;
+    }
+    return 0;
+}
+
 BackfillState::Enqueuing::Enqueuing(my_context ctx)
   : my_base(ctx)
 {
   LOG_PREFIX(BackfillState::Enqueuing::Enqueuing);
   auto& primary_bi = backfill_state().backfill_info;
+  using interruptor =
+    crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
 
   // update our local interval to cope with recent changes
   primary_bi.begin = backfill_state().last_backfill_started;
@@ -339,7 +387,8 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
     post_event(RequestPrimaryScanning{});
     return;
   }
-
+  
+  /*
   do {
     if (!backfill_listener().budget_available()) {
       DEBUGDPP("throttle failed, turning to Waiting", pg());
@@ -347,7 +396,6 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       return;
     } else if (should_rescan_replicas(backfill_state().peer_backfill_info,
 				      primary_bi)) {
-      // Count simultaneous scans as a single op and let those complete
       post_event(RequestReplicasScanning{});
       return;
     }
@@ -355,15 +403,9 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
     if (all_emptied(primary_bi, backfill_state().peer_backfill_info)) {
       break;
     }
-    // Get object within set of peers to operate on and the set of targets
-    // for which that object applies.
     if (const hobject_t check = \
           earliest_peer_backfill(backfill_state().peer_backfill_info);
         check < primary_bi.begin) {
-      // Don't increment ops here because deletions
-      // are cheap and not replied to unlike real recovery_ops,
-      // and we can't increment ops without requeueing ourself
-      // for recovery.
       auto result = remove_on_peers(check);
       trim_backfilled_object_from_intervals(std::move(result),
 					    backfill_state().last_backfill_started,
@@ -380,7 +422,32 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
       break;
     }
   } while (!all_emptied(primary_bi, backfill_state().peer_backfill_info));
+   */
 
+  do {
+    seastar::logger& logger = crimson::get_logger(0);
+    logger.info("Calling acq_throttle ");
+    std::optional<int> backfill_result;
+    auto futopt = backfill_listener().acq_throttle();
+    if (!futopt) {
+      seastar::logger& logger = crimson::get_logger(0);
+      logger.info("throtteling future is disabled");
+      process_backfill_attempt(primary_bi);
+    } else {
+      logger.info(" throttle is acquired");
+      backfill_listener().throttle_acquired = true;
+      std::ignore = interruptor::make_interruptible(std::move(*futopt)
+      ).then_interruptible([this, &primary_bi, &backfill_result] {
+         seastar::logger& logger = crimson::get_logger(0);
+         logger.info("throtteling future is loaded ");
+         backfill_result = process_backfill_attempt(primary_bi);
+         backfill_listener().release_throttle();
+      });
+    }
+    if(backfill_result.has_value())
+      logger.info("backfill_result value is {}", backfill_result.value());
+  } while (!all_emptied(primary_bi, backfill_state().peer_backfill_info));
+   
   if (should_rescan_primary(backfill_state().peer_backfill_info,
 				   primary_bi)) {
     // need to grab one another chunk of the object namespace and restart

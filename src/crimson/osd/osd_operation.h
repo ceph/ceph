@@ -346,14 +346,17 @@ public:
   // returns the future for the acquiring otherwise
   std::optional<seastar::future<>>
   try_acquire_throttle_now(crimson::osd::scheduler::params_t params) {
-    if (!max_in_progress || in_progress < max_in_progress) {
-      ++in_progress;
-      --pending;
+    if (!max_in_progress) {
       return std::nullopt;
     }
     return acquire_throttle(params);
   }
 
+  void try_release_throttle() {
+    return release_throttle();
+  }
+
+  void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami);
 private:
   void dump_detail(Formatter *f) const final;
 

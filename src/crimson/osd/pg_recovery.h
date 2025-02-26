@@ -51,6 +51,8 @@ public:
     const hobject_t& obj,
     const eversion_t& v,
     const std::vector<pg_shard_t> &peers) final;
+  void release_throttle();
+  //bool throttle_acquired;
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
@@ -122,6 +124,7 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+  std::optional<seastar::future<>> acq_throttle() final;
   void backfilled() final;
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;

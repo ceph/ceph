@@ -170,7 +170,7 @@ public:
       const PeeringFacade& peering_state,
       const BackfillInterval& backfill_info,
       const std::map<pg_shard_t, BackfillInterval>& peer_backfill_info);
-
+    int process_backfill_attempt(auto &primary_bi);
   private:
     void maybe_update_range();
     void trim_backfill_infos();
@@ -320,6 +320,8 @@ public:
       backfill_machine.process_event(RequestDone{});
     }
   }
+  //void process_backfill_attempt(auto &primary_bi);
+
 private:
   struct backfill_suspend_state_t {
     bool suspended = false;
@@ -383,6 +385,9 @@ struct BackfillState::BackfillListener {
 
   virtual void backfilled() = 0;
 
+  virtual std::optional<seastar::future<>> acq_throttle() = 0;
+  virtual void release_throttle() = 0;
+  bool throttle_acquired = false;
   virtual ~BackfillListener() = default;
 };
 

@@ -66,7 +66,7 @@ class ClassedOpQueueScheduler final : public Scheduler {
     if (conf.get_val<std::string>("osd_op_queue_cut_off") == "debug_random") {
       srand(time(NULL));
       return (rand() % 2 < 1) ?
-	scheduler_class_t::repop : scheduler_class_t::immediate;
+        scheduler_class_t::repop : scheduler_class_t::immediate;
     } else if (conf.get_val<std::string>("osd_op_queue_cut_off") == "high") {
       return scheduler_class_t::immediate;
     } else {
@@ -128,7 +128,7 @@ public:
     return queue.empty();
   }
 
-  item_t dequeue() final {
+  WorkItem dequeue() final {
     return queue.dequeue();
   }
 
@@ -145,7 +145,8 @@ public:
   ~ClassedOpQueueScheduler() final {};
 };
 
-SchedulerRef make_scheduler(ConfigProxy &conf)
+SchedulerRef make_scheduler(CephContext *cct, ConfigProxy &conf, int whoami, uint32_t nshards, int sid,
+                            bool is_rotational, bool perf_cnt)
 {
   const std::string _type = conf.get_val<std::string>("osd_op_queue");
   const std::string *type = &_type;
@@ -166,7 +167,7 @@ SchedulerRef make_scheduler(ConfigProxy &conf)
 	conf->osd_op_pq_min_cost
       );
   } else if (*type == "mclock_scheduler") {
-    return std::make_unique<mClockScheduler>(conf);
+    return std::make_unique<mClockScheduler>(cct, whoami, nshards, sid, is_rotational, perf_cnt);
   } else {
     ceph_assert("Invalid choice of wq" == 0);
     return std::unique_ptr<mClockScheduler>();

@@ -582,6 +582,12 @@ seastar::future<> OSD::start()
   }).then([this] {
     return _add_device_class();
    }).then([this] {
+    return _get_device_type();
+   }).then([this](auto rotational) {
+    return shard_services.invoke_on_all([this, rotational](auto &local_service) {
+      local_service.local_state.initialize_scheduler(local_service.get_cct(), rotational);
+    });
+   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
     monc->sub_want("osdmap", 0, 0);
@@ -684,6 +690,24 @@ seastar::future<> OSD::_send_boot()
   // OSDMap flag
   m->metadata["osd_type"] = "crimson";
   return monc->send_message(std::move(m));
+}
+seastar::future<bool> OSD::_get_device_type()
+{
+  LOG_PREFIX(OSD::_get_device_type);
+  if (!local_conf().get_val<bool>("osd_class_update_on_start")) {
+    co_return false;
+  }
+
+  std::string device_class = co_await store.get_default_device_class();
+  if (device_class.empty()) {
+    INFO("Device class is empty; ");
+    co_return false;
+  }
+
+  bool rotational = (device_class != "ssd");
+
+  INFO("device_class is {} rotational: {}", device_class, rotational);
+  co_return rotational;
 }
 
 seastar::future<> OSD::_add_device_class()
