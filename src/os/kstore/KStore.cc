@@ -34,6 +34,8 @@
 #include "common/Formatter.h"
 #include "common/pretty_binary.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_kstore
 
