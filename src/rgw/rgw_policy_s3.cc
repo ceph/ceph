@@ -248,8 +248,7 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
 {
   JSONParser parser;
 
-  // JSON coming in for Policies can include the NULL character, which breaks parsing:
-  if (!parser.parse(std::string_view(bl.c_str(), bl.length() - 1))) {
+  if (!parser.parse(bl.c_str(), bl.length())) {
     err_msg = "Malformed JSON";
     dout(0) << "malformed json" << dendl;
     return -EINVAL;
