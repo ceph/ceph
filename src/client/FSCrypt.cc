@@ -735,6 +735,16 @@ int FSCryptFNameDenc::get_encrypted_name_length(const int& plain_size) const
   return padded_size;
 }
 
+int FSCryptFNameDenc::get_encrypted_symlink_length(const int& plain_size) const
+{
+   int padding_size = ctx->get_filename_padding_bytes();
+   int padded_size = (plain_size + padding_size - 1) & ~ (padding_size - 1);
+   if (padded_size > PATH_MAX) {
+    padded_size = PATH_MAX;
+  }
+  return padded_size;
+}
+
 int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name)
 {
   if (plain == "." || plain == ".." ) {
@@ -809,13 +819,13 @@ int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, const std::
 
 struct fscrypt_slink_data {
   ceph_le16 len;
-  char enc[NAME_MAX - 2];
+  char enc[PATH_MAX - 2];
 };
 
 int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::string *encrypted)
 {
   auto plain_size = plain.size();
-  auto symlink_padded_size = get_encrypted_name_length(plain_size);
+  auto symlink_padded_size = get_encrypted_symlink_length(plain_size);
 
   char orig[symlink_padded_size];
   memcpy(orig, plain.c_str(), plain_size);
@@ -832,7 +842,7 @@ int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::strin
 
   slink_data.len = r;
 
-  int b64_len = NAME_MAX * 2; // name.size() * 2;
+  int b64_len = PATH_MAX * 2; // name.size() * 2;
   char b64_name[b64_len]; // large enough
   int len = fscrypt_fname_armor((const char *)&slink_data, slink_data.len + sizeof(slink_data.len), b64_name, b64_len);
 
@@ -848,7 +858,7 @@ int FSCryptFNameDenc::get_decrypted_symlink(const std::string& b64enc, std::stri
   int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
                                   (char *)&slink_data, sizeof(slink_data));
 
-  char dec_fname[NAME_MAX + 64]; /* some extra just in case */
+  char dec_fname[PATH_MAX + 64]; /* some extra just in case */
 
   if (slink_data.len > len) { /* should never happen */
     ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: slink_data.len greater than decrypted buffer (slink_data.len=" << slink_data.len << ", len=" << len << ")" << dendl;
