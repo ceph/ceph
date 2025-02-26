@@ -6204,7 +6204,8 @@ int RGWInitMultipart::verify_permission(optional_yield y)
   // add server-side encryption headers
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutObject)) {
+  if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3PutObject)) {
     return -EACCES;
   }
 
