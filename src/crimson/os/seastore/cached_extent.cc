@@ -109,6 +109,26 @@ void LogicalCachedExtent::maybe_set_intermediate_laddr(LBAMapping &mapping) {
     : mapping.get_key();
 }
 
+std::ostream &operator<<(
+  std::ostream &out,
+  CachedExtent::viewable_state_t state)
+{
+  switch(state) {
+  case CachedExtent::viewable_state_t::stable:
+    return out << "stable";
+  case CachedExtent::viewable_state_t::pending:
+    return out << "pending";
+  case CachedExtent::viewable_state_t::invalid:
+    return out << "invalid";
+  case CachedExtent::viewable_state_t::stable_retired:
+    return out << "stable_retired";
+  case CachedExtent::viewable_state_t::stable_with_pending:
+    return out << "stable_with_pending";
+  default:
+    __builtin_unreachable();
+  }
+}
+
 bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length) const
 {
   assert(length > 0);
