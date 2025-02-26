@@ -151,7 +151,9 @@ typedef struct {
 typedef enum {
   RBD_MIRROR_MODE_DISABLED, /* mirroring is disabled */
   RBD_MIRROR_MODE_IMAGE,    /* mirroring enabled on a per-image basis */
-  RBD_MIRROR_MODE_POOL      /* mirroring enabled on all journaled images */
+  RBD_MIRROR_MODE_POOL,     /* mirroring enabled on all journaled images */
+  RBD_MIRROR_MODE_INIT_ONLY /* mirroring is initialized but not enabled
+                               (default namespace only) */
 } rbd_mirror_mode_t;
 
 typedef enum {
