@@ -318,7 +318,7 @@ public:
 };
 
 template <typename IntegerT>
-requires ceph_json::detail::json_integer<IntegerT> ||
+requires ceph_json::detail::json_integer<IntegerT> 
 void decode_json_obj(IntegerT& val, JSONObj *obj)
 {
  auto r = ceph::parse<IntegerT>(obj->get_data());
