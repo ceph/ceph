@@ -219,7 +219,6 @@ private:
   std::unique_ptr<remote_pool_poller::Listener> m_remote_pool_poller_listener;
   std::unique_ptr<RemotePoolPoller<ImageCtxT>> m_remote_pool_poller;
 
-  std::unique_ptr<NamespaceReplayer<ImageCtxT>> m_default_namespace_replayer;
   std::map<std::string, NamespaceReplayer<ImageCtxT> *> m_namespace_replayers;
 
   std::string m_asok_hook_name;

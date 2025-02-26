@@ -29,8 +29,9 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_FAST_DIFF,
                  RBD_FEATURE_OBJECT_MAP,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
-                 RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
-                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                 RBD_MIRROR_MODE_POOL, RBD_MIRROR_MODE_INIT_ONLY,
+                 RBD_MIRROR_IMAGE_ENABLED, RBD_MIRROR_IMAGE_DISABLED,
+                 MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_OPERATION_FEATURE_CLONE_CHILD,
@@ -2393,23 +2394,90 @@ class TestMirroring(object):
         eq(rados.get_fsid(), self.rbd.mirror_site_name_get(rados))
 
     def test_mirror_remote_namespace(self):
-        remote_namespace = "remote-ns"
-        # cannot set remote namespace for the default namespace
-        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
-                      ioctx, remote_namespace)
         eq("", self.rbd.mirror_remote_namespace_get(ioctx))
-        self.rbd.namespace_create(ioctx, "ns1")
-        ioctx.set_namespace("ns1")
-        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
         # cannot set remote namespace while mirroring enabled
         assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
-                      ioctx, remote_namespace)
-        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
-        # cannot set remote namespace to the default namespace
+                      ioctx, "remote-ns1")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
         assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
                       ioctx, "")
-        self.rbd.mirror_remote_namespace_set(ioctx, remote_namespace)
-        eq(remote_namespace, self.rbd.mirror_remote_namespace_get(ioctx))
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_INIT_ONLY)
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # set remote namespace for the default namespace while in init-only
+        self.rbd.mirror_remote_namespace_set(ioctx, "remote-ns1")
+        eq("remote-ns1", self.rbd.mirror_remote_namespace_get(ioctx))
+        # reset remote namespace for the default namespace while in init-only
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # change remote namespace for the default namespace while in init-only
+        self.rbd.mirror_remote_namespace_set(ioctx, "remote-ns2")
+        eq("remote-ns2", self.rbd.mirror_remote_namespace_get(ioctx))
+        # disabling mirroring also resets remote namespace
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # set remote namespace for the default namespace while mirroring disabled
+        self.rbd.mirror_remote_namespace_set(ioctx, "remote-ns3")
+        eq("remote-ns3", self.rbd.mirror_remote_namespace_get(ioctx))
+        # reset remote namespace for the default namespace while mirroring disabled
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # change remote namespace for the default namespace while mirroring disabled
+        self.rbd.mirror_remote_namespace_set(ioctx, "remote-ns4")
+        eq("remote-ns4", self.rbd.mirror_remote_namespace_get(ioctx))
+        # moving to init-only or an enabled state preserves remote namespace
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_INIT_ONLY)
+        eq("remote-ns4", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        eq("remote-ns4", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        eq("remote-ns4", self.rbd.mirror_remote_namespace_get(ioctx))
+
+        self.rbd.namespace_create(ioctx, "ns1")
+        ioctx.set_namespace("ns1")
+        eq("ns1", self.rbd.mirror_remote_namespace_get(ioctx))
+        # set remote namespace on a non-default namespace while mirroring disabled
+        self.rbd.mirror_remote_namespace_set(ioctx, "remote-ns1")
+        eq("remote-ns1", self.rbd.mirror_remote_namespace_get(ioctx))
+        # reset remote namespace on a non-default namespace while mirroring disabled
+        self.rbd.mirror_remote_namespace_set(ioctx, "ns1")
+        eq("ns1", self.rbd.mirror_remote_namespace_get(ioctx))
+        # change remote namespace on a non-default namespace while mirroring disabled
+        self.rbd.mirror_remote_namespace_set(ioctx, "remote-ns2")
+        eq("remote-ns2", self.rbd.mirror_remote_namespace_get(ioctx))
+        # cannot move to init-only on a non-default namespace
+        assert_raises(InvalidArgument, self.rbd.mirror_mode_set,
+                      ioctx, RBD_MIRROR_MODE_INIT_ONLY)
+        eq(RBD_MIRROR_MODE_DISABLED, self.rbd.mirror_mode_get(ioctx))
+        # moving to an enabled state preserves remote namespace
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        eq("remote-ns2", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        eq("remote-ns2", self.rbd.mirror_remote_namespace_get(ioctx))
+        # disabling mirroring also resets remote namespace
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        eq("ns1", self.rbd.mirror_remote_namespace_get(ioctx))
+        # set remote namespace on a non-default namespace to the default namespace
+        self.rbd.mirror_remote_namespace_set(ioctx, "")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # moving to an enabled state preserves remote namespace
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # cannot set remote namespace while mirroring enabled
+        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
+                      ioctx, "remote-ns1")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
+                      ioctx, "ns1")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        assert_raises(InvalidArgument, self.rbd.mirror_remote_namespace_set,
+                      ioctx, "")
+        eq("", self.rbd.mirror_remote_namespace_get(ioctx))
+        # disabling mirroring clears remote namespace
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED)
+        eq("ns1", self.rbd.mirror_remote_namespace_get(ioctx))
         ioctx.set_namespace("")
         self.rbd.namespace_remove(ioctx, "ns1")
 
