@@ -11345,6 +11345,10 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     if (fh->flags & O_PATH)
         return -EBADF;
 #endif
+    // negative iovcount is invalid,
+    // if we are doing zerocopy, we must also have a bufferlist
+    // zero copy could work with a passed in buffer for write 
+    // (but not for read - for read, we need an iovec to fill, a passed in buffer would force a copy).
     if(iovcnt < 0 || (zerocopy && blp == nullptr)) {
       return -EINVAL;
     }
@@ -11372,7 +11376,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     } else {
         bufferlist bl;
         // if zerocopy, blp can't be null due to the check above
-        // so the read will be into the memory provided by caller
+        // the read will be into Ceph buffers which are returned to the caller.
         int64_t r = _read(fh, offset, totallen, blp ? blp : &bl,
                           onfinish);
         ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
