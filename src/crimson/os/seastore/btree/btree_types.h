@@ -100,4 +100,96 @@ struct __attribute__((packed)) fixed_kv_node_meta_le_t {
   }
 };
 
-}
+namespace lba_manager::btree {
+
+/**
+ * lba_map_val_t
+ *
+ * struct representing a single lba mapping
+ */
+struct lba_map_val_t {
+  extent_len_t len = 0;  ///< length of mapping
+  pladdr_t pladdr;         ///< direct addr of mapping or
+			   //	laddr of a direct lba mapping(see btree_lba_manager.h)
+  extent_ref_count_t refcount = 0; ///< refcount
+  checksum_t checksum = 0; ///< checksum of original block written at paddr (TODO)
+
+  lba_map_val_t() = default;
+  lba_map_val_t(
+    extent_len_t len,
+    pladdr_t pladdr,
+    extent_ref_count_t refcount,
+    checksum_t checksum)
+    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
+  bool operator==(const lba_map_val_t&) const = default;
+};
+
+std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
+
+/**
+ * lba_map_val_le_t
+ *
+ * On disk layout for lba_map_val_t.
+ */
+struct __attribute__((packed)) lba_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  pladdr_le_t pladdr;
+  extent_ref_count_le_t refcount{0};
+  checksum_le_t checksum{0};
+
+  lba_map_val_le_t() = default;
+  lba_map_val_le_t(const lba_map_val_le_t &) = default;
+  explicit lba_map_val_le_t(const lba_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      pladdr(pladdr_le_t(val.pladdr)),
+      refcount(val.refcount),
+      checksum(val.checksum) {}
+
+  operator lba_map_val_t() const {
+    return lba_map_val_t{ len, pladdr, refcount, checksum };
+  }
+};
+
+} // namespace lba_manager::btree
+
+namespace backref {
+
+struct backref_map_val_t {
+  extent_len_t len = 0;	///< length of extents
+  laddr_t laddr = L_ADDR_MIN; ///< logical address of extents
+  extent_types_t type = extent_types_t::NONE;
+
+  backref_map_val_t() = default;
+  backref_map_val_t(
+    extent_len_t len,
+    laddr_t laddr,
+    extent_types_t type)
+    : len(len), laddr(laddr), type(type) {}
+
+  bool operator==(const backref_map_val_t& rhs) const noexcept {
+    return len == rhs.len && laddr == rhs.laddr;
+  }
+};
+
+std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
+
+struct __attribute__((packed)) backref_map_val_le_t {
+  extent_len_le_t len = init_extent_len_le(0);
+  laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
+  extent_types_le_t type = 0;
+
+  backref_map_val_le_t() = default;
+  backref_map_val_le_t(const backref_map_val_le_t &) = default;
+  explicit backref_map_val_le_t(const backref_map_val_t &val)
+    : len(init_extent_len_le(val.len)),
+      laddr(val.laddr),
+      type(extent_types_le_t(val.type)) {}
+
+  operator backref_map_val_t() const {
+    return backref_map_val_t{len, laddr, (extent_types_t)type};
+  }
+};
+
+} // namespace backerf
+
+} // namespace crimson::os::seastore

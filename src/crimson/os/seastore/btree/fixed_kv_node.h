@@ -16,7 +16,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/btree/fixed_kv_btree.h"
 #include "crimson/os/seastore/root_block.h"
 

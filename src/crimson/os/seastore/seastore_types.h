@@ -74,6 +74,7 @@ inline depth_le_t init_depth_le(uint32_t i) {
 }
 
 using checksum_t = uint32_t;
+using checksum_le_t = ceph_le32;
 constexpr checksum_t CRC_NULL = 0;
 
 // Immutable metadata for seastore to set at mkfs time
