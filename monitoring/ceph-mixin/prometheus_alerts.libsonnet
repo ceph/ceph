@@ -848,7 +848,7 @@
         {
           alert: 'NVMeoFSubsystemNamespaceLimit',
           'for': '1m',
-          expr: '(count by(nqn, cluster) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit',
+          expr: '(count by(nqn, cluster, instance) (ceph_nvmeof_subsystem_namespace_metadata)) >= on(nqn, instance) group_right(cluster) ceph_nvmeof_subsystem_namespace_limit',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: '{{ $labels.nqn }} subsystem has reached its maximum number of namespaces%(cluster)s' % $.MultiClusterSummary(),
