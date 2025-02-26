@@ -544,7 +544,7 @@ namespace rgw::sal {
     return read_attrs(dpp, read_op, y, target_obj);
   }
 
-  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp)
+  int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
   {
     rgw_obj target = get_obj();
     int r = get_obj_attrs(y, dpp, &target);
@@ -553,7 +553,7 @@ namespace rgw::sal {
     }
     set_atomic();
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
   }
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)

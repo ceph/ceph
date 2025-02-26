@@ -206,7 +206,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp) 
+                               optional_yield y, const DoutPrefixProvider* dpp,  uint32_t flags)
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
@@ -214,7 +214,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
   if (driver->get_cache_driver()->update_attrs(dpp, this->get_key().get_oid(), update, y) < 0) 
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver update_attrs method failed." << dendl;
 
-  return next->modify_obj_attrs(attr_name, attr_val, y, dpp);  
+  return next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
