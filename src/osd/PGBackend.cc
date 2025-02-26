@@ -208,7 +208,8 @@ void PGBackend::rollback(
       PGBackend *pg) : hoid(hoid), pg(pg) {}
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
-      pg->rollback_append(hoid, old_size, &temp);
+      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, pg->get_parent()->whoami_shard().shard);
+      pg->rollback_append(hoid, shard_size, &temp);
       temp.append(t);
       temp.swap(t);
     }
@@ -500,13 +501,13 @@ void PGBackend::rollback_setattrs(
 
 void PGBackend::rollback_append(
   const hobject_t &hoid,
-  uint64_t old_size,
+  uint64_t old_shard_size,
   ObjectStore::Transaction *t) {
   ceph_assert(!hoid.is_temp());
   t->truncate(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    old_size);
+    old_shard_size);
 }
 
 void PGBackend::rollback_stash(
