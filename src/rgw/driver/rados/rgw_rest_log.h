@@ -27,6 +27,7 @@ class RGWOp_BILog_List : public RGWRESTOp {
   uint32_t format_ver{0};
   bool truncated{false};
   std::optional<rgw::bucket_log_layout_generation> next_log_layout;
+  std::optional<rgw_bi_log_entry> last_processed_entry;
 
 public:
   RGWOp_BILog_List() : sent_header(false) {}
@@ -206,10 +207,11 @@ public:
 
 class RGWOp_DATALog_List : public RGWRESTOp {
   std::vector<rgw_data_change_log_entry> entries;
-  std::string last_marker;
+  read_remote_data_log_last_marker last_marker;
   bool truncated;
   bool extra_info;
   ceph::real_time last_update;
+  uint32_t format_ver{1};
 public:
   RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() override {}

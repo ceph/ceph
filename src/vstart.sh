@@ -959,6 +959,11 @@ $CCLIENTDEBUG
         ; rgw lc debug interval = 10
         $(format_conf "${extra_conf}")
 EOF
+    if [ -n "$RGW_ZONEGROUP" ]; then
+        wconf <<EOF
+        rgw zonegroup = $RGW_ZONEGROUP
+EOF
+    fi
     if [ "$rgw_store" == "dbstore" ] ; then
         do_rgw_dbstore_conf
     elif [ "$rgw_store" == "posix" ] ; then

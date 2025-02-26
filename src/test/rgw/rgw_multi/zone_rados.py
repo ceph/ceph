@@ -58,10 +58,10 @@ class RadosZone(Zone):
         def delete_bucket(self, name):
             return self.conn.delete_bucket(name)
 
-        def check_bucket_eq(self, zone_conn, bucket_name):
-            log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
+        def check_bucket_eq(self, zone_conn, bucket_name, bucket_name2=None):
+            log.info('comparing buckets={%s, %s} zones={%s, %s}', bucket_name, bucket_name2 or bucket_name, self.name, zone_conn.name)
             b1 = self.get_bucket(bucket_name)
-            b2 = zone_conn.get_bucket(bucket_name)
+            b2 = zone_conn.get_bucket(bucket_name2 or bucket_name)
 
             b1_versions = b1.list_versions()
             log.debug('bucket1 objects:')
@@ -101,7 +101,7 @@ class RadosZone(Zone):
                         if k1_olh or k2_olh:
                             check_object_eq(k1_olh, k2_olh, False)
 
-            log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
+            log.info('success, bucket identical: buckets={%s, %s} zones={%s, %s}', bucket_name, bucket_name2 or bucket_name, self.name, zone_conn.name)
 
             return True
 

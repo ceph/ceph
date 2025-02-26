@@ -371,7 +371,8 @@ void RGWOp_BILog_List::execute(optional_yield y) {
          max_entries_str = s->info.args.get("max-entries"),
          bucket_instance = s->info.args.get("bucket-instance"),
          gen_str = s->info.args.get("generation", &gen_specified),
-         format_version_str = s->info.args.get("format-ver");
+         format_version_str = s->info.args.get("format-ver"),
+         rgwx_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "zone");
   std::unique_ptr<rgw::sal::Bucket> bucket;
   rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name));
 
@@ -443,12 +444,12 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
   unsigned count = 0;
 
-
   max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   send_response();
+  list<rgw_bi_log_entry> zone_entries;
   do {
     list<rgw_bi_log_entry> entries;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(s, bucket->get_info(), log_layout, shard_id,
@@ -459,9 +460,21 @@ void RGWOp_BILog_List::execute(optional_yield y) {
       return;
     }
 
-    count += entries.size();
+    // update last processed marker for trimming purposes
+    if (!entries.empty()) {
+      last_processed_entry = entries.back();
+    }
 
-    send_response(entries, marker);
+    zone_entries.clear();
+    for (auto& entry : entries) {
+      if (entry.log_zones.contains(rgwx_zone) || rgwx_zone.empty() || entry.log_zones.empty()) {
+        zone_entries.push_back(std::move(entry));
+      }
+    }
+
+    count += zone_entries.size();
+
+    send_response(zone_entries, marker);
   } while (truncated && count < max_entries);
 
   send_response_end();
@@ -509,6 +522,13 @@ void RGWOp_BILog_List::send_response_end() {
       encode_json("generation", next_log_layout->gen, s->formatter);
       encode_json("num_shards", rgw::num_shards(next_log_layout->layout.in_index.layout), s->formatter);
       s->formatter->close_section(); // next_log
+    }
+
+    if (last_processed_entry) {
+      s->formatter->open_object_section("last_processed_marker");
+      encode_json("id", last_processed_entry->id, s->formatter);
+      encode_json("timestamp", utime_t(last_processed_entry->timestamp), s->formatter);
+      s->formatter->close_section(); // last_processed_marker
     }
 
     s->formatter->close_section(); // result
@@ -652,10 +672,11 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
 }
 
 void RGWOp_DATALog_List::execute(optional_yield y) {
-  string   shard = s->info.args.get("id");
-
-  string   max_entries_str = s->info.args.get("max-entries"),
+  string   shard = s->info.args.get("id"),
+           max_entries_str = s->info.args.get("max-entries"),
            marker = s->info.args.get("marker"),
+           rgwx_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "zone"),
+           format_version_str = s->info.args.get("format-ver"),
            err;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
@@ -674,6 +695,15 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
     return;
   }
 
+  if (!format_version_str.empty()) {
+    format_ver = strict_strtoll(format_version_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_ver << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+  }
+
   if (!max_entries_str.empty()) {
     max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
     if (!err.empty()) {
@@ -690,7 +720,7 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
   // entry listed
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
     datalog_rados->list_entries(this, shard_id, max_entries, entries,
-				marker, &last_marker, &truncated, y);
+				marker, &last_marker, &truncated, y, rgwx_zone);
 
   RGWDataChangesLogInfo info;
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
@@ -708,9 +738,13 @@ void RGWOp_DATALog_List::send_response() {
     return;
 
   s->formatter->open_object_section("log_entries");
-  s->formatter->dump_string("marker", last_marker);
   utime_t lu(last_update);
   encode_json("last_update", lu, s->formatter);
+  if (format_ver >= 2) {
+    encode_json("last_marker", last_marker, s->formatter);
+  } else {
+    s->formatter->dump_string("marker", last_marker.log_id);
+  }
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
@@ -724,7 +758,7 @@ void RGWOp_DATALog_List::send_response() {
     }
     s->formatter->close_section();
   }
-  s->formatter->close_section();
+  s->formatter->close_section(); // log_entries
   flusher.flush();
 }
 
@@ -1079,11 +1113,24 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       std::unique_ptr<rgw::sal::Bucket> dest_bucket;
       op_ret = driver->load_bucket(s, *pipe.dest.bucket, &dest_bucket, y);
       if (op_ret < 0) {
+        if (op_ret == -ENOENT) { // if the destination bucket got deleted, let it trim
+          status.sync_status.state = BucketSyncState::NotApplicable;
+          op_ret = 0;
+          continue;
+        }
         ldpp_dout(this, 4) << "failed to read target bucket info (bucket=: " << cpp_strerror(op_ret) << dendl;
         return;
       }
 
       *opt_dest_info = dest_bucket->get_info();
+      if (opt_dest_info->zonegroup != driver->get_zone()->get_zonegroup().get_id()) {
+        // this usually happen when the user has wrong zones for the bucket in the sync policy
+        // we can cover the mistake by returning the bucket as not applicable so it can be trimmed
+        status.sync_status.state = BucketSyncState::NotApplicable;
+        ldpp_dout(this, 20) << "skipping as I do not own the bucket: " << *pipe.dest.bucket << dendl;
+        continue;
+      }
+
       pinfo = &(*opt_dest_info);
       pipe.dest.bucket = pinfo->bucket;
     }

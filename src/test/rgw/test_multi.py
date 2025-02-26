@@ -64,15 +64,16 @@ class Cluster(multisite.Cluster):
             cmd += ['--rgw-cache-enabled=false']
         return bash(cmd, **kwargs)
 
-    def start(self):
+    def start(self, zonegroup):
         cmd = [mstart_path + 'mstart.sh', self.cluster_id]
         env = None
         if self.needs_reset:
             env = os.environ.copy()
             env['CEPH_NUM_MDS'] = '0'
+            env['RGW_ZONEGROUP'] = zonegroup
             cmd += ['-n']
-            # cmd += ['-o']
-            # cmd += ['rgw_cache_enabled=false']
+            cmd += ['-o']
+            cmd += ['rgw_cache_enabled=false']
         bash(cmd, env=env)
         self.needs_reset = False
 
@@ -238,7 +239,7 @@ def init(parse_args):
     # start first cluster
     c1 = Cluster(cluster_name(1))
     if bootstrap:
-        c1.start()
+        c1.start(zonegroup_name(0))
     clusters = []
     clusters.append(c1)
 
@@ -302,7 +303,7 @@ def init(parse_args):
                 cluster = Cluster(cluster_name(len(clusters) + 1))
                 clusters.append(cluster)
                 if bootstrap:
-                    cluster.start()
+                    cluster.start(zonegroup.name)
                     # pull realm configuration from the master's gateway
                     gateway = realm.meta_master_zone().gateways[0]
                     realm.pull(cluster, gateway, admin_creds, ['--default'])

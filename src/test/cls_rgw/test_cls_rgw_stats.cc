@@ -88,10 +88,7 @@ int index_prepare(librados::IoCtx& ioctx, const std::string& oid,
 {
   librados::ObjectWriteOperation op;
   const std::string loc; // empty
-  constexpr bool log_op = false;
-  constexpr int flags = 0;
-  rgw_zone_set zones;
-  cls_rgw_bucket_prepare_op(op, type, tag, key, loc, log_op, flags, zones);
+  cls_rgw_bucket_prepare_op(op, type, tag, key, loc);
   return ioctx.operate(oid, &op);
 }
 
@@ -105,8 +102,9 @@ int index_complete(librados::IoCtx& ioctx, const std::string& oid,
   constexpr bool log_op = false;
   constexpr int flags = 0;
   constexpr rgw_zone_set* zones = nullptr;
+  constexpr std::set<rgw_zone_id> log_zones;
   cls_rgw_bucket_complete_op(op, type, tag, ver, key, meta,
-                             remove_objs, log_op, flags, zones);
+                             remove_objs, log_op, flags, zones, log_zones);
   return ioctx.operate(oid, &op);
 }
 

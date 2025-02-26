@@ -438,9 +438,7 @@ public:
                RGWSI_BucketIndex *bi_svc,
                RGWSI_User* user_svc);
 
-  void init(RGWUserCtl *user_ctl,
-            RGWDataChangesLog *datalog,
-            const DoutPrefixProvider *dpp);
+  void init(RGWUserCtl *user_ctl);
 
   struct Bucket {
     struct GetParams {
@@ -693,15 +691,17 @@ public:
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,
                               std::optional<rgw_bucket> bucket,
-			      RGWBucketSyncPolicyHandlerRef *phandler,
-			      optional_yield y,
+                              RGWBucketSyncPolicyHandlerRef *phandler,
+                              optional_yield y,
                               const DoutPrefixProvider *dpp);
-  int bucket_exports_data(const rgw_bucket& bucket,
-                          optional_yield y,
-                          const DoutPrefixProvider *dpp);
   int bucket_imports_data(const rgw_bucket& bucket,
                           optional_yield y,
                           const DoutPrefixProvider *dpp);
+  int get_bucket_sync_hints(const DoutPrefixProvider *dpp,
+                            const rgw_bucket& bucket,
+                            std::set<rgw_bucket> *sources,
+                            std::set<rgw_bucket> *dests,
+                            optional_yield y);
 
 private:
   int convert_old_bucket_info(const rgw_bucket& bucket,

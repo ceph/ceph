@@ -648,8 +648,17 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   del_op->params.bucket_owner = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
 
-  uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
-                   ? rgw::sal::FLAG_LOG_OP : 0;
+  bool log_op = !remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone());
+  if (log_op) { // only check per-bucket if it's lc needs logging
+    rgw_log_op_info log_op_info;
+    if (ret = should_log_op(driver, oc.bucket->get_key(), obj->get_name(), obj->get_attrs(), dpp, null_yield, log_op_info); ret < 0 && ret != -ENOENT) {
+      return ret;
+    }
+    log_op = ret;
+    del_op->params.log_op_info = &log_op_info;
+  }
+
+  uint32_t flags = log_op ? rgw::sal::FLAG_LOG_OP : 0;
   ret =  del_op->delete_obj(dpp, null_yield, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
@@ -1006,13 +1015,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   return 0;
 } /* RGWLC::handle_multipart_expiration */
 
-static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, bufferlist& tags_bl)
-{
-  std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
-
-  return rop->get_attr(dpp, RGW_ATTR_TAGS, tags_bl, null_yield);
-}
-
 static bool is_valid_op(const lc_op& op)
 {
       return (op.status &&
@@ -1063,23 +1065,14 @@ static int check_tags(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool *skip)
   if (op.obj_tags != boost::none) {
     *skip = true;
 
-    bufferlist tags_bl;
-    int ret = read_obj_tags(dpp, oc.obj.get(), tags_bl);
+    RGWObjTags dest_obj_tags;
+    int ret = read_obj_tags(dpp, oc.obj.get(), null_yield, dest_obj_tags);
     if (ret < 0) {
       if (ret != -ENODATA) {
         ldpp_dout(oc.dpp, 5) << "ERROR: read_obj_tags returned r="
 			 << ret << " " << oc.wq->thr_name() << dendl;
       }
       return 0;
-    }
-    RGWObjTags dest_obj_tags;
-    try {
-      auto iter = tags_bl.cbegin();
-      dest_obj_tags.decode(iter);
-    } catch (buffer::error& err) {
-      ldpp_dout(oc.dpp,0) << "ERROR: caught buffer::error, couldn't decode TagSet "
-		      << oc.wq->thr_name() << dendl;
-      return -EIO;
     }
 
     if (! has_all_tags(op, dest_obj_tags)) {
@@ -1542,10 +1535,18 @@ public:
         return -EINVAL;
       }
 
-      uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
-                       ? rgw::sal::FLAG_LOG_OP : 0;
+      bool log_op = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone());
+      rgw_log_op_info log_op_info;
+      if (log_op) { // only check per-bucket if lc needs logging
+        if (r = should_log_op(oc.driver, oc.bucket->get_key(), oc.obj->get_name(), oc.obj->get_attrs(), oc.dpp, null_yield, log_op_info); r < 0 && r != -ENOENT) {
+          return r;
+        }
+        log_op = r;
+      }
+
+      uint32_t flags = log_op ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
-                                 o.versioned_epoch, oc.dpp, null_yield, flags);
+                                 o.versioned_epoch, oc.dpp, null_yield, &log_op_info, flags);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 

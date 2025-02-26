@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "rgw_basic_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
 
 
@@ -80,8 +80,6 @@ struct rgw_sync_bucket_entity {
             s1 == s2);
   }
 
-  bool all_zones{false};
-
   rgw_sync_bucket_entity() {}
   rgw_sync_bucket_entity(const rgw_zone_id& _zone,
                          std::optional<rgw_bucket> _bucket) : zone(_zone),
@@ -92,16 +90,18 @@ struct rgw_sync_bucket_entity {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(all_zones, bl);
+    ENCODE_START(2, 1, bl);
     encode(zone, bl);
     encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(all_zones, bl);
+    DECODE_START(2, bl);
+    if (struct_v < 2) {
+      bool all_zones;
+      decode(all_zones, bl);
+    }
     decode(zone, bl);
     decode(bucket, bl);
     DECODE_FINISH(bl);
@@ -117,18 +117,14 @@ struct rgw_sync_bucket_entity {
   std::string bucket_key() const;
 
   bool match_zone(const rgw_zone_id& z) const {
-    if (all_zones) {
-      return true;
-    }
     if (!zone) {
-      return false;
+      return true;
     }
 
     return (*zone == z);
   }
 
   void apply_zone(const rgw_zone_id& z) {
-    all_zones = false;
     zone = z;
   }
 
@@ -158,10 +154,10 @@ struct rgw_sync_bucket_entity {
   }
 
   const bool operator<(const rgw_sync_bucket_entity& e) const {
-    if (all_zones && !e.all_zones) {
+    if (zone && !e.zone) {
       return false;
     }
-    if (!all_zones && e.all_zones) {
+    if (!zone && e.zone) {
       return true;
     }
     if (zone < e.zone) {
@@ -424,11 +420,13 @@ struct rgw_sync_bucket_entities {
   std::optional<rgw_bucket> bucket; /* define specific bucket */
   std::optional<std::set<rgw_zone_id> > zones; /* define specific zones, if not set then all zones */
 
+  // If zones is nullopt, then it applies to all zones.
+  // all_zones indicates whether the original pipe is interested
+  // in keeping the zones updated when the bucket is re-created in another zonegroup.
   bool all_zones{false};
 
-
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(bucket, bl);
     encode(zones, bl);
     encode(all_zones, bl);
@@ -436,10 +434,16 @@ struct rgw_sync_bucket_entities {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bucket, bl);
     decode(zones, bl);
     decode(all_zones, bl);
+    if (struct_v < 2) {
+      if (all_zones) {
+        all_zones = false;
+        zones.reset();
+      }
+    }
     DECODE_FINISH(bl);
   }
 
@@ -471,10 +475,7 @@ struct rgw_sync_bucket_entities {
 
   bool match_zone(const rgw_zone_id& zone) const {
     if (!zones) {
-      if (all_zones) {
-	return true;
-      }
-      return false;
+      return true;
     }
 
     return (zones->find(zone) != zones->end());
@@ -487,13 +488,6 @@ struct rgw_sync_bucket_entities {
   }
 
   static std::string bucket_key(std::optional<rgw_bucket> b);
-
-  void set_all_zones(bool state) {
-    all_zones = state;
-    if (all_zones) {
-      zones.reset();
-    }
-  }
 };
 WRITE_CLASS_ENCODER(rgw_sync_bucket_entities)
 
@@ -680,5 +674,3 @@ struct rgw_sync_policy_info {
                                      std::set<rgw_bucket> *dests) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_info)
-
-

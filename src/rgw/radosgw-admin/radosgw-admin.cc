@@ -2672,6 +2672,10 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       source_sync_info.status = fmt::format("full sync: {} objects completed", full_status.full.count);
       return 0;
     }
+    if (full_status.state == BucketSyncState::NotApplicable) {
+      source_sync_info.status = "not applicable: bucket can't be replicated here";
+      return 0;
+    }
     gen = full_status.incremental_gen;
     shard_status.resize(full_status.shards_done_with_gen.size());
   } else if (r == -ENOENT) {
@@ -2932,14 +2936,14 @@ static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
     return r;
   }
 
-  auto& sources = handler->get_sources();
+  const auto& sources = handler->get_all_sources();
 
-  for (auto& m : sources) {
-    auto& zone = m.first;
+  for (const auto& m : sources) {
+    const auto& zone = m.first;
     out << indented{width, "source zone"} << zone << std::endl;
-    for (auto& pipe_handler : m.second) {
-      out << indented{width, "bucket"} << *pipe_handler.source.bucket << std::endl;
-    }
+
+    const auto& pipe = m.second;
+    out << indented{width, "bucket"} << *pipe.source.bucket << std::endl;
   }
 
   return 0;
@@ -3008,7 +3012,7 @@ struct bucket_sync_status_info {
 
 };
 
-static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
+static int bucket_sync_status(const rgw::SiteConfig& site, rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               bucket_sync_status_info& bucket_sync_info)
@@ -3035,57 +3039,48 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
   auto sources = handler->get_all_sources();
 
   auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_conn_map();
-  set<rgw_zone_id> zone_ids;
 
-  if (!source_zone_id.empty()) {
-    std::unique_ptr<rgw::sal::Zone> zone;
-    int ret = driver->get_zone()->get_zonegroup().get_zone_by_id(source_zone_id.id, &zone);
-    if (ret < 0) {
-      bucket_sync_info.error = fmt::format("Source zone not found in zonegroup {}", zonegroup.get_name());
-      return -EINVAL;
+  for (auto& entry : sources) {
+    auto& pipe = entry.second;
+    if (opt_source_bucket &&
+        pipe.source.bucket != opt_source_bucket) {
+      continue;
     }
-    auto c = zone_conn_map.find(source_zone_id);
+    const auto& zone = pipe.source.zone.value_or(rgw_zone_id());
+    if (zone.empty()) {
+      continue;
+    }
+
+    if (!source_zone_id.empty() && source_zone_id != zone.id) {
+      continue;
+    }
+
+    RGWZone source_zone;
+    RGWZoneGroup source_zg;
+    if(!site.get_period()->period_map.find_zone_by_id(zone, &source_zg, &source_zone)) {
+      bucket_sync_info.error = fmt::format("failed to find source zone {}", zone.id);
+      return EINVAL;
+    }
+
+    bucket_source_sync_info source_sync_info(source_zone);
+
+    auto c = zone_conn_map.find(zone.id);
     if (c == zone_conn_map.end()) {
-      bucket_sync_info.error = fmt::format("No connection to zone {}", zone->get_name());
-      return -EINVAL;
-    }
-    zone_ids.insert(source_zone_id);
-  } else {
-    std::list<std::string> ids;
-    int ret = driver->get_zone()->get_zonegroup().list_zones(ids);
-    if (ret == 0) {
-      for (const auto& entry : ids) {
-	zone_ids.insert(entry);
-      }
-    }
-  }
-
-  for (auto& zone_id : zone_ids) {
-    auto z = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.find(zone_id.id);
-    if (z == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.end()) { /* shouldn't happen */
-      continue;
-    }
-    auto c = zone_conn_map.find(zone_id.id);
-    if (c == zone_conn_map.end()) { /* shouldn't happen */
+      source_sync_info.error = fmt::format("No connection to zone {}", zone.id);
       continue;
     }
 
-    for (auto& entry : sources) {
-      auto& pipe = entry.second;
-      if (opt_source_bucket &&
-	  pipe.source.bucket != opt_source_bucket) {
-	continue;
-      }
-      if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-        bucket_source_sync_info source_sync_info(z->second);
-        bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(), z->second,
-				  c->second,
-				  info, pipe,
-				  source_sync_info);
-
-        bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
-      }
+    int ret = bucket_source_sync_status(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+                                        static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone(),
+                                        source_zone,
+                                        c->second,
+                                        info, pipe,
+                                        source_sync_info);
+    if (ret < 0) {
+      source_sync_info.error = fmt::format("failed to get bucket sync status: {}", cpp_strerror(-ret));
     }
+
+    bucket_sync_info.source_status_info.emplace_back(std::move(source_sync_info));
   }
 
   return 0;
@@ -8151,6 +8146,10 @@ next:
 	dendl;
       return -ret;
     }
+    if (bucket->get_info().is_indexless()) {
+      cerr << "ERROR: indexless bucket has no index to list" << std::endl;
+      return EINVAL;
+    }
 
     std::list<rgw_cls_bi_entry> entries;
     bool is_truncated;
@@ -8592,7 +8591,8 @@ next:
       return ENOTSUP;
     }
 
-    if (!RGWBucketReshard::should_zone_reshard_now(bucket->get_info(), zone_svc) &&
+    auto datalog_rados = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
+    if (!RGWBucketReshard::should_zone_reshard_now(dpp(), null_yield, bucket->get_info(), datalog_rados) &&
         !yes_i_really_mean_it) {
       std::cerr << "Bucket '" << bucket->get_name() << "' already has too many "
           "log generations (" << bucket->get_info().layout.logs.size() << ") "
@@ -10108,8 +10108,8 @@ next:
 
     auto bucket_info = bucket->get_info();
     bucket_sync_status_info bucket_sync_info(bucket_info);
- 
-    ret = bucket_sync_status(driver, bucket_info, source_zone,
+
+    ret = bucket_sync_status(*site, driver, bucket_info, source_zone,
         opt_source_bucket, bucket_sync_info);
 
     if (ret == 0) {
@@ -10191,6 +10191,12 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+
+    if (bucket->get_info().is_indexless()) {
+      cerr << "ERROR: indexless bucket has no bilogs" << std::endl;
+      return EINVAL;
+    }
+
     formatter->open_array_section("entries");
     bool truncated;
     int count = 0;
@@ -10537,7 +10543,11 @@ next:
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE ||
       opt_cmd == OPT::SYNC_GROUP_PIPE_MODIFY) {
     CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
+    if (!opt_pipe_id) {
+      // ReplicationConfiguration can have ID as empty string
+      // cf. https://docs.aws.amazon.com/AmazonS3/latest/API/API_ReplicationRule.html#AmazonS3-Type-ReplicationRule-ID
+      opt_pipe_id = "";
+    }
     if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE) {
       CHECK_TRUE(require_non_empty_opt(opt_source_zone_ids), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
       CHECK_TRUE(require_non_empty_opt(opt_dest_zone_ids), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
@@ -10575,12 +10585,37 @@ next:
     pipe->source.set_bucket(opt_source_tenant,
                             opt_source_bucket_name,
                             opt_source_bucket_id);
+
+    if (pipe->source.bucket && !pipe->source.zones) {
+      // load the bucket and set the available zones from its zonegroup
+      std::set<rgw_zone_id> zones;
+      if (ret = list_bucket_zones(driver, *pipe->source.bucket, dpp(), null_yield, zones); ret < 0) {
+        return -ret;
+      }
+      pipe->source.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+      pipe->source.all_zones = true; // preserve the all_zones flag as a hint for CreateBucket to update the zones
+    } else {
+      pipe->source.all_zones = false;
+    }
+
     if (opt_dest_zone_ids) {
       pipe->dest.add_zones(*opt_dest_zone_ids);
     }
     pipe->dest.set_bucket(opt_dest_tenant,
                             opt_dest_bucket_name,
                             opt_dest_bucket_id);
+
+    if (pipe->dest.bucket && !pipe->dest.zones) {
+        // load the bucket and set the available zones from its zonegroup
+        std::set<rgw_zone_id> zones;
+        if (ret = list_bucket_zones(driver, *pipe->dest.bucket, dpp(), null_yield, zones); ret < 0) {
+          return -ret;
+        }
+        pipe->dest.add_zones(std::vector<rgw_zone_id>(zones.begin(), zones.end()));
+        pipe->dest.all_zones = true; // preserve the all_zones flag as a hint for CreateBucket to update the zones
+    } else {
+      pipe->dest.all_zones = false;
+    }
 
     pipe->params.source.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
     pipe->params.source.filter.set_tags(tags_add, tags_rm);
@@ -10725,6 +10760,11 @@ next:
     }
     map<int, string> markers;
     const auto& logs = bucket->get_info().layout.logs;
+    if (logs.empty()) {
+      cerr << "ERROR: no log layout for bucket" << std::endl;
+      return ENOENT;
+    }
+
     auto log_layout = std::reference_wrapper{logs.back()};
     if (gen) {
       auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(*gen));
@@ -10810,11 +10850,11 @@ next:
       if (specified_shard_id) {
         ret = datalog_svc->list_entries(dpp(), shard_id, max_entries - count,
 					entries, marker,
-					&marker, &truncated,
-					null_yield);
+					nullptr, &truncated,
+					null_yield, "");
       } else {
         ret = datalog_svc->list_entries(dpp(), max_entries - count, entries,
-					log_marker, &truncated, null_yield);
+					log_marker, &truncated, null_yield, "");
       }
       if (ret < 0) {
         cerr << "ERROR: datalog_svc->list_entries(): " << cpp_strerror(-ret) << std::endl;
