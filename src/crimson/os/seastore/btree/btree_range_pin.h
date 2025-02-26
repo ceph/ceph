@@ -14,7 +14,6 @@
 namespace crimson::os::seastore {
 class Cache;
 
-template <typename node_key_t>
 struct op_context_t {
   Cache &cache;
   Transaction &trans;
@@ -102,7 +101,7 @@ struct __attribute__((packed)) fixed_kv_node_meta_le_t {
 template <typename key_t, typename val_t>
 class BtreeNodeMapping : public PhysicalNodeMapping<key_t, val_t> {
 protected:
-  op_context_t<key_t> ctx;
+  op_context_t ctx;
   /**
    * parent
    *
@@ -121,10 +120,10 @@ protected:
 
 public:
   using val_type = val_t;
-  BtreeNodeMapping(op_context_t<key_t> ctx) : ctx(ctx) {}
+  BtreeNodeMapping(op_context_t ctx) : ctx(ctx) {}
 
   BtreeNodeMapping(
-    op_context_t<key_t> ctx,
+    op_context_t ctx,
     CachedExtentRef parent,
     uint16_t pos,
     pladdr_t value,
