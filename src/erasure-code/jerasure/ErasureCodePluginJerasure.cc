@@ -39,7 +39,7 @@ int ErasureCodePluginJerasure::factory(const std::string& directory,
     std::string t;
     if (profile.find("technique") != profile.end())
       t = profile.find("technique")->second;
-    if (t == "reed_sol_van") {
+    if (t == "reed_sol_van" || t == "") { // Default!
       interface = new ErasureCodeJerasureReedSolomonVandermonde();
     } else if (t == "reed_sol_r6_op") {
       interface = new ErasureCodeJerasureReedSolomonRAID6();
