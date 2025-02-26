@@ -8,7 +8,7 @@
 #include <boost/container/flat_map.hpp>
 
 /* Enable boost.json's header-only mode:
-	(see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
+        (see: "https://github.com/boostorg/json?tab=readme-ov-file#header-only"): */
 #include <boost/json/src.hpp>
 
 #include <memory>
@@ -43,19 +43,19 @@ ostream& operator<<(ostream &out, const JSONObj &obj) {
 void JSONObj::handle_value(boost::json::value v)
 {
   if (auto op = v.if_object()) {
-	for (const auto& kvp : *op) {
-		auto child = std::make_unique<JSONObj>(this, kvp.key(), kvp.value());
-		children.emplace(std::pair { kvp.key(), std::move(child) });
-	 }
+        for (const auto& kvp : *op) {
+                auto child = std::make_unique<JSONObj>(this, kvp.key(), kvp.value());
+                children.emplace(std::pair { kvp.key(), std::move(child) });
+         }
 
-	return;
+        return;
   }
 
  if (auto ap = v.if_array()) {
-	for (const auto& kvp : *ap) {
-		auto child = std::make_unique<JSONObj>(this, "", kvp);
-		children.emplace(std::pair { child->get_name(), std::move(child) });
-	 }
+        for (const auto& kvp : *ap) {
+                auto child = std::make_unique<JSONObj>(this, "", kvp);
+                children.emplace(std::pair { child->get_name(), std::move(child) });
+         }
  }
 
  // unknown type is not-an-error
@@ -69,7 +69,7 @@ vector<string> JSONObj::get_array_elements()
   return elements;
 
  std::ranges::for_each(data.as_array(), [&elements](const auto& i) {
- 	elements.emplace_back(boost::json::serialize(i));
+        elements.emplace_back(boost::json::serialize(i));
  });
 
   return elements;
@@ -151,7 +151,7 @@ bool JSONParser::parse(const char *file_name)
 
 bool JSONFormattable::val_bool() const {
   return (boost::iequals(value.str, "true") ||
-	  boost::iequals(value.str, "1") ||
+          boost::iequals(value.str, "1") ||
           boost::iequals(value.str, "on") ||
           boost::iequals(value.str, "yes"));
 }
@@ -199,11 +199,11 @@ static int parse_entity(const string& s, vector<field_entity> *result)
 
     if (!index_str.empty()) {
 
-	int x;
-	if (auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
+        int x;
+        if (auto [_, ec] = std::from_chars(begin(index_str), end(index_str), x); std::errc() == ec) 
          result->emplace_back(field_entity(x));
         else
-	 throw std::invalid_argument(fmt::format("{}", index_str));
+         throw std::invalid_argument(fmt::format("{}", index_str));
 
     } else {
       field_entity f;
