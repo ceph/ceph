@@ -178,7 +178,7 @@ instances should only be done on a single-site cluster.
 
 ::
 
-   # radosgw-admin reshard stale-instances rm
+   # radosgw-admin reshard stale-instances delete
 
 
 Lifecycle fixes
