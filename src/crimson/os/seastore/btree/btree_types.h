@@ -190,4 +190,49 @@ struct __attribute__((packed)) backref_map_val_le_t {
 
 } // namespace backerf
 
+template <typename key_t, typename val_t>
+struct BtreeCursor {
+  op_context_t ctx;
+  CachedExtentRef parent;
+  uint64_t modifications;
+  key_t key;
+  val_t val;
+  uint16_t pos;
+
+  bool is_valid() const;
+
+  std::unique_ptr<BtreeCursor<key_t, val_t>> duplicate() const {
+    return std::make_unique<BtreeCursor<key_t, val_t>>(*this);
+  }
+};
+
+using LBACursor = BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
+using LBACursorRef = std::unique_ptr<LBACursor>;
+
+using BackrefCursor = BtreeCursor<paddr_t, backref::backref_map_val_t>;
+using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+
+template <typename key_t, typename val_t>
+std::ostream &operator<<(
+  std::ostream &out, const BtreeCursor<key_t, val_t> &iter)
+{
+  if constexpr (std::is_same_v<key_t, laddr_t>) {
+    out << "LBACursor(";
+  } else {
+    out << "BackrefCursor(";
+  }
+  out << (void*)iter.parent.get()
+      << "@" << iter.pos
+      << "#" << iter.modifications
+      << "," << iter.key
+      << "~" << iter.val
+      << ")";
+  return out;
+}
+
 } // namespace crimson::os::seastore
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::LBACursor> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::BackrefCursor> : fmt::ostream_formatter {};
+#endif
