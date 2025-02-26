@@ -12,13 +12,9 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/linked_tree_node.h"
-
-namespace crimson::os::seastore::lba_manager::btree {
-struct lba_map_val_t;
-}
 
 namespace crimson::os::seastore {
 
