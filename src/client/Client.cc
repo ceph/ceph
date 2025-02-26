@@ -17363,6 +17363,8 @@ const char** Client::get_tracked_conf_keys() const
 void Client::handle_conf_change(const ConfigProxy& conf,
 				const std::set <std::string> &changed)
 {
+  ldout(cct, 20) << "got conf changes: " << changed << dendl;
+
   std::scoped_lock lock(client_lock);
 
   if (changed.count("client_cache_mid")) {
