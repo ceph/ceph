@@ -185,8 +185,8 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   if (prefix_size != 0) {
     // prefix rule exists
     if (prefix_size > key_size) {
-      // if prefix is longer than key, we fail
-      return false;
+      // if prefix is longer than key, we fail if filter is negative, else return true
+      return filter.negative_filter == true ? true : false;
     }
     if (!std::equal(filter.prefix_rule.begin(), filter.prefix_rule.end(), key.begin())) {
       return filter.negative_filter == true ? true : false;
@@ -196,8 +196,8 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   if (suffix_size != 0) {
     // suffix rule exists
     if (suffix_size > key_size) {
-      // if suffix is longer than key, we fail
-      return false;
+      // if suffix is longer than key, we fail if filter is negative, else return true
+      return filter.negative_filter == true ? true : false;
     }
     if (!std::equal(filter.suffix_rule.begin(), filter.suffix_rule.end(), (key.end() - suffix_size))) {
       return filter.negative_filter == true ? true : false;
@@ -210,7 +210,7 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
       return filter.negative_filter == true ? true : false;
     }
   }
-  return filter.negative_filter == true ? true : false;;
+  return filter.negative_filter == true ? false : true;
 }
 
 bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
