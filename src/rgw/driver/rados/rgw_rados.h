@@ -643,6 +643,8 @@ public:
                     const std::optional<std::string>& swift_ver_location,
                     const std::optional<RGWQuotaInfo>& quota,
                     std::optional<ceph::real_time> creation_time,
+                    std::optional<rgw::BucketIndexType> index_type,
+                    std::optional<uint32_t> index_shards,
                     obj_version* pep_objv,
                     RGWBucketInfo& info);
 

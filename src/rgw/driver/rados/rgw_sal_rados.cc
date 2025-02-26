@@ -174,7 +174,8 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
       dpp, y, key, params.owner, params.zonegroup_id,
       params.placement_rule, params.zone_placement, params.attrs,
       params.obj_lock_enabled, params.swift_ver_location,
-      params.quota, params.creation_time, &bucket_version, info);
+      params.quota, params.creation_time, params.index_type,
+      params.index_shards, &bucket_version, info);
 
   bool existed = false;
   if (ret == -EEXIST) {
@@ -186,6 +187,13 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
      * client about a name conflict.
      */
     if (info.owner != params.owner) {
+      return -ERR_BUCKET_EXISTS;
+    }
+    // prevent re-creation with different index type or shard count
+    if ((params.index_type && *params.index_type !=
+         info.layout.current_index.layout.type) ||
+        (params.index_shards && *params.index_shards !=
+         info.layout.current_index.layout.normal.num_shards)) {
       return -ERR_BUCKET_EXISTS;
     }
     ret = 0;
