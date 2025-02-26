@@ -5,7 +5,7 @@
 
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/linked_tree_node.h"
-#include "crimson/os/seastore/btree/btree_range_pin.h"
+#include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 
 namespace crimson::os::seastore {
