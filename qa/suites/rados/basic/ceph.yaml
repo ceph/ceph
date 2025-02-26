@@ -8,6 +8,14 @@ overrides:
         mon osdmap full prune min: 15
         mon osdmap full prune interval: 2
         mon osdmap full prune txsize: 2
+      global:
+        debug mon: 30
+        debug osd: 20
+        debug paxos: 20
+        debug ms: 20
+        debug monc: 30
+        debug auth: 20
+        debug cephx: 30
 tasks:
 - install:
     extra_system_packages:
