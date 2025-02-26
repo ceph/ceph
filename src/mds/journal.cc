@@ -2655,7 +2655,7 @@ void rmdir_rollback::generate_test_instances(std::list<rmdir_rollback*>& ls)
 
 void rename_rollback::drec::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(dirfrag, bl);
   encode(dirfrag_old_mtime, bl);
   encode(dirfrag_old_rctime, bl);
@@ -2664,12 +2664,13 @@ void rename_rollback::drec::encode(bufferlist &bl) const
   encode(dname, bl);
   encode(remote_d_type, bl);
   encode(old_ctime, bl);
+  encode(referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
 void rename_rollback::drec::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(dirfrag, bl);
   decode(dirfrag_old_mtime, bl);
   decode(dirfrag_old_rctime, bl);
@@ -2678,6 +2679,8 @@ void rename_rollback::drec::decode(bufferlist::const_iterator &bl)
   decode(dname, bl);
   decode(remote_d_type, bl);
   decode(old_ctime, bl);
+  if (struct_v >= 3)
+    decode(referent_ino, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2689,6 +2692,7 @@ void rename_rollback::drec::dump(Formatter *f) const
   f->dump_int("ino", ino);
   f->dump_int("remote ino", remote_ino);
   f->dump_string("dname", dname);
+  f->dump_int("referent_ino", referent_ino);
   uint32_t type = DTTOIF(remote_d_type) & S_IFMT; // convert to type entries
   string type_string;
   switch(type) {
