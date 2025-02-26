@@ -1,3 +1,8 @@
+# pjd suite is a serial metadata operation correctness suite. It doesn't
+# generate a metadata tree that triggers metadata balancing.
+teuthology:
+  postmerge:
+    - if yaml.overrides.ceph.cephfs.max_mds > 1 then reject() end
 overrides:
   ceph:
     conf:
