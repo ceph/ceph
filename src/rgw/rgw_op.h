@@ -1462,6 +1462,7 @@ class RGWRestoreObj : public RGWOp {
 protected:
   std::optional<uint64_t> expiry_days;
   int restore_ret;
+  static std::optional<uint64_t> modified_days;
 public:
   RGWRestoreObj() {}
 
