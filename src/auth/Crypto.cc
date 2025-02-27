@@ -314,6 +314,7 @@ public:
   int encrypt(CephContext *cct, const ceph::bufferlist& in,
 	      ceph::bufferlist& out,
               std::string* /* unused */) const override {
+    ldout(cct, 20) << "CryptoAESKeyHandler::encrypt()" << dendl;
     // we need to take into account the PKCS#7 padding. There *always* will
     // be at least one byte of padding. This stays even to input aligned to
     // AES_BLOCK_LEN. Otherwise we would face ambiguities during decryption.
@@ -356,6 +357,7 @@ public:
   int decrypt(CephContext *cct, const ceph::bufferlist& in,
 	      ceph::bufferlist& out,
 	      std::string* /* unused */) const override {
+    ldout(cct, 20) << "CryptoAESKeyHandler::decrypt()" << dendl;
     // PKCS#7 padding enlarges even empty plain-text to take 16 bytes.
     if (in.length() < AES_BLOCK_LEN || in.length() % AES_BLOCK_LEN) {
       return -1;
@@ -745,6 +747,7 @@ public:
   int encrypt(CephContext *cct, const ceph::bufferlist& in,
 	      ceph::bufferlist& out,
               std::string* /* unused */) const override {
+    ldout(cct, 20) << "CryptoAES256KRB5KeyHandler::encrypt()" << dendl;
     // encrypted (confounder | data) | hash
     ceph::bufferptr out_tmp{static_cast<unsigned>(
       AES256KRB5_BLOCK_LEN + in.length() + AES256KRB5_HASH_LEN)};
@@ -794,6 +797,7 @@ public:
 	      ceph::bufferlist& out,
 	      std::string* /* unused */) const override {
 
+    ldout(cct, 20) << "CryptoAES256KRB5KeyHandler::decrypt()" << dendl;
     if (in.length() < AES256KRB5_BLOCK_LEN + AES256KRB5_HASH_LEN) { /* minimum size: confounder + hmac */
       return -EINVAL;
     }
@@ -861,7 +865,6 @@ public:
 
     return 0;
   }
-
 };
 
 
