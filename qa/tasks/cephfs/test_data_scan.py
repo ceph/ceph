@@ -499,11 +499,6 @@ class TestDataScan(CephFSTestCase):
         self.fs.table_tool([self.fs.name + ":0", "reset", "inode"])
 
         # Run the recovery procedure
-        if False:
-            with self.assertRaises(CommandFailedError):
-                # Normal reset should fail when no objects are present, we'll use --force instead
-                self.fs.journal_tool(["journal", "reset", "--yes-i-really-really-mean-it"], 0)
-
         self.fs.journal_tool(["journal", "reset", "--force", "--yes-i-really-really-mean-it"], 0)
         self.fs.data_scan(["init", "--force-init"])
         self.fs.data_scan(["scan_extents"], worker_count=workers)
