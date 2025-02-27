@@ -8241,14 +8241,37 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
   // -- create stray dentry? --
   CDentry *straydn = NULL;
   if (dnl->is_primary()) {
+    /* Handle race between unlink of secondary hardlink (say hl_file1) and
+     * linkmerge rename, triggered by unlink of primary (say file1) on to
+     * the same secondary hardlink (hl_file1).
+     *           1. unlink hl_file1
+     *           2. prepares straydn for referent inode
+     *           3. wait for the locks
+     *
+     *   unlink file1, triggers linkmerge rename
+     *   rename(hl_file1, primary_stray) ---> referent straydn converted to primary
+     *
+     *           4. On retry, it find itself as primary,
+     *              needs to prepare straydn for primary.
+     *              so clean up the earlier referent straydn
+     */
+    if (mdr->straydn && mdr->referent_straydn) {
+      dout(10) << __func__ << " race, clean up referent straydn " << *mdr->straydn << dendl;
+      mdr->unpin(mdr->straydn);
+      mdr->straydn = nullptr;
+    }
     straydn = prepare_stray_dentry(mdr, dnl->get_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = false;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (dnl->is_referent_remote()) {
+    // Above race is not applicable here since a referent can get converted
+    // to primary but not the otherway.
     straydn = prepare_stray_dentry(mdr, dnl->get_referent_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = true;
     dout(10) << __func__ << " referent straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
@@ -9099,11 +9122,13 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     straydn = prepare_stray_dentry(mdr, destdnl->get_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = false;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (destdnl->is_referent_remote()) { //both linkmerge and non linkmerge case
     straydn = prepare_stray_dentry(mdr, destdnl->get_referent_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = true;
     dout(10) << __func__ << (linkmerge ? " linkmerge:yes ": " linkmerge:no ")
              << " referent straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
