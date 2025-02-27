@@ -39,8 +39,21 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
   b.client_challenge = client_challenge;
 
   bufferlist enc;
-  if (encode_encrypt(cct, b, secret, enc, error))
-    return;
+  switch (secret.get_type()) {
+    case CEPH_CRYPTO_AES:
+      if (encode_encrypt(cct, b, secret, enc, error))
+        return;
+      break;
+    default:
+      /*
+       * AES256KRB5 has a builtin confounder that randomizes the result,
+       * so just encode_encrypt() cannot be used. We should use
+       * a cryptographic has anyway, keeping the old behavior
+       * for AES for backward compatibility.
+       */
+      if (encode_hash(cct, b, secret, enc, error))
+        return;
+  };
 
   uint64_t k = 0;
   const ceph_le64 *p = (const ceph_le64 *)enc.c_str();

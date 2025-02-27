@@ -648,4 +648,17 @@ int encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
   return 0;
 }
 
+template <typename T>
+int encode_hash(CephContext *cct, const T& t, const CryptoKey& key,
+                ceph::buffer::list& out, std::string &error)
+{
+  using ceph::encode;
+  ceph::buffer::list bl_enc;
+  /* simple encoding, we don't need to add any magic because this will not be decoded */
+  ::encode(t, bl_enc);
+  sha256_digest_t hash = key.hmac_sha256(cct, bl_enc);
+  out.append((const char *)&hash, sizeof(hash));
+  return 0;
+}
+
 #endif
