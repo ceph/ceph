@@ -1,0 +1,15 @@
+<ng-container *ngIf="selection">
+  <cds-tabs
+    type="contained"
+    followFocus="true"
+    isNavigation="true"
+    cacheActive="true">
+  <cds-tab
+    heading="Shares"
+    i18n-heading>
+    <cd-smb-share-list
+      [clusterId]="selection.cluster_id"
+    ></cd-smb-share-list>
+  </cds-tab>
+  </cds-tabs>
+</ng-container>

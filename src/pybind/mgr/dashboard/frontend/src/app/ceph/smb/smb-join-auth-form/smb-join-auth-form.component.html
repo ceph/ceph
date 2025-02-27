@@ -1,0 +1,126 @@
+<div
+  cdsCol
+  [columnNumbers]="{ md: 4 }"
+>
+  <form name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div i18n="form title"
+         class="form-header">
+      {{ action | titlecase }} {{ resource | upperFirst }}
+    </div>
+
+    <!-- Auth Id -->
+    <div class="form-item">
+      <cds-text-label
+        for="authId"
+        i18n
+        helperText="Unique identifier"
+        i18n-helperText
+        [invalid]="form.controls.authId.invalid && form.controls.authId.dirty"
+        [invalidText]="jaError"
+      >Active directory access resource name
+        <input
+          cdsText
+          type="text"
+          id="authId"
+          name="authId"
+          formControlName="authId"
+          [invalid]="form.controls.authId.invalid && form.controls.authId.dirty"
+        />
+      </cds-text-label>
+      <ng-template #jaError>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('authId', form, 'required')"
+          i18n
+          >This field is required.</span
+        >
+      </ng-template>
+    </div>
+
+    <!-- Username -->
+    <div class="form-item">
+      <cds-text-label
+        for="username"
+        i18n
+        [invalid]="form.controls.username.invalid && form.controls.username.dirty"
+        [invalidText]="usernameError"
+      >Username
+      <input
+          cdsText
+          type="text"
+          id="username"
+          name="username"
+          formControlName="username"
+          [invalid]="form.controls.username.invalid && form.controls.username.dirty"
+      />
+      </cds-text-label>
+      <ng-template #usernameError>
+        <span
+            class="invalid-feedback"
+            *ngIf="form.showError('username', form, 'required')"
+            i18n
+        >This field is required.
+        </span>
+      </ng-template>
+    </div>
+
+    <!-- Password -->
+    <div class="form-item">
+      <cds-password-label
+        for="password"
+        i18n
+        [invalid]="form.controls.password.invalid && form.controls.password.dirty"
+        [invalidText]="passwordError"
+      >Password
+        <input
+          cdsPassword
+          type="password"
+          id="password"
+          name="password"
+          formControlName="password"
+          [invalid]="form.controls.password.invalid && form.controls.password.dirty"
+        />
+      </cds-password-label>
+      <ng-template #passwordError>
+        <span
+            class="invalid-feedback"
+            *ngIf="form.showError('password', form, 'required')"
+            i18n
+        >This field is required.
+        </span>
+      </ng-template>
+    </div>
+
+    <!-- linkedToCluster -->
+    <div
+      *ngIf="smbClusters$ | async as clusters"
+      class="form-item"
+    >
+      <cds-select
+        label="Linked to cluster"
+        i18n-label
+        formControlName="linkedToCluster"
+        name="linkedToCluster"
+        cdOptionalField="Linked to cluster"
+        helperText="This resource may only be used with the linked cluster and will automatically be removed when the linked cluster is removed."
+        i18n-helperText
+      >
+        <option
+          [value]="null"
+          i18n
+        >-- List of clusters --
+        </option>
+        <option *ngFor="let cluster of clusters"
+                [value]="cluster.cluster_id">{{ cluster.cluster_id }}</option>
+      </cds-select>
+    </div>
+    <cd-form-button-panel
+        (submitActionEvent)="submit()"
+        [form]="form"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"></cd-form-button-panel>
+  </form>
+</div>

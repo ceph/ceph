@@ -1,0 +1,113 @@
+#!/bin/sh
+
+# if we start up as ./init-ceph, assume everything else is in the
+# current directory too.
+if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
+    BINDIR=.
+    LIBEXECDIR=.
+    ETCDIR=.
+else
+    BINDIR=@bindir@
+    LIBEXECDIR=@libexecdir@/ceph
+    ETCDIR=@sysconfdir@/ceph
+fi
+
+BINDBGDIR="/usr/lib/debug/usr/bin"
+
+usage_exit() {
+    echo "usage: $0 [-c ceph.conf] <filename.tar.gz>"
+    exit
+}
+
+wait_pid_exit() {
+	pid=$1
+
+	for i in $(seq 10); do
+		[ -e /proc/$pid ] || return
+		sleep 1
+	done
+	if [ -e /proc/$pid ]; then
+	    echo Killing pid $pid
+	    kill $pid
+	fi
+}
+
+. $LIBEXECDIR/ceph_common.sh
+
+dest_tar=''
+while [ $# -ge 1 ]; do
+case $1 in
+    --conf | -c)
+	    [ -z "$2" ] && usage_exit
+	    shift
+	    conf=$1
+	    ;;
+    *)
+	    if [ -n "$dest_tar" ]; then
+	    	echo unrecognized option \'$1\'
+	    	usage_exit
+	    fi
+	    dest_tar=$1
+	    ;;
+esac
+shift
+done
+
+[ "$dest_tar" = "" ] && usage_exit
+
+echo "$0: generating debugpack tarball..."
+
+if [ -e $dest_tar ]; then
+    echo "$0: dest $dest_tar already exists, aborting"
+    exit 1
+fi
+
+# get absolute path for dest_tar
+bins="ceph-mon ceph-mds ceph-osd radosgw"
+core_paths="/ $BINDIR $BINDBGDIR"
+[ "$conf" = "" ] && conf=$ETCDIR/ceph.conf
+log_path=`$CCONF -c $conf "log dir"`
+
+[ -z "$conf" ] && usage_exit
+
+# all configs
+files='/etc/ceph'
+
+# binaries
+for bin in bins; do
+    if [ -e "/usr/bin/$bin" ]; then
+	files="$files /usr/bin/$bin"
+    fi
+    if [ -e "/usr/lib/debug/usr/bin/$bin" ]; then
+	files="$files /usr/lib/debug/usr/bin/$bin"
+    fi
+done
+
+# logs (the non-rotated ones)
+for f in `find $path -maxdepth 1 -name 'core*'`; do
+    files="$files $f"
+done
+
+# copy cores (if exist)
+for path in $core_paths; do
+    if [ -d $path ]; then
+        for f in `find $path -maxdepth 1 -name 'core*'`; do
+	    files="$files $f"
+	done
+    fi
+done
+
+# cluster state
+tmp_path=`mktemp -d /tmp/ceph-debugpack.XXXXXXXXXX`
+
+$BINDIR/ceph report > $tmp_path/ceph-report &
+wait_pid_exit $!
+
+files="$files $tmp_path"
+
+# now create a tarball
+tar cvfz $dest_tar $files
+rm -rf $tmp_path
+
+echo "$0: created debugpack tarball at $dest_tar"
+
