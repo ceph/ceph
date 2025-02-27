@@ -153,8 +153,9 @@ class MetadataTool
   void build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
     const file_layout_t &layout,
-    InodeStore *out,
-    std::string symlink);
+    std::string symlink,
+    inodeno_t remote_inode,
+    InodeStore *out);
 
   /**
    * Construct a synthetic InodeStore for a directory
