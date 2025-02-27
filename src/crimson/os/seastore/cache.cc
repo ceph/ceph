@@ -1340,6 +1340,14 @@ record_t Cache::prepare_record(
     delta_stat.increment(delta_length);
   }
 
+  t.for_each_finalized_fresh_block([](auto &e) {
+    // fresh blocks' `prepare_commit` must be invoked before
+    // retiering extents, this is because logical linked tree
+    // nodes needs to access their prior instances in this
+    // phase if they are rewritten.
+    e->prepare_commit();
+  });
+
   // Transaction is now a go, set up in-memory cache state
   // invalidate now invalid blocks
   io_stat_t retire_stat;
@@ -1403,7 +1411,6 @@ record_t Cache::prepare_record(
 
     bufferlist bl;
     i->prepare_write();
-    i->prepare_commit();
     bl.append(i->get_bptr());
     if (is_root_type(i->get_type())) {
       ceph_assert(0 == "ROOT never gets written as a fresh block");
@@ -1457,7 +1464,6 @@ record_t Cache::prepare_record(
     assert(!i->is_inline());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
-    i->prepare_commit();
     if (is_backref_mapped_type(i->get_type())) {
       laddr_t alloc_laddr;
       if (i->is_logical()) {
