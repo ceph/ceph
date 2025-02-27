@@ -48,6 +48,7 @@
 
 class AdminSocket;
 class CryptoHandler;
+class CryptoManager;
 class CryptoRandom;
 class MonMap;
 
@@ -224,7 +225,9 @@ public:
   /**
    * get a crypto handler
    */
-  CryptoHandler *get_crypto_handler(int type);
+  CryptoManager *get_crypto_manager() {
+    return _crypto_mgr.get();
+  }
 
   CryptoRandom* random() const { return _crypto_random.get(); }
 
@@ -353,10 +356,8 @@ private:
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
-  CryptoHandler *_crypto_none;
-  CryptoHandler *_crypto_aes;
-  CryptoHandler *_crypto_aes256krb5;
   std::unique_ptr<CryptoRandom> _crypto_random;
+  std::unique_ptr<CryptoManager> _crypto_mgr;
 
   // experimental
   CephContextObs *_cct_obs;

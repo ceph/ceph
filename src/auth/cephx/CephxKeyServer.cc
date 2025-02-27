@@ -260,7 +260,7 @@ std::map<EntityName,CryptoKey> KeyServer::get_used_pending_keys()
 bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;
-  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto crypto = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   if (!crypto)
     return false;
 
