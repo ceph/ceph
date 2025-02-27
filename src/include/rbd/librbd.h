@@ -356,6 +356,14 @@ typedef struct {
   uint64_t last_copied_object_number;
 } rbd_snap_mirror_namespace_t;
 
+typedef struct {
+  rbd_snap_mirror_state_t state;
+  size_t mirror_peer_uuids_count;
+  char* mirror_peer_uuids;
+  char* primary_mirror_uuid;
+  char* primary_snap_id;
+} rbd_group_snap_mirror_namespace_t;
+
 typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
   RBD_LOCK_MODE_SHARED = 1,
@@ -1647,6 +1655,11 @@ CEPH_RBD_API int rbd_mirror_group_list(rados_ioctx_t p, char *names,
                                        size_t *size);
 CEPH_RBD_API int rbd_mirror_group_enable(rados_ioctx_t p, const char *name,
                                          rbd_mirror_image_mode_t mirror_image_mode);
+CEPH_RBD_API int rbd_group_snap_get_mirror_namespace(
+    rados_ioctx_t p, const char *group_name, const char *snap_id,
+    rbd_group_snap_mirror_namespace_t *mirror_namespace);
+CEPH_RBD_API void rbd_group_snap_mirror_namespace_cleanup(
+    rbd_group_snap_mirror_namespace_t *mirror_namespace);
 CEPH_RBD_API int rbd_mirror_group_disable(rados_ioctx_t p, const char *name,
                                           bool force);
 CEPH_RBD_API int rbd_mirror_group_promote(rados_ioctx_t p,
