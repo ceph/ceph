@@ -211,7 +211,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   admin_hook(NULL),
   routed_request_tid(0),
-  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1)
+  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1),
+  ms_inject_drop_mon_forward_msgs(cct, "mon_inject_drop_mon_forward_msgs", 0)
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
@@ -4162,6 +4163,14 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else if (session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
   } else if (!session->closed) {
+    // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
+    // if positive drop random percentage of mon forward messages
+    if (ms_inject_drop_mon_forward_msgs > 0.0 &&
+      rand() % 10000 < 10000 * ms_inject_drop_mon_forward_msgs) {
+      dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
+      req->put();
+      return;
+    }
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->con = req->get_connection();
@@ -4405,6 +4414,14 @@ void Monitor::resend_routed_requests()
       auto q = rr->request_bl.cbegin();
       PaxosServiceMessage *req =
 	(PaxosServiceMessage *)decode_message(cct, 0, q);
+      // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
+      // if positive drop random percentage of mon forward messages
+      if (ms_inject_drop_mon_forward_msgs > 0.0 &&
+        rand() % 10000 < 10000 * ms_inject_drop_mon_forward_msgs) {
+        dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
+        req->put();
+        continue;
+      }
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
@@ -5533,8 +5550,9 @@ void Monitor::send_latest_monmap(Connection *con)
     << " id:" << con->get_peer_id()
     << " quorum: " << get_quorum()
     << dendl;
+  monmap->set_quorum(get_quorum());
   monmap->encode(bl, con->get_features());
-  con->send_message(new MMonMap(bl, con_self->get_peer_addrs(), get_epoch(), get_quorum()));
+  con->send_message(new MMonMap(bl));
 }
 
 void Monitor::check_quorum_subs_and_send_updates()
