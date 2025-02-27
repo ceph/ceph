@@ -267,7 +267,7 @@ void _generate_bootstrap_keys(
     EntityName name;
     name.from_str("client." + p.first);
     EntityAuth auth;
-    auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
     auth.caps = p.second;
 
     auth_lst->push_back(make_pair(name, auth));
@@ -1519,7 +1519,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     if (!has_keyring) {
       dout(10) << "AuthMonitor::prepare_command generating random key for "
         << auth_inc.name << dendl;
-      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
     }
     new_inc.caps = encoded_caps;
 
@@ -1574,7 +1574,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	auth_inc.op = KeyServerData::AUTH_INC_ADD;
 	auth_inc.name = entity;
 	auth_inc.auth = entity_auth;
-	auth_inc.auth.pending_key.create(g_ceph_context, CEPH_CRYPTO_AES);
+	auth_inc.auth.pending_key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
 	push_cephx_inc(auth_inc);
 	kr.add(entity, auth_inc.auth.key, auth_inc.auth.pending_key);
         push_cephx_inc(auth_inc);
@@ -1673,7 +1673,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
@@ -1866,7 +1866,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    entity_auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    entity_auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
 
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
@@ -2065,7 +2065,7 @@ int AuthMonitor::_update_or_create_entity(const EntityName& entity,
   auth_inc.op = KeyServerData::AUTH_INC_ADD;
   auth_inc.auth.caps = encoded_caps;
   if (create_entity) {
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
   }
 
   push_cephx_inc(auth_inc);
@@ -2247,7 +2247,7 @@ bool AuthMonitor::_upgrade_format_to_luminous()
     EntityName name = bootstrap_mgr_name;
     EntityAuth auth;
     encode("allow profile bootstrap-mgr", auth.caps["mon"]);
-    auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
     add_entity(name, auth);
     changed = true;
   }
