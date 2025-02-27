@@ -76,6 +76,12 @@ void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
     encode(_symlink, symlink_bl);
     op.setxattr("symlink", symlink_bl);
   }
+
+  if (remote_inode) {
+    bufferlist remote_inode_bl;
+    encode(remote_inode, remote_inode_bl);
+    op.setxattr("remote_inode", remote_inode_bl);
+  }
 }
 
 class CInodeIOContext : public MDSIOContextBase
@@ -1392,8 +1398,12 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
     slink = symlink;
   }
 
+  inodeno_t remote_inode = 0;
+  if (is_referent_remote())
+    remote_inode = get_remote_ino();
+
   ops_vec.emplace_back(op_prio, pool, get_inode()->layout,
-                       mdcache->mds->mdsmap->get_up_features(), slink);
+                       mdcache->mds->mdsmap->get_up_features(), slink, remote_inode);
 
   if (!state_test(STATE_DIRTYPOOL) || get_inode()->old_pools.empty() || ignore_old_pools) {
     dout(20) << __func__ << ": no dirtypool or no old pools or ignore_old_pools" << dendl;
