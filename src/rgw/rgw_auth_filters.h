@@ -237,12 +237,16 @@ ThirdPartyAccountApplier<T> add_3rdparty(rgw::sal::Driver* driver,
 
 template <typename T>
 class SysReqApplier : public DecoratedApplier<T> {
+  using aclspec_t = rgw::auth::Identity::aclspec_t;
+
   CephContext* const cct;
   rgw::sal::Driver* driver;
   const RGWHTTPArgs& args;
   mutable boost::tribool is_system;
   mutable std::optional<ACLOwner> effective_owner;
-  mutable std::optional<std::string> effective_tenant;
+  mutable std::optional<RGWUserInfo> effective_user_info;
+  mutable std::optional<RGWAccountInfo> effective_account;
+  mutable std::vector<IAM::Policy> effective_policies;
 
 public:
   template <typename U>
@@ -268,14 +272,89 @@ public:
     return DecoratedApplier<T>::get_aclowner();
   }
 
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
+  bool is_owner_of(const rgw_owner& o) const override;
+  bool is_identity(const Principal& p) const override;
+  uint32_t get_identity_type() const override {
+    if (!evals_passed_uid_perm()) {
+      return DecoratedApplier<T>::get_identity_type();
+    }
+
+    if (effective_user_info) {
+      return effective_user_info->type;
+    }
+
+    return DecoratedApplier<T>::get_identity_type();
+  }
+
   const std::string& get_tenant() const override {
-    if (effective_tenant) {
-      return *effective_tenant;
+    if (effective_user_info) {
+      return effective_user_info->user_id.tenant;
+    } else if (effective_account) {
+      return effective_account->tenant;
     }
     return DecoratedApplier<T>::get_tenant();
   }
-
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return effective_account;
+  }
 };
+
+template<typename T>
+uint32_t SysReqApplier<T>::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
+{
+  if (!effective_user_info) {
+    // if we don't have an effective user, fall back to the default strategy
+    return DecoratedApplier<T>::get_perms_from_aclspec(dpp, aclspec);
+  }
+
+  // match acl grants to the specific user id
+  uint32_t mask = rgw_perms_from_aclspec_default_strategy(
+    effective_user_info->user_id.to_str(), aclspec, dpp);
+
+  if (effective_account) {
+    // account users also match acl grants to the account id. in aws, grantees
+    // ONLY refer to accounts. but we continue to match user grants to preserve
+    // access when moving legacy users into new accounts
+    mask |= rgw_perms_from_aclspec_default_strategy(effective_account->id, aclspec, dpp);
+  }
+
+  return mask;
+}
+
+template<typename T>
+bool SysReqApplier<T>::is_owner_of(const rgw_owner& o) const
+{
+  if (effective_user_info) {
+    return match_owner(o, effective_user_info->user_id, effective_account);
+  }
+  return DecoratedApplier<T>::is_owner_of(o);
+}
+
+template<typename T>
+bool SysReqApplier<T>::is_identity(const Principal& p) const {
+  if (!effective_user_info) {
+    return DecoratedApplier<T>::is_identity(p);
+  }
+
+  if (p.is_wildcard()) {
+    return true;
+  } else if (p.is_account()) {
+    return match_account_or_tenant(effective_account, effective_user_info->user_id.tenant,
+                                   p.get_account());
+  } else if (p.is_user()) {
+    // account users can match both account- and tenant-based arns
+    if (effective_account && p.get_account() == effective_account->id) {
+      return match_principal(effective_user_info->path, effective_user_info->display_name,
+                             rgw::auth::LocalApplier::NO_SUBUSER, p.get_id());
+    } else {
+      return p.get_account() == effective_user_info->user_id.tenant
+          && match_principal(effective_user_info->path, effective_user_info->user_id.id,
+                             rgw::auth::LocalApplier::NO_SUBUSER, p.get_id());
+    }
+  }
+  return false;
+}
 
 template <typename T>
 void SysReqApplier<T>::to_str(std::ostream& out) const
@@ -295,8 +374,6 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
   is_system = user->get_info().system;
 
   if (is_system) {
-    //ldpp_dout(dpp, 20) << "system request" << dendl;
-
     std::string str = args.sys_get(RGW_SYS_PARAM_PREFIX "uid");
     if (!str.empty()) {
       effective_owner.emplace();
@@ -306,21 +383,35 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
       if (const auto* uid = std::get_if<rgw_user>(&effective_owner->id); uid) {
         user = driver->get_user(*uid);
         if (user->load_user(dpp, null_yield) < 0) {
-          //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
           throw -EACCES;
         }
         effective_owner->display_name = user->get_display_name();
-        effective_tenant = uid->tenant;
+
+        effective_user_info = user->get_info();
+
+        // load account info
+        int ret = load_account_and_policies(dpp, null_yield, driver, user->get_info(),
+                                            user->get_attrs(), effective_account, effective_policies);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "ERROR: failed to load account info: user="
+                            << user << " ret=" << ret << dendl;
+          throw -EACCES;
+        }
+
+        if (effective_account) {
+          // update effective owner with the account id
+          effective_owner->id = effective_account->id;
+          effective_owner->display_name = effective_account->name;
+        }
       } else if (const auto* id = std::get_if<rgw_account_id>(&effective_owner->id); id) {
-        RGWAccountInfo info;
+        effective_account.emplace();
         rgw::sal::Attrs attrs;
         RGWObjVersionTracker objv;
-        int r = driver->load_account_by_id(dpp, null_yield, *id, info, attrs, objv);
+        int r = driver->load_account_by_id(dpp, null_yield, *id, *effective_account, attrs, objv);
         if (r < 0) {
           throw -EACCES;
         }
-        effective_tenant = info.tenant;
-     }
+      }
     }
   }
   return user;
@@ -337,6 +428,11 @@ void SysReqApplier<T>::modify_request_state(const DoutPrefixProvider* dpp, req_s
     s->info.args.set_system();
     s->system_request = true;
   }
+
+  // copy our effective identity policies into req_state
+  s->iam_identity_policies.insert(s->iam_identity_policies.end(),
+                                  effective_policies.begin(), effective_policies.end());
+
   DecoratedApplier<T>::modify_request_state(dpp, s);
 }
 
