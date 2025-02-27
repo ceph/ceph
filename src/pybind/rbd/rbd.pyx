@@ -3035,6 +3035,49 @@ cdef class Group(object):
         if ret != 0:
             raise make_ex(ret, 'error rolling back group to snapshot', group_errno_to_exception)
 
+    def group_snap_get_mirror_namespace(self, snap_id):
+        """
+        get the group snap mirror namespace details.
+        :param snap_id: the snapshot id of the mirror group snapshot
+        :type snap_id: str
+
+        :returns: dict - contains the following keys:
+
+            * ``state`` (int) - the group snapshot state
+
+            * ``mirror_peer_uuids`` (list) - mirror peer uuids
+
+            * ``primary_mirror_uuid`` (str) - primary mirror uuid
+
+            * ``primary_snap_id`` (str) - primary snapshot id
+
+        """
+        snap_id = cstr(snap_id, 'snap_id')
+        cdef:
+            rbd_group_snap_mirror_namespace_t sn
+            char *_snap_id = snap_id
+        with nogil:
+            ret = rbd_group_snap_get_mirror_namespace(
+                  self._ioctx, self._name, _snap_id, &sn)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot mirror '
+                               'namespace for group: %s, snap_id: %s' %
+                               (self.name, snap_id))
+        uuids = []
+        cdef char *p = sn.mirror_peer_uuids
+        for i in range(sn.mirror_peer_uuids_count):
+            uuid = decode_cstr(p)
+            uuids.append(uuid)
+            p += len(uuid) + 1
+        info = {
+                'state' : sn.state,
+                'mirror_peer_uuids' : uuids,
+                'primary_mirror_uuid' : decode_cstr(sn.primary_mirror_uuid),
+                'primary_snap_id' : decode_cstr(sn.primary_snap_id),
+            }
+        rbd_group_snap_mirror_namespace_cleanup(&sn)
+        return info
+
     def mirror_group_create_snapshot(self, flags=0):
         """
         Create mirror group snapshot.

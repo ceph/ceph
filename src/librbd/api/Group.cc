@@ -83,6 +83,28 @@ std::string calc_ind_image_snap_name(uint64_t pool_id,
   return ind_snap_name_stream.str();
 }
 
+class GetGroupMirrorVisitor {
+public:
+  group_snap_mirror_namespace_t *mirror_snap;
+
+  explicit GetGroupMirrorVisitor(group_snap_mirror_namespace_t *mirror_snap)
+      : mirror_snap(mirror_snap) {}
+
+  template <typename T>
+  inline int operator()(const T&) const {
+    return -EINVAL;
+  }
+
+  inline int operator()(
+                const cls::rbd::GroupSnapshotNamespaceMirror& snap_namespace) {
+    mirror_snap->state = static_cast<snap_mirror_state_t>(snap_namespace.state);
+    mirror_snap->mirror_peer_uuids = snap_namespace.mirror_peer_uuids;
+    mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
+    mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
+    return 0;
+  }
+};
+
 int group_image_list(librados::IoCtx& group_ioctx,
                      const std::string &group_name,
 		     std::vector<cls::rbd::GroupImageStatus> *images) {
@@ -1267,6 +1289,46 @@ int Group<I>::group_image_list_by_id(librados::IoCtx& group_ioctx,
 
     r = images_page.size();
   } while (r == max_read);
+
+  return 0;
+}
+
+template <typename I>
+int Group<I>::snap_get_mirror_namespace(
+    librados::IoCtx& group_ioctx, const char *group_name, const char *snap_id,
+    group_snap_mirror_namespace_t* mirror_namespace) {
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+
+  std::string group_id;
+  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
+                                 group_name, &group_id);
+  if (r < 0) {
+    lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::vector<cls::rbd::GroupSnapshot> cls_group_snaps;
+  r = group_snap_list<I>(group_ioctx, group_id, false, false, &cls_group_snaps);
+  if (r < 0) {
+    return r;
+  }
+
+  const cls::rbd::GroupSnapshot *cls_group_snap_ptr = nullptr;
+  for (const auto& cls_group_snap : cls_group_snaps) {
+    if (cls_group_snap.id == snap_id) {
+      cls_group_snap_ptr = &cls_group_snap;
+      break;
+    }
+  }
+  if (cls_group_snap_ptr == nullptr) {
+    return -ENOENT;
+  }
+
+  GetGroupMirrorVisitor visitor(mirror_namespace);
+  r = cls_group_snap_ptr->snapshot_namespace.visit(visitor);
+  if (r < 0) {
+    return r;
+  }
 
   return 0;
 }
