@@ -71,7 +71,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   expiration = ceph::to_iso_8601(exp);
 
   //Session Token - Encrypt using AES
-  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
     ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
     return -EINVAL;
