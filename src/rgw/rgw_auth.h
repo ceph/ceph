@@ -927,6 +927,18 @@ protected:
   }
 };
 
+bool match_principal(std::string_view path,
+  std::string_view name,
+  std::string_view subuser,
+  std::string_view expected);
+
+bool match_account_or_tenant(const std::optional<RGWAccountInfo>& account,
+  std::string_view tenant,
+  std::string_view expected);
+
+bool match_owner(const rgw_owner& owner, const rgw_user& uid,
+                 const std::optional<RGWAccountInfo>& account);
+
 } /* namespace auth */
 } /* namespace rgw */
 
