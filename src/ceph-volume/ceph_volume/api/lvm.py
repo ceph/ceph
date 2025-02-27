@@ -322,16 +322,13 @@ def dmsetup_splitname(dev: str) -> Dict[str, Any]:
 
 
 def is_ceph_device(lv: "Volume") -> bool:
-    try:
-        lv.tags['ceph.osd_id']
-    except (KeyError, AttributeError):
-        logger.warning('device is not part of ceph: %s', lv)
-        return False
+    osd_id = lv.tags.get('ceph.osd_id', 'null')
 
-    if lv.tags['ceph.osd_id'] == 'null':
-        return False
-    else:
-        return True
+    if osd_id == 'null':
+         logger.warning('device is not part of ceph: %s', lv)
+         return False
+
+    return True
 
 class Lvm:
     def __init__(self, name_key: str, tags_key: str, **kw: Any) -> None:
@@ -907,6 +904,7 @@ class Volume(Lvm):
         self.lv_uuid: str = ''
         self.vg_name: str = ''
         self.lv_size: str = ''
+        self.tags: Dict[str, Any] = {}
         self.lv_tags: Dict[str, Any] = {}
         super().__init__('lv_name', 'lv_tags', **kw)
         self.lv_api = kw
