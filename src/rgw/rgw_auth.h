@@ -101,6 +101,9 @@ public:
 
   /* write any auth-specific fields that are safe to expose in the ops log */
   virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
+
+  /* Returns true if the identity is evaluating the permission for the provided rgwx-uid parameter in the request */
+  virtual bool evals_passed_uid_perm() const { return false; }
 };
 
 inline std::ostream& operator<<(std::ostream& out,
