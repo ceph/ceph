@@ -1654,6 +1654,14 @@ namespace librbd {
                                            false, snaps);
   }
 
+  int RBD::group_snap_get_mirror_namespace(
+      IoCtx& group_ioctx, const char* group_name, const char* snap_id,
+      group_snap_mirror_namespace_t* mirror_namespace) {
+    return librbd::api::Group<>::snap_get_mirror_namespace(group_ioctx,
+                                                           group_name, snap_id,
+                                                           mirror_namespace);
+  }
+
   int RBD::group_snap_get_info(IoCtx& group_ioctx, const char *group_name,
                                const char *snap_name,
                                group_snap_info2_t *group_snap) {
@@ -7982,6 +7990,48 @@ extern "C" int rbd_group_snap_rollback(rados_ioctx_t group_p,
   tracepoint(librbd, group_snap_rollback_exit, r);
 
   return r;
+}
+
+extern "C" int rbd_group_snap_get_mirror_namespace(
+    rados_ioctx_t group_p, const char *group_name, const char *snap_id,
+    rbd_group_snap_mirror_namespace_t* mirror_namespace)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  librbd::group_snap_mirror_namespace_t mirror_namespace_cpp;
+  int r = librbd::api::Group<>::snap_get_mirror_namespace(
+      group_ioctx, group_name, snap_id, &mirror_namespace_cpp);
+  if (r < 0) {
+    return r;
+  }
+
+  mirror_namespace->state = mirror_namespace_cpp.state;
+  mirror_namespace->primary_mirror_uuid =
+    strdup(mirror_namespace_cpp.primary_mirror_uuid.c_str());
+  mirror_namespace->primary_snap_id =
+    strdup(mirror_namespace_cpp.primary_snap_id.c_str());
+  mirror_namespace->mirror_peer_uuids_count =
+    mirror_namespace_cpp.mirror_peer_uuids.size();
+  size_t len = 0;
+  for (auto &peer : mirror_namespace_cpp.mirror_peer_uuids) {
+    len += peer.size() + 1;
+  }
+  mirror_namespace->mirror_peer_uuids = (char *)malloc(len);
+  char *p = mirror_namespace->mirror_peer_uuids;
+  for (auto &peer : mirror_namespace_cpp.mirror_peer_uuids) {
+    strncpy(p, peer.c_str(), peer.size() + 1);
+    p += peer.size() + 1;
+  }
+
+  return 0;
+}
+
+extern "C" void rbd_group_snap_mirror_namespace_cleanup(
+    rbd_group_snap_mirror_namespace_t *mirror_namespace) {
+  free(mirror_namespace->primary_mirror_uuid);
+  free(mirror_namespace->primary_snap_id);
+  free(mirror_namespace->mirror_peer_uuids);
 }
 
 extern "C" int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
