@@ -58,7 +58,7 @@ seastar::future<> make_keyring()
       return seastar::now();
     } else {
       CephContext temp_cct{};
-      auth.key.create(&temp_cct, CEPH_CRYPTO_AES);
+      auth.key.create(&temp_cct, CEPH_CRYPTO_AES256KRB5);
       keyring.add(name, auth);
       bufferlist bl;
       keyring.encode_plaintext(bl);
