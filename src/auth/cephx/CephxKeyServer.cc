@@ -356,7 +356,7 @@ std::list<KeyServer> KeyServer::generate_test_instances()
 bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;
-  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto crypto = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   if (!crypto)
     return false;
 
