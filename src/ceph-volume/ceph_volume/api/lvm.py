@@ -6,7 +6,6 @@ set of utilities for interacting with LVM.
 import logging
 import os
 import uuid
-from itertools import repeat
 from math import floor
 from ceph_volume import process, util, conf
 from ceph_volume.exceptions import SizeAllocationError
@@ -885,9 +884,10 @@ class Volume:
             return report
 
     def _format_tag_args(self, op: str, tags: Dict[str, Any]) -> List[str]:
-        tag_args = ['{}={}'.format(k, v) for k, v in tags.items()]
-        # weird but efficient way of ziping two lists and getting a flat list
-        return list(sum(zip(repeat(op), tag_args), ()))
+        result: List[str] = []
+        for k, v in tags.items():
+            result.extend([op, f'{k}={v}'])
+        return result
 
     def clear_tags(self, keys: Optional[List[str]] = None) -> None:
         """
