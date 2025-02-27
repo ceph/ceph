@@ -1051,5 +1051,49 @@ CryptoHandler *CryptoHandler::create(int type)
   }
 }
 
+CryptoManager::CryptoManager(CephContext *_cct) : cct(_cct) {
+  crypto_none.reset(CryptoHandler::create(CEPH_CRYPTO_NONE));
+  crypto_aes.reset(CryptoHandler::create(CEPH_CRYPTO_AES));
+  crypto_aes256krb5.reset(CryptoHandler::create(CEPH_CRYPTO_AES256KRB5));
+
+  supported_crypto_types = { CEPH_CRYPTO_NONE, CEPH_CRYPTO_AES, CEPH_CRYPTO_AES256KRB5 };
+}
+
+std::shared_ptr<CryptoHandler> CryptoManager::get_handler(int type)
+{
+  switch (type) {
+    case CEPH_CRYPTO_NONE:
+      return crypto_none;
+    case CEPH_CRYPTO_AES:
+      return crypto_aes;
+    case CEPH_CRYPTO_AES256KRB5:
+      return crypto_aes256krb5;
+    default:
+      break;
+  };
+  return nullptr;
+}
+
+int CryptoManager::get_key_type(const std::string& s)
+{
+  auto l = s;
+  std::transform(l.begin(), l.end(), l.begin(), ::tolower);
+  if (l == "aes") {
+    return CEPH_CRYPTO_AES;
+  }
+  if (l == "aes256k") {
+    return CEPH_CRYPTO_AES256KRB5;
+  }
+  if (l == "none") {
+    return CEPH_CRYPTO_NONE;
+  }
+  return -ENOENT;
+}
+
+bool CryptoManager::crypto_type_supported(int type) const
+{
+  return supported_crypto_types.find(type) != supported_crypto_types.end();
+}
+
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop

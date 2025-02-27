@@ -7329,7 +7329,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
     return -EINVAL;
   }
 
-  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
     return -EINVAL;
   }
