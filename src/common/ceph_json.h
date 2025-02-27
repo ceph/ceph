@@ -323,7 +323,7 @@ void decode_json_obj(IntegerT& val, JSONObj *obj)
 {
  auto r = ceph::parse<IntegerT>(obj->get_data());
 
- if(std::errc() != r)
+ if(!r)
   throw JSONDecoder::err(fmt::format("failed to parse number from JSON"));
 
  val = *r;
