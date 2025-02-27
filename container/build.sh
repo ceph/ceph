@@ -4,6 +4,8 @@
 # repo auth with write perms must be present (this script does not log into
 # repos named by CONTAINER_REPO_*).
 # If NO_PUSH is set, no login is necessary
+# If REMOVE_LOCAL_IMAGES is true (the default), local images are removed
+# after push.  If you want to save local image copies, set this to false.
 
 
 CFILE=${1:-Containerfile}
@@ -25,11 +27,13 @@ CONTAINER_REPO_USERNAME
 CONTAINER_REPO_PASSWORD
 PRERELEASE_USERNAME for download.ceph.com:/prerelease/ceph
 PRERELEASE_PASSWORD
+REMOVE_LOCAL_IMAGES set to 'false' if you want to keep local images
 
 For a release build: (from ceph.git, built and pushed to download.ceph.com)
 CI_CONTAINER: must be 'false'
 and you must also add
 VERSION (for instance, 19.1.0) for tagging the image
+REMOVE_LOCAL_IMAGES set to 'false' if you want to keep local images
 
 You can avoid the push step (for testing) by setting NO_PUSH to anything
 EOF
@@ -48,6 +52,7 @@ REPO_ARCH=amd64
 if [[ "${ARCH}" = arm64 ]] ; then
     REPO_ARCH=arm64
 fi
+REMOVE_LOCAL_IMAGES=${REMOVE_LOCAL_IMAGES:-true}
 
 if [[ ${CI_CONTAINER} == "true" ]] ; then
     CONTAINER_REPO_HOSTNAME=${CONTAINER_REPO_HOSTNAME:-quay.ceph.io}
@@ -67,6 +72,7 @@ fi
 : "${BRANCH:?}"
 : "${CEPH_SHA1:?}"
 : "${ARCH:?}"
+: "${REMOVE_LOCAL_IMAGES:?}"
 if [[ ${NO_PUSH} != "true" ]] ; then
     : "${CONTAINER_REPO_HOSTNAME:?}"
     : "${CONTAINER_REPO_ORGANIZATION:?}"
@@ -173,6 +179,9 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
         podman tag ${image_id} ${sha1_flavor_repo_tag}
         if [[ -z "${NO_PUSH}" ]] ; then
             podman push ${sha1_flavor_repo_tag}
+            if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
+                podman rmi -f ${sha1_flavor_repo_tag}
+            fi
         fi
         exit
     fi
@@ -181,6 +190,9 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
         podman push ${full_repo_tag}
         podman push ${branch_repo_tag}
         podman push ${sha1_repo_tag}
+        if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
+            podman rmi -f ${full_repo_tag} ${branch_repo_tag} ${sha1_repo_tag}
+        fi
     fi
 else
     #
@@ -192,7 +204,9 @@ else
     podman tag ${image_id} ${version_tag}
     if [[ -z "${NO_PUSH}" ]] ; then
         podman push ${version_tag}
+        if [[ ${REMOVE_LOCAL_IMAGES} == "true" ]] ; then
+            podman rmi -f ${version_tag}
+        fi
     fi
 fi
-
 
