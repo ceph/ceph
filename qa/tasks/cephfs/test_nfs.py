@@ -379,9 +379,19 @@ class TestNFS(MgrTestCase):
         tries = 3
         while True:
             try:
-                self.ctx.cluster.run(
-                    args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
-                          f'{ip}:{pseudo_path}', '/mnt'])
+                # TODO: NFS V4.2 is failing with libaio read.
+                # TODO: Reference: https://tracker.ceph.com/issues/70203
+                nfs_version_conf = self.ctx['config'].get('nfs', {})
+                nfs_version = nfs_version_conf.get('vers', 'latest')
+                if nfs_version == 4.1:
+                    self.ctx.cluster.run(
+                        args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port},vers=4.1',
+                              f'{ip}:{pseudo_path}', '/mnt'])
+                else:
+                    self.ctx.cluster.run(
+                        args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
+                              f'{ip}:{pseudo_path}', '/mnt'])
+                    pass
                 break
             except CommandFailedError:
                 if tries:
