@@ -79,6 +79,7 @@ status_log() {
     ceph nvme-gw show $POOL $GROUP
     sudo nvme list
     sudo nvme list | wc -l
+    sudo nvme list-subsys
     for device in $selected_drives; do
         echo "Processing device: $device"
         sudo nvme list-subsys /dev/$device
