@@ -400,7 +400,7 @@ class TestNFS(MgrTestCase):
         try:
             self._mnt_nfs(pseudo_path, port, ip)
             self.ctx.cluster.run(args=['mkdir', '/mnt/fio'])
-            fio_cmd=['sudo', 'fio', '--ioengine=libaio', '-directory=/mnt/fio', '--filename=fio.randrw.test', '--name=job', '--bs=16k', '--direct=1', '--group_reporting', '--iodepth=128', '--randrepeat=0', '--norandommap=1', '--thread=2', '--ramp_time=20s', '--offset_increment=5%', '--size=5G', '--time_based', '--runtime=300', '--ramp_time=1s', '--percentage_random=0', '--rw=randrw', '--rwmixread=50']
+            fio_cmd=['sudo', 'fio', '--ioengine=libaio', '-directory=/mnt/fio', '--filename=fio.randrw.test', '--name=job', '--bs=16k', '--direct=1', '--group_reporting', '--iodepth=128', '--randrepeat=0', '--norandommap=1', '--thread=2', '--ramp_time=20s', '--offset_increment=5%', '--size=5G', '--time_based', '--runtime=300', '--ramp_time=1s', '--percentage_random=0', '--rw=randrw', '--rwmixread=50', '--debug=all']
             self.ctx.cluster.run(args=fio_cmd)
         except CommandFailedError as e:
             self.fail(f"expected fio to be successful but failed with {e.exitstatus}")
