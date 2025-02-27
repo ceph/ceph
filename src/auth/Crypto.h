@@ -187,7 +187,7 @@ public:
     return ckh->encrypt(cct, in, out);
   }
 
-  sha256_digest_t hmac_sha256(CephContext*, const ceph::buffer::list& in) {
+  sha256_digest_t hmac_sha256(CephContext*, const ceph::buffer::list& in) const {
     ceph_assert(ckh);
     return ckh->hmac_sha256(in);
   }
