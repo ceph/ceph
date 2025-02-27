@@ -20,6 +20,7 @@
 #include "ops.h"
 #include "include/utime.h"
 #include "common/ceph_time.h"
+#include "common/dout.h"
 
 namespace cls::cmpxattr {
   /// requests with too many key comparisons will be rejected with -E2BIG
@@ -39,7 +40,13 @@ namespace cls::cmpxattr {
   [[nodiscard]] int cmp_vals_set_vals(librados::ObjectWriteOperation& writeop,
 				      Mode mode, Op comparison,
 				      const ComparisonMap& cmp_pairs,
-				      const std::map<std::string, bufferlist>& set_pairs);
+				      const std::map<std::string, bufferlist>& set_pairs,
+				      bufferlist *out);
+
+  int report_cmp_set_error(const DoutPrefixProvider *dpp,
+			   int err_code,
+			   const bufferlist &err_bl,
+			   const char *caller);
 
   // bufferlist factories for comparison values
   inline ceph::bufferlist string_buffer(const std::string_view& value) {

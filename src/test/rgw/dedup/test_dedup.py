@@ -262,28 +262,21 @@ def count_object_parts_in_all_buckets(verbose=False):
 
     if found == False:
         log.debug("Pool %s doesn't exists!", poolname)
-        return (0, 0)
+        return 0
 
-    result = rados(['ls', '- -l', '-p ', poolname])
+    result = rados(['ls', '-p ', poolname])
     assert result[1] == 0
 
     names=result[0].split()
-    total_size=0
     count = 0
     for name in names:
         #log.info(name)
         count = count + 1
-        size = 0
-        for token in name.rsplit("::", maxsplit=1):
-            size=token
-
-        total_size += int(size)
 
     if verbose:
         log.info("Pool has %d rados objects", count)
-        log.info("Pool size is %d Bytes (%.2f MiB)", total_size, total_size/MB)
 
-    return (count, total_size)
+    return count
 
 
 #-------------------------------------------------------------------------------
@@ -329,7 +322,7 @@ def delete_bucket_with_all_objects(bucket_name, conn):
 def verify_pool_is_empty():
     result = admin(['gc', 'process', '--include-all'])
     assert result[1] == 0
-    assert count_object_parts_in_all_buckets() == (0, 0)
+    assert count_object_parts_in_all_buckets() == 0
 
 
 #-------------------------------------------------------------------------------
@@ -467,7 +460,7 @@ def calc_expected_results(files, config):
     expcted_space_post_dedup=(total_space-duplicated_space)
     log.debug("Post dedup expcted data in pool = %.2f MiB", expcted_space_post_dedup/MB)
 
-    return (expected_rados_obj_count_post_dedup, expcted_space_post_dedup)
+    return expected_rados_obj_count_post_dedup
 
 
 #-------------------------------------------------------------------------------
@@ -516,12 +509,12 @@ def upload_objects(out_dir, bucket_name, files, indices, conn, config, check_obj
     expcted_space_post_dedup=(total_space-duplicated_space)
     log.info("Post dedup expcted data in pool = %.2f MiB", expcted_space_post_dedup/MB)
     if check_obj_count:
-        assert (rados_objects_total, total_space) == count_object_parts_in_all_buckets()
+        assert rados_objects_total == count_object_parts_in_all_buckets()
 
     dedup_stats.size_before_dedup=total_space
     #dedup_stats.duplicate_bytes=duplicated_space
     expected_results=(expected_rados_obj_count_post_dedup, expcted_space_post_dedup)
-    return (expected_results, dedup_stats, s3_objects_total)
+    return (expected_rados_obj_count_post_dedup, dedup_stats, s3_objects_total)
 
 
 #-------------------------------------------------------------------------------
@@ -574,13 +567,13 @@ def upload_objects_multi(out_dir, files, conns, bucket_names, indices, config, c
     expcted_space_post_dedup=(total_space-duplicated_space)
     log.debug("Post dedup expcted data in pool = %.2f MiB", expcted_space_post_dedup/MB)
     if check_obj_count:
-        assert (rados_objects_total, total_space) == count_object_parts_in_all_buckets()
+        assert rados_objects_total == count_object_parts_in_all_buckets()
         assert (s3_object_count == s3_objects_total)
 
     dedup_stats.size_before_dedup=total_space
     #dedup_stats.duplicate_bytes=duplicated_space
     expected_results=(expected_rados_obj_count_post_dedup, expcted_space_post_dedup)
-    return (expected_results, dedup_stats, s3_objects_total)
+    return (expected_rados_obj_count_post_dedup, dedup_stats, s3_objects_total)
 
 
 #-------------------------------------------------------------------------------
@@ -747,11 +740,11 @@ def exec_dedup(expcted_dedup_stats, verify_stats=True):
 def prepare_test(out_dir):
     cleanup_local(out_dir)
     #make sure we are starting with all buckets empty
-    if count_object_parts_in_all_buckets() != (0, 0):
+    if count_object_parts_in_all_buckets() != 0:
         log.warning("The system was left dirty from previous run");
         log.warning("Make sure to remove all objects before starting");
+        assert(0)
 
-    assert count_object_parts_in_all_buckets() == (0, 0)
     os.mkdir(out_dir)
 
 

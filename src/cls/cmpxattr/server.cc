@@ -76,6 +76,7 @@ static int compare_value(Mode mode, Op op, const bufferlist& input,
   }
 }
 
+//-------------------------------------------------------------------------------------
 static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   cmp_vals_set_vals_op op;
@@ -117,24 +118,26 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
       return -EINVAL;
     }
 
+    int ret = 0;
     // an empty input value will match an empty value or a non-existing key
-    if (input.length() == 0 && value.length() > 0) {
-      CLS_LOG(1, "%s:: key=%s exists!", __func__, key.c_str());
-      return -EEXIST;
+    if (input.length() == 0 && (op.comparison == Op::EQ)) {
+      if (value.length() == 0) {
+	ret = true;
+      }
+      else {
+	CLS_LOG(1, "%s:: key=%s exists!", __func__, key.c_str());
+	return -EEXIST;
+      }
     }
-    int ret = compare_value(op.mode, op.comparison, input, value);
+    else {
+      ret = compare_value(op.mode, op.comparison, input, value);
+    }
     if (ret <= 0) {
       // unsuccessful comparison
       CLS_LOG(10, "%s:: failed compare key=%s ret=%d", __func__, key.c_str(), ret);
-      if (ret < 0) {
-	return ret;
-      }
-      else {
-	// ret value of 0 is understood as false here for compare failure
-	// TBD: return a better error code to be able to distinguish from a
-	//      generic failure
-	return -1;
-      }
+      // set the failing key in the returned bl
+      encode(key, *out);
+      return ret;
     }
 
     // successful comparison

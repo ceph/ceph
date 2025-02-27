@@ -98,19 +98,19 @@ namespace rgw::dedup {
     int dedup_type = DEDUP_TYPE_DRY_RUN;
     dedup_epoch_t new_epoch = { serial, dedup_type, ceph_clock_now(), num_work_shards,
 				num_md5_shards };
-    bufferlist new_epoch_bl, empty_bl;
+    bufferlist new_epoch_bl, empty_bl, err_bl;
     encode(new_epoch, new_epoch_bl);
     ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, empty_bl}};
     std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
+    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs, &err_bl);
     if (ret != 0) {
       ldpp_dout(dpp, 5) << __func__ << "::failed cmp_vals_set_vals" << dendl;
       return -EINVAL;
     }
     ldpp_dout(dpp, 20) << __func__ << "::send EPOCH CLS" << dendl;
-    ret = ioctx.operate(oid, &op);
-    if (ret == 0) {
+    ret = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
+    if (ret == 0 && err_bl.length() == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was written" << dendl;
     }
     else if (ret == -EEXIST) {
@@ -118,8 +118,7 @@ namespace rgw::dedup {
       ret = 0;
     }
     else {
-      ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.operate() with: "
-			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+      ret = report_cmp_set_error(dpp, ret, err_bl, __func__);
     }
     return ret;
   }
@@ -134,16 +133,20 @@ namespace rgw::dedup {
   {
     dedup_epoch_t new_epoch = { p_old_epoch->serial + 1, dedup_type, ceph_clock_now(),
 				num_work_shards, num_md5_shards};
-    bufferlist old_epoch_bl, new_epoch_bl;
+    bufferlist old_epoch_bl, new_epoch_bl, err_bl;
     encode(*p_old_epoch, old_epoch_bl);
     encode(new_epoch, new_epoch_bl);
     ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, old_epoch_bl}};
     std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    int ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
+    int ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs, &err_bl);
     ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
     std::string oid(DEDUP_EPOCH_TOKEN);
-    ret = ioctx.operate(oid, &op);
+    ret = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
+    if (ret || err_bl.length()) {
+      ret = report_cmp_set_error(dpp, ret, err_bl, __func__);
+    }
+
     return ret;
   }
 
@@ -1006,18 +1009,16 @@ namespace rgw::dedup {
       return ret;
     }
 
-    ldpp_dout(dpp, 1) << __func__ << (dry_run ?"::DRY RUN":"::FULL DEDUP") << dendl;
+    ldpp_dout(dpp, 10) << __func__ << (dry_run ?"::DRY RUN":"::FULL DEDUP") << dendl;
     int dedup_type = (dry_run ? DEDUP_TYPE_DRY_RUN : DEDUP_TYPE_FULL);
     ret = swap_epoch(dpp, ioctx, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::Epoch object was reset" << dendl;
-      dedup_control(store, dpp, URGENT_MSG_RESTART);
+      ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
+      return dedup_control(store, dpp, URGENT_MSG_RESTART);
     }
     else {
-      ldpp_dout(dpp, 0) << __func__ << "::Failed to reset EPOCH object with: "
-			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+      return ret;
     }
-    return ret;
   }
 
   //---------------------------------------------------------------------------

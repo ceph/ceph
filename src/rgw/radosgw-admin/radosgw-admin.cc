@@ -9119,7 +9119,6 @@ next:
   }
 
   if (opt_cmd == OPT::DEDUP_STATS) {
-    std::cout << "OPT::DEDUP_STATS" << std::endl;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
       cerr << "ERROR: this command can only work when the cluster has a RADOS "
@@ -9158,7 +9157,15 @@ next:
 	   << "backing store." << std::endl;
       return EPERM;
     }
-    rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
+    int ret = rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
+    if (ret == 0) {
+      std::cout << "Dedup was restarted successfully" << std::endl;
+    }
+    else {
+      std::cerr << "Dedup failed to restart" << std::endl;
+      std::cerr << "Error is: " << ret << "::" << cpp_strerror(ret) << std::endl;
+    }
+    return -ret;
   }
 
   if (opt_cmd == OPT::GC_LIST) {

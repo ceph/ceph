@@ -642,13 +642,14 @@ namespace rgw::dedup {
     crypto::digest<crypto::SHA1>(p_src_rec->manifest_bl).encode(shared_manifest_hash_bl);
     librados::ObjectWriteOperation src_op, tgt_op;
     ComparisonMap src_cmp_pairs, tgt_cmp_pairs;
+    bufferlist src_err_bl, tgt_err_bl;
     init_cmp_pairs(p_src_rec, etag_bl, &src_cmp_pairs);
     init_cmp_pairs(p_tgt_rec, etag_bl, &tgt_cmp_pairs);
     map<string, bufferlist> src_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl}};
     map<string, bufferlist> tgt_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl},
 					     {RGW_ATTR_MANIFEST, p_src_rec->manifest_bl}};
-    ret = cmp_vals_set_vals(src_op, Mode::String, Op::EQ, src_cmp_pairs, src_set_pairs);
-    ret = cmp_vals_set_vals(tgt_op, Mode::String, Op::EQ, tgt_cmp_pairs, tgt_set_pairs);
+    ret = cmp_vals_set_vals(src_op, Mode::String, Op::EQ, src_cmp_pairs, src_set_pairs, &src_err_bl);
+    ret = cmp_vals_set_vals(tgt_op, Mode::String, Op::EQ, tgt_cmp_pairs, tgt_set_pairs, &tgt_err_bl);
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
@@ -665,10 +666,9 @@ namespace rgw::dedup {
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS" << dendl;
-      ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
-      if (ret < 0) {
-	ldpp_dout(dpp, 1) << __func__ << "::ERR: failed TGT rgw_rados_operate() ret="
-			  << ret << dendl;
+      ret = tgt_ioctx.operate(tgt_oid, &tgt_op, librados::OPERATION_RETURNVEC);
+      if (unlikely(ret < 0 || tgt_err_bl.length())) {
+	ret = report_cmp_set_error(dpp, ret, src_err_bl, "dedup_object::TGT");
 	rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
 	return ret;
       }
@@ -678,10 +678,9 @@ namespace rgw::dedup {
 
       if(!has_shared_manifest_src) {
 	ldpp_dout(dpp, 20) << __func__ << "::send SRC CLS" << dendl;
-	ret = src_ioctx.operate(src_oid, &src_op);
-	if (ret < 0) {
-	  ldpp_dout(dpp, 1) << __func__ << "::ERR: failed SRC rgw_rados_operate() ret="
-			    << ret << dendl;
+	ret = src_ioctx.operate(src_oid, &src_op, librados::OPERATION_RETURNVEC);
+	if (unlikely(ret < 0 || src_err_bl.length())) {
+	  ret = report_cmp_set_error(dpp, ret, src_err_bl, "dedup_object::SRC");
 	  return ret;
 	}
       }
