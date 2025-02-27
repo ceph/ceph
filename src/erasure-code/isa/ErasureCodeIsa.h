@@ -160,7 +160,7 @@ public:
 
   void encode_delta(const ceph::bufferptr &old_data,
                     const ceph::bufferptr &new_data,
-                    ceph::bufferptr *delta) override;
+                    ceph::bufferptr *delta_maybe_in_place) override;
 
   void apply_delta(const shard_id_map<ceph::bufferptr> &in,
                    shard_id_map<ceph::bufferptr> &out);
