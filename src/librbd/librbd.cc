@@ -1671,6 +1671,15 @@ namespace librbd {
                                            false, snaps);
   }
 
+  int RBD::group_snap_get_mirror_namespace(librados::IoCtx& group_ioctx,
+                                      const std::string& group_id, const std::string& snap_id,
+                                      group_snap_mirror_namespace_t* mirror_namespace)
+  {
+    return librbd::api::Group<>::snap_get_mirror_namespace(group_ioctx,
+                                      group_id, snap_id,
+                                      mirror_namespace);
+  }
+
   int RBD::group_snap_get_info(IoCtx& group_ioctx, const char *group_name,
                                const char *snap_name,
                                group_snap_info2_t *group_snap) {
