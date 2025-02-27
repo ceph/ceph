@@ -488,8 +488,38 @@ class TestNFS(MgrTestCase):
                                  }
                              }))
 
+    def apply_ganesha_spec(self, spec):
+        """
+        apply spec and wait for redeploy otherwise it will reset any conf changes
+        :param spec: ganesha daemon spec (YAML)
+        """
+        ganesha_daemon_pid_init = (self.ctx.cluster.run(args=["sudo", "pgrep", "ganesha.nfsd"],
+                                                        stdout=StringIO(),
+                                                        stderr=StringIO()))[0].stdout.getvalue().strip()
+        self.ctx.cluster.run(args=['ceph', 'orch', 'apply', '-i', '-'],
+                             stdin=spec)
+        with contextutil.safe_while(sleep=4, tries=15) as proceed:
+            while proceed():
+                try:
+                    ganesha_daemon_pid = (self.ctx.cluster.run(args=["sudo", "pgrep", "ganesha.nfsd"],
+                                                               stdout=StringIO(),
+                                                               stderr=StringIO()))[0].stdout.getvalue().strip()
+                    if ganesha_daemon_pid != ganesha_daemon_pid_init:
+                        # new pid i.e. redeployment done
+                        break
+                except CommandFailedError:
+                    # no pid if the redeployment is in progress
+                    log.info('waiting for ganesha daemon redeployment')
+
     def enable_libcephfs_logging(self, cluster_name):
+        """
+        enable ceph client logs by adding a volume mount to ganesha daemon's
+        unit.run using `ceph orch apply -i <spec>` and adding client log path
+        to /var/lib/ceph/{fsid}/{ganesha_daemon}/config
+        :param cluster_name: nfs cluster name
+        """
         fsid = self._cmd("fsid").strip()
+
         # add volume mount for ceph client logging from /var/log/ceph/$fsid:/var/log/ceph:z
         ganesha_spec = self._cmd("orch", "ls", "--service-name",
                                  f"nfs.{cluster_name}", "--export").strip()
@@ -500,12 +530,8 @@ class TestNFS(MgrTestCase):
         debug_enabled_ganesha_spec = yaml.dump(parsed_ganesha_spec).replace("- -v", '- "-v"').replace(
             f"- /var/log/ceph/{fsid}:/var/log/ceph:z", f'- "/var/log/ceph/{fsid}:/var/log/ceph:z"')
         log.debug(f"debug enabled ganesha spec: {debug_enabled_ganesha_spec}")
-        self.ctx.cluster.run(
-            args=['ceph', 'orch', 'apply', '-i', '-'],
-            stdin=debug_enabled_ganesha_spec)
 
-        # wait for redeploy otherwise the below config changes would reset
-        time.sleep(5)
+        self.apply_ganesha_spec(debug_enabled_ganesha_spec)
 
         # add client debug to /var/lib/ceph/$fsid/$ganesha_daemon/config
         ganesha_daemon = ((self._orch_cmd("ps", "--daemon-type", "nfs")).split("\n")[1].split(' ')[0]).strip()
@@ -517,37 +543,51 @@ class TestNFS(MgrTestCase):
         if "[client]" not in original_ganesha_conf:
             s = f"[client]\n\tdebug client = 20\n\tlog file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log"
             self._sys_cmd(["echo", Raw(f'"{s}"'), Raw("|"), "sudo", "tee", Raw("-a"), GANESHA_CONF_FILE_PATH])
+            # restart ganesha daemon for the changes to take effect
+            self._orch_cmd("restart", f"nfs.{cluster_name}")
 
-        self._orch_cmd("restart", f"nfs.{cluster_name}")
-
+        # ensure log level and file path exists
         ganesha_conf_debug_enabled = (self.ctx.cluster.run(args=["sudo", "cat", GANESHA_CONF_FILE_PATH],
                                                            stdout=StringIO(),
                                                            stderr=StringIO()))[0].stdout.getvalue().strip()
         self.assertIn("[client]", ganesha_conf_debug_enabled)
         self.assertIn("debug client = 20", ganesha_conf_debug_enabled)
-        self.assertIn(f"log file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log", ganesha_conf_debug_enabled)
+        self.assertIn(f"log file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log",
+                      ganesha_conf_debug_enabled)
 
-        time.sleep(5)
+        def check_libcephfs_log():
+            LIBCEPHFS_LOG_FILE_PATH = f"/var/log/ceph/{fsid}/ceph-client.nfs.{cluster_name}.log"
+            libcephfs_log = (self.ctx.cluster.run(args=["sudo", "cat",
+                                                        LIBCEPHFS_LOG_FILE_PATH,
+                                                        Raw("|"), "tail", "-n", "2"],
+                                                  check_status=False,
+                                                  stdout=StringIO(),
+                                                  stderr=StringIO()))
+            if libcephfs_log[0].returncode != 0:
+                log.debug(f"failed to read {LIBCEPHFS_LOG_FILE_PATH}, retrying")
+                return False
+            if len(libcephfs_log[0].stdout.getvalue().strip()) == 0:
+                log.debug(f"log file {LIBCEPHFS_LOG_FILE_PATH} empty, retrying")
+                return False
+            return True
 
-        libcephfs_log = (self.ctx.cluster.run(args=["sudo", "cat",
-                                                    f"/var/log/ceph/{fsid}/ceph-client.nfs.{cluster_name}.log",
-                                                    Raw("|"), "tail", "-n", "2"],
-                                              check_status=True,
-                                              stdout=StringIO(),
-                                              stderr=StringIO()))[0].stdout.getvalue().strip()
-        self.assertGreater(len(libcephfs_log), 0, "empty log file")
+        # usually appears in no time, sometimes might take a second or two for the log file to appear
+        self.wait_until_true(check_libcephfs_log, timeout=60)
 
         return original_ganesha_spec, GANESHA_CONF_FILE_PATH, original_ganesha_conf
 
     def disable_libcephfs_logging(self, cluster_name, ganesha_spec, conf_path, ganesha_conf):
-        self.ctx.cluster.run(
-            args=['ceph', 'orch', 'apply', '-i', '-'],
-            stdin=ganesha_spec)
-        
-        # ceph orch apply should reset the config, wait for 5 secs if it still exists
-        # then move ahead with manually removing it
-        time.sleep(5)
-        
+        """
+        disable ceph client logs by reverting back to the primary ganesha spec and removing debug level
+        and file path from /var/lib/ceph/{fsid}/{ganesha_daemon}/config
+        :param cluster_name: nfs cluster name
+        :param ganesha_spec: primary spec (spec prior to adding debug volume mount)
+        :param conf_path: ganesha conf file path
+        :param ganesha_conf: primary ganesha conf (conf prior to adding debug level and path)
+        """
+        self.apply_ganesha_spec(ganesha_spec)
+
+        # remove ceph client debug info from ganesha conf
         conf_content = (self.ctx.cluster.run(args=["sudo", "cat", conf_path],
                                              stdout=StringIO(),
                                              stderr=StringIO()))[0].stdout.getvalue().strip()
@@ -560,8 +600,8 @@ class TestNFS(MgrTestCase):
             self.assertNotIn("[client]", default_conf)
             self.assertNotIn("debug client = 20", default_conf)
             self.assertNotIn(f"log file = /var/log/ceph/ceph-client.nfs.{cluster_name}.log", default_conf)
-
-        self._orch_cmd("restart", f"nfs.{cluster_name}")
+            # restart ganesha daemon for the changes to take effect
+            self._orch_cmd("restart", f"nfs.{cluster_name}")
 
     def test_create_and_delete_cluster(self):
         '''
