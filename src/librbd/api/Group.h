@@ -69,6 +69,9 @@ struct Group {
                                 librados::IoCtx& image_ioctx,
                                 std::string image_id);
 
+  static int snap_get_mirror_namespace(librados::IoCtx& group_ioctx,
+                                       const char *group_name, const char *snap_id,
+                                       group_snap_mirror_namespace_t* mirror_namespace);
 };
 
 } // namespace api
