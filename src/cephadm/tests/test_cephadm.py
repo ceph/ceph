@@ -676,6 +676,101 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
                 ),
                 'expected': '1b58ca4f6dfd',  # YIKES!
             },
+            # multiple ceph deamons
+            {
+                'containers': [
+                    {
+                        'name': 'osd.8',
+                        '_container_info': _container_info(
+                            '7487e763ce4a103a60292a33269bb39d0abfaf688c7793a78251ce6489a9c52d',
+                            'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                            '1b58ca4f6dfd7553d99b923e6b7e8fd0ab4f8ca4db802b81c68de9b6c362ee7a',
+                            '2025-01-17 11:00:44.361121326 -0500 EST',
+                            '',
+                        ),
+                    },
+                    {
+                        'name': 'mgr.cep0.aofdsasdi',
+                        '_container_info': _container_info(
+                            '44ec17226ffd4824cdfebf0f8d628be9acb942ecbad47ae1699cfea38fb17f48',
+                            'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                            'c17226ffd4824c0f7dfebf0f8d628be9acb942ecbad47ae1699cfea38fb17f48',
+                            '2025-01-17 11:00:44.361121326 -0500 EST',
+                            '',
+                        ),
+                    },
+                ],
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:d6d1f4ab7148145467d9b632efc89d75710196434cba00aec5571b01e15b8a99|1e6f059b33d7|main|2025-01-21 16:54:41 +0000 UTC
+quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789|c17226ffd482|test|2025-01-21 16:54:41 +0000 UTC
+                    '''
+                ),
+                'expected': 'quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789',
+            },
+            # named ceph deamon
+            {
+                'name': 'osd.8',
+                'containers': [
+                    {
+                        'name': 'osd.8',
+                        '_container_info': _container_info(
+                            '7487e763ce4a103a60292a33269bb39d0abfaf688c7793a78251ce6489a9c52d',
+                            'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                            '1b58ca4f6dfd7553d99b923e6b7e8fd0ab4f8ca4db802b81c68de9b6c362ee7a',
+                            '2025-01-17 11:00:44.361121326 -0500 EST',
+                            '',
+                        ),
+                    },
+                    {
+                        'name': 'mgr.cep0.aofdsasdi',
+                        '_container_info': _container_info(
+                            '44ec17226ffd4824cdfebf0f8d628be9acb942ecbad47ae1699cfea38fb17f48',
+                            'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                            'c17226ffd4824c0f7dfebf0f8d628be9acb942ecbad47ae1699cfea38fb17f48',
+                            '2025-01-17 11:00:44.361121326 -0500 EST',
+                            '',
+                        ),
+                    },
+                ],
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:d6d1f4ab7148145467d9b632efc89d75710196434cba00aec5571b01e15b8a99|1b58ca4f6df|main|2025-01-21 16:54:41 +0000 UTC
+quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789|c17226ffd482|test|2025-01-21 16:54:41 +0000 UTC
+                    '''
+                ),
+                'expected': 'quay.ceph.io/ceph-ci/ceph@sha256:d6d1f4ab7148145467d9b632efc89d75710196434cba00aec5571b01e15b8a99',
+            },
+            # named ceph deamon image unavailable
+            {
+                'name': 'osd.8',
+                'containers': [
+                    {
+                        'name': 'osd.8',
+                        '_container_info': _container_info(
+                            '7487e763ce4a103a60292a33269bb39d0abfaf688c7793a78251ce6489a9c52d',
+                            'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                            'ccdb1b58cdfd7553d99b923e6b7e8fd0ab4f8ca4db802b81c68de9b6c362ee7a',
+                            '2025-01-17 11:00:44.361121326 -0500 EST',
+                            '',
+                        ),
+                    },
+                    {
+                        'name': 'mgr.cep0.aofdsasdi',
+                        '_container_info': _container_info(
+                            '44ec17226ffd4824cdfebf0f8d628be9acb942ecbad47ae1699cfea38fb17f48',
+                            'quay.ceph.io/ceph-ci/ceph@sha256:863ae69e531b26a9cb609ecea17a477ef8f77aa11b2d398091d54c73a2464d29',
+                            'c17226ffd4824c0f7dfebf0f8d628be9acb942ecbad47ae1699cfea38fb17f48',
+                            '2025-01-17 11:00:44.361121326 -0500 EST',
+                            '',
+                        ),
+                    },
+                ],
+                'images_output': (
+                    '''quay.ceph.io/ceph-ci/ceph@sha256:d6d1f4ab7148145467d9b632efc89d75710196434cba00aec5571b01e15b8a99|1b58ca4f6df|main|2025-01-21 16:54:41 +0000 UTC
+quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789|c17226ffd482|test|2025-01-21 16:54:41 +0000 UTC
+                    '''
+                ),
+                'expected': 'quay.ceph.io/ceph-ci/ceph@sha256:8eb43767c40d3e2d8cdb7577904f5f0b94373afe2dde29672c2b0001bd098789',
+            },
         ],
     )
     def test_infer_local_ceph_image(self, params, funkypatch):
@@ -684,17 +779,29 @@ quay.ceph.io/ceph-ci/ceph@sha256:eeddcc536bb887b36b959e887d5984dd7a3f008a23aa1f2
         ctx.container_engine = mock_podman()
 
         cinfo = params.get('container_info', None)
+        containers = params.get('containers', [])
+        assert not (
+            cinfo and containers
+        ), "test params must only have either cinfo OR containers"
+        if not containers and cinfo:
+            containers = [{'_container_info': cinfo, 'name': 'mon.foo'}]
+        if params.get('name', None):
+            ctx.name = params['name']
+
         out = params.get('images_output', '')
         expected = params.get('expected', None)
-        funkypatch.patch('cephadmlib.call_wrappers.call').return_value = out, '', 0
-        funkypatch.patch('cephadmlib.listing_updaters.CoreStatusUpdater')().expand.return_value = {
-            '_container_info': cinfo,
-            'name': 'mon.foo',
-        }
-        funkypatch.patch('cephadmlib.listing.daemons_matching').return_value = [0] if cinfo else []
-        image = _cephadm.infer_local_ceph_image(
-            ctx, ctx.container_engine
+        funkypatch.patch('cephadmlib.call_wrappers.call').return_value = (
+            out,
+            '',
+            0,
         )
+        funkypatch.patch(
+            'cephadmlib.listing_updaters.CoreStatusUpdater'
+        )().expand.side_effect = lambda ctx, v: v
+        funkypatch.patch(
+            'cephadmlib.listing.daemons_matching'
+        ).return_value = containers
+        image = _cephadm.infer_local_ceph_image(ctx, ctx.container_engine)
         assert image == expected
 
     @pytest.mark.parametrize('daemon_filter, by_name, daemon_list, container_stats, output',
