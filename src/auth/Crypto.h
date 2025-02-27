@@ -226,4 +226,25 @@ public:
 };
 
 
+class CryptoManager {
+  CephContext *cct;
+  std::shared_ptr<CryptoHandler> crypto_none;
+  std::shared_ptr<CryptoHandler> crypto_aes;
+  std::shared_ptr<CryptoHandler> crypto_aes256krb5;
+
+  std::set<int> supported_crypto_types;
+public:
+  CryptoManager(CephContext *_cct);
+
+  const std::set<int>& get_supported_crypto_types() const {
+    return supported_crypto_types;
+  }
+
+  static int get_key_type(const std::string& s);
+  bool crypto_type_supported(int type) const;
+
+  std::shared_ptr<CryptoHandler> get_handler(int type);
+};
+
+
 #endif
