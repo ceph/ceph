@@ -418,6 +418,10 @@ public:
     }
   }
 
+  void emplace(entity_addrvec_t addr, AuxConnection conn) {
+    aux_list.emplace(addr, std::move(conn));
+  }
+
 private:
   std::map<entity_addrvec_t, AuxConnection> aux_list;
 };

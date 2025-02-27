@@ -416,7 +416,7 @@ void MonClient::handle_monmap(MMonMap *m)
   ldout(cct, 10) << " got monmap " << monmap.epoch
 		 << " from mon." << old_name
 		 << " (according to old e" << monmap.get_epoch() << ")"
-                 << " quorum is " << m->quorum
+                 << " quorum is " << monmap.quorum
                  << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
@@ -446,9 +446,9 @@ void MonClient::handle_monmap(MMonMap *m)
   }
 
   cct->set_mon_addrs(monmap);
-
+  auto mon_name = monmap.get_name(con_addrs);
   // set quorum
-  quorum.add_quorum(m->peer_addrs, m->epoch, m->quorum);
+  quorum.add_quorum(monmap.get_addrs(mon_name), monmap.epoch, monmap.quorum);
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
   want_monmap = false;
@@ -709,6 +709,7 @@ void MonClient::handle_auth(MAuthReply *m)
     auto& mc = found->second;
     ceph_assert(mc.have_session());
     active_con.reset(new MonConnection(std::move(mc)));
+    pending_cons.erase(found);
     aux_list.splice(pending_cons);
     pending_cons.clear();
     ldout(cct, 10) << __func__ << " hunting success, active mon."
@@ -1567,8 +1568,9 @@ int MonClient::handle_auth_done(
 	  }
 	} else {
 	  active_con.reset(new MonConnection(std::move(i.second)));
+          pending_cons.erase(i.first);
           aux_list.splice(pending_cons);
-	  pending_cons.clear();
+          pending_cons.clear();
 	  ceph_assert(active_con->have_session());
           ldout(cct, 10) << __func__ << " hunting success, active mon."
                 << monmap.get_name(active_con->get_con()->get_peer_addr())
@@ -1582,23 +1584,6 @@ int MonClient::handle_auth_done(
 	  _finish_auth(r);
 	}
 	return r;
-      }
-    }
-    ldout(cct, 20) << __func__ << " failed to find pending mon con in pending_cons" << dendl;
-    for (auto& i : aux_list.get_aux_list()) {
-      if (i.second.is_con(con)) {
-        int r = i.second.handle_auth_done(
-          auth_meta, global_id, bl,
-          session_key, connection_secret);
-        if (r) {
-          ldout(cct, 20) << __func__ << " " << i.first << " failed r=" << r << " for aux addr " << i.first << dendl;
-          aux_list.erase(i.first);
-          if (!aux_list.empty()) {
-            return r;
-          }
-        }
-        ldout(cct, 20) << __func__ << " auth aux conn done: " << i.first << " returning " << r << dendl;
-        return r;
       }
     }
     return -ENOENT;

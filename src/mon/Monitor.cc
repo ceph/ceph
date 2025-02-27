@@ -5482,8 +5482,9 @@ void Monitor::send_latest_monmap(Connection *con)
     << " id:" << con->get_peer_id()
     << " quorum: " << get_quorum()
     << dendl;
+  monmap->set_quorum(get_quorum());
   monmap->encode(bl, con->get_features());
-  con->send_message(new MMonMap(bl, con_self->get_peer_addrs(), get_epoch(), get_quorum()));
+  con->send_message(new MMonMap(bl));
 }
 
 void Monitor::check_quorum_subs_and_send_updates()
