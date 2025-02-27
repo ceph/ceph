@@ -165,7 +165,6 @@ public:
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
   std::string gss_ktfile_client{};
-
 private:
   void new_tick();
 
@@ -1046,7 +1045,7 @@ private:
   void write_features(MonitorDBStore::TransactionRef t);
 
   OpTracker op_tracker;
-
+  md_config_cacher_t<double> ms_inject_drop_mon_forward_msgs;
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
