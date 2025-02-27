@@ -185,15 +185,15 @@ ErasureCodeIsaDefault::erasure_contains(int *erasures, int i)
 void
 ErasureCodeIsaDefault::encode_delta(const bufferptr &old_data,
                                   const bufferptr &new_data,
-                                  bufferptr *delta)
+                                  bufferptr *delta_maybe_in_place)
 {
   constexpr int data_vectors = 2;
   char * data[data_vectors];
   data[0] = const_cast<char*>(old_data.c_str());
   data[1] = const_cast<char*>(new_data.c_str());
-  char * coding = delta->c_str();
+  char * coding = delta_maybe_in_place->c_str();
 
-  isa_xor(data, coding, delta->length(), data_vectors);
+  isa_xor(data, coding, delta_maybe_in_place->length(), data_vectors);
 }
 
 // -----------------------------------------------------------------------------
