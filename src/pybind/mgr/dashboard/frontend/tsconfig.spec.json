@@ -14,8 +14,8 @@
     "src/polyfills.ts"
   ],
   "include": [
-    "src/**/*.spec.ts",
-    "src/**/*.d.ts",
-    "src/testing/*.ts"
+    "apps/ceph-dashboard/src/**/*.spec.ts",
+    "apps/ceph-dashboard/src/**/*.d.ts",
+    "apps/ceph-dashboard/src/testing/*.ts"
   ]
 }
