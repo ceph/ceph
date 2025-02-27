@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        # remove the threshold so that test_bucket_index_log_trim() will test DeleteRange
+        rocksdb delete range threshold: 0
+      # instead of expanding the matrix, run each osd with a different omap limit
+      osd.0:
+        osd_max_omap_entries_per_request: 10
+      osd.1:
+        osd_max_omap_entries_per_request: 1000
+      osd.2:
+        osd_max_omap_entries_per_request: 10000
