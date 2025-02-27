@@ -107,6 +107,30 @@ int Background::read_script() {
   return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script);
 }
 
+std::unique_ptr<lua_state_guard> Background::initialize_lguard_state() {
+  auto lguard = std::make_unique<lua_state_guard>(
+      cct->_conf->rgw_lua_max_memory_per_state,
+      cct->_conf->rgw_lua_max_runtime_per_state, &dp);
+  lua_State* L = lguard->get();
+  if (!L) {
+    ldpp_dout(&dp, 1) << "Failed to create state for Lua background thread"
+                      << dendl;
+    return nullptr;
+  }
+  try {
+    open_standard_libs(L);
+    set_package_path(L, lua_manager->luarocks_path());
+    create_debug_action(L, cct);
+    create_background_metatable(L);
+  } catch (const std::runtime_error& e) {
+    ldpp_dout(&dp, 1)
+        << "Failed to create initial setup of Lua background thread. error "
+        << e.what() << dendl;
+    return nullptr;
+  }
+  return lguard;
+}
+
 const BackgroundMapValue Background::empty_table_value;
 
 const BackgroundMapValue& Background::get_table_value(const std::string& key) const {
@@ -124,21 +148,8 @@ const BackgroundMapValue& Background::get_table_value(const std::string& key) co
 void Background::run() {
   ceph_pthread_setname("lua_background");
   const DoutPrefixProvider* const dpp = &dp;
-  lua_state_guard lguard(cct->_conf->rgw_lua_max_memory_per_state,
-                         cct->_conf->rgw_lua_max_runtime_per_state, dpp);
-  auto L = lguard.get();
-  if (!L) {
-    ldpp_dout(dpp, 1) << "Failed to create state for Lua background thread" << dendl;
-    return;
-  }
-  try {
-    open_standard_libs(L);
-  set_package_path(L, lua_manager->luarocks_path());
-    create_debug_action(L, cct);
-    create_background_metatable(L);
-  } catch (const std::runtime_error& e) { 
-    ldpp_dout(dpp, 1) << "Failed to create initial setup of Lua background thread. error " 
-      << e.what() << dendl;
+  std::unique_ptr<lua_state_guard> lguard = initialize_lguard_state();
+  if (!lguard) {
     return;
   }
 
@@ -153,7 +164,20 @@ void Background::run() {
       }
       ldpp_dout(dpp, 10) << "Lua background thread resumed" << dendl;
     }
-    
+    const std::size_t max_memory = cct->_conf->rgw_lua_max_memory_per_state;
+    const std::uint64_t max_runtime = cct->_conf->rgw_lua_max_runtime_per_state;
+    auto res = lguard->set_max_memory(max_memory);
+    if (!res) {
+      ldpp_dout(dpp, 10)
+          << "Lua state required reset due to memory limit change" << dendl;
+      lguard = initialize_lguard_state();
+      if (!lguard) {
+        return;
+      }
+      ldpp_dout(dpp, 10) << "Lua state restarted seccessfully." << dendl;
+    }
+    lguard->set_max_runtime(max_runtime);
+    lguard->reset_start_time();
     const auto rc = read_script();
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do
@@ -161,6 +185,7 @@ void Background::run() {
       ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
     } else {
       auto failed = false;
+      auto L = lguard->get();
       try {
         //execute the background lua script
         if (luaL_dostring(L, rgw_script.c_str()) != LUA_OK) {
