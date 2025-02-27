@@ -1,0 +1,175 @@
+@use '@carbon/styles/scss/config' with (
+  $font-path: '~@ibm/plex',
+  $flex-grid-columns: 16,
+  $use-flexbox-grid: true,
+);
+@use '@carbon/layout';
+@use '@carbon/colors';
+@use './src/styles/vendor/variables' as vv;
+@use './themes/default';
+@use '@carbon/styles/scss/compat/themes' as compat;
+@use '@carbon/styles/scss/themes';
+@use '@carbon/styles/scss/theme' with (
+  $theme: default.$theme,
+  $fallback: compat.$g90,
+  );
+
+/******************************************
+  Component token overrides should go here
+  ******************************************/
+
+@use '@carbon/styles/scss/components/button/tokens' as button-tokens with (
+  $button-primary: vv.$primary,
+  $button-primary-hover: darken(vv.$primary, 5%),
+  $button-primary-active: darken(vv.$primary, 10%),
+  $button-secondary: vv.$secondary,
+  $button-secondary-hover: darken(vv.$secondary, 5%),
+  $button-secondary-active: darken(vv.$secondary, 10%),
+  $button-tertiary: vv.$primary,
+  $button-tertiary-hover: darken(vv.$primary, 5%),
+  $button-tertiary-active: darken(vv.$primary, 10%)
+);
+
+@use '@carbon/styles';
+@use '@carbon/type';
+
+/******************************************
+Custom theme
+******************************************/
+@forward './themes/content';
+
+/******************************************
+Datatable
+******************************************/
+
+tr.cds--expandable-row > td:first-of-type {
+  background-color: vv.$white !important;
+  padding-inline-start: 1rem !important;
+}
+
+tr.cds--expandable-row {
+  th,
+  tr td {
+    padding-inline-start: 0;
+  }
+}
+
+tbody:has(td.cds--table-column-checkbox) > tr.cds--expandable-row[data-child-row] td,
+tr.cds--parent-row.cds--expandable-row + tr[data-child-row] td {
+  padding-inline-start: 1rem;
+}
+
+th {
+  padding-block: 0 !important;
+}
+
+/******************************************
+Side nav
+******************************************/
+
+.cds--side-nav__navigation {
+  left: -4.8rem;
+  transition: 250ms ease;
+}
+
+.cds--side-nav--expanded {
+  left: 0;
+  transition: 250ms ease;
+}
+
+/******************************************
+Overflow menu
+******************************************/
+.cds--overflow-menu.cds--overflow-menu--open {
+  box-shadow: none;
+}
+
+/******************************************
+Forms
+******************************************/
+.form-header {
+  @include type.type-style('heading-04');
+  margin-bottom: 40px;
+}
+
+.cd-header {
+  @extend .pb-1;
+  @extend .mt-4;
+  @extend .mb-4;
+  @include type.type-style('heading-03');
+}
+
+.spacing-03 {
+  margin: 0.5rem;
+}
+
+.cds--col-md-4 {
+  padding-inline: 0;
+}
+
+/******************************************
+Breadcrumbs
+******************************************/
+.cds--breadcrumb {
+  margin-top: 8px;
+  padding: 8px 0;
+}
+
+/******************************************
+Modals
+******************************************/
+.cds--modal-container {
+  background-color: colors.$gray-10;
+
+  .cds--modal-close {
+    background-color: transparent;
+
+    &:hover {
+      background-color: colors.$gray-10-hover;
+    }
+
+    &:focus,
+    &:active {
+      background-color: transparent;
+    }
+  }
+}
+
+/******************************************
+Dashboard page
+******************************************/
+// keeping this on 12px for now until we have responsive design
+// based on carbon
+cd-dashboard {
+  font-size: 12px;
+}
+
+/******************************************
+Code snippet
+******************************************/
+.cds--snippet {
+  width: fit-content;
+}
+
+/******************************************
+Tooltip
+******************************************/
+.cds--tooltip-content {
+  background-color: theme.$layer-02;
+}
+
+/******************************************
+Carbon Popover
+******************************************/
+.cds--popover-content {
+  background-color: theme.$layer-02;
+  max-height: layout.$spacing-13;
+  overflow: auto;
+}
+
+/******************************************
+Tabs
+******************************************/
+.cds--tab-content {
+  background: var(--cds-layer-01);
+}

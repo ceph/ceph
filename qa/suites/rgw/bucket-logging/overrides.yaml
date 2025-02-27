@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw bucket logging obj roll time: 5
+  rgw:
+    storage classes:
+      LUKEWARM:
+      FROZEN:
+  s3tests:
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

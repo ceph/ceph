@@ -1,0 +1,347 @@
+api-change:
+  - src/pybind/mgr/dashboard/openapi.yaml
+
+build/ops:
+  - "**/CMakeLists.txt"
+  - admin/**
+  - ceph.spec.in
+  - cmake/**
+  - container/**
+  - debian/**
+  - do_cmake.sh
+  - do_freebsd.sh
+  - install-deps.sh
+  - keys/**
+  - make-debs.sh
+  - make-dist
+  - make-srpm.sh
+  - run-make-check.sh
+  - win32_build.sh
+  - win32_deps_build.sh
+
+documentation:
+  - AUTHORS
+  - CONTRIBUTING.rst
+  - COPYING*
+  - CodingStyle
+  - PendingReleaseNotes
+  - README.*
+  - SubmittingPatches*
+  - doc/**
+  - doc_deps.deb.txt
+  - man/**
+  - "**/*.+(rst|md)"
+
+libcephsqlite:
+  - doc/rados/api/libcephsqlite.rst
+  - qa/suites/rados/basic/tasks/libcephsqlite.yaml
+  - qa/workunits/rados/test_libcephsqlite.sh
+  - src/SimpleRADOSStriper.*
+  - src/include/libcephsqlite.h
+  - src/libcephsqlite.cc
+  - src/test/libcephsqlite/**
+
+mon:
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/monmaptool.rst
+  - doc/mon/**
+  - qa/workunits/mon/**
+  - src/mon/**
+  - src/test/mon/**
+
+mgr:
+  - doc/mgr/**
+  - src/mgr/**
+  - src/pybind/mgr/ceph_module.pyi
+  - src/pybind/mgr/mgr_module.py
+  - src/pybind/mgr/mgr_util.py
+  - src/pybind/mgr/object_format.py
+  - src/pybind/mgr/requirements.txt
+  - src/pybind/mgr/tox.ini
+  - src/test/mgr/**
+
+pybind:
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/**
+  - src/pybind/rados/**
+  - src/pybind/rbd/**
+  - src/pybind/rgw/**
+  - src/pybind/**
+  - src/python-common/**
+
+common:
+  - src/common/**
+  - src/global/**
+  - src/log/**
+
+cephadm:
+  - doc/cephadm/**
+  - doc/dev/cephadm/**
+  - doc/man/8/cephadm.rst
+  - qa/suites/orch/cephadm/**
+  - qa/tasks/cephadm.py
+  - qa/tasks/cephadm_cases
+  - qa/tasks/mgr/test_cephadm_orchestrator.py
+  - qa/tasks/mgr/test_orchestrator_cli.py
+  - qa/workunits/cephadm/**
+  - src/cephadm/**
+  - src/pybind/mgr/cephadm/**
+  - src/python-common/**
+    
+orchestrator:
+  - doc/mgr/orchestrator.rst
+  - doc/mgr/orchestrator_modules.rst
+  - src/pybind/mgr/orchestrator/**
+  - src/pybind/mgr/rook/**
+  - src/pybind/mgr/test_orchestrator/**
+  - qa/tasks/mgr/test_orchestrator_cli.py
+
+rook:
+  - doc/mgr/rook.rst
+  - src/pybind/mgr/rook/**
+  - qa/tasks/rook.py
+  - qa/suites/orch/rook/smoke/**
+
+bluestore:
+  - src/os/bluestore/**
+
+core:
+  - doc/man/8/ceph-authtool.rst
+  - doc/man/8/ceph-conf.rst
+  - doc/man/8/ceph-create-keys.rst
+  - doc/man/8/ceph-kvstore-tool.rst
+  - doc/man/8/ceph-mon.rst
+  - doc/man/8/ceph-objectstore-tool.rst
+  - doc/man/8/ceph-osd.rst
+  - doc/man/8/ceph.rst
+  - doc/man/8/crushtool.rst
+  - doc/man/8/monmaptool.rst
+  - doc/man/8/rados.rst
+  - doc/rados/**
+  - qa/standalone/**
+  - qa/suites/rados/**
+  - qa/workunits/erasure-code/**
+  - qa/workunits/mgr/**
+  - qa/workunits/mon/**
+  - qa/workunits/objectstore/**
+  - qa/workunits/rados/**
+  - src/ceph.in
+  - src/ceph_osd.cc
+  - src/ceph_mon.cc
+  - src/blk/**
+  - src/crush/*
+  - src/erasure-code/**
+  - src/kv/**
+  - src/librados/**
+  - src/mgr/**
+  - src/mon/**
+  - src/msg/**
+  - src/os/**
+  - src/osd/**
+  - src/tools/ceph_dedup_tool.cc
+  - src/tools/ceph_kvstore_tool.cc
+  - src/tools/ceph_monstore_tool.cc
+  - src/tools/ceph_objectstore_tool.*
+  - src/tools/crushtool.cc
+  - src/tools/kvstore_tool.*
+  - src/tools/monmaptool.cc
+  - src/tools/osdmaptool.cc
+  - src/tools/rados/**
+  - src/test/librados/**
+  - src/test/osd/**
+
+crimson:
+  - doc/dev/crimson/**
+  - src/crimson/**
+  - src/test/crimson/**
+  - qa/suites/crimson-rados/**
+  - src/seastar/**
+
+dashboard:
+  - src/pybind/mgr/dashboard/**
+  - qa/suites/rados/dashboard/**
+  - qa/tasks/mgr/test_dashboard.py
+  - qa/tasks/mgr/dashboard/**
+  - monitoring/**
+  - doc/mgr/dashboard.rst
+  - doc/dev/developer_guide/dash-devel.rst
+
+cephfs:
+  - doc/cephfs/**
+  - doc/man/8/ceph-fuse.rst
+  - doc/man/8/ceph-mds.rst
+  - doc/man/8/ceph-syn.rst
+  - doc/man/8/mount.ceph.rst
+  - doc/man/8/mount.fuse.ceph.rst
+  - qa/suites/fs/**
+  - qa/suites/multimds/**
+  - qa/tasks/ceph_fuse.py
+  - qa/tasks/cephfs/**
+  - qa/tasks/cephfs_test_runner.py
+  - qa/tasks/fs.py
+  - qa/tasks/kclient.py
+  - qa/tasks/mds_creation_failure.py
+  - qa/tasks/mds_thrash.py
+  - src/ceph_fuse.cc
+  - src/ceph_mds.cc
+  - src/ceph_syn.cc
+  - src/client/**
+  - src/include/ceph_fs.h
+  - src/include/ceph_fuse.h
+  - src/include/cephfs/**
+  - src/include/filepath.h
+  - src/include/frag.h
+  - src/include/fs_types.h
+  - src/libcephfs.cc
+  - src/mds/**
+  - src/mon/MDSMonitor.*
+  - src/mon/FSCommands.*
+  - src/pybind/cephfs/**
+  - src/pybind/mgr/mds_autoscaler/**
+  - src/pybind/mgr/status/**
+  - src/pybind/mgr/volumes/**
+  - src/test/fs/**
+  - src/test/libcephfs/**
+  - src/tools/cephfs/**
+  - src/tools/cephfs_mirror/**
+
+CI:
+  - .github/**
+
+rbd:
+  - doc/dev/rbd*
+  - doc/man/8/ceph-rbdnamer.rst
+  - doc/man/8/rbd*
+  - doc/rbd/**
+  - doc/start/quick-rbd.rst
+  - examples/librbd/**
+  - examples/rbd-replay/**
+  - qa/rbd/**
+  - qa/run_xfstests*
+  - qa/suites/krbd/**
+  - qa/suites/rbd/**
+  - qa/tasks/ceph_iscsi_client.py
+  - qa/tasks/metadata.yaml
+  - qa/tasks/qemu.py
+  - qa/tasks/rbd*
+  - qa/tasks/userdata*
+  - qa/workunits/cls/test_cls_journal.sh
+  - qa/workunits/cls/test_cls_lock.sh
+  - qa/workunits/cls/test_cls_rbd.sh
+  - qa/workunits/rbd/**
+  - qa/workunits/windows/**
+  - src/ceph-rbdnamer
+  - src/cls/journal/**
+  - src/cls/lock/**
+  - src/cls/rbd/**
+  - src/common/options/rbd*
+  - src/etc-rbdmap
+  - src/include/krbd.h
+  - src/include/rbd*
+  - src/include/rbd/**
+  - src/journal/**
+  - src/krbd.cc
+  - src/librbd/**
+  - src/ocf/**
+  - src/pybind/mgr/rbd_support/**
+  - src/pybind/rbd/**
+  - src/rbd*
+  - src/rbd*/**
+  - src/test/cli/rbd/**
+  - src/test/cli-integration/rbd/**
+  - src/test/cls_journal/**
+  - src/test/cls_lock/**
+  - src/test/cls_rbd/**
+  - src/test/journal/**
+  - src/test/librbd/**
+  - src/test/pybind/test_rbd.py
+  - src/test/rbd*
+  - src/test/rbd*/**
+  - src/test/run-rbd*
+  - src/test/test_rbd*
+  - src/tools/rbd*/**
+  - systemd/ceph-rbd-mirror*
+  - systemd/rbdmap.service.in
+  - udev/50-rbd.rules
+
+nvmeof:
+  - qa/suites/nvmeof/**
+  - qa/tasks/nvmeof.py
+  - qa/workunits/nvmeof/**
+  - src/ceph_nvmeof_monitor_client.cc
+  - src/cephadm/cephadmlib/daemons/nvmeof.py
+  - src/messages/MNVMeofGw*
+  - src/mon/NVMeofGw*
+  - src/nvmeof/**
+  - src/pybind/mgr/cephadm/services/nvmeof.py
+  - src/pybind/mgr/cephadm/templates/services/nvmeof/**
+  - src/tools/ceph-dencoder/nvmeof*
+
+rgw:
+  - qa/suites/rgw/**
+  - qa/tasks/rgw*
+  - qa/tasks/s3*
+  - src/cls/cmpomap/**
+  - src/cls/fifo/**
+  - src/cls/otp/**
+  - src/cls/queue/**
+  - src/cls/rgw/**
+  - src/cls/rgw_gc/**
+  - src/cls/timeindex/**
+  - src/mrgw.sh
+  - src/mrun
+  - src/mstart.sh
+  - src/mstop.sh
+  - src/rgw/**
+  - src/test/cls_rgw/**
+  - src/test/librgw_*
+  - src/test/rgw/**
+  - src/test/test_rgw*
+
+ceph-volume:
+  - src/ceph-volume/**
+  - doc/ceph-volume/**
+  - src/python-common/ceph/deployment/drive_group.py
+  - src/python-common/ceph/deployment/drive_selection/**
+
+tests:
+  - qa/**
+  - src/test/**
+
+nfs:
+  - src/pybind/mgr/nfs/**
+  - src/pybind/mgr/cephadm/services/nfs.py
+  - src/pybind/mgr/cephadm/templates/services/nfs/ganesha.conf.j2
+  - src/pybind/mgr/dashboard/controllers/nfs.py
+  - src/pybind/mgr/dashboard/tests/test_nfs.py
+  - qa/tasks/cephfs/test_nfs.py
+  - doc/mgr/nfs.rst
+  - doc/cephfs/nfs.rst
+  - doc/cephadm/nfs.rst
+  - doc/radosgw/nfs.rst
+  - doc/dev/vstart-ganesha.rst
+
+monitoring:
+  - doc/cephadm/monitoring.rst
+  - src/pybind/mgr/cephadm/services/monitoring.py
+  - src/pybind/mgr/cephadm/templates/services/alertmanager/**
+  - src/pybind/mgr/cephadm/templates/services/grafana/**
+  - src/pybind/mgr/cephadm/templates/services/prometheus/**
+  - src/pybind/mgr/dashboard/ci/check_grafana_dashboards.py
+  - src/pybind/mgr/prometheus/**
+  - monitoring/**  
+ 
+telemetry:
+  - doc/mgr/telemetry.rst
+  - qa/suites/upgrade/telemetry-upgrade/**
+  - qa/workunits/test_telemetry_pacific.sh
+  - qa/workunits/test_telemetry_pacific_x.sh
+  - qa/workunits/test_telemetry_quincy.sh
+  - qa/workunits/test_telemetry_quincy_x.sh
+  - src/pybind/mgr/telemetry/**
+  - src/telemetry/**
+
+script:
+  - src/script/**
+  - admin/**
+  - doc/scripts/**
