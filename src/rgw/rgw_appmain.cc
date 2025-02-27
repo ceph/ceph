@@ -551,6 +551,8 @@ void rgw::AppMain::init_tracepoints()
 
 void rgw::AppMain::init_lua()
 {
+  if (!g_conf().get_val<bool>("rgw_lua_enable"))
+    return;
   rgw::sal::Driver* driver = env.driver;
   int r{0};
   std::string install_dir;
@@ -583,7 +585,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
-    static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
+    if (g_conf().get_val<bool>("rgw_lua_enable"))
+      static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->
+          unwatch_reload(dpp);
   }
 
   for (auto& fe : fes) {
