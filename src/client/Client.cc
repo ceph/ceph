@@ -6622,6 +6622,9 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   if (!mref_writer.is_first_writer()) // already mounting or mounted
     return 0;
 
+  ldout(cct, 1) << __func__ << ": " << mount_root << " " << perms
+                << " required_mds=" << require_mds << " fs_name=" << fs_name << dendl;
+
   std::unique_lock cl(client_lock);
 
   int r = subscribe_mdsmap(fs_name);
