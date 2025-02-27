@@ -1,7 +1,6 @@
 set(crimson_seastore_srcs
   cached_extent.cc
   lba_mapping.cc
-  logical_child_node.cc
   seastore_types.cc
   segment_manager.cc
   segment_manager/ephemeral.cc
