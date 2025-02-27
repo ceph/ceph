@@ -341,6 +341,23 @@ public:
     return conn_ptr->handle_auth_done(auth_meta, global_id, bl, session_key, connection_secret);
   }
 
+  int get_auth_request(
+    uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
+    ceph::buffer::list *out,
+    const EntityName& entity_name,
+    uint32_t want_keys,
+    RotatingKeyRing* keyring) {
+    return conn_ptr->get_auth_request(method, preferred_modes, out, entity_name, want_keys, keyring);
+  }
+
+  int handle_auth_reply_more(
+    AuthConnectionMeta *auth_meta,
+    const ceph::buffer::list& bl,
+    ceph::buffer::list *reply) {
+    return conn_ptr->handle_auth_reply_more(auth_meta, bl, reply);
+  }
+
   bool empty() const {
     return !conn_ptr;
   }
@@ -409,13 +426,17 @@ public:
   size_t size() const {
     return aux_list.size();
   }
-  
-  void splice(std::map<entity_addrvec_t, MonConnection>& other) {
-    for (auto& [addr, conn] : other) {
-      aux_list.emplace(
-          addr,
-          AuxConnection(conn.get_mon_name(), std::make_unique<MonConnection>(std::move(conn))));
+
+  void splice(unsigned keep, std::map<entity_addrvec_t, MonConnection>& other) {
+    for (auto it = other.begin(); it != other.end() && keep > 0; ++it, --keep) {
+      aux_list.emplace(it->first,
+        AuxConnection(it->second.get_mon_name(),
+        std::make_unique<MonConnection>(std::move(it->second))));
     }
+  }
+
+  void emplace(entity_addrvec_t addr, AuxConnection conn) {
+    aux_list.emplace(addr, std::move(conn));
   }
 
 private:
@@ -500,6 +521,7 @@ private:
   bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
+  void handle_quorum_peon(MMonMap *m);
   void handle_config(MConfig *m);
 
   void handle_auth(MAuthReply *m);
