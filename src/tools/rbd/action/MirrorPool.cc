@@ -829,6 +829,36 @@ int get_mirror_image_status(
   return 0;
 }
 
+int get_mirror_group_status(
+    librados::IoCtx& io_ctx, uint32_t* total_groups,
+    std::map<librbd::mirror_group_status_state_t, int>* mirror_group_states,
+    MirrorHealth* mirror_group_health) {
+  librbd::RBD rbd;
+  int r = rbd.mirror_group_status_summary(io_ctx, mirror_group_states);
+  if (r < 0) {
+    std::cerr << "rbd: failed to get status summary for mirrored groups: "
+	      << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  *mirror_group_health = MIRROR_HEALTH_OK;
+  for (auto &it : *mirror_group_states) {
+    auto &state = it.first;
+    if (*mirror_group_health < MIRROR_HEALTH_WARNING &&
+	(state != MIRROR_GROUP_STATUS_STATE_REPLAYING &&
+	 state != MIRROR_GROUP_STATUS_STATE_STOPPED)) {
+      *mirror_group_health = MIRROR_HEALTH_WARNING;
+    }
+    if (*mirror_group_health < MIRROR_HEALTH_ERROR &&
+	state == MIRROR_GROUP_STATUS_STATE_ERROR) {
+      *mirror_group_health = MIRROR_HEALTH_ERROR;
+    }
+    *total_groups += it.second;
+  }
+
+  return 0;
+}
+
 } // anonymous namespace
 
 void get_peer_bootstrap_create_arguments(po::options_description *positional,
@@ -1576,10 +1606,18 @@ int execute_status(const po::variables_map &vm,
   librbd::RBD rbd;
 
   uint32_t total_images = 0;
+  uint32_t total_groups = 0;
   std::map<librbd::mirror_image_status_state_t, int> mirror_image_states;
+  std::map<librbd::mirror_group_status_state_t, int> mirror_group_states;
   MirrorHealth mirror_image_health = MIRROR_HEALTH_UNKNOWN;
+  MirrorHealth mirror_group_health = MIRROR_HEALTH_UNKNOWN;
   r = get_mirror_image_status(io_ctx, &total_images, &mirror_image_states,
                               &mirror_image_health);
+  if (r < 0) {
+    return r;
+  }
+  r = get_mirror_group_status(io_ctx, &total_groups, &mirror_group_states,
+                              &mirror_group_health);
   if (r < 0) {
     return r;
   }
@@ -1590,7 +1628,9 @@ int execute_status(const po::variables_map &vm,
   MirrorHealth mirror_daemon_health = daemon_service_info.get_daemon_health();
   auto mirror_services = daemon_service_info.get_mirror_services();
 
-  auto mirror_health = std::max(mirror_image_health, mirror_daemon_health);
+  auto mirror_health = std::max(std::max(mirror_image_health,
+                                         mirror_group_health),
+                                mirror_daemon_health);
 
   if (formatter != nullptr) {
     formatter->open_object_section("status");
@@ -1598,25 +1638,36 @@ int execute_status(const po::variables_map &vm,
     formatter->dump_stream("health") << mirror_health;
     formatter->dump_stream("daemon_health") << mirror_daemon_health;
     formatter->dump_stream("image_health") << mirror_image_health;
-    formatter->open_object_section("states");
+    formatter->dump_stream("group_health") << mirror_group_health;
+    formatter->open_object_section("image_states");
     for (auto &it : mirror_image_states) {
       std::string state_name = utils::mirror_image_status_state(it.first);
       formatter->dump_int(state_name.c_str(), it.second);
     }
-    formatter->close_section(); // states
+    formatter->close_section(); // image_states
+    formatter->open_object_section("group_states");
+    for (auto &it : mirror_group_states) {
+      std::string state_name = utils::mirror_group_status_state(it.first);
+      formatter->dump_int(state_name.c_str(), it.second);
+    }
+    formatter->close_section(); // group_states
     formatter->close_section(); // summary
   } else {
     std::cout << "health: " << mirror_health << std::endl;
     std::cout << "daemon health: " << mirror_daemon_health << std::endl;
     std::cout << "image health: " << mirror_image_health << std::endl;
+    std::cout << "group health: " << mirror_group_health << std::endl;
     std::cout << "images: " << total_images << " total" << std::endl;
     for (auto &it : mirror_image_states) {
       std::cout << "    " << it.second << " "
 		<< utils::mirror_image_status_state(it.first) << std::endl;
     }
+    std::cout << "groups: " << total_groups << " total" << std::endl;
+    for (auto &it : mirror_group_states) {
+      std::cout << "    " << it.second << " "
+                << utils::mirror_group_status_state(it.first) << std::endl;
+    }
   }
-
-  int ret = 0;
 
   if (verbose) {
     // dump per-daemon status
@@ -1706,12 +1757,119 @@ int execute_status(const po::variables_map &vm,
     ImageRequestGenerator<StatusImageRequest> generator(
       io_ctx, instance_ids, mirror_peers, peer_mirror_uuids_to_name,
       daemon_service_info, formatter, &saw_image);
-    ret = generator.execute();
+    r = generator.execute();
+    if (r < 0) {
+      return r;
+    }
 
     if (formatter != nullptr) {
       formatter->close_section(); // images
+      formatter->open_array_section("groups");
     } else {
       if (saw_image == false) {
+        std::cout << std::endl << "  none" << std::endl;
+      }
+      std::cout << std::endl << "GROUPS";
+    }
+
+    std::map<std::string, librbd::mirror_group_global_status_t> mirror_groups;
+    r = rbd.mirror_group_global_status_list(io_ctx, "", 1024, &mirror_groups);
+    if (r < 0) {
+      std::cerr << "rbd: failed to get group status list: "
+                << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    for (auto& [group_id, group_global_status] : mirror_groups) {
+      utils::populate_unknown_mirror_group_site_statuses(mirror_peers,
+                                                         &group_global_status);
+
+      librbd::mirror_group_site_status_t group_local_status;
+      int local_site_r = utils::get_local_mirror_group_status(
+        group_global_status, &group_local_status);
+      group_global_status.site_statuses.erase(
+        std::remove_if(group_global_status.site_statuses.begin(),
+                       group_global_status.site_statuses.end(),
+                       [](auto& group_status) {
+            return (group_status.mirror_uuid ==
+                      RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+          }),
+        group_global_status.site_statuses.end());
+
+      if (formatter != nullptr) {
+        formatter->open_object_section("group");
+        formatter->dump_string("name", group_global_status.name);
+        formatter->dump_string("global_id", group_global_status.info.global_id);
+        if (local_site_r >= 0) {
+          formatter->dump_string("state", utils::mirror_group_site_status_state(
+            group_local_status));
+          formatter->dump_string("description", group_local_status.description);
+          formatter->dump_string("last_update", utils::timestr(
+            group_local_status.last_update));
+        }
+        if (!group_global_status.site_statuses.empty()) {
+          formatter->open_array_section("peer_sites");
+          for (auto& status : group_global_status.site_statuses) {
+            formatter->open_object_section("peer_site");
+
+            auto name_it = peer_mirror_uuids_to_name.find(status.mirror_uuid);
+            formatter->dump_string("site_name",
+              (name_it != peer_mirror_uuids_to_name.end() ?
+                 name_it->second : ""));
+            formatter->dump_string("mirror_uuid", status.mirror_uuid);
+
+            formatter->dump_string(
+              "state", utils::mirror_group_site_status_state(status));
+            formatter->dump_string("description", status.description);
+            formatter->dump_string("last_update", utils::timestr(
+              status.last_update));
+            formatter->close_section(); // peer_site
+          }
+          formatter->close_section(); // peer_sites
+        }
+        formatter->close_section(); // group
+      } else {
+        std::cout << std::endl
+                  << group_global_status.name << ":" << std::endl
+                  << "  global_id:   " << group_global_status.info.global_id
+                  << std::endl;
+        if (local_site_r >= 0) {
+          std::cout << "  state:       "
+                    << utils::mirror_group_site_status_state(group_local_status)
+                    << std::endl
+                    << "  description: " << group_local_status.description
+                    << std::endl
+                    << "  last_update: " << utils::timestr(
+                      group_local_status.last_update) << std::endl;
+        }
+        if (!group_global_status.site_statuses.empty()) {
+          std::cout << "  peer_sites:" << std::endl;
+          bool first_site = true;
+          for (auto& site : group_global_status.site_statuses) {
+            if (!first_site) {
+              std::cout << std::endl;
+            }
+            first_site = false;
+
+            auto name_it = peer_mirror_uuids_to_name.find(site.mirror_uuid);
+            std::cout << "    name: "
+                      << (name_it != peer_mirror_uuids_to_name.end() ?
+                            name_it->second : site.mirror_uuid)
+                      << std::endl
+                      << "    state: " << utils::mirror_group_site_status_state(
+                        site) << std::endl
+                      << "    description: " << site.description << std::endl
+                      << "    last_update: " << utils::timestr(
+                        site.last_update) << std::endl;
+          }
+        }
+      }
+    }
+
+    if (formatter != nullptr) {
+      formatter->close_section(); // groups
+    } else {
+      if (mirror_groups.empty()) {
         std::cout << std::endl << "  none" << std::endl;
       }
     }
@@ -1722,7 +1880,7 @@ int execute_status(const po::variables_map &vm,
     formatter->flush(std::cout);
   }
 
-  return ret;
+  return 0;
 }
 
 void get_promote_arguments(po::options_description *positional,

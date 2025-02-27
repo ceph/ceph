@@ -247,6 +247,7 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef enum rbd_group_snap_namespace_type_t:
         _RBD_GROUP_SNAP_NAMESPACE_TYPE_USER "RBD_GROUP_SNAP_NAMESPACE_TYPE_USER"
+        _RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR "RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR"
 
     ctypedef struct rbd_group_image_snap_info_t:
         char *image_name
@@ -261,6 +262,13 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_group_snap_namespace_type_t namespace_type
         size_t image_snaps_count
         rbd_group_image_snap_info_t *image_snaps
+
+    ctypedef struct rbd_group_snap_mirror_namespace_t:
+        rbd_snap_mirror_state_t state;
+        size_t mirror_peer_uuids_count;
+        char* mirror_peer_uuids;
+        char* primary_mirror_uuid;
+        char* primary_snap_id;
 
     ctypedef enum rbd_image_migration_state_t:
         _RBD_IMAGE_MIGRATION_STATE_UNKNOWN "RBD_IMAGE_MIGRATION_STATE_UNKNOWN"
@@ -793,6 +801,12 @@ cdef extern from "rbd/librbd.h" nogil:
 
     int rbd_group_snap_rollback(rados_ioctx_t group_p, const char *group_name,
                                 const char *snap_name)
+
+    int rbd_group_snap_get_mirror_namespace(
+        rados_ioctx_t group_p, const char *group_name, const char *snap_id,
+        rbd_group_snap_mirror_namespace_t* mirror_namespace)
+    void rbd_group_snap_mirror_namespace_cleanup(
+        rbd_group_snap_mirror_namespace_t *mirror_namespace)
 
     int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
                           size_t *max_watchers)

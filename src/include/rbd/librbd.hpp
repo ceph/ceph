@@ -211,6 +211,13 @@ namespace librbd {
 
   typedef rbd_image_info_t image_info_t;
 
+  typedef struct {
+    snap_mirror_state_t state;
+    std::set<std::string> mirror_peer_uuids;
+    std::string primary_mirror_uuid;
+    std::string primary_snap_id;
+  } group_snap_mirror_namespace_t;
+
   class CEPH_RBD_API ProgressContext
   {
   public:
@@ -524,6 +531,9 @@ public:
   int mirror_group_list(IoCtx& io_ctx, std::vector<std::string> *names);
   int mirror_group_enable(IoCtx& io_ctx, const char *group_name,
                           mirror_image_mode_t mirror_image_mode);
+  int group_snap_get_mirror_namespace(
+      IoCtx& group_ioctx, const char *group_name, const char *snap_id,
+      group_snap_mirror_namespace_t* mirror_namespace);
   int mirror_group_disable(IoCtx& io_ctx, const char *group_name, bool force);
   int mirror_group_promote(IoCtx& io_ctx, const char *group_name, bool force);
   int mirror_group_demote(IoCtx& io_ctx, const char *group_name);
