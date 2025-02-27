@@ -15,8 +15,8 @@ declare global {
 // https://github.com/cypress-io/cypress-browserify-preprocessor/issues/53
 // is fixed.
 /* tslint:disable*/
-import { CdHelperClass } from '../../src/app/shared/classes/cd-helper.class';
-import { Permissions } from '../../src/app/shared/models/permissions';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
+import { Permissions } from '~/app/shared/models/permissions';
 import { table } from 'table';
 /* tslint:enable*/
 let auth: any;

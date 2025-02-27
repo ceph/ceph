@@ -23,17 +23,14 @@
     "baseUrl": "./",
     "resolveJsonModule": true,
     "paths": {
-      "~/*": ["src/*"],
-      "timers": [
-          "node_modules/timers-browserify"
-        ],
-        "stream": [
-          "node_modules/stream-browserify"
-        ]
+      "stream": ["node_modules/stream-browserify"],
+      "timers": ["node_modules/timers-browserify"],
+      "~/*": ["apps/ceph-dashboard/src/*"]
     },
     "typeRoots": ["node_modules/@types"],
     "lib": ["es2017", "dom"],
-    "allowJs": true
+    "allowJs": true,
+    "rootDir": "."
   },
-  "exclude": ["coverage", "dist", "node_modules", "cypress"]
+  "exclude": ["coverage", "dist", "node_modules", "cypress", "tmp"]
 }

@@ -11,12 +11,12 @@ const esModules = [
 const jestConfig = {
   moduleNameMapper: {
     '\\.scss$': 'identity-obj-proxy',
-    '~/(.*)$': '<rootDir>/src/$1',
+    '~/(.*)$': '<rootDir>/apps/ceph-dashboard/src/$1',
     '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js'
   },
   moduleFileExtensions: ['ts', 'html', 'js', 'json', 'mjs', 'cjs'],
   preset: 'jest-preset-angular',
-  setupFilesAfterEnv: ['<rootDir>/src/setupJest.ts'],
+  setupFilesAfterEnv: ['<rootDir>/apps/ceph-dashboard/src/setupJest.ts'],
   transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$|'.concat(esModules.join('|'), ')')],
   transform: {
     '^.+\\.(ts|html|mjs)$': [

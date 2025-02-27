@@ -1,0 +1,5 @@
+@use './styles/vendor/variables' as vv;
+
+.warn {
+  color: vv.$warning;
+}

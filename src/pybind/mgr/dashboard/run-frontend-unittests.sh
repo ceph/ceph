@@ -30,7 +30,7 @@ if [ $? -gt 0 ]; then
   failed=true
   echo -e "\nTranslations extraction has failed."
 else
-  i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' src/locale/messages.xlf`
+  i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' apps/ceph-dashboard/src/locale/messages.xlf`
 
   # Excluding the node_modules/ folder errors from the lint error
   if [[ -n "$i18n_lint" &&  $i18n_lint != *"node_modules/"* ]]; then
