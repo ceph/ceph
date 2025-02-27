@@ -12146,14 +12146,12 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
 
   // extend file?
   if (request_size + request_offset > in->effective_size()) {
-    size = request_size + request_offset;
     if (encrypted) {
-      in->set_effective_size(size);
+      in->set_effective_size(request_size + request_offset);
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
-      size = fscrypt_next_block_start(offset + size);
     }
     ldout(cct, 7) << "in->effective_size()=" << in->effective_size() << dendl;
-    in->size = size;
+    in->size = totalwritten + offset;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
     if (is_quota_bytes_approaching(in, f->actor_perms)) {
