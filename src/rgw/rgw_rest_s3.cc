@@ -411,6 +411,24 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       total_len = 0;
     }
 
+    // check for GetObject(Version)Tagging permission to include tags in response
+    auto action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
+    // since we are already under s->system_request, if the request is not impersonating,
+    // it can be assumed that it is not a user-mode replication.
+    bool keep_tags = s->auth.identity->is_admin_of(s->user->get_id()) || verify_object_permission(this, s, action);
+
+    // remove tags from attrs if the user doesn't have permission
+    bufferlist tags_bl;
+    if (!keep_tags) {
+      auto iter = attrs.find(RGW_ATTR_TAGS);
+      if (iter != attrs.end()) {
+        ldpp_dout(this, 4) << "removing tags from attrs due to missing permission on " << rgw::IAM::action_bit_string(action) << dendl;
+
+        tags_bl = iter->second;
+        attrs.erase(iter);
+      }
+    }
+
     /* JSON encode object metadata */
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
@@ -423,6 +441,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     metadata_bl.append(ss.str());
     dump_header(s, "Rgwx-Embedded-Metadata-Len", metadata_bl.length());
     total_len += metadata_bl.length();
+
+    // restore tags
+    if (tags_bl.length()) {
+      attrs[RGW_ATTR_TAGS] = std::move(tags_bl);
+    }
   }
 
   if (s->system_request && !real_clock::is_zero(lastmod)) {
