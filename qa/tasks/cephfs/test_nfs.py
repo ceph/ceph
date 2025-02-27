@@ -369,6 +369,39 @@ class TestNFS(MgrTestCase):
         except CommandFailedError as e:
             self.fail(f"expected read/write of a file to be successful but failed with {e.exitstatus}")
 
+    def _mnt_nfs(self, pseudo_path, port, ip):
+        '''
+        Mount created export
+        :param pseudo_path: It is the pseudo root name
+        :param port: Port of deployed nfs cluster
+        :param ip: IP of deployed nfs cluster
+        '''
+        tries = 3
+        while True:
+            try:
+                # TODO: NFS V4.2 is failing with libaio read.
+                # TODO: Reference: https://tracker.ceph.com/issues/70203
+                nfs_version_conf = self.ctx['config'].get('nfs', {})
+                nfs_version = nfs_version_conf.get('vers', 'latest')
+                if nfs_version == "latest":
+                    self.ctx.cluster.run(
+                        args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port}',
+                              f'{ip}:{pseudo_path}', '/mnt'])
+                else:
+                    self.ctx.cluster.run(
+                        args=['sudo', 'mount', '-t', 'nfs', '-o', f'port={port},vers={nfs_version}',
+                              f'{ip}:{pseudo_path}', '/mnt'])
+                    pass
+                break
+            except CommandFailedError:
+                if tries:
+                    tries -= 1
+                    time.sleep(2)
+                    continue
+                raise
+
+        self.ctx.cluster.run(args=['sudo', 'chmod', '1777', '/mnt'])
+
     def _write_to_read_only_export(self, pseudo_path, port, ip):
         '''
         Check if write to read only export fails
