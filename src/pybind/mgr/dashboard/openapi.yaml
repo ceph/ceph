@@ -11035,6 +11035,11 @@ paths:
         \ detailed account info.\n        - If detailed=False, returns only account\
         \ ids.\n        "
       parameters:
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       - default: false
         in: query
         name: detailed
@@ -11071,6 +11076,9 @@ paths:
               properties:
                 account_name:
                   description: Account name
+                  type: string
+                daemon_name:
+                  description: Name of the daemon
                   type: string
                 email:
                   description: Email
@@ -11132,6 +11140,12 @@ paths:
         required: true
         schema:
           type: string
+      - allowEmptyValue: true
+        description: Name of the daemon
+        in: query
+        name: daemon_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -11164,6 +11178,12 @@ paths:
         in: path
         name: account_id
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Name of the daemon
+        in: query
+        name: daemon_name
         schema:
           type: string
       responses:
@@ -11204,6 +11224,9 @@ paths:
               properties:
                 account_name:
                   description: Account name
+                  type: string
+                daemon_name:
+                  description: Name of the daemon
                   type: string
                 email:
                   description: Email
