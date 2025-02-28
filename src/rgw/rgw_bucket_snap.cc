@@ -6,6 +6,7 @@ void rgw_bucket_snap_info::dump(Formatter *f) const {
   encode_json("name", name, f);
   encode_json("description", description, f);
   encode_json("creation_time", creation_time, f);
+  encode_json("flags", flags, f);
 }
 
 void rgw_bucket_snap::dump(Formatter *f) const {
@@ -19,7 +20,9 @@ RGWBucketSnapMgr::RGWBucketSnapMgr() {}
 void RGWBucketSnapMgr::dump(Formatter *f) const {
   encode_json("enabled", enabled, f);
   encode_json("cur_snap", cur_snap, f);
+  encode_json("cur_snap", cur_snap, f);
   encode_json("snaps", snaps, f);
+  encode_json("rm_snaps", rm_snaps, f);
   encode_json("names_to_ids", names_to_ids, f);
 }
 
@@ -38,4 +41,34 @@ int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info)
   names_to_ids[info.name] = snap.id;
 
   return 0;
+}
+
+int RGWBucketSnapMgr::remove_snap(rgw_bucket_snap_id snap_id)
+{
+  auto iter = snaps.find(snap_id);
+  if (iter == snaps.end()) {
+    return 0;
+  }
+
+  auto& snap = iter->second;
+
+  snap.info.flags |= rgw_bucket_snap_info::Flags::MARKED_FOR_REMOVAL;
+  rm_snaps[snap_id] = snap;
+
+  snaps.erase(iter);
+
+  return 0;
+}
+
+bool RGWBucketSnapMgr::live_snapshot_at_range(rgw_bucket_snap_id min, rgw_bucket_snap_id max) const
+{
+  if (min >= cur_snap) {
+    return true;
+  }
+  auto iter = snaps.lower_bound(min);
+  if (iter == snaps.end()) {
+    return false;
+  }
+
+  return !max.is_set() || (iter->first < max);
 }
