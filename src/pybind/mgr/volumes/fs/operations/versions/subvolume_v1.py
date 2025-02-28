@@ -749,6 +749,20 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 return False
             raise
 
+    def remove_non_existent_pending_clones(self, path, link_path, track_id):
+        try:
+            self.fs.lstat(link_path)
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                try:
+                    log.info(f"Cleaning up dangling symlink for the clone: {path}")
+                    self.fs.unlink(path)
+                    self._remove_snap_clone(track_id)
+                except (cephfs.Error, MetadataMgrException) as e:
+                    log.warning(f'Removing of dangling symlink for the clone {path}'
+                                f' failed with the exception:"{e}"')
+                    pass
+    
     def get_pending_clones(self, snapname):
         pending_clones_info: Dict[str, Any] = {"has_pending_clones": "no"}
         pending_track_id_list = []
@@ -774,7 +788,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         for track_id in pending_track_id_list:
             try:
-                link_path = self.fs.readlink(os.path.join(index_path, track_id), 4096)
+                t_path = os.path.join(index_path, track_id)
+                link_path = self.fs.readlink(t_path, 4096)
+                self.remove_non_existent_pending_clones(t_path, link_path, track_id)
             except cephfs.Error as e:
                 if e.errno != errno.ENOENT:
                     raise VolumeException(-e.args[0], e.args[1])
