@@ -19,28 +19,31 @@
 
 #include "include/types.h"
 
+#include "Capability.h"
 #include "MDSContext.h"
+#include "Mutation.h" // for MDRequestRef
 
 #include <map>
 #include <list>
 #include <set>
 #include <string_view>
 
-#include "messages/MExportCaps.h"
-#include "messages/MExportCapsAck.h"
-#include "messages/MExportDir.h"
-#include "messages/MExportDirAck.h"
-#include "messages/MExportDirCancel.h"
-#include "messages/MExportDirDiscover.h"
-#include "messages/MExportDirDiscoverAck.h"
-#include "messages/MExportDirFinish.h"
-#include "messages/MExportDirNotify.h"
-#include "messages/MExportDirNotifyAck.h"
-#include "messages/MExportDirPrep.h"
-#include "messages/MExportDirPrepAck.h"
-#include "messages/MGatherCaps.h"
-
+class MDCache;
+class MDSMap;
 class MDSRank;
+class MExportCaps;
+class MExportCapsAck;
+class MExportDir;
+class MExportDirAck;
+class MExportDirCancel;
+class MExportDirDiscover;
+class MExportDirDiscoverAck;
+class MExportDirFinish;
+class MExportDirNotify;
+class MExportDirNotifyAck;
+class MExportDirPrep;
+class MExportDirPrepAck;
+class MGatherCaps;
 class CDir;
 class CInode;
 class CDentry;

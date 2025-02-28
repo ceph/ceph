@@ -44,14 +44,11 @@ enum {
 #include "include/types.h"
 #include "include/Context.h"
 
-#include "MDSContext.h"
 #include "common/Cond.h"
 #include "common/DecayCounter.h"
-#include "common/Finisher.h"
 #include "common/Thread.h"
 
 #include "LogSegment.h"
-#include "MDSMap.h"
 #include "SegmentBoundary.h"
 #include "mdstypes.h"
 
@@ -61,6 +58,9 @@ enum {
 class Journaler;
 class JournalPointer;
 class LogEvent;
+class MDSContext;
+class MDSLogContextBase;
+class MDSMap;
 class MDSRank;
 class LogSegment;
 class ESubtreeMap;

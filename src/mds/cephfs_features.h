@@ -17,6 +17,8 @@
 
 #include "include/cephfs/metrics/Types.h"
 
+#include <string>
+
 class feature_bitset_t;
 namespace ceph {
   class Formatter;

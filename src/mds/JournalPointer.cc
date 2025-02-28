@@ -13,15 +13,14 @@
  */
 
 
+#include "mds/JournalPointer.h"
+#include "mds/mdstypes.h"
+
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Cond.h"
 #include "osdc/Objecter.h"
-#include "mds/mdstypes.h"
 #include "msg/Messenger.h"
-
-#include "mds/JournalPointer.h"
-
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_journaler
