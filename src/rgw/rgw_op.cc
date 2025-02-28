@@ -1105,6 +1105,24 @@ int RGWGetObj::verify_permission(optional_yield y)
   // if the identity is evaluating the passed uid and is system request, then we can assume it's a replication request
   bool is_replication_request = s->system_request && s->auth.identity->evals_passed_uid_perm();
 
+  if (s->bucket->get_info().obj_lock_enabled()) {
+    get_retention = verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention);
+    if (is_replication_request && !get_retention) {
+      s->err.message = "missing s3:GetObjectRetention permission";
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
+
+    get_legal_hold = verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold);
+    if (is_replication_request && !get_legal_hold) {
+      s->err.message = "missing s3:GetObjectLegalHold permission";
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
+  }
+
   if (is_replication_request) {
     // check for s3:GetObject(Version)Acl permission
     action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectAcl : rgw::IAM::s3GetObjectVersionAcl;
@@ -1139,11 +1157,6 @@ int RGWGetObj::verify_permission(optional_yield y)
     }
 
     return -EACCES;
-  }
-
-  if (s->bucket->get_info().obj_lock_enabled()) {
-    get_retention = verify_object_permission(this, s, rgw::IAM::s3GetObjectRetention);
-    get_legal_hold = verify_object_permission(this, s, rgw::IAM::s3GetObjectLegalHold);
   }
 
   return 0;
