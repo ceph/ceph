@@ -43,7 +43,8 @@ class CertInfo:
 
     def get_status_description(self) -> str:
         cert_source = 'user-made' if self.user_made else 'self-signed'
-        cert_details = f"'{self.cert_name} ({self.target})' ({cert_source})"
+        cert_target = f' ({self.target})' if self.target else ''
+        cert_details = f"'{self.cert_name}{cert_target}' ({cert_source})"
         if not self.is_valid:
             if 'expired' in self.error_info.lower():
                 return f'Certificate {cert_details} has expired'
