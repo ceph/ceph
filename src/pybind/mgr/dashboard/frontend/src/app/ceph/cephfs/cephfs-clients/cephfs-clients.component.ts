@@ -4,7 +4,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -92,7 +92,7 @@ export class CephfsClientsComponent implements OnInit {
 
   evictClientModal() {
     const clientId = this.selection.first().id;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'client',
       itemNames: [clientId],
       actionDescription: 'evict',

@@ -28,7 +28,7 @@ import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
@@ -247,7 +247,7 @@ export class CephfsSnapshotscheduleListComponent
   deactivateSnapshotSchedule() {
     const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
       actionDescription: this.actionLabels.DEACTIVATE,
       submitActionObservable: () =>
@@ -270,7 +270,7 @@ export class CephfsSnapshotscheduleListComponent
   activateSnapshotSchedule() {
     const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
       actionDescription: this.actionLabels.ACTIVATE,
       submitActionObservable: () =>
@@ -302,7 +302,7 @@ export class CephfsSnapshotscheduleListComponent
       })
       ?.join('|');
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({

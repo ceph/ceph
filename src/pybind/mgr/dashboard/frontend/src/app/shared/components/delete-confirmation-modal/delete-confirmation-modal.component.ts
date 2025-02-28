@@ -1,18 +1,20 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { UntypedFormControl, Validators } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, ValidationErrors, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
+import { CdValidators } from '../../forms/cd-validators';
+import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
 
 @Component({
   selector: 'cd-deletion-modal',
-  templateUrl: './critical-confirmation-modal.component.html',
-  styleUrls: ['./critical-confirmation-modal.component.scss']
+  templateUrl: './delete-confirmation-modal.component.html',
+  styleUrls: ['./delete-confirmation-modal.component.scss']
 })
-export class CriticalConfirmationModalComponent implements OnInit {
+export class DeleteConfirmationModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;
@@ -25,15 +27,33 @@ export class CriticalConfirmationModalComponent implements OnInit {
   itemDescription: 'entry';
   itemNames: string[];
   actionDescription = 'delete';
-
+  impactEnum = DeletionImpact;
   childFormGroup: CdFormGroup;
   childFormGroupTemplate: TemplateRef<any>;
-
-  constructor(public activeModal: NgbActiveModal) {}
+  impact: DeletionImpact;
+  constructor(public activeModal: NgbActiveModal) {
+    this.impact = this.impact || DeletionImpact.medium;
+  }
 
   ngOnInit() {
     const controls = {
-      confirmation: new UntypedFormControl(false, [Validators.requiredTrue])
+      impact: new UntypedFormControl(this.impact),
+      confirmation: new UntypedFormControl(false, {
+        validators: [
+          CdValidators.composeIf(
+            {
+              impact: DeletionImpact.medium
+            },
+            [Validators.requiredTrue]
+          )
+        ]
+      }),
+      confirmInput: new UntypedFormControl('', [
+        CdValidators.composeIf({ impact: this.impactEnum.high }, [
+          this.matchResourceName.bind(this),
+          Validators.required
+        ])
+      ])
     };
     if (this.childFormGroup) {
       controls['child'] = this.childFormGroup;
@@ -42,6 +62,13 @@ export class CriticalConfirmationModalComponent implements OnInit {
     if (!(this.submitAction || this.submitActionObservable)) {
       throw new Error('No submit action defined');
     }
+  }
+
+  matchResourceName(control: AbstractControl): ValidationErrors | null {
+    if (this.itemNames && control.value !== String(this.itemNames?.[0])) {
+      return { matchResource: true };
+    }
+    return null;
   }
 
   callSubmitAction() {
