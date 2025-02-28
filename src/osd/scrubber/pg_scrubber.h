@@ -650,8 +650,6 @@ class PgScrubber : public ScrubPgIF,
   epoch_t m_interval_start{0};	///< interval's 'from' of when scrubbing was
 				///< first scheduled
 
-  void repair_oinfo_oid(ScrubMap& smap);
-
   /*
    * the exact epoch when the scrubbing actually started (started here - cleared
    * checks for no-scrub conf). Incoming events are verified against this, with
