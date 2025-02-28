@@ -411,6 +411,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
+            'certificate_check_debug_mode',
+            type='bool',
+            default=False,
+            desc='FOR TESTING ONLY: This flag forces the certificate check instead of waiting for certificate_check_period.',
+        ),
+        Option(
             'certificate_automated_rotation_enabled',
             type='bool',
             default=True,
@@ -576,6 +582,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.certificate_duration_days = 0
             self.certificate_renewal_threshold_days = 0
             self.certificate_automated_rotation_enabled = False
+            self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
 
         self.notify(NotifyType.mon_map, None)
