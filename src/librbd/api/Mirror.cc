@@ -2975,9 +2975,9 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY && !force) {
+  if (state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY && !force) {
     lderr(cct) << "group " << group_name
-               << " is non-primary, ideally disable it from primary cluster "
+               << " is not primary, disable is allowed when cluster is primary"
                << " or if you know what you are doing, add a force flag"
                << dendl;
     return -EINVAL;
