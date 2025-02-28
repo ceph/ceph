@@ -1845,6 +1845,29 @@ int BlueFS::log_dump()
   return r;
 }
 
+int BlueFS::super_dump(std::ostream* out)
+{
+  _init_logger();
+  _open_super();
+  *out << super.to_string();
+  _shutdown_logger();
+  return 0;
+}
+
+int BlueFS::set_alloc_size(uint8_t bdev_id, uint64_t alloc_size)
+{
+  if (bdev_id > BDEV_SLOW) {
+    return -1;
+  }
+  _init_logger();
+  _open_super();
+  super.required_alloc_size.resize(BDEV_REAL_CNT);
+  super.required_alloc_size[bdev_id] = alloc_size;
+  _write_super(BDEV_DB);
+  _shutdown_logger();
+  return 0;
+}
+
 int BlueFS::device_migrate_to_existing(
   CephContext *cct,
   const set<int>& devs_source,

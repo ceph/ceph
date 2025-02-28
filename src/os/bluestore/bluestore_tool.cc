@@ -4,6 +4,7 @@
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
 
+#include <cstdlib>
 #include <stdio.h>
 #include <string.h>
 #include <filesystem>
@@ -289,6 +290,8 @@ int main(int argc, char **argv)
   string empty_sharding(1, '\0');
   string new_sharding = empty_sharding;
   string resharding_ctrl;
+  string alloc_size_str;
+  uint64_t alloc_size = 0;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -311,6 +314,7 @@ int main(int argc, char **argv)
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
     ("bdev-type", po::value<vector<string>>(&bdev_type), "bdev type to inspect: 'bdev-block'/'bdev-wal'/'bdev-db'")
+    ("alloc-size", po::value<string>(&alloc_size_str), "alloc size for bluefs-set-alloc-size")
     ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
@@ -338,6 +342,8 @@ int main(int argc, char **argv)
         "rm-label-key, "
         "prime-osd-dir, "
         "bluefs-log-dump, "
+        "bluefs-super-dump, "
+        "bluefs-set-alloc-size, "
         "free-dump, "
         "free-score, "
         "free-fragmentation, "
@@ -504,7 +510,9 @@ int main(int argc, char **argv)
   }
   if (action == "bluefs-export" || 
       action == "bluefs-import" || 
-      action == "bluefs-log-dump") {
+      action == "bluefs-log-dump" ||
+      action == "bluefs-super-dump" ||
+      action == "bluefs-set-alloc-size") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -522,6 +530,22 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     inferring_bluefs_devices(devs, path);
+  }
+  if (action == "bluefs-set-alloc-size") {
+    if (bdev_type.size() != 1) {
+      cerr << "must specify exactly one --bdev-type" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (alloc_size_str.empty()) {
+      cerr << "must specify --alloc-size" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    alloc_size = std::stoull(alloc_size_str, nullptr, 0);
+    if (alloc_size == 0 || !p2isp2(alloc_size)) {
+      cerr << "requested alloc size 0x" << std::hex << alloc_size << std::dec
+        << " is not a power of 2" << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
   if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
     if (path.empty()) {
@@ -957,6 +981,35 @@ int main(int argc, char **argv)
     delete fs;
   } else if (action == "bluefs-log-dump") {
     log_dump(cct.get(), path, devs);
+  } else if (action == "bluefs-super-dump") {
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.open_bluefs_environment();
+    if (r != 0) {
+      cerr << "can't initialize bluefs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    BlueFS* bluefs = bluestore.get_bluefs();
+    ceph_assert(bluefs);
+    bluefs->super_dump(&cout);
+    bluestore.close_bluefs_environment();
+  } else if (action == "bluefs-set-alloc-size") {
+    uint8_t id = BlueFS::MAX_BDEV;
+    if (bdev_type[0] == "bdev-block") id = BlueFS::BDEV_SLOW;
+    if (bdev_type[0] == "bdev-db") id = BlueFS::BDEV_DB;
+    if (bdev_type[0] == "bdev-wal") id = BlueFS::BDEV_WAL;
+    if (id == BlueFS::MAX_BDEV) {
+      cerr << "--bdev-type must be one of 'bdev-block' 'bdev-db' 'bdev-wal'" << std::endl;
+    }
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.open_bluefs_environment();
+    if (r != 0) {
+      cerr << "can't initialize bluefs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    BlueFS* bluefs = bluestore.get_bluefs();
+    ceph_assert(bluefs);
+    bluefs->set_alloc_size(id, alloc_size);
+    bluestore.close_bluefs_environment();
   } else if (action == "bluefs-bdev-new-db" || action == "bluefs-bdev-new-wal") {
     map<string, int> cur_devs_map;
     bool need_db = action == "bluefs-bdev-new-db";

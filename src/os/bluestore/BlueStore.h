@@ -3135,6 +3135,9 @@ public:
 
   int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
   int close_db_environment();
+
+  int open_bluefs_environment();
+  int close_bluefs_environment();
   BlueFS* get_bluefs();
 
   int write_meta(const std::string& key, const std::string& value) override;

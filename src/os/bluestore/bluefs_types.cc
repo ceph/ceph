@@ -128,6 +128,23 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
   ls.back()->block_size = 4096;
 }
 
+std::string bluefs_super_t::to_string()
+{
+  std::stringstream str;
+  str << "uuid " << uuid << std::endl;
+  str << "osd " << osd_uuid << std::endl;
+  str << "version " << version << std::endl;
+  str << "block size 0x" << std::hex << block_size << std::endl;
+  str << "log fnode " << log_fnode << std::endl;
+  str << "alloc size WAL " << (required_alloc_size.size()>BlueFS::BDEV_WAL ?
+    required_alloc_size[BlueFS::BDEV_WAL] : 0) << std::endl;
+  str << "alloc size DB " << (required_alloc_size.size()>BlueFS::BDEV_DB ?
+    required_alloc_size[BlueFS::BDEV_DB] : 0) << std::endl;
+  str << "alloc size SLOW " << (required_alloc_size.size()>BlueFS::BDEV_SLOW ?
+    required_alloc_size[BlueFS::BDEV_SLOW] : 0) << std::endl;
+  return str.str();
+}
+
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
   return out << "super(uuid " << s.uuid
