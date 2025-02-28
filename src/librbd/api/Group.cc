@@ -259,7 +259,8 @@ int GroupSnapshot_to_group_snap_info2(
   group_snap->namespace_type = static_cast<group_snap_namespace_type_t>(
     cls::rbd::get_group_snap_namespace_type(cls_group_snap.snapshot_namespace));
 
-  if (!image_snaps.empty()) {
+  if (!image_snaps.empty() &&
+      group_snap->namespace_type == RBD_GROUP_SNAP_NAMESPACE_TYPE_USER) {
     group_snap->image_snap_name = calc_ind_image_snap_name(
         group_ioctx.get_id(), group_id, cls_group_snap.id);
   }
