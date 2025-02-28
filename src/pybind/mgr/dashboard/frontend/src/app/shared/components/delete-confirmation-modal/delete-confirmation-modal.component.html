@@ -1,0 +1,88 @@
+<cds-modal size="sm"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <form name="deletionForm"
+          #formDir="ngForm"
+          [formGroup]="deletionForm"
+          novalidate>
+      <cd-alert-panel *ngIf="infoMessage"
+                      type="info"
+                      spacingClass="mb-3"
+                      i18n>
+        <p>{{ infoMessage }}</p>
+      </cd-alert-panel>
+      <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
+      <div class="question">
+        <span *ngIf="itemNames; else noNames">
+          <p *ngIf="itemNames.length === 1; else manyNames"
+             i18n>Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?</p>
+          <ng-template #manyNames>
+            <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected items?</p>
+            <ul>
+              <li *ngFor="let itemName of itemNames"><strong>{{ itemName }}</strong></li>
+            </ul>
+          </ng-template >
+        </span>
+        <ng-template #noNames>
+          <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
+        </ng-template>
+        <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
+        <div class="form-item">
+          <ng-container *ngIf="impact == impactEnum.medium; else highImpactDeletion">
+            <cds-checkbox id="confirmation"
+                          formControlName="confirmation"
+                          autofocus
+                          [required]="true"
+                          modal-primary-focus
+                          i18n>Yes, I am sure.</cds-checkbox>
+          </ng-container>
+          <ng-template #highImpactDeletion>
+            <cds-text-label label="Resource Name"
+                            labelInputID="resource_name"
+                            cdRequiredField="Resource Name"
+                            [invalid]="!deletionForm.controls.confirmInput.valid && deletionForm.controls.confirmInput.dirty"
+                            [invalidText]="ResourceError"
+                            i18n
+                            i18n-label>Resource Name
+              <input cdsText
+                     type="text"
+                     placeholder="Enter resource name to delete"
+                     id="resource_name"
+                     formControlName="confirmInput"
+                     i18n-placeholder/>
+            </cds-text-label>
+            <ng-template #ResourceError>
+              <span *ngIf="deletionForm.showError('confirmInput', formDir, 'required')"
+                    class="invalid-feedback">
+                <ng-container i18n>This field is required.</ng-container>
+              </span>
+              <span *ngIf="deletionForm.showError('confirmInput', formDir, 'matchResource')"
+                    class="invalid-feedback">
+                <ng-container i18n>Enter the correct resource name.</ng-container>
+              </span>
+            </ng-template>
+          </ng-template>
+        </div>
+      </div>
+    </form>
+  </section>
+  <cd-form-button-panel (submitActionEvent)="callSubmitAction()"
+                        (backActionEvent)="backAction ? callBackAction() : hideModal()"
+                        [form]="deletionForm"
+                        [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"
+                        [modalForm]="true"
+                        [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>
+
+</cds-modal>
+
+<ng-template #deletionHeading>
+  <h3 cdsModalHeaderHeading
+      i18n>
+    {{ actionDescription | titlecase }} {{ itemDescription }}
+  </h3>
+</ng-template>

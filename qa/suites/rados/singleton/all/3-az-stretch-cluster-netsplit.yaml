@@ -1,0 +1,73 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.a
+  - mgr.b
+- - mon.d
+  - mon.e
+  - mon.f
+  - osd.3
+  - osd.4
+  - osd.5
+  - mgr.c
+  - mgr.d
+- - mon.g
+  - mon.h
+  - mon.i
+  - osd.6
+  - osd.7
+  - osd.8
+  - mgr.e
+  - mgr.f
+- - client.0
+
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      global:
+        mon election default strategy: 3
+      mon:
+        client mount timeout: 60
+        osd pool default size: 6
+        osd_pool_default_min_size: 3
+        osd_pool_default_pg_autoscale_mode: off
+        debug mon: 30
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+      - \(POOL_APP_NOT_ENABLED\)
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+      - \(MON_DOWN\)
+      - \(PG_AVAILABILITY\)
+      - \(SLOW_OPS\)
+      - \[WRN\]
+- workunit:
+    clients:
+      client.0:
+        - mon/mon-stretch-pool.sh
+- cephfs_test_runner:
+    modules:
+      - tasks.test_netsplit_3az_stretch_pool
