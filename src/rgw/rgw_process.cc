@@ -226,7 +226,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     ret = op->verify_permission(y);
     std::swap(span, s->trace);
   }
-  if (ret < 0) {
+  if (ret == -EACCES || ret == -EPERM) {
     if (!s->auth.identity->evals_passed_uid_perm()) {
       // system user is allowed to do anything only if rgwx-uid is not present
       if (s->system_request) {
