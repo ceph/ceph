@@ -520,9 +520,12 @@ private:
    */
   std::vector<BlockDevice*> bdev;                  ///< block devices we can use
   std::vector<IOContext*> ioc;                     ///< IOContexts for bdevs
-  std::vector<uint64_t> block_reserved;            ///< starting reserve extent per device
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
+  std::vector<bluefs_extent_t> locked_alloc;       ///< candidate extents for locked alocations,
+                                                   ///< no alloc/release reqs matching these space
+                                                   ///< to be issued to allocator.
+
 
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
@@ -554,7 +557,7 @@ private:
 
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
-
+  uint64_t _get_minimal_reserved(unsigned id) const;
 
   FileRef _get_file(uint64_t ino);
   void _drop_link_D(FileRef f);
@@ -707,6 +710,7 @@ public:
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
+  uint64_t get_full_reserved(unsigned id);
   void dump_perf_counters(ceph::Formatter *f);
 
   void dump_block_extents(std::ostream& out);
