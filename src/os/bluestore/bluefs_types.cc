@@ -81,7 +81,7 @@ bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   encode(uuid, bl);
   encode(osd_uuid, bl);
   encode(version, bl);
@@ -89,12 +89,13 @@ void bluefs_super_t::encode(bufferlist& bl) const
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
   encode(bluefs_max_alloc_size, bl);
+  encode(reserved, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluefs_super_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(3, p);
+  DECODE_START(4, p);
   decode(uuid, p);
   decode(osd_uuid, p);
   decode(version, p);
@@ -108,6 +109,10 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
   } else {
     std::fill(bluefs_max_alloc_size.begin(), bluefs_max_alloc_size.end(), 0);
   }
+  reserved = 0;
+  if (struct_v >= 4) {
+    decode(reserved, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -120,6 +125,7 @@ void bluefs_super_t::dump(Formatter *f) const
   f->dump_object("log_fnode", log_fnode);
   for (auto& p : bluefs_max_alloc_size)
     f->dump_unsigned("max_alloc_size", p);
+  f->dump_unsigned("reserved", reserved);
 }
 
 void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
@@ -138,6 +144,7 @@ ostream& operator<<(ostream& out, const bluefs_super_t& s)
 	     << " block_size 0x" << std::hex << s.block_size
 	     << " log_fnode 0x" << s.log_fnode
 	     << " max_alloc_size " << s.bluefs_max_alloc_size
+	     << " reserved " << s.reserved
 	     << std::dec << ")";
 }
 

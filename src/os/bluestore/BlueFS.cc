@@ -826,15 +826,31 @@ void BlueFS::_init_alloc()
         name += devnames[id];
       else
         name += to_string(uintptr_t(this));
+      string alloc_type = cct->_conf->bluefs_allocator;
+      if (super.reserved == 0) {
+        // Legacy BlueFS with unaligned reserved space at bdev beginning,
+        // we should forbid bitmap allocator usage.
+        // See https://tracker.ceph.com/issues/68772
+        if (alloc_type == "bitmap" ||
+            alloc_type == "hybrid" ||
+            alloc_type == "hybrid_btree2") {
+          dout(0) << __func__
+                  << " bluefs allocator has been forced to 'avl' "
+                  << "due to potential issue with bitmap allocator"
+                  << dendl;
+          alloc_type = "avl";
+        }
+      }
+
       dout(1) << __func__ << " new, id " << id << std::hex
               << ", allocator name " << name
-              << ", allocator type " << cct->_conf->bluefs_allocator
+              << ", allocator type " << alloc_type
               << ", capacity 0x" << bdev[id]->get_size()
               << ", reserved 0x" << block_reserved[id]
               << ", block size 0x" << alloc_size[id]
               << ", max alloc size 0x" << super.bluefs_max_alloc_size[id]
               << std::dec << dendl;
-      alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
+      alloc[id] = Allocator::create(cct, alloc_type,
 				    bdev[id]->get_size(),
 				    super.bluefs_max_alloc_size[id],
 				    name);
@@ -1173,10 +1189,14 @@ int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
 
 void BlueFS::collect_metadata(map<string,string> *pm, unsigned skip_bdev_id)
 {
-  if (skip_bdev_id != BDEV_DB && bdev[BDEV_DB])
+  if (skip_bdev_id != BDEV_DB && bdev[BDEV_DB]) {
     bdev[BDEV_DB]->collect_metadata("bluefs_db_", pm);
-  if (bdev[BDEV_WAL])
+    (*pm)["bluefs_db_allocator"]= alloc[BDEV_DB] ? alloc[BDEV_DB]->get_type(): "null";
+  }
+  if (bdev[BDEV_WAL]) {
     bdev[BDEV_WAL]->collect_metadata("bluefs_wal_", pm);
+    (*pm)["bluefs_wal_allocator"]= alloc[BDEV_WAL] ? alloc[BDEV_WAL]->get_type(): "null";
+  }
 }
 
 void BlueFS::get_devices(set<string> *ls)
