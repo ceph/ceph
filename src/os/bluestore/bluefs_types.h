@@ -220,8 +220,6 @@ struct bluefs_super_t {
 
   std::optional<bluefs_layout_t> memorized_layout;
 
-  std::vector<uint64_t> bluefs_max_alloc_size;
-
   bluefs_super_t();
 
   uint64_t block_mask() const {
