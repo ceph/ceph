@@ -148,20 +148,20 @@ class CephadmServe:
 
         # Check certificates if:
         # - This is the first time (startup, last_certificates_check is None)
+        # - We are running in certificates check debug mode (for testing only)
         # - Or the elapsed time is greater than or equal to the configured check period
-        check_certificates = False
-        if self.last_certificates_check is None:
-            check_certificates = True
-        else:
-            elapsed_time = datetime_now() - self.last_certificates_check
-            check_certificates = elapsed_time.days >= self.mgr.certificate_check_period
+        check_certificates = (
+            self.last_certificates_check is None
+            or self.mgr.certificate_check_debug_mode
+            or (datetime_now() - self.last_certificates_check).days >= self.mgr.certificate_check_period
+        )
 
         if check_certificates:
             self.log.debug('_check_certificates')
             self.last_certificates_check = datetime_now()
             services_to_reconfig, _ = self.mgr.cert_mgr.check_services_certificates(fix_issues=True)
             for svc in services_to_reconfig:
-                logger.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
+                self.log.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
                 self.mgr.service_action('reconfig', svc)
 
     def _serve_sleep(self) -> None:
