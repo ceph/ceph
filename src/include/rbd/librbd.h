@@ -304,7 +304,8 @@ typedef enum {
 } rbd_group_snap_state_t;
 
 typedef enum {
-  RBD_GROUP_SNAP_NAMESPACE_TYPE_USER = 0
+  RBD_GROUP_SNAP_NAMESPACE_TYPE_USER = 0,
+  RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR
 } rbd_group_snap_namespace_type_t;
 
 typedef struct {
