@@ -74,6 +74,8 @@ void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
 }
 
 // bluefs_super_t
+bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {
+}
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
