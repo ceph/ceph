@@ -13,7 +13,7 @@ import { forkJoin, Subscription, timer as observableTimer } from 'rxjs';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, TimerServiceInterval } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -521,7 +521,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   delete(node: TreeNode) {
     if (node.data.type === 'realm') {
-      this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
         itemDescription: $localize`${node.data.type} ${node.data.name}`,
         itemNames: [`${node.data.name}`],
         submitAction: () => {
