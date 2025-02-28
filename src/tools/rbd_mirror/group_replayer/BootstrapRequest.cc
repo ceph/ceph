@@ -1088,7 +1088,8 @@ void BootstrapRequest<I>::handle_remove_local_mirror_group(int r) {
   }
 
   m_local_mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
-  if (r != -ENOENT && (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
+  if (r != -ENOENT && (m_local_mirror_group.global_group_id == m_global_group_id) &&
+      (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
        m_remote_mirror_group_primary)) {
     create_local_mirror_group();
   } else {
@@ -1317,6 +1318,10 @@ void BootstrapRequest<I>::finish(int r) {
                             m_local_mirror_group_primary, m_local_io_ctx};
       r = create_replayers();
     }
+  }
+
+  if (r == -ENOENT && m_local_mirror_group.global_group_id != m_global_group_id) {
+    r = -ERESTART; // try again
   }
 
   m_on_finish->complete(r);
