@@ -53,6 +53,12 @@ public:
     });
   }
 
+  void update_log_root(Transaction &t, omap_root_t &lroot) final {
+    with_mutable_layout(t, [&lroot](onode_layout_t &mlayout) {
+      mlayout.log_root.update(lroot);
+    });
+  }
+
   void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
     with_mutable_layout(t, [&xroot](onode_layout_t &mlayout) {
       mlayout.xattr_root.update(xroot);
