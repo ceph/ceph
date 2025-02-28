@@ -186,6 +186,7 @@ force_addr=0
 osds_per_host=0
 require_osd_and_client_version=""
 use_crush_tunables=""
+run_rgws_same_port=false
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -280,6 +281,7 @@ options:
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
+	--use-same-port-rgws: run multiple rgws on same port.
 \n
 EOF
 
@@ -675,6 +677,9 @@ case $1 in
         shift
         echo "use_crush_tunables $use_crush_tunables"
         ;;
+    --use-same-port-rgws)
+        run_rgws_same_port=true
+        ;;
     *)
         usage_exit
 esac
@@ -767,12 +772,14 @@ do_rgw_conf() {
         wconf << EOF
 [client.rgw.${current_port}]
         rgw frontends = $rgw_frontend port=${current_port}${flight_conf:+,arrow_flight}
-        admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
         debug rgw_flight = 20
         debug rgw_notification = 20
 EOF
         current_port=$((current_port + 1))
         unset flight_conf
+        if $run_rgws_same_port; then
+          break
+        fi
 done
 
 }
@@ -2020,11 +2027,16 @@ do_rgw()
         fi
 
         debug echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
+        if $run_rgws_same_port; then
+          extra_arg=".${n}"
+        else
+          extra_arg=""
+        fi
         run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
-            --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
-            --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
-            --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
-            --rgw_luarocks_location=${CEPH_OUT_DIR}/radosgw.${current_port}.luarocks  \
+            --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}${extra_arg}.log \
+            --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}${extra_arg}.asok \
+            --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}${extra_arg}.pid \
+            --rgw_luarocks_location=${CEPH_OUT_DIR}/radosgw.${current_port}${extra_arg}.luarocks  \
             ${RGWDEBUG} \
             -n ${rgw_name} \
             "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}${flight_conf:+,arrow_flight}"
@@ -2032,7 +2044,9 @@ do_rgw()
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
 
-        current_port=$((current_port+1))
+        if ! $run_rgws_same_port; then
+            current_port=$((current_port+1))
+        fi
         unset flight_conf
     done
 }
