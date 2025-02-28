@@ -1984,6 +1984,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      if (!snap_mgr.live_snapshot_at_range(iter->meta.snap_id, iter->removed_at_snap())) {
+        ldpp_dout(this, 20) << __func__ << "(): skipping entry key=" << iter->key << " meta.snap_id=" << iter->meta.snap_id << " removed_at=" << iter->removed_at_snap() << dendl;
+        continue;
+      }
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker"
           : "Version");
       s->formatter->open_object_section(section_name);
