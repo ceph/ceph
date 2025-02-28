@@ -5,6 +5,7 @@
  * Server-side encryption integrations with Key Management Systems (SSE-KMS)
  */
 
+#include <keyutils.h>
 #include <sys/stat.h>
 #include "common/ceph_crypto.h"
 #include "common/web_cache.h"
@@ -1097,9 +1098,27 @@ class KMSContext : public SSEContext {
 
  public:
   struct KMSCachedSecret {
-    std::string secret;
+    size_t len;
+    key_serial_t serial;
+    KMSCachedSecret(const std::string& key, const std::string& secret)
+        : len(secret.size()) {
+      serial = ::add_key(
+          "user", key.c_str(), secret.c_str(), secret.size(),
+          KEY_SPEC_PROCESS_KEYRING);
+      ceph_assert(serial != -1);
+      ceph_assertf(serial != -1, "add_key(3): %d", serial);
+    }
+
+    void read(std::string& out) const {
+      out.clear();
+      out.resize(len);
+      const auto ret = ::keyctl_read(serial, &out[0], out.size());
+      ceph_assertf(ret == len, "keyctl_read(3): %d", ret);
+    }
+
     ~KMSCachedSecret() {
-      ::ceph::crypto::zeroize_for_security(secret.data(), secret.length());
+      const auto ret = ::keyctl_invalidate(serial);
+      ceph_assertf(ret == 0, "keyctl_invalidate(3): %d", ret);
     }
   };
 
@@ -1262,8 +1281,11 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
 
   if (kctx.cache_enabled()) {
     auto future = kctx.secrets_cache(dpp->get_cct()).lookup_or(key_id, [&]() {
-      auto entry = std::make_shared<KMSContext::KMSCachedSecret>();
-      const int ret = fetch(entry->secret);
+      std::string secret;
+      const int ret = fetch(secret);
+      auto entry =
+          std::make_shared<KMSContext::KMSCachedSecret>(key_id, secret);
+      ::ceph::crypto::zeroize_for_security(secret.data(), secret.length());
       return KMSContext::KMSSecretCache::Result(
           entry, std::error_code(ret, std::system_category()));
     });
@@ -1273,7 +1295,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
         // TODO(irq0) integrate this into webcache
         if (future.wait_for(1ms) == std::future_status::ready) {
           const auto& result = future.get();
-          actual_key = result.value()->secret;
+          result.value()->read(actual_key);
           return result.error().value();
         } else {
           auto executor = boost::asio::get_associated_executor(yield);
@@ -1291,7 +1313,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
       }
     } else {
       const auto& result = future.get();
-      actual_key = result.value()->secret;
+      result.value()->read(actual_key);
       return result.error().value();
     }
   } else {
