@@ -614,8 +614,7 @@ uint64_t BlueFS::get_used(unsigned id)
 uint64_t BlueFS::_get_total(unsigned id) const
 {
   ceph_assert(id < bdev.size());
-  ceph_assert(id < block_reserved.size());
-  return get_block_device_size(id) - block_reserved[id];
+  return get_block_device_size(id);
 }
 
 uint64_t BlueFS::get_total(unsigned id)
@@ -854,9 +853,8 @@ void BlueFS::_init_alloc()
 				    bdev[id]->get_size(),
 				    super.bluefs_max_alloc_size[id],
 				    name);
-      alloc[id]->init_add_free(
-        block_reserved[id],
-        _get_total(id));
+      auto reserved = block_reserved[id];
+      alloc[id]->init_add_free(reserved, _get_total(id) - reserved);
     }
   }
 }
