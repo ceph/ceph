@@ -16,9 +16,11 @@
 #define CEPH_MDSTABLESERVER_H
 
 #include "MDSTable.h"
-#include "MDSContext.h"
+#include "mdstypes.h" // for mds_table_pending_t
 
 #include "messages/MMDSTableRequest.h"
+
+class MDSContext;
 
 class MDSTableServer : public MDSTable {
 public:

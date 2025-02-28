@@ -16,10 +16,11 @@
 #ifndef DAMAGE_TABLE_H_
 #define DAMAGE_TABLE_H_
 
-#include <string_view>
-
 #include "mdstypes.h"
-#include "include/random.h"
+
+#include <memory>
+#include <string>
+#include <string_view>
 
 class CDir;
 class CInode;
@@ -38,11 +39,7 @@ typedef enum
 class DamageEntry
 {
   public:
-    DamageEntry()
-    {
-      id = ceph::util::generate_random_number<damage_entry_id_t>(0, 0xffffffff);
-      reported_at = ceph_clock_now();
-    }
+    DamageEntry();
 
     virtual ~DamageEntry();
 

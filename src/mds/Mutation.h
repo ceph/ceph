@@ -22,22 +22,22 @@
 #include "include/elist.h"
 #include "include/filepath.h"
 
-#include "MDSCacheObject.h"
 #include "MDSContext.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"
-#include "BatchOp.h"
 
+#include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
 #include "messages/MMDSPeerRequest.h"
-#include "messages/MClientReply.h"
 
 class LogSegment;
+class BatchOp;
 class CInode;
 class CDir;
 class CDentry;
+class MDSCacheObject;
 class Session;
 class ScatterLock;
 struct sr_t;

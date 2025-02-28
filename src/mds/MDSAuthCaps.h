@@ -14,17 +14,16 @@
 #ifndef MDS_AUTH_CAPS_H
 #define MDS_AUTH_CAPS_H
 
-#include <ostream>
+#include <cstdint>
+#include <iosfwd>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "include/encoding.h"
-#include "include/common_fwd.h"
-#include "include/types.h"
-#include "common/debug.h"
+#include "msg/msg_types.h" // for struct entity_addr_t
 
-#include "mdstypes.h"
+#include <boost/optional.hpp>
 
 // unix-style capabilities
 enum {

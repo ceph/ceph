@@ -12,16 +12,13 @@
  * 
  */
 
-#include <string_view>
-
-#include <errno.h>
+#include "MDSAuthCaps.h"
 
 #include <boost/spirit/include/qi.hpp>
 #include <boost/phoenix/operator.hpp>
 #include <boost/phoenix.hpp>
 
 #include "common/debug.h"
-#include "MDSAuthCaps.h"
 #include "mdstypes.h"
 #include "include/ipaddr.h"
 
