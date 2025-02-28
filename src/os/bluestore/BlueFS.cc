@@ -201,7 +201,6 @@ BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
-    block_reserved(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0)
 {
@@ -496,33 +495,28 @@ void BlueFS::_update_logger_stats()
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
                              bluefs_shared_alloc_context_t* _shared_alloc)
 {
-  uint64_t reserved;
   string dev_name;
   switch(id) {
     case BDEV_WAL:
     case BDEV_NEWWAL:
-      reserved = BDEV_LABEL_BLOCK_SIZE;
       dev_name = "wal";
       break;
     case BDEV_DB:
     case BDEV_NEWDB:
-      reserved = SUPER_RESERVED;
       dev_name = "db";
       break;
     case BDEV_SLOW:
-      reserved = 0;
       dev_name = "slow";
       break;
     default:
       ceph_assert(false);
   }
   dout(10) << __func__ << " bdev " << id << " path " << path << " "
-           << " reserved " << reserved << dendl;
+           << dendl;
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
   BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
 				       discard_cb[id], static_cast<void*>(this), dev_name.c_str());
-  block_reserved[id] = reserved;
   if (_shared_alloc) {
     b->set_no_exclusive_lock();
   }
@@ -683,13 +677,14 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   }
 
   _init_logger();
-  _init_alloc();
 
   super.version = 0;
   super.block_size = bdev[BDEV_DB]->get_block_size();
   super.osd_uuid = osd_uuid;
   super.uuid.generate_random();
-  dout(1) << __func__ << " uuid " << super.uuid << dendl;
+  super.reserved = p2roundup(SUPER_RESERVED, cct->_conf->bluefs_alloc_size);
+
+  _init_alloc();
 
   // init log
   FileRef log_file = ceph::make_ref<File>();
@@ -714,6 +709,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   super.log_fnode = log_file->fnode;
   super.memorized_layout = layout;
   _write_super(BDEV_DB);
+  dout(1) << __func__ << " super " << super << dendl;
   _flush_bdev();
 
   // clean up
@@ -826,9 +822,11 @@ void BlueFS::_init_alloc()
       else
         name += to_string(uintptr_t(this));
       string alloc_type = cct->_conf->bluefs_allocator;
-      if (super.reserved == 0) {
+      auto reserved = super.reserved;
+      if (reserved == 0) {
         // Legacy BlueFS with unaligned reserved space at bdev beginning,
-        // we should forbid bitmap allocator usage.
+        // we should forbid bitmap allocator usage and use predefined reserved
+        // block size.
         // See https://tracker.ceph.com/issues/68772
         if (alloc_type == "bitmap" ||
             alloc_type == "hybrid" ||
@@ -839,13 +837,27 @@ void BlueFS::_init_alloc()
                   << dendl;
           alloc_type = "avl";
         }
+        switch(id) {
+          case BDEV_WAL:
+          case BDEV_NEWWAL:
+            reserved = BDEV_LABEL_BLOCK_SIZE;
+            break;
+          case BDEV_DB:
+          case BDEV_NEWDB:
+            reserved = SUPER_RESERVED;
+            break;
+          case BDEV_SLOW:
+            reserved = 0;
+            break;
+          default:
+            ceph_assert(false);
+        }
       }
-
       dout(1) << __func__ << " new, id " << id << std::hex
               << ", allocator name " << name
               << ", allocator type " << alloc_type
               << ", capacity 0x" << bdev[id]->get_size()
-              << ", reserved 0x" << block_reserved[id]
+              << ", reserved 0x" << reserved
               << ", block size 0x" << alloc_size[id]
               << ", max alloc size 0x" << super.bluefs_max_alloc_size[id]
               << std::dec << dendl;
@@ -853,7 +865,6 @@ void BlueFS::_init_alloc()
 				    bdev[id]->get_size(),
 				    super.bluefs_max_alloc_size[id],
 				    name);
-      auto reserved = block_reserved[id];
       alloc[id]->init_add_free(reserved, _get_total(id) - reserved);
     }
   }
