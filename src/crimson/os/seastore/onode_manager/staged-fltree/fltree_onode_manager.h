@@ -49,6 +49,7 @@ struct FLTreeOnode final : Onode, Value {
     enum class delta_op_t : uint8_t {
       UPDATE_ONODE_SIZE,
       UPDATE_OMAP_ROOT,
+      UPDATE_LOG_ROOT,
       UPDATE_XATTR_ROOT,
       UPDATE_OBJECT_DATA,
       UPDATE_OBJECT_INFO,
@@ -119,6 +120,7 @@ struct FLTreeOnode final : Onode, Value {
   }
 
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
+    assert(oroot.get_type() == omap_type_t::OMAP);
     with_mutable_layout(
       t,
       [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
@@ -132,7 +134,23 @@ struct FLTreeOnode final : Onode, Value {
     });
   }
 
+  void update_log_root(Transaction &t, omap_root_t &lroot) final {
+    assert(lroot.get_type() == omap_type_t::LOG);
+    with_mutable_layout(
+      t,
+      [&lroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	mlayout.log_root.update(lroot);
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_LOG_ROOT);
+	}
+    });
+  }
+
   void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
+    assert(xroot.get_type() == omap_type_t::XATTR);
     with_mutable_layout(
       t,
       [&xroot](NodeExtentMutable &payload_mut, Recorder *recorder) {

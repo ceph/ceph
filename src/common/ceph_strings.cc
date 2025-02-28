@@ -227,6 +227,8 @@ const char *ceph_osd_alloc_hint_flag_name(int f)
 		return "compressible";
 	case CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE:
 		return "incompressible";
+	case CEPH_OSD_ALLOC_HINT_FLAG_LOG:
+		return "log";
 	default:
 		return "???";
 	}

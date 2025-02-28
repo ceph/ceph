@@ -1116,4 +1116,18 @@ std::ostream& operator<<(std::ostream& out, const cache_access_stats_printer_t& 
   return out;
 }
 
+std::ostream& operator<<(std::ostream& out, const omap_type_t& t)
+{
+  switch(t) {
+  case omap_type_t::XATTR:
+    return out << "XATTR";
+  case omap_type_t::OMAP:
+    return out << "OMAP";
+  case omap_type_t::LOG:
+    return out << "LOG";
+  default:
+    return out << "INVALID_OMAP_TYPE!";
+  }
+}
+
 } // namespace crimson::os::seastore
