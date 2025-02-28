@@ -1145,6 +1145,15 @@ int RGWGetObj::verify_permission(optional_yield y)
 
     // fallback to s3:GetObject(Version) permission
     action = s->object->get_instance().empty() ? rgw::IAM::s3GetObject : rgw::IAM::s3GetObjectVersion;
+
+    // sse-kms is not supported by s3:GetObject(Version) permission
+    bufferlist bl;
+    if (s->object->get_attr(RGW_ATTR_CRYPT_MODE, bl) && bl.to_str() == "SSE-KMS") {
+      s->err.message = "object is encrypted with SSE-KMS, missing s3:GetObjectVersionForReplication permission";
+      ldpp_dout(this, 4) << "ERROR: fetching object for replication object=" << s->object << " reason=" << s->err.message << dendl;
+
+      return -EACCES;
+    }
   } else if (get_torrent) {
     action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTorrent : rgw::IAM::s3GetObjectVersionTorrent;
   } else {
