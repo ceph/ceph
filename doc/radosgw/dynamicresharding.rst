@@ -6,20 +6,20 @@ RGW Dynamic Bucket Index Resharding
 
 .. versionadded:: Luminous
 
-A large bucket index can lead to performance problems, which can
-be addressed by sharding bucket indexes.
-Until Luminous, changing the number of bucket shards (resharding)
-needed to be done offline, with RGW services disabled.
-Since the Luminous release Ceph has supported online bucket resharding.
+A bucket index object with too many entries can lead to performance
+problems. This can be addressed by resharding bucket indexes.  Until
+Luminous, changing the number of bucket shards (resharding) could only
+be done offline, with RGW services disabled.  Since the Luminous
+release Ceph has supported online bucket resharding.
 
 Each bucket index shard can handle its entries efficiently up until
-reaching a certain threshold. If this threshold is
-exceeded the system can suffer from performance issues. The dynamic
-resharding feature detects this situation and automatically increases
-the number of shards used by a bucket's index, resulting in a
-reduction of the number of entries in each shard. This
-process is transparent to the user. Writes to the target bucket
-are blocked (but reads are not) briefly during resharding process.
+reaching a certain threshold number. If this threshold is exceeded the
+system can suffer from performance issues. The dynamic resharding
+feature detects this situation and automatically increases the number
+of shards used by a bucket's index, resulting in a reduction of the
+number of entries in each shard. This process is transparent to the
+user. Writes to the target bucket can be blocked briefly during
+resharding process, but reads are not.
 
 By default dynamic bucket index resharding can only increase the
 number of bucket index shards to 1999, although this upper-bound is a
@@ -29,10 +29,16 @@ spread the number of entries across the bucket index
 shards more evenly.
 
 Detection of resharding opportunities runs as a background process
-that periodically
-scans all buckets. A bucket that requires resharding is added to
-a queue. A thread runs in the background and processes the queueued
-resharding tasks, one at a time and in order.
+that periodically scans all buckets. A bucket that requires resharding
+is added to a queue. A thread runs in the background and processes the
+queueued resharding tasks one at a time.
+
+Starting with Tentacle, dynamic resharding has the ability to reduce
+the number of shards. Once the condition allowing reduction is noted,
+there is a time delay before it will actually be executed, in case the
+number of objects increases in the near future. The goal of the delay
+is to avoid thrashing where resharding keeps getting re-invoked on
+buckets that fluctuate in numbers of objects.
 
 Multisite
 =========
@@ -48,6 +54,8 @@ Configuration
 .. confval:: rgw_dynamic_resharding
 .. confval:: rgw_max_objs_per_shard
 .. confval:: rgw_max_dynamic_shards
+.. confval:: rgw_dynamic_resharding_may_reduce
+.. confval:: rgw_dynamic_resharding_reduction_wait
 .. confval:: rgw_reshard_bucket_lock_duration
 .. confval:: rgw_reshard_thread_interval
 .. confval:: rgw_reshard_num_logs
@@ -136,7 +144,7 @@ For example, the output at each dynamic resharding stage is shown below:
 Cancel pending bucket resharding
 --------------------------------
 
-Note: Bucket resharding operations cannot be cancelled while executing. ::
+Note: Bucket resharding tasks cannot be cancelled once they start executing. ::
 
    # radosgw-admin reshard cancel --bucket <bucket_name>
 
@@ -157,6 +165,20 @@ For example, 7001 bucket index shards is better than 7000
 since the former is prime. A variety of web sites have lists of prime
 numbers; search for "list of prime numbers" with your favorite
 search engine to locate some web sites.
+
+Setting a bucket's minimum number of shards
+-------------------------------------------
+
+::
+
+   # radosgw-admin bucket set-min-shards --bucket <bucket_name> --num-shards <min number of shards>
+
+Since dynamic resharding can now reduce the number of shards,
+administrators may want to prevent the number of shards from becoming
+too low, for example if the expect the number of objects to increase
+in the future. This command allows administrators to set a per-bucket
+minimum. This does not, however, prevent administrators from manually
+resharding to a lower number of shards.
 
 Troubleshooting
 ===============
