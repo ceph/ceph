@@ -220,12 +220,6 @@ struct bluefs_super_t {
 
   std::optional<bluefs_layout_t> memorized_layout;
 
-  std::vector<uint64_t> bluefs_max_alloc_size;
-
-  uint64_t reserved = 0; // space reserved at the beginning of bdev,
-                         // 0 denotes legacy superblock where the field
-                         // didn't exist.
-
   bluefs_super_t();
 
   uint64_t block_mask() const {
