@@ -92,7 +92,15 @@ std::optional<Scrub::SchedEntry> ScrubQueue::pop_ready_entry(
   };
 
   std::unique_lock lck{jobs_lock};
-  to_scrub.advance_time(time_now);
+  if (!to_scrub.advance_time(time_now)) {
+    // the clock was not advanced
+    dout(5) << fmt::format(
+		   ": time now ({}) is earlier than the previous not-before "
+		   "cut-off time",
+		   time_now)
+	    << dendl;
+    // we still try to dequeue, mainly to handle possible corner cases
+  }
   return to_scrub.dequeue_by_pred(eligible_filtr);
 }
 

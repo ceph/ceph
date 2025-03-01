@@ -111,7 +111,9 @@ TEST_F(NotBeforeTest, NotBefore) {
   ASSERT_EQ(queue.dequeue(), std::make_optional(e5));
   ASSERT_EQ(queue.dequeue(), std::nullopt);
 
-  queue.advance_time(1);
+  EXPECT_TRUE(queue.advance_time(1U));
+  // a 2'nd call using earlier time - should fail
+  EXPECT_FALSE(queue.advance_time(0U));
 
   EXPECT_EQ(queue.dequeue(), std::make_optional(e1));
   EXPECT_EQ(queue.dequeue(), std::make_optional(e2));
@@ -244,7 +246,7 @@ TEST_F(NotBeforeTest, RemoveIfByClass_with_cond) {
 	  53U, [](const tv_t &v) { return v.ordering_value == 44; }),
       2);
 
-  ASSERT_EQ(queue.total_count(), 17);
+  ASSERT_EQ(queue.total_count(), 17U);
   EXPECT_EQ(
       queue.remove_if_by_class(
 	  57U, [](const tv_t &v) { return v.ordering_value > 10; }, 20),
@@ -294,14 +296,15 @@ TEST_F(NotBeforeTest, accumulate_1) {
   EXPECT_EQ(res_all, "abcdefgh");
 
   // set time to 20: the order changes: 2, 4, 1, 3
-  queue.advance_time(20);
+  EXPECT_TRUE(queue.advance_time(20));
+  EXPECT_FALSE(queue.advance_time(18));
   acc_just_elig = acc_just_elig_templ;
   res = queue.accumulate<std::string, decltype(acc_just_elig)>(
       std::move(acc_just_elig));
   EXPECT_EQ(res, "jpor");
 
   // at 35: 2, 4, 1, 7, 8, 3
-  queue.advance_time(35);
+  EXPECT_TRUE(queue.advance_time(35));
   acc_just_elig = acc_just_elig_templ;
   res = queue.accumulate<std::string, decltype(acc_just_elig)>(
       std::move(acc_just_elig));
