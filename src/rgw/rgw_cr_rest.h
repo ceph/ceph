@@ -189,6 +189,10 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   }
 
   int send_request(const DoutPrefixProvider *dpp) override {
+    if (send_content_length) {
+      headers.push_back(param_pair_t("Content-Length", std::to_string(input_bl.length())));
+    }
+
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
         new RGWRESTSendResource(conn, method, path, params, &headers, http_manager));
 
