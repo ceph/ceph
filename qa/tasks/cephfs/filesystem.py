@@ -1322,8 +1322,10 @@ class FilesystemBase(MDSClusterBase):
 
             status = self.status()
 
-    def dencoder(self, obj_type, obj_blob, skip=0):
+    def dencoder(self, obj_type, obj_blob, skip=0, stray_okay=False):
         args = [os.path.join(self._prefix, "ceph-dencoder"), 'type', obj_type]
+        if stray_okay:
+            args.extend(["stray_okay"])
         if skip != 0 :
             args.extend(["skip", str(skip)])
         args.extend(['import', '-', 'decode', 'dump_json'])
@@ -1544,6 +1546,24 @@ class FilesystemBase(MDSClusterBase):
         obj_name = "{0:x}.00000000".format(ino_no)
         args = ["setxattr", obj_name, xattr_name, data]
         self.rados(args, pool=pool)
+
+    def read_meta_inode(self, dir_ino, file_name, pool=None):
+        """
+        Get decoded in-memory inode from the metadata pool
+        """
+        if pool is None:
+            pool = self.get_metadata_pool_name()
+
+        dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
+        args=["getomapval", dirfrag_obj_name, file_name+"_head", "-"]
+        try:
+            proc = self.rados(args, pool=pool, stdout=BytesIO())
+        except CommandFailedError as e:
+            log.error(e.__str__())
+            raise ObjectNotFound(dirfrag_obj_name)
+
+        obj_blob = proc.stdout.getvalue()
+        return json.loads(self.dencoder("inode_t<std::allocator>", obj_blob, 25, True).strip())
 
     def read_remote_inode(self, ino_no, pool=None):
         """
