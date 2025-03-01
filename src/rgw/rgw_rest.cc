@@ -1715,6 +1715,9 @@ RGWOp* RGWHandler_REST::get_op(void)
    case OP_OPTIONS:
      op = op_options();
      break;
+    case OP_PATCH:
+      op = op_patch();
+      break;
    default:
      return NULL;
   }
@@ -1877,6 +1880,8 @@ static http_op op_from_method(const char *method)
     return OP_COPY;
   if (strcmp(method, "OPTIONS") == 0)
     return OP_OPTIONS;
+  if (strcmp(method, "PATCH") == 0)
+    return OP_PATCH;
 
   return OP_UNKNOWN;
 }
@@ -1925,6 +1930,9 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
     break;
   case OP_OPTIONS:
     only_bucket = true;
+    break;
+  case OP_PATCH:
+    only_bucket = false;
     break;
   default:
     return -EINVAL;

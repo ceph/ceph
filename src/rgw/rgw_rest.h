@@ -629,6 +629,7 @@ protected:
   virtual RGWOp *op_post() { return NULL; }
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
+  virtual RGWOp *op_patch() { return NULL; }
 
 public:
   static int allocate_formatter(req_state *s, RGWFormat default_formatter,
