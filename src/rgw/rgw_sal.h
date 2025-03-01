@@ -1719,7 +1719,7 @@ public:
 
   /** Get the type of this tier */
   virtual const std::string& get_tier_type() = 0;
-  /** Is the type of this tier cloud-s3/clous-s3-glacier */
+  /** Is the type of this tier cloud-s3/cloud-s3-glacier */
   virtual bool is_tier_type_s3() = 0;
   /** Get the storage class of this tier */
   virtual const std::string& get_storage_class() = 0;
