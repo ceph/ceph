@@ -391,6 +391,11 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
+
+  refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) final;
+
 private:
   Cache &cache;
 
@@ -525,6 +530,21 @@ private:
   get_physical_cursor(
     op_context_t c,
     const LBACursorRef &indirect_cursor);
+
+  using make_btree_partial_iter_iertr = base_iertr;
+  using make_btree_partial_iter_ret = make_btree_partial_iter_iertr::future<
+    LBABtree::iterator>;
+  make_btree_partial_iter_ret make_btree_partial_iter(
+    op_context_t c,
+    LBABtree &btree,
+    LBACursor &cursor);
+
+  using refresh_lba_cursor_iertr = base_iertr;
+  using refresh_lba_cursor_ret = refresh_lba_cursor_iertr::future<>;
+  refresh_lba_cursor_ret refresh_lba_cursor(
+    op_context_t c,
+    LBABtree &btree,
+    LBACursorRef &cursor);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
