@@ -20,7 +20,16 @@ public:
   LBAMapping(LBACursorRef physical, LBACursorRef indirect)
       : physical_cursor(std::move(physical)),
 	indirect_cursor(std::move(indirect))
-  {}
+  {
+    if (physical) {
+      assert(physical->parent);
+      auto parent = physical->parent;
+      if (!parent->is_pending()) {
+	using LBALeafNode = lba_manager::btree::LBALeafNode;
+	child_pos = {parent->template cast<LBALeafNode>(), physical->pos};
+      }
+    }
+  }
 
   static LBAMapping create_physical(LBACursorRef iter) {
     return LBAMapping(std::move(iter), nullptr);
@@ -122,10 +131,8 @@ public:
   get_logical_extent(Transaction &t);
 
   void link_child(LogicalChildNode &extent) {
-    using lba_manager::btree::LBALeafNode;
-    auto leaf = physical_cursor->parent->cast<LBALeafNode>();
-    assert(leaf->is_stable());
-    leaf->link_child(&extent, physical_cursor->pos);
+    ceph_assert(child_pos);
+    child_pos->link_child(&extent);
   }
 
   LBAMapping duplicate() const {
@@ -192,6 +199,8 @@ private:
   // their keys.
   LBACursorRef physical_cursor;
   LBACursorRef indirect_cursor;
+  using LBALeafNode = lba_manager::btree::LBALeafNode;
+  std::optional<child_pos_t<LBALeafNode>> child_pos;
 };
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);

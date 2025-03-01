@@ -42,8 +42,12 @@ LBAMapping::get_logical_extent(Transaction &t)
   assert(i.pos != std::numeric_limits<uint16_t>::max());
   ceph_assert(t.get_trans_id() == i.ctx.trans.get_trans_id());
   auto p = physical_cursor->parent->cast<LBALeafNode>();
-  return p->template get_child<LogicalChildNode>(
+  auto v = p->template get_child<LogicalChildNode>(
     t, i.ctx.cache, i.pos, i.key);
+  if (!v.has_child()) {
+    child_pos = v.get_child_pos();
+  }
+  return v;
 }
 
 bool LBAMapping::is_stable() const {
