@@ -403,6 +403,12 @@ public:
   virtual std::string canonical_name() const override { return fmt::format("REST.{}.ACL", s->info.method); }
 };
 
+class RGWSetObjAttrs_ObjStore : public RGWSetAttrs {
+public:
+  RGWSetObjAttrs_ObjStore() {}
+  ~RGWSetObjAttrs_ObjStore() override {}
+};
+
 class RGWGetObjAttrs_ObjStore : public RGWGetObjAttrs {
 public:
   RGWGetObjAttrs_ObjStore() {}

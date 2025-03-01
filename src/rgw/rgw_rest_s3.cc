@@ -3880,6 +3880,56 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+void RGWSetObjAttrs_ObjStore_S3::send_response()
+{
+  int r = op_ret;
+  if (!r)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+int RGWSetObjAttrs_ObjStore_S3::verify_permission(optional_yield y)
+{
+  // only for system user
+  if (!s->system_request) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+int RGWSetObjAttrs_ObjStore_S3::get_params(optional_yield y)
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = 0;
+  bufferlist data;
+
+  std::tie(r, data) = read_all_input(s, max_size, false);
+  if (r < 0)
+    return r;
+
+  JSONParser jp;
+  if (!jp.parse(data.c_str(), data.length())) {
+    ldpp_dout(this, 0) << "failed to parse attrs. len=" << data.length() << " data=" << data.c_str() << dendl;
+    return -EINVAL;
+  }
+
+  JSONDecoder::decode_json("attrs", attrs, &jp);
+
+  bool log_op = true;
+  s->info.args.get_bool("log_op", &log_op, true);
+  if (!log_op) {
+    set_attrs_flags &= ~rgw::sal::FLAG_LOG_OP;
+  }
+
+  ldpp_dout(this, 20) << "attrs=" << attrs << " set_attrs_flags=" << set_attrs_flags << dendl;
+
+  return 0;
+}
+
 int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
 {
   string err;
@@ -5241,6 +5291,15 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
+RGWOp *RGWHandler_REST_Obj_S3::op_patch()
+{
+  if (is_attributes_op()) {
+    return new RGWSetObjAttrs_ObjStore_S3;
+  }
+
+  return NULL;
+}
+
 RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 {
   RGWGetObj_ObjStore_S3 *get_obj_op = new RGWGetObj_ObjStore_S3;
@@ -6388,6 +6447,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_LOGGING:
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
+        case RGW_OP_SET_ATTRS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;

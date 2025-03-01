@@ -374,6 +374,16 @@ public:
   int get_params(optional_yield y) override;
 };
 
+class RGWSetObjAttrs_ObjStore_S3 : public RGWSetObjAttrs_ObjStore {
+public:
+  RGWSetObjAttrs_ObjStore_S3() {}
+  ~RGWSetObjAttrs_ObjStore_S3() override {}
+
+  int get_params(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void send_response() override;
+};
+
 class RGWGetObjAttrs_ObjStore_S3 : public RGWGetObjAttrs_ObjStore {
 public:
   RGWGetObjAttrs_ObjStore_S3() {}
@@ -802,6 +812,7 @@ protected:
   RGWOp *op_delete() override;
   RGWOp *op_post() override;
   RGWOp *op_options() override;
+  RGWOp *op_patch() override;
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_Obj_S3() override = default;
