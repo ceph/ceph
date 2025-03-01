@@ -778,15 +778,13 @@ BtreeLBAManager::refresh_lba_cursor(
     });
   }
 
-  auto [viewable, state] = cursor.parent->is_viewable_by_trans(c.trans);
   auto leaf = cursor.parent->cast<LBALeafNode>();
-
-  TRACET("cursor: {} viewable: {} state: {}",
-	 c.trans, cursor, viewable, state);
-
-  if (!viewable) {
+  auto [got_new, l] = leaf->resolve_transaction(c.trans, cursor.key);
+  bool viewable = !got_new;
+  TRACET("cursor: {} viewable: {}", c.trans, cursor, viewable);
+  if (got_new) {
+    leaf = l;
     stats.num_refresh_unviewable_parent++;
-    leaf = leaf->find_pending_version(c.trans, cursor.get_laddr());
     cursor.parent = leaf;
   }
 
