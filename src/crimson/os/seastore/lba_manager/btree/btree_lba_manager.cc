@@ -561,6 +561,39 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
+BtreeLBAManager::refresh_lba_mapping_ret
+BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
+{
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, LBAMapping>(
+    cache,
+    c,
+    std::move(mapping),
+    [c, this](LBABtree &btree, LBAMapping &mapping) mutable {
+      return refresh_lba_cursor(
+	c, btree, mapping.physical_cursor
+      ).si_then([c, this, &btree, &mapping] {
+	return refresh_lba_cursor(c, btree, mapping.indirect_cursor);
+      });
+    });
+}
+
+BtreeLBAManager::refresh_lba_cursor_ret
+BtreeLBAManager::refresh_lba_cursor(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursorRef &cursor)
+{
+  if (!cursor) {
+    return refresh_lba_cursor_iertr::now();
+  }
+
+  return make_btree_partial_iter(c, btree, *cursor
+  ).si_then([&cursor](LBABtree::iterator iter) {
+    iter.update_cursor(*cursor);
+  });
+}
+
 void BtreeLBAManager::register_metrics()
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
@@ -840,6 +873,50 @@ BtreeLBAManager::get_cursors(
 	    seastar::stop_iteration>(seastar::stop_iteration::no);
 	});
     });
+}
+
+BtreeLBAManager::make_btree_partial_iter_ret
+BtreeLBAManager::make_btree_partial_iter(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursor &cursor)
+{
+  LOG_PREFIX(BtreeLBAManager::make_btree_partial_iter);
+  TRACET("{}", c.trans, cursor);
+  assert(cursor.ctx.trans.get_trans_id() == c.trans.get_trans_id());
+  if (!cursor.parent->is_valid()) {
+    TRACET("{} parent is invalid", c.trans, cursor);
+    return btree.lower_bound(c, cursor.key
+    ).si_then([&cursor](LBABtree::iterator iter) {
+      if (iter.is_end()) {
+	ceph_assert(cursor.key == L_ADDR_NULL);
+      } else {
+	ceph_assert(cursor.key == iter.get_key());
+      }
+      return make_btree_partial_iter_iertr::make_ready_future<
+	LBABtree::iterator>(std::move(iter));
+    });
+  }
+
+  auto leaf = cursor.parent->cast<LBALeafNode>();
+  auto [viewable, state] = leaf->is_viewable_by_trans(c.trans.get_trans_id());
+  if (!viewable) {
+    leaf = leaf->find_pending_version(c.trans, cursor.key);
+    TRACET("find pending extent {} for {}",
+	   c.trans, (void*)leaf.get(), cursor);
+    return make_btree_partial_iter_iertr::make_ready_future<
+      LBABtree::iterator>(btree.make_partial_iter(c, leaf, cursor.key));
+  }
+
+  // parent is viewable for current transaction
+
+  if (!leaf->modified_since(cursor.modifications)) {
+    return make_btree_partial_iter_iertr::make_ready_future<
+      LBABtree::iterator>(btree.make_partial_iter(c, leaf, cursor.key, cursor.pos));
+  }
+
+  return make_btree_partial_iter_iertr::make_ready_future<
+    LBABtree::iterator>(btree.make_partial_iter(c, leaf, cursor.key));
 }
 
 }
