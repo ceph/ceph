@@ -2675,7 +2675,7 @@ int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, A
 			bucket->get_info(),
 			get_obj(),
 			setattrs ? *setattrs : empty,
-			delattrs ? delattrs : nullptr,
+			delattrs,
 			y, log_op, mtime);
 }
 
