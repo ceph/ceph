@@ -566,52 +566,14 @@ BtreeLBAManager::refresh_lba_cursor(
   LBABtree &btree,
   LBACursorRef &cursor)
 {
-  LOG_PREFIX(BtreeLBAManager::refresh_lba_cursor);
   if (!cursor) {
     return refresh_lba_cursor_iertr::now();
   }
 
-  if (!cursor->parent->is_valid()) {
-    TRACET("cursor {} parent is invalid, re-search from scratch",
-	   c.trans, *cursor);
-    return btree.lower_bound(c, cursor->get_laddr()
-    ).si_then([&cursor](LBABtree::iterator iter) {
-      assert(!iter.is_end());
-      assert(iter.get_key() == cursor->get_laddr());
-      auto node = iter.get_leaf_node();
-      cursor->parent = node;
-      cursor->modifications = node->modifications;
-      cursor->pos = iter.get_leaf_pos();
-      cursor->key = iter.get_key();
-      cursor->val = iter.get_val();
-      assert(cursor->is_valid());
-    });
-  }
-
-  auto [viewable, state] = cursor->parent->is_viewable_by_trans(c.trans);
-  auto leaf = cursor->parent->cast<LBALeafNode>();
-
-  TRACET("cursor: {} viewable: {} state: {}",
-	 c.trans, *cursor, viewable, state);
-
-  if (!viewable) {
-    leaf = leaf->find_pending_version(c.trans, cursor->get_laddr());
-    cursor->parent = leaf;
-  }
-
-  if (!viewable ||
-      leaf->modified_since(cursor->modifications)) {
-    auto i = leaf->lower_bound(cursor->get_laddr());
-    cursor->pos = i.get_offset();
-    cursor->modifications = leaf->modifications;
-    cursor->val = i.get_val();
-  }
-
-  auto iter = LBALeafNode::iterator(leaf.get(), cursor->pos);
-  ceph_assert(iter.get_key() == cursor->key);
-  ceph_assert(iter.get_val() == cursor->val);
-  assert(cursor->is_valid());
-  return refresh_lba_cursor_iertr::make_ready_future();
+  return make_btree_partial_iter(c, btree, *cursor
+  ).si_then([&cursor](LBABtree::iterator iter) {
+    iter.update_cursor(*cursor);
+  });
 }
 
 void BtreeLBAManager::register_metrics()
@@ -893,6 +855,55 @@ BtreeLBAManager::get_cursors(
 	    seastar::stop_iteration>(seastar::stop_iteration::no);
 	});
     });
+}
+
+BtreeLBAManager::make_btree_partial_iter_ret
+BtreeLBAManager::make_btree_partial_iter(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursor &cursor)
+{
+  LOG_PREFIX(BtreeLBAManager::make_btree_partial_iter);
+  TRACET("{}", c.trans, cursor);
+  assert(cursor.ctx.trans.get_trans_id() == c.trans.get_trans_id());
+  if (!cursor.parent->is_valid()) {
+    TRACET("{} parent is invalid", c.trans, cursor);
+    return btree.lower_bound(c, cursor.key
+    ).si_then([&cursor](LBABtree::iterator iter) {
+      if (iter.is_end()) {
+	ceph_assert(cursor.key == L_ADDR_NULL);
+      } else {
+	ceph_assert(cursor.key == iter.get_key());
+      }
+      return make_btree_partial_iter_iertr::make_ready_future<
+	LBABtree::iterator>(std::move(iter));
+    });
+  }
+
+  auto leaf = cursor.parent->cast<LBALeafNode>();
+  auto [viewable, state] = leaf->is_viewable_by_trans(c.trans);
+  if (!viewable) {
+    leaf = leaf->find_pending_version(c.trans, cursor.key);
+    TRACET("find pending extent {} for {}",
+	   c.trans, (void*)leaf.get(), cursor);
+    auto it = leaf->lower_bound(cursor.key);
+    assert(it != leaf->end() && it.get_key() == cursor.key);
+    return make_btree_partial_iter_iertr::make_ready_future<
+      LBABtree::iterator>(btree.make_partial_iter(
+	c, leaf, cursor.key, it.get_offset()));
+  }
+
+  // parent is viewable for current transaction
+
+  if (leaf->modified_since(cursor.modifications)) {
+    // fix cursor pos
+    auto it = leaf->lower_bound(cursor.key);
+    cursor.pos = it->get_offset();
+  }
+
+  return make_btree_partial_iter_iertr::make_ready_future<
+    LBABtree::iterator>(btree.make_partial_iter(
+      c, leaf, cursor.key, cursor.pos));
 }
 
 }

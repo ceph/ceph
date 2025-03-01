@@ -498,7 +498,7 @@ public:
       auto fut = base_iertr::now();
       if (!pin.is_indirect()) {
         ceph_assert(!pin.is_clone());
-	fut = fut.si_then([this, &t, &pin]() mutable {
+	fut = fut.si_then([this, &t, pin=pin.duplicate()]() mutable {
 	  if (pin.is_valid()) {
 	    return base_iertr::make_ready_future<LBAMapping>(std::move(pin));
 	  } else {
