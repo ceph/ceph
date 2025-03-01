@@ -93,7 +93,7 @@ BtreeBackrefManager::get_mapping(
   LOG_PREFIX(BtreeBackrefManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<BackrefBtree, BackrefMappingRef>(
+  return with_btree_ret<BackrefBtree, BackrefMapping>(
     cache,
     c,
     [c, offset](auto &btree) {
@@ -109,7 +109,7 @@ BtreeBackrefManager::get_mapping(
 	       c.trans, offset, iter.get_key(), iter.get_val());
 	return get_mapping_ret(
 	  interruptible::ready_future_marker{},
-	  iter.get_pin(c));
+	  iter.get_cursor(c));
       }
     });
   });
@@ -124,7 +124,7 @@ BtreeBackrefManager::get_mappings(
   LOG_PREFIX(BtreeBackrefManager::get_mappings);
   TRACET("{}~{}", t, offset, end);
   auto c = get_context(t);
-  return with_btree_state<BackrefBtree, backref_pin_list_t>(
+  return with_btree_state<BackrefBtree, backref_mapping_list_t>(
     cache,
     c,
     [c, offset, end](auto &btree, auto &ret) {
@@ -143,7 +143,7 @@ BtreeBackrefManager::get_mappings(
 	  TRACET("{}~{} got {}, {}, repeat ...",
 	         c.trans, offset, end, pos.get_key(), pos.get_val());
 	  ceph_assert((pos.get_key().add_offset(pos.get_val().len)) > offset);
-	  ret.emplace_back(pos.get_pin(c));
+	  ret.emplace_back(pos.get_cursor(c));
 	  return BackrefBtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
@@ -239,8 +239,8 @@ BtreeBackrefManager::new_mapping(
 	  });
 	});
     }).si_then([c](auto &&state) {
-      return new_mapping_iertr::make_ready_future<BackrefMappingRef>(
-	state.ret->get_pin(c));
+      return new_mapping_iertr::make_ready_future<BackrefMapping>(
+	state.ret->get_cursor(c));
     });
 }
 
