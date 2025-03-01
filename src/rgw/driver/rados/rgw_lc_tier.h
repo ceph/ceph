@@ -57,3 +57,18 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
                          real_time* pset_mtime, std::string& etag,
                          uint64_t& accounted_size, rgw::sal::Attrs& attrs,
                          void* cb);
+int rgw_cloud_tier_restore_object(RGWLCCloudTierCtx& tier_ctx,
+                         std::map<std::string, std::string>& headers,
+                         real_time* pset_mtime, std::string& etag,
+                         uint64_t& accounted_size, rgw::sal::Attrs& attrs,
+                  			 std::optional<uint64_t> days,
+                         RGWZoneGroupTierS3Glacier& glacier_params,
+                         void* cb);
+
+int cloud_tier_restore(const DoutPrefixProvider *dpp,
+                       RGWRESTConn& dest_conn, const rgw_obj& dest_obj,
+                       std::optional<uint64_t> days,
+                       RGWZoneGroupTierS3Glacier& glacier_params);
+
+bool is_restore_in_progress(const DoutPrefixProvider *dpp,
+                            std::map<std::string, std::string>& headers);
