@@ -332,6 +332,8 @@ inline int op_to_perm(std::uint64_t op) {
 }
 }
 
+const char* action_bit_string(uint64_t action);
+
 enum class PolicyPrincipal {
   Role,
   Session,
