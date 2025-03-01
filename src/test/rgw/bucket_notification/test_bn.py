@@ -8,6 +8,7 @@ import socket
 import time
 import os
 import io
+import re
 import string
 # XXX this should be converted to use boto3
 import boto
@@ -1101,7 +1102,41 @@ def test_ps_s3_notification_filter_on_master():
     result, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
+    # create s3 to test type field - negative filter uptake
     topic_conf_list = [{'Id': notification_name+'_4',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'prefix', 'Value': 'hello', 'Type': 'OUT'}]
+                          }
+                        }
+                       },
+                       {'Id': notification_name+'_5',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'prefix', 'Value': 'world', 'Type': 'OUT'},
+                                            {'Name': 'suffix', 'Value': 'log'}]
+                          }
+                        }
+                       },
+                       {'Id': notification_name+'_6',
+                        'TopicArn': topic_arn,
+                        'Events': [],
+                        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)\\.txt', 'Type': 'IN'}]
+                         }
+                        }
+                       }]
+
+    s3_notification_conf4 = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    result, status = s3_notification_conf4.set_config()
+    assert_equal(status/100, 2)
+
+    topic_conf_list = [{'Id': notification_name+'_7',
                         'TopicArn': topic_arn,
                         'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
                         'Filter': {
@@ -1116,13 +1151,13 @@ def test_ps_s3_notification_filter_on_master():
                         }]
 
     try:
-        s3_notification_conf4 = PSNotificationS3(conn, bucket_name, topic_conf_list)
-        _, status = s3_notification_conf4.set_config()
+        s3_notification_conf7 = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        _, status = s3_notification_conf7.set_config()
         assert_equal(status/100, 2)
-        skip_notif4 = False
+        skip_notif7 = False
     except Exception as error:
         print('note: metadata filter is not supported by boto3 - skipping test')
-        skip_notif4 = True
+        skip_notif7 = True
 
 
     # get all notifications
@@ -1132,38 +1167,36 @@ def test_ps_s3_notification_filter_on_master():
         filter_name = conf['Filter']['Key']['FilterRules'][0]['Name']
         assert filter_name == 'prefix' or filter_name == 'suffix' or filter_name == 'regex', filter_name
 
-    if not skip_notif4:
-        result, status = s3_notification_conf4.get_config(notification=notification_name+'_4')
+    if not skip_notif7:
+        result, status = s3_notification_conf7.get_config(notification=notification_name+'_7')
         assert_equal(status/100, 2)
         filter_name = result['NotificationConfiguration']['TopicConfiguration']['Filter']['S3Metadata']['FilterRule'][0]['Name']
         assert filter_name == 'x-amz-meta-foo' or filter_name == 'x-amz-meta-hello'
 
-    expected_in1 = ['hello.kaboom', 'hello.txt', 'hello123.txt', 'hello']
-    expected_in2 = ['world1.log', 'world2log', 'world3.log']
-    expected_in3 = ['hello.txt', 'hell.txt', 'worldlog.txt']
-    expected_in4 = ['foo', 'bar', 'hello', 'world']
-    filtered = ['hell.kaboom', 'world.og', 'world.logg', 'he123ll.txt', 'wo', 'log', 'h', 'txt', 'world.log.txt']
+
+    sample_space = ['hello.kaboom', 'hello.txt', 'hello123.txt', 'hello', 'world1.log', 'world2log', 'world3.log', 'hello.txt', 'hell.txt', 'worldlog.txt', 'kaboom.log', 'foobar.log', 'log', 'he123ll.txt', 'wo', 'h', 'txt', 'world.log.txt']
+    expected_in1 = [key for key in sample_space if key.startswith('hello')]
+    expected_in2 = [key for key in sample_space if key.startswith('world') and key.endswith('log')]
+    expected_in3 = [key for key in sample_space if re.match('([a-z]+)\\.txt', key) is not None]
+    expected_in4 = [key for key in sample_space if key.startswith('hello') is False]
+    expected_in5 = [key for key in sample_space if key.endswith('log') and key.startswith('world') is False]
+    expected_in6 = expected_in3
+
+    expected_in7 = ['foo', 'bar', 'hello', 'world']
     filtered_with_attr = ['nofoo', 'nobar', 'nohello', 'noworld']
-    # create objects in bucket
-    for key_name in expected_in1:
+    
+    for key_name in sample_space:
         key = bucket.new_key(key_name)
         key.set_contents_from_string('bar')
-    for key_name in expected_in2:
-        key = bucket.new_key(key_name)
-        key.set_contents_from_string('bar')
-    for key_name in expected_in3:
-        key = bucket.new_key(key_name)
-        key.set_contents_from_string('bar')
-    if not skip_notif4:
-        for key_name in expected_in4:
+
+    if not skip_notif7:
+        for key_name in expected_in7:
             key = bucket.new_key(key_name)
             key.set_metadata('foo', 'bar')
             key.set_metadata('hello', 'world')
             key.set_metadata('goodbye', 'cruel world')
             key.set_contents_from_string('bar')
-    for key_name in filtered:
-        key = bucket.new_key(key_name)
-        key.set_contents_from_string('bar')
+
     for key_name in filtered_with_attr:
         key.set_metadata('foo', 'nobar')
         key.set_metadata('hello', 'noworld')
@@ -1178,6 +1211,9 @@ def test_ps_s3_notification_filter_on_master():
     found_in2 = []
     found_in3 = []
     found_in4 = []
+    found_in5 = []
+    found_in6 = []
+    found_in7 = []
 
     for event in receiver.get_and_reset_events():
         notif_id = event['Records'][0]['s3']['configurationId']
@@ -1192,21 +1228,31 @@ def test_ps_s3_notification_filter_on_master():
             found_in2.append(key_name)
         elif notif_id == notification_name+'_3':
             found_in3.append(key_name)
-        elif not skip_notif4 and notif_id == notification_name+'_4':
+        elif notif_id == notification_name + '_4':
             found_in4.append(key_name)
+        elif notif_id == notification_name + '_5':
+            found_in5.append(key_name)
+        elif notif_id == notification_name + '_6':
+            found_in6.append(key_name)
+        elif not skip_notif7 and notif_id == notification_name+'_7':
+            found_in7.append(key_name)
         else:
             assert False, 'invalid notification: ' + notif_id
 
     assert_equal(set(found_in1), set(expected_in1))
     assert_equal(set(found_in2), set(expected_in2))
     assert_equal(set(found_in3), set(expected_in3))
-    if not skip_notif4:
-        assert_equal(set(found_in4), set(expected_in4))
+    assert_equal(set(found_in4), set(expected_in4))
+    assert_equal(set(found_in5), set(expected_in5))
+    assert_equal(set(found_in6), set(expected_in6))
+
+    if not skip_notif7:
+        assert_equal(set(found_in7), set(expected_in7))
 
     # cleanup
     s3_notification_conf.del_config()
-    if not skip_notif4:
-        s3_notification_conf4.del_config()
+    if not skip_notif7:
+        s3_notification_conf7.del_config()
     topic_conf.del_config()
     # delete the bucket
     for key in bucket.list():
@@ -2392,29 +2438,45 @@ def metadata_filter(endpoint_type, conn):
                 'FilterRules': [{'Name': META_PREFIX+meta_key, 'Value': meta_value}]
             }
         }
+    }, {'Id': notification_name + '_TYPE_IN', 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+        'Filter': {
+            'Metadata': {
+                'FilterRules': [{'Name': META_PREFIX+meta_key, 'Value': meta_value, 'Type': 'IN'}]
+            }
+        }
+    }, {'Id': notification_name + '_TYPE_OUT', 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+        'Filter': {
+            'Metadata': {
+                'FilterRules': [{'Name': META_PREFIX+meta_key, 'Value': meta_value, 'Type': 'OUT'}]
+            }
+        }
     }]
 
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
-    expected_keys = []
+    expected_keys_in = []
+    expected_keys_out = []
     # create objects in the bucket
     key_name = 'foo'
     key = bucket.new_key(key_name)
     key.set_metadata(meta_key, meta_value)
     key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-    expected_keys.append(key_name)
+    expected_keys_in.append(key_name)
 
     # create objects in the bucket using COPY
     key_name = 'copy_of_foo'
     bucket.copy_key(key_name, bucket.name, key.name)
-    expected_keys.append(key_name)
+    expected_keys_in.append(key_name)
 
     # create another objects in the bucket using COPY
     # but override the metadata value
     key_name = 'another_copy_of_foo'
     bucket.copy_key(key_name, bucket.name, key.name, metadata={meta_key: 'kaboom'})
+    expected_keys_out.append(key_name)
     # this key is not in the expected keys due to the different meta value
 
     # create objects in the bucket using multi-part upload
@@ -2425,23 +2487,21 @@ def metadata_filter(endpoint_type, conn):
     fp.write(content)
     fp.flush()
     fp.seek(0)
-    key_name = 'multipart_foo'
-    uploader = bucket.initiate_multipart_upload(key_name,
-            metadata={meta_key: meta_value})
-    for i in range(1,5):
-        uploader.upload_part_from_file(fp, i, size=chunk_size)
-        fp.seek(i*chunk_size)
-    uploader.complete_upload()
+    key_name_in = 'multipart_foo'
+    key_name_out = 'mutlipart_foo_copy'
+    upload_multi_part_object(bucket, meta_key, meta_value, key_name_in, fp, chunk_size)
+    upload_multi_part_object(bucket, meta_key, 'kaboom', key_name_out, fp, chunk_size)
     fp.close()
-    expected_keys.append(key_name)
+    expected_keys_in.append(key_name_in)
+    expected_keys_out.append(key_name_out)
 
     print('wait for the messages...')
     wait_for_queue_to_drain(topic_name, http_port=port)
     # check amqp receiver
     events = receiver.get_and_reset_events()
-    assert_equal(len(events), len(expected_keys))
+    assert_equal(len(events), len(expected_keys_in) + len(expected_keys_out))
     for event in events:
-        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys_in ^ event['Records'][0]['s3']['object']['key'] in expected_keys_out)
 
     # delete objects
     for key in bucket.list():
@@ -2450,9 +2510,9 @@ def metadata_filter(endpoint_type, conn):
     wait_for_queue_to_drain(topic_name, http_port=port)
     # check endpoint receiver
     events = receiver.get_and_reset_events()
-    assert_equal(len(events), len(expected_keys))
+    assert_equal(len(events), len(expected_keys_in))
     for event in events:
-        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys_in ^ event['Records'][0]['s3']['object']['key'] in expected_keys_out)
 
     # cleanup
     receiver.close(task)
@@ -2460,6 +2520,15 @@ def metadata_filter(endpoint_type, conn):
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
+
+#helper function to process multi-part object upload
+def upload_multi_part_object(bucket, meta_key, meta_value, key_name, fp, chunk_size):
+    uploader = bucket.initiate_multipart_upload(key_name,
+            metadata={meta_key: meta_value})
+    for i in range(1,5):
+        uploader.upload_part_from_file(fp, i, size=chunk_size)
+        fp.seek(i*chunk_size)
+    uploader.complete_upload()
 
 
 @attr('kafka_test')
