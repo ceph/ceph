@@ -527,7 +527,7 @@ static curl_slist *headers_to_slist(param_vec_t& headers)
 
 static bool is_upload_request(const string& method)
 {
-  return method == "POST" || method == "PUT";
+  return method == "POST" || method == "PUT" || method == "PATCH";
 }
 
 /*

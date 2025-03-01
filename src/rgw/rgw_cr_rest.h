@@ -327,6 +327,21 @@ public:
 
 };
 
+template <class T, class E = int>
+class RGWPatchRawRESTResourceCR: public RGWSendRawRESTResourceCR <T, E> {
+ public:
+ RGWPatchRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                           RGWHTTPManager *_http_manager,
+                           const std::string& _path,
+                           rgw_http_param_pair *_params,
+                           std::map<std::string, std::string> * _attrs,
+                           bufferlist& _input,
+                           T *_result, E *_err_result = nullptr)
+    : RGWSendRawRESTResourceCR<T, E>(_cct, _conn, _http_manager, "PATCH", _path,
+                                  _params, _attrs, _input, _result, true, _err_result) {}
+
+};
+
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
 
