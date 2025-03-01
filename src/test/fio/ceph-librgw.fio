@@ -1,0 +1,28 @@
+#
+# example jobfile, e.g.:
+# fio --max-jobs=20  /lv2tb/ceph-cp/src/test/fio/ceph-librgw.fio
+#
+[global]
+ioengine=external:/home/mbenjamin/ceph-cp/build/lib/libfio_librgw.so
+name=fiotest
+direct=0
+access_key=${AWS_ACCESS_KEY_ID}
+secret_key=${AWS_SECRET_ACCESS_KEY}
+userid=testuser
+ceph_cluster=ceph
+ceph_conf=/home/mbenjamin/ceph-cp/build/ceph.conf
+#in current impl, there is only one, global bucket
+bucket_name=fiotest
+thread=1
+nr_files=8
+bs=256k
+size=256k
+
+[rgw_randwrite]
+numjobs=8
+rw=rw
+rwmixread=70
+rwmixwrite=30
+offset=0
+time_based=1
+runtime=30s
