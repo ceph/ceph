@@ -38,6 +38,7 @@
     bucket check unlinked            check for object versions that are not visible in a bucket listing 
     bucket chown                     link bucket to specified user and update its object ACLs
     bucket reshard                   reshard bucket
+    bucket set-min-shards            set the minimum number of shards that dynamic resharding will consider for a bucket
     bucket rewrite                   rewrite all objects in the specified bucket
     bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote
     bucket sync disable              disable bucket sync

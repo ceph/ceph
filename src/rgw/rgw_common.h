@@ -1045,6 +1045,9 @@ class RGWSI_Zone;
 
 #include "rgw_cksum.h"
 
+
+// this represents the at-rest bucket instance object and is stored as
+// a system object
 struct RGWBucketInfo {
   rgw_bucket bucket;
   rgw_owner owner;

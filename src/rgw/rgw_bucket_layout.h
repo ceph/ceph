@@ -54,10 +54,15 @@ void decode_json_obj(BucketHashType& t, JSONObj *obj);
 struct bucket_index_normal_layout {
   uint32_t num_shards = 1;
 
+  // the fewest number of shards this bucket layout allows
+  uint32_t min_num_shards = 1;
+
   BucketHashType hash_type = BucketHashType::Mod;
 
-  friend std::ostream& operator<<(std::ostream& out, const bucket_index_normal_layout& l) {
-    out << "num_shards=" << l.num_shards << ", hash_type=" << to_string(l.hash_type);
+  friend std::ostream& operator<<(std::ostream& out,
+				  const bucket_index_normal_layout& l) {
+    out << "num_shards=" << l.num_shards << ", min_num_shards=" <<
+      l.min_num_shards << ", hash_type=" << to_string(l.hash_type);
     return out;
   }
 };
@@ -278,8 +283,12 @@ inline uint32_t num_shards(const bucket_index_layout& index) {
 inline uint32_t num_shards(const bucket_index_layout_generation& index) {
   return num_shards(index.layout);
 }
+
 inline uint32_t current_num_shards(const BucketLayout& layout) {
   return num_shards(layout.current_index);
+}
+inline uint32_t current_min_layout_shards(const BucketLayout& layout) {
+  return layout.current_index.layout.normal.min_num_shards;
 }
 inline bool is_layout_indexless(const bucket_index_layout_generation& layout) {
   return layout.layout.type == BucketIndexType::Indexless;

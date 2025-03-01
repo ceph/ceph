@@ -1,10 +1,9 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
  * Copyright (C) 2025 IBM 
-*/
+ */
 
 #include <cerrno>
 #include <string>
@@ -169,6 +168,7 @@ void usage()
   cout << "  bucket check unlinked            check for object versions that are not visible in a bucket listing \n";
   cout << "  bucket chown                     link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard                   reshard bucket\n";
+  cout << "  bucket set-min-shards            set the minimum number of shards that dynamic resharding will consider for a bucket\n";
   cout << "  bucket rewrite                   rewrite all objects in the specified bucket\n";
   cout << "  bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote\n";
   cout << "  bucket sync disable              disable bucket sync\n";
@@ -699,6 +699,7 @@ enum class OPT {
   BUCKET_RM,
   BUCKET_REWRITE,
   BUCKET_RESHARD,
+  BUCKET_SET_MIN_SHARDS,
   BUCKET_CHOWN,
   BUCKET_RADOS_LIST,
   BUCKET_SHARD_OBJECTS,
@@ -937,6 +938,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket rm", OPT::BUCKET_RM },
   { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
+  { "bucket set-min-shards", OPT::BUCKET_SET_MIN_SHARDS },
   { "bucket chown", OPT::BUCKET_CHOWN },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
@@ -8802,6 +8804,51 @@ next:
       return -ret;
     }
   } // OPT_RESHARD_CANCEL
+
+  if (opt_cmd == OPT::BUCKET_SET_MIN_SHARDS) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+
+    if (!num_shards_specified) {
+      cerr << "ERROR: --num-shards not specified" << std::endl;
+      return -EINVAL;
+    }
+
+    if (num_shards < 1) {
+      cerr << "ERROR: --num-shards must be at least 1" << std::endl;
+      return -EINVAL;
+    }
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    auto& bucket_info = bucket->get_info();
+
+    const rgw::BucketIndexType type =
+      bucket_info.layout.current_index.layout.type;
+    if (type != rgw::BucketIndexType::Normal) {
+      cerr << "ERROR: the bucket's layout is type " << type <<
+	" instead of type " << rgw::BucketIndexType::Normal <<
+	" and therefore does not have a "
+	"minimum number of shards that can be altered" << std::endl;
+      return EINVAL;
+    }
+
+    uint32_t& min_num_shards =
+      bucket_info.layout.current_index.layout.normal.min_num_shards;
+    min_num_shards = num_shards;
+
+    ret = bucket->put_info(dpp(), false, real_time(), null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    return 0;
+  } // SET_MIN_SHARDS
 
   if (opt_cmd == OPT::OBJECT_UNLINK) {
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);

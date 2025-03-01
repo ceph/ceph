@@ -1630,6 +1630,7 @@ public:
   void calculate_preferred_shards(const DoutPrefixProvider* dpp,
 				  const uint64_t num_objs,
 				  const uint32_t current_shard_count,
+				  const uint32_t min_layout_shards,
 				  bool& need_resharding,
 				  uint32_t* suggested_num_shard_count = nullptr);
 

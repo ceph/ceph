@@ -69,23 +69,13 @@ const std::initializer_list<uint16_t> RGWBucketReshard::reshard_primes = {
 };
 
 
-uint32_t RGWBucketReshard::get_prime_shard_count(
-  uint32_t shard_count,
-  uint32_t max_dynamic_shards,
-  uint32_t min_dynamic_shards)
-{
+uint32_t RGWBucketReshard::nearest_prime(uint32_t shard_count)  {
   uint32_t prime_shard_count =
     get_prime_shards_greater_or_equal(shard_count);
 
   // if we cannot find a larger prime number, then just use what was
   // passed in
-  if (! prime_shard_count) {
-    prime_shard_count = shard_count;
-  }
-
-  // keep within min/max bounds
-  return std::min(max_dynamic_shards,
-		  std::max(min_dynamic_shards, prime_shard_count));
+  return prime_shard_count ? prime_shard_count : shard_count;
 }
 
 
@@ -96,6 +86,7 @@ uint32_t RGWBucketReshard::get_prime_shard_count(
 void RGWBucketReshard::calculate_preferred_shards(
   const DoutPrefixProvider* dpp,
   const uint32_t max_dynamic_shards,
+  const uint32_t min_layout_shards,
   const uint64_t max_objs_per_shard,
   const bool is_multisite,
   const uint64_t num_objs,
@@ -139,9 +130,12 @@ void RGWBucketReshard::calculate_preferred_shards(
   }
 
   if (prefer_prime) {
-    calculated_num_shards = get_prime_shard_count(
-      calculated_num_shards, max_dynamic_shards, min_dynamic_shards);
+    calculated_num_shards = nearest_prime(calculated_num_shards);
   }
+
+  calculated_num_shards =
+    std::min(max_dynamic_shards,
+	     std::max({ calculated_num_shards, min_dynamic_shards, min_layout_shards }));
 
   ldpp_dout(dpp, 20) << __func__ << ": reshard " << verb <<
     " suggested; current average (objects/shard) is " <<
@@ -461,6 +455,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
   rgw::bucket_index_layout_generation target;
   target.layout.type = rgw::BucketIndexType::Normal;
   target.layout.normal.num_shards = new_num_shards;
+  target.layout.normal.min_num_shards = current.layout.normal.min_num_shards;
   target.gen = current.gen + 1;
 
   if (bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS) {
@@ -1256,7 +1251,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     // block the client op and complete the resharding
     ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
     ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-                              formatter, bucket_info.layout.resharding, dpp, y);
+			  formatter, bucket_info.layout.resharding, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << ": failed in progress state of reshard ret = " << ret << dendl;
       return ret;
@@ -1637,6 +1632,9 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     ret = store->getRados()->get_bucket_stats(dpp, bucket_info,
 					      bucket_info.layout.current_index,
 					      -1, nullptr, nullptr, stats, nullptr, nullptr);
+    if (ret < 0) {
+      return clean_up("unable to access buckets current stats");
+    }
 
     // determine current number of bucket entries across shards
     uint64_t num_entries = 0;
@@ -1645,7 +1643,9 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     }
 
     const uint32_t current_shard_count =
-      rgw::num_shards(bucket_info.get_current_index().layout.normal);
+      rgw::current_num_shards(bucket_info.layout);
+    const uint32_t min_layout_shards =
+      rgw::current_min_layout_shards(bucket_info.layout);
 
     bool needs_resharding { false };
     uint32_t suggested_shard_count { 0 };
@@ -1653,7 +1653,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     // needed to perform the calculation before calling
     // calculating_preferred_shards() in this class
     store->getRados()->calculate_preferred_shards(
-      dpp, num_entries, current_shard_count,
+      dpp, num_entries, current_shard_count, min_layout_shards,
       needs_resharding, &suggested_shard_count);
 
     // if we no longer need resharding or currently need to expand
@@ -1711,7 +1711,6 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
   }
 
   // all checkes passed; we can reshard...
-
   RGWBucketReshard br(store, bucket_info, bucket_attrs, nullptr);
 
   ReshardFaultInjector f; // no fault injected
