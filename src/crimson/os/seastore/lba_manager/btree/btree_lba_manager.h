@@ -151,18 +151,18 @@ public:
       std::move(alloc_infos)
     ).si_then([&t, this, intermediate_base](auto imappings) {
       assert(imappings.size() == 1);
-      auto &imapping = imappings.front();
+      LBAMapping &indirect = imappings.front();
+      ceph_assert(indirect.indirect_cursor);
+      ceph_assert(!indirect.physical_cursor);
       return update_refcount(t, intermediate_base, 1, false
-      ).si_then([imapping=std::move(imapping)](auto p) mutable {
-	auto mapping = std::move(p.mapping);
-	ceph_assert(mapping->is_stable());
-	ceph_assert(imapping->is_indirect());
-	mapping->make_indirect(
-	  imapping->get_key(),
-	  imapping->get_length(),
-	  imapping->get_intermediate_key());
+      ).si_then([indirect=std::move(indirect)](auto p) mutable {
+	LBAMapping direct = std::move(p.mapping);
+	ceph_assert(!direct.indirect_cursor);
+	ceph_assert(direct.physical_cursor);
+	ceph_assert(direct.is_stable());
+	direct.make_indirect(std::move(indirect.indirect_cursor));
 	return seastar::make_ready_future<
-	  LBAMappingRef>(std::move(mapping));
+	  LBAMapping>(std::move(direct));
       });
     }).handle_error_interruptible(
       crimson::ct_error::input_output_error::pass_further{},
@@ -246,11 +246,11 @@ public:
 
   remap_ret remap_mappings(
     Transaction &t,
-    LBAMappingRef orig_mapping,
+    LBAMapping orig_mapping,
     std::vector<remap_entry> remaps,
     std::vector<LogicalChildNodeRef> extents) final {
     LOG_PREFIX(BtreeLBAManager::remap_mappings);
-    assert((orig_mapping->is_indirect())
+    assert((orig_mapping.is_indirect())
       == (remaps.size() != extents.size()));
     return seastar::do_with(
       lba_remap_ret_t{},
@@ -259,29 +259,26 @@ public:
       std::move(orig_mapping),
       [&t, FNAME, this](auto &ret, const auto &remaps,
 			auto &extents, auto &orig_mapping) {
-      return update_refcount(t, orig_mapping->get_key(), -1, false
+      return update_refcount(t, orig_mapping.get_key(), -1, false
       ).si_then([&ret, this, &extents, &remaps,
 		&t, &orig_mapping, FNAME](auto r) {
 	ret.ruret = std::move(r.ref_update_res);
-	if (!orig_mapping->is_indirect()) {
+	if (!orig_mapping.is_indirect()) {
 	  ceph_assert(ret.ruret.refcount == 0 &&
 	    ret.ruret.addr.is_paddr() &&
 	    !ret.ruret.addr.get_paddr().is_zero());
 	}
 	auto fut = alloc_extent_iertr::make_ready_future<
-	  std::vector<LBAMappingRef>>();
-	laddr_t orig_laddr = orig_mapping->get_key();
-	if (orig_mapping->is_indirect()) {
+	  std::vector<LBAMapping>>();
+	laddr_t orig_laddr = orig_mapping.get_key();
+	if (orig_mapping.is_indirect()) {
+	  ceph_assert(orig_mapping.physical_cursor);
 	  std::vector<alloc_mapping_info_t> alloc_infos;
 	  for (auto &remap : remaps) {
-	    extent_len_t orig_len = orig_mapping->get_length();
-	    paddr_t orig_paddr = orig_mapping->get_val();
-	    laddr_t intermediate_base = orig_mapping->is_indirect()
-	      ? orig_mapping->get_intermediate_base()
-	      : L_ADDR_NULL;
-	    laddr_t intermediate_key = orig_mapping->is_indirect()
-	      ? orig_mapping->get_intermediate_key()
-	      : L_ADDR_NULL;
+	    extent_len_t orig_len = orig_mapping.get_length();
+	    paddr_t orig_paddr = orig_mapping.get_val();
+	    laddr_t intermediate_base = orig_mapping.get_intermediate_base();
+	    laddr_t intermediate_key = orig_mapping.get_intermediate_key();
 	    auto remap_offset = remap.offset;
 	    auto remap_len = remap.len;
 	    auto remap_laddr = (orig_laddr + remap_offset).checked_to_laddr();
@@ -306,21 +303,14 @@ public:
 	    t,
 	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
 	    std::move(alloc_infos)
-	  ).si_then([&orig_mapping](auto imappings) mutable {
-	    std::vector<LBAMappingRef> mappings;
-	    for (auto &imapping : imappings) {
-	      auto mapping = orig_mapping->duplicate();
-	      auto bmapping = static_cast<BtreeLBAMapping*>(mapping.get());
-	      bmapping->adjust_mutable_indirect_attrs(
-		imapping->get_key(),
-		imapping->get_length(),
-		imapping->get_intermediate_key());
-	      mappings.emplace_back(std::move(mapping));
+	  ).si_then([&orig_mapping](auto imappings) {
+	    for (auto &indirect : imappings) {
+	      indirect.link_physical(orig_mapping.physical_cursor->duplicate());
 	    }
-	    return seastar::make_ready_future<std::vector<LBAMappingRef>>(
-	      std::move(mappings));
+	    return seastar::make_ready_future<std::vector<LBAMapping>>(
+	      std::move(imappings));
 	  });
-	} else { // !orig_mapping->is_indirect()
+	} else { // !orig_mapping.is_indirect()
 	  fut = alloc_extents(
 	    t,
 	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
@@ -336,16 +326,16 @@ public:
 	  for (;ref_it != refs.end(); ref_it++, remap_it++) {
 	    auto &ref = *ref_it;
 	    auto &remap = *remap_it;
-	    assert(ref->get_key() == orig_mapping->get_key() + remap.offset);
-	    assert(ref->get_length() == remap.len);
+	    assert(ref.get_key() == orig_mapping.get_key() + remap.offset);
+	    assert(ref.get_length() == remap.len);
 	  }
 #endif
 	  ret.remapped_mappings = std::move(refs);
 	  return seastar::now();
 	});
       }).si_then([&remaps, &t, &orig_mapping, this] {
-	if (remaps.size() > 1 && orig_mapping->is_indirect()) {
-	  auto intermediate_base = orig_mapping->get_intermediate_base();
+	if (remaps.size() > 1 && orig_mapping.is_indirect()) {
+	  auto intermediate_base = orig_mapping.get_intermediate_base();
 	  return _incref_extent(t, intermediate_base, remaps.size() - 1
 	  ).si_then([](auto) {
 	    return seastar::now();
@@ -424,7 +414,7 @@ private:
    */
   struct update_refcount_ret_bare_t {
     ref_update_result_t ref_update_res;
-    BtreeLBAMappingRef mapping;
+    LBAMapping mapping;
   };
   using update_refcount_iertr = ref_iertr;
   using update_refcount_ret = update_refcount_iertr::future<
@@ -442,7 +432,7 @@ private:
    */
   struct update_mapping_ret_bare_t {
     lba_map_val_t map_value;
-    BtreeLBAMappingRef mapping;
+    LBAMapping mapping;
   };
   using _update_mapping_iertr = ref_iertr;
   using _update_mapping_ret = ref_iertr::future<
@@ -473,7 +463,7 @@ private:
     });
   }
 
-  alloc_extent_iertr::future<std::vector<BtreeLBAMappingRef>> alloc_cloned_mappings(
+  alloc_extent_iertr::future<std::vector<LBAMapping>> alloc_cloned_mappings(
     Transaction &t,
     laddr_t laddr,
     std::vector<alloc_mapping_info_t> alloc_infos)
@@ -493,32 +483,22 @@ private:
 	EXTENT_DEFAULT_REF_COUNT
       ).si_then([&alloc_infos](auto mappings) {
 	assert(alloc_infos.size() == mappings.size());
-	std::vector<BtreeLBAMappingRef> rets;
 	auto mit = mappings.begin();
 	auto ait = alloc_infos.begin();
 	for (; mit != mappings.end(); mit++, ait++) {
-	  auto mapping = static_cast<BtreeLBAMapping*>(mit->release());
+	  auto &mapping = *mit;
 	  auto &alloc_info = *ait;
-	  assert(mapping->get_key() == alloc_info.key);
-	  assert(mapping->get_raw_val().get_laddr() ==
+	  assert(mapping.indirect_cursor);
+	  assert(!mapping.physical_cursor);
+	  assert(mapping.indirect_cursor->key == alloc_info.key);
+	  assert(mapping.indirect_cursor->val.pladdr.get_laddr() ==
 	    alloc_info.val.get_laddr());
-	  assert(mapping->get_length() == alloc_info.len);
-	  rets.emplace_back(mapping);
+	  assert(mapping.indirect_cursor->val.len == alloc_info.len);
 	}
-	return rets;
+	return std::move(mappings);
       });
     });
   }
-
-  using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
-  _get_mapping_ret _get_mapping(
-    Transaction &t,
-    laddr_t offset);
-
-  using _get_original_mappings_ret = get_mappings_ret;
-  _get_original_mappings_ret _get_original_mappings(
-    op_context_t c,
-    std::list<BtreeLBAMappingRef> &pin_list);
 
   using _decref_intermediate_ret = ref_iertr::future<
     std::optional<ref_update_result_t>>;
@@ -526,6 +506,25 @@ private:
     Transaction &t,
     laddr_t addr,
     extent_len_t len);
+
+  using get_cursor_iertr = get_mapping_iertr;
+  using get_cursor_ret = get_cursor_iertr::future<LBACursorRef>;
+  get_cursor_ret get_cursor(
+    op_context_t c,
+    laddr_t laddr);
+
+  using get_cursors_iertr = get_mappings_iertr;
+  using get_cursors_ret = get_cursors_iertr::future<
+    std::vector<LBACursorRef>>;
+  get_cursors_ret get_cursors(
+    op_context_t c,
+    laddr_t laddr,
+    extent_len_t);
+
+  get_cursors_iertr::future<LBACursorRef>
+  get_physical_cursor(
+    op_context_t c,
+    const LBACursorRef &indirect_cursor);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
