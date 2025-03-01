@@ -130,6 +130,8 @@ void create_deferred_and_terminate() {
 
   // small deferred writes over object
   // and complete overwrite of previous one
+  lgeneric_dout(g_ceph_context, 0) << "starting object IO" << dendl;
+  cout << "starting object IO" << std::endl;
   bufferlist bl_8_bytes;
   bl_8_bytes.append("abcdefgh");
   std::atomic<size_t> deferred_counter{0};
@@ -147,9 +149,11 @@ void create_deferred_and_terminate() {
     ghobject_t hoid_m(hobject_t(oid_m, "", CEPH_NOSNAP, 1, poolid, ""));
     t.write(cid, hoid_m, 4096 * o, bl_64K.length(), bl_64K);
 
-    t.register_on_commit(new C_do_action([&] {
+    t.register_on_commit(new C_do_action([=, &deferred_counter] {
+      lgeneric_dout(g_ceph_context, 0) << "completed id=" << o << dendl;
+      cout << "completed id=" << o << std::endl;
       if (++deferred_counter == object_count) {
-        exit(0);
+        _exit(0);
       }
     }));
     r = store->queue_transaction(ch, std::move(t));
@@ -307,6 +311,10 @@ boost::intrusive_ptr<CephContext> setup_env() {
   return cct;
 }
 
+void say_good_bye() {
+  std::cout << "good bye" << std::endl;
+}
+
 int main(int _argc, char **_argv) {
   argc = _argc;
   argv = _argv;
@@ -314,6 +322,7 @@ int main(int _argc, char **_argv) {
   pid_t first_test = fork();
   if (first_test == 0) {
     std::cout << "1. Testing deletion of deferred (L) entries." << std::endl;
+    atexit(&say_good_bye);
     pid_t child = fork();
     if (child == 0) {
       auto cct = setup_env();
@@ -339,6 +348,7 @@ int main(int _argc, char **_argv) {
     waitpid(first_test, &first_stat, 0);
     ceph_assert(WIFEXITED(first_stat) && WEXITSTATUS(first_stat) == 0);
     std::cout << "2. Testing overwrite of space allocated by BlueFS" << std::endl;
+    atexit(&say_good_bye);
     pid_t child = fork();
     if (child == 0) {
       auto cct = setup_env();
