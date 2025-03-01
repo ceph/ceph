@@ -758,63 +758,14 @@ BtreeLBAManager::refresh_lba_cursor(
   LBABtree &btree,
   LBACursor &cursor)
 {
-  LOG_PREFIX(BtreeLBAManager::refresh_lba_cursor);
-  stats.num_refresh_parent_total++;
-
-  if (!cursor.parent->is_valid()) {
-    stats.num_refresh_invalid_parent++;
-    TRACET("cursor {} parent is invalid, re-search from scratch",
-	   c.trans, cursor);
-    return btree.lower_bound(c, cursor.get_laddr()
-    ).si_then([&cursor](LBABtree::iterator iter) {
-      auto leaf = iter.get_leaf_node();
-      cursor.parent = leaf;
-      cursor.modifications = leaf->modifications;
-      cursor.pos = iter.get_leaf_pos();
-      if (!cursor.is_end()) {
-	ceph_assert(!iter.is_end());
-	ceph_assert(iter.get_key() == cursor.get_laddr());
-	cursor.val = iter.get_val();
-	assert(cursor.is_valid());
-      }
-    });
+  if (!cursor) {
+    return refresh_lba_cursor_iertr::now();
   }
 
-  auto [viewable, state] = cursor.parent->is_viewable_by_trans(c.trans);
-  auto leaf = cursor.parent->cast<LBALeafNode>();
-
-  TRACET("cursor: {} viewable: {} state: {}",
-	 c.trans, cursor, viewable, state);
-
-  if (!viewable) {
-    stats.num_refresh_unviewable_parent++;
-    leaf = leaf->find_pending_version(c.trans, cursor.get_laddr());
-    cursor.parent = leaf;
-  }
-
-  if (!viewable ||
-      leaf->modified_since(cursor.modifications)) {
-    if (viewable) {
-      stats.num_refresh_modified_viewable_parent++;
-    }
-
-    cursor.modifications = leaf->modifications;
-    if (cursor.is_end()) {
-      cursor.pos = leaf->get_size();
-      assert(!cursor.val);
-    } else {
-      auto i = leaf->lower_bound(cursor.get_laddr());
-      cursor.pos = i.get_offset();
-      cursor.val = i.get_val();
-
-      auto iter = LBALeafNode::iterator(leaf.get(), cursor.pos);
-      ceph_assert(iter.get_key() == cursor.key);
-      ceph_assert(iter.get_val() == cursor.val);
-      assert(cursor.is_valid());
-    }
-  }
-
-  return refresh_lba_cursor_iertr::make_ready_future();
+  return make_btree_partial_iter(c, btree, *cursor
+  ).si_then([&cursor](LBABtree::iterator iter) {
+    iter.update_cursor(*cursor);
+  });
 }
 
 void BtreeLBAManager::register_metrics()
@@ -1098,6 +1049,59 @@ BtreeLBAManager::_update_mapping(
 	}
       });
     });
+}
+
+BtreeLBAManager::make_btree_partial_iter_ret
+BtreeLBAManager::make_btree_partial_iter(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursor &cursor)
+{
+  LOG_PREFIX(BtreeLBAManager::make_btree_partial_iter);
+  TRACET("{}", c.trans, cursor);
+  assert(cursor.ctx.trans.get_trans_id() == c.trans.get_trans_id());
+  stats.num_refresh_parent_total++;
+  if (!cursor.parent->is_valid()) {
+    TRACET("{} parent is invalid", c.trans, cursor);
+    stats.num_refresh_invalid_parent++;
+    return btree.lower_bound(c, cursor.key
+    ).si_then([&cursor](LBABtree::iterator iter) {
+      if (iter.is_end()) {
+	ceph_assert(cursor.key == L_ADDR_MAX);
+      } else {
+	ceph_assert(cursor.key == iter.get_key());
+      }
+      return make_btree_partial_iter_iertr::make_ready_future<
+	LBABtree::iterator>(std::move(iter));
+    });
+  }
+
+  auto leaf = cursor.parent->cast<LBALeafNode>();
+  auto [viewable, state] = leaf->is_viewable_by_trans(c.trans);
+  if (!viewable) {
+    leaf = leaf->find_pending_version(c.trans, cursor.key);
+    stats.num_refresh_unviewable_parent++;
+    TRACET("find pending extent {} for {}",
+	   c.trans, (void*)leaf.get(), cursor);
+    auto it = leaf->lower_bound(cursor.key);
+    assert(it == leaf->end() || it.get_key() == cursor.key);
+    return make_btree_partial_iter_iertr::make_ready_future<
+      LBABtree::iterator>(btree.make_partial_iter(
+	c, leaf, cursor.key, it.get_offset()));
+  }
+
+  // parent is viewable for current transaction
+
+  if (leaf->modified_since(cursor.modifications)) {
+    // fix cursor pos
+    auto it = leaf->lower_bound(cursor.key);
+    stats.num_refresh_modified_viewable_parent++;
+    cursor.pos = it->get_offset();
+  }
+
+  return make_btree_partial_iter_iertr::make_ready_future<
+    LBABtree::iterator>(btree.make_partial_iter(
+      c, leaf, cursor.key, cursor.pos));
 }
 
 }
