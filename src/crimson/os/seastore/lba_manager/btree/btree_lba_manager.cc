@@ -91,41 +91,6 @@ template class TreeRootLinker<RootBlock, lba_manager::btree::LBALeafNode>;
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
-BtreeLBAMapping::get_logical_extent(Transaction &t)
-{
-  ceph_assert(is_parent_viewable());
-  assert(pos != std::numeric_limits<uint16_t>::max());
-  ceph_assert(t.get_trans_id() == ctx.trans.get_trans_id());
-  auto &p = static_cast<LBALeafNode&>(*parent);
-  auto k = this->is_indirect()
-    ? this->get_intermediate_base()
-    : get_key();
-  auto v = p.template get_child<LogicalChildNode>(ctx.trans, ctx.cache, pos, k);
-  if (!v.has_child()) {
-    this->child_pos = v.get_child_pos();
-  }
-  return v;
-}
-
-bool BtreeLBAMapping::is_stable() const
-{
-  assert(!parent_modified());
-  assert(pos != std::numeric_limits<uint16_t>::max());
-  auto &p = (LBALeafNode&)*parent;
-  auto k = is_indirect() ? get_intermediate_base() : get_key();
-  return p.is_child_stable(ctx, pos, k);
-}
-
-bool BtreeLBAMapping::is_data_stable() const
-{
-  assert(!parent_modified());
-  assert(pos != std::numeric_limits<uint16_t>::max());
-  auto &p = (LBALeafNode&)*parent;
-  auto k = is_indirect() ? get_intermediate_base() : get_key();
-  return p.is_child_data_stable(ctx, pos, k);
-}
-
 BtreeLBAManager::mkfs_ret
 BtreeLBAManager::mkfs(
   Transaction &t)
