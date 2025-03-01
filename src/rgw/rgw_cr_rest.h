@@ -154,7 +154,6 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   std::string path;
   param_vec_t params;
   param_vec_t headers;
-  std::map<std::string, std::string> *attrs;
   T *result;
   E *err_result;
   bufferlist input_bl;
@@ -172,7 +171,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           E *_err_result = nullptr)
    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
      method(_method), path(_path), params(make_param_list(_params)),
-     headers(make_param_list(_attrs)), attrs(_attrs),
+     headers(make_param_list(_attrs)),
      result(_result), err_result(_err_result),
      input_bl(_input), send_content_length(_send_content_length) {}
 
@@ -182,7 +181,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           rgw_http_param_pair *_params, std::map<std::string, std::string> *_attrs,
                           T *_result, E *_err_result = nullptr)
    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), result(_result),
     err_result(_err_result) {}
 
   ~RGWSendRawRESTResourceCR() override {
