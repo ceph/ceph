@@ -1302,7 +1302,6 @@ Effect Statement::eval_conditions(const Environment& e) const {
   return Effect::Deny;
 }
 
-namespace {
 const char* action_bit_string(uint64_t action) {
   switch (action) {
   case s3GetObject:
@@ -1764,6 +1763,7 @@ const char* action_bit_string(uint64_t action) {
   return "s3Invalid";
 }
 
+namespace {
 ostream& print_actions(ostream& m, const Action_t a) {
   bool begun = false;
   m << "[ ";
