@@ -4604,6 +4604,15 @@ public:
 		       bs.bucket.name, key, zone_name);
           set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
           tn->log(0, "Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
+
+          if (retcode == -EPERM || retcode == -EACCES) {
+            // update src object with failed status
+            call(data_sync_module->fail_object_replication_status(dpp, sc, sync_pipe, key));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update object replication status: " << cpp_strerror(-retcode)));
+            }
+          }
+
           retcode = 0;
         }
       } while (marker_tracker->need_retry(key));
