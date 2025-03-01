@@ -2627,6 +2627,8 @@ public:
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *fail_object_replication_status(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
+                                               rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key) override;
 };
 
 class RGWDefaultSyncModuleInstance : public RGWSyncModuleInstance {
@@ -3102,6 +3104,41 @@ public:
     return 0;
   }
 };
+
+RGWCoroutine *RGWDefaultDataSyncModule::fail_object_replication_status(const DoutPrefixProvider *dpp,
+                                                                       RGWDataSyncCtx *sc, rgw_bucket_sync_pipe &sync_pipe,
+                                                                       rgw_obj_key &key)
+{
+  rgw::sal::Attrs attrs;
+  bufferlist bl;
+  bl.append("FAILED");
+  attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl);
+
+  // encode attrs
+  JSONFormatter jf;
+  jf.open_object_section("attrs");
+  encode_json("attrs", attrs, &jf);
+  jf.close_section();
+  stringstream ss;
+  jf.flush(ss);
+  bufferlist bl_attrs;
+  bl_attrs.append(ss.str());
+
+  string path = fmt::format("{}/{}", sync_pipe.source_bucket_info.bucket.get_key(':', 0), key.name);
+
+  rgw_http_param_pair params[] = {
+    { "attributes", nullptr },  // attributes always present
+    { "log_op", "false" },      // don't log this op on the source zone, otherwise we'll end up in a loop
+    { nullptr, nullptr },       // versionId only added if key.instance is not empty
+    { nullptr, nullptr }        // end of params
+  };
+  if (!key.instance.empty()) {
+    params[2].key = "versionId";
+    params[2].val = key.instance.c_str();
+  }
+
+  return new RGWPatchRawRESTResourceCR<bufferlist>(sc->cct, sc->conn, sc->env->http_manager, path, params, nullptr, bl_attrs, nullptr);
+}
 
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                                                     rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
