@@ -640,10 +640,7 @@ void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
 
 int RGWRESTSendResource::send(const DoutPrefixProvider *dpp, bufferlist& outbl, optional_yield y)
 {
-  req.set_send_length(outbl.length());
-  req.set_outbl(outbl);
-
-  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
+  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr, &outbl);
   if (ret < 0) {
     ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
@@ -660,10 +657,7 @@ int RGWRESTSendResource::send(const DoutPrefixProvider *dpp, bufferlist& outbl, 
 
 int RGWRESTSendResource::aio_send(const DoutPrefixProvider *dpp, bufferlist& outbl)
 {
-  req.set_send_length(outbl.length());
-  req.set_outbl(outbl);
-
-  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr);
+  int ret = req.send_request(dpp, &conn->get_key(), headers, resource, mgr, &outbl);
   if (ret < 0) {
     ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
