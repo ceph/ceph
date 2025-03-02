@@ -1283,7 +1283,8 @@ std::vector<std::string> LogMonitor::get_tracked_keys() const noexcept
     "mon_cluster_log_to_graylog"s,
     "mon_cluster_log_to_graylog_host"s,
     "mon_cluster_log_to_graylog_port"s,
-    "mon_cluster_log_to_journald"s
+    "mon_cluster_log_to_journald"s,
+    "mon_cluster_log_to_file"s
   };}
 
 void LogMonitor::handle_conf_change(const ConfigProxy& conf,
