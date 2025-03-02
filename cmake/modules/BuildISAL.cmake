@@ -17,7 +17,7 @@ function(build_isal)
   # because it messes with the internal install paths of arrow's bundled deps
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
-  if(HAVE_ARMV8_SIMD)
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND HAVE_ARMV8_SIMD)
     list(APPEND configure_cmd CFLAGS=-no-integrated-as)
   endif()
 
