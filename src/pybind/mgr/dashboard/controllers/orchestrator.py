@@ -4,7 +4,7 @@ from functools import wraps
 
 from .. import mgr
 from ..exceptions import DashboardException
-from ..services.orchestrator import OrchClient
+from ..services.orchestrator import OrchClient  # pylint: disable=import-error
 from . import APIDoc, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
 
 STATUS_SCHEMA = {

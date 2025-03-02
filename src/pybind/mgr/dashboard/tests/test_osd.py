@@ -4,8 +4,10 @@ from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 from unittest import mock
 
-from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec  # type: ignore
-from ceph.deployment.service_spec import PlacementSpec
+from ceph.deployment.drive_group import \
+    DeviceSelection  # type: ignore; pylint: disable=import-error
+from ceph.deployment.drive_group import DriveGroupSpec  # type: ignore; pylint: disable=import-error
+from ceph.deployment.service_spec import PlacementSpec  # pylint: disable=import-error
 
 from .. import mgr
 from ..controllers._version import APIVersion
