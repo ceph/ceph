@@ -331,7 +331,7 @@ declare -a test_create_group_stop_daemon_then_recreate_2=("${CLUSTER2}" "${CLUST
 declare -a test_create_group_stop_daemon_then_recreate_3=("${CLUSTER2}" "${CLUSTER1}" 'stop_restart_after_recreate')
 
 # TODO enable scenarios 2 and 3 when they pass
-test_create_group_stop_daemon_then_recreate_scenarios=1
+test_create_group_stop_daemon_then_recreate_scenarios=3
 
 test_create_group_stop_daemon_then_recreate()
 {
@@ -943,6 +943,17 @@ test_group_with_clone_image()
   #  2025-01-30T17:17:34.421+0000 7f9ad0d74b40 -1 librbd::api::Mirror: group_enable: enabling mirroring for group test-group0 either in progress or was interrupted
   mirror_group_enable_try "${primary_cluster}" "${pool}/${group}" || :
   test 0 = "$(grep -c "interrupted" "$CMD_STDERR")" || fail "unexpected output"
+
+  # tidy up
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  group_remove "${primary_cluster}" "${pool}/${group}"
+
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+
+  image_remove "${primary_cluster}" "${pool}/other_image0"
+  image_remove "${primary_cluster}" "${pool}/other_image1"
+  image_remove "${primary_cluster}" "${pool}/child_image"
 }
 
 test_from_nithya_that_will_stop_working_when_api_changes()
@@ -1452,6 +1463,7 @@ test_stopped_daemon()
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${group_image_count}"
+  image_remove "${primary_cluster}" "${pool}/${image_name}"
 }
 
 # multiple images in group and standalone images too with io
@@ -1963,7 +1975,7 @@ declare -a test_force_promote_3=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image
 declare -a test_force_promote_4=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'image_rename' 5)
 
 # TODO scenarios 2, 3 and 4 are currently failing
-test_force_promote_scenarios=1
+test_force_promote_scenarios=3
 
 test_force_promote()
 {
@@ -2149,6 +2161,13 @@ test_force_promote()
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
   image_remove "${primary_cluster}" "${pool}/${big_image}"
+
+  # Note: we altered primary and secondary cluster, so reset.
+  old_primary_cluster="${primary_cluster}"
+  primary_cluster="${secondary_cluster}"
+  secondary_cluster="${old_primary_cluster}"
+  stop_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
 }
 
 declare -a test_force_promote_delete_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5)
@@ -2349,6 +2368,9 @@ test_multiple_user_snapshot_whilst_stopped()
 
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
+
+  # tidy up
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
   group_remove "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
@@ -2473,6 +2495,10 @@ test_resync()
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
 
   images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+
+  # reset: start the right daemons for the next test
+  stop_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
 }
 
 run_test()
@@ -2503,14 +2529,14 @@ run_test_all_scenarios()
 run_all_tests()
 {
   run_test_all_scenarios test_empty_group
-  run_test_all_scenarios test_empty_groups 
+  run_test_all_scenarios test_empty_groups
   # This next test requires support for dynamic groups TODO
   # run_test_all_scenarios test_mirrored_group_remove_all_images
   # This next test also requires dynamic groups - TODO enable
   # run_test_all_scenarios test_mirrored_group_add_and_remove_images
   # This next also requires dynamic groups - TODO enable
   # run_test_all_scenarios test_create_group_mirror_then_add_images
-  run_test_all_scenarios test_create_group_with_images_then_mirror 
+  run_test_all_scenarios test_create_group_with_images_then_mirror
   # next test is not MVP - TODO
   # run_test_all_scenarios test_images_different_pools
   run_test_all_scenarios test_create_group_with_images_then_mirror_with_regular_snapshots
@@ -2518,18 +2544,18 @@ run_all_tests()
   run_test_all_scenarios test_create_group_with_multiple_images_do_io
   run_test_all_scenarios test_group_and_standalone_images_do_io
   run_test_all_scenarios test_create_multiple_groups_do_io
-  #run_test_all_scenarios test_stopped_daemon
+  run_test_all_scenarios test_stopped_daemon
   run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
-  #run_test_all_scenarios test_image_move_group
+  run_test_all_scenarios test_image_move_group
   run_test_all_scenarios test_force_promote
   run_test_all_scenarios test_resync
   run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_multiple_user_snapshot_whilst_stopped
-  #run_test_all_scenarios test_create_group_with_image_remove_then_repeat
+  run_test_all_scenarios test_create_group_with_image_remove_then_repeat
   run_test_all_scenarios test_enable_disable_repeat
   run_test_all_scenarios test_empty_group_omap_keys
   #run_test_all_scenarios test_group_with_clone_image
-  #run_test_all_scenarios test_multiple_user_snapshot_time
+  run_test_all_scenarios test_multiple_user_snapshot_time
   #run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
