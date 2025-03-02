@@ -1626,6 +1626,15 @@ class FilesystemBase(MDSClusterBase):
 
         return want_objects, exist_objects
 
+    def list_data_objects (self):
+        """
+        Get the list of existing data objects in the data pool
+        """
+        existing_objects = self.rados(["ls"], pool=self.get_data_pool_name(), stdout=StringIO()).stdout.getvalue().split("\n")
+
+        return existing_objects
+
+
     def data_objects_present(self, ino, size):
         """
         Check that *all* the expected data objects for an inode are present in the data pool
