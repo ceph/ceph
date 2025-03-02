@@ -4,6 +4,7 @@
 #include "client.h"
 
 #include <seastar/core/sleep.hh>
+#include <seastar/util/defer.hh>
 
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
@@ -51,6 +52,25 @@ seastar::future<> Client::stop()
   co_await gates.close_all();
 }
 
+seastar::future<> Client::send(MessageURef msg)
+{
+  LOG_PREFIX(Client::send);
+  DEBUGDPP("{}", *this, *msg);
+  if (!conn_lock.try_lock_shared()) {
+    WARNDPP("ongoing reconnect, report skipped", *this, *msg);
+    co_return;
+  }
+  auto unlocker = seastar::defer([this] {
+    conn_lock.unlock_shared();
+  });
+  if (!conn) {
+    WARNDPP("no conn available, report skipped", *this, *msg);
+    co_return;
+  }
+  DEBUGDPP("sending {}", *this, *msg);
+  co_await conn->send(std::move(msg));
+}
+
 std::optional<seastar::future<>>
 Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
@@ -89,7 +109,7 @@ void Client::ms_handle_connect(
       m->daemon_name = local_conf()->name.get_id();
       local_conf().get_config_bl(0, &m->config_bl, &last_config_bl_version);
       local_conf().get_defaults_bl(&m->config_defaults_bl);
-      return conn->send(std::move(m));
+      return send(std::move(m));
     } else {
       DEBUGDPP("connection changed", *this);
       return seastar::now();
@@ -117,6 +137,10 @@ seastar::future<> Client::reconnect()
 {
   LOG_PREFIX(Client::reconnect);
   DEBUGDPP("", *this);
+  co_await conn_lock.lock();
+  auto unlocker = seastar::defer([this] {
+    conn_lock.unlock();
+  });
   if (conn) {
     DEBUGDPP("marking down", *this);
     conn->mark_down();
@@ -185,17 +209,9 @@ void Client::report()
   _send_report();
   gates.dispatch_in_background(__func__, *this, [this, FNAME] {
     DEBUGDPP("dispatching in background", *this);
-    if (!conn) {
-      WARNDPP("no conn available; report skipped", *this);
-      return seastar::now();
-    }
     return with_stats.get_stats(
-    ).then([this, FNAME](auto &&pg_stats) {
-      if (!conn) {
-        WARNDPP("no conn available; before sending stats, report skipped", *this);
-        return seastar::now();
-      }
-      return conn->send(std::move(pg_stats));
+    ).then([this](auto &&pg_stats) {
+      return send(std::move(pg_stats));
     });
   });
 }
@@ -211,10 +227,6 @@ void Client::_send_report()
   DEBUGDPP("", *this);
   gates.dispatch_in_background(__func__, *this, [this, FNAME] {
     DEBUGDPP("dispatching in background", *this);
-    if (!conn) {
-      WARNDPP("cannot send report; no conn available", *this);
-      return seastar::now();
-    }
     auto report = make_message<MMgrReport>();
     // Adding empty information since we don't support perfcounters yet
     report->undeclare_types.emplace_back();
@@ -235,10 +247,10 @@ void Client::_send_report()
       return get_perf_report_cb(
       ).then([report=std::move(report), this](auto payload) mutable {
 	report->metric_report_message = MetricReportMessage(std::move(payload));
-	return conn->send(std::move(report));
+	return send(std::move(report));
       });
     }
-    return conn->send(std::move(report));
+    return send(std::move(report));
   });
 }
 
