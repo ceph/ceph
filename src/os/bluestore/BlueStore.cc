@@ -120,6 +120,8 @@ using ceph::mono_clock;
 using ceph::mono_time;
 using ceph::timespan_str;
 
+using namespace std::literals;
+
 // kv store prefixes
 const string PREFIX_SUPER = "S";       // field -> value
 const string PREFIX_STAT = "T";        // field -> value(int64 array)
@@ -5761,53 +5763,51 @@ BlueStore::~BlueStore()
   buffer_cache_shards.clear();
 }
 
-const char **BlueStore::get_tracked_conf_keys() const
+std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "bluestore_csum_type",
-    "bluestore_compression_mode",
-    "bluestore_compression_algorithm",
-    "bluestore_compression_min_blob_size",
-    "bluestore_compression_min_blob_size_ssd",
-    "bluestore_compression_min_blob_size_hdd",
-    "bluestore_compression_max_blob_size",
-    "bluestore_compression_max_blob_size_ssd",
-    "bluestore_compression_max_blob_size_hdd",
-    "bluestore_compression_required_ratio",
-    "bluestore_max_alloc_size",
-    "bluestore_prefer_deferred_size",
-    "bluestore_prefer_deferred_size_hdd",
-    "bluestore_prefer_deferred_size_ssd",
-    "bluestore_deferred_batch_ops",
-    "bluestore_deferred_batch_ops_hdd",
-    "bluestore_deferred_batch_ops_ssd",
-    "bluestore_throttle_bytes",
-    "bluestore_throttle_deferred_bytes",
-    "bluestore_throttle_cost_per_io_hdd",
-    "bluestore_throttle_cost_per_io_ssd",
-    "bluestore_throttle_cost_per_io",
-    "bluestore_max_blob_size",
-    "bluestore_max_blob_size_ssd",
-    "bluestore_max_blob_size_hdd",
-    "osd_memory_target",
-    "osd_memory_target_cgroup_limit_ratio",
-    "osd_memory_base",
-    "osd_memory_cache_min",
-    "osd_memory_expected_fragmentation",
-    "bluestore_cache_autotune",
-    "bluestore_cache_autotune_interval",
-    "bluestore_cache_age_bin_interval",
-    "bluestore_cache_kv_age_bins",
-    "bluestore_cache_kv_onode_age_bins",
-    "bluestore_cache_meta_age_bins",
-    "bluestore_cache_data_age_bins",
-    "bluestore_warn_on_legacy_statfs",
-    "bluestore_warn_on_no_per_pool_omap",
-    "bluestore_warn_on_no_per_pg_omap",
-    "bluestore_max_defer_interval",
-    NULL
+  return {
+    "bluestore_csum_type"s,
+    "bluestore_compression_mode"s,
+    "bluestore_compression_algorithm"s,
+    "bluestore_compression_min_blob_size"s,
+    "bluestore_compression_min_blob_size_ssd"s,
+    "bluestore_compression_min_blob_size_hdd"s,
+    "bluestore_compression_max_blob_size"s,
+    "bluestore_compression_max_blob_size_ssd"s,
+    "bluestore_compression_max_blob_size_hdd"s,
+    "bluestore_compression_required_ratio"s,
+    "bluestore_max_alloc_size"s,
+    "bluestore_prefer_deferred_size"s,
+    "bluestore_prefer_deferred_size_hdd"s,
+    "bluestore_prefer_deferred_size_ssd"s,
+    "bluestore_deferred_batch_ops"s,
+    "bluestore_deferred_batch_ops_hdd"s,
+    "bluestore_deferred_batch_ops_ssd"s,
+    "bluestore_throttle_bytes"s,
+    "bluestore_throttle_deferred_bytes"s,
+    "bluestore_throttle_cost_per_io_hdd"s,
+    "bluestore_throttle_cost_per_io_ssd"s,
+    "bluestore_throttle_cost_per_io"s,
+    "bluestore_max_blob_size"s,
+    "bluestore_max_blob_size_ssd"s,
+    "bluestore_max_blob_size_hdd"s,
+    "osd_memory_target"s,
+    "osd_memory_target_cgroup_limit_ratio"s,
+    "osd_memory_base"s,
+    "osd_memory_cache_min"s,
+    "osd_memory_expected_fragmentation"s,
+    "bluestore_cache_autotune"s,
+    "bluestore_cache_autotune_interval"s,
+    "bluestore_cache_age_bin_interval"s,
+    "bluestore_cache_kv_age_bins"s,
+    "bluestore_cache_kv_onode_age_bins"s,
+    "bluestore_cache_meta_age_bins"s,
+    "bluestore_cache_data_age_bins"s,
+    "bluestore_warn_on_legacy_statfs"s,
+    "bluestore_warn_on_no_per_pool_omap"s,
+    "bluestore_warn_on_no_per_pg_omap"s,
+    "bluestore_max_defer_interval"s
   };
-  return KEYS;
 }
 
 void BlueStore::handle_conf_change(const ConfigProxy& conf,
