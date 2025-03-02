@@ -13,12 +13,7 @@
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrReport.h"
 
-namespace {
-  seastar::logger& logger()
-  {
-    return crimson::get_logger(ceph_subsys_mgrc);
-  }
-}
+SET_SUBSYS(mgrc);
 
 using crimson::common::local_conf;
 
@@ -38,15 +33,19 @@ Client::Client(crimson::net::Messenger& msgr,
 
 seastar::future<> Client::start()
 {
+  LOG_PREFIX(Client::start);
+  DEBUGDPP("", *this);
   return seastar::now();
 }
 
 seastar::future<> Client::stop()
 {
-  logger().info("{}", __func__);
+  LOG_PREFIX(Client::stop);
+  DEBUGDPP("", *this);
   report_timer.cancel();
   auto fut = gates.close_all();
   if (conn) {
+    DEBUGDPP("marking down", *this);
     conn->mark_down();
   }
   return fut;
@@ -55,8 +54,12 @@ seastar::future<> Client::stop()
 std::optional<seastar::future<>>
 Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
+  LOG_PREFIX(Client::ms_dispatch);
+  DEBUGDPP("{}", *this, *m);
   bool dispatched = true;
-  gates.dispatch_in_background(__func__, *this, [this, conn, &m, &dispatched] {
+  gates.dispatch_in_background(__func__, *this,
+  [this, conn, &m, &dispatched, FNAME] {
+    DEBUGDPP("dispatching in background {}", *this, *m);
     switch(m->get_type()) {
     case MSG_MGR_MAP:
       return handle_mgr_map(conn, boost::static_pointer_cast<MMgrMap>(m));
@@ -74,9 +77,13 @@ void Client::ms_handle_connect(
     crimson::net::ConnectionRef c,
     seastar::shard_id prv_shard)
 {
+  LOG_PREFIX(Client::ms_handle_connect);
+  DEBUGDPP("prev_shard: {}", *this, prv_shard);
   ceph_assert_always(prv_shard == seastar::this_shard_id());
-  gates.dispatch_in_background(__func__, *this, [this, c] {
+  gates.dispatch_in_background(__func__, *this,
+  [this, c, FNAME] {
     if (conn == c) {
+      DEBUGDPP("dispatching in background", *this);
       // ask for the mgrconfigure message
       auto m = crimson::make_message<MMgrOpen>();
       m->daemon_name = local_conf()->name.get_id();
@@ -84,6 +91,7 @@ void Client::ms_handle_connect(
       local_conf().get_defaults_bl(&m->config_defaults_bl);
       return conn->send(std::move(m));
     } else {
+      DEBUGDPP("connection changed", *this);
       return seastar::now();
     }
   });
@@ -91,7 +99,11 @@ void Client::ms_handle_connect(
 
 void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace */)
 {
-  gates.dispatch_in_background(__func__, *this, [this, c] {
+  LOG_PREFIX(Client::ms_handle_reset);
+  DEBUGDPP("", *this);
+  gates.dispatch_in_background(__func__, *this,
+  [this, c, FNAME] {
+    DEBUGDPP("dispatching in background", *this);
     if (conn == c) {
       report_timer.cancel();
       return reconnect();
@@ -103,33 +115,40 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace *
 
 seastar::future<> Client::reconnect()
 {
+  LOG_PREFIX(Client::reconnect);
+  DEBUGDPP("", *this);
   if (conn) {
+    DEBUGDPP("marking down", *this);
     conn->mark_down();
     conn = {};
   }
   if (!mgrmap.get_available()) {
-    logger().warn("No active mgr available yet");
+    WARNDPP("No active mgr available yet", *this);
     return seastar::now();
   }
   auto retry_interval = std::chrono::duration<double>(
     local_conf().get_val<double>("mgr_connect_retry_interval"));
   auto a_while = std::chrono::duration_cast<seastar::steady_clock_type::duration>(
     retry_interval);
-  return seastar::sleep(a_while).then([this] {
+  DEBUGDPP("reconnecting in {} seconds", *this, retry_interval);
+  return seastar::sleep(a_while).then([this, FNAME] {
     auto peer = mgrmap.get_active_addrs().pick_addr(msgr.get_myaddr().get_type());
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
-      logger().error("mgr.{} does not have an addr compatible with me",
-                     mgrmap.get_active_name());
+      ERRORDPP("mgr.{} does not have an addr compatible with me",
+               *this, mgrmap.get_active_name());
       return;
     }
     conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MGR);
+    DEBUGDPP("reconnected successfully", *this);
   });
 }
 
 seastar::future<> Client::handle_mgr_map(crimson::net::ConnectionRef,
                                          Ref<MMgrMap> m)
 {
+  LOG_PREFIX(Client::handle_mgr_map);
+  DEBUGDPP("", *this);
   mgrmap = m->get_map();
   if (!conn) {
     return reconnect();
@@ -144,7 +163,8 @@ seastar::future<> Client::handle_mgr_map(crimson::net::ConnectionRef,
 seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
                                           Ref<MMgrConfigure> m)
 {
-  logger().info("{} {}", __func__, *m);
+  LOG_PREFIX(Client::handle_mgr_conf);
+  DEBUGDPP("{}", *this, *m);
 
   auto report_period = std::chrono::seconds{m->stats_period};
   if (report_period.count()) {
@@ -165,16 +185,19 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
 
 void Client::report()
 {
+  LOG_PREFIX(Client::report);
+  DEBUGDPP("", *this);
   _send_report();
-  gates.dispatch_in_background(__func__, *this, [this] {
+  gates.dispatch_in_background(__func__, *this, [this, FNAME] {
+    DEBUGDPP("dispatching in background", *this);
     if (!conn) {
-      logger().warn("report: no conn available; report skipped");
+      WARNDPP("no conn available; report skipped", *this);
       return seastar::now();
     }
     return with_stats.get_stats(
-    ).then([this](auto &&pg_stats) {
+    ).then([this, FNAME](auto &&pg_stats) {
       if (!conn) {
-        logger().warn("report: no conn available; before sending stats, report skipped");
+        WARNDPP("no conn available; before sending stats, report skipped", *this);
         return seastar::now();
       }
       return conn->send(std::move(pg_stats));
@@ -189,9 +212,12 @@ void Client::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 
 void Client::_send_report()
 {
-  gates.dispatch_in_background(__func__, *this, [this] {
+  LOG_PREFIX(Client::_send_report);
+  DEBUGDPP("", *this);
+  gates.dispatch_in_background(__func__, *this, [this, FNAME] {
+    DEBUGDPP("dispatching in background", *this);
     if (!conn) {
-      logger().warn("cannot send report; no conn available");
+      WARNDPP("cannot send report; no conn available", *this);
       return seastar::now();
     }
     auto report = make_message<MMgrReport>();
