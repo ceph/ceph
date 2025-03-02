@@ -696,7 +696,7 @@ public:
   int ll_register_callbacks2(struct ceph_client_callback_args *args);
   std::pair<int, bool> test_dentry_handling(bool can_invalidate);
 
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
 	                          const std::set <std::string> &changed) override;
   uint32_t get_deleg_timeout() { return deleg_timeout; }
