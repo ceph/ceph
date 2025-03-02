@@ -1,0 +1,700 @@
+commit 408cd61584c72c0d97b774b3d8f95c6b1b06341a
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Mon Sep 9 12:50:11 2013 -0700
+
+    v0.67.3
+
+commit 17a7342b3b935c06610c58ab92a9a1d086923d32
+Merge: b4252bf 10433bb
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Sep 7 13:34:45 2013 -0700
+
+    Merge pull request #574 from dalgaaf/fix/da-dumpling-cherry-picks
+    
+    init-radosgw*: fix status return value if radosgw isn't running
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 10433bbe72dbf8eae8fae836e557a043610eb54e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Sat Sep 7 11:30:15 2013 +0200
+
+    init-radosgw*: fix status return value if radosgw isn't running
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit b5137baf651eaaa9f67e3864509e437f9d5c3d5a)
+
+commit b4252bff79150a95e9d075dd0b5e146ba9bf2ee5
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Aug 22 11:19:37 2013 -0700
+
+    FileStore: add config option to disable the wbthrottle
+    
+    Backport: dumpling
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3528100a53724e7ae20766344e467bf762a34163)
+
+commit 699324e0910e5e07a1ac68df8cf1108e5671ec15
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Aug 22 11:19:52 2013 -0700
+
+    WBThrottle: use fdatasync instead of fsync
+    
+    Backport: dumpling
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d571825080f0bff1ed3666e95e19b78a738ecfe8)
+
+commit 074717b4b49ae1a55bc867e5c34d43c51edc84a5
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Aug 29 15:08:58 2013 -0700
+
+    PGLog: initialize writeout_from in PGLog constructor
+    
+    Fixes: 6151
+    Backport: dumpling
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Introduced: f808c205c503f7d32518c91619f249466f84c4cf
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 42d65b0a7057696f4b8094f7c686d467c075a64d)
+
+commit c22d980cf42e580818dc9f526327518c0ddf8ff5
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Aug 27 08:49:14 2013 -0700
+
+    PGLog: maintain writeout_from and trimmed
+    
+    This way, we can avoid omap_rmkeyrange in the common append
+    and trim cases.
+    
+    Fixes: #6040
+    Backport: Dumpling
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit f808c205c503f7d32518c91619f249466f84c4cf)
+
+commit 53c7ab4db00ec7034f5aa555231f9ee167f43201
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Aug 27 07:27:26 2013 -0700
+
+    PGLog: don't maintain log_keys_debug if the config is disabled
+    
+    Fixes: #6040
+    Backport: Dumpling
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 1c0d75db1075a58d893d30494a5d7280cb308899)
+
+commit 40dc489351383c2e35b91c3d4e76b633309716df
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Aug 26 23:19:45 2013 -0700
+
+    PGLog: move the log size check after the early return
+    
+    There really are stl implementations (like the one on my ubuntu 12.04
+    machine) which have a list::size() which is linear in the size of the
+    list.  That assert, therefore, is quite expensive!
+    
+    Fixes: #6040
+    Backport: Dumpling
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit fe68b15a3d82349f8941f5b9f70fcbb5d4bc7f97)
+
+commit 4261eb5ec105b9c27605360910602dc367fd79f5
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 13 17:16:08 2013 -0700
+
+    rbd.cc: relicense as LGPL2
+    
+    All past authors for rbd.cc have consented to relicensing from GPL to
+    LGPL2 via email:
+    
+    ---
+    
+    Date: Sat, 27 Jul 2013 01:59:36 +0200
+    From: Sylvain Munaut <s.munaut@whatever-company.com>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I hereby consent to the relicensing of any contribution I made to the
+    aforementioned rbd.cc file from GPL to LGPL2.1.
+    
+    (I hope that'll be impressive enough, I did my best :p)
+    
+    btw, tnt@246tNt.com and s.munaut@whatever-company.com are both me.
+    
+    Cheers,
+    
+        Sylvain
+    
+    ---
+    
+    Date: Fri, 26 Jul 2013 17:00:48 -0700
+    From: Yehuda Sadeh <yehuda@inktank.com>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I consent.
+    
+    ---
+    
+    Date: Fri, 26 Jul 2013 17:02:24 -0700
+    From: Josh Durgin <josh.durgin@inktank.com>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I consent.
+    
+    ---
+    
+    Date: Fri, 26 Jul 2013 18:17:46 -0700
+    From: Stanislav Sedov <stas@freebsd.org>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I consent.
+    
+    Thanks for taking care of it!
+    
+    ---
+    
+    Date: Fri, 26 Jul 2013 18:24:15 -0700
+    From: Colin McCabe <cmccabe@alumni.cmu.edu>
+    
+    I consent.
+    
+    cheers,
+    Colin
+    
+    ---
+    
+    Date: Sat, 27 Jul 2013 07:08:12 +0200
+    From: Christian Brunner <christian@brunner-muc.de>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I consent
+    
+    Christian
+    
+    ---
+    
+    Date: Sat, 27 Jul 2013 12:17:34 +0300
+    From: Stratos Psomadakis <psomas@grnet.gr>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    Hi,
+    
+    I consent with the GPL -> LGL2.1 re-licensing.
+    
+    Thanks
+    Stratos
+    
+    ---
+    
+    Date: Sat, 27 Jul 2013 16:13:13 +0200
+    From: Wido den Hollander <wido@42on.com>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I consent!
+    
+    You have my permission to re-license the code I wrote for rbd.cc to LGPL2.1
+    
+    ---
+    
+    Date: Sun, 11 Aug 2013 10:40:32 +0200
+    From: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    Subject: Re: btw
+    
+    Hi Sage,
+    
+    I agree to switch the license of ceph_argparse.py and rbd.cc from GPL2
+    to LGPL2.
+    
+    Regards
+    
+    Danny Al-Gaaf
+    
+    ---
+    
+    Date: Tue, 13 Aug 2013 17:15:24 -0700
+    From: Dan Mick <dan.mick@inktank.com>
+    Subject: Re: Ceph rbd.cc GPL -> LGPL2 license change
+    
+    I consent to relicense any contributed code that I wrote under LGPL2.1 license.
+    
+    ---
+    
+    ...and I consent too.  Drop the exception from COPYING and debian/copyright
+    files.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2206f55761c675b31078dea4e7dd66f2666d7d03)
+
+commit 211c5f13131e28b095a1f3b72426128f1db22218
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Aug 23 15:39:20 2013 -0700
+
+    rgw: flush pending data when completing multipart part upload
+    
+    Fixes: #6111
+    Backport: dumpling
+    When completing the part upload we need to flush any data that we
+    aggregated and didn't flush yet. With earlier code didn't have to deal
+    with it as for multipart upload we didn't have any pending data.
+    What we do now is we call the regular atomic data completion
+    function that takes care of it.
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 9a551296e0811f2b65972377b25bb28dbb42f575)
+
+commit 1a9651010aab51c9be2edeccd80e9bd11f5177ce
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 26 19:46:43 2013 -0700
+
+    rgw: check object name after rebuilding it in S3 POST
+    
+    Fixes: #6088
+    Backport: bobtail, cuttlefish, dumpling
+    
+    When posting an object it is possible to provide a key
+    name that refers to the original filename, however we
+    need to verify that in the end we don't end up with an
+    empty object name.
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit c8ec532fadc0df36e4b265fe20a2ff3e35319744)
+
+commit 1bd74a020b93f154b2d4129d512f6334387de7c7
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 22 17:46:45 2013 -0700
+
+    mon/MonClient: release pending outgoing messages on shutdown
+    
+    This fixes a small memory leak when we have messages queued for the mon
+    when we shut down.  It is harmless except for the valgrind leak check
+    noise that obscures real leaks.
+    
+    Backport: dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 309569a6d0b7df263654b7f3f15b910a72f2918d)
+
+commit 24f2669783e2eb9d9af5ecbe106efed93366ba63
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Aug 29 13:06:33 2013 -0700
+
+    rgw: change watch init ordering, don't distribute if can't
+    
+    Backport: dumpling
+    
+    Moving back the watch initialization after the zone init,
+    as the zone info holds the control pool name. Since zone
+    init might need to create a new system object (that needs
+    to distribute cache), don't try to distribute cache if
+    watch is not yet initialized.
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 1d1f7f18dfbdc46fdb09a96ef973475cd29feef5)
+
+commit a708c8ab52e5b1476405a1f817c23b8845fbaab3
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 30 09:41:29 2013 -0700
+
+    ceph-post-file: use mktemp instead of tempfile
+    
+    tempfile is a debian thing, apparently; mktemp is present everywhere.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e60d4e09e9f11e3c34a05cd122341e06c7c889bb)
+
+commit 625f13ee0d6cca48d61dfd65e00517d092552d1c
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Aug 28 09:50:11 2013 -0700
+
+    mon: discover mon addrs, names during election state too
+    
+    Currently we only detect new mon addrs and names during the probing phase.
+    For non-trivial clusters, this means we can get into a sticky spot when
+    we discover enough peers to form an quorum, but not all of them, and the
+    undiscovered ones are enough to break the mon ranks and prevent an
+    election.
+    
+    One way to work around this is to continue addr and name discovery during
+    the election.  We should also consider making the ranks less sensitive to
+    the undefined addrs; that is a separate change.
+    
+    Fixes: #4924
+    Backport: dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Tested-by: Bernhard Glomm <bernhard.glomm@ecologic.eu>
+    (cherry picked from commit c24028570015cacf1d9e154ffad80bec06a61e7c)
+
+commit 83cfd4386c1fd0fa41aea345704e27f82b524ece
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Aug 22 17:30:24 2013 -0700
+
+    ceph_rest_api.py: create own default for log_file
+    
+    common/config thinks the default log_file for non-daemons should be "".
+    Override that so that the default is
+        /var/log/ceph/{cluster}-{name}.{pid}.log
+    since ceph-rest-api is more of a daemon than a client.
+    
+    Fixes: #6099
+    Backport: dumpling
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 2031f391c3df68e0d9e381a1ef3fe58d8939f0a8)
+
+commit 8a1da62d9564a32f7b8963fe298e1ac3ad0ea3d9
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 16 17:59:11 2013 -0700
+
+    ceph-post-file: single command to upload a file to cephdrop
+    
+    Use sftp to upload to a directory that only this user and ceph devs can
+    access.
+    
+    Distribute an ssh key to connect to the account.  This will let us revoke
+    the key in the future if we feel the need.  Also distribute a known_hosts
+    file so that users have some confidence that they are connecting to the
+    real ceph drop account and not some third party.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit d08e05e463f1f7106a1f719d81b849435790a3b9)
+
+commit 3f8663477b585dcb528fdd7047c50d9a52d24b95
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Aug 22 13:29:32 2013 -0700
+
+    ceph.spec.in:  remove trailing paren in previous commit
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 23fb908cb3ac969c874ac12755d20ed2f636e1b9
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Aug 22 11:07:16 2013 -0700
+
+    ceph.spec.in:  Don't invoke debug_package macro on centos.
+    
+    If the redhat-rpm-config package is installed, the debuginfo rpms will
+    be built by default.   The build will fail when the package installed
+    and the specfile also invokes the macro.
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 11f5853d8178ab60ab948d373c1a1f67324ce3bd
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Aug 24 14:04:09 2013 -0700
+
+    osd: install admin socket commands after signals
+    
+    This lets us tell by the presence of the admin socket commands whether
+    a signal will make us shut down cleanly.  See #5924.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit c5b5ce120a8ce9116be52874dbbcc39adec48b5c)
+
+commit 39adc0195e6016ce36828885515be1bffbc10ae1
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 20 22:39:09 2013 -0700
+
+    ceph-disk: partprobe after creating journal partition
+    
+    At least one user reports that a partprobe is needed after creating the
+    journal partition.  It is not clear why sgdisk is not doing it, but this
+    fixes ceph-disk for them, and should be harmless for other users.
+    
+    Fixes: #5599
+    Tested-by: lurbs in #ceph
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2af59d5e81c5e3e3d7cfc50d9330d7364659c5eb)
+    (cherry picked from commit 3e42df221315679605d68b2875aab6c7eb6b3cc4)
+
+commit 6a4fe7b9b068ae990d6404921a46631fe9ebcd31
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 20 11:27:23 2013 -0700
+
+    mon/Paxos: always refresh after any store_state
+    
+    If we store any new state, we need to refresh the services, even if we
+    are still in the midst of Paxos recovery.  This is because the
+    subscription path will share any committed state even when paxos is
+    still recovering.  This prevents a race like:
+    
+     - we have maps 10..20
+     - we drop out of quorum
+     - we are elected leader, paxos recovery starts
+     - we get one LAST with committed states that trim maps 10..15
+     - we get a subscribe for map 10..20
+       - we crash because 10 is no longer on disk because the PaxosService
+         is out of sync with the on-disk state.
+    
+    Fixes: #6045
+    Backport: dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 981eda9f7787c83dc457f061452685f499e7dd27)
+
+commit 13d396e46ed9200e4b9f21db2f0a8efbc5998d82
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 20 11:27:09 2013 -0700
+
+    mon/Paxos: return whether store_state stored anything
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 7e0848d8f88f156a05eef47a9f730b772b64fbf2)
+
+commit f248383bacff76203fa94716cfdf6cf766da24a7
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 20 11:26:57 2013 -0700
+
+    mon/Paxos: cleanup: use do_refresh from handle_commit
+    
+    This avoid duplicated code by using the helper created exactly for this
+    purpose.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit b9dee2285d9fe8533fa98c940d5af7b0b81f3d33)
+
+commit 02608a12d4e7592784148a62a47d568efc24079d
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 15 21:48:06 2013 -0700
+
+    osdc/ObjectCacher: do not merge rx buffers
+    
+    We do not try to merge rx buffers currently.  Make that explicit and
+    documented in the code that it is not supported.  (Otherwise the
+    last_read_tid values will get lost and read results won't get applied
+    to the cache properly.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1c50c446152ab0e571ae5508edb4ad7c7614c310)
+
+commit 0e2bfe71965eeef29b47e8032637ea820a7ce49c
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 15 21:47:18 2013 -0700
+
+    osdc/ObjectCacher: match reads with their original rx buffers
+    
+    Consider a sequence like:
+    
+     1- start read on 100~200
+           100~200 state rx
+     2- truncate to 200
+           100~100 state rx
+     3- start read on 200~200
+           100~100 state rx
+           200~200 state rx
+     4- get 100~200 read result
+    
+    Currently this makes us crash on
+    
+    osdc/ObjectCacher.cc: 738: FAILED assert(bh->length() <= start+(loff_t)length-opos)
+    
+    when processing the second 200~200 bufferhead (it is too big).  The
+    larger issue, though, is that we should not be looking at this data at
+    all; it has been truncated away.
+    
+    Fix this by marking each rx buffer with the read request that is sent to
+    fill it, and only fill it from that read request.  Then the first reply
+    will fill the first 100~100 extend but not touch the other extent; the
+    second read will do that.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b59f930ae147767eb4c9ff18c3821f6936a83227)
+
+commit 6b51c960715971a0351e8203d4896cb0c4138a3f
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 22 15:54:48 2013 -0700
+
+    mon/Paxos: fix another uncommitted value corner case
+    
+    It is possible that we begin the paxos recovery with an uncommitted
+    value for, say, commit 100.  During last/collect we discover 100 has been
+    committed already.  But also, another node provides an uncommitted value
+    for 101 with the same pn.  Currently, we refuse to learn it, because the
+    pn is not strictly > than our current uncommitted pn... even though it is
+    the next last_committed+1 value that we need.
+    
+    There are two possible fixes here:
+    
+     - make this a >= as we can accept newer values from the same pn.
+     - discard our uncommitted value metadata when we commit the value.
+    
+    Let's do both!
+    
+    Fixes: #6090
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fe5010380a3a18ca85f39403e8032de1dddbe905)
+
+commit b3a280d5af9d06783d2698bd434940de94ab0fda
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 23 11:45:35 2013 -0700
+
+    os: make readdir_r buffers larger
+    
+    PATH_MAX isn't quite big enough.
+    
+    Backport: dumpling, cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 99a2ff7da99f8cf70976f05d4fe7aa28dd7afae5)
+
+commit 989a664ef0d1c716cab967f249112f595cf98c43
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 23 11:45:08 2013 -0700
+
+    os: fix readdir_r buffer size
+    
+    The buffer needs to be big or else we're walk all over the stack.
+    
+    Backport: dumpling, cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2df66d9fa214e90eb5141df4d5755b57e8ba9413)
+    
+    Conflicts:
+    
+    	src/os/BtrfsFileStoreBackend.cc
+
+commit a4cca31c82bf0e84272e01eb1b3188dfdb5b5615
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Aug 22 10:53:12 2013 -0700
+
+    rgw: fix crash when creating new zone on init
+    
+    Moving the watch/notify init before the zone init,
+    as we might need to send a notification.
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 3d55534268de7124d29bd365ea65da8d2f63e501)
+
+commit 4cf6996803ef66f2b6083f73593259d45e2740a3
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 19 08:40:16 2013 -0700
+
+    rgw: change cache / watch-notify init sequence
+    
+    Fixes: #6046
+    We were initializing the watch-notify (through the cache
+    init) before reading the zone info which was much too
+    early, as we didn't have the control pool name yet. Now
+    simplifying init/cleanup a bit, cache doesn't call watch/notify
+    init and cleanup directly, but rather states its need
+    through a virtual callback.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d26ba3ab0374e77847c742dd00cb3bc9301214c2)
+
+commit aea6de532b0b843c3a8bb76d10bab8476f0d7c09
+Author: Alexandre Oliva <oliva@gnu.org>
+Date:   Thu Aug 22 03:40:22 2013 -0300
+
+    enable mds rejoin with active inodes' old parent xattrs
+    
+    When the parent xattrs of active inodes that the mds attempts to open
+    during rejoin lack pool info (struct_v < 5), this field will be filled
+    in with -1, causing the mds to retry fetching a backtrace with a pool
+    number that matches the expected value, which fails and causes the
+    err==-ENOENT branch to be taken and retry pool 1, which succeeds, but
+    with pool -1, and so keeps on bouncing between the two retry cases
+    forever.
+    
+    This patch arranges for the mds to go along with pool -1 instead of
+    insisting that it be refetched, enabling it to complete recovery
+    instead of eating cpu, network bandwidth and metadata osd's resources
+    like there's no tomorrow, in what AFAICT is an infinite and very busy
+    loop.
+    
+    This is not a new problem: I've had it even before upgrading from
+    Cuttlefish to Dumpling, I'd just never managed to track it down, and
+    force-unmounting the filesystem and then restarting the mds was an
+    easier (if inconvenient) work-around, particularly because it always
+    hit when the filesystem was under active, heavy-ish use (or there
+    wouldn't be much reason for caps recovery ;-)
+    
+    There are two issues not addressed in this patch, however.  One is
+    that nothing seems to proactively update the parent xattr when it is
+    found to be outdated, so it remains out of date forever.  Not even
+    renaming top-level directories causes the xattrs to be recursively
+    rewritten.  AFAICT that's a bug.
+    
+    The other is that inodes that don't have a parent xattr (created by
+    even older versions of ceph) are reported as non-existing in the mds
+    rejoin message, because the absence of the parent xattr is signaled as
+    a missing inode (?failed to reconnect caps for missing inodes?).  I
+    suppose this may cause more serious recovery problems.
+    
+    I suppose a global pass over the filesystem tree updating parent
+    xattrs that are out-of-date would be desirable, if we find any parent
+    xattrs still lacking current information; it might make sense to
+    activate it as a background thread from the backtrace decoding
+    function, when it finds a parent xattr that's too out-of-date, or as a
+    separate client (ceph-fsck?).
+    
+    Backport: dumpling, cuttlefish
+    Signed-off-by: Alexandre Oliva <oliva@gnu.org>
+    Reviewed-by: Zheng, Yan <zheng.z.yan@intel.com>
+    (cherry picked from commit 617dc36d477fd83b2d45034fe6311413aa1866df)
+
+commit 0738bdf92f5e5eb93add152a4135310ac7ea1c91
+Author: David Disseldorp <ddiss@suse.de>
+Date:   Mon Jul 29 17:05:44 2013 +0200
+
+    mds: remove waiting lock before merging with neighbours
+    
+    CephFS currently deadlocks under CTDB's ping_pong POSIX locking test
+    when run concurrently on multiple nodes.
+    The deadlock is caused by failed removal of a waiting_locks entry when
+    the waiting lock is merged with an existing lock, e.g:
+    
+    Initial MDS state (two clients, same file):
+    held_locks -- start: 0, length: 1, client: 4116, pid: 7899, type: 2
+    	      start: 2, length: 1, client: 4110, pid: 40767, type: 2
+    waiting_locks -- start: 1, length: 1, client: 4116, pid: 7899, type: 2
+    
+    Waiting lock entry 4116@1:1 fires:
+    handle_client_file_setlock: start: 1, length: 1,
+    			    client: 4116, pid: 7899, type: 2
+    
+    MDS state after lock is obtained:
+    held_locks -- start: 0, length: 2, client: 4116, pid: 7899, type: 2
+    	      start: 2, length: 1, client: 4110, pid: 40767, type: 2
+    waiting_locks -- start: 1, length: 1, client: 4116, pid: 7899, type: 2
+    
+    Note that the waiting 4116@1:1 lock entry is merged with the existing
+    4116@0:1 held lock to become a 4116@0:2 held lock. However, the now
+    handled 4116@1:1 waiting_locks entry remains.
+    
+    When handling a lock request, the MDS calls adjust_locks() to merge
+    the new lock with available neighbours. If the new lock is merged,
+    then the waiting_locks entry is not located in the subsequent
+    remove_waiting() call because adjust_locks changed the new lock to
+    include the old locks.
+    This fix ensures that the waiting_locks entry is removed prior to
+    modification during merge.
+    
+    Signed-off-by: David Disseldorp <ddiss@suse.de>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 476e4902907dfadb3709ba820453299ececf990b)
+
+commit a0ac88272511d670b5c3756dda2d02c93c2e9776
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Tue Aug 20 11:10:42 2013 -0700
+
+    mon/PGMap: OSD byte counts 4x too large (conversion to bytes overzealous)
+    
+    Fixes: #6049
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit eca53bbf583027397f0d5e050a76498585ecb059)
+
+commit 87b19c33ce29e2ca4fc49a2adeb12d3f14ca90a9
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Fri Aug 23 08:56:07 2013 -0400
+
+    ceph-disk: specify the filetype when mounting
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f040020fb2a7801ebbed23439159755ff8a3edbd)

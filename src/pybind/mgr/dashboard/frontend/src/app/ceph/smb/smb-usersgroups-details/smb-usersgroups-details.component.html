@@ -1,0 +1,19 @@
+<cds-tabs
+  type="contained"
+  followFocus="true"
+  isNavigation="true"
+  [cacheActive]="false"
+>
+  <cds-tab
+    heading="Users"
+    i18n-heading>
+    <cd-table
+      [data]="selection?.values.users"
+      columnMode="flex"
+      [columns]="columns"
+      selectionType="single"
+      [hasDetails]="false"
+    >
+    </cd-table>
+  </cds-tab>
+</cds-tabs>
