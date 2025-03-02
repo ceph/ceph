@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 
 import cherrypy
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec  # pylint: disable=import-error
 
 from ..security import Scope
 from ..services.exception import handle_custom_error, handle_orchestrator_error

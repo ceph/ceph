@@ -5,7 +5,8 @@ import json
 from enum import Enum
 from typing import Dict, NamedTuple, Optional
 
-from ceph.utils import datetime_now, datetime_to_str, parse_timedelta, str_to_datetime
+from ceph.utils import datetime_now, datetime_to_str  # pylint: disable=import-error
+from ceph.utils import parse_timedelta, str_to_datetime  # pylint: disable=import-error
 from mgr_module import CLICommand
 
 from . import PLUGIN_MANAGER as PM
