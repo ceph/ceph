@@ -7865,6 +7865,10 @@ unsigned OSDMap::get_device_class_flags(int id) const
 
 std::optional<std::string> OSDMap::pending_require_osd_release() const
 {
+  if (HAVE_FEATURE(get_up_osd_features(), SERVER_TENTACLE) &&
+      require_osd_release < ceph_release_t::tentacle) {
+    return "tentacle";
+  }
   if (HAVE_FEATURE(get_up_osd_features(), SERVER_SQUID) &&
       require_osd_release < ceph_release_t::squid) {
     return "squid";
