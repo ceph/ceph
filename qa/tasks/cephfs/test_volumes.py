@@ -1861,6 +1861,32 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolumegroup_charmap(self):
+        attrs = {
+          "normalization": "nfc",
+          "encoding": "utf8",
+          "casesensitive": False,
+        }
+        group = "foo"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        for setting, value in attrs.items():
+            self._fs_cmd("subvolumegroup", "charmap", "set", self.volname, "--group_name", group, setting, str(value))
+        v = self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, "--group_name", group)
+        v = json.loads(v)
+        self.assertEqual(v, attrs)
+
+    def test_subvolumegroup_charmap_rm(self):
+        group = "foo"
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        self._fs_cmd("subvolumegroup", "charmap", "set", self.volname, "--group_name", group, "normalization", "nfc")
+        self._fs_cmd("subvolumegroup", "charmap", "rm", self.volname, "--group_name", group)
+        try:
+            self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, "--group_name", group)
+        except CommandFailedError:
+            pass # ENODATA
+        else:
+            self.fail("should fail")
+
     def test_subvolume_group_rm_force(self):
         # test removing non-existing subvolume group with --force
         group = self._gen_subvol_grp_name()
@@ -2051,6 +2077,42 @@ class TestSubvolumes(TestVolumesHelper):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_charmap_inherited(self):
+        subvolume = self._gen_subvol_name()
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        self._fs_cmd("subvolumegroup", "charmap", "set", self.volname, "--group_name", group, "casesensitive", "0")
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+        v = self._fs_cmd("subvolume", "charmap", "get", self.volname, "--group_name", group, subvolume)
+        v = json.loads(v)
+        self.assertEqual(v['casesensitive'], False)
+
+    def test_subvolume_charmap(self):
+        subvolume = self._gen_subvol_name()
+        attrs = {
+          "normalization": "nfkd",
+          "encoding": "utf8",
+          "casesensitive": False,
+        }
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        for setting, value in attrs.items():
+            self._fs_cmd("subvolume", "charmap", "set", self.volname, subvolume, setting, str(value))
+        v = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume)
+        v = json.loads(v)
+        self.assertEqual(v, attrs)
+
+    def test_subvolume_charmap_rm(self):
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._fs_cmd("subvolume", "charmap", "set", self.volname, subvolume, "normalization", "nfkc")
+        self._fs_cmd("subvolume", "charmap", "rm", self.volname, subvolume)
+        try:
+            self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume)
+        except CommandFailedError:
+            pass # ENODATA
+        else:
+            self.fail("should fail")
 
     def test_subvolume_create_idempotence(self):
         # create subvolume

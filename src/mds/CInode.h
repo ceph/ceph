@@ -1013,6 +1013,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     return !projected_parent.empty();
   }
 
+  charmap_md_t<mempool::mds_co::pool_allocator> const* get_charmap() const;
+
   mds_rank_t get_export_pin(bool inherit=true) const;
   void check_pin_policy(mds_rank_t target);
   void set_export_pin(mds_rank_t rank);
