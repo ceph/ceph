@@ -3802,3 +3802,87 @@ def test_bucket_replication_versioned_to_non_versioned():
     # check the source object has replication status set to FAILED
     res = source.s3_client.head_object(Bucket=source_bucket.name, Key=objname)
     assert_equal(res['ReplicationStatus'], 'FAILED')
+
+@allow_bucket_replication
+def test_bucket_replication_lock_enabled_to_lock_disabled():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket_name = gen_bucket_name()
+    source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket_name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket_name, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # check the source object has replication status set to FAILED
+    res = source.s3_client.head_object(Bucket=source_bucket_name, Key=objname)
+    assert_equal(res['ReplicationStatus'], 'FAILED')
+
+@allow_bucket_replication
+def test_bucket_replication_lock_disabled_to_lock_enabled():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket_name = gen_bucket_name()
+    dest.s3_client.create_bucket(Bucket=dest_bucket_name, ObjectLockEnabledForBucket=True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket_name}',
+                }
+            }]
+        }
+    )
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket.name, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket_name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # check the source object has replication status set to FAILED
+    res = source.s3_client.head_object(Bucket=source_bucket.name, Key=objname)
+    assert_equal(res['ReplicationStatus'], 'FAILED')

@@ -4571,6 +4571,20 @@ public:
 
             goto done;
           }
+          // if object lock is enabled on either, the other should follow as well
+          if (sync_pipe.source_bucket_info.obj_lock_enabled() != sync_pipe.dest_bucket_info.obj_lock_enabled()) {
+            set_status("skipping entry due to object lock mismatch");
+            tn->log(0, SSTR("skipping entry due to object lock mismatch: " << key));
+
+            // update src object with failed status
+            call(data_sync_module->fail_object_replication_status(dpp, sc, sync_pipe, key));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update object replication status: " << cpp_strerror(-retcode)));
+              retcode = 0;
+            }
+
+            goto done;
+          }
           if (error_injection &&
               rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
