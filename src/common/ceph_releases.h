@@ -31,6 +31,7 @@ enum class ceph_release_t : std::uint8_t {
   quincy,
   reef,
   squid,
+  tentacle,
   max,
 };
 
