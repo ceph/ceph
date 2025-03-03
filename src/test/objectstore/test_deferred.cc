@@ -311,6 +311,10 @@ boost::intrusive_ptr<CephContext> setup_env() {
   return cct;
 }
 
+void say_good_bye() {
+  std::cout << "good bye" << std::endl;
+}
+
 int main(int _argc, char **_argv) {
   argc = _argc;
   argv = _argv;
@@ -318,6 +322,7 @@ int main(int _argc, char **_argv) {
   pid_t first_test = fork();
   if (first_test == 0) {
     std::cout << "1. Testing deletion of deferred (L) entries." << std::endl;
+    atexit(&say_good_bye);
     pid_t child = fork();
     if (child == 0) {
       auto cct = setup_env();
@@ -343,6 +348,7 @@ int main(int _argc, char **_argv) {
     waitpid(first_test, &first_stat, 0);
     ceph_assert(WIFEXITED(first_stat) && WEXITSTATUS(first_stat) == 0);
     std::cout << "2. Testing overwrite of space allocated by BlueFS" << std::endl;
+    atexit(&say_good_bye);
     pid_t child = fork();
     if (child == 0) {
       auto cct = setup_env();
