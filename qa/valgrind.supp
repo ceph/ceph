@@ -1115,3 +1115,11 @@
    fun:_dl_init
    ...
 }
+{
+   client icu leaks
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   obj:/usr/lib64/libicuuc.so.67.1
+   ...
+}

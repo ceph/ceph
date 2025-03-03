@@ -332,6 +332,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup charmap set'
+                   ' name=vol_name,type=CephString'
+                   ' name=group_name,type=CephString,req=true'
+                   ' name=setting,type=CephChoices,strings=casesensitive|normalization|encoding'
+                   ' name=value,type=CephString,req=true',
+            'desc': "Set charmap settings for subvolumegroup",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup charmap rm'
+                   ' name=vol_name,type=CephString'
+                   ' name=group_name,type=CephString,req=true',
+            'desc': "Remove charmap settings for subvolumegroup",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup charmap get'
+                   ' name=vol_name,type=CephString'
+                   ' name=group_name,type=CephString,req=true'
+                   ' name=setting,type=CephChoices,strings=casesensitive|normalization|encoding,req=false',
+            'desc': "Get charmap settings for subvolumegroup",
+            'perm': 'rw'
+        },
+
+        {
             'cmd': 'fs subvolumegroup snapshot ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString ',
@@ -457,6 +482,33 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    ' name=pin_setting,type=CephString,req=true'
                    ' name=group_name,type=CephString,req=false',
             'desc': "Set MDS pinning policy for subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume charmap set'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=setting,type=CephChoices,strings=casesensitive|normalization|encoding'
+                   ' name=value,type=CephString,req=true'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Set charmap settings for subvolumegroup",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume charmap rm'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Remove charmap settings for subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume charmap get'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=setting,type=CephChoices,strings=casesensitive|normalization|encoding,req=false'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Get charmap settings for subvolumegroup",
             'perm': 'rw'
         },
         {
@@ -821,6 +873,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            pin_setting=cmd['pin_setting'])
 
     @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_charmap_set(self, inbuf, cmd):
+        return self.vc.subvolume_group_charmap_set(vol_name=cmd['vol_name'],
+                                                   group_name=cmd['group_name'],
+                                                   setting=cmd['setting'],
+                                                   value=cmd['value'])
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_charmap_rm(self, inbuf, cmd):
+        return self.vc.subvolume_group_charmap_rm(vol_name=cmd['vol_name'],
+                                                   group_name=cmd['group_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_charmap_get(self, inbuf, cmd):
+        return self.vc.subvolume_group_charmap_get(vol_name=cmd['vol_name'],
+                                                   group_name=cmd['group_name'],
+                                                   setting=cmd.get('setting', 'charmap'))
+
+    @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_group_snapshot(vol_name=cmd['vol_name'],
                                                        group_name=cmd['group_name'],
@@ -911,6 +980,27 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                      sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
                                      pin_setting=cmd['pin_setting'],
                                      group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_charmap_set(self, inbuf, cmd):
+        return self.vc.subvolume_charmap_set(vol_name=cmd['vol_name'],
+                                             sub_name=cmd['sub_name'],
+                                             setting=cmd['setting'],
+                                             value=cmd['value'],
+                                             group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_charmap_rm(self, inbuf, cmd):
+        return self.vc.subvolume_charmap_rm(vol_name=cmd['vol_name'],
+                                             sub_name=cmd['sub_name'],
+                                             group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_charmap_get(self, inbuf, cmd):
+        return self.vc.subvolume_charmap_get(vol_name=cmd['vol_name'],
+                                             sub_name=cmd['sub_name'],
+                                             setting=cmd.get('setting', 'charmap'),
+                                             group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):

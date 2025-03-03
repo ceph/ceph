@@ -98,7 +98,7 @@ class filepath {
     ino = b;
   }
   void set_path(std::string_view s) {
-    if (s[0] == '/') {
+    if (!s.empty() && s[0] == '/') {
       path = s.substr(1);
       ino = 1;
     } else {

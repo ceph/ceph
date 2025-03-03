@@ -54,11 +54,11 @@ ActivePyModules::ActivePyModules(
   DaemonStateIndex &ds, ClusterState &cs,
   MonClient &mc, LogChannelRef clog_,
   LogChannelRef audit_clog_, Objecter &objecter_,
-  Client &client_, Finisher &f, DaemonServer &server,
+  Finisher &f, DaemonServer &server,
   PyModuleRegistry &pmr)
 : module_config(module_config_), daemon_state(ds), cluster_state(cs),
   monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
-  client(client_), finisher(f),
+  finisher(f),
   cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
   server(server), py_module_registry(pmr)
 {
@@ -246,7 +246,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "modified_config_options") {
     without_gil_t no_gil;
     auto all_daemons = daemon_state.get_all();
-    set<string> names;
+    std::set<string> names;
     for (auto& [key, daemon] : all_daemons) {
       std::lock_guard l(daemon->lock);
       for (auto& [name, valmap] : daemon->config) {
@@ -783,7 +783,7 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
 void ActivePyModules::update_kv_data(
   const std::string prefix,
   bool incremental,
-  const map<std::string, std::optional<bufferlist>, std::less<>>& data)
+  const std::map<std::string, std::optional<bufferlist>, std::less<>>& data)
 {
   std::lock_guard l(lock);
   bool do_config = false;
@@ -1119,7 +1119,7 @@ PyObject *ActivePyModules::get_foreign_config(
 
   std::map<std::string,std::string,std::less<>> config;
   cluster_state.with_osdmap([&](const OSDMap &osdmap) {
-      map<string,string> crush_location;
+      std::map<string,string> crush_location;
       string device_class;
       if (entity.is_osd()) {
 	osdmap.crush->get_full_location(who, &crush_location);
@@ -1278,7 +1278,7 @@ void ActivePyModules::set_device_wear_level(const std::string& devid,
 					    float wear_level)
 {
   // update mgr state
-  map<string,string> meta;
+  std::map<string,string> meta;
   daemon_state.with_device(
     devid,
     [wear_level, &meta] (DeviceState& dev) {

@@ -27,6 +27,10 @@
   of the column showing the state of a group snapshot in the unformatted CLI
   output is changed from 'STATUS' to 'STATE'. The state of a group snapshot
   that was shown as 'ok' is now shown as 'complete', which is more descriptive.
+* CephFS: Directories may now be configured with case-insensitive or
+  normalized directory entry names. This is an inheritable configuration making
+  it apply to an entire directory tree. For more information, see
+  https://docs.ceph.com/en/latest/cephfs/charmap/
 * Based on tests performed at scale on an HDD based Ceph cluster, it was found
   that scheduling with mClock was not optimal with multiple OSD shards. For
   example, in the test cluster with multiple OSD node failures, the client

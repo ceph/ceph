@@ -1295,7 +1295,7 @@ static void do_init(void *data, fuse_conn_info *conn)
     conn->want |= FUSE_CAP_SPLICE_MOVE;
 
 #if !defined(__APPLE__)
-  if (!client->fuse_default_permissions && client->ll_handle_umask()) {
+  if (!client->get_fuse_default_permissions() && client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
     if(conn->capable & FUSE_CAP_DONT_MASK)
       conn->want |= FUSE_CAP_DONT_MASK;
@@ -1783,6 +1783,7 @@ fuse_req_t CephFuse::Handle::get_fuse_req()
 
 CephFuse::CephFuse(Client *c, int fd) : _handle(new CephFuse::Handle(c, fd))
 {
+  c->set_is_fuse();
 }
 
 CephFuse::~CephFuse()

@@ -52,7 +52,6 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 		     "mgr",
 		     Messenger::get_random_nonce())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
-  client{client_messenger.get(), &monc, &objecter},
   mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
@@ -131,7 +130,6 @@ int MgrStandby::init()
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
   client_messenger->add_dispatcher_head(&objecter);
-  client_messenger->add_dispatcher_tail(&client);
   client_messenger->start();
 
   poolctx.start(2);
@@ -198,7 +196,6 @@ int MgrStandby::init()
   objecter.set_client_incarnation(0);
   objecter.init();
   objecter.start();
-  client.init();
   timer.init();
 
   py_module_registry.init();
@@ -369,7 +366,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
       dout(1) << "Activating!" << dendl;
       active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
                                client_messenger.get(), &objecter,
-			       &client, clog, audit_clog));
+			       clog, audit_clog));
       active_mgr->background_init(new LambdaContext(
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
@@ -405,26 +402,24 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
   }
 }
 
-bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
   dout(10) << state_str() << " " << *m << dendl;
 
+  Dispatcher::dispatch_result_t r;
+
   if (m->get_type() == MSG_MGR_MAP) {
     handle_mgr_map(ref_cast<MMgrMap>(m));
+    r = Dispatcher::ACKNOWLEDGED();
   }
-  bool handled = false;
   if (active_mgr) {
     auto am = active_mgr;
     lock.unlock();
-    handled = am->ms_dispatch2(m);
+    r = am->ms_dispatch2(m);
     lock.lock();
   }
-  if (m->get_type() == MSG_MGR_MAP) {
-    // let this pass through for mgrc
-    handled = false;
-  }
-  return handled;
+  return r;
 }
 
 

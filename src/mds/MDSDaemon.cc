@@ -992,7 +992,7 @@ void MDSDaemon::respawn()
 
 
 
-bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
+Dispatcher::dispatch_result_t MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 {
   dout(25) << __func__ << ": processing " << m << dendl;
   std::lock_guard l(mds_lock);

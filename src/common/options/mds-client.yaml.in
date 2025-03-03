@@ -312,7 +312,8 @@ options:
   default: true
   services:
   - mds_client
-  with_legacy: true
+  flags:
+  - runtime
 - name: client_dirsize_rbytes
   type: bool
   level: advanced

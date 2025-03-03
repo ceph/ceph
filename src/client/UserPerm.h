@@ -88,6 +88,12 @@ public:
     gids = o.gids;
     alloced_gids = false;
   }
+  void print(std::ostream& os) const {
+    os
+      << "UserPerm(uid=" << m_uid
+      << " gid=" << m_gid
+      << ")";
+  }
 };
 
 #endif
