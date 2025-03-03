@@ -88,6 +88,14 @@ def run_in_barbican_venv(ctx, client, args):
                          run.Raw('&&')
                         ] + args)
 
+def get_constraints_url(cconf):
+    version = cconf.get('force-branch', 'master')
+    if '/' in version:
+        # split stable/<version> to <version>
+        version = str(version).split('/')[1]
+    url = f"https://releases.openstack.org/constraints/upper/{version}"
+    return url
+
 @contextlib.contextmanager
 def setup_venv(ctx, config):
     """
@@ -95,13 +103,14 @@ def setup_venv(ctx, config):
     """
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for barbican...')
-    for (client, _) in config.items():
+    for (client, cconf) in config.items():
         run_in_barbican_dir(ctx, client,
                             ['python3', '-m', 'venv', '.barbicanenv'])
         run_in_barbican_venv(ctx, client,
                              ['pip', 'install', '--upgrade', 'pip'])
+        url = get_constraints_url(cconf)
         run_in_barbican_venv(ctx, client,
-                             ['pip', 'install', 'pytz',
+                             ['pip', 'install', f'-c{url}', 'pytz',
                               '-e', get_barbican_dir(ctx)])
     yield
 
