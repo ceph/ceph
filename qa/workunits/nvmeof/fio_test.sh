@@ -104,6 +104,7 @@ fio --showcmd $fio_file
 set +e 
 sudo fio $fio_file
 if [ $? -ne 0 ]; then
+    echo "[nvmeof.fio]: fio failed!" 
     status_log
     exit 1
 fi
