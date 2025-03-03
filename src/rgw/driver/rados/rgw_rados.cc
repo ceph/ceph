@@ -5064,6 +5064,7 @@ done_ret:
       if (ret2 < 0) {
         continue;
       }
+      obj.ioctx.set_pool_full_try();  // allow deletion at pool quota limit
 
       ObjectWriteOperation op;
       cls_refcount_put(op, ref_tag, true);
@@ -5679,6 +5680,7 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
   if (ret < 0) {
     return;
   }
+  ioctx.set_pool_full_try();  // allow deletion at pool quota limit
 
   // issue deletions in parallel, up to max_aio at a time
   auto aio = rgw::make_throttle(cct->_conf->rgw_multi_obj_del_max_aio, y);
@@ -6171,6 +6173,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   }
 
   auto& ioctx = ref.ioctx;
+  ioctx.set_pool_full_try(); // allow deletion at pool quota limit
   version_t epoch = 0;
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
 
