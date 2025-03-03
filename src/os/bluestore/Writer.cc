@@ -732,6 +732,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
   blob_data_t& bd)            // modified when consumed
 {
   uint32_t search_stop = p2align(logical_offset, (uint32_t)wctx->target_blob_size);
+  search_stop = std::max(left_shard_bound, search_stop);
   uint32_t au_size = bstore->min_alloc_size;
   uint32_t block_size = bstore->block_size;
   ceph_assert(!bd.is_compressed());
@@ -812,6 +813,7 @@ void BlueStore::Writer::_try_reuse_allocated_r(
   uint32_t block_size = bstore->block_size;
   uint32_t blob_size = wctx->target_blob_size;
   uint32_t search_end = p2roundup(end_offset, blob_size);
+  search_end = std::min(right_shard_bound, search_end);
   ceph_assert(!bd.is_compressed());
   ceph_assert(p2phase<uint32_t>(end_offset, au_size) != 0);
   BlueStore::ExtentMap& emap = onode->extent_map;
