@@ -8317,7 +8317,7 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::Object::empty(s->object.get())) {
     rgw::sal::Attrs a(attrs);
-    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, set_attrs_flags);
+    op_ret = s->object->set_obj_attrs(this, &a, nullptr, y, set_attrs_flags, unmod_since);
   } else {
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   }
