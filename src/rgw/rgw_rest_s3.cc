@@ -3883,8 +3883,9 @@ void RGWPutACLs_ObjStore_S3::send_response()
 void RGWSetObjAttrs_ObjStore_S3::send_response()
 {
   int r = op_ret;
-  if (!r)
+  if (!r || (r == -ERR_PRECONDITION_FAILED && no_precondition_error)) {
     r = STATUS_NO_CONTENT;
+  }
 
   set_req_state_err(s, r);
   dump_errno(s);
@@ -3903,6 +3904,20 @@ int RGWSetObjAttrs_ObjStore_S3::verify_permission(optional_yield y)
 
 int RGWSetObjAttrs_ObjStore_S3::get_params(optional_yield y)
 {
+  const char *if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if (if_unmod) {
+    std::string if_unmod_decoded = url_decode(if_unmod);
+    uint64_t epoch;
+    uint64_t nsec;
+    if (utime_t::parse_date(if_unmod_decoded, &epoch, &nsec) < 0) {
+      ldpp_dout(this, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
+      return -EINVAL;
+    }
+    unmod_since = utime_t(epoch, nsec).to_real_time();
+  }
+
+  s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
+
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   int r = 0;
   bufferlist data;
