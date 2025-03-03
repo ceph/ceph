@@ -803,9 +803,14 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
 {
   int max = mon.monmap->size();
   int actual = mon.get_quorum().size();
-  const auto now = ceph::real_clock::now();
+  const auto rcnow = ceph::real_clock::now();
+  const auto created = mon.monmap->created.to_real_time();
+  const auto mcnow = ceph::coarse_mono_clock::now();
+  const auto starttime = mon.get_starttime();
+
   if (actual < max &&
-      now > mon.monmap->created.to_real_time() + g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace")) {
+      (rcnow - created) > g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace") &&
+      (mcnow - starttime) > g_conf().get_val<std::chrono::seconds>("mon_down_uptime_grace")) {
     ostringstream ss;
     ss << (max-actual) << "/" << max << " mons down, quorum "
        << mon.get_quorum_names();
