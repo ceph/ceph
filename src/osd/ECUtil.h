@@ -466,7 +466,7 @@ public:
   }
   /* Return a "span" - which can be iterated over */
   auto get_data_shards() const {
-    return std::span(chunk_mapping).subspan(0, k - 1);
+    return std::span(chunk_mapping).subspan(0, k);
   }
   auto get_parity_shards() const {
     return std::span(chunk_mapping).subspan(k, m);
