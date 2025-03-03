@@ -6,7 +6,8 @@ import { RequestModel } from '~/app/ceph/rgw/models/rgw-storage-class.model';
   providedIn: 'root'
 })
 export class RgwStorageClassService {
-  private url = 'api/rgw/zonegroup/storage-class';
+  private baseUrl = 'api/rgw/zonegroup';
+  private url = `${this.baseUrl}/storage-class`;
 
   constructor(private http: HttpClient) {}
 
@@ -18,5 +19,13 @@ export class RgwStorageClassService {
 
   createStorageClass(requestModel: RequestModel) {
     return this.http.post(`${this.url}`, requestModel);
+  }
+
+  editStorageClass(requestModel: RequestModel) {
+    return this.http.put(`${this.url}`, requestModel);
+  }
+
+  getPlacement_target(placement_id: string) {
+    return this.http.get(`${this.baseUrl}/get_placement_target_by_placement_id/${placement_id}`);
   }
 }
