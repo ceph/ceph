@@ -247,6 +247,7 @@ class SysReqApplier : public DecoratedApplier<T> {
   mutable std::optional<RGWUserInfo> effective_user_info;
   mutable std::optional<RGWAccountInfo> effective_account;
   mutable std::vector<IAM::Policy> effective_policies;
+  mutable bool perm_check{false};
 
 public:
   template <typename U>
@@ -298,14 +299,21 @@ public:
   const std::optional<RGWAccountInfo>& get_account() const override {
     return effective_account;
   }
+  bool evals_passed_uid_perm() const override { return perm_check; }
 };
 
 template<typename T>
 uint32_t SysReqApplier<T>::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
-  if (!effective_user_info) {
-    // if we don't have an effective user, fall back to the default strategy
+  if (!evals_passed_uid_perm()) {
+    // if we're not evaluating uid perms, fallback to the default strategy
     return DecoratedApplier<T>::get_perms_from_aclspec(dpp, aclspec);
+  }
+
+  if (!effective_user_info) {
+    // if we don't have user info, we can't evaluate uid perms
+    ldpp_dout(dpp, 0) << "ERROR: rgwx-perm-check is not user id" << dendl;
+    return 0;
   }
 
   // match acl grants to the specific user id
@@ -325,16 +333,25 @@ uint32_t SysReqApplier<T>::get_perms_from_aclspec(const DoutPrefixProvider* dpp,
 template<typename T>
 bool SysReqApplier<T>::is_owner_of(const rgw_owner& o) const
 {
-  if (effective_user_info) {
-    return match_owner(o, effective_user_info->user_id, effective_account);
+  if (!evals_passed_uid_perm()) {
+    return DecoratedApplier<T>::is_owner_of(o);
   }
-  return DecoratedApplier<T>::is_owner_of(o);
+
+  if (!effective_user_info) {
+    return false;
+  }
+
+  return match_owner(o, effective_user_info->user_id, effective_account);
 }
 
 template<typename T>
 bool SysReqApplier<T>::is_identity(const Principal& p) const {
-  if (!effective_user_info) {
+  if (!evals_passed_uid_perm()) {
     return DecoratedApplier<T>::is_identity(p);
+  }
+
+  if (!effective_user_info) {
+    return false;
   }
 
   if (p.is_wildcard()) {
@@ -374,11 +391,17 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
   is_system = user->get_info().system;
 
   if (is_system) {
-    std::string str = args.sys_get(RGW_SYS_PARAM_PREFIX "uid");
-    if (!str.empty()) {
+    std::string passed_uid = args.sys_get(RGW_SYS_PARAM_PREFIX "perm-check-uid");
+    if (passed_uid.empty()) {
+      passed_uid = args.sys_get(RGW_SYS_PARAM_PREFIX "uid");
+    } else {
+      perm_check = true;
+    }
+
+    if (!passed_uid.empty()) {
       effective_owner.emplace();
 
-      effective_owner->id = parse_owner(str);
+      effective_owner->id = parse_owner(passed_uid);
 
       if (const auto* uid = std::get_if<rgw_user>(&effective_owner->id); uid) {
         user = driver->get_user(*uid);
