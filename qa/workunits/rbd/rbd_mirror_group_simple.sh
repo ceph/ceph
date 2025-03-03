@@ -453,7 +453,7 @@ test_enable_disable_repeat()
   start_mirrors "${secondary_cluster}"
 
   local loop_instance
-  for loop_instance in $(seq 0 10); do
+  for loop_instance in $(seq 0 9); do
     testlog "test_enable_disable_repeat ${loop_instance}"
 
     for group_instance in $(seq 0 9); do
@@ -2233,8 +2233,8 @@ test_force_promote_delete_group()
   test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
   test_fields_in_group_info ${secondary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
 
-  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' 0
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+error' 0
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
+  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+error' 0
 
   # TODO - test normally fails on next line with missing images
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
@@ -2242,6 +2242,7 @@ test_force_promote_delete_group()
 
   group_remove "${secondary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
   # disable and re-enable on original primary
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
@@ -2259,6 +2260,8 @@ test_force_promote_delete_group()
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+
+  stop_mirrors "${primary_cluster}"
 }
 
 # test force unlink time
@@ -2552,13 +2555,15 @@ run_all_tests()
   run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_multiple_user_snapshot_whilst_stopped
   run_test_all_scenarios test_create_group_with_image_remove_then_repeat
-  run_test_all_scenarios test_enable_disable_repeat
   run_test_all_scenarios test_empty_group_omap_keys
   #run_test_all_scenarios test_group_with_clone_image
   run_test_all_scenarios test_multiple_user_snapshot_time
-  #run_test_all_scenarios test_force_promote_delete_group
+  run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
+
+  #FIXME: This test leaves residual groups on secondary moving it to the end.
+  run_test_all_scenarios test_enable_disable_repeat
 }
 
 if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
