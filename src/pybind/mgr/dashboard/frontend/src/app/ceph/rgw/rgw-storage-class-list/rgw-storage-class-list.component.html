@@ -1,0 +1,26 @@
+<legend>
+  <cd-help-text i18n>
+    A storage class for tiering defines the policies for automatically moving objects between different storage tiers.
+  </cd-help-text>
+</legend>
+<cd-table
+  [data]="storageClassList"
+  columnMode="flex"
+  [columns]="columns"
+  (fetchData)="loadStorageClass()"
+  selectionType="single"
+  [hasDetails]="true"
+  (setExpandedRow)="setExpandedRow($event)"
+  (updateSelection)="updateSelection($event)"
+>
+  <div class="table-actions">
+    <cd-table-actions class="btn-group"
+                      [permission]="permission"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </div>
+  <cd-rgw-storage-class-details *cdTableDetail
+                                [selection]="expandedRow">
+  </cd-rgw-storage-class-details>
+</cd-table>
