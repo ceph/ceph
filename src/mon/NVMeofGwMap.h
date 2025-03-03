@@ -87,6 +87,7 @@ public:
        const NvmeGroupKey& group_key, bool &map_modified);
   void gw_performed_startup(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &propose_pending);
+  void skip_failovers_for_group(const NvmeGroupKey& group_key);
 private:
   int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int  do_erase_gw_id(const NvmeGwId &gw_id,
