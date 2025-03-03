@@ -1028,6 +1028,94 @@ TEST(FSCrypt, FallocateNotImplemented) {
   ceph_shutdown(cmount);
 }
 
+TEST(FSCrypt, ReadCipherText) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  std::clog << __func__ << "11111() ceph_mount r=" << std::endl;
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  std::clog << __func__ << "2() ceph_mount r=" << std::endl;
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  ASSERT_EQ(0, r);
+
+  struct fscrypt_policy_v2 policy;
+  populate_policy(kid, &policy);
+
+  std::clog << __func__ << "3() ceph_mount r=" << std::endl;
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ceph_close(cmount, fd);
+  std::clog << __func__ << "4() ceph_mount r=" << std::endl;
+
+  string file_name = "file1";
+  string file_path = "";
+  file_path.append(dir_path);
+  file_path.append("/");
+  file_path.append(file_name);
+  std::clog << __func__ << "5() ceph_mount r=" << std::endl;
+  std::clog << __func__ << "5a() keylen=" << sizeof(fscrypt_key) << std::endl;
+  fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  ASSERT_EQ(sizeof(fscrypt_key), ceph_write(cmount, fd, fscrypt_key, sizeof(fscrypt_key), 0));
+  ceph_close(cmount, fd);
+  std::clog << __func__ << "6() ceph_mount r=" << std::endl;
+
+  ino_t inode = 0;
+  struct dirent *result;
+  struct ceph_dir_result *rdir;
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+  std::clog << __func__ << "7() ceph_mount r=" << std::endl;
+    if (strcmp(result->d_name, file_name.c_str()) == 0) {
+  std::clog << __func__ << "8() ceph_mount r=" << std::endl;
+      inode = result->d_ino;
+      break;
+    }
+  }
+  ASSERT_EQ(ceph_closedir(cmount, rdir), 0);
+  std::clog << __func__ << "9() ceph_mount r=" << std::endl;
+
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+  
+  string src_path = "";
+  std::clog << __func__ << "10() ceph_mount r=" << std::endl;
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+  std::clog << __func__ << "11() ceph_mount r=" << std::endl;
+    if (result->d_ino == inode){
+  std::clog << __func__ << "12() ceph_mount r=" << std::endl;
+      src_path = dir_path;
+      src_path.append("/");
+      src_path.append(result->d_name);
+      break;
+    }
+  }
+  //ASSERT_EQ(ceph_closedir(cmount, rdir), 0);
+  std::clog << __func__ << "13() ceph_mount r=" << std::endl;
+  std::clog << __func__ << "13a() src_path=" << src_path.c_str() << std::endl;
+
+  fd = ceph_open(cmount, src_path.c_str(), O_RDONLY|CEPH_O_CIPHERTEXT, 0644);
+  std::clog << __func__ << "14() ceph_mount r=" << std::endl;
+  ASSERT_GT(fd, 0);
+
+  char in_buf[40];
+  std::clog << __func__ << "15() ceph_mount r=" << std::endl;
+  ASSERT_EQ((int)sizeof(in_buf), ceph_read(cmount, fd, in_buf, sizeof(in_buf), 0));
+  std::clog << __func__ << "16() ceph_mount r=" << std::endl;
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
 int main(int argc, char **argv)
 {
   int r = update_root_mode();
