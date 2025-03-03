@@ -4557,6 +4557,20 @@ public:
             tn->log(0, "entry with empty obj name, skipping");
             goto done;
           }
+          // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
+          if (key.instance.empty() == sync_pipe.dest_bucket_info.versioned()) {
+            set_status("skipping entry due to versioning mismatch");
+            tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
+
+            // update src object with failed status
+            call(data_sync_module->fail_object_replication_status(dpp, sc, sync_pipe, key));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update object replication status: " << cpp_strerror(-retcode)));
+              retcode = 0;
+            }
+
+            goto done;
+          }
           if (error_injection &&
               rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
