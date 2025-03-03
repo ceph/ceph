@@ -9,4 +9,4 @@ tasks:
       RBD_POOL: mypool
       NVMEOF_GROUP: mygroup0
       IOSTAT_INTERVAL: '10'
-      RUNTIME: '1800'
+      RUNTIME: '1200'
