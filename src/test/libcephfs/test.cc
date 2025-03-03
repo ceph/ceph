@@ -3793,3 +3793,39 @@ TEST(LibCephFS, SnapdirAttrsOnSnapRename) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, PathWalkAndLookup) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int ret;
+  char dir_name[128];
+  char dir_path[256];
+
+  pid_t mypid = getpid();
+  sprintf(dir_name, "dir_%d", mypid);
+  sprintf(dir_path, "/%s", dir_name);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dir_path, 0777), 0);
+
+  UserPerm *perms = ceph_mount_perms(cmount);
+  Inode *root, *slash, *diri = NULL;
+  struct ceph_statx stx = { 0 };
+
+  ret = ceph_ll_walk(cmount, ".", &root, &stx, CEPH_STATX_INO, 0, perms);
+  ASSERT_EQ(ret, 0);
+
+  ret = ceph_ll_lookup(cmount, root, "/", &slash, &stx, CEPH_STATX_INO, 0, perms);
+  ASSERT_EQ(ret, 0);
+
+  /* treated as a request under a snapdir */
+  ret = ceph_ll_lookup(cmount, slash, dir_name, &diri, &stx, CEPH_STATX_INO, 0, perms);
+  ASSERT_EQ(ret, -ENOENT);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
