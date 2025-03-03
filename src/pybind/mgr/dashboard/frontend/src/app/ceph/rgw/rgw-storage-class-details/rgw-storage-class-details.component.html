@@ -1,0 +1,114 @@
+<ng-container *ngIf="!!selection">
+  <cds-tabs type="contained"
+            theme="light">
+    <cds-tab heading="Details">
+      <table
+        class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+        data-testid="rgw-storage-details"
+      >
+        <tbody>
+          <tr>
+            <td class="bold">
+              Target Path
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  The target path specifies a prefix to which the source bucket-name/object-name is
+                  appended.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.target_path }}</td>
+          </tr>
+          <tr>
+            <td class="bold">
+              Access key
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Access key is the remote cloud S3 access key used for a specific connection.
+                </span>
+              </cd-helper>
+            </td>
+            <td>
+              <div cdsCol
+                   [columnNumbers]="{ md: 4 }"
+                   class="d-flex">
+                <input
+                  cdsPassword
+                  type="password"
+                  readonly
+                  id="access_key"
+                  [value]="selection?.access_key"
+                />
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="access_key"></button>
+                <cd-copy-2-clipboard-button source="access_key"> </cd-copy-2-clipboard-button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="bold">
+              Secret key
+              <cd-helper class="text-pre-wrap">
+                <span i18n> Secret is the secret key for the remote cloud S3 service. </span>
+              </cd-helper>
+            </td>
+            <td>
+              <div cdsCol
+                   [columnNumbers]="{ md: 4 }"
+                   class="d-flex">
+                <input
+                  cdsPassword
+                  type="password"
+                  readonly
+                  id="secret"
+                  [value]="selection?.secret"
+                />
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="secret"></button>
+                <cd-copy-2-clipboard-button source="secret"> </cd-copy-2-clipboard-button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td
+                class="bold">
+              Host Style
+              <cd-helper class="text-pre-wrap">
+                <span i18n>The URL format for accessing the remote S3 endpoint: 'Path' for a path-based URL
+                  or 'Virtual' for a domain-based URL.</span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.host_style }}</td>
+          </tr>
+          <tr>
+            <td
+                class="bold">
+              Multipart Minimum Part Size
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Minimum parts size to use when transitioning objects using multipart upload.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.multipart_min_part_size }}</td>
+          </tr>
+          <tr>
+            <td
+                class="bold">
+              Multipart Sync Threshold
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Objects this size or larger will be transitioned to the cloud using multipart
+                  upload.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.multipart_sync_threshold }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </cds-tab>
+  </cds-tabs>
+</ng-container>
