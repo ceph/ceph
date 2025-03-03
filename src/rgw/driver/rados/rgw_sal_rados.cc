@@ -2676,7 +2676,7 @@ int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, A
 			get_obj(),
 			setattrs ? *setattrs : empty,
 			delattrs,
-			y, log_op, mtime);
+			y, log_op, mtime, unmod_since);
 }
 
 int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
