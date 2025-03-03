@@ -790,7 +790,9 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
-  JSONDecoder::decode_json("inline_data", inline_data, obj);
+  if(!JSONDecoder::decode_json("inline_data", inline_data, obj)) {
+    inline_data = true;
+  }
   index_type = (rgw::BucketIndexType)it;
 
   /* backward compatibility, these are now defined in storage_classes */
