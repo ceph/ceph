@@ -3433,7 +3433,7 @@ Then run the following:
                                         f"group name '{nvmeof_spec.group}' and service id '{nvmeof_spec.service_id}'")
             for sspec in [s.spec for s in self.spec_store.get_by_service_type('nvmeof')]:
                 nspec = cast(NvmeofServiceSpec, sspec)
-                if nvmeof_spec.group == nspec.group:
+                if nvmeof_spec.group == nspec.group and nvmeof_spec.service_id != nspec.service_id:
                     raise OrchestratorError(f"Cannot create nvmeof service with group {nvmeof_spec.group}. That group is already "
                                             f"being used by the service {nspec.service_name()}")
 
