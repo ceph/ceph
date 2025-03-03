@@ -56,6 +56,7 @@ private:
   seastar::future<> handle_mgr_conf(crimson::net::ConnectionRef conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
+  seastar::future<> retry_interval();
 
   void print(std::ostream&) const;
   friend std::ostream& operator<<(std::ostream& out, const Client& client);

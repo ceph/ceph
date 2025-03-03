@@ -133,6 +133,17 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace *
   });
 }
 
+seastar::future<> Client::retry_interval()
+{
+  LOG_PREFIX(Client::retry_interval);
+  auto retry_interval = std::chrono::duration<double>(
+    local_conf().get_val<double>("mgr_connect_retry_interval"));
+  auto a_while = std::chrono::duration_cast<seastar::steady_clock_type::duration>(
+    retry_interval);
+  DEBUGDPP("reconnecting in {} seconds", *this, retry_interval);
+  co_await seastar::sleep(a_while);
+}
+
 seastar::future<> Client::reconnect()
 {
   LOG_PREFIX(Client::reconnect);
@@ -150,12 +161,7 @@ seastar::future<> Client::reconnect()
     WARNDPP("No active mgr available yet", *this);
     co_return;
   }
-  auto retry_interval = std::chrono::duration<double>(
-    local_conf().get_val<double>("mgr_connect_retry_interval"));
-  auto a_while = std::chrono::duration_cast<seastar::steady_clock_type::duration>(
-    retry_interval);
-  DEBUGDPP("reconnecting in {} seconds", *this, retry_interval);
-  co_await seastar::sleep(a_while);
+  co_await retry_interval();
 
   auto peer = mgrmap.get_active_addrs().pick_addr(msgr.get_myaddr().get_type());
   if (peer == entity_addr_t{}) {
