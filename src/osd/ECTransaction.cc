@@ -40,7 +40,7 @@ void debug(const hobject_t &oid, const std::string &str, const ECUtil::shard_ext
   ldpp_dout(dpp, 20)
     << "EC_DEBUG_BUFFERS: generate_transactions: "
     << "oid: " << oid
-    << " " << str << " " << map.debug_string(3767, 0) << dendl;
+    << " " << str << " " << map.debug_string(2048, 0) << dendl;
 #else
   ldpp_dout(dpp, 20)
     << "generate_transactions: "
