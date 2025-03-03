@@ -636,11 +636,18 @@ class RgwBucket(RgwRESTController):
             self._delete_lifecycle(bucket_name, daemon_name, uid)
         return self._append_bid(result) if result else None
 
-    def delete(self, bucket, purge_objects='true', daemon_name=None):
-        return self.proxy(daemon_name, 'DELETE', 'bucket', {
-            'bucket': bucket,
-            'purge-objects': purge_objects
-        }, json_response=False)
+    def delete(self, bucket, daemon_name=None):
+        try:
+            bucket_info = self.proxy(daemon_name, 'GET', 'bucket', {'bucket': bucket})
+            num_objects = bucket_info.get('usage', {}).get('rgw.main', {}).get('num_objects', 0)
+            if num_objects > 0:
+                raise DashboardException(msg='Unable to delete bucket"{}" - Bucket is not empty. '
+                                         'Remove all objects before deletion.'.format(bucket))
+            return self.proxy(daemon_name, 'DELETE', 'bucket', {
+                'bucket': bucket
+            }, json_response=False)
+        except (DashboardException, RequestException) as e:  # pragma: no cover
+            raise DashboardException(e, component='rgw')
 
     @RESTController.Collection(method='PUT', path='/setEncryptionConfig')
     @allow_empty_body
