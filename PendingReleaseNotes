@@ -48,6 +48,10 @@
   by disabling async recovery by setting osd_async_recovery_min_cost to a very
   large value on all OSDs until the upgrade is complete:
   ``ceph config set osd osd_async_recovery_min_cost 1099511627776``
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
+
 
 >=19.0.0
 
