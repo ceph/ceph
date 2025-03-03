@@ -699,7 +699,10 @@ void BootstrapRequest<I>::handle_get_local_mirror_group(int r) {
     return;
   }
 
-  if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+  if (m_local_mirror_group.global_group_id != m_global_group_id) {
+    finish(-ERESTART);
+    return;
+  } else if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
     derr << "group with same name exists: " << m_group_name
          << " and is currently disabling" << dendl;
     finish(-ERESTART); // The other group replayer might be removing the
