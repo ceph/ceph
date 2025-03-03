@@ -127,6 +127,7 @@ After dev freeze
 ================
 
 - [ ] create branch for new release
+- [ ] create vX.3.0 annotated tag on ``main`` so upgrades from new release to main are not wrongly considered downgrades.
 - [ ] remove ``doc/releases/*.rst``. This should leave behind ``doc/releases/releases.yml`` which is used for doc building purposes. See also commit 33d63c3 ("doc: remove release notes for release branch") for details.
 - [ ] cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
 - [ ] add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
