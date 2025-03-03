@@ -1718,6 +1718,15 @@ public:
     return _write_entries(0, rgw_bucket_dir_entry::FLAG_CURRENT, header);
   }
 
+  int set_removed_at(rgw_bucket_snap_id snap_id, rgw_bucket_dir_header& header) {
+    int ret = _validate_init();
+    if (ret < 0) {
+      return ret;
+    }
+    instance_entry.set_snap_info().removed_at = snap_id;
+    return _write_entries(0, 0, header);
+  }
+
   bool is_delete_marker() {
     return instance_entry.is_delete_marker();
   }
@@ -1956,6 +1965,10 @@ public:
   void set_tag(const string& tag) {
     olh_data_entry.tag = tag;
   }
+
+  const rgw_bucket_snap_id& get_null_ver_snap_id() const {
+    return olh_data_entry.null_ver_snap_id;
+  }
 };
 
 static int write_version_marker(cls_method_context_t hctx, cls_rgw_obj_key& key,
@@ -2122,7 +2135,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     BIVerObjEntry other_obj(hctx, op.key);
     ret = other_obj.init(!op.delete_marker); /* try reading the other
 					      * null versioned
-					      * entry */
+					      * entry at the same
+                                              * snap_id */
     existed = (ret >= 0 && !other_obj.is_delete_marker());
     if (ret >= 0 && other_obj.is_delete_marker() != op.delete_marker) {
       ret = other_obj.unlink_list_entry(header);
@@ -2210,6 +2224,32 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     if (op.key.instance.empty()){
       obj.set_epoch(1);
     }
+  }
+
+  /* if it's a null versioned object, and it's written in a newer snap than the
+   * previous null versioned object, we need to mark the old one as 'removed',
+   * so that we can know at what snap_id it shouldn't exist anymore and we can
+   * remove it later when the snapshots are deleted
+   */
+  if (op.key.instance.empty() &&
+      op.key.snap_id > olh.get_null_ver_snap_id()) {
+    if (olh.get_null_ver_snap_id().is_set()) {
+      auto prev_null_key = op.key;
+      prev_null_key.snap_id = olh.get_null_ver_snap_id();
+
+      CLS_LOG(20, "%s: marking obj (snap_id=%lld) as removed at snap: key=%s", __func__, (long long)prev_null_key.snap_id,
+              escape_str(prev_null_key.to_string()).c_str());
+      BIVerObjEntry prev_null_obj(hctx, prev_null_key);
+      ret = prev_null_obj.set_removed_at(op.key.snap_id, header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: could not set obj as removed at snap: key=%s ret=%d", escape_str(prev_null_key.to_string()).c_str(), ret);
+        return ret;
+      }
+
+    }
+
+    auto& olh_entry = olh.get_entry();
+    olh_entry.null_ver_snap_id = op.key.snap_id;
   }
 
   /* update the olh log */
