@@ -682,6 +682,12 @@ struct rgw_bucket_olh_entry {
   std::string tag;
   bool exists;
   bool pending_removal;
+  rgw_bucket_snap_id null_ver_snap_id; /* snap in which latest null version exists.
+                                          It's needed so that we can easily find it
+                                          when a new null version is being written,
+                                          so that we may need to mark the old one
+                                          as 'removed' at a specific snapshot */
+                                    
 
   rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
@@ -695,6 +701,7 @@ struct rgw_bucket_olh_entry {
     encode(exists, bl);
     encode(pending_removal, bl);
     encode(snap_id, bl);
+    encode(null_ver_snap_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -708,6 +715,7 @@ struct rgw_bucket_olh_entry {
     decode(pending_removal, bl);
     if (struct_v >= 2) {
       decode(snap_id, bl);
+      decode(null_ver_snap_id, bl);
     }
     DECODE_FINISH(bl);
   }
