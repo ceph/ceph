@@ -2107,6 +2107,8 @@ extern "C" void LL_onfinish_release(void *release_data)
 extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
 						    struct ceph_ll_io_info *io_info)
 {
+  // a zero copy read MUST provide a length 1 iovec,
+  // where the buffer is a nullptr and the length is the requested read length
   if (!io_info->write && io_info->zerocopy && io_info->iovcnt != 1) {
     return -EINVAL;
   }
