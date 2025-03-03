@@ -528,7 +528,7 @@ namespace rgw::sal {
     return read_op.prepare(dpp);
   }
 
-  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags, ceph::real_time unmod_since)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),

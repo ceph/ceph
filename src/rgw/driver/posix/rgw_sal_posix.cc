@@ -2918,7 +2918,8 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            ceph::real_time unmod_since)
 {
   if (delattrs) {
     for (auto& it : *delattrs) {

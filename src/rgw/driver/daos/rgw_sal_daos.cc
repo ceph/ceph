@@ -896,7 +896,8 @@ int DaosObject::load_obj_state(const DoutPrefixProvider* dpp,
 DaosObject::~DaosObject() { close(nullptr); }
 
 int DaosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                              Attrs* delattrs, optional_yield y, uint32_t flags) {
+                              Attrs* delattrs, optional_yield y, uint32_t flags,
+                              ceph::real_time unmod_since) {
   ldpp_dout(dpp, 20) << "DEBUG: DaosObject::set_obj_attrs()" << dendl;
   // TODO handle target_obj
   // Get object's metadata (those stored in rgw_bucket_dir_entry)

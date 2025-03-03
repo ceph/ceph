@@ -2664,7 +2664,7 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
   return read_op.prepare(y, dpp);
 }
 
-int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
+int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags, ceph::real_time unmod_since)
 {
   Attrs empty;
   const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
