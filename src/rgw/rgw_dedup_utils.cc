@@ -2,6 +2,44 @@
 #include "common/ceph_crypto.h"
 
 namespace rgw::dedup {
+#if 0
+  //void encode(const dedup_req_type_t& dedup_type, ceph::bufferlist& bl);
+  //void decode(dedup_req_type_t& d, ceph::bufferlist::const_iterator& bl);
+  //---------------------------------------------------------------------------
+  void encode(const dedup_req_type_t& dedup_type, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode(dedup_type, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  void decode(dedup_req_type_t& dedup_type, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    decode(dedup_type, bl);
+    DECODE_FINISH(bl);
+  }
+#endif
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type)
+  {
+    if (dedup_type == dedup_req_type_t::DEDUP_TYPE_NONE) {
+      out << "DEDUP_TYPE_NONE";
+    }
+    else if (dedup_type == dedup_req_type_t::DEDUP_TYPE_DRY_RUN) {
+      out << "DEDUP_TYPE_DRY_RUN";
+    }
+    else if (dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL) {
+      out << "DEDUP_TYPE_FULL";
+    }
+    else {
+      out << "\n*** unexpected dedup_type ***\n";
+    }
+
+    return out;
+  }
+
   // convert a hex-string to a 64bit integer (max 16 hex digits)
   //---------------------------------------------------------------------------
   uint64_t hex2int(const char *p, const char* p_end)

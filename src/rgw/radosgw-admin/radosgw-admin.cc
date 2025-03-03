@@ -9119,25 +9119,27 @@ next:
   }
 
   if (opt_cmd == OPT::DEDUP_STATS) {
+    using namespace rgw::dedup;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
       cerr << "ERROR: this command can only work when the cluster has a RADOS "
 	   << "backing store." << std::endl;
       return EPERM;
     }
-    rgw::dedup::cluster::collect_all_shard_stats(store, dpp());
+    return cluster::collect_all_shard_stats(store, dpp());
   }
 
   if (opt_cmd == OPT::DEDUP_ABORT || opt_cmd == OPT::DEDUP_PAUSE || opt_cmd == OPT::DEDUP_RESUME) {
-    int urgent_msg;
+    using namespace rgw::dedup;
+    urgent_msg_t urgent_msg;
     if (opt_cmd == OPT::DEDUP_ABORT) {
-      urgent_msg = rgw::dedup::URGENT_MSG_ABORT;
+      urgent_msg = URGENT_MSG_ABORT;
     }
     else if (opt_cmd == OPT::DEDUP_PAUSE) {
-      urgent_msg = rgw::dedup::URGENT_MSG_PASUE;
+      urgent_msg = URGENT_MSG_PASUE;
     }
     else {
-      urgent_msg = rgw::dedup::URGENT_MSG_RESUME;
+      urgent_msg = URGENT_MSG_RESUME;
     }
 
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -9146,18 +9148,29 @@ next:
 	   << "backing store." << std::endl;
       return EPERM;
     }
-    rgw::dedup::cluster::dedup_control(store, dpp(), urgent_msg);
+    return cluster::dedup_control(store, dpp(), urgent_msg);
   }
 
   if (opt_cmd == OPT::DEDUP_RESTART_DRY || opt_cmd == OPT::DEDUP_RESTART) {
-    std::cout << "OPT::DEDUP_RESTART" << std::endl;
+    using namespace rgw::dedup;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
       cerr << "ERROR: this command can only work when the cluster has a RADOS "
 	   << "backing store." << std::endl;
       return EPERM;
     }
-    int ret = rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
+    dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
+    if (opt_cmd == OPT::DEDUP_RESTART_DRY) {
+      dedup_type = dedup_req_type_t::DEDUP_TYPE_DRY_RUN;
+    }
+    else if (opt_cmd == OPT::DEDUP_RESTART) {
+      dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
+    }
+    else {
+      std::cerr << "unexpected opt_cmd: " << std::endl;
+      return -EINVAL;
+    }
+    int ret = cluster::dedup_restart_scan(store, dedup_type, dpp());
     if (ret == 0) {
       std::cout << "Dedup was restarted successfully" << std::endl;
     }
@@ -9165,7 +9178,7 @@ next:
       std::cerr << "Dedup failed to restart" << std::endl;
       std::cerr << "Error is: " << ret << "::" << cpp_strerror(ret) << std::endl;
     }
-    return -ret;
+    return ret;
   }
 
   if (opt_cmd == OPT::GC_LIST) {

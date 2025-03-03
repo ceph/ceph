@@ -539,7 +539,7 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  ostream& operator<<(std::ostream& out, const disk_block_id_t& block_id)
+  std::ostream& operator<<(std::ostream& out, const disk_block_id_t& block_id)
   {
     std::ios_base::fmtflags flags = out.flags();
     out << std::hex << "0x"

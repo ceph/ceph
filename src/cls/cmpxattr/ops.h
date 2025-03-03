@@ -28,7 +28,7 @@ namespace cls::cmpxattr {
     std::map<std::string, ceph::bufferlist> set_pairs;
   };
 
-  inline void encode(const cmp_vals_set_vals_op& o, ceph::bufferlist& bl, uint64_t f=0)
+  inline void encode(const cmp_vals_set_vals_op& o, ceph::bufferlist& bl)
   {
     ENCODE_START(1, 1, bl);
     encode(o.mode, bl);

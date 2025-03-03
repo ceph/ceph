@@ -115,7 +115,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void control_t::reset()
   {
-    this->dedup_type         = DEDUP_TYPE_NONE;
+    this->dedup_type         = dedup_req_type_t::DEDUP_TYPE_NONE;
     this->started            = false;
     this->dedup_exec         = false;
     this->shutdown_req       = false;
@@ -127,28 +127,6 @@ namespace rgw::dedup {
     this->remote_pause_req   = false;
     this->remote_paused      = false;
     this->remote_restart_req = false;
-  }
-
-  //---------------------------------------------------------------------------
-  void control_t::show_dedup_type(const DoutPrefixProvider* const dpp,
-				  const char* caller)
-  {
-    if (this->dedup_type == DEDUP_TYPE_NONE) {
-      ldpp_dout(dpp, 10) << __func__ << "::" << caller
-			 << "::DEDUP_TYPE_NONE" << dendl;
-    }
-    else if (this->dedup_type == DEDUP_TYPE_DRY_RUN) {
-      ldpp_dout(dpp, 10) << __func__ << "::" << caller
-			 << "::DEDUP_TYPE_DRY_RUN" << dendl;
-    }
-    else if (this->dedup_type == DEDUP_TYPE_FULL) {
-      ldpp_dout(dpp, 10) << __func__ << "::" << caller
-			 << "::DEDUP_TYPE_FULL" << dendl;
-    }
-    else {
-      ldpp_dout(dpp, 1) << __func__ << "::" << caller
-			<< "::UNEXPECTED DEDUP_TYPE" << dendl;
-    }
   }
 
   //---------------------------------------------------------------------------
@@ -192,51 +170,39 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   std::ostream& operator<<(std::ostream &out, const control_t &ctl)
   {
-    if (ctl.dedup_type == DEDUP_TYPE_NONE) {
-      out << "DEDUP_TYPE_NONE::";
-    }
-    else if (ctl.dedup_type == DEDUP_TYPE_DRY_RUN) {
-      out << "DEDUP_TYPE_DRY_RUN::";
-    }
-    else if (ctl.dedup_type == DEDUP_TYPE_FULL) {
-      out << "DEDUP_TYPE_FULL::";
-    }
-    else {
-      out << "\n*** unexpected dedup_type ***\n";
-    }
-
+    out << static_cast<dedup_req_type_t>(ctl.dedup_type);
     if (ctl.started) {
-      out << "started::";
+      out << "::started";
     }
     if (ctl.dedup_exec) {
-      out << "dedup_exec::";
+      out << "::dedup_exec";
     }
     if (ctl.shutdown_req) {
-      out << "shutdown_req::";
+      out << "::shutdown_req";
     }
     if (ctl.shutdown_done) {
-      out << "shutdown_done::";
+      out << "::shutdown_done";
     }
     if (ctl.local_pause_req) {
-      out << "local_pause_req::";
+      out << "::local_pause_req";
     }
     if (ctl.local_paused) {
-      out << "local_paused::";
+      out << "::local_paused";
     }
     if (ctl.remote_abort_req) {
-      out << "remote_abort_req::";
+      out << "::remote_abort_req";
     }
     if (ctl.remote_aborted) {
-      out << "remote_aborted::";
+      out << "::remote_aborted";
     }
     if (ctl.remote_pause_req) {
-      out << "remote_pause_req::";
+      out << "::remote_pause_req";
     }
     if (ctl.remote_paused) {
-      out << "remote_paused::";
+      out << "::remote_paused";
     }
     if (ctl.remote_restart_req) {
-      out << "remote_restart_req::";
+      out << "::remote_restart_req";
     }
 
     return out;
@@ -1493,8 +1459,9 @@ namespace rgw::dedup {
     display_table_stat_counters(dpp, obj_count_in_shard, d_num_rados_objects_bytes, p_stats);
 
 #if 1
-    d_ctl.show_dedup_type(dpp, "MD5 Loop");
-    if (d_ctl.dedup_type != DEDUP_TYPE_FULL) {
+    ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::"
+		       << static_cast<dedup_req_type_t>(d_ctl.dedup_type) << dendl;
+    if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_FULL) {
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
 	remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
@@ -1945,9 +1912,10 @@ namespace rgw::dedup {
 
     ldpp_dout(dpp, 10) <<__func__ << "::" << *p_epoch << dendl;
     d_ctl.dedup_type = p_epoch->dedup_type;
-    ceph_assert(d_ctl.dedup_type == DEDUP_TYPE_FULL ||
-		d_ctl.dedup_type == DEDUP_TYPE_DRY_RUN);
-    d_ctl.show_dedup_type(dpp, __func__);
+    ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL ||
+		d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_DRY_RUN);
+    ldpp_dout(dpp, 10) << __func__ << "::"
+		       << static_cast<dedup_req_type_t>(d_ctl.dedup_type) << dendl;
 
     return 0;
   }
@@ -1992,9 +1960,10 @@ namespace rgw::dedup {
 
     ldpp_dout(dpp, 10) <<__func__ << "::" << *p_epoch << dendl;
     d_ctl.dedup_type = p_epoch->dedup_type;
-    ceph_assert(d_ctl.dedup_type == DEDUP_TYPE_FULL ||
-		d_ctl.dedup_type == DEDUP_TYPE_DRY_RUN);
-    d_ctl.show_dedup_type(dpp, __func__);
+    ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL ||
+		d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_DRY_RUN);
+    ldpp_dout(dpp, 10) << __func__ << "::"
+		       << static_cast<dedup_req_type_t>(d_ctl.dedup_type) << dendl;
 
     return 0;
   }

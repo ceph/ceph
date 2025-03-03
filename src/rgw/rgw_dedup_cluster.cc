@@ -21,9 +21,8 @@
 #include <string>
 
 using namespace ::cls::cmpxattr;
-
 namespace rgw::dedup {
-#define DEDUP_EPOCH_TOKEN  "EPOCH_TOKEN"
+  const char* DEDUP_EPOCH_TOKEN = "EPOCH_TOKEN";
 
   static constexpr unsigned EPOCH_MAX_LOCK_DURATION_SEC = 30;
   struct shard_progress_t;
@@ -95,11 +94,25 @@ namespace rgw::dedup {
     }
 
     uint32_t serial = 0;
-    int dedup_type = DEDUP_TYPE_DRY_RUN;
-    dedup_epoch_t new_epoch = { serial, dedup_type, ceph_clock_now(), num_work_shards,
-				num_md5_shards };
+    dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_DRY_RUN;
+    dedup_epoch_t new_epoch = { serial, dedup_type, ceph_clock_now(),
+				num_work_shards, num_md5_shards };
     bufferlist new_epoch_bl, empty_bl, err_bl;
     encode(new_epoch, new_epoch_bl);
+#if 0
+    ldpp_dout(dpp, 10) << __func__ << "::after encode(new_epoch)" << dendl;
+    {
+      try {
+	dedup_epoch_t epoch_test;
+	auto bl_iter = new_epoch_bl.cbegin();
+	decode(epoch_test, bl_iter);
+	ldpp_dout(dpp, 5) << __func__ << "::decoded epoch=" << epoch_test << dendl;
+      } catch (buffer::error& err) {
+	ldpp_dout(dpp, 5) << __func__ << "::ERR: unable to decode err_bl" << dendl;
+	return -EINVAL;
+      }
+    }
+#endif
     ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, empty_bl}};
     std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
@@ -108,7 +121,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5) << __func__ << "::failed cmp_vals_set_vals" << dendl;
       return -EINVAL;
     }
-    ldpp_dout(dpp, 20) << __func__ << "::send EPOCH CLS" << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::send EPOCH CLS" << dendl;
     ret = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
     if (ret == 0 && err_bl.length() == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was written" << dendl;
@@ -127,12 +140,12 @@ namespace rgw::dedup {
   static int swap_epoch(const DoutPrefixProvider *dpp,
 			librados::IoCtx &ioctx,
 			const dedup_epoch_t *p_old_epoch,
-			int dedup_type,
+			dedup_req_type_t dedup_type,
 			work_shard_t num_work_shards,
 			md5_shard_t num_md5_shards)
   {
-    dedup_epoch_t new_epoch = { p_old_epoch->serial + 1, dedup_type, ceph_clock_now(),
-				num_work_shards, num_md5_shards};
+    dedup_epoch_t new_epoch = { p_old_epoch->serial + 1, dedup_type,
+				ceph_clock_now(), num_work_shards, num_md5_shards};
     bufferlist old_epoch_bl, new_epoch_bl, err_bl;
     encode(*p_old_epoch, old_epoch_bl);
     encode(new_epoch, new_epoch_bl);
@@ -153,16 +166,24 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   struct shard_progress_t {
     shard_progress_t() {
+      // init an empty object
+      this->progress_a = SP_NO_OBJECTS;
+      this->progress_b = SP_NO_OBJECTS;
+      this->completed  = false;
+
+      // set all timers to now
       this->creation_time   = utime_t();
       this->completion_time = utime_t();
       this->update_time     = utime_t();
+
+      // owner and stats_bl are empty until set
     }
 
     shard_progress_t(uint64_t _progress_a,
 		     uint64_t _progress_b,
 		     bool _completed,
 		     const std::string &_owner,
-		     const bufferlist  &_in_bl) :owner(_owner), in_bl(_in_bl) {
+		     const bufferlist  &_stats_bl) : owner(_owner), stats_bl(_stats_bl) {
       this->progress_a  = _progress_a;
       this->progress_b  = _progress_b;
       this->completed   = _completed;
@@ -176,14 +197,14 @@ namespace rgw::dedup {
       }
     }
 
-    uint64_t    progress_a = SP_NO_OBJECTS;
-    uint64_t    progress_b = SP_NO_OBJECTS;
-    bool        completed = false;
+    uint64_t    progress_a;
+    uint64_t    progress_b;
+    bool        completed;
     utime_t     update_time;
     utime_t     creation_time;
     utime_t     completion_time;
     std::string owner;
-    bufferlist  in_bl;
+    bufferlist  stats_bl;
   };
 
   //---------------------------------------------------------------------------
@@ -197,7 +218,7 @@ namespace rgw::dedup {
     encode(sp.completion_time, bl);
     encode(sp.update_time, bl);
     encode(sp.owner, bl);
-    encode(sp.in_bl, bl);
+    encode(sp.stats_bl, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -212,7 +233,7 @@ namespace rgw::dedup {
     decode(sp.completion_time, bl);
     decode(sp.update_time, bl);
     decode(sp.owner, bl);
-    decode(sp.in_bl, bl);
+    decode(sp.stats_bl, bl);
     DECODE_FINISH(bl);
   }
 
@@ -295,21 +316,21 @@ namespace rgw::dedup {
     auto store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
       ldpp_dout(dpp, 0) << "ERR: failed dynamic_cast to RadosStore" << dendl;
-      // TBD: should we through an exception ??
+      ceph_abort("non-rados backend");
       return;
     }
 
     librados::IoCtx ioctx;
     if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
-      // TBD: should we through an exception ??
-      return;
+      throw std::runtime_error ("Failed init_dedup_pool_ioctx()");
     }
+
     // generate an empty epoch with zero counters
     int ret = set_epoch(ioctx, d_cluster_id, dpp, 0, 0);
     if (ret != 0) {
       ldpp_dout(dpp, 1) << __func__ << "::failed set_epoch()! ret="
 			<< ret << "::" << cpp_strerror(ret) << dendl;
-      return;
+      throw std::runtime_error ("Failed set_epoch()");
     }
 
     dedup_epoch_t epoch;
@@ -342,7 +363,8 @@ namespace rgw::dedup {
 	break;
       }
       else {
-	ret = swap_epoch(dpp, ioctx, p_epoch, p_epoch->dedup_type,
+	ret = swap_epoch(dpp, ioctx, p_epoch,
+			 static_cast<dedup_req_type_t> (p_epoch->dedup_type),
 			 num_work_shards, num_md5_shards);
       }
     }
@@ -375,7 +397,8 @@ namespace rgw::dedup {
 			  << "::" << cpp_strerror(ret) << dendl;
 	return ret;
       }
-      unsigned deleted_count = 0, skipped_count = 0, failed_count= 0;;
+      unsigned deleted_count = 0, skipped_count  = 0;
+      unsigned failed_count  = 0, no_entry_count = 0;
       for (const std::string& oid : oids) {
 	if (oid == DEDUP_WATCH_OBJ || oid == DEDUP_EPOCH_TOKEN) {
 	  ldpp_dout(dpp, 10) << __func__ << "::skipping " << oid << dendl;
@@ -384,7 +407,14 @@ namespace rgw::dedup {
 	}
 	uint64_t size;
 	struct timespec tspec;
-	if (ioctx.stat2(oid, &size, &tspec) != 0) {
+	ret = ioctx.stat2(oid, &size, &tspec);
+	if (ret == -ENOENT) {
+	  ldpp_dout(dpp, 20) << __func__ << "::" << oid
+			     << " was removed by others" << dendl;
+	  no_entry_count++;
+	  continue;
+	}
+	else if (ret != 0) {
 	  ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
 	  failed_count++;
 	  continue;
@@ -398,8 +428,15 @@ namespace rgw::dedup {
 	  continue;
 	}
 	ldpp_dout(dpp, 10) << __func__ << "::removing object: " << oid << dendl;
-	if (ioctx.remove(oid) == 0) {
+	ret = ioctx.remove(oid);
+	if (ret == 0) {
 	  deleted_count++;
+	}
+	else if (ret == -ENOENT) {
+	  ldpp_dout(dpp, 20) << __func__ << "::" << oid
+			     << " was removed by others" << dendl;
+	  no_entry_count++;
+	  continue;
 	}
 	else {
 	  failed_count++;
@@ -410,6 +447,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 10) << __func__ << "::oids.size()=" << oids.size()
 			 << "::deleted=" << deleted_count
 			 << "::failed="  << failed_count
+			 << "::no entry="  << no_entry_count
 			 << "::skipped=" << skipped_count << dendl;
     } while (truncated);
     return 0;
@@ -701,7 +739,7 @@ namespace rgw::dedup {
 			  << ret << "::" << cpp_strerror(ret) << dendl;
 	continue;
       }
-      bl_arr[shard] = sp.in_bl;
+      bl_arr[shard] = sp.stats_bl;
     }
 
     if (count != shards_count) {
@@ -832,13 +870,15 @@ namespace rgw::dedup {
 				       const DoutPrefixProvider *dpp)
   {
     librados::IoCtx ioctx;
-    if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
-      return -1;
+    int ret = init_dedup_pool_ioctx(store->getRados(), dpp, ioctx);
+    if (ret != 0) {
+      return ret;
     }
 
     dedup_epoch_t epoch;
-    if (get_epoch(ioctx, dpp, &epoch, nullptr) != 0) {
-      return -1;
+    ret = get_epoch(ioctx, dpp, &epoch, nullptr);
+    if (ret != 0) {
+      return ret;
     }
     work_shard_t num_work_shards = epoch.num_work_shards;
     md5_shard_t  num_md5_shards  = epoch.num_md5_shards;
@@ -925,7 +965,7 @@ namespace rgw::dedup {
   // command-line called from radosgw-admin.cc
   int cluster::dedup_control(rgw::sal::RadosStore *store,
 			     const DoutPrefixProvider *dpp,
-			     int urgent_msg)
+			     urgent_msg_t urgent_msg)
   {
     ldpp_dout(dpp, 20) << __func__ << "::dedup_control req = "
 		       << get_urgent_msg_names(urgent_msg) << dendl;
@@ -934,19 +974,20 @@ namespace rgw::dedup {
 	urgent_msg != URGENT_MSG_RESTART &&
 	urgent_msg != URGENT_MSG_ABORT) {
       ldpp_dout(dpp, 1) << __func__ << "::illegal urgent_msg="<< urgent_msg << dendl;
-      return -1;
+      return -EINVAL;
     }
 
     librados::IoCtx ioctx;
-    if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
-      return -1;
+    int ret = init_dedup_pool_ioctx(store->getRados(), dpp, ioctx);
+    if (ret != 0) {
+      return ret;
     }
     // 10 seconds timeout
     const uint64_t timeout_ms = 10*1000;
     bufferlist reply_bl, urgent_msg_bl;
     ceph::encode(urgent_msg, urgent_msg_bl);
-    int ret = rgw_rados_notify(dpp, ioctx, DEDUP_WATCH_OBJ, urgent_msg_bl,
-			       timeout_ms, &reply_bl, null_yield);
+    ret = rgw_rados_notify(dpp, ioctx, DEDUP_WATCH_OBJ, urgent_msg_bl,
+			   timeout_ms, &reply_bl, null_yield);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_notify("
 			<< DEDUP_WATCH_OBJ << ")::err="<<cpp_strerror(ret) << dendl;
@@ -988,17 +1029,18 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   // command-line called from radosgw-admin.cc
   int cluster::dedup_restart_scan(rgw::sal::RadosStore *store,
-				  bool dry_run,
+				  dedup_req_type_t dedup_type,
 				  const DoutPrefixProvider *dpp)
   {
     librados::IoCtx ioctx;
-    if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
-      return -1;
+    int ret = init_dedup_pool_ioctx(store->getRados(), dpp, ioctx);
+    if (ret != 0) {
+      return ret;
     }
 
     dedup_epoch_t old_epoch;
     // store the previous epoch for cmp-swap
-    int ret = get_epoch(ioctx, dpp, &old_epoch, __func__);
+    ret = get_epoch(ioctx, dpp, &old_epoch, __func__);
     if (ret != 0) {
       return ret;
     }
@@ -1009,8 +1051,9 @@ namespace rgw::dedup {
       return ret;
     }
 
-    ldpp_dout(dpp, 10) << __func__ << (dry_run ?"::DRY RUN":"::FULL DEDUP") << dendl;
-    int dedup_type = (dry_run ? DEDUP_TYPE_DRY_RUN : DEDUP_TYPE_FULL);
+    ldpp_dout(dpp, 10) << __func__ << dedup_type << dendl;
+    ceph_assert(dedup_type == dedup_req_type_t::DEDUP_TYPE_DRY_RUN ||
+		dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL);
     ret = swap_epoch(dpp, ioctx, &old_epoch, dedup_type, 0, 0);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was reset" << dendl;
@@ -1026,8 +1069,9 @@ namespace rgw::dedup {
   {
     ldpp_dout(dpp, 10) << __func__ << "::epoch=" << d_epoch_time << dendl;
     librados::IoCtx ioctx;
-    if (init_dedup_pool_ioctx(store->getRados(), dpp, ioctx) != 0) {
-      return -1;
+    int ret = init_dedup_pool_ioctx(store->getRados(), dpp, ioctx);
+    if (ret != 0) {
+      return ret;
     }
 
     dedup_epoch_t new_epoch;
@@ -1043,7 +1087,7 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 10) << __func__ << "::Epoch hasn't change - > Do not restart scan!!" << dendl;
       }
       else {
-	ldpp_dout(dpp, 1) << __func__ << "::Do not restart scan!\n    epoch="
+	ldpp_dout(dpp, 1) << __func__ << " ::Do not restart scan!\n    epoch="
 			  << d_epoch_time << "\nnew_epoch="<< new_epoch.time <<dendl;
       }
       return false;

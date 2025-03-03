@@ -84,7 +84,7 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
     auto p = in->cbegin();
     decode(op, p);
   } catch (const buffer::error&) {
-    CLS_LOG(0, "ERROR: %s: failed to decode input", __func__);
+    CLS_LOG(4, "ERROR: %s: failed to decode input", __func__);
     return -EINVAL;
   }
 
@@ -125,7 +125,7 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
 	ret = true;
       }
       else {
-	CLS_LOG(1, "%s:: key=%s exists!", __func__, key.c_str());
+	CLS_LOG(10, "%s:: key=%s exists!", __func__, key.c_str());
 	return -EEXIST;
       }
     }
@@ -137,6 +137,7 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
       CLS_LOG(10, "%s:: failed compare key=%s ret=%d", __func__, key.c_str(), ret);
       // set the failing key in the returned bl
       encode(key, *out);
+      encode(value, *out);
       return ret;
     }
 
@@ -163,7 +164,7 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
 
 CLS_INIT(cmpxattr)
 {
-  CLS_LOG(1, "Loaded cmpxattr class!");
+  CLS_LOG(10, "Loaded cmpxattr class!");
   cls_handle_t h_class;
   cls_method_handle_t h_cmp_vals_set_vals;
   cls_register("cmpxattr", &h_class);

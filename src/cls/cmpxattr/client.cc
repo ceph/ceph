@@ -27,12 +27,14 @@ namespace cls::cmpxattr {
 			const std::map<std::string, bufferlist>& set_pairs,
 			bufferlist *out)
   {
+    // Limit the number of cmp/set pairs (currently set to 8)
+    if (unlikely(cmp_pairs.size() > max_keys || set_pairs.size() > max_keys)) {
+      return -E2BIG;
+    }
+
     // Caller must supply non-empty cmp_pairs and set_pairs
     // However, it is legal to pass an empty value bl for the key
     //         this is used when try to set a new key/value atomically
-    if (unlikely(cmp_pairs.size() > max_keys)) {
-      return -E2BIG;
-    }
     if (unlikely(cmp_pairs.empty() || set_pairs.empty())) {
       return -EINVAL;
     }
@@ -40,8 +42,8 @@ namespace cls::cmpxattr {
     cmp_vals_set_vals_op call;
     call.mode = mode;
     call.comparison = comparison;
-    call.cmp_pairs = std::move(cmp_pairs);
-    call.set_pairs = std::move(set_pairs);
+    call.cmp_pairs = cmp_pairs;
+    call.set_pairs = set_pairs;
     // not sure what is it used for, so don't need to pass an argument for it
     // in any case, keep a static place for an async reply
     static int rval;
@@ -63,14 +65,16 @@ namespace cls::cmpxattr {
 			<< cpp_strerror(err_code)
 			<< ", err_code=" << err_code << dendl;
     }
-    else if (err_bl.length() ){
+    else if (err_bl.length() ) {
       try {
 	std::string key;
+	std::string val;
 	auto bl_iter = err_bl.cbegin();
 	using ceph::decode;
 	decode(key, bl_iter);
-	ldpp_dout(dpp, 5) << caller << "::ERR: failed cmp_vals_set_vals for key: "
-			  << key << dendl;
+	decode(val, bl_iter);
+	ldpp_dout(dpp, 10) << caller << "::ERR: failed cmp_vals_set_vals for key: "
+			   << key << "::val=" << val << dendl;
 	// another thread set a new value causing CMP to fail
 	ret = -EBUSY;
       } catch (buffer::error& err) {

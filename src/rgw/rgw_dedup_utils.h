@@ -2,8 +2,11 @@
 #include <string>
 #include "include/rados/buffer.h"
 #include "include/encoding.h"
+#include "common/Formatter.h"
+#include "common/ceph_json.h"
 #include <time.h>
 #include "include/utime.h"
+#include "include/encoding.h"
 
 namespace rgw::dedup {
   static constexpr const char* DEDUP_WATCH_OBJ = "DEDUP_WATCH_OBJ";
@@ -36,6 +39,14 @@ namespace rgw::dedup {
   static_assert(MAX_MD5_SHARD  < NULL_SHARD);
   static_assert(MAX_MD5_SHARD  <= MD5_SHARD_HARD_LIMIT);
 
+  //---------------------------------------------------------------------------
+  enum dedup_req_type_t {
+    DEDUP_TYPE_NONE    = 0,
+    DEDUP_TYPE_DRY_RUN = 1,
+    DEDUP_TYPE_FULL    = 2
+  };
+
+  std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type);
   struct __attribute__ ((packed)) dedup_flags_t {
   private:
     static constexpr uint8_t RGW_DEDUP_FLAG_SHA256          = 0x01;
@@ -96,6 +107,22 @@ namespace rgw::dedup {
 
       return *this;
     }
+
+    void dump(Formatter *f) const {
+      Formatter::ObjectSection outer(*f, "worker_stats");
+
+      {
+	Formatter::ObjectSection inner_a(*f, "obj_sec_inner_a");
+	encode_json("ingress_obj", this->ingress_obj, f);
+      }
+
+      {
+	Formatter::ObjectSection inner_b(*f, "obj_sec_inner_b");
+	encode_json("single_part_objs", this->single_part_objs, f);
+      }
+
+    }
+
     uint64_t ingress_obj = 0;
     uint64_t ingress_obj_bytes = 0;
     uint64_t egress_records = 0;
@@ -127,6 +154,7 @@ namespace rgw::dedup {
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
+
   inline void encode(const worker_stats_t& w, ceph::bufferlist& bl)
   {
     ENCODE_START(1, 1, bl);

@@ -63,8 +63,12 @@ namespace rgw::dedup {
 					  md5_shard_t num_md5_shards);
     bool         can_start_new_scan(rgw::sal::RadosStore *store);
     static int   collect_all_shard_stats(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp);
-    static int   dedup_control(rgw::sal::RadosStore *store, const DoutPrefixProvider *dpp, int urgent_msg);
-    static int   dedup_restart_scan(rgw::sal::RadosStore *store, bool dry_run, const DoutPrefixProvider *dpp);
+    static int   dedup_control(rgw::sal::RadosStore *store,
+			       const DoutPrefixProvider *dpp,
+			       urgent_msg_t urgent_msg);
+    static int   dedup_restart_scan(rgw::sal::RadosStore *store,
+				    dedup_req_type_t dedup_type,
+				    const DoutPrefixProvider *dpp);
 
     //---------------------------------------------------------------------------
     int mark_work_shard_token_completed(librados::IoCtx &ioctx,

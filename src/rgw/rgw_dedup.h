@@ -10,7 +10,6 @@
 #include <variant>
 #include <iostream>
 #include <ostream>
-using namespace std;
 
 namespace rgw::dedup {
   struct dedup_epoch_t;
@@ -28,11 +27,10 @@ namespace rgw::dedup {
     inline bool should_pause() const {
       return (local_pause_req || remote_pause_req);
     }
-    void show_dedup_type(const DoutPrefixProvider* const dpp, const char* caller);
 
-    // TBD: pack state data members in a struct
     // allow to start/pasue/resume/stop execution
-    int  dedup_type         = 0;
+    //dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
+    int  dedup_type         = (int)dedup_req_type_t::DEDUP_TYPE_NONE;
     bool started            = false;
     bool dedup_exec         = false;
     bool shutdown_req       = false;
@@ -111,13 +109,13 @@ namespace rgw::dedup {
 					  const rgw::sal::Bucket     *bucket,
 					  const rgw_bucket_dir_entry &entry,
 					  worker_stats_t             *p_worker_stats /*IN-OUT*/);
-    int  process_bucket_shards(disk_block_array_t     &disk_arr,
+    int  process_bucket_shards(disk_block_array_t &disk_arr,
 			       const rgw::sal::Bucket *bucket,
-			       std::map<int, string>  &oids,
-			       librados::IoCtx        &ioctx,
-			       work_shard_t            shard_id,
-			       work_shard_t            num_work_shards,
-			       worker_stats_t         *p_worker_stats /*IN-OUT*/);
+			       std::map<int,std::string> &oids,
+			       librados::IoCtx &ioctx,
+			       work_shard_t shard_id,
+			       work_shard_t num_work_shards,
+			       worker_stats_t *p_worker_stats /*IN-OUT*/);
     int  ingress_bucket_objects_single_shard(disk_block_array_t &disk_arr,
 					     const rgw_bucket   &bucket_rec,
 					     work_shard_t        worker_id,
@@ -167,7 +165,7 @@ namespace rgw::dedup {
     int add_disk_rec_from_bucket_idx(disk_block_array_t     &disk_arr,
 				     const rgw::sal::Bucket *p_bucket,
 				     const parsed_etag_t    *p_parsed_etag,
-				     const string           &obj_name,
+				     const std::string      &obj_name,
 				     uint64_t                obj_size);
 
     int read_object_attribute(dedup_table_t       *p_table,
@@ -187,15 +185,15 @@ namespace rgw::dedup {
 				  const struct disk_record_t *p_rec,
 				  disk_block_id_t block_id,
 				  record_id_t rec_id);
-    int inc_ref_count_by_manifest(const string   &ref_tag,
-				  const string   &oid,
-				  RGWObjManifest &manifest);
-    int rollback_ref_by_manifest(const string   &ref_tag,
-				 const string   &oid,
-				 RGWObjManifest &tgt_manifest);
-    int free_tail_objs_by_manifest(const string   &ref_tag,
-				   const string   &oid,
-				   RGWObjManifest &tgt_manifest);
+    int inc_ref_count_by_manifest(const std::string &ref_tag,
+				  const std::string &oid,
+				  RGWObjManifest    &manifest);
+    int rollback_ref_by_manifest(const std::string &ref_tag,
+				 const std::string &oid,
+				 RGWObjManifest    &tgt_manifest);
+    int free_tail_objs_by_manifest(const std::string &ref_tag,
+				   const std::string &oid,
+				   RGWObjManifest    &tgt_manifest);
     int dedup_object(const disk_record_t *p_src_rec,
 		     const disk_record_t *p_tgt_rec,
 		     bool                 is_shared_manifest_src,
