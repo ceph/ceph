@@ -65,6 +65,21 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
   return params;
 }
 
+inline void set_date_header(const ceph::real_time *t, std::map<std::string, std::string>& headers, bool high_precision_time, const std::string& header_name)
+{
+  if (!t) {
+    return;
+  }
+  std::stringstream s;
+  utime_t tm = utime_t(*t);
+  if (high_precision_time) {
+    tm.gmtime_nsec(s);
+  } else {
+    tm.gmtime(s);
+  }
+  headers[header_name] = s.str();
+}
+
 class RGWRESTConn
 {
   /* the endpoint is not able to connect if the timestamp is not real_clock::zero */

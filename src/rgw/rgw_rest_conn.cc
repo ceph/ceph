@@ -272,21 +272,6 @@ int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-static void set_date_header(const real_time *t, map<string, string>& headers, bool high_precision_time, const string& header_name)
-{
-  if (!t) {
-    return;
-  }
-  stringstream s;
-  utime_t tm = utime_t(*t);
-  if (high_precision_time) {
-    tm.gmtime_nsec(s);
-  } else {
-    tm.gmtime(s);
-  }
-  headers[header_name] = s.str();
-}
-
 template <class T>
 static void set_header(T val, map<string, string>& headers, const string& header_name)
 {
