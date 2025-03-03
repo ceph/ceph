@@ -18,15 +18,13 @@ Versions and tags
 - [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
 - [x] Update src/librbd/CMakeLists.txt VERSION (librbd target at the bottom to 1.X.0)
 - [x] Update src/ceph_release with the new release name, number, and type ('dev')
-- [ ] Initial tag vX.0.0 (so that we can distinguish from (and sort
-      after) the backported (X-1).2.Z versions.
+- [x] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
 
-### Notes on tagging
-* Tags must be annonated as CMake determines `CEPH_GIT_NICE_VER` by
-calling `git describe --always`.
-* vX.0.0 are special ones in the sense they are pushed manually (unlike v.X.2.n
-which are handled by Jenkins).
-* vX.0.0 should point to a commit before the first one in a kickoff branch.
+.. note::
+
+    - Tags must be annotated as CMake determines ``CEPH_GIT_NICE_VER`` by calling ``git describe --always``.
+    - vX.0.0 are special ones in the sense they are pushed manually (unlike vX.1.Z and vX.2.Z which are handled by Jenkins).
+    - vX.0.0 should point to a commit before the first one in a kickoff branch.
 
 Define release names and constants
 ----------------------------------
