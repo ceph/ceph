@@ -90,6 +90,11 @@
   redistribution. In contrast, a stretch rule with a single-take configuration
   will not cause any data movement during the upgrade process.
 
+* CephFS: Command "ceph fs volume create" now allows users to pass metadata
+  and data pool names that should be used for creating the volume. In case
+  the passed name is a name of a non-empty pool, the command will abort.
+
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
