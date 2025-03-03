@@ -11349,7 +11349,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     // if we are doing zerocopy, we must also have a bufferlist
     // zero copy could work with a passed in buffer for write 
     // (but not for read - for read, we need an iovec to fill, a passed in buffer would force a copy).
-    if(iovcnt < 0 || (zerocopy && blp == nullptr)) {
+    if (iovcnt < 0 || (zerocopy && (!blp || (!write && !iov)))) {
       return -EINVAL;
     }
     loff_t totallen = 0;
