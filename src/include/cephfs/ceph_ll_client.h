@@ -71,6 +71,7 @@ struct ceph_statx {
 	struct timespec	stx_mtime;
 	struct timespec	stx_btime;
 	uint64_t	stx_version;
+	uint64_t 	stx_attributes;
 };
 
 #define CEPH_STATX_MODE		0x00000001U     /* Want/got stx_mode */
@@ -88,6 +89,13 @@ struct ceph_statx {
 #define CEPH_STATX_BTIME	0x00000800U     /* Want/got stx_btime */
 #define CEPH_STATX_VERSION	0x00001000U     /* Want/got stx_version */
 #define CEPH_STATX_ALL_STATS	0x00001fffU     /* All supported stats */
+
+// the value of STATX_ATTR_ENCRYPTED on most systems is equal to FS_ENCRYPT_FL
+// to identify encrypted files uniformly,
+// simplifying operations that need to check encryption status.
+#ifndef STATX_ATTR_ENCRYPTED
+#define STATX_ATTR_ENCRYPTED	0x00000800 /* File requires key to decrypt in fs */
+#endif
 
 /*
  * Compatibility macros until these defines make their way into glibc
@@ -120,6 +128,17 @@ struct ceph_statx {
 #endif
 #ifndef FALLOC_FL_PUNCH_HOLE
 #define FALLOC_FL_PUNCH_HOLE 0x02
+#endif
+
+/* fscrypt IOCTL flags*/
+// the value of FS_ENCRYPT_FL on most systems is equal to STATX_ATTR_ENCRYPTED
+// to identify encrypted files uniformly,
+// simplifying operations that need to check encryption status.
+#ifndef FS_ENCRYPT_FL
+#define FS_ENCRYPT_FL	0x00000800 /* Encrypted file */
+#endif
+#ifndef FS_IOC_GETFLAGS
+#define FS_IOC_GETFLAGS _IOR('f', 1, int32_t)
 #endif
 
 /** ceph_deleg_cb_t: Delegation recalls

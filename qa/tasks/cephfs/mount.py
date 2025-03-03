@@ -711,7 +711,7 @@ class CephFSMountBase(object):
             if r.exitstatus != 0:
                 raise RuntimeError("Expected file {0} not found".format(suffix))
 
-    def write_file(self, path, data, perms=None):
+    def write_file_ex(self, path, data, **kwargs):
         """
         Write the given data at the given path and set the given perms to the
         file on the path.
@@ -719,12 +719,22 @@ class CephFSMountBase(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        write_file(self.client_remote, path, data)
+        self.client_remote.write_file(path, data, **kwargs)
+
+    def write_file(self, path, data, perms=None, **kwargs):
+        """
+        Write the given data at the given path and set the given perms to the
+        file on the path.
+        """
+        if path.find(self.hostfs_mntpt) == -1:
+            path = os.path.join(self.hostfs_mntpt, path)
+
+        write_file(self.client_remote, path, data, **kwargs)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
 
-    def read_file(self, path, sudo=False):
+    def read_file(self, path, sudo=False, offset=None, length=None):
         """
         Return the data from the file on given path.
         """
@@ -734,7 +744,13 @@ class CephFSMountBase(object):
         args = []
         if sudo:
             args.append('sudo')
-        args += ['cat', path]
+        args.append('dd')
+        args.append(f'if={path}')
+        args.append('bs=1')
+        if offset:
+            args.append(f'skip={offset}')
+        if length:
+            args.append(f'count={length}')
 
         return self.run_shell(args=args, omit_sudo=False).stdout.getvalue().strip()
 
@@ -1486,6 +1502,84 @@ class CephFSMountBase(object):
         else:
             return proc
 
+    def lchown(self, fs_path, uid, gid):
+        """
+        Change ownership of a link with uid and gid provided.
+        """
+
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                os.lchown("{abs_path}", {uid}, {gid})
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def symlink(self, fs_path, symlink_path):
+        """
+        Change ownership of a link with uid and gid provided.
+        """
+
+        src_path = os.path.join(self.hostfs_mntpt, fs_path)
+        sym_path = os.path.join(self.hostfs_mntpt, symlink_path)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                os.symlink("{src_path}", "{sym_path}")
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def copy_file_range(self, src, dest, length):
+        """
+        Truncate a file of certain size
+        """
+
+        src_path = os.path.join(self.hostfs_mntpt, src)
+        dest_path = os.path.join(self.hostfs_mntpt, dest)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                src_fd = os.open("{src_path}", os.O_RDONLY)
+                dest_fd = os.open("{dest_path}", os.O_WRONLY|os.O_TRUNC)
+                os.copy_file_range(src_fd, dest_fd, {length})
+                os.close(src_fd)
+                os.close(dest_fd)
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def truncate(self, fs_path, size):
+        """
+        Truncate a file of certain size
+        """
+
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        pyscript = dedent(f"""
+            import os
+            import sys
+
+            try:
+                os.truncate("{abs_path}", {size})
+            except OSError as e:
+                sys.exit(e.errno)
+            """)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
     def touch(self, fs_path):
         """
         Create a dentry if it doesn't already exist.  This python
@@ -1503,6 +1597,28 @@ class CephFSMountBase(object):
             try:
                 f = open("{path}", "w")
                 f.close()
+            except IOError as e:
+                sys.exit(errno.EIO)
+            """).format(path=abs_path)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
+    def touch_os(self, fs_path):
+        """
+        Create a dentry if it doesn't already exist.  Use open in os module.
+
+        :param fs_path:
+        :return:
+        """
+        abs_path = os.path.join(self.hostfs_mntpt, fs_path)
+        pyscript = dedent("""
+            import os
+            import sys
+            import errno
+
+            try:
+                fd = os.open("{path}", os.O_RDONLY | os.O_CREAT)
+                os.close(fd)
             except IOError as e:
                 sys.exit(errno.EIO)
             """).format(path=abs_path)

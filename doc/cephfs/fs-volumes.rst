@@ -284,7 +284,7 @@ Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>]
+   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>] [--enctag <enctag>]
 
 
 The command succeeds even if the subvolume already exists.
@@ -324,6 +324,9 @@ Valid Earmarks
    be aware that user permissions and ACLs associated with the previous scope might still apply. Ensure that
    any necessary permissions are updated as needed to maintain proper access control.
 
+A separate encryption tag is available for use with encryption. This is to be used tagging the subvolume, with
+an identifier that is useful for system administrators or other services. By default, the tag is empty. This tag
+is not required, but can be a useful step in setting up encrypted subvolumes.
 
 Removing a subvolume
 ~~~~~~~~~~~~~~~~~~~~
@@ -454,6 +457,7 @@ The output format is JSON and contains the following fields.
 * ``features``: features supported by the subvolume
 * ``state``: current state of the subvolume
 * ``earmark``: earmark of the subvolume
+* ``enctag``: Encryption tag of the subvolume
 
 If a subvolume has been removed but its snapshots have been retained, the
 output contains only the following fields.
@@ -584,6 +588,33 @@ Use a command of the following form to remove the earmark of a subvolume:
 .. prompt:: bash #
 
    ceph fs subvolume earmark rm <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Getting enctag of a subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to get the enctag on a subvolume:
+
+.. prompt:: bash #
+
+   ceph fs subvolume enctag get <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Setting enctag of a subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to set the enctag on a subvolume:
+
+.. prompt:: bash #
+
+   ceph fs subvolume enctag set <vol_name> <subvol_name> [--group_name <subvol_group_name>] <enctag>
+
+Removing enctag of a subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to remove the enctag on a subvolume:
+
+.. prompt:: bash #
+
+   ceph fs subvolume enctag rm <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 Creating a Snapshot of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
