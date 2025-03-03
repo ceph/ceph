@@ -1,6 +1,6 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, Subject } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 
 import {
   ClusterRequestModel,
@@ -19,11 +19,17 @@ export class SmbService {
   baseURL = 'api/smb';
   private modalDataSubject = new Subject<DomainSettings>();
   modalData$ = this.modalDataSubject.asObservable();
+  private poolDataSource = new BehaviorSubject<any>(null);
+  poolData$ = this.poolDataSource.asObservable();
 
   constructor(private http: HttpClient) {}
 
   passData(data: DomainSettings) {
     this.modalDataSubject.next(data);
+  }
+
+  passPoolData(data: any) {
+    this.poolDataSource.next(data);
   }
 
   listClusters(): Observable<SMBCluster[]> {

@@ -1,8 +1,8 @@
 <cds-modal size="lg"
            [open]="open"
            [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
+           (overlaySelected)="closeModal1()">
+  <cds-modal-header (closeSelect)="closeModal1()">
     <h3 cdsModalHeaderHeading
         i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
   </cds-modal-header>
