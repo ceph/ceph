@@ -694,14 +694,14 @@ class TestImage(object):
         data = rand_data(256)
         self.image.write(data, 0)
         self.image.write_zeroes(0, 256)
-        eq(self.image.read(256, 256), b'\0' * 256)
+        eq(self.image.read(0, 256), b'\0' * 256)
         check_diff(self.image, 0, IMG_SIZE, None, 0, [])
 
     def test_write_zeroes_thick_provision(self):
         data = rand_data(256)
         self.image.write(data, 0)
         self.image.write_zeroes(0, 256, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION)
-        eq(self.image.read(256, 256), b'\0' * 256)
+        eq(self.image.read(0, 256), b'\0' * 256)
         check_diff(self.image, 0, IMG_SIZE, None, 0, [(0, 256, True)])
 
     def test_read(self):
@@ -1604,7 +1604,7 @@ class TestImage(object):
         eq(retval[0], 0)
         eq(comp.get_return_value(), 0)
         eq(sys.getrefcount(comp), 2)
-        eq(self.image.read(256, 256), b'\0' * 256)
+        eq(self.image.read(0, 256), b'\0' * 256)
 
     def test_aio_flush(self):
         retval = [None]
