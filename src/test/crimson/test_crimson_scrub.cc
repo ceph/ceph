@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <boost/iterator/filter_iterator.hpp>
 
 #include <fmt/ranges.h>
 

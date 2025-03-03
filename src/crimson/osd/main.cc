@@ -17,6 +17,7 @@
 #include <seastar/util/closeable.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/std-compat.hh>
+#include <seastar/core/signal.hh>
 
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
@@ -161,7 +162,7 @@ int main(int argc, const char* argv[])
           }
           // just ignore SIGHUP, we don't reread settings. keep in mind signals
           // handled by S* must be blocked for alien threads (see AlienStore).
-          seastar::engine().handle_signal(SIGHUP, [] {});
+          seastar::handle_signal(SIGHUP, [] {});
 
           // start prometheus API server
           seastar::httpd::http_server_control prom_server;
