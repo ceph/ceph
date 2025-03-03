@@ -18,4 +18,10 @@ if(${WITH_CEPHFS})
     )
   install(TARGETS ceph_test_client
     DESTINATION ${CMAKE_INSTALL_BINDIR})
+  add_executable(ceph_test_zerocopy_sanity
+          zerocopy.cc
+  )
+  add_ceph_unittest(ceph_test_zerocopy_sanity)
+  target_link_libraries(ceph_test_zerocopy_sanity ceph-common cephfs)
+  install(TARGETS ceph_test_zerocopy_sanity DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(${WITH_CEPHFS})
