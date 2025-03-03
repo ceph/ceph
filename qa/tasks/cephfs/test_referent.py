@@ -1,5 +1,7 @@
 import logging
 import time
+import os
+import signal
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +55,23 @@ class TestReferentInode(CephFSTestCase):
         self.assertEqual(mdc_stats["num_strays_delayed"], 0)
         self.assertEqual(pq_stats["pq_executing"], 0)
         self.assertEqual(pq_stats["pq_executing_ops"], 0)
+
+    def verify_referent_inode_list_in_memory(self, p_file, referent_ino):
+        p_file_ino = self.mount_a.path_to_ino(p_file)
+        p_file_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(p_file_ino)])
+        referent_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(referent_ino)])
+        # referents's remote should point to primary
+        self.assertEqual(p_file_inode_dump['ino'], referent_inode_dump['remote_ino'])
+        self.assertIn(referent_ino, p_file_inode_dump['referent_inodes'])
+
+    def verify_referent_inode_list_on_disk(self, p_dir, p_file, s_dir, s_file):
+        p_dir_ino = self.mount_a.path_to_ino(p_dir)
+        primary_inode = self.fs.read_meta_inode(p_dir_ino, p_file)
+        s_dir_ino = self.mount_a.path_to_ino(s_dir)
+        referent_inode = self.fs.read_meta_inode(s_dir_ino, s_file)
+        # referents's remote should point to primary
+        self.assertEqual(primary_inode['ino'], referent_inode['remote_ino'])
+        self.assertIn(referent_inode['ino'], primary_inode['referent_inodes'])
 
     def test_referent_link(self):
         """
@@ -352,19 +371,208 @@ class TestReferentInode(CephFSTestCase):
         post_reint_bt = self.fs.read_backtrace(file_b_ino)
         self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "linkto_b")
 
-    def test_multiple_referent_post_reintegration(self):
-        pass
+    def test_read_a_referent_dentry(self):
+        """
+        test_read_a_referent_dentry - Test read of a hardlink file with referent inode
+        """
+        self.mount_a.run_shell(["mkdir", "dir0"])
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.write_file('dir0/file1', 'somedata')
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file1"])
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file2"])
+
+        data_read_from_primary_file = self.mount_a.read_file('dir0/file1')
+        self.assertEqual('somedata', data_read_from_primary_file)
+        data_read_from_hardlink1 = self.mount_a.read_file('dir1/hardlink_file1')
+        self.assertEqual('somedata', data_read_from_hardlink1)
+        data_read_from_hardlink2 = self.mount_a.read_file('dir1/hardlink_file2')
+        self.assertEqual('somedata', data_read_from_hardlink2)
+
+    def test_referent_dentry_load_after_mds_restart(self):
+        """
+        test_referent_dentry_load_after_mds_restart - Test loading of referent inode from disk
+        """
+        self.mount_a.run_shell(["mkdir", "dir0"])
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.write_file('dir0/file1', 'somedata')
+
+        # create hardlinks and save referent inode numbers before mds restart
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file1"])
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file2"])
+        self.fs.mds_asok(['flush', 'journal'])
+        file1_ino = self.mount_a.path_to_ino("dir0/file1")
+        file1_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(file1_ino)])
+        referent1_ino = file1_inode_dump['referent_inodes'][0]
+        referent2_ino = file1_inode_dump['referent_inodes'][1]
+
+        # umount, flush and restart the mds forcing the mds to load the dentries from the disk
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(['flush', 'journal'])
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+
+        # validate the data after loading referent dentry from the disk
+        data_read_from_primary_file = self.mount_a.read_file('dir0/file1')
+        self.assertEqual('somedata', data_read_from_primary_file)
+        data_read_from_hardlink1 = self.mount_a.read_file('dir1/hardlink_file1')
+        self.assertEqual('somedata', data_read_from_hardlink1)
+        data_read_from_hardlink2 = self.mount_a.read_file('dir1/hardlink_file2')
+        self.assertEqual('somedata', data_read_from_hardlink2)
+
+        # validate the referent_inodes list after mds restart
+        file1_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(file1_ino)])
+        self.assertEqual(len(file1_inode_dump['referent_inodes']), 2)
+        self.assertIn(referent1_ino, file1_inode_dump['referent_inodes'])
+        self.assertIn(referent2_ino, file1_inode_dump['referent_inodes'])
 
     def test_rename_a_referent_dentry(self):
+        """
+        test_rename_a_referent_dentry - Test rename of a hardlink file with referent inode
+        """
+
+        self.mount_a.run_shell(["mkdir", "dir0"])
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.run_shell(["mkdir", "dir2"])
+        self.mount_a.write_file('dir0/file1', 'somedata')
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file1"])
+
+        # write out the backtrace - this would writeout the backrace
+        # of the newly introduced referent inode to the data pool.
+        self.fs.mds_asok(["flush", "journal"])
+        # save referent ino for validation from disk
+        dir1_ino = self.mount_a.path_to_ino('dir1')
+        referent_inode = self.fs.read_meta_inode(dir1_ino, "hardlink_file1")
+        referent_ino = referent_inode['ino']
+
+        # rename hardlink referent dentry
+        self.mount_a.run_shell(["mv", "dir1/hardlink_file1", "dir2/renamed_hardlink_file1"])
+
+        # validate the data read after rename
+        data_read_from_renamed_hardlink = self.mount_a.read_file('dir2/renamed_hardlink_file1')
+        self.assertEqual('somedata', data_read_from_renamed_hardlink)
+
+        # validate referent_inode list in memory and on disk
+        self.fs.mds_asok(["flush", "journal"])
+        self.verify_referent_inode_list_in_memory("dir0/file1", referent_ino)
+        self.verify_referent_inode_list_on_disk("dir0", "file1", "dir2", "renamed_hardlink_file1")
+        # validate backtrace after rename
+        self.assert_backtrace(referent_ino, "dir2/renamed_hardlink_file1")
+
+    def test_rename_primary_to_existing_referent_dentry(self):
+        """
+        test_rename_primary_to_existing_referent_dentry - Test rename primary to it's existing hardlink file.
+        The rename should be noop as it's rename to same ino
+        """
+
+        self.mount_a.run_shell(["mkdir", "dir0"])
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.write_file('dir0/file1', 'somedata')
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file1"])
+        primary_inode = self.mount_a.path_to_ino('dir0/file1')
+
+        # write out the backtrace - this would writeout the backrace
+        # of the newly introduced referent inode to the data pool.
+        self.fs.mds_asok(["flush", "journal"])
+        # save referent ino for validation from disk
+        dir1_ino = self.mount_a.path_to_ino('dir1')
+        referent_inode = self.fs.read_meta_inode(dir1_ino, "hardlink_file1")
+        referent_ino = referent_inode['ino']
+
+        # rename hardlink referent dentry, noop
+        srcpath = os.path.join(self.mount_a.mountpoint, "dir0", "file1")
+        dstpath = os.path.join(self.mount_a.mountpoint, "dir1", "hardlink_file1")
+        os.rename(srcpath, dstpath)
+
+        primary_inode_after_rename = self.mount_a.path_to_ino('dir0/file1')
+        hardlink_inode = self.mount_a.path_to_ino('dir1/hardlink_file1')
+        self.assertEqual(primary_inode_after_rename, primary_inode)
+        self.assertEqual(hardlink_inode, primary_inode)
+
+        # validate referent_inode list in memory and on disk. Noop after rename
+        self.verify_referent_inode_list_in_memory("dir0/file1", referent_ino)
+        self.verify_referent_inode_list_on_disk("dir0", "file1", "dir1", "hardlink_file1")
+        # validate backtrace after rename. Noop
+        self.assert_backtrace(referent_ino, "dir1/hardlink_file1")
+
+    def test_referent_with_mdlog_replay(self):
+        """
+        test_referent_with_mdlog_replay - Restart the mds before the journal flush so that it recovers referent hardlinks from the journal
+        """
+        self.mount_a.run_shell(["mkdir", "dir0"])
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.run_shell(["mkdir", "dir2"])
+        self.mount_a.write_file('dir0/file1', 'somedata')
+        primary_inode = self.mount_a.path_to_ino('dir0/file1')
+
+        # hardlinks
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file1"])
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file2"])
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file3"])
+        self.mount_a.run_shell(["ln", "dir0/file1", "dir1/hardlink_file4"])
+
+        # unlink referent hardlink dentry
+        self.mount_a.run_shell(["rm", "-f", "dir1/hardlink_file4"])
+        # rename referent hardlink dentry
+        self.mount_a.run_shell(["mv", "dir1/hardlink_file3", "dir2/renamed_hardlink_file3"])
+
+        # restart mds without flush, so that it recovers from the journal replay
+        self.fs.rank_signal(signal.SIGKILL, rank=0)
+        self.fs.mds_fail_restart()
+        self.fs.rank_fail(rank=0)
+        self.fs.wait_for_daemons()
+
+        # Validate after mdlog replay
+        primary_inode_after_replay = self.mount_a.path_to_ino('dir0/file1')
+        self.assertEqual(primary_inode, primary_inode_after_replay)
+        hardlink1_inode = self.mount_a.path_to_ino('dir1/hardlink_file1')
+        hardlink2_inode = self.mount_a.path_to_ino('dir1/hardlink_file2')
+        renamed_hardlink3_inode = self.mount_a.path_to_ino('dir2/renamed_hardlink_file3')
+        hardlink_file3_path = os.path.join(self.mount_a.mountpoint, "dir1", "hardlink_file3")
+        hardlink_file4_path = os.path.join(self.mount_a.mountpoint, "dir1", "hardlink_file4")
+        with self.assertRaises(FileNotFoundError):
+            os.lstat(hardlink_file3_path)
+        with self.assertRaises(FileNotFoundError):
+            os.lstat(hardlink_file4_path)
+        self.assertEqual(primary_inode, hardlink1_inode)
+        self.assertEqual(primary_inode, hardlink2_inode)
+        self.assertEqual(primary_inode, renamed_hardlink3_inode)
+
+        # referent_inodes list validation
+        primary_inode_dump = self.fs.mds_asok(['dump', 'inode', hex(primary_inode)])
+        self.assertEqual(len(primary_inode_dump['referent_inodes']), 3)
+        self.assertEqual(primary_inode_dump['nlink'], 4)
+
+        # flush journal and validate backtraces
+        self.fs.mds_asok(["flush", "journal"])
+        dir1_ino = self.mount_a.path_to_ino('dir1')
+        dir2_ino = self.mount_a.path_to_ino('dir2')
+        referent_inode1 = self.fs.read_meta_inode(dir1_ino, "hardlink_file1")
+        referent_inode2 = self.fs.read_meta_inode(dir1_ino, "hardlink_file2")
+        referent_inode3 = self.fs.read_meta_inode(dir2_ino, "renamed_hardlink_file3")
+        self.verify_referent_inode_list_in_memory("dir0/file1", referent_inode1['ino'])
+        self.verify_referent_inode_list_in_memory("dir0/file1", referent_inode2['ino'])
+        self.verify_referent_inode_list_in_memory("dir0/file1", referent_inode3['ino'])
+        self.verify_referent_inode_list_on_disk("dir0", "file1", "dir1", "hardlink_file1")
+        self.verify_referent_inode_list_on_disk("dir0", "file1", "dir1", "hardlink_file2")
+        self.verify_referent_inode_list_on_disk("dir0", "file1", "dir2", "renamed_hardlink_file3")
+        with self.assertRaises(ObjectNotFound):
+            self.fs.read_meta_inode(dir1_ino, "hardlink_file3")
+        with self.assertRaises(ObjectNotFound):
+            self.fs.read_meta_inode(dir1_ino, "hardlink_file4")
+
+        # validate backtrace after rename
+        self.assert_backtrace(referent_inode1['ino'], "dir1/hardlink_file1")
+        self.assert_backtrace(referent_inode2['ino'], "dir1/hardlink_file2")
+        self.assert_backtrace(referent_inode3['ino'], "dir2/renamed_hardlink_file3")
+
+    def test_multiple_referent_post_reintegration(self):
         pass
 
     def test_referent_with_mds_killpoints(self):
         pass
 
     def test_referent_with_snapshot(self):
-        pass
-
-    def test_referent_with_mdlog_replay(self):
         pass
 
     def test_referent_no_caps(self):
