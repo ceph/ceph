@@ -346,6 +346,7 @@ add_library(cls_2pc_queue_client STATIC ${cls_2pc_queue_client_srcs})
 
 
 add_subdirectory(cmpomap)
+add_subdirectory(cmpxattr)
 
 # cls_fifo
 set(cls_fifo_srcs fifo/cls_fifo.cc)
