@@ -140,6 +140,8 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
     { ECANCELED, {409, "ConcurrentModification"}},
+    { EDQUOT, {507, "InsufficientCapacity"}},
+    { ENOSPC, {507, "InsufficientCapacity"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
