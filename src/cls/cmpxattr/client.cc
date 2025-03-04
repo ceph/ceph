@@ -18,7 +18,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 
-static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 namespace cls::cmpxattr {
   //---------------------------------------------------------------------------
   int cmp_vals_set_vals(librados::ObjectWriteOperation& op,
@@ -78,7 +77,7 @@ namespace cls::cmpxattr {
 	// another thread set a new value causing CMP to fail
 	ret = -EBUSY;
       } catch (buffer::error& err) {
-	std::cerr << caller << "::ERR: unable to decode err_bl" << std::endl;
+	ldpp_dout(1) << caller << "::ERR: unable to decode err_bl" << dendl;
 	ret = -EINVAL;
       }
     }
