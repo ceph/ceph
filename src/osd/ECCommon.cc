@@ -806,7 +806,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
   ECSubWrite local_write_op;
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
-  shard_id_set backfill_shards = get_parent()->get_backfill_shard_id_set();
+  set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
 
   if (op.version.version != 0) {
     if (oid_to_version.contains(op.hoid)) {
@@ -838,7 +838,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op)
     op.pending_commits++;
     bool should_send = get_parent()->should_send_op(pg_shard, op.hoid);
     const pg_stat_t &stats =
-      (should_send || !backfill_shards.contains(shard)) ?
+      (should_send || !backfill_shards.contains(pg_shard)) ?
       get_info().stats :
       get_parent()->get_shard_info().find(pg_shard)->second.stats;
 
