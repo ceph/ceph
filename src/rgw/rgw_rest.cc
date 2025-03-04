@@ -82,6 +82,7 @@ const static struct rgw_http_status_code http_codes[] = {
   { 500, "Internal Server Error" },
   { 501, "Not Implemented" },
   { 503, "Slow Down"},
+  { 507, "Insufficient Storage"},
   { 0, NULL },
 };
 
