@@ -33,15 +33,37 @@ class SMBService(CephService):
         smb_spec = cast(SMBSpec, spec)
         return 'clustered' in smb_spec.features
 
+    def fence(self, daemon_id: str) -> None:
+        logger.info(f'Fencing old smb.{daemon_id}')
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth rm',
+            'entity': f'client.smb.fs.cluster.{daemon_id}',
+        })
+
     def fence_old_ranks(
         self,
         spec: ServiceSpec,
         rank_map: Dict[int, Dict[int, Optional[str]]],
         num_ranks: int,
     ) -> None:
-        logger.warning(
-            'fence_old_ranks: Unsupported %r %r', rank_map, num_ranks
-        )
+        smb_spec = cast(SMBSpec, spec)
+        for rank, m in list(rank_map.items()):
+            if rank >= num_ranks:
+                for daemon_id in m.values():
+                    if daemon_id is not None:
+                        logger.info(f'Fencing old smb.{smb_spec.cluster_id}')
+                        self.fence(smb_spec.cluster_id)
+                del rank_map[rank]
+                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+            else:
+                max_gen = max(m.keys())
+                for gen, daemon_id in list(m.items()):
+                    if gen < max_gen:
+                        if daemon_id is not None:
+                            logger.info(f'Fencing old smb.{smb_spec.cluster_id}')
+                            self.fence(smb_spec.cluster_id)
+                        del rank_map[rank][gen]
+                        self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
     def prepare_create(
         self, daemon_spec: CephadmDaemonDeploySpec
