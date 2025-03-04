@@ -3081,16 +3081,30 @@ int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
  */
 int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield y) {
   int ret = 0;
+
+  /* once bucket versioning is enabled, the non-current entries with
+   * instance empty should have instance set to "null" to be able
+   * to correctly read its olh version entry.
+   */
+  rgw_obj_key& obj_key = get_key();
+  rgw::sal::Bucket* bucket = get_bucket();
+
+  if (obj_key.instance.empty() && bucket->versioned()) {
+    obj_key.instance = "null";
+  }
+
   real_time read_mtime;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
   read_op->params.lastmod = &read_mtime;
-  ldpp_dout(dpp, 20) << "Entering handle_obj_expiry Obj:" << get_key() << dendl;
-
   ret = read_op->prepare(y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "handle_obj_expiry Obj:" << get_key() << 
 	    ", read_op failed ret=" << ret << dendl;
     return ret;
+  }
+
+  if (obj_key.instance == "null") {
+    obj_key.instance.clear();
   }
 
   set_atomic();
