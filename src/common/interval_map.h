@@ -210,7 +210,7 @@ public:
     return ret;
   }
   template<bool strict = true>
-  void to_interval_set(interval_set<K, C, strict> set) const {
+  void to_interval_set(interval_set<K, C, strict> &set) const {
     for (auto &&i: *this) {
       set.insert(i.get_off(), i.get_len());
     }
