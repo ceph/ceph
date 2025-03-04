@@ -777,8 +777,14 @@ void Replayer<I>::scan_remote_mirror_snapshots(
           auto limit = get_remote_snap_id_end_limit();
           if (limit != CEPH_NOSNAP && limit >= m_remote_snap_id_end) {
             copy_snapshots();
-          } else {
-            load_local_image_meta();
+            return;
+          }
+          dout(10) << "idling waiting for change in snapshot limits" << dendl;
+          {
+            std::unique_lock locker{m_lock};
+            ceph_assert(m_state == STATE_REPLAYING);
+            m_state = STATE_IDLE;
+            notify_status_updated();
           }
         }
         return;
