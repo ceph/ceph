@@ -85,7 +85,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """ Path to user data directory within a subvolume snapshot named 'snapname' """
         return self.snapshot_path(snapname)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization):
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, case_insensitive):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -106,6 +106,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 'quota': size,
                 'earmark': earmark,
                 'normalization': normalization,
+                'case_insensitive': case_insensitive,
             }
             self.set_attrs(subvol_path, attrs)
 
