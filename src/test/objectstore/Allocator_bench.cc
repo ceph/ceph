@@ -13,6 +13,7 @@
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
+#include "os/bluestore/AllocatorBase.h"
 
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -294,7 +295,7 @@ struct OverwriteTextContext : public Thread {
 
   void build_histogram() {
     const size_t num_buckets = 8;
-    Allocator::FreeStateHistogram hist(num_buckets);
+    AllocatorBase::FreeStateHistogram hist(num_buckets);
     alloc->foreach(
       [&](size_t off, size_t len) {
 	hist.record_extent(uint64_t(alloc_unit), off, len);

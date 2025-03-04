@@ -23,7 +23,7 @@ Btree2Allocator::Btree2Allocator(CephContext* _cct,
   double _rweight_factor,
   bool with_cache,
   std::string_view name) :
-    Allocator(name, device_size, block_size),
+    AllocatorBase(name, device_size, block_size),
     myTraits(RANGE_SIZE_BUCKET_COUNT),
     cct(_cct),
     range_count_cap(max_mem / sizeof(range_seg_t))
