@@ -380,17 +380,43 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection inner_a(*f, "common:");
-      //encode_json("", this->, f);
+      encode_json("Total processed objects", this->processed_objects, f);
+      encode_json("Loaded objects", this->loaded_objects, f);
+#if 0
+      encode_json("", this->, f);
+      encode_json("", this->, f);
+      encode_json("", this->, f);
+      encode_json("", this->, f);
+      encode_json("", this->, f);
+#endif
     }
 
     {
       Formatter::ObjectSection inner_b(*f, "notify:");
-      //encode_json("", this->, f);
+      //encode_json("Valid SHA256 attrs", this->valid_sha256_attrs, f);
+      //encode_json("inValid SHA256 attrs", this->invalid_sha256_attrs, f);
     }
 
     {
       Formatter::ObjectSection inner_b(*f, "skipped:");
-      //encode_json("", this->, f);
+      encode_json("Skipped shared_manifest", this->skipped_shared_manifest, f);
+      encode_json("Skipped singleton objs", this->skipped_singleton, f);
+      if (this->skipped_singleton) {
+	encode_json("Skipped singleton Bytes", this->skipped_singleton_bytes, f);
+      }
+      encode_json("Skipped source record", this->skipped_source_record, f);
+
+      if (this->ingress_skip_encrypted) {
+	encode_json("Skipped Encrypted objs", this->ingress_skip_encrypted, f);
+	encode_json("Skipped Encrypted Bytes",this->ingress_skip_encrypted_bytes, f);
+      }
+      if (this->ingress_skip_compressed) {
+	encode_json("Skipped Compressed objs", this->ingress_skip_compressed, f);
+	encode_json("Skipped Compressed Bytes", this->ingress_skip_compressed_bytes, f);
+      }
+      if (this->ingress_skip_changed_objs) {
+	encode_json("Skipped Changed Object", this->ingress_skip_changed_objs, f);
+      }
     }
 
     {

@@ -10,8 +10,7 @@ namespace rgw::dedup {
 
   struct dedup_epoch_t {
     uint32_t serial;
-    //dedup_req_type_t dedup_type;
-    int dedup_type;
+    dedup_req_type_t dedup_type;
     utime_t time;
     uint32_t num_work_shards = 0;
     uint32_t num_md5_shards = 0;
@@ -22,7 +21,7 @@ namespace rgw::dedup {
   {
     ENCODE_START(1, 1, bl);
     encode(o.serial, bl);
-    encode(o.dedup_type, bl);
+    encode(static_cast<int32_t>(o.dedup_type), bl);
     encode(o.time, bl);
     encode(o.num_work_shards, bl);
     encode(o.num_md5_shards, bl);
@@ -34,7 +33,9 @@ namespace rgw::dedup {
   {
     DECODE_START(1, bl);
     decode(o.serial, bl);
-    decode(o.dedup_type, bl);
+    int32_t dedup_type;
+    decode(dedup_type, bl);
+    o.dedup_type = static_cast<dedup_req_type_t> (dedup_type);
     decode(o.time, bl);
     decode(o.num_work_shards, bl);
     decode(o.num_md5_shards, bl);

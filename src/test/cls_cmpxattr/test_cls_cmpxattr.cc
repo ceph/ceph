@@ -56,14 +56,15 @@ namespace cls::cmpxattr {
     bool do_cmp_vals_set_vals(const std::string& oid,
 			      Mode mode,
 			      Op comparison,
-			      const ComparisonMap& cmp_pairs,
-			      const std::map<std::string, bufferlist>& set_pairs,
+			      const ComparisonMap cmp_pairs,
+			      const std::map<std::string, bufferlist> set_pairs,
 			      int *p_ret = nullptr,
 			      std::string *p_key = nullptr)
     {
       bufferlist err_bl;
       librados::ObjectWriteOperation op;
-      int ret = cmp_vals_set_vals(op, mode, comparison, cmp_pairs, set_pairs, &err_bl);
+      int ret = cmp_vals_set_vals(op, mode, comparison, std::move(cmp_pairs),
+				  std::move(set_pairs), &err_bl);
       if (ret < 0) {
 	return ret;
       }
@@ -665,7 +666,8 @@ namespace cls::cmpxattr {
     }
     bufferlist err_bl;
     librados::ObjectWriteOperation op;
-    EXPECT_EQ(cmp_vals_set_vals(op, Mode::U64, Op::EQ, cmp_pairs, set_pairs, &err_bl), 0);
+    EXPECT_EQ(cmp_vals_set_vals(op, Mode::U64, Op::EQ, std::move(cmp_pairs),
+				std::move(set_pairs), &err_bl), 0);
   }
 
   //---------------------------------------------------------------------------
@@ -680,7 +682,8 @@ namespace cls::cmpxattr {
     }
     bufferlist err_bl;
     librados::ObjectWriteOperation op;
-    EXPECT_EQ(cmp_vals_set_vals(op, Mode::U64, Op::EQ, cmp_pairs, set_pairs, &err_bl), -E2BIG);
+    EXPECT_EQ(cmp_vals_set_vals(op, Mode::U64, Op::EQ, std::move(cmp_pairs),
+				std::move(set_pairs), &err_bl), -E2BIG);
   }
 
   //---------------------------------------------------------------------------
@@ -697,11 +700,14 @@ namespace cls::cmpxattr {
 
     bufferlist err_bl;
     librados::ObjectWriteOperation op;
-    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, empty_cmp_pairs, empty_set_pairs, &err_bl), -EINVAL);
-    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, empty_cmp_pairs, set_pairs, &err_bl), -EINVAL);
-    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, empty_set_pairs, &err_bl), -EINVAL);
-
-    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs, &err_bl), 0);
+    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(empty_cmp_pairs),
+				std::move(empty_set_pairs), &err_bl), -EINVAL);
+    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(empty_cmp_pairs),
+				std::move(set_pairs), &err_bl), -EINVAL);
+    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(cmp_pairs),
+				std::move(empty_set_pairs), &err_bl), -EINVAL);
+    EXPECT_EQ(cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(cmp_pairs),
+				std::move(set_pairs), &err_bl), 0);
   }
 
 } // namespace cls::cmpxattr

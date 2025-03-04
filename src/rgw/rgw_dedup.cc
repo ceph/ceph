@@ -133,7 +133,7 @@ namespace rgw::dedup {
   void encode(const control_t& ctl, ceph::bufferlist& bl)
   {
     ENCODE_START(1, 1, bl);
-    encode(ctl.dedup_type, bl);
+    encode(static_cast<int32_t>(ctl.dedup_type), bl);
     encode(ctl.started, bl);
     encode(ctl.dedup_exec, bl);
     encode(ctl.shutdown_req, bl);
@@ -152,7 +152,9 @@ namespace rgw::dedup {
   void decode(control_t& ctl, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
-    decode(ctl.dedup_type, bl);
+    int32_t dedup_type;
+    decode(dedup_type, bl);
+    ctl.dedup_type = static_cast<dedup_req_type_t> (dedup_type);
     decode(ctl.started, bl);
     decode(ctl.dedup_exec, bl);
     decode(ctl.shutdown_req, bl);
@@ -170,7 +172,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   std::ostream& operator<<(std::ostream &out, const control_t &ctl)
   {
-    out << static_cast<dedup_req_type_t>(ctl.dedup_type);
+    out << ctl.dedup_type;
     if (ctl.started) {
       out << "::started";
     }
@@ -614,8 +616,10 @@ namespace rgw::dedup {
     map<string, bufferlist> src_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl}};
     map<string, bufferlist> tgt_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl},
 					     {RGW_ATTR_MANIFEST, p_src_rec->manifest_bl}};
-    ret = cmp_vals_set_vals(src_op, Mode::String, Op::EQ, src_cmp_pairs, src_set_pairs, &src_err_bl);
-    ret = cmp_vals_set_vals(tgt_op, Mode::String, Op::EQ, tgt_cmp_pairs, tgt_set_pairs, &tgt_err_bl);
+    ret = cmp_vals_set_vals(src_op, Mode::String, Op::EQ, std::move(src_cmp_pairs),
+			    std::move(src_set_pairs), &src_err_bl);
+    ret = cmp_vals_set_vals(tgt_op, Mode::String, Op::EQ, std::move(tgt_cmp_pairs),
+			    std::move(tgt_set_pairs), &tgt_err_bl);
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
@@ -1295,7 +1299,7 @@ namespace rgw::dedup {
       // get bucket-indices of @current_shard
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter,
 			     max_entries, list_versions, &result);
-      int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
+      int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, null_yield);
       if (unlikely(ret < 0)) {
 	ldpp_dout(dpp, 1) << __func__ << "::ERR: failed rgw_rados_operate() ret="
 			  << ret << "::" << cpp_strerror(-ret) << dendl;
@@ -1459,8 +1463,7 @@ namespace rgw::dedup {
     display_table_stat_counters(dpp, obj_count_in_shard, d_num_rados_objects_bytes, p_stats);
 
 #if 1
-    ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::"
-		       << static_cast<dedup_req_type_t>(d_ctl.dedup_type) << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;
     if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_FULL) {
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
 	remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
@@ -1914,8 +1917,7 @@ namespace rgw::dedup {
     d_ctl.dedup_type = p_epoch->dedup_type;
     ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL ||
 		d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_DRY_RUN);
-    ldpp_dout(dpp, 10) << __func__ << "::"
-		       << static_cast<dedup_req_type_t>(d_ctl.dedup_type) << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::" << d_ctl.dedup_type << dendl;
 
     return 0;
   }
@@ -1962,8 +1964,7 @@ namespace rgw::dedup {
     d_ctl.dedup_type = p_epoch->dedup_type;
     ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL ||
 		d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_DRY_RUN);
-    ldpp_dout(dpp, 10) << __func__ << "::"
-		       << static_cast<dedup_req_type_t>(d_ctl.dedup_type) << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::" << d_ctl.dedup_type << dendl;
 
     return 0;
   }

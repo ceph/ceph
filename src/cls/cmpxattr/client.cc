@@ -23,8 +23,8 @@ namespace cls::cmpxattr {
   //---------------------------------------------------------------------------
   int cmp_vals_set_vals(librados::ObjectWriteOperation& op,
 			Mode mode, Op comparison,
-			const ComparisonMap& cmp_pairs,
-			const std::map<std::string, bufferlist>& set_pairs,
+			const ComparisonMap&& cmp_pairs,
+			const std::map<std::string, bufferlist>&& set_pairs,
 			bufferlist *out)
   {
     // Limit the number of cmp/set pairs (currently set to 8)
@@ -42,8 +42,8 @@ namespace cls::cmpxattr {
     cmp_vals_set_vals_op call;
     call.mode = mode;
     call.comparison = comparison;
-    call.cmp_pairs = cmp_pairs;
-    call.set_pairs = set_pairs;
+    call.cmp_pairs = std::move(cmp_pairs);
+    call.set_pairs = std::move(set_pairs);
     // not sure what is it used for, so don't need to pass an argument for it
     // in any case, keep a static place for an async reply
     static int rval;

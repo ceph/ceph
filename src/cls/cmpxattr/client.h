@@ -39,8 +39,8 @@ namespace cls::cmpxattr {
   /// and is not reported as an error
   [[nodiscard]] int cmp_vals_set_vals(librados::ObjectWriteOperation& writeop,
 				      Mode mode, Op comparison,
-				      const ComparisonMap& cmp_pairs,
-				      const std::map<std::string, bufferlist>& set_pairs,
+				      const ComparisonMap&& cmp_pairs,
+				      const std::map<std::string, bufferlist>&& set_pairs,
 				      bufferlist *out);
 
   int report_cmp_set_error(const DoutPrefixProvider *dpp,

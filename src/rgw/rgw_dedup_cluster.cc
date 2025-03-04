@@ -116,7 +116,8 @@ namespace rgw::dedup {
     ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, empty_bl}};
     std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs, &err_bl);
+    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(cmp_pairs),
+			    std::move(set_pairs), &err_bl);
     if (ret != 0) {
       ldpp_dout(dpp, 5) << __func__ << "::failed cmp_vals_set_vals" << dendl;
       return -EINVAL;
@@ -152,7 +153,8 @@ namespace rgw::dedup {
     ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, old_epoch_bl}};
     std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    int ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs, &err_bl);
+    int ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(cmp_pairs),
+				std::move(set_pairs), &err_bl);
     ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
     std::string oid(DEDUP_EPOCH_TOKEN);
     ret = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
@@ -545,7 +547,7 @@ namespace rgw::dedup {
       op.assert_exists();
       rados::cls::lock::lock(&op, oid, ClsLockType::EXCLUSIVE, d_lock_cookie,
 			     lock_tag, "dedup_shard_token", lock_duration, lock_flags);
-      int ret = rgw_rados_operate(dpp, ioctx, oid, &op, null_yield);
+      int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), null_yield);
       if (ret == -EBUSY) {
 	// someone else took this token -> move to the next one
 	ldpp_dout(dpp, 10) << __func__ << "::Failed lock. " << oid <<

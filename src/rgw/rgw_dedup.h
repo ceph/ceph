@@ -29,8 +29,7 @@ namespace rgw::dedup {
     }
 
     // allow to start/pasue/resume/stop execution
-    //dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
-    int  dedup_type         = (int)dedup_req_type_t::DEDUP_TYPE_NONE;
+    dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
     bool started            = false;
     bool dedup_exec         = false;
     bool shutdown_req       = false;
