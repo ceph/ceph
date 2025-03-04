@@ -77,7 +77,7 @@ namespace cls::cmpxattr {
 	// another thread set a new value causing CMP to fail
 	ret = -EBUSY;
       } catch (buffer::error& err) {
-	ldpp_dout(1) << caller << "::ERR: unable to decode err_bl" << dendl;
+	ldpp_dout(dpp, 1) << caller << "::ERR: unable to decode err_bl" << dendl;
 	ret = -EINVAL;
       }
     }
