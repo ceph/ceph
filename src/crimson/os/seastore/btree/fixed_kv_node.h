@@ -139,7 +139,7 @@ struct FixedKVInternalNode
     node_size,
     node_type_t>;
   using parent_node_t = ParentNode<node_type_t, NODE_KEY>;
-  using base_child_node_t = BaseChildNode<node_type_t, NODE_KEY>;
+  using base_child_t = BaseChildNode<node_type_t, NODE_KEY>;
   using child_node_t = ChildNode<node_type_t, node_type_t, NODE_KEY>;
   using root_node_t = RootChildNode<RootBlock, node_type_t>;
 
@@ -236,7 +236,7 @@ struct FixedKVInternalNode
   void update(
     internal_const_iterator_t iter,
     paddr_t addr,
-    base_child_node_t* nextent) {
+    base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::update);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, {}",
       this->pending_for_transaction,
@@ -253,7 +253,7 @@ struct FixedKVInternalNode
     internal_const_iterator_t iter,
     NODE_KEY pivot,
     paddr_t addr,
-    base_child_node_t* nextent) {
+    base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::insert);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}, {}",
       this->pending_for_transaction,
@@ -284,7 +284,7 @@ struct FixedKVInternalNode
     internal_const_iterator_t iter,
     NODE_KEY pivot,
     paddr_t addr,
-    base_child_node_t* nextent) {
+    base_child_t* nextent) {
     LOG_PREFIX(FixedKVInternalNode::replace);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}, {}",
       this->pending_for_transaction,
