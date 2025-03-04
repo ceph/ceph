@@ -1,3 +1,6 @@
+# cython: language_level=3
+# cython: legacy_implicit_noexcept=True
+
 """
 This module is a thin wrapper around libcephfs.
 """
