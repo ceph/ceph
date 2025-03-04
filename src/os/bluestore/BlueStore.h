@@ -239,6 +239,8 @@ enum {
 #define META_POOL_ID ((uint64_t)-1ull)
 using bptr_c_it_t = buffer::ptr::const_iterator;
 
+extern const std::vector<uint64_t> bdev_label_positions;
+
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
@@ -2533,6 +2535,11 @@ private:
   bool bdev_label_multi = false;
   int64_t bdev_label_epoch = -1;
   bool bluestore_bdev_label_require_all = false;
+  uint64_t before_expansion_bdev_size = 0; // having non-zero indicates we need
+                                           // to expand allocator in NCB mode,
+                                           // perhaps could be removed when
+                                           // https://tracker.ceph.com/issues/70008
+                                           // is resolved.
 
   typedef std::map<uint64_t, volatile_statfs> osd_pools_map;
 
@@ -2878,7 +2885,6 @@ private:
     std::vector<uint64_t>* out_valid_positions = nullptr,
     bool* out_is_multi = nullptr,
     int64_t* out_epoch = nullptr);
-  int _set_bdev_label_size(const std::string& path, uint64_t size);
   void _main_bdev_label_try_reserve();
   void _main_bdev_label_remove(Allocator* alloc);
 
@@ -3545,23 +3551,23 @@ public:
     _wctx_finish(&txc, c, o, &wctx, nullptr);
   }
 
-  static int debug_read_bdev_label(
-    CephContext* cct, BlockDevice* bdev, const std::string &path,
-    bluestore_bdev_label_t *label, uint64_t disk_position) {
-      return _read_bdev_label(cct, bdev, path, label, disk_position);
-    }
   static int debug_write_bdev_label(
     CephContext* cct, BlockDevice* bdev, const std::string &path,
     const bluestore_bdev_label_t& label, uint64_t disk_position) {
       return _write_bdev_label(cct, bdev, path, label,
         std::vector<uint64_t>({disk_position}));
     }
+  static int read_bdev_label_at_pos(
+    CephContext* cct,
+    const std::string &bdev_path,
+    uint64_t disk_position,
+    bluestore_bdev_label_t *label);
   static int read_bdev_label(
     CephContext* cct,
     const std::string &path,
     bluestore_bdev_label_t *out_label,
     std::vector<uint64_t>* out_valid_positions = nullptr,
-    bool* out_is_cloned = nullptr,
+    bool* out_is_multi = nullptr,
     int64_t* out_epoch = nullptr);
   static int write_bdev_label(
     CephContext* cct, const std::string &path,
