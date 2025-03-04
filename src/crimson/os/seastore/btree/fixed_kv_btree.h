@@ -443,21 +443,17 @@ public:
     op_context_t c,
     TCachedExtentRef<leaf_node_t> leaf,
     node_key_t key,
-    std::optional<uint16_t> pos_hint = std::nullopt)
+    uint16_t pos)
   {
     assert(leaf->is_valid());
     assert(leaf->is_viewable_by_trans(c.trans.get_trans_id()).first);
 
-    uint16_t pos;
-    if (pos_hint) {
-      pos = *pos_hint;
-    } else {
-      auto iter = leaf->lower_bound(key);
-      pos = iter->get_offset();
-    }
-
     auto depth = get_root().get_depth();
-    auto ret = iterator(depth, iterator::state_t::PARTIAL);
+    auto ret = iterator(
+      depth,
+      depth == 1
+        ? iterator::state_t::FULL
+        : iterator::state_t::PARTIAL);
     ret.leaf.node = leaf;
     ret.leaf.pos = pos;
     if (ret.is_end()) {
@@ -1943,6 +1939,7 @@ private:
     };
 
     for (; split_from > 0; --split_from) {
+      iter.ensure_internal(c.trans, split_from + 1);
       auto &parent_pos = iter.get_internal(split_from + 1);
       if (!parent_pos.node->is_mutable()) {
         parent_pos.node = c.cache.duplicate_for_write(
@@ -1951,6 +1948,7 @@ private:
       }
 
       if (split_from > 1) {
+        iter.ensure_internal(c.trans, split_from);
         auto &pos = iter.get_internal(split_from);
         SUBTRACET(
           seastore_fixedkv_tree,
@@ -2030,9 +2028,11 @@ private:
               "merging depth {}",
               c.trans,
               to_merge);
+            iter.ensure_internal(c.trans, to_merge + 1);
             auto &parent_pos = iter.get_internal(to_merge + 1);
             auto merge_fut = handle_merge_iertr::now();
             if (to_merge > 1) {
+              iter.ensure_internal(c.trans, to_merge);
               auto &pos = iter.get_internal(to_merge);
               merge_fut = merge_level(c, to_merge, parent_pos, pos);
             } else {

@@ -904,19 +904,24 @@ BtreeLBAManager::make_btree_partial_iter(
     leaf = leaf->find_pending_version(c.trans, cursor.key);
     TRACET("find pending extent {} for {}",
 	   c.trans, (void*)leaf.get(), cursor);
+    auto it = leaf->lower_bound(cursor.key);
+    assert(it != leaf->end() && it.get_key() == cursor.key);
     return make_btree_partial_iter_iertr::make_ready_future<
-      LBABtree::iterator>(btree.make_partial_iter(c, leaf, cursor.key));
+      LBABtree::iterator>(btree.make_partial_iter(
+	c, leaf, cursor.key, it.get_offset()));
   }
 
   // parent is viewable for current transaction
 
-  if (!leaf->modified_since(cursor.modifications)) {
-    return make_btree_partial_iter_iertr::make_ready_future<
-      LBABtree::iterator>(btree.make_partial_iter(c, leaf, cursor.key, cursor.pos));
+  if (leaf->modified_since(cursor.modifications)) {
+    // fix cursor pos
+    auto it = leaf->lower_bound(cursor.key);
+    cursor.pos = it->get_offset();
   }
 
   return make_btree_partial_iter_iertr::make_ready_future<
-    LBABtree::iterator>(btree.make_partial_iter(c, leaf, cursor.key));
+    LBABtree::iterator>(btree.make_partial_iter(
+      c, leaf, cursor.key, cursor.pos));
 }
 
 }
