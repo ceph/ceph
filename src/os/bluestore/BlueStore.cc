@@ -17601,7 +17601,9 @@ int BlueStore::_do_write_v2(
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
   }
-  o->extent_map.fault_range(db, offset, length);
+  uint64_t start = p2align(offset, min_alloc_size);
+  uint64_t end = p2roundup(offset + length, min_alloc_size);
+  o->extent_map.fault_range(db, start, end - start);
   BlueStore::Writer wr(this, txc, &wctx, o);
   wr.do_write(offset, bl);
   return r;
