@@ -17,7 +17,6 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
 
   # Required for building the dashboard grpc protos at build time
   set(CEPH_GRPC_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-grpc-virtualenv)
-  set(CEPH_NVME_GATEWAY_PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/nvmeof/gateway/control/proto)
 
   add_custom_command(
     OUTPUT ${CEPH_GRPC_VIRTUALENV}/lib/python*/site-packages/grpc_tools
@@ -29,10 +28,9 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
   # protobuffer files generation
   add_custom_command(
     OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway_pb2.py" "${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway_pb2_grpc.py"
-    COMMAND cp ${CEPH_NVME_GATEWAY_PROTO_DIR}/gateway.proto dashboard/services/proto/gateway.proto
     COMMAND . ${CEPH_GRPC_VIRTUALENV}/bin/activate && ${CEPH_GRPC_VIRTUALENV}/bin/python -m grpc_tools.protoc --proto_path=. --python_out=. --grpc_python_out=. dashboard/services/proto/gateway.proto && deactivate
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
-    DEPENDS ${CEPH_NVME_GATEWAY_PROTO_DIR}/gateway.proto ${CEPH_GRPC_VIRTUALENV}/lib/python*/site-packages/grpc_tools
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway.proto ${CEPH_GRPC_VIRTUALENV}/lib/python*/site-packages/grpc_tools
     COMMENT "proto generation for grpc deps")
   add_custom_target(mgr-dashboard-services-deps
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway_pb2.py ${CMAKE_CURRENT_SOURCE_DIR}/services/proto/gateway_pb2_grpc.py
