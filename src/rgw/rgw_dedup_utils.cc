@@ -176,12 +176,12 @@ namespace rgw::dedup {
 
   static const char* s_urgent_msg_names[] = {
     "URGENT_MSG_NONE",
-    "URGENT_MSG_ABORT",
-    "URGENT_MSG_PASUE",
-    "URGENT_MSG_RESUME",
-    "URGENT_MSG_RESTART",
-    "URGENT_MSG_INVALID"
-  };
+      "URGENT_MSG_ABORT",
+      "URGENT_MSG_PASUE",
+      "URGENT_MSG_RESUME",
+      "URGENT_MSG_RESTART",
+      "URGENT_MSG_INVALID"
+      };
 
   //---------------------------------------------------------------------------
   const char* get_urgent_msg_names(int msg) {
@@ -239,6 +239,72 @@ namespace rgw::dedup {
       }
     }
     return out;
+  }
+
+  //---------------------------------------------------------------------------
+  void worker_stats_t::dump(Formatter *f) const
+  {
+    Formatter::ObjectSection outer(*f, "worker_stats");
+
+    {
+      Formatter::ObjectSection inner_a(*f, "common:");
+      encode_json("Ingress Objs count", this->ingress_obj, f);
+      encode_json("Accum byte size Ingress Objs", this->ingress_obj_bytes, f);
+      encode_json("Egress Records count", this->egress_records, f);
+      encode_json("Egress Blocks count", this->egress_blocks, f);
+      encode_json("Egress Slabs count", this->egress_slabs, f);
+
+      encode_json("Single part obj count", this->single_part_objs, f);
+      encode_json("Multipart obj count", this->multipart_objs, f);
+
+      if (this->small_multipart_obj) {
+	encode_json("Small Multipart obj count", this->small_multipart_obj, f);
+      }
+    }
+
+    {
+      Formatter::ObjectSection inner_b(*f, "notify:");
+
+      if(this->non_default_storage_class_objs) {
+	encode_json("non default storage class objs",
+		    this->non_default_storage_class_objs, f);
+	encode_json("non default storage class objs bytes",
+		    this->non_default_storage_class_objs_bytes, f);
+      }
+      else {
+	ceph_assert(this->default_storage_class_objs == this->ingress_obj);
+	ceph_assert(this->default_storage_class_objs_bytes == this->ingress_obj_bytes);
+      }
+    }
+
+    {
+      Formatter::ObjectSection inner_b(*f, "skipped:");
+      if(this->ingress_skip_too_small) {
+	encode_json("Ingress skip: too small objs",
+		    this->ingress_skip_too_small, f);
+	encode_json("Ingress skip: too small bytes",
+		    this->ingress_skip_too_small_bytes, f);
+
+	if(this->ingress_skip_too_small_64KB) {
+	  encode_json("Ingress skip: 64KB<=size<=4MB Obj",
+		      this->ingress_skip_too_small_64KB, f);
+	  encode_json("Ingress skip: 64KB<=size<=4MB Bytes",
+		      this->ingress_skip_too_small_64KB_bytes, f);
+	}
+      }
+    }
+
+    {
+      Formatter::ObjectSection inner_b(*f, "failed:");
+      if(this->ingress_failed_get_object) {
+	encode_json("Ingress failed get_object()",
+		    this->ingress_failed_get_object, f);
+      }
+      if(this->ingress_failed_get_obj_attrs) {
+	encode_json("Ingress failed get_obj_attrs()",
+		    this->ingress_failed_get_obj_attrs, f);
+      }
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -305,5 +371,31 @@ namespace rgw::dedup {
     out << "Duplicate Blocks Bytes   = " << s.duplicated_blocks_bytes << "\n";
 
     return out;
+  }
+
+  //---------------------------------------------------------------------------
+  void md5_stats_t::dump(Formatter *f) const
+  {
+    Formatter::ObjectSection outer(*f, "md5_stats");
+
+    {
+      Formatter::ObjectSection inner_a(*f, "common:");
+      //encode_json("", this->, f);
+    }
+
+    {
+      Formatter::ObjectSection inner_b(*f, "notify:");
+      //encode_json("", this->, f);
+    }
+
+    {
+      Formatter::ObjectSection inner_b(*f, "skipped:");
+      //encode_json("", this->, f);
+    }
+
+    {
+      Formatter::ObjectSection inner_b(*f, "failed:");
+      //encode_json("", this->, f);
+    }
   }
 } //namespace rgw::dedup

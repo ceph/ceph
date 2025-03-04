@@ -108,20 +108,7 @@ namespace rgw::dedup {
       return *this;
     }
 
-    void dump(Formatter *f) const {
-      Formatter::ObjectSection outer(*f, "worker_stats");
-
-      {
-	Formatter::ObjectSection inner_a(*f, "obj_sec_inner_a");
-	encode_json("ingress_obj", this->ingress_obj, f);
-      }
-
-      {
-	Formatter::ObjectSection inner_b(*f, "obj_sec_inner_b");
-	encode_json("single_part_objs", this->single_part_objs, f);
-      }
-
-    }
+    void dump(Formatter *f) const;
 
     uint64_t ingress_obj = 0;
     uint64_t ingress_obj_bytes = 0;
@@ -264,6 +251,7 @@ namespace rgw::dedup {
       this->failed_dedup            += other.failed_dedup;
       return *this;
     }
+    void dump(Formatter *f) const;
 
     uint64_t rados_bytes_before_dedup = 0;
     uint64_t ingress_failed_get_object = 0;
