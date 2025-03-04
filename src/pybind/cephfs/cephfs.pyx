@@ -111,7 +111,7 @@ cdef extern from "Python.h":
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
     void PyEval_InitThreads()
 
-cdef void completion_callback(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) nogil:
+cdef void completion_callback(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) noexcept nogil:
     # This GIL awkwardness is due to incompatible types with function pointers defined with mds_command2:
     with gil:
         pyout = (<unsigned char*>out)[:outlen]
