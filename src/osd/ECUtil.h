@@ -853,12 +853,9 @@ struct log_entry_t {
    const pg_shard_t &pg_shard,
    const shard_extent_map_t &extent_map) :
   event(event), shard(pg_shard),
-  io(extent_set())
-  {
-    if (extent_map.contains(pg_shard.shard)) {
-      extent_map.get_extent_map(pg_shard.shard).to_interval_set(io);
-    }
-  }
+  io(extent_map.contains(pg_shard.shard)?
+    extent_map.get_extent_set(pg_shard.shard):
+    extent_set()) {}
 
   friend std::ostream& operator<<(std::ostream& out, const log_entry_t& lhs);
 };

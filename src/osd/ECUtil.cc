@@ -426,7 +426,9 @@ namespace ECUtil {
      * e.g. appends will not provide parity buffers.
      * We should EITHER have no buffers, or have the right buffers.
      */
-    for (shard_id_t shard(sinfo->get_k()); shard < sinfo->get_k_plus_m(); ++shard) {
+    for (raw_shard_id_t raw_shard(sinfo->get_k()); raw_shard < sinfo->get_k_plus_m(); ++raw_shard) {
+      shard_id_t shard = sinfo->get_shard(raw_shard);
+
       for (auto &&[offset, length] : encode_set) {
         /* No need to recreate buffers we already have */
         if (extent_maps.contains(shard)) {
