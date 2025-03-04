@@ -71,6 +71,16 @@ def main():
     exec_cmd(f'rados -p {DATA_POOL} ls')
     log.debug('forced quota to propagate')
 
+    # expect uploads to fail at pool quota
+    try:
+        bucket.put_object(Key=f'{key}-at-quota', Body=b"new data")
+    except botocore.exceptions.ClientError as e:
+        if not e.response['Error']['Code'] == 'InsufficientCapacity':
+            raise
+    else:
+        assert False, 'Upload succeeded at quota limit, expected InsufficientCapacity'
+
+    # expect deletions to succeed at pool quota
     for obj in objects:
         try:
             bucket.Object(obj).delete()
