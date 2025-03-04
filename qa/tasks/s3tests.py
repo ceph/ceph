@@ -211,7 +211,7 @@ def create_users(ctx, config, s3tests_conf):
         yield
     finally:
         for client in config.keys():
-            for user in users.values():
+            for section, user in users.items():
                 # don't need to delete keystone users
                 if section in keystone_users:
                     continue
