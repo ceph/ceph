@@ -839,6 +839,12 @@ struct inode_t {
     optmetadata.del_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
   }
 
+  const std::vector<uint64_t>& get_referent_inodes() { return referent_inodes; }
+  void add_referent_ino(inodeno_t ref_ino) { referent_inodes.push_back(ref_ino); }
+  void remove_referent_ino(inodeno_t ref_ino) {
+    referent_inodes.erase(remove(referent_inodes.begin(), referent_inodes.end(), ref_ino), referent_inodes.end());
+  }
+
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
@@ -944,6 +950,7 @@ struct inode_t {
   optmetadata_multiton<optmetadata_singleton_server_t,Allocator> optmetadata;
 
   inodeno_t remote_ino = 0; // referent inode - remote inode link
+  std::vector<uint64_t> referent_inodes;
 
 private:
   bool older_is_consistent(const inode_t &other) const;
@@ -1016,6 +1023,8 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(optmetadata, bl, features);
 
   encode(remote_ino, bl);
+  encode(referent_inodes, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -1140,6 +1149,7 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 21) {
     decode(remote_ino, p);
+    decode(referent_inodes, p);
   }
   DECODE_FINISH(p);
 }
@@ -1220,6 +1230,11 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
   f->dump_unsigned("last_scrub_version", last_scrub_version);
   f->dump_unsigned("remote_ino", remote_ino);
+  f->open_array_section("referent_inodes");
+  for (const auto &ri : referent_inodes) {
+    f->dump_unsigned("referent_inode", ri);
+  }
+  f->close_section();
 }
 
 template<template<typename> class Allocator>
@@ -1280,6 +1295,7 @@ void inode_t<Allocator>::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("last_scrub_stamp", last_scrub_stamp, obj, true);
   JSONDecoder::decode_json("last_scrub_version", last_scrub_version, obj, true);
   JSONDecoder::decode_json("remote_ino", remote_ino.val, obj, true);
+  JSONDecoder::decode_json("referent_inodes", referent_inodes, obj, true);
 }
 
 template<template<typename> class Allocator>
@@ -1326,7 +1342,8 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
         backtrace_version != other.backtrace_version ||
-	remote_ino != other.remote_ino) {
+	remote_ino != other.remote_ino ||
+	referent_inodes != other.referent_inodes) {
       *divergent = true;
     }
     return 0;
