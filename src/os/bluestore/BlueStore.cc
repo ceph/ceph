@@ -6085,7 +6085,7 @@ int BlueStore::_set_cache_sizes()
 
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
-  if (!bdev || !bdev->supported_bdev_label()) {
+  if (!bdev) {
     // skip bdev label section if not supported
     return ObjectStore::write_meta(key, value);
   }
@@ -6124,7 +6124,7 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
       local_bdev = nullptr;
     }
   }
-  if (!local_bdev || !local_bdev->supported_bdev_label()) {
+  if (!local_bdev) {
     // skip bdev label section if not supported
     return ObjectStore::read_meta(key, value);
   }
@@ -7050,15 +7050,13 @@ int BlueStore::_open_bdev(bool create)
     bdev->try_discard(whole_device, false);
   }
 
-  if (bdev->supported_bdev_label()) {
-    if (create) {
-      r = _set_main_bdev_label();
-    } else {
-      r = _check_main_bdev_label();
-    }
-    if (r < 0)
-      goto fail_close;
+  if (create) {
+    r = _set_main_bdev_label();
+  } else {
+    r = _check_main_bdev_label();
   }
+  if (r < 0)
+    goto fail_close;
 
   // initialize global block parameters
   block_size = bdev->get_block_size();
@@ -7534,16 +7532,14 @@ int BlueStore::_minimal_open_bluefs(bool create)
       goto free_bluefs;
     }
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
-      r = _check_or_set_bdev_label(
-        bluefs->get_block_device(BlueFS::BDEV_DB),
-        bfn,
-        "bluefs db", create);
-      if (r < 0) {
-        derr << __func__ << " check block device(" << bfn
-             << ") label returned: " << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
+    r = _check_or_set_bdev_label(
+      bluefs->get_block_device(BlueFS::BDEV_DB),
+      bfn,
+      "bluefs db", create);
+    if (r < 0) {
+      derr << __func__ << " check block device(" << bfn
+           << ") label returned: " << cpp_strerror(r) << dendl;
+      goto free_bluefs;
     }
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
     bluefs_layout.dedicated_db = true;
@@ -7580,16 +7576,14 @@ int BlueStore::_minimal_open_bluefs(bool create)
       goto free_bluefs;
     }
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
-      r = _check_or_set_bdev_label(
-        bluefs->get_block_device(BlueFS::BDEV_WAL),
-        bfn,
-        "bluefs wal", create);
-      if (r < 0) {
-        derr << __func__ << " check block device(" << bfn
-             << ") label returned: " << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
+    r = _check_or_set_bdev_label(
+      bluefs->get_block_device(BlueFS::BDEV_WAL),
+      bfn,
+      "bluefs wal", create);
+    if (r < 0) {
+      derr << __func__ << " check block device(" << bfn
+           << ") label returned: " << cpp_strerror(r) << dendl;
+      goto free_bluefs;
     }
 
     bluefs_layout.dedicated_wal = true;
@@ -8696,14 +8690,12 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
-      r = _check_or_set_bdev_label(
-        bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
-        p,
-        "bluefs wal",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
+      p,
+      "bluefs wal",
+      true);
+    ceph_assert(r == 0);
 
     bluefs_layout.dedicated_wal = true;
   } else if (id == BlueFS::BDEV_NEWDB) {
@@ -8717,14 +8709,12 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
-      r = _check_or_set_bdev_label(
-        bluefs->get_block_device(BlueFS::BDEV_NEWDB),
-        p,
-        "bluefs db",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      bluefs->get_block_device(BlueFS::BDEV_NEWDB),
+      p,
+      "bluefs db",
+      true);
+    ceph_assert(r == 0);
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
     bluefs_layout.dedicated_db = true;
   }
@@ -8846,14 +8836,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
-      r = _check_or_set_bdev_label(
-        bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
-        dev_path,
-        "bluefs wal",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
+      dev_path,
+      "bluefs wal",
+      true);
+    ceph_assert(r == 0);
   } else if (id == BlueFS::BDEV_NEWDB) {
     target_name = "block.db";
     target_size = cct->_conf->bluestore_block_db_size;
@@ -8864,14 +8852,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
-      r = _check_or_set_bdev_label(
-        bluefs->get_block_device(BlueFS::BDEV_NEWDB),
-        dev_path,
-        "bluefs db",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      bluefs->get_block_device(BlueFS::BDEV_NEWDB),
+      dev_path,
+      "bluefs db",
+      true);
+    ceph_assert(r == 0);
   }
 
   bluefs->umount();
@@ -8969,12 +8955,10 @@ int BlueStore::expand_devices(ostream& out)
 	    <<": can't find device path " << dendl;
       continue;
     }
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
-        out << devid
+    if (_set_bdev_label_size(p, size) >= 0) {
+      out << devid
           << " : size label updated to " << size
           << std::endl;
-      }
     }
   }
   uint64_t size0 = fm->get_size();
@@ -8984,21 +8968,19 @@ int BlueStore::expand_devices(ostream& out)
       << " : expanding " << " from 0x" << std::hex
       << size0 << " to 0x" << size << std::dec << std::endl;
     _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
-      }
-      if (bdev_label_multi) {
-        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-        for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
-            bdev_label_valid_locations.push_back(loc);
-          }
+    if (_set_bdev_label_size(path, size) >= 0) {
+      out << bluefs_layout.shared_bdev
+        << " : size label updated to " << size
+        << std::endl;
+    }
+    if (bdev_label_multi) {
+      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      for (uint64_t loc : bdev_label_positions) {
+        if ((loc >= size0) && (loc + lsize <= size)) {
+          bdev_label_valid_locations.push_back(loc);
         }
-        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
       }
+      _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
     }
     _close_db_and_around();
 
@@ -10764,13 +10746,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   auto alloc_size = fm->get_alloc_size();
 
-  if (bdev->supported_bdev_label() && bdev_label_multi
+  if (bdev_label_multi
     && bdev_label_valid_locations.empty()) {
     derr << __func__ << " fsck error: no valid block device label found" << dendl;
     return -EIO;
   }
   // Delayed action, we could not do it in _fsck().
-  if (bdev->supported_bdev_label() && repair && !bdev_label_multi &&
+  if (repair && !bdev_label_multi &&
     cct->_conf.get_val<bool>("bluestore_bdev_label_multi_upgrade")) {
     // upgrade to multi
     bdev_label.meta["multi"] = "yes";
@@ -10779,7 +10761,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     bdev_labels_broken.push_back(BDEV_FIRST_LABEL_POSITION);
     errors++;
   }
-  if (bdev->supported_bdev_label() && bdev_label_multi) {
+  if (bdev_label_multi) {
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t location = bdev_label_positions[i];
       if (location + BDEV_LABEL_BLOCK_SIZE > bdev->get_size()) {
@@ -10821,7 +10803,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   bluefs_used_blocks = used_blocks;
 
-  if (bdev->supported_bdev_label() && bdev_label_multi) {
+  if (bdev_label_multi) {
     // Forcibly mark regions of bdev label clones as used.
     // If an object happens to be using it we will get an error and a repair applied.
     // We can move away data only if it was allocated for object in BlueStore,
@@ -11448,10 +11430,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     // skip freelist vs allocated compare when we have Null fm
     if (!fm->is_null_manager()) {
       dout(1) << __func__ << " checking freelist vs allocated" << dendl;
-      if (!bdev->supported_bdev_label()) {
-        // it should be 0 labels if labels are not supported
-        ceph_assert(bdev_label_valid_locations.empty());
-      }
       //unmark extra bdev copies, will collide with the check
 
       std::vector<uint64_t> sum = bdev_label_valid_locations;
@@ -11550,8 +11528,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     dout(5) << __func__ << " repair applied" << dendl;
   }
   if (repair && bdev_labels_in_repair.size() > 0) {
-    // should not happen when labels are disabled
-    ceph_assert(bdev->supported_bdev_label());
+
     // Now fix bdev_labels that were detected to be broken & repairable.
     string p = path + "/block";
     _write_bdev_label(cct, bdev, p, bdev_label, bdev_labels_in_repair);
