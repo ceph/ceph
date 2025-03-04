@@ -200,7 +200,7 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
     ns.mirror_peer_uuids = m_mirror_peer_uuids;
   }
   if (!m_group_snap_id.empty()) {
-    ns.group_spec = {m_group_id, m_image_ctx->md_ctx.get_id()};
+    ns.group_spec = m_image_ctx->group_spec;
     ns.group_snap_id = m_group_snap_id;
   }
   ns.snap_seqs = m_snap_seqs;
