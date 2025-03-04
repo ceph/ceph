@@ -122,10 +122,18 @@ void CreateNonPrimaryRequest<I>::handle_get_mirror_image(int r) {
     return;
   }
 
-  uuid_d uuid_gen;
-  uuid_gen.generate_random();
-  m_snap_name = ".mirror.non_primary." + mirror_image.global_image_id + "." +
-    uuid_gen.to_string();
+  std::stringstream ss;
+  ss << ".mirror.non_primary." << mirror_image.global_image_id << ".";
+  if (!m_group_snap_id.empty()) {
+    ss << m_image_ctx->group_spec.pool_id << "_"
+       << m_image_ctx->group_spec.group_id << "_"
+       << m_group_snap_id;
+  } else {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    ss << uuid_gen.to_string();
+  }
+  m_snap_name = ss.str();
 
   get_mirror_peers();
 }
