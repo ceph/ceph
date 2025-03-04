@@ -153,7 +153,7 @@ void create_deferred_and_terminate() {
       lgeneric_dout(g_ceph_context, 0) << "completed id=" << o << dendl;
       cout << "completed id=" << o << std::endl;
       if (++deferred_counter == object_count) {
-        exit(0);
+        _exit(0);
       }
     }));
     r = store->queue_transaction(ch, std::move(t));
