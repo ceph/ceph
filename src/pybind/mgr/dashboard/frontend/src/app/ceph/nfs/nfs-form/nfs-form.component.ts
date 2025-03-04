@@ -617,12 +617,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   private buildRequest() {
     const requestModel: any = _.cloneDeep(this.nfsForm.value);
-
+    const path = this.nfsForm.get('path').value;
     if (this.isEdit) {
       requestModel.export_id = _.parseInt(this.export_id);
       if (requestModel.fsal.name === SUPPORTED_FSAL.RGW) {
         requestModel.fsal.user_id = this.nfsForm.getValue('fsal').user_id;
-        requestModel.path = this.nfsForm.getValue('path');
+        requestModel.path = path;
       }
     }
 
@@ -689,6 +689,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       requestModel.fsal.sec_label_xattr = requestModel.sec_label_xattr;
     }
     delete requestModel.sec_label_xattr;
+    requestModel.path = path;
 
     return requestModel;
   }
