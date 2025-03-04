@@ -9016,7 +9016,7 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
   if (mdr->reqid.name.is_mds() &&
       !(MDS_INO_IS_STRAY(srcpath.get_ino()) &&
 	MDS_INO_IS_STRAY(destpath.get_ino())) &&
-      !(destdnl->is_remote() &&
+      !((destdnl->is_remote() || destdnl->is_referent_remote()) &&
 	destdnl->get_remote_ino() == srci->ino())) {
     respond_to_request(mdr, -CEPHFS_EINVAL);  // actually, this won't reply, but whatev.
     return;
@@ -9095,6 +9095,12 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     if (!straydn)
       return;
     dout(10) << " straydn is " << *straydn << dendl;
+  } else if (destdnl->is_referent_remote()) { //both linkmerge and non linkmerge case
+    straydn = prepare_stray_dentry(mdr, destdnl->get_referent_inode());
+    if (!straydn)
+      return;
+    dout(10) << __func__ << (linkmerge ? " linkmerge:yes ": " linkmerge:no ")
+             << " referent straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
     mdr->straydn = NULL;
@@ -9144,7 +9150,7 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
   }
 
   if (linkmerge)
-    ceph_assert(srcdir->inode->is_stray() && srcdnl->is_primary() && destdnl->is_remote());
+    ceph_assert(srcdir->inode->is_stray() && srcdnl->is_primary() && (destdnl->is_remote() || destdnl->is_referent_remote()));
 
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
     if (!check_access(mdr, srcdir->get_inode(), MAY_WRITE))
@@ -9292,10 +9298,10 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     srcdn->list_replicas(witnesses);
   else
     witnesses.insert(srcdn->authority().first);
-  if (srcdnl->is_remote() && !srci->is_auth())
+  if ((srcdnl->is_remote() || srcdnl->is_referent_remote()) && !srci->is_auth())
     witnesses.insert(srci->authority().first);
   destdn->list_replicas(witnesses);
-  if (destdnl->is_remote() && !oldin->is_auth())
+  if ((destdnl->is_remote() || destdnl->is_referent_remote()) && !oldin->is_auth())
     witnesses.insert(oldin->authority().first);
   dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
@@ -9429,7 +9435,7 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
   
   // bump popularity
   mds->balancer->hit_dir(srcdn->get_dir(), META_POP_IWR);
-  if (destdnl->is_remote() && in->is_auth())
+  if ((destdnl->is_remote() || destdnl->is_referent_remote()) && in->is_auth())
     mds->balancer->hit_inode(in, META_POP_IWR);
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
@@ -9584,7 +9590,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
   // primary+remote link merge?
   bool linkmerge = (srci == oldin);
   if (linkmerge)
-    ceph_assert(srcdnl->is_primary() && destdnl->is_remote());
+    ceph_assert(srcdnl->is_primary() && (destdnl->is_remote() || destdnl->is_referent_remote()));
   bool silent = srcdn->get_dir()->inode->is_stray();
 
   bool force_journal_dest = false;
@@ -9622,6 +9628,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
   // prepare
   CInode::mempool_inode *spi = 0;    // renamed inode
   CInode::mempool_inode *tpi = 0;  // target/overwritten inode
+  CInode::mempool_inode *trpi = 0;  // target/overwritten referent inode
   
   // target inode
   if (!linkmerge) {
@@ -9643,6 +9650,21 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
         tpi = pi.inode.get();
       }
     }
+  } else if (linkmerge && destdnl->is_referent_remote()) {
+      CInode *oldrefi = destdnl->get_referent_inode();
+      dout(10) << __func__ << " linkmerge and destdnl is referent. oldrefi= " << *oldrefi << dendl;
+      ceph_assert(straydn && oldrefi);  // moving referent inode to straydn.
+
+      // link--, and move.
+      if (destdn->is_auth()) {
+	auto pi= oldrefi->project_inode(mdr); //project_snaprealm
+	pi.inode->version = straydn->pre_dirty(pi.inode->version);
+	//backtrace updation is not required
+        trpi = pi.inode.get();
+        trpi->nlink = 0;
+        oldrefi->state_set(CInode::STATE_ORPHAN);
+      }
+      straydn->push_projected_linkage(oldrefi);
   }
 
   // dest
@@ -9694,6 +9716,16 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       pi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
       pi.inode->update_backtrace();
       spi = pi.inode.get();
+
+      // Remove referent inode from primary link on linkmerge
+      if (linkmerge && destdnl->is_referent_remote()) {
+        CInode *oldrefi = destdnl->get_referent_inode();
+        spi->remove_referent_ino(oldrefi->ino());
+        dout(20) << __func__ << " linkmerge referent_inodes " << std::hex
+                 << spi->get_referent_inodes() << " referent ino removed "
+		 << oldrefi->ino() << dendl;
+      }
+
     }
     destdn->push_projected_linkage(srci);
   }
@@ -9727,6 +9759,18 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       if (tpi->nlink == 0)
 	oldin->state_set(CInode::STATE_ORPHAN);
     }
+    if (trpi) {
+      trpi->ctime = mdr->get_op_stamp();
+      if (mdr->get_op_stamp() > trpi->rstat.rctime)
+	trpi->rstat.rctime = mdr->get_op_stamp();
+      trpi->change_attr++;
+      {
+        std::string t;
+        destdn->make_path_string(t, true);
+        dout(20) << __func__ << " referent stray_prior_path = " << t << dendl;
+        trpi->stray_prior_path = std::move(t);
+      }
+    }
   }
 
   // prepare nesting, mtime updates
@@ -9740,9 +9784,15 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       metablob->add_dir_context(straydn->get_dir());
       metablob->add_dir(straydn->get_dir(), true);
     }
+  } else if (destdnl->is_referent_remote()) { //both linkmerge and non linkmerge case
+    ceph_assert(straydn);
+    if (straydn->is_auth()) {
+      metablob->add_dir_context(straydn->get_dir());
+      metablob->add_dir(straydn->get_dir(), true);
+    }
   }
 
-  if (!linkmerge && destdnl->is_remote() && oldin->is_auth()) {
+  if (!linkmerge && (destdnl->is_remote() || destdnl->is_referent_remote()) && oldin->is_auth()) {
     CDir *oldin_dir = oldin->get_projected_parent_dir();
     if (oldin_dir != srcdn->get_dir() && oldin_dir != destdn->get_dir())
       mdcache->predirty_journal_parents(mdr, metablob, oldin, oldin_dir, PREDIRTY_PRIMARY);
@@ -9756,10 +9806,16 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       ceph_assert(straydn);
       mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
 					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    } else if (destdnl->is_referent_remote()) { // both linkmerge and non linkmerge case
+      CInode *oldrefi = destdnl->get_referent_inode();
+      ceph_assert(straydn);
+      ceph_assert(oldrefi);
+      mdcache->predirty_journal_parents(mdr, metablob, oldrefi, straydn->get_dir(),
+					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     }
   }
 
-  if (srcdnl->is_remote() && srci->is_auth()) {
+  if ((srcdnl->is_remote() || srcdnl->is_referent_remote()) && srci->is_auth()) {
     CDir *srci_dir = srci->get_projected_parent_dir();
     if (srci_dir != srcdn->get_dir() && srci_dir != destdn->get_dir())
       mdcache->predirty_journal_parents(mdr, metablob, srci, srci_dir, PREDIRTY_PRIMARY);
@@ -9793,7 +9849,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
 	metablob->add_dir_context(straydn->get_dir());
 	metablob->add_primary_dentry(straydn, oldin, true);
       }
-    } else if (destdnl->is_remote()) {
+    } else if (destdnl->is_remote() || destdnl->is_referent_remote()) {
       if (oldin->is_auth()) {
 	sr_t *new_srnode = NULL;
 	if (mdr->peer_request) {
@@ -9817,10 +9873,25 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
 	metablob->add_primary_dentry(oldin_pdn, oldin, true);
       }
     }
+  } else if (linkmerge && destdnl->is_referent_remote()) {
+    CInode *oldrefi = destdnl->get_referent_inode();
+    ceph_assert(straydn);
+    ceph_assert(oldrefi);
+    if (destdn->is_auth()) {
+      // No snapshot on referent inode - Ignoring snaprealm projection
+      // Updating first is required here ? Mostly not required, keeping
+      // it for now.
+      straydn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+      metablob->add_primary_dentry(straydn, oldrefi, true, true);
+    } else if (force_journal_stray) {
+      dout(10) << __func__ << " forced journaling referent straydn " << *straydn << dendl;
+      metablob->add_dir_context(straydn->get_dir());
+      metablob->add_primary_dentry(straydn, oldrefi, true);
+    }
   }
 
   // dest
-  if (srcdnl->is_remote()) {
+  if (srcdnl->is_remote() || srcdnl->is_referent_remote()) {
     ceph_assert(!linkmerge);
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
@@ -9909,8 +9980,14 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
   }
   // make stray inode first track the straydn
   if (straydn && straydn->is_auth()) {
-    ceph_assert(oldin->first <= straydn->first);
-    oldin->first = straydn->first;
+    if (destdnl->is_referent_remote()) { //both linkmerge and non-linkmerge case
+      CInode *oldrefi = destdnl->get_referent_inode();
+      ceph_assert(oldrefi->first <= straydn->first);
+      oldrefi->first = straydn->first;
+    } else {
+      ceph_assert(oldin->first <= straydn->first);
+      oldin->first = straydn->first;
+    }
   }
 
   if (oldin && oldin->is_dir()) {
@@ -9936,7 +10013,7 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
   // primary+remote link merge?
   bool linkmerge = (srcdnl->get_inode() == oldin);
   if (linkmerge)
-    ceph_assert(srcdnl->is_primary() && destdnl->is_remote());
+    ceph_assert(srcdnl->is_primary() && (destdnl->is_remote() || destdnl->is_referent_remote()));
 
   bool new_in_snaprealm = false;
   bool new_oldin_snaprealm = false;
@@ -10042,8 +10119,28 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
     }
   } else { // primary
     if (linkmerge) {
-      dout(10) << "merging primary onto remote link" << dendl;
-      destdn->get_dir()->unlink_inode(destdn, false);
+      if (destdnl->is_referent_remote()) {
+        dout(10) << __func__ << " merging primary onto referent link" << dendl;
+        CInode *oldrefi = destdnl->get_referent_inode();
+        ceph_assert(straydn);
+        ceph_assert(oldrefi);
+        dout(10) << __func__ << " linkmerge referent straydn is " << *straydn << dendl;
+        // no need to handle any snaprealm related stuff for referent inode
+        destdn->get_dir()->unlink_inode(destdn, false);
+
+        straydn->pop_projected_linkage();
+        if (mdr->is_peer() && !mdr->more()->peer_update_journaled)
+          ceph_assert(!straydn->is_projected()); // no other projected
+
+        // nlink-- referent inode
+        if (destdn->is_auth())
+          oldrefi->pop_and_dirty_projected_inode(mdr->ls, mdr);
+
+        mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
+      } else if (destdnl->is_remote()) {
+        dout(10) << __func__ << " merging primary onto remote link" << dendl;
+        destdn->get_dir()->unlink_inode(destdn, false);
+      }
     }
     destdnl = destdn->pop_projected_linkage();
     if (mdr->is_peer() && !mdr->more()->peer_update_journaled)
@@ -10211,9 +10308,11 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   // stray?
   bool linkmerge = srcdnl->get_inode() == destdnl->get_inode();
   if (linkmerge)
-    ceph_assert(srcdnl->is_primary() && destdnl->is_remote());
+    ceph_assert(srcdnl->is_primary() && (destdnl->is_remote() || destdnl->is_referent_remote()));
   CDentry *straydn = mdr->straydn;
   if (destdnl->is_primary() && !linkmerge)
+    ceph_assert(straydn);
+  if (destdnl->is_referent_remote()) //both linkmerge and non-linkmerge case
     ceph_assert(straydn);
 
   mdr->set_op_stamp(mdr->peer_request->op_stamp);
@@ -10327,7 +10426,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   if (srcdnl->is_primary())
     rollback.orig_src.ino = srcdnl->get_inode()->ino();
   else {
-    ceph_assert(srcdnl->is_remote());
+    ceph_assert(srcdnl->is_remote() || srcdnl->is_referent_remote());
     rollback.orig_src.remote_ino = srcdnl->get_remote_ino();
     rollback.orig_src.remote_d_type = srcdnl->get_remote_d_type();
   }
@@ -10338,7 +10437,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   rollback.orig_dest.dname = destdn->get_name();
   if (destdnl->is_primary())
     rollback.orig_dest.ino = destdnl->get_inode()->ino();
-  else if (destdnl->is_remote()) {
+  else if (destdnl->is_remote() || destdnl->is_referent_remote()) {
     rollback.orig_dest.remote_ino = destdnl->get_remote_ino();
     rollback.orig_dest.remote_d_type = destdnl->get_remote_d_type();
   }
