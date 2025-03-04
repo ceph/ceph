@@ -611,6 +611,8 @@ struct inode_t {
 
   bufferlist fscrypt_last_block;
 
+  inodeno_t remote_ino = 0; // referent inode - remote inode link
+
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
@@ -619,7 +621,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(19, 6, bl);
+  ENCODE_START(20, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -679,6 +681,7 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(fscrypt_file, bl);
   encode(fscrypt_last_block, bl);
 
+  encode(remote_ino, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -796,6 +799,10 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
   if (struct_v >= 19) {
     decode(fscrypt_last_block, p);
   }
+
+  if (struct_v >= 20) {
+    decode(remote_ino, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -872,6 +879,7 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
 
   f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
   f->dump_unsigned("last_scrub_version", last_scrub_version);
+  f->dump_unsigned("remote_ino", remote_ino);
 }
 
 template<template<typename> class Allocator>
@@ -931,6 +939,7 @@ void inode_t<Allocator>::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("quota", quota, obj, true);
   JSONDecoder::decode_json("last_scrub_stamp", last_scrub_stamp, obj, true);
   JSONDecoder::decode_json("last_scrub_version", last_scrub_version, obj, true);
+  JSONDecoder::decode_json("remote_ino", remote_ino.val, obj, true);
 }
 
 template<template<typename> class Allocator>
@@ -975,7 +984,8 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         !(accounted_rstat == other.accounted_rstat) ||
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
-        backtrace_version != other.backtrace_version) {
+        backtrace_version != other.backtrace_version ||
+	remote_ino != other.remote_ino) {
       *divergent = true;
     }
     return 0;
