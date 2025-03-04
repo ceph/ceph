@@ -222,7 +222,7 @@ RecoveryBackend::handle_backfill_remove(
 
 RecoveryBackend::interruptible_future<BackfillInterval>
 RecoveryBackend::scan_for_backfill(
-  const hobject_t& start,
+  const hobject_t start,
   [[maybe_unused]] const std::int64_t min,
   const std::int64_t max)
 {

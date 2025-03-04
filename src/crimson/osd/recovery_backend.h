@@ -90,7 +90,7 @@ public:
     eversion_t need) = 0;
 
   interruptible_future<BackfillInterval> scan_for_backfill(
-    const hobject_t& from,
+    const hobject_t from,
     std::int64_t min,
     std::int64_t max);
 
