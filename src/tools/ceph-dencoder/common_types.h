@@ -341,6 +341,7 @@ MESSAGE(MMDSCacheRejoin)
 TYPE(MMDSCacheRejoin::dirfrag_strong)
 TYPE(MMDSCacheRejoin::dn_strong)
 TYPE(MMDSCacheRejoin::inode_strong)
+TYPE(MMDSCacheRejoin::dn_strong_new)
 
 #include "messages/MMDSFindIno.h"
 MESSAGE(MMDSFindIno)
