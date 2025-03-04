@@ -350,6 +350,8 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
 BuildRequires:	python%{python3_pkgversion}-asyncssh
 BuildRequires:	python%{python3_pkgversion}-natsort
+BuildRequires:	python%{python3_pkgversion}-grpcio
+BuildRequires:	python%{python3_pkgversion}-grpcio-tools
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libthrift-devel >= 0.13.0
