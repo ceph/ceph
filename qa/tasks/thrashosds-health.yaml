@@ -34,7 +34,7 @@ overrides:
       - is down
       - osds down
       - pg .*? is .*?degraded.*?, acting
-      - pg .*? is stuck inactive for .*?m, current state .*?degraded.*?, last acting
+      - pg .*? is stuck
       - pg degraded
       - PG_BACKFILL_FULL
       - Low space hindering backfill .*? backfill_toofull
