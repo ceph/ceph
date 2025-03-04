@@ -5266,8 +5266,16 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
+
+  // bi expects empty instance for the entries created when
+  // bucket versioning is not enabled or suspended.
+  rgw_obj dest_obj_bi = dest_obj;
+  if (dest_obj_bi.key.instance == "null") {
+    dest_obj_bi.key.instance.clear();
+  }
+
   rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
+                                  owner, obj_ctx, dest_obj_bi, olh_epoch, tag, dpp, y, no_trace);
  
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;
