@@ -57,9 +57,29 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
     this.rgwBucketService
       .getLifecycle(this.bucket.bucket, this.bucket.owner)
       .subscribe((lifecycle) => {
-        this.configuredLifecycle = lifecycle || { LifecycleConfiguration: { Rules: [] } };
+        if (lifecycle == null) {
+          lifecycle = { LifecycleConfiguration: { Rule: [] } };
+        }
+        if (!Array.isArray(lifecycle.LifecycleConfiguration.Rule)) {
+          lifecycle.LifecycleConfiguration.Rule = [lifecycle.LifecycleConfiguration.Rule];
+        }
+        lifecycle.LifecycleConfiguration.Rule = lifecycle.LifecycleConfiguration.Rule.map(
+          (rule: any) => {
+            if (rule?.['Filter']?.['Tag'] && !Array.isArray(rule?.['Filter']?.['Tag'])) {
+              rule['Filter']['Tag'] = [rule['Filter']['Tag']];
+            }
+            if (
+              rule?.['Filter']?.['And']?.['Tag'] &&
+              !Array.isArray(rule?.['Filter']?.['And']?.['Tag'])
+            ) {
+              rule['Filter']['And']['Tag'] = [rule['Filter']['And']['Tag']];
+            }
+            return rule;
+          }
+        );
+        this.configuredLifecycle = lifecycle;
         if (this.editing) {
-          const ruleToEdit = this.configuredLifecycle?.['LifecycleConfiguration']?.['Rules'].filter(
+          const ruleToEdit = this.configuredLifecycle?.['LifecycleConfiguration']?.['Rule'].filter(
             (rule: any) => rule?.['ID'] === this.selectedLifecycle?.['ID']
           )[0];
           this.tieringForm.patchValue({
@@ -93,9 +113,9 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
     if (
       this.isValidPrefix(rule?.['Prefix']) ||
       this.isValidPrefix(rule?.['Filter']?.['Prefix']) ||
-      this.isValidArray(rule?.['Filter']?.['Tags']) ||
+      this.isValidArray(rule?.['Filter']?.['Tag']) ||
       this.isValidPrefix(rule?.['Filter']?.['And']?.['Prefix']) ||
-      this.isValidArray(rule?.['Filter']?.['And']?.['Tags'])
+      this.isValidArray(rule?.['Filter']?.['And']?.['Tag'])
     ) {
       return true;
     }
@@ -103,7 +123,7 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
   }
 
   isValidPrefix(value: string) {
-    return value !== undefined && value !== '';
+    return value !== undefined && value !== '' && value !== null;
   }
 
   isValidArray(value: object[]) {
@@ -111,13 +131,13 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
   }
 
   setTags(rule: any) {
-    if (rule?.['Filter']?.['Tags']?.length > 0) {
-      rule?.['Filter']?.['Tags']?.forEach((tag: { Key: string; Value: string }) =>
+    if (rule?.['Filter']?.['Tag']?.length > 0) {
+      rule?.['Filter']?.['Tag']?.forEach((tag: { Key: string; Value: string }) =>
         this.addTags(tag.Key, tag.Value)
       );
     }
-    if (rule?.['Filter']?.['And']?.['Tags']?.length > 0) {
-      rule?.['Filter']?.['And']?.['Tags']?.forEach((tag: { Key: string; Value: string }) =>
+    if (rule?.['Filter']?.['And']?.['Tag']?.length > 0) {
+      rule?.['Filter']?.['And']?.['Tag']?.forEach((tag: { Key: string; Value: string }) =>
         this.addTags(tag.Key, tag.Value)
       );
     }
@@ -130,16 +150,16 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
   addTags(key?: string, value?: string) {
     this.tags.push(
       new FormGroup({
-        Key: new FormControl(key),
-        Value: new FormControl(value)
+        Key: new FormControl(key, Validators.required),
+        Value: new FormControl(value, Validators.required)
       })
     );
     this.cd.detectChanges();
   }
 
   duplicateConfigName(control: AbstractControl): ValidationErrors | null {
-    if (this.configuredLifecycle?.LifecycleConfiguration?.Rules?.length > 0) {
-      const ruleIds = this.configuredLifecycle.LifecycleConfiguration.Rules.map(
+    if (this.configuredLifecycle?.LifecycleConfiguration?.Rule?.length > 0) {
+      const ruleIds = this.configuredLifecycle.LifecycleConfiguration.Rule.map(
         (rule: any) => rule.ID
       );
       return ruleIds.includes(control.value) ? { duplicate: true } : null;
@@ -214,7 +234,7 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
       });
     }
     if (!this.editing) {
-      this.configuredLifecycle.LifecycleConfiguration.Rules.push(lifecycle);
+      this.configuredLifecycle.LifecycleConfiguration.Rule.push(lifecycle);
       this.rgwBucketService
         .setLifecycle(
           this.bucket.bucket,
@@ -237,7 +257,7 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
           }
         });
     } else {
-      const rules = this.configuredLifecycle.LifecycleConfiguration.Rules;
+      const rules = this.configuredLifecycle.LifecycleConfiguration.Rule;
       const index = rules.findIndex((rule: any) => rule?.['ID'] === this.selectedLifecycle?.['ID']);
       rules.splice(index, 1, lifecycle);
       this.rgwBucketService
@@ -266,5 +286,6 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
 
   goToCreateStorageClass() {
     this.router.navigate(['rgw/tiering/create']);
+    this.closeModal();
   }
 }
