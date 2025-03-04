@@ -16,7 +16,7 @@ from typing import (
     Tuple,
     Union,
     cast,
-    get_type_hints
+    Annotated
 )
 if TYPE_CHECKING:
     import sys
@@ -102,6 +102,8 @@ PG_STATES = [
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
 
+class CLI_ANNOTATIONS:
+    MemorySize = 'cli_memory_size'
 
 class CephReleases(IntEnum):
     argonaut = 1
@@ -429,17 +431,7 @@ class CLICommand(object):
         f, extra_args = _extract_target_func(f)
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
-        arg_spec = get_type_hints(f)
-        arg_spec2 = full_argspec.annotations
-        if arg_spec != arg_spec2:
-            print('BOOM')
-            print(arg_spec)
-            print(arg_spec2)
-            print(f)
-            print(inspect.getsource(f))
-            print('^^^^^')
-            
-        arg_spec = full_argspec.annotations | get_type_hints(f)
+        arg_spec = full_argspec.annotations
         first_default = len(arg_spec)
         if full_argspec.defaults:
             first_default -= len(full_argspec.defaults)

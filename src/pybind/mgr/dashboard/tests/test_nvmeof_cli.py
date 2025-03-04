@@ -1,30 +1,11 @@
-import json
 from typing import Annotated
 import errno
 from unittest.mock import MagicMock
 
 import pytest
-from mgr_module import CLICommand, HandleCommandResult
+from mgr_module import CLICommand, HandleCommandResult, CLI_ANNOTATIONS
 
-from ..services.nvmeof_cli import GB, KB, MB, PB, TB, B, G, K, M, \
-    NvmeofCLICommand, P, T, convert_to_bytes, NvmeCliSize
-
-
-@pytest.fixture(scope="class", name="command_with_size_annotation_name")
-def fixture_command_with_size_annotation_name():
-    return "test annotated size command"
-
-
-@pytest.fixture(scope="class", name="command_with_size_annotation")
-def fixture_command_with_size_annotation(command_with_size_annotation_name):
-    print(NvmeofCLICommand.COMMANDS.keys())
-    @NvmeofCLICommand(command_with_size_annotation_name)
-    def func(_, param: Annotated[int, NvmeCliSize]): # noqa # pylint: disable=unused-variable
-        return {'a': '1', 'param': param}
-    print(NvmeofCLICommand.COMMANDS.keys())
-    yield func 
-    del NvmeofCLICommand.COMMANDS[command_with_size_annotation_name]
-    assert command_with_size_annotation_name not in NvmeofCLICommand.COMMANDS
+from ..services.nvmeof_cli import NvmeofCLICommand
 
 
 @pytest.fixture(scope="class", name="sample_command")
@@ -105,75 +86,3 @@ class TestNvmeofCLICommand:
         assert result.stdout == ''
         assert result.stderr == ''
         base_call_return_none_mock.assert_called_once()
-        
-        
-class TestConvertAnnotatedType:
-    def test_command_convert_annotated_parameter(self, command_with_size_annotation, command_with_size_annotation_name):
-        print(command_with_size_annotation)
-        
-        result = NvmeofCLICommand.COMMANDS[command_with_size_annotation_name].call(MagicMock(), {"param": f"{5 * 1024 ** 2}"})
-        assert result.retval == 0
-        assert json.loads(result.stdout)['param'] == 5 * 1024 ** 2
-        assert result.stderr == ''
-        
-        result = NvmeofCLICommand.COMMANDS[command_with_size_annotation_name].call(MagicMock(), {"param": f"{5 * 1024}{KB}"})
-        assert result.retval == 0
-        assert json.loads(result.stdout)['param'] == 5 * 1024 ** 2
-        assert result.stderr == ''
-        
-        result = NvmeofCLICommand.COMMANDS[command_with_size_annotation_name].call(MagicMock(), {"param": "5{MB}"})
-        assert result.retval == 0
-        assert json.loads(result.stdout)['param'] == 5 * 1024 ** 2
-        assert result.stderr == ''
-    
-
-
-class TestConvertToBytes:
-    def test_with_kb(self):
-        assert convert_to_bytes(f"100{KB}") == 102400
-        assert convert_to_bytes(f"100{K}") == 102400
-
-    def test_with_mb(self):
-        assert convert_to_bytes(f"2{MB}") == 2 * 1024 ** 2
-        assert convert_to_bytes(f"2{M}") == 2 * 1024 ** 2
-
-    def test_with_gb(self):
-        assert convert_to_bytes(f"1{GB}") == 1024 ** 3
-        assert convert_to_bytes(f"1{G}") == 1024 ** 3
-
-    def test_with_tb(self):
-        assert convert_to_bytes(f"1{TB}") == 1024 ** 4
-        assert convert_to_bytes(f"1{T}") == 1024 ** 4
-
-    def test_with_pb(self):
-        assert convert_to_bytes(f"1{PB}") == 1024 ** 5
-        assert convert_to_bytes(f"1{P}") == 1024 ** 5
-
-    def test_with_integer(self):
-        assert convert_to_bytes(50, default_unit=B) == 50
-
-    def test_invalid_unit(self):
-        with pytest.raises(ValueError):
-            convert_to_bytes("50XYZ")
-
-    def test_b(self):
-        assert convert_to_bytes(f"500{B}") == 500
-
-    def test_with_large_number(self):
-        assert convert_to_bytes(f"1000{GB}") == 1000 * 1024 ** 3
-
-    def test_no_number(self):
-        with pytest.raises(ValueError):
-            convert_to_bytes(GB)
-
-    def test_no_unit_with_default_unit_gb(self):
-        assert convert_to_bytes("500", default_unit=GB) == 500 * 1024 ** 3
-
-    def test_no_unit_with_no_default_unit_raises(self):
-        with pytest.raises(ValueError):
-            convert_to_bytes("500")
-
-    def test_unit_in_input_overrides_default(self):
-        assert convert_to_bytes("50", default_unit=KB) == 50 * 1024
-        assert convert_to_bytes("50KB", default_unit=KB) == 50 * 1024
-        assert convert_to_bytes("50MB", default_unit=KB) == 50 * 1024 ** 2

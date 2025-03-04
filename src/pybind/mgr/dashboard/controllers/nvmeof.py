@@ -6,15 +6,16 @@ import cherrypy
 from orchestrator import OrchestratorError
 
 from .. import mgr
-from ..exceptions import DashboardException
 from ..model import nvmeof as model
 from ..security import Scope
-from ..services.nvmeof_cli import B, NvmeofCLICommand, convert_to_bytes, NvmeCliSize
+from ..services.nvmeof_cli import NvmeofCLICommand
 from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
     RESTController, UIRouter
+from mgr_module import CLI_ANNOTATIONS
+
 
 logger = logging.getLogger(__name__)
 
@@ -366,8 +367,8 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
-            size: Optional[int] = 1024,
-            rbd_image_size: Optional[Annotated[int, NvmeCliSize]]=None,
+            size: Optional[Annotated[int, NvmeCliSize]] = None,
+            rbd_image_size: Optional[Annotated[int, NvmeCliSize]] = None,
             trash_image: Optional[bool] = False,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
