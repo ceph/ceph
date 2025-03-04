@@ -16145,11 +16145,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   }
   req->set_filepath2(from);
 
-  if (de->alternate_name.empty()) {
-    req->set_alternate_name(std::move(alternate_name));
-  } else {
-    req->set_alternate_name(de->alternate_name);
-  }
+  req->set_alternate_name(std::move(alternate_name));
 
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
