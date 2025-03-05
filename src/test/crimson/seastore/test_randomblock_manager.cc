@@ -94,7 +94,7 @@ struct rbm_test_t :
     return rbm_manager->write(paddr, ptr).unsafe_get();
   }
 
-  auto read(uint64_t addr, bufferptr_rw &ptr) {
+  auto read(uint64_t addr, bufferptr &ptr) {
     paddr_t paddr = convert_abs_addr_to_paddr(
       addr,
       rbm_manager->get_device_id());
@@ -107,7 +107,7 @@ struct rbm_test_t :
       std::numeric_limits<char>::max()
     );
     char contents = distribution(generator);
-    auto bp = bufferptr_rw(ceph::buffer::create_page_aligned(blocks * block_size));
+    auto bp = bufferptr(ceph::buffer::create_page_aligned(blocks * block_size));
     memset(bp.c_str(), contents, bp.length());
     return bp;
   }
@@ -146,7 +146,7 @@ TEST_F(rbm_test_t, open_read_write_test)
 	 block_size,
 	 content
 	 );
-     auto bp = bufferptr_rw(ceph::buffer::create_page_aligned(block_size));
+     auto bp = bufferptr(ceph::buffer::create_page_aligned(block_size));
      read(
 	 block_size,
 	 bp
@@ -162,7 +162,7 @@ TEST_F(rbm_test_t, open_read_write_test)
    close();
    open();
    {
-     auto bp = bufferptr_rw(ceph::buffer::create_page_aligned(block_size));
+     auto bp = bufferptr(ceph::buffer::create_page_aligned(block_size));
      read(
 	 block_size,
 	 bp

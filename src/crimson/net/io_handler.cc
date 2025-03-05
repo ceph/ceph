@@ -1047,8 +1047,7 @@ IOHandler::read_message(
         std::move(msg_frame.front()),
         std::move(msg_frame.middle()),
         std::as_const(msg_frame.data()),
-        nullptr,
-        conn.features);
+        nullptr);
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();

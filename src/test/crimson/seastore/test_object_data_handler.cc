@@ -114,7 +114,7 @@ struct object_data_handler_test_t:
   TMTestState {
   OnodeRef onode;
 
-  bufferptr_rw known_contents;
+  bufferptr known_contents;
   extent_len_t size = 0;
   std::random_device rd;
   std::mt19937 gen;

@@ -80,14 +80,14 @@ TEST_F(nvdev_test_t, write_and_verify_test)
       bufferlist bl;
       encode(original_data, bl);
       bl_length = bl.length();
-      auto write_buf = ceph::bufferptr_rw(buffer::create_page_aligned(BLK_SIZE));
+      auto write_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
       bl.begin().copy(bl_length, write_buf.c_str());
       ((RBMDevice*)&d)->write(0, std::move(write_buf)).unsafe_get();
     }
 
     nvdev_test_block_t read_data;
     {
-      auto read_buf = ceph::bufferptr_rw(buffer::create_page_aligned(BLK_SIZE));
+      auto read_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
       ((RBMDevice*)&d)->read(0, read_buf).unsafe_get();
       bufferlist bl;
       bl.push_back(read_buf);

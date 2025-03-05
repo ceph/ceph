@@ -259,7 +259,7 @@ class SyntheticWorkload {
        bufferlist bl;
        boost::uniform_int<> u(32, max_message_len);
        uint64_t value_len = u(rng);
-       bufferptr_rw bp(value_len);
+       bufferptr bp(value_len);
        bp.zero();
        for (uint64_t j = 0; j < value_len-sizeof(i); ) {
          memcpy(bp.c_str()+j, &i, sizeof(i));
