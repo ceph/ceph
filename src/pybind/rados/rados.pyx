@@ -1386,8 +1386,8 @@ cdef class OmapIterator(object):
         :returns: next rados.OmapItem
         """
         cdef:
-            char *key_ = NULL
-            char *val_ = NULL
+            const char *key_ = NULL
+            const char *val_ = NULL
             size_t len_
 
         with nogil:
