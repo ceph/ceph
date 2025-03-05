@@ -776,3 +776,121 @@ TEST(cls_refcount, set_ec) /* test refcount using implicit referencing of newly 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, rados));
 }
+
+TEST(cls_refcount, test_get_and_create) /* test refcount when object does not exist beforehand */
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  /* create pool */
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  /* add chains */
+  string oid = "obj";
+  string tag1 = "tag1";
+
+  /* create the object and get ref */
+  librados::ObjectWriteOperation *op = new_op();
+  cls_refcount_get(*op, tag1, true, false);
+  ASSERT_EQ(0, ioctx.operate(oid, op));
+  delete op;
+
+  /* read reference and verify */
+  list<string> refs;
+
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(1, (int)refs.size());
+  ASSERT_EQ(tag1, refs.front());
+
+  /* create another ref, when the object already exists */
+  string tag2 = "tag2";
+  op = new_op();
+  cls_refcount_get(*op, tag2, true, false);
+  ASSERT_EQ(0, ioctx.operate(oid, op));
+  delete op;
+
+  /* read reference and verify */
+  refs.clear();
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(2, (int)refs.size());
+  map<string, bool> refs_map;
+  for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
+    refs_map[*iter] = true;
+  }
+  ASSERT_EQ(1, (int)refs_map.count(tag1));
+  ASSERT_EQ(1, (int)refs_map.count(tag2));
+
+  /* drop tag2 reference */
+  op = new_op();
+  cls_refcount_put(*op, tag2, true);
+  ASSERT_EQ(0, ioctx.operate(oid, op));
+  delete op;
+
+  /* drop tag1 reference, make sure object removed */
+  op = new_op();
+  cls_refcount_put(*op, tag1, true);
+  ASSERT_EQ(0, ioctx.operate(oid, op));
+  delete op;
+
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, NULL, NULL));
+
+  /* remove pool */
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_refcount, test_get_and_create_error) /* test error handling with implicit object creation */
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  /* create pool */
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  /* add chains */
+  string oid = "obj";
+  string tag1 = "tag1";
+
+  /* create the object and get ref */
+  librados::ObjectWriteOperation *op = new_op();
+  cls_refcount_get(*op, tag1, true, false);
+  ASSERT_EQ(0, ioctx.operate(oid, op));
+  delete op;
+
+  /* read reference and verify */
+  list<string> refs;
+
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(1, (int)refs.size());
+  ASSERT_EQ(tag1, refs.front());
+
+  /* create another ref, when the object already exists - mark creation as exclusive */
+  string tag2 = "tag2";
+  op = new_op();
+  op->create(true);
+  cls_refcount_get(*op, tag1, true, false);
+  ASSERT_EQ(-EEXIST, ioctx.operate(oid, op));
+  delete op;
+
+  /* read reference and verify */
+  ASSERT_EQ(0, cls_refcount_read(ioctx, oid, &refs, true));
+  ASSERT_EQ(1, (int)refs.size());
+  ASSERT_EQ(tag1, refs.front());
+
+  /* drop tag1 reference, make sure object removed */
+  op = new_op();
+  cls_refcount_put(*op, tag1, true);
+  ASSERT_EQ(0, ioctx.operate(oid, op));
+  delete op;
+
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, NULL, NULL));
+
+  /* remove pool */
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
