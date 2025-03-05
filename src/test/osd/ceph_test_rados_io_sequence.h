@@ -322,7 +322,7 @@ class TestRunner {
   ceph::spliterator tokens;
 
   void clear_tokens();
-  std::string get_token();
+  std::string get_token(bool allow_eof = false);
   std::optional<std::string> get_optional_token();
   uint64_t get_numeric_token();
   std::optional<uint64_t> get_optional_numeric_token();
