@@ -42,6 +42,10 @@ enum class Sequence {
   SEQUENCE_SEQ8,
   SEQUENCE_SEQ9,
   SEQUENCE_SEQ10,
+  SEQUENCE_SEQ11,
+  SEQUENCE_SEQ12,
+  SEQUENCE_SEQ13,
+  SEQUENCE_SEQ14,
 
   SEQUENCE_END,
   SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -228,6 +232,70 @@ class Seq9 : public IoSequence {
  public:
   Seq9(std::pair<int, int> obj_size_range, int seed);
 
+      Sequence get_id() const override;
+      std::string get_name() const override;
+      std::unique_ptr<IoOp> _next() override;
+    };
+
+class Seq11 : public IoSequence {
+ private:
+  uint64_t count;
+  bool doneread = true;
+  bool donebarrier = false;
+
+ public:
+  Seq11(std::pair<int, int> obj_size_range, int seed);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq12 : public IoSequence {
+ private:
+  uint64_t count;
+  uint64_t overlap;
+  bool doneread = true;
+  bool donebarrier = false;
+
+ public:
+  Seq12(std::pair<int, int> obj_size_range, int seed);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq13 : public IoSequence {
+ private:
+  uint64_t count;
+  uint64_t gap;
+  bool doneread = true;
+  bool donebarrier = false;
+
+ public:
+  Seq13(std::pair<int, int> obj_size_range, int seed);
+
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq14 : public IoSequence {
+ private:
+  uint64_t offset;
+  uint64_t step;
+  uint64_t target_obj_size;
+  uint64_t current_size = 0;
+  std::default_random_engine startrng;
+  std::vector<uint64_t> starts;
+  size_t startidx;
+  bool doneread = false;
+
+ public:
+  Seq14(std::pair<int, int> obj_size_range, int seed);
+
+  void setup_starts();
   Sequence get_id() const override;
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;

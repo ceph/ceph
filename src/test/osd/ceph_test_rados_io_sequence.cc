@@ -48,6 +48,8 @@ using TripleReadOp = ceph::io_exerciser::TripleReadOp;
 using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
 using DoubleWriteOp = ceph::io_exerciser::DoubleWriteOp;
 using TripleWriteOp = ceph::io_exerciser::TripleWriteOp;
+using SingleAppendOp = ceph::io_exerciser::SingleAppendOp;
+using TruncateOp = ceph::io_exerciser::TruncateOp;
 using SingleFailedWriteOp = ceph::io_exerciser::SingleFailedWriteOp;
 using DoubleFailedWriteOp = ceph::io_exerciser::DoubleFailedWriteOp;
 using TripleFailedWriteOp = ceph::io_exerciser::TripleFailedWriteOp;
@@ -667,10 +669,17 @@ void ceph::io_sequence::tester::TestRunner::clear_tokens() {
   tokens = split.end();
 }
 
-std::string ceph::io_sequence::tester::TestRunner::get_token() {
+std::string ceph::io_sequence::tester::TestRunner::get_token(bool allow_eof) {
   while (line.empty() || tokens == split.end()) {
     if (!std::getline(std::cin, line)) {
+      if (allow_eof) {
+        return "done";
+      }
       throw std::runtime_error("End of input");
+    }
+    if (line.starts_with('#')) {
+      dout(0) << line << dendl;
+      continue;
     }
     split = ceph::split(line);
     tokens = split.begin();
@@ -759,9 +768,13 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
   }
 
   while (!done) {
-    const std::string op = get_token();
+    const std::string op = get_token(true);
     if (op == "done" || op == "q" || op == "quit") {
       ioop = ceph::io_exerciser::DoneOp::generate();
+    } else if (op == "sleep") {
+      uint64_t duration = get_numeric_token();
+      dout(0) << "Sleep " << duration << dendl;
+      sleep(duration);
     } else if (op == "create") {
       ioop = ceph::io_exerciser::CreateOp::generate(get_numeric_token());
     } else if (op == "remove" || op == "delete") {
@@ -804,6 +817,11 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t length3 = get_numeric_token();
       ioop = TripleWriteOp::generate(offset1, length1, offset2, length2,
                                      offset3, length3);
+    } else if (op == "append") {
+      uint64_t length = get_numeric_token();
+      ioop = SingleAppendOp::generate(length);
+    } else if (op == "truncate") {
+      ioop = TruncateOp::generate(get_numeric_token());
     } else if (op == "failedwrite") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();

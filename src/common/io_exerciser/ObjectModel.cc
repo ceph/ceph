@@ -45,7 +45,9 @@ std::string ObjectModel::to_string(int mask) const {
 bool ObjectModel::readyForIoOp(IoOp& op) { return true; }
 
 void ObjectModel::applyIoOp(IoOp& op) {
-  auto generate_random = [&rng = rng]() { return rng(); };
+  auto generate_random = [&rng = rng]() {
+    return rng(1, std::numeric_limits<int>::max());
+  };
 
   auto verify_and_record_read_op =
       [&contents = contents, &created = created, &num_io = num_io,
@@ -71,7 +73,9 @@ void ObjectModel::applyIoOp(IoOp& op) {
           ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
           ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
           writes.union_insert(writeOp.offset[i], writeOp.length[i]);
-          ceph_assert(writeOp.offset[i] + writeOp.length[i] <= contents.size());
+          if (writeOp.offset[i] + writeOp.length[i] > contents.size()) {
+            contents.resize(writeOp.offset[i] + writeOp.length[i]);
+          }
           std::generate(std::execution::seq,
                         std::next(contents.begin(), writeOp.offset[i]),
                         std::next(contents.begin(),
@@ -114,6 +118,13 @@ void ObjectModel::applyIoOp(IoOp& op) {
                     generate_random);
       break;
 
+    case OpType::Truncate:
+      ceph_assert(created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      contents.resize(static_cast<TruncateOp&>(op).size);
+      break;
+
     case OpType::Remove:
       ceph_assert(created);
       ceph_assert(reads.empty());
@@ -148,6 +159,14 @@ void ObjectModel::applyIoOp(IoOp& op) {
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
       verify_write_and_record_and_generate_seed(writeOp);
     } break;
+
+    case OpType::Append: {
+      ceph_assert(created);
+      SingleAppendOp& appendOp = static_cast<SingleAppendOp&>(op);
+      appendOp.offset[0] = contents.size();
+      verify_write_and_record_and_generate_seed(appendOp);
+    } break;
+
     case OpType::FailedWrite: {
       ceph_assert(created);
       SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);
@@ -156,6 +175,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
     case OpType::FailedWrite2: {
       DoubleWriteOp& writeOp = static_cast<DoubleWriteOp&>(op);
       verify_failed_write_and_record(writeOp);
+
     } break;
     case OpType::FailedWrite3: {
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
