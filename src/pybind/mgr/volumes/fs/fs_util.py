@@ -27,6 +27,11 @@ def rename_pool(mgr, pool_name, new_pool_name):
                'destpool': new_pool_name}
     return mgr.mon_command(command)
 
+def add_data_pool_to_fs(mgr, fs_name, data_pool):
+    command = {'prefix': 'fs add_data_pool', 'fs_name': fs_name,
+               'pool': data_pool}
+    return mgr.mon_command(command)
+
 def create_filesystem(mgr, fs_name, metadata_pool, data_pool):
     command = {'prefix': 'fs new', 'fs_name': fs_name, 'metadata': metadata_pool,
                'data': data_pool}
