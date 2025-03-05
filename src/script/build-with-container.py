@@ -676,12 +676,15 @@ def bc_make_debs(ctx):
     basedir = pathlib.Path(ctx.cli.homedir) / "debs"
     if ctx.cli.build_dir:
         basedir = pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir
+    make_debs_cmd = f"./make-debs.sh {basedir}"
+    if ctx.cli.ceph_version:
+        make_debs_cmd = f"{make_debs_cmd} {ctx.cli.ceph_version}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"mkdir -p {basedir} && cd {ctx.cli.homedir} && ./make-debs.sh {basedir}",
+            f"mkdir -p {basedir} && cd {ctx.cli.homedir} && {make_debs_cmd}",
         ],
     )
     with ctx.user_command():
