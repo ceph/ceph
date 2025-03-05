@@ -7,20 +7,17 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 describe('NfsClusterDetailsComponent', () => {
   let component: NfsClusterDetailsComponent;
   let fixture: ComponentFixture<NfsClusterDetailsComponent>;
-  
+
   configureTestBed({
     declarations: [NfsClusterDetailsComponent],
-    imports: [
-      HttpClientTestingModule,
-      SharedModule,
-    ],
+    imports: [HttpClientTestingModule, SharedModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsClusterDetailsComponent);
     component = fixture.componentInstance;
-  })
+  });
   it('should create', () => {
     expect(component).toBeTruthy();
   });
-})
+});
