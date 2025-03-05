@@ -41,7 +41,7 @@ public:
     encode(pgs, payload);
     encode(pg_extra, payload);
   }
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(epoch, p);

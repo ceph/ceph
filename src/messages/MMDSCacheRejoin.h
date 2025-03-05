@@ -313,7 +313,7 @@ public:
     encode(xlocked_dentries, payload);
     encode(client_metadata_map, payload);
   }
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(op, p);

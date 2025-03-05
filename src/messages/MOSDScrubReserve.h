@@ -83,7 +83,7 @@ public:
     return;
   }
 
-  void decode_payload(uint64_t) {
+  void decode_payload() {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);

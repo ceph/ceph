@@ -427,7 +427,7 @@ struct ceph_osd_request_head {
     }
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     using ceph::decode;
     ceph_assert(partial_decode_needed && final_decode_needed);
     p = std::cbegin(payload);

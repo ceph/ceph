@@ -252,7 +252,7 @@ public:
   void mark_queued_for_replay() const { queued_for_replay = true; }
   bool is_queued_for_replay() const { return queued_for_replay; }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
 

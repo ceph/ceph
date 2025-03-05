@@ -31,7 +31,7 @@ public:
     o << "mon_health_checks(" << health_checks.checks.size() << " checks)";
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);

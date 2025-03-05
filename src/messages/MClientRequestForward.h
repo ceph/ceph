@@ -57,7 +57,7 @@ public:
     encode(client_must_resend, payload);
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(dest_mds, p);
