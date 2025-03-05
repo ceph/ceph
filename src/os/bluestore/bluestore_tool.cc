@@ -338,6 +338,7 @@ int main(int argc, char **argv)
         "show-label, "
         "show-label-at, "
         "set-label-key, "
+	"create-bdev-label, "
         "rm-label-key, "
         "prime-osd-dir, "
         "bluefs-log-dump, "
@@ -494,6 +495,16 @@ int main(int argc, char **argv)
     }
     if (action == "set-label-key" && value.size() == 0) {
       cerr << "must specify a value with -v" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (action == "create-bdev-label") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (devs.size() != 1) {
+      cerr << "must specify the main bluestore device" << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -809,6 +820,53 @@ int main(int argc, char **argv)
     jf.close_section();
     jf.close_section();
     jf.flush(cout);
+  }
+  else if (action == "create-bdev-label") {
+
+    std::vector<std::string> metadata_files = {
+        "bfm_blocks", "bfm_blocks_per_key", "bfm_bytes_per_block", "bfm_size",
+        "bluefs", "ceph_fsid", "ceph_version_when_created", "created_at",
+        "elastic_shared_blobs", "fsid", "keyring", "kv_backend", "magic",
+        "mkfs_done", "osd_key", "ready", "require_osd_release", "type", "whoami"
+    };
+
+    bluestore_bdev_label_t label;
+    std::vector<uint64_t> valid_positions;
+    bool is_multi = false;
+    int64_t epoch = -1;
+
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label,
+      &valid_positions, &is_multi, &epoch);
+    if (r < 0) {
+      cerr << "unable to read label for " << devs.front() << ": "
+           << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    for (const auto& file : metadata_files) {
+        std::ifstream infile(path + "/" + file);
+        if (infile) {
+            std::string value((std::istreambuf_iterator<char>(infile)), std::istreambuf_iterator<char>());
+            label.meta[file] = value;
+        } else {
+            cerr << "Warning: unable to read metadata file: " << file << std::endl;
+        }
+    }
+
+    bool wrote_at_least_one = false;
+    for (uint64_t position : valid_positions) {
+      r = BlueStore::write_bdev_label(cct.get(), devs.front(), label, position);
+      if (r < 0) {
+        cerr << "unable to write label for " << devs.front()
+             << " at 0x" << std::hex << position << std::dec
+             << ": " << cpp_strerror(r) << std::endl;
+      } else {
+        wrote_at_least_one = true;
+      }
+    }
+    if (!wrote_at_least_one) {
+        exit(EXIT_FAILURE);
+    }
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
