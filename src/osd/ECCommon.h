@@ -21,7 +21,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
-#if WITH_SEASTAR
+#if WITH_CRIMSON
 #include "ExtentCache.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
@@ -67,7 +67,7 @@ struct ECListener {
   virtual void cancel_pull(
     const hobject_t &soid) = 0;
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   // XXX
   virtual pg_shard_t primary_shard() const = 0;
   virtual bool pgb_is_primary() const = 0;
@@ -137,7 +137,7 @@ struct ECListener {
 #endif
 
   // XXX
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) = 0;
 

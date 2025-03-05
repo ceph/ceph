@@ -18,7 +18,7 @@
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 #endif
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/os/alienstore/alien_store.h"
 #endif
 

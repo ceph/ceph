@@ -323,7 +323,7 @@ Message *decode_message(CephContext *cct,
                         ceph::bufferlist& data,
                         Message::ConnectionRef conn)
 {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   // In crimson, conn is independently maintained outside Message.
   ceph_assert(conn == nullptr);
 #endif
@@ -335,7 +335,7 @@ Message *decode_message(CephContext *cct,
     if (front_crc != footer.front_crc) {
       if (cct) {
 	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 	              << " from " << conn->get_peer_addr()
 #endif
 	              << dendl;
@@ -348,7 +348,7 @@ Message *decode_message(CephContext *cct,
     if (middle_crc != footer.middle_crc) {
       if (cct) {
 	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 	              << " from " << conn->get_peer_addr()
 #endif
 	              << dendl;
@@ -365,7 +365,7 @@ Message *decode_message(CephContext *cct,
       if (data_crc != footer.data_crc) {
 	if (cct) {
 	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 	                << " from " << conn->get_peer_addr()
 #endif
 	                << dendl;
