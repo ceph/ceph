@@ -694,8 +694,12 @@ public:
   int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->remove_logging_object(obj_name, y, dpp);
   }
-  int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
-    return next->write_logging_object(obj_name, record, y, dpp, async_completion);
+  int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp,
+      bool async_completion, boost::optional<const std::string&> transaction_id = boost::none) override {
+    return next->write_logging_object(obj_name, record, y, dpp, async_completion, transaction_id);
+  }
+  int complete_logging_object_write(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& transaction_id) override {
+    return next->complete_logging_object_write(obj_name, y, dpp, transaction_id);
   }
 
   virtual rgw_bucket& get_key() override { return next->get_key(); }

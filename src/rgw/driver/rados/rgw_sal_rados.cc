@@ -76,6 +76,7 @@
 #include "services/svc_user.h"
 #include "services/svc_sys_obj_cache.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/refcount/cls_refcount_client.h"
 
 #include "account.h"
 #include "buckets.h"
@@ -1082,7 +1083,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
   }
   bufferlist bl;
   bl.append(obj_name);
-  const int ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
+  auto ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
                                data_pool,
                                obj_name_oid,
                                bl,
@@ -1093,12 +1094,25 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
                                nullptr);
   if (ret == -EEXIST) {
     ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
-  } else if (ret == -ECANCELED) {
-    ldpp_dout(dpp, 20) << "INFO: race detected in updating logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
-  } else if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+    return ret;
   }
-  return ret;
+  if (ret == -ECANCELED) {
+    ldpp_dout(dpp, 20) << "INFO: race detected in updating logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+    return ret;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+    return ret;
+  }
+  // create an empty object and add a refcount to it
+  // so it won't be deleted when the last real transaction is completed
+  static const std::string empty_record;
+  static const std::string do_no_delete_trans_id{"do_no_delete"};
+  ret = write_logging_object(obj_name, empty_record, y, dpp, false, do_no_delete_trans_id);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to create empty logging object '" << obj_name << "'. ret = " << ret << dendl;
+  }
+  return 0;
 }
 
 int RadosBucket::remove_logging_object_name(const std::string& prefix,
@@ -1155,7 +1169,28 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
     return -EIO;
   }
 
+
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
+  {
+    // wait until there are no open transactions on the object
+    librados::IoCtx io_ctx;
+    if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for commiting object from data pool:" << data_pool.to_str() << dendl;
+      return -EIO;
+    }
+    librados::ObjectReadOperation op;
+    std::list<std::string> refs;
+    if (auto ret = cls_refcount_read(io_ctx, temp_obj_name, &refs); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to read logging object '" << obj_name << "'. ret = " << ret << dendl;
+      return ret;
+    }
+    if (refs.size() > 1) {
+      // TODO: check for old transactions and commit anyway
+      ldpp_dout(dpp, 1) << "WARNING: logging object '" << obj_name << "' is still referenced by " << refs.size() - 1 << " transactions" << dendl;
+      //return -EAGAIN;
+    }
+  }
+
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
   bufferlist bl_data;
@@ -1263,11 +1298,10 @@ void bucket_logging_completion(rados_completion_t completion, void* args) {
   }
 }
 
-int RadosBucket::write_logging_object(const std::string& obj_name,
-    const std::string& record,
+int RadosBucket::complete_logging_object_write(const std::string& obj_name,
     optional_yield y,
     const DoutPrefixProvider *dpp,
-    bool async_completion) {
+    const std::string& transaction_id) {
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
@@ -1281,13 +1315,52 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
     ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
     return -EIO;
   }
-  bufferlist bl;
-  bl.append(record);
-  bl.append("\n");
-  // append the record to the temporary object
-  // if this is the first record, the object will be created
   librados::ObjectWriteOperation op;
-  op.append(bl);
+  cls_refcount_put(op, transaction_id);
+  if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, std::move(op), y); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to mark logging object transaction '" <<
+      transaction_id << "' as completed for logging object '" << temp_obj_name <<
+      "'. ret = " << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
+int RadosBucket::write_logging_object(const std::string& obj_name,
+    const std::string& record,
+    optional_yield y,
+    const DoutPrefixProvider *dpp,
+    bool async_completion,
+    boost::optional<const std::string&> transaction_id) {
+  const auto temp_obj_name = to_temp_object_name(this, obj_name);
+  rgw_pool data_pool;
+  rgw_obj obj{get_key(), obj_name};
+  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_name() <<
+      "' when writing logging object" << dendl;
+    return -EIO;
+  }
+  librados::IoCtx io_ctx;
+  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
+    return -EIO;
+  }
+  librados::ObjectWriteOperation op;
+  // allow creation of the object if it does not exist
+  // but dont fail if it does
+  op.create(false);
+  if (!record.empty()) {
+    // append the record to the temporary object
+    bufferlist bl;
+    bl.append(record);
+    bl.append("\n");
+    op.append(bl);
+  }
+  if (transaction_id) {
+    // indicate there is an open transaction on the object
+    // create the object if it does not exist
+    cls_refcount_get(op, *transaction_id, false, false);
+  }
   if (async_completion) {
     aio_completion_ptr completion{librados::Rados::aio_create_completion()};
     auto arg = std::make_unique<BucketLoggingCompleteArg>(temp_obj_name, record.length(), store->ctx());
@@ -1306,8 +1379,13 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
       "'. ret = " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "INFO: wrote " << record.length() << " bytes to logging object '" <<
-    temp_obj_name << "'" << dendl;
+  if (!record.empty()) {
+    ldpp_dout(dpp, 20) << "INFO: wrote " << record.length() << " bytes to logging object '" <<
+      temp_obj_name << "'" << dendl;
+  } else {
+    ldpp_dout(dpp, 20) << "INFO: created new logging object '" <<
+      temp_obj_name << "'" << dendl;
+  }
   return 0;
 }
 

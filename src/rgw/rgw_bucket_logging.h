@@ -13,6 +13,7 @@
 
 class XMLObj;
 namespace ceph { class Formatter; }
+namespace sal { class Bucket; }
 class DoutPrefixProvider;
 struct req_state;
 struct RGWObjVersionTracker;
@@ -154,6 +155,8 @@ inline std::string to_string(const Records& records) {
   return str_records;
 }
 
+class BucketLoggingCompleter;
+
 // log a bucket logging record according to the configuration
 int log_record(rgw::sal::Driver* driver,
     const sal::Object* obj,
@@ -165,7 +168,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp, 
     optional_yield y, 
     bool async_completion,
-    bool log_source_bucket);
+    bool log_source_bucket,
+    boost::optional<BucketLoggingCompleter&> completer = boost::none);
 
 // commit the pending log objec to the log bucket
 // and create a new pending log object
@@ -213,7 +217,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp, 
     optional_yield y, 
     bool async_completion,
-    bool log_source_bucket);
+    bool log_source_bucket,
+    boost::optional<BucketLoggingCompleter&> completer = boost::none);
 
 // return (by ref) an rgw_bucket object with the bucket name and tenant name
 // fails if the bucket name is not in the format: [tenant name:]<bucket name>
@@ -246,5 +251,33 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
                                    optional_yield y);
+
+class BucketLoggingCompleterImpl;
+
+// if this class is passed into the log_record() function
+// it will be used to complete the transaction upon destruction
+class BucketLoggingCompleter {
+  const std::string trans_id;
+  std::unique_ptr<BucketLoggingCompleterImpl> impl;
+public:
+  BucketLoggingCompleter(const std::string& _trans_id);
+  ~BucketLoggingCompleter();
+
+  // this function allocate and populate impl
+  // and therefore need access to private members of the class
+  friend int log_record(rgw::sal::Driver* driver,
+      const sal::Object* obj,
+      const req_state* s,
+      const std::string& op_name,
+      const std::string& etag,
+      size_t size,
+      const configuration& conf,
+      const DoutPrefixProvider *dpp,
+      optional_yield y,
+      bool async_completion,
+      bool log_source_bucket,
+      boost::optional<BucketLoggingCompleter&> completer);
+};
+
 } // namespace rgw::bucketlogging
 

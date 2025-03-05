@@ -4700,12 +4700,23 @@ void RGWPutObj::execute(optional_yield y)
     obj_retention->encode(obj_retention_bl);
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
- 
+
+  rgw::bucketlogging::BucketLoggingCompleter bucket_logging_completer(s->trans_id);
   if (!multipart) {
-    op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, s->object->get_size(), this, y, false, false);
+    op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal,
+        s->object.get(),
+        s,
+        canonical_name(),
+        etag,
+        s->object->get_size(),
+        this,
+        y,
+        false,
+        false,
+        bucket_logging_completer);
     if (op_ret  < 0) {
       return;
-   }
+    }
   }
 
   // don't track the individual parts of multipart uploads. they replicate in
@@ -5906,7 +5917,18 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   etag = s->src_object->get_attrs()[RGW_ATTR_ETAG].to_str();
-  op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, obj_size, this, y, false, false);
+  rgw::bucketlogging::BucketLoggingCompleter bucket_logging_completer(s->trans_id);
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s, canonical_name(),
+      etag,
+      obj_size,
+      this,
+      y,
+      false,
+      false,
+      bucket_logging_completer);
   if (op_ret < 0) {
     return;
   }
@@ -6996,7 +7018,19 @@ void RGWCompleteMultipart::execute(optional_yield y)
   prefix_map_t processed_prefixes; 
 
   // no etag and size before completion
-  op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), "", 0, this, y, false, false);
+  rgw::bucketlogging::BucketLoggingCompleter bucket_logging_completer(s->trans_id);
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      "",
+      0,
+      this,
+      y,
+      false,
+      false,
+      bucket_logging_completer);
   if (op_ret < 0) {
     return;
   }

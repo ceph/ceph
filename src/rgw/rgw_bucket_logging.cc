@@ -401,7 +401,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket) {
+    bool log_source_bucket,
+    boost::optional<BucketLoggingCompleter&> completer) {
   if (!s->bucket) {
     ldpp_dout(dpp, 1) << "ERROR: only bucket operations are logged" << dendl;
     return -EINVAL;
@@ -537,11 +538,17 @@ int log_record(rgw::sal::Driver* driver,
       return -EINVAL;
   }
 
+  boost::optional<const std::string&> trans_id;
+  if (completer) {
+    completer->impl = std::make_unique<BucketLoggingCompleterImpl>(completer->trans_id, obj_name, y, dpp, target_bucket.get());
+    trans_id = completer->trans_id;
+  }
   if (ret = target_bucket->write_logging_object(obj_name,
         record,
         y,
         dpp,
-        async_completion); ret < 0 && ret != -EFBIG) {
+        async_completion,
+        trans_id); ret < 0 && ret != -EFBIG) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write record to logging object '" <<
       obj_name << "'. ret = " << ret << dendl;
     return ret;
@@ -556,7 +563,8 @@ int log_record(rgw::sal::Driver* driver,
         record,
         y,
         dpp,
-        async_completion); ret < 0) {
+        async_completion,
+        trans_id); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write record to logging object '" <<
       obj_name << "'. ret = " << ret << dendl;
     return ret;
@@ -583,7 +591,8 @@ int log_record(rgw::sal::Driver* driver,
     const DoutPrefixProvider *dpp,
     optional_yield y,
     bool async_completion,
-    bool log_source_bucket) {
+    bool log_source_bucket,
+    boost::optional<BucketLoggingCompleter&> completer) {
   if (!s->bucket) {
     // logging only bucket operations
     return 0;
@@ -609,7 +618,7 @@ int log_record(rgw::sal::Driver* driver,
     }
     ldpp_dout(dpp, 20) << "INFO: found matching logging configuration of bucket '" << s->bucket->get_info().bucket <<
       "' configuration: " << configuration.to_json_str() << dendl;
-    if (auto ret = log_record(driver, obj, s, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket); ret < 0) {
+    if (auto ret = log_record(driver, obj, s, op_name, etag, size, configuration, dpp, y, async_completion, log_source_bucket, completer); ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_info().bucket <<
         "'. ret=" << ret << dendl;
       return ret;
@@ -800,6 +809,29 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
     info.bucket << "'"<< dendl;
   return 0;
 }
+
+class BucketLoggingCompleterImpl {
+  const std::string& trans_id;
+  const std::string obj_name;
+  optional_yield y;
+  const DoutPrefixProvider* dpp;
+  std::unique_ptr<sal::Bucket> bucket;
+public:
+  BucketLoggingCompleterImpl(
+      const std::string& _trans_id,
+      const std::string& _obj_name,
+      optional_yield _y,
+      const DoutPrefixProvider* _dpp,
+      sal::Bucket* _bucket) : trans_id(_trans_id), obj_name(_obj_name), y(_y), dpp(_dpp), bucket(_bucket->clone()) {}
+  ~BucketLoggingCompleterImpl() {
+    bucket->complete_logging_object_write(obj_name, y, dpp, trans_id);
+  }
+};
+
+BucketLoggingCompleter::BucketLoggingCompleter(const std::string& _trans_id) : trans_id(_trans_id) {}
+// default dtor will invoke complete_logging_object_write
+// if impl was allocated
+BucketLoggingCompleter::~BucketLoggingCompleter() {}
 
 } // namespace rgw::bucketlogging
 
