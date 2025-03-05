@@ -271,6 +271,44 @@ TransactionManager::ref_ret TransactionManager::remove(
   });
 }
 
+TransactionManager::ref_iertr::future<LBAMapping> TransactionManager::remove(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::remove);
+  auto fut = base_iertr::make_ready_future<LogicalChildNodeRef>();
+  if (mapping.get_val().is_real()) {
+    auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping.duplicate());
+    if (ret.index() == 1) {
+      fut = std::move(std::get<1>(ret));
+    }
+  }
+  return fut.si_then([mapping=std::move(mapping),
+                      FNAME, this, &t](auto extent) mutable {
+    auto offset = mapping.get_key();
+    return lba_manager->decref_extent(t, std::move(mapping)
+    ).si_then([FNAME, this, extent, &t, offset](auto result) {
+      auto fut = ref_iertr::now();
+      if (result.refcount == 0) {
+        if (result.addr.is_paddr() &&
+            !result.addr.get_paddr().is_zero()) {
+          if (extent) {
+            cache->retire_extent(t, extent);
+          } else {
+            fut = cache->retire_extent_addr(
+              t, result.addr.get_paddr(), result.length);
+          }
+        }
+      }
+      return fut.si_then([result=std::move(result), &t, FNAME, offset]() mutable {
+        DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+               t, result.addr, result.length, result.refcount, offset);
+        return std::move(result.mapping);
+      });
+    });
+  });
+}
+
 TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
@@ -553,16 +591,22 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    return lba_manager->update_mapping(
-      t,
-      extent->get_laddr(),
-      extent->get_length(),
-      extent->get_paddr(),
-      nextent->get_length(),
-      nextent->get_paddr(),
-      nextent->get_last_committed_crc(),
-      nextent.get()
-    ).discard_result();
+    return lba_manager->get_mapping(t, *extent
+    ).si_then([this, &t, extent, nextent](auto mapping) {
+      return lba_manager->update_mapping(
+        t,
+        std::move(mapping),
+        extent->get_length(),
+        extent->get_paddr(),
+        nextent->get_length(),
+        nextent->get_paddr(),
+        nextent->get_last_committed_crc(),
+        nextent.get()
+      ).discard_result();
+    }).handle_error_interruptible(
+      rewrite_extent_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
     auto length = extent->get_length();
@@ -602,18 +646,25 @@ TransactionManager::rewrite_logical_extent(
            * avoid this complication. */
           auto fut = base_iertr::now();
           if (first_extent) {
-            fut = lba_manager->update_mapping(
-              t,
-              (extent->get_laddr() + off).checked_to_laddr(),
-              extent->get_length(),
-              extent->get_paddr(),
-              nextent->get_length(),
-              nextent->get_paddr(),
-              nextent->get_last_committed_crc(),
-              nextent.get()
-            ).si_then([&refcount](auto c) {
-              refcount = c;
-            });
+            fut = lba_manager->get_mapping(t, *extent
+              ).si_then([this, &t, extent, nextent,
+                        &refcount](auto mapping) {
+                return lba_manager->update_mapping(
+                  t,
+                  std::move(mapping),
+                  extent->get_length(),
+                  extent->get_paddr(),
+                  nextent->get_length(),
+                  nextent->get_paddr(),
+                  nextent->get_last_committed_crc(),
+                  nextent.get()
+                ).si_then([&refcount](auto c) {
+                  refcount = c;
+                });
+              }).handle_error_interruptible(
+                rewrite_extent_iertr::pass_further{},
+                crimson::ct_error::assert_all{"unexpected enoent"}
+              );
           } else {
             ceph_assert(refcount != 0);
             fut = lba_manager->alloc_extent(

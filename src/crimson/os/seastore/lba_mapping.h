@@ -58,8 +58,9 @@ public:
 
   bool is_valid() const {
     assert(!is_null());
-    return physical_cursor->is_valid()
-	&& (!is_indirect() || indirect_cursor->is_valid());
+    return is_indirect()
+      ? indirect_cursor->is_valid()
+      : physical_cursor->is_valid();
   }
 
   // For reserved mappings, the return values are
@@ -146,12 +147,29 @@ public:
     };
     return LBAMapping(dup_iter(physical_cursor), dup_iter(indirect_cursor));
   }
-
 private:
   // Only allow BtreeLBAManager use these two methods
   // FIXME: remove them
 
   friend class lba_manager::btree::BtreeLBAManager;
+  friend class TransactionManager;
+  friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
+
+  LBACursor& get_effective_cursor() {
+    if (is_indirect()) {
+      return *indirect_cursor;
+    }
+    return *physical_cursor;
+  }
+
+  bool is_complete_indirect() const {
+    assert(!is_null());
+    return (bool)indirect_cursor && (bool)physical_cursor;
+  }
+
+  bool is_complete() const {
+    return !is_indirect() || is_complete_indirect();
+  }
 
   void make_indirect(LBACursorRef cursor) {
     assert(physical_cursor);
