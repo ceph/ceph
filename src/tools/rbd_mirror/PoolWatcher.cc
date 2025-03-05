@@ -482,7 +482,7 @@ void PoolWatcher<I>::notify_listener() {
       // If previous entity is not there in current set of entities or if
       // their id's don't match then consider its removed
       if (it == m_pending_entities.end() || it->second != id ||
-          it->first.count < entity.count) {
+          it->first.count != entity.count) {
         removed_entities.insert(entity);
       }
     }
@@ -491,7 +491,7 @@ void PoolWatcher<I>::notify_listener() {
       // If current entity is not there in previous set of entities or if
       // their id's don't match then consider its added
       if (it == m_entities.end() || it->second != id ||
-          it->first.count < entity.count) {
+          it->first.count != entity.count) {
         added_entities.insert(entity);
       }
     }
