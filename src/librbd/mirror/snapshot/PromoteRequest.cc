@@ -62,7 +62,7 @@ void PromoteRequest<I>::create_orphan_snapshot() {
     &PromoteRequest<I>::handle_create_orphan_snapshot>(this);
 
   auto req = CreateNonPrimaryRequest<I>::create(
-    m_image_ctx, false, "", "", "", CEPH_NOSNAP, {}, {}, nullptr, ctx);
+    m_image_ctx, false, "", "", CEPH_NOSNAP, {}, {}, nullptr, ctx);
   req->send();
 }
 
@@ -301,8 +301,8 @@ void PromoteRequest<I>::create_promote_snapshot() {
     m_image_ctx, m_global_image_id, CEPH_NOSNAP,
     SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
     (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
-     snapshot::CREATE_PRIMARY_FLAG_FORCE), m_group_pool_id,
-    m_group_id, m_group_snap_id, m_snap_id, ctx);
+     snapshot::CREATE_PRIMARY_FLAG_FORCE), m_group_snap_id, m_snap_id,
+    ctx);
   req->send();
 }
 
