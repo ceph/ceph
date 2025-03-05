@@ -8611,6 +8611,9 @@ paths:
                 rbd_image_name:
                   description: RBD image name
                   type: string
+                rbd_image_size:
+                  description: RBD image size
+                  type: integer
                 rbd_pool:
                   default: rbd
                   description: RBD pool name
