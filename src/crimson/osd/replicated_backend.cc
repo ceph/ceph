@@ -92,7 +92,11 @@ ReplicatedBackend::submit_transaction(
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
-    pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
+    pending_trans.try_emplace(
+      tid,
+      pg_shards.size(),
+      osd_op_p.at_version,
+      pg.get_last_complete()).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
