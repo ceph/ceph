@@ -129,6 +129,7 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
+import { NfsClusterFormComponent } from '../nfs/nfs-cluster-form/nfs-cluster-form.component';
 
 @NgModule({
   imports: [
@@ -424,7 +425,12 @@ const routes: Routes = [
     children: [
       { path: '', component: NfsClusterComponent },
       {
-        path: URLVerbs.CREATE,
+        path: `${URLVerbs.EDIT}/:cluster_id`,
+        component: NfsClusterFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: `${URLVerbs.CREATE}/:cluster_id`,
         component: NfsFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
       },
