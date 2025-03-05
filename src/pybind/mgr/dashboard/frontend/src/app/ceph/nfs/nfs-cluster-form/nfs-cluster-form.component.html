@@ -1,0 +1,40 @@
+
+  <div cdsCol
+       [columnNumbers]="{md: 4}">
+  <ng-container *cdFormLoading="loading">
+  <form name="nfsForm"
+        [formGroup]="nfsForm"
+        #formDir="ngForm"
+        novalidate>
+  <div i18n="form title"
+       class="form-header">
+  <span *ngIf="isEdit">
+          Set Cluster Quality of Service
+  </span>
+  <span *ngIf="!isEdit">
+       {{action | titlecase }} {{ resource | upperFirst }}
+  </span>
+  </div>
+
+  <div class="form-group row">
+  <cds-text-label for="cluster_id"
+                  i18n>Client ID
+  <input  cdsText
+          type="text"
+          id="cluster_id"
+          i18n-placeholder
+          formControlName="cluster_id">
+  </cds-text-label>
+  </div>
+  <cd-nfs-rate-limit-form [action]="action"
+                          [isEdit]="isEdit"
+                          [type]="'cluster'"
+                          (emitErrors)="childCompErrorHandler($event)"
+                          [clusterDataConfig]="nfsBwIopConfig"></cd-nfs-rate-limit-form>
+  <cd-form-button-panel (submitActionEvent)="submitAction()"
+                        [form]="nfsForm"
+                        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                        wrappingClass="text-right"></cd-form-button-panel>
+  </form>
+  </ng-container>
+  </div>
