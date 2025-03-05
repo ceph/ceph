@@ -27,7 +27,7 @@
 #include "common/hobject.h"
 
 /**
-   ExtentCache
+   ECExtentCacheL
 
    The main purpose of this cache is to ensure that we can pipeline
    overlapping partial overwrites.
@@ -93,7 +93,8 @@
    states.
  */
 
-/// If someone wants these types, but not ExtentCache, move to another file
+namespace ECLegacy {
+/// If someone wants these types, but not ECExtentCacheL, move to another file
 struct bl_split_merge {
   ceph::buffer::list split(
     uint64_t offset,
@@ -116,7 +117,7 @@ struct bl_split_merge {
 using extent_set = interval_set<uint64_t>;
 using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
 
-class ExtentCache {
+class ECExtentCacheL {
   struct object_extent_set;
   struct pin_state;
 private:
@@ -287,11 +288,11 @@ private:
 		*(ext->bl),
 		extoff - ext->offset,
 		extlen);
-	      final_extent = new ExtentCache::extent(
+	      final_extent = new ECExtentCacheL::extent(
 		extoff,
 		bl);
 	    } else {
-	      final_extent = new ExtentCache::extent(
+	      final_extent = new ECExtentCacheL::extent(
 		extoff, extlen);
 	    }
 	    final_extent->link(*this, pin);
@@ -392,7 +393,7 @@ private:
 
 public:
   class write_pin : private pin_state {
-    friend class ExtentCache;
+    friend class ECExtentCacheL;
   private:
     void open(uint64_t in_tid) {
       _open(in_tid, pin_state::WRITE);
@@ -483,4 +484,5 @@ public:
   std::ostream &print(std::ostream &out) const;
 };
 
-std::ostream &operator <<(std::ostream &lhs, const ExtentCache &cache);
+std::ostream &operator <<(std::ostream &lhs, const ECExtentCacheL &cache);
+} // namespace ECLegacy
