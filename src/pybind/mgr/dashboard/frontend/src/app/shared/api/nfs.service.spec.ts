@@ -27,7 +27,7 @@ describe('NfsService', () => {
   });
 
   it('should call list', () => {
-    let cluster_id="test";
+    let cluster_id = 'test';
     service.list(cluster_id).subscribe();
     const req = httpTesting.expectOne('api/nfs-ganesha/export?cluster_id=test');
     expect(req.request.method).toBe('GET');

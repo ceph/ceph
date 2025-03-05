@@ -55,6 +55,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   @ViewChild('transport', { static: true })
   transport: TemplateRef<any>;
 
+  @Input() clusterId: string;
+
   columns: CdTableColumn[];
   permission: Permission;
   selection = new CdTableSelection();
@@ -65,7 +67,6 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   isDefaultCluster = false;
   fsal: SUPPORTED_FSAL;
 
-  @Input() clusterId: string;
   modalRef: NgbModalRef;
 
   builders = {
@@ -100,7 +101,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const createAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      routerLink: () => `/${prefix}/nfs/create`,
+      routerLink: () => `/${prefix}/nfs/create/${this.clusterId}`,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
     };

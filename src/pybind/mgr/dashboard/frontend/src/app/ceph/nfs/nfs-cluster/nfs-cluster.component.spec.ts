@@ -7,20 +7,17 @@ import { NfsClusterComponent } from './nfs-cluster.component';
 describe('NfsClusterComponent', () => {
   let component: NfsClusterComponent;
   let fixture: ComponentFixture<NfsClusterComponent>;
-  
+
   configureTestBed({
     declarations: [NfsClusterComponent],
-    imports: [
-      HttpClientTestingModule,
-      SharedModule,
-    ],
+    imports: [HttpClientTestingModule, SharedModule]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsClusterComponent);
     component = fixture.componentInstance;
-  })
+  });
   it('should create', () => {
     expect(component).toBeTruthy();
   });
-})
+});
