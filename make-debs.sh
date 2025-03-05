@@ -23,17 +23,17 @@ rm -fr $(dirname $releasedir)
 #
 # remove all files not under git so they are not
 # included in the distribution.
-#
-git clean -dxf
-#
+
+[ -d .git ] && git clean -dxf
+
 # git describe provides a version that is
 # a) human readable
 # b) is unique for each commit
 # c) compares higher than any previous commit
 # d) contains the short hash of the commit
 #
-vers=$(git describe --match "v*" | sed s/^v//)
-./make-dist $vers
+vers=${2:-$(git describe --match "v*" | sed s/^v//)}
+test -f "ceph-$vers.tar.bz2" || ./make-dist $vers
 #
 # rename the tarbal to match debian conventions and extract it
 #
