@@ -144,6 +144,7 @@ import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar
 import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page/rgw-bucket-resource-page.component';
 import { RgwBucketResourceBreadcrumbResolver } from './rgw-bucket-resource-page/rgw-bucket-resource-breadcrumb.resolver';
 import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-tags-table.component';
+import { NfsClusterFormComponent } from '../nfs/nfs-cluster-form/nfs-cluster-form.component';
 
 @NgModule({
   imports: [
@@ -570,7 +571,12 @@ const routes: Routes = [
     children: [
       { path: '', component: NfsClusterComponent },
       {
-        path: URLVerbs.CREATE,
+        path: `${URLVerbs.EDIT}/:cluster_id`,
+        component: NfsClusterFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: `${URLVerbs.CREATE}/:cluster_id`,
         component: NfsFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
       },
