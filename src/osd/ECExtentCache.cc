@@ -82,7 +82,13 @@ void ECExtentCache::Object::request(OpRef &op)
      * to this area will be skipped, but this makes them essentially zero
      * reads.
      */
-    sinfo.ro_range_to_shard_extent_set(projected_size, op->projected_size, do_not_read);
+    shard_extent_set_t obj_hole(sinfo.get_k_plus_m());
+    shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+
+    sinfo.ro_size_to_read_mask(op->projected_size, obj_hole);
+    sinfo.ro_size_to_read_mask(projected_size, read_mask);
+    obj_hole.subtract(read_mask);
+    do_not_read.insert(obj_hole);
   } else if (op->projected_size < projected_size) {
     // Invalidate the object's cache when we see any object reduce in size.
     op->invalidates_cache = true;
