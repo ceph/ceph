@@ -1655,22 +1655,13 @@ class NvmeofServiceSpec(ServiceSpec):
                     ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'NOTICE'])
         self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
-
-        verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
         if (
             self.spdk_ping_interval_in_seconds is not None
             and self.spdk_ping_interval_in_seconds < 1.0
         ):
             raise SpecValidationError("SPDK ping interval should be at least 1 second")
-
-        verify_non_negative_int(self.allowed_consecutive_spdk_ping_failures,
+        verify_positive_int(self.allowed_consecutive_spdk_ping_failures,
                                 "Allowed consecutive SPDK ping failures")
-        if (
-            self.allowed_consecutive_spdk_ping_failures is not None
-            and self.allowed_consecutive_spdk_ping_failures < 1
-        ):
-            raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
-
         verify_non_negative_int(self.state_update_interval_sec, "State update interval")
         verify_non_negative_int(self.rebalance_period_sec, "Rebalance period")
         verify_non_negative_int(self.max_gws_in_grp, "Max gateways in group")
