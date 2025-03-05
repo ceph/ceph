@@ -18,23 +18,19 @@ namespace mirror {
 template <typename ImageCtxT = librbd::ImageCtx>
 class DemoteRequest {
 public:
-  static DemoteRequest *create(ImageCtxT &image_ctx, int64_t group_pool_id,
-                               const std::string &group_id,
+  static DemoteRequest *create(ImageCtxT &image_ctx,
                                const std::string &group_snap_id,
                                uint64_t *snap_id, Context *on_finish) {
-    return new DemoteRequest(image_ctx, group_pool_id, group_id,
-                             group_snap_id, snap_id, on_finish);
+    return new DemoteRequest(image_ctx, group_snap_id, snap_id, on_finish);
   }
   static DemoteRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
-    return new DemoteRequest(image_ctx, -1, {}, {}, nullptr, on_finish);
+    return new DemoteRequest(image_ctx, {}, nullptr, on_finish);
   }
 
-  DemoteRequest(ImageCtxT &image_ctx, int64_t group_pool_id,
-                const std::string &group_id, const std::string &group_snap_id,
+  DemoteRequest(ImageCtxT &image_ctx, const std::string &group_snap_id,
                 uint64_t *snap_id, Context *on_finish)
-    : m_image_ctx(image_ctx), m_group_pool_id(group_pool_id),
-      m_group_id(group_id), m_group_snap_id(group_snap_id), m_snap_id(snap_id),
-      m_on_finish(on_finish) {
+    : m_image_ctx(image_ctx), m_group_snap_id(group_snap_id),
+      m_snap_id(snap_id), m_on_finish(on_finish) {
   }
 
   void send();
@@ -64,8 +60,6 @@ private:
    */
 
   ImageCtxT &m_image_ctx;
-  const int64_t m_group_pool_id;
-  const std::string m_group_id;
   const std::string m_group_snap_id;
   uint64_t *m_snap_id;
   Context *m_on_finish;
