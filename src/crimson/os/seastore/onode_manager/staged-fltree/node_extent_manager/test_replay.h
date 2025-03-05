@@ -38,7 +38,7 @@ class TestReplayExtent final: public NodeExtent {
 
   static Ref create(extent_len_t length, DeltaRecorderURef&& recorder) {
     auto r = ceph::buffer::create_aligned(length, 4096);
-    auto bp = ceph::bufferptr_rw(std::move(r));
+    auto bp = ceph::bufferptr(std::move(r));
     return new TestReplayExtent(std::move(bp), std::move(recorder));
   }
 
@@ -57,7 +57,7 @@ class TestReplayExtent final: public NodeExtent {
     ceph_abort("impossible path"); }
 
  private:
-  TestReplayExtent(ceph::bufferptr_rw&& ptr, DeltaRecorderURef&& recorder)
+  TestReplayExtent(ceph::bufferptr&& ptr, DeltaRecorderURef&& recorder)
       : NodeExtent(std::move(ptr)), recorder(std::move(recorder)) {
     state = extent_state_t::MUTATION_PENDING;
   }

@@ -36,7 +36,7 @@ std::string rand_name(const int len)
 }
 
 bufferlist rand_buffer(const int len) {
-  bufferptr_rw ptr(len);
+  bufferptr ptr(len);
   for (auto i = ptr.c_str(); i < ptr.c_str() + len; ++i) {
     *i = (char)rand();
   }
