@@ -37,7 +37,7 @@ public:
   // encode map<string,string> of compiled-in defaults
   ceph::buffer::list config_defaults_bl;
 
-  void decode_payload(uint64_t) override
+  void decode_payload() override
   {
     using ceph::decode;
     auto p = payload.cbegin();

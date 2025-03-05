@@ -38,7 +38,7 @@ public:
     ::encode(ack, payload);
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     // noop to prevent unnecessary overheads
   }
 

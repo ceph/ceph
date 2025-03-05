@@ -52,7 +52,7 @@ public:
     paxos_encode();
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     ceph_abort();
     auto p = payload.cbegin();
     paxos_decode(p);

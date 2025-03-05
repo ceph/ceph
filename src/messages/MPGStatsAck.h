@@ -36,7 +36,7 @@ public:
     using ceph::encode;
     encode(pg_stat, payload);
   }
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(pg_stat, p);

@@ -1063,7 +1063,7 @@ Message *decode_message(CephContext *cct,
   }
 
   try {
-    m->decode_payload(0);
+    m->decode_payload();
   }
   catch (const ceph::buffer::error &e) {
     if (cct) {

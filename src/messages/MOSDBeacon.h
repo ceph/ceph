@@ -34,7 +34,7 @@ public:
     encode(last_purged_snaps_scrub, payload);
     encode(osd_beacon_report_interval, payload);
   }
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     auto p = payload.cbegin();
     using ceph::decode;
     paxos_decode(p);

@@ -76,7 +76,7 @@ public:
     encode(cost, payload);
     encode(objects, payload);
   }
-  void decode_payload(uint64_t) {
+  void decode_payload() {
     using ceph::decode;
     auto p = payload.cbegin();
     decode(from, p);

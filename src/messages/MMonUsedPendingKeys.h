@@ -31,7 +31,7 @@ public:
     out << "used_pending_keys(" << used_pending_keys.size() << " keys)";
   }
 
-  void decode_payload(uint64_t) override {
+  void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
