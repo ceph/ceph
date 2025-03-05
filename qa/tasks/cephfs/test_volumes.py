@@ -931,6 +931,27 @@ class TestVolumeCreate(TestVolumesHelper):
         self.assertIn(data_pool, o)
         self.assertNotIn(non_existent_meta_pool, o)
 
+    def test_passing_list_of_multiple_data_pools(self):
+        v = self._gen_vol_name()
+
+        meta = f'ceph.{v}.meta'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+
+        data = f'ceph.{v}.data1,ceph.{v}.data2,ceph.{v}.data3'
+        for i in data.split(','):
+            self.run_ceph_cmd(f'osd pool create {i}')
+
+        self.run_ceph_cmd(f'fs volume create {v} --meta-pool {meta} --data-pool {data}')
+
+        # ensure that the volume was created by above "fs volume create"
+        output = self.get_ceph_cmd_stdout('fs ls')
+        self.assertIn(f'name: {v}', output)
+
+        # ensure that all data pools are used by the volume created above
+        for i in data.split(','):
+            self.assertIn(f'{i}', output)
+
+
 class TestRenameCmd(TestVolumesHelper):
 
     def test_volume_rename(self):
