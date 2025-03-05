@@ -1126,7 +1126,7 @@ public:
 
   int stat_remote_obj(const DoutPrefixProvider *dpp,
                RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
+               const rgw_owner* user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& src_obj,
@@ -1145,7 +1145,8 @@ public:
                std::string *petag, optional_yield y);
 
   int fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
-                       const rgw_user& user_id,
+                       const rgw_owner* user_id,
+                       const rgw_user* perm_check_uid,
                        req_info *info,
                        const rgw_zone_id& source_zone,
                        const rgw_obj& dest_obj,

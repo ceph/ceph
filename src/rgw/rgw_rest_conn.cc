@@ -296,7 +296,9 @@ static void set_header(T val, map<string, string>& headers, const string& header
 }
 
 
-int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, req_info *info /* optional */, const rgw_obj& obj,
+int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner *uid,
+                         const rgw_user *perm_check_uid,
+                         req_info *info /* optional */, const rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
@@ -306,6 +308,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, re
 {
   get_obj_params params;
   params.uid = uid;
+  params.perm_check_uid = perm_check_uid;
   params.info = info;
   params.mod_ptr = mod_ptr;
   params.mod_pg_ver = mod_pg_ver;
@@ -328,7 +331,10 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, cons
     return ret;
 
   param_vec_t params;
-  populate_params(params, &in_params.uid, self_zone_group);
+  populate_params(params, in_params.uid, self_zone_group);
+  if (in_params.perm_check_uid) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "perm-check-uid", to_string(*in_params.perm_check_uid)));
+  }
   if (in_params.prepend_metadata) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", "true"));
   }
