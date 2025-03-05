@@ -123,6 +123,7 @@ add_executable(unittest-crimson-scrub
   test_crimson_scrub.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_machine.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 target_link_libraries(
   unittest-crimson-scrub
