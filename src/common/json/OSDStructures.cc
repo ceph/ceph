@@ -160,3 +160,25 @@ void OSDSetRequest::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("key", key, obj);
   JSONDecoder::decode_json("yes_i_really_mean_it", yes_i_really_mean_it, obj);
 }
+
+void InjectECParityRead::dump(Formatter* f) const {
+  encode_json("prefix", "injectparityread", f);
+  encode_json("pool", pool, f);
+  encode_json("objname", objname, f);
+}
+
+void InjectECParityRead::decode_json(JSONObj* obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("objname", objname, obj);
+}
+
+void InjectECClearParityRead::dump(Formatter* f) const {
+  encode_json("prefix", "injectparityread", f);
+  encode_json("pool", pool, f);
+  encode_json("objname", objname, f);
+}
+
+void InjectECClearParityRead::decode_json(JSONObj* obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("objname", objname, obj);
+}
