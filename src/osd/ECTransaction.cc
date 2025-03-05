@@ -625,11 +625,18 @@ void ECTransaction::generate_transactions(
            * can actually truncate to a size larger than the object!
            */
           shard_id_t shard_id(shard);
-          auto &&t = (*transactions)[shard_id];
-          t.truncate(
-            coll_t(spg_t(pgid, shard_id)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard_id),
-            new_shard_size);
+          if (transactions->contains(shard_id)) {
+            auto &t = transactions->at(shard_id);
+            t.truncate(
+	      coll_t(spg_t(pgid, shard_id)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard_id),
+              new_shard_size);
+          }
+	  // Update written_shards because this must complete to consider
+	  // the write as complete
+	  if (entry) {
+	    entry->written_shards.insert(shard);
+	  }
         }
       }
 
@@ -726,6 +733,16 @@ void ECTransaction::generate_transactions(
           // More efficient to encode an empty set for all shards
           entry->written_shards.clear();
         }
+	// Calculate set of present shards
+	for (auto &&[shard, t]: *transactions) {
+          ldpp_dout(dpp,20) << "BILLPR: adding shard " << shard << dendl;
+	  entry->present_shards.insert(shard);
+	}
+	if (entry->present_shards.size() == sinfo.get_k_plus_m()) {
+          // More efficient to encode an empty set for all shards
+	  entry->present_shards.clear();
+	}
+        ldpp_dout(dpp,20) << "BILLPR: " << entry->present_shards << dendl;
         if (plan.hinfo) {
           plan.hinfo->set_total_chunk_size_clear_hash(
             sinfo.ro_offset_to_next_stripe_ro_offset(plan.projected_size));
