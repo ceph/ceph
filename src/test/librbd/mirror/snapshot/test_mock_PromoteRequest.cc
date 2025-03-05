@@ -92,7 +92,6 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   static CreateNonPrimaryRequest* s_instance;
   static CreateNonPrimaryRequest *create(MockTestImageCtx *image_ctx,
                                          bool demoted,
-                                         const std::string group_id,
                                          const std::string group_snap_id,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
@@ -127,8 +126,6 @@ struct CreatePrimaryRequest<MockTestImageCtx> {
                                       uint64_t clean_since_snap_id,
                                       uint64_t snap_create_flags,
                                       uint32_t flags,
-                                      int64_t group_pool_id,
-                                      const std::string &group_id,
                                       const std::string &group_snap_id,
                                       uint64_t *snap_id,
                                       Context *on_finish) {
