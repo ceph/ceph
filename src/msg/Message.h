@@ -568,8 +568,7 @@ inline std::ostream& operator<<(std::ostream& out, const Message& m) {
 
 extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
-                               ceph::buffer::list::const_iterator& bl,
-                               uint64_t features);
+                               ceph::buffer::list::const_iterator& bl);
 
 /// this is a "safe" version of Message. it does not allow calling get/put
 /// methods on its derived classes. This is intended to prevent some accidental
