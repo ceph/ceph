@@ -1466,12 +1466,9 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
       shard_id_t shard,
       ceph::os::Transaction& transaction) final
   {
-// FIXME: BILL: Enable EC partial metadata writes
-#if 0
     if (transaction.empty()) {
       return true;
     }
-#endif
     pending_roll_forward.insert(shard);
     return false;
   }
