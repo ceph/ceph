@@ -112,27 +112,7 @@ BootstrapRequest<I>::BootstrapRequest(
 
 template <typename I>
 void BootstrapRequest<I>::send() {
-  *m_resync_requested = false;
-
-  if (m_local_group_id && !m_local_group_id->empty()) {
-    std::string group_header_oid = librbd::util::group_header_name(
-        *m_local_group_id);
-    std::string value;
-    int r = librbd::cls_client::metadata_get(&m_local_io_ctx, group_header_oid,
-                                             RBD_GROUP_RESYNC, &value);
-    if (r < 0 && r != -ENOENT) {
-      derr << "failed reading metadata: " << cpp_strerror(r) << dendl;
-    } else if (r == 0) {
-      dout(10) << "local group resync requested" << dendl;
-      *m_resync_requested = true;
-    }
-  }
-
-  if (*m_resync_requested) {
-    get_local_group_id();
-  } else {
-    get_remote_group_id();
-  }
+  get_remote_group_id();
 }
 
 template <typename I>
@@ -355,6 +335,29 @@ void BootstrapRequest<I>::handle_list_remote_group_snapshots(int r) {
     }
     ceph_assert(r == 0);
     m_remote_mirror_group_primary = (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY);
+  }
+
+  *m_resync_requested = false;
+  if (m_local_group_id && !m_local_group_id->empty()) {
+    std::string group_header_oid = librbd::util::group_header_name(
+        *m_local_group_id);
+    std::string value;
+    int r = librbd::cls_client::metadata_get(&m_local_io_ctx, group_header_oid,
+                                             RBD_GROUP_RESYNC, &value);
+    if (r < 0 && r != -ENOENT) {
+      derr << "failed reading metadata: " << cpp_strerror(r) << dendl;
+    } else if (r == 0) {
+      dout(10) << "local group resync requested : " << m_local_group_id
+               << dendl;
+      if (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
+          m_remote_mirror_group_primary) {
+        *m_resync_requested = true;
+        list_remote_group();
+        return;
+      }
+      dout(10) << "turns out remote is not primary, we cannot resync, will retry later"
+               << dendl;
+    }
   }
 
   if (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
@@ -910,7 +913,8 @@ void BootstrapRequest<I>::handle_get_local_mirror_image(int r) {
                m_remote_mirror_group_primary &&
                m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
                m_local_mirror_group.global_group_id == m_global_group_id &&
-               has_remote_image(spec.pool_id, mirror_image.global_image_id)) {
+               has_remote_image(spec.pool_id, mirror_image.global_image_id)
+               && *m_resync_requested == false) {
       dout(10) << "add secondary to replayer queue: " << spec.pool_id << " "
                << spec.image_id << " " << mirror_image.global_image_id
                << dendl;
@@ -922,7 +926,6 @@ void BootstrapRequest<I>::handle_get_local_mirror_image(int r) {
         finish(-ERESTART);
         return;
       }
-
       dout(10) << "add to trash queue: " << spec.pool_id << " "
                << spec.image_id << " " << mirror_image.global_image_id
                << dendl;
@@ -1024,7 +1027,8 @@ void BootstrapRequest<I>::handle_move_local_image_to_trash(int r) {
 template <typename I>
 void BootstrapRequest<I>::disable_local_mirror_group() {
   if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
-      m_local_mirror_group.global_group_id == m_global_group_id) {
+      m_local_mirror_group.global_group_id == m_global_group_id &&
+      *m_resync_requested == false) {
     finish(0);
     return;
   }
@@ -1093,7 +1097,7 @@ void BootstrapRequest<I>::handle_remove_local_mirror_group(int r) {
   m_local_mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
   if (r != -ENOENT && (m_local_mirror_group.global_group_id == m_global_group_id) &&
       (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
-       m_remote_mirror_group_primary)) {
+       m_remote_mirror_group_primary) && *m_resync_requested == false) {
     create_local_mirror_group();
   } else {
     remove_local_group();
