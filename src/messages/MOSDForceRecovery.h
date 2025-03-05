@@ -67,7 +67,7 @@ public:
      out << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     using ceph::encode;
     if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       header.version = 1;
@@ -87,7 +87,7 @@ public:
     encode(forced_pgs, payload);
     encode(options, payload);
   }
-  void decode_payload(uint64_t) override {
+  void decode_payload(uint64_t) {
     using ceph::decode;
     auto p = payload.cbegin();
     if (header.version == 1) {
