@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -12,7 +12,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
   templateUrl: './bucket-tag-modal.component.html',
   styleUrls: ['./bucket-tag-modal.component.scss']
 })
-export class BucketTagModalComponent {
+export class BucketTagModalComponent extends BaseModal {
   @Output()
   submitAction = new EventEmitter();
 
@@ -21,11 +21,8 @@ export class BucketTagModalComponent {
   currentKeyTags: string[];
   storedKey: string;
 
-  constructor(
-    private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
-    public actionLabels: ActionLabelsI18n
-  ) {
+  constructor(private formBuilder: CdFormBuilder, public actionLabels: ActionLabelsI18n) {
+    super();
     this.createForm();
   }
 
@@ -62,7 +59,7 @@ export class BucketTagModalComponent {
 
   onSubmit() {
     this.submitAction.emit(this.form.value);
-    this.activeModal.close();
+    this.closeModal();
   }
 
   getMode() {
