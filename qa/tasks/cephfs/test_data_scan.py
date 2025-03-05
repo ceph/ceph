@@ -417,6 +417,28 @@ class ManyFilesWorkload(Workload):
         return self._errors
 
 
+class ManyFirstObjectsWorkload(Workload):
+    """
+    The objective of this class is to test parallelized cleanup provided with
+    a workload that leads to huge object count.
+    """
+    def __init__(self, filesystem, mount, file_count, file_size):
+        super(ManyFirstObjectsWorkload, self).__init__(filesystem, mount)
+        self.file_count = file_count
+        self.file_size = file_size
+
+    def write(self):
+        self._mount.run_shell(["mkdir", "foo"])
+        for n in range(0, self.file_count):
+            self._mount.write_n_mb("foo/{0}".format(n), self.file_size)
+
+    def delete(self):
+        self._mount.run_shell(["sudo", "rm", "-rf", "foo/"])
+
+    def validate(self):
+        pass
+
+
 class MissingZerothObject(Workload):
     def write(self):
         self._mount.run_shell(["mkdir", "subdir"])
@@ -679,6 +701,32 @@ class TestDataScan(CephFSTestCase):
     @for_teuthology
     def test_parallel_execution(self):
         self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 25), workers=7)
+
+    def test_parallel_execution_many_objects(self):
+        obj = ManyFirstObjectsWorkload(self.fs, self.mount_a, 20000, 6)
+        # first try metadata recovery with single cleanup worker
+        try:
+            start = time.perf_counter()
+            self._rebuild_metadata(obj, workers=7, parallelize_cleanup=False)
+            end = time.perf_counter()
+            non_parallelized_cleanup = (end - start) / 60
+        finally:
+            obj.delete()
+
+        # now with 7 workers
+        try:
+            start = time.perf_counter()
+            self._rebuild_metadata(obj, workers=7)
+            end = time.perf_counter()
+            parallelized_cleanup_time = (end - start) / 60
+        finally:
+            obj.delete()
+
+        log.info(f"Metadata recovery with single cleanup worker: {non_parallelized_cleanup:.2f} minutes")
+        log.info(f"Metadata recovery with seven cleanup workers: {parallelized_cleanup_time:.2f} minutes")
+        self.assertLess(parallelized_cleanup_time, non_parallelized_cleanup)
+        log.info("Metadata recovery with parallelized cleanup is "
+                 f"{non_parallelized_cleanup - parallelized_cleanup_time} minutes faster")
 
     def test_pg_files(self):
         """
