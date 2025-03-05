@@ -125,9 +125,6 @@ void rgw_cls_obj_prepare_op::dump(Formatter *f) const
   f->dump_string("name", key.name);
   f->dump_string("tag", tag);
   f->dump_string("locator", locator);
-  f->dump_bool("log_op", log_op);
-  f->dump_int("bilog_flags", bilog_flags);
-  encode_json("zones_trace", zones_trace, f);
 }
 
 void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_op*>& o)
