@@ -162,7 +162,7 @@ class MgmtGatewayService(CephadmService):
 
         return daemon_config, sorted(MgmtGatewayService.get_dependencies(self.mgr))
 
-    def pre_remove(self, daemon: DaemonDescription) -> None:
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
         Called before mgmt-gateway daemon is removed.
         """

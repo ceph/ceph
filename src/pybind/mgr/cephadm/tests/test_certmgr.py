@@ -715,7 +715,7 @@ class TestCertMgr(object):
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_certificate_renewal_for_self_signed(self, _set_store, cephadm_module: CephadmOrchestrator):
-        """ Test that self-signed certificates close to expiration are renewed """
+        """ Test that cephadm-signed certificates close to expiration are renewed """
         cert_mgr = cephadm_module.cert_mgr
 
         # for services with host scope
@@ -758,7 +758,7 @@ class TestCertMgr(object):
                                            'Detected 2 cephadm certificate(s) issues: 1 invalid, 1 expired',
                                            2,
                                            ["Certificate 'test_service_1 (target_1)' (user-made) has expired",
-                                            "Certificate 'test_service_2 (target_2)' (self-signed) is not valid (error: invalid format)"])
+                                            "Certificate 'test_service_2 (target_2)' (cephadm-signed) is not valid (error: invalid format)"])
 
         # Test in case of appending new errors we also report previous ones
         problematic_certs = [
@@ -770,8 +770,8 @@ class TestCertMgr(object):
                                            'Detected 3 cephadm certificate(s) issues: 1 invalid, 1 expired, 1 expiring',
                                            3,
                                            ["Certificate 'test_service_1 (target_1)' (user-made) has expired",
-                                            "Certificate 'test_service_2 (target_2)' (self-signed) is not valid (error: invalid format)",
-                                            "Certificate 'test_service_3 (target_3)' (self-signed) is about to expire (remaining days: 0)"])
+                                            "Certificate 'test_service_2 (target_2)' (cephadm-signed) is not valid (error: invalid format)",
+                                            "Certificate 'test_service_3 (target_3)' (cephadm-signed) is about to expire (remaining days: 0)"])
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_health_warning_on_bad_certificates(self, _set_store, cephadm_module: CephadmOrchestrator):
