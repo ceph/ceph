@@ -2,15 +2,12 @@
            [open]="open"
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()"
-                    i18n>{{editing ? 'Edit' : 'Create'}} Tiering configuration</cds-modal-header>
+                    i18n>{{editing ? 'Edit' : 'Create'}} Tiering configuration
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
 
 <ng-container *cdFormLoading="loading">
   <section cdsModalContent>
-    <legend>
-      <cd-help-text i18n>
-        All fields are required, except where marked optional.
-      </cd-help-text>
-    </legend>
     <cd-alert-panel
       *ngIf="(snapScheduleModuleStatus$ | async) === false"
       type="info"
