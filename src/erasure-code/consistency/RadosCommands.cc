@@ -54,7 +54,7 @@ int RadosCommands::get_primary_osd(const std::string& pool_name,
 /**
  * Send a mon command to fetch the name of the erasure code profile for the
  * specified pool and return it.
- * 
+ *
  * @param pool_name string Name of the pool to get the erasure code profile for
  * @returns string The erasure code profile for the specified pool
  */
@@ -82,7 +82,7 @@ std::string RadosCommands::get_pool_ec_profile_name(const std::string& pool_name
 
 /**
  * Fetch the erasure code profile for the specified pool and return it.
- * 
+ *
  * @param pool_name string Name of the pool to get the EC profile for
  * @returns ErasureCodeProfile The EC profile for the specified pool
  */
