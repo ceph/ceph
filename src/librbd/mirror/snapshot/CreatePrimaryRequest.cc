@@ -31,12 +31,10 @@ template <typename I>
 CreatePrimaryRequest<I>::CreatePrimaryRequest(
     I *image_ctx, const std::string& global_image_id,
     uint64_t clean_since_snap_id, uint64_t snap_create_flags, uint32_t flags,
-    int64_t group_pool_id, const std::string &group_id,
     const std::string &group_snap_id, uint64_t *snap_id, Context *on_finish)
   : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
     m_clean_since_snap_id(clean_since_snap_id),
     m_snap_create_flags(snap_create_flags), m_flags(flags),
-    m_group_pool_id(group_pool_id), m_group_id(group_id),
     m_group_snap_id(group_snap_id), m_snap_id(snap_id), m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
   m_default_ns_ctx.set_namespace("");
@@ -127,7 +125,7 @@ void CreatePrimaryRequest<I>::create_snapshot() {
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
     m_mirror_peer_uuids, "", m_clean_since_snap_id};
-  ns.group_spec = {m_group_id, m_group_pool_id};
+  ns.group_spec = m_image_ctx->group_spec;
   ns.group_snap_id = m_group_snap_id;
 
   CephContext *cct = m_image_ctx->cct;
