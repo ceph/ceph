@@ -890,9 +890,7 @@ void PG::enqueue_delete_for_backfill(
   backfill_state->enqueue_standalone_delete(obj, v, peers);
 }
 
-PG::interruptible_future<
-  std::tuple<PG::interruptible_future<>,
-             PG::interruptible_future<>>>
+PG::interruptible_future<PG::rep_op_fut_t>
 PG::submit_transaction(
   ObjectContextRef&& obc,
   ObjectContextRef&& new_clone,
