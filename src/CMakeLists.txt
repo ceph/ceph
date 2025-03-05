@@ -812,7 +812,10 @@ install(PROGRAMS
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)
-add_subdirectory(client)
+
+if(WITH_LIBCEPHFS OR WITH_FUSE)
+  add_subdirectory(client)
+endif()
 
 if(WITH_LIBCEPHFS)
   set(libcephfs_srcs libcephfs.cc)
