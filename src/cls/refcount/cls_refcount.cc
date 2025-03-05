@@ -71,7 +71,7 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
   obj_refcount objr;
   int ret = read_refcount(hctx, op.implicit_ref, &objr);
-  if (ret < 0)
+  if ((ret < 0 && ret != -ENOENT) || (op.must_exist && ret == -ENOENT))
     return ret;
 
   CLS_LOG(10, "cls_rc_refcount_get() tag=%s\n", op.tag.c_str());

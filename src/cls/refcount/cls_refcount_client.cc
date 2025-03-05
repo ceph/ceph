@@ -12,12 +12,13 @@ using std::string;
 
 using ceph::bufferlist;
 
-void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref)
+void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref, bool must_exist)
 {
   bufferlist in;
   cls_refcount_get_op call;
   call.tag = tag;
   call.implicit_ref = implicit_ref;
+  call.must_exist = must_exist;
   encode(call, in);
   op.exec("refcount", "get", in);
 }
