@@ -362,3 +362,74 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_cluster_qos_ops_disable(self, cluster_id: str) -> None:
         """Disable NFS cluster QOS IOPS control"""
         return self.nfs.disable_cluster_qos_ops(cluster_id)
+
+    def enable_cluster_qos_bw(self, cluster_id: str,
+                              qos_type: str,
+                              combined_bw_ctrl: bool,
+                              **kwargs: Any
+                              ) -> None:
+        qos = UserQoSType(qos_type)
+        try:
+            # by default it will take 0 which is expected by this function
+            bw_obj = QOSBandwidthControl(enable_bw_ctrl=True,
+                                         combined_bw_ctrl=combined_bw_ctrl,
+                                         export_writebw=kwargs.get('max_export_write_bw', '0'),
+                                         export_readbw=kwargs.get('max_export_read_bw', '0'),
+                                         client_writebw=kwargs.get('max_client_write_bw', '0'),
+                                         client_readbw=kwargs.get('max_client_read_bw', '0'),
+                                         export_rw_bw=kwargs.get('max_export_combined_bw', '0'),
+                                         client_rw_bw=kwargs.get('max_client_combined_bw', '0'))
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.nfs.enable_cluster_qos_bw(cluster_id=cluster_id,
+                                              qos_type=QOSType[qos.value],
+                                              bw_obj=bw_obj)
+
+    def enable_export_qos_bw(self, cluster_id: str,
+                             pseudo_path: str,
+                             combined_bw_ctrl: bool,
+                             **kwargs: Any
+                             ) -> None:
+        try:
+            bw_obj = QOSBandwidthControl(enable_bw_ctrl=True,
+                                         combined_bw_ctrl=combined_bw_ctrl,
+                                         export_writebw=kwargs.get('max_export_write_bw', '0'),
+                                         export_readbw=kwargs.get('max_export_read_bw', '0'),
+                                         client_writebw=kwargs.get('max_client_write_bw', '0'),
+                                         client_readbw=kwargs.get('max_client_read_bw', '0'),
+                                         export_rw_bw=kwargs.get('max_export_combined_bw', '0'),
+                                         client_rw_bw=kwargs.get('max_client_combined_bw', '0'))
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.export_mgr.enable_export_qos_bw(cluster_id=cluster_id,
+                                                    pseudo_path=pseudo_path,
+                                                    bw_obj=bw_obj)
+
+    def enable_cluster_qos_ops(self, cluster_id: str,
+                               qos_type: str,
+                               **kwargs: Any
+                               ) -> None:
+        qos = UserQoSType(qos_type)
+        try:
+            ops_obj = QOSOpsControl(enable_iops_ctrl=True,
+                                    max_export_iops=kwargs.get('max_export_iops', 0),
+                                    max_client_iops=kwargs.get('max_client_iops', 0))
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.nfs.enable_cluster_qos_ops(cluster_id=cluster_id,
+                                               qos_type=QOSType[qos.value],
+                                               ops_obj=ops_obj)
+
+    def enable_export_qos_ops(self, cluster_id: str,
+                              pseudo_path: str,
+                              **kwargs: Any
+                              ) -> None:
+        try:
+            ops_obj = QOSOpsControl(enable_iops_ctrl=True,
+                                    max_export_iops=kwargs.get('max_export_iops', 0),
+                                    max_client_iops=kwargs.get('max_client_iops', 0))
+        except Exception as e:
+            raise object_format.ErrorResponse.wrap(e)
+        return self.export_mgr.enable_export_qos_ops(cluster_id=cluster_id,
+                                                     pseudo_path=pseudo_path,
+                                                     ops_obj=ops_obj)

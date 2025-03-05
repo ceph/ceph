@@ -11,6 +11,11 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { NFSCluster } from '../models/nfs-cluster-config';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { getFsalFromRoute, getPathfromFsal } from '../utils';
+import { Router } from '@angular/router';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 const BASE_URL = 'cephfs/nfs';
@@ -30,11 +35,16 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
   @ViewChild('virtualIpTpl', { static: true })
   virtualIpTpl: TemplateRef<any>;
 
+  @ViewChild('table', { static: true })
+  table: TableComponent;
+
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
   tableActions: CdTableAction[] = [];
   permission: Permission;
   orchStatus: OrchestratorStatus;
+  fsal: SUPPORTED_FSAL;
+  viewCacheStatus: any;
   clusters$: Observable<NFSCluster[]>;
   subject = new BehaviorSubject<NFSCluster[]>([]);
 
@@ -43,7 +53,8 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
     protected ngZone: NgZone,
     private authStorageService: AuthStorageService,
     private nfsService: NfsService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private router: Router
   ) {
     super();
   }
@@ -52,6 +63,9 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;
     });
+    this.fsal = getFsalFromRoute(this.router.url);
+    const prefix = getPathfromFsal(this.fsal);
+    const getNfsUri = () => this.selection.first() && `${encodeURI(this.selection.first()?.name)}`;
     this.permission = this.authStorageService.getPermissions().nfs;
     this.clusters$ = this.subject.pipe(switchMap(() => this.nfsService.nfsClusterList()));
     this.columns = [
@@ -61,7 +75,7 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
         flexGrow: 1
       },
       {
-        name: $localize`Hostnames`,
+        name: $localize`Hostname`,
         prop: 'backend',
         flexGrow: 2,
         cellTemplate: this.hostnameTpl
@@ -79,12 +93,21 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
         cellTemplate: this.virtualIpTpl
       }
     ];
+
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => [`/${prefix}/nfs/edit/${getNfsUri()}`],
+      name: $localize`Set QOS`,
+      canBePrimary: () => true
+    };
+
+    this.tableActions = [editAction];
   }
 
   loadData() {
     this.subject.next([]);
   }
-
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }

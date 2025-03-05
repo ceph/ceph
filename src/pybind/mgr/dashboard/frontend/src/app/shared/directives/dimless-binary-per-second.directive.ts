@@ -64,6 +64,9 @@ export class DimlessBinaryPerSecondDirective implements OnInit {
   @Input()
   roundPower: number;
 
+  @Input()
+  defaultEmptyValue: boolean = false;
+
   /**
    * Default unit that should be used when user do not type a unit.
    * By default, "MiB" will be used.
@@ -94,6 +97,11 @@ export class DimlessBinaryPerSecondDirective implements OnInit {
   }
 
   setValue(value: string) {
+    if (value === '' && this.defaultEmptyValue) {
+      this.ngModelChange.emit(value);
+      this.control.control.setValue(value);
+      return;
+    }
     if (/^[\d.]+$/.test(value)) {
       value += this.defaultUnit || 'm';
     }
