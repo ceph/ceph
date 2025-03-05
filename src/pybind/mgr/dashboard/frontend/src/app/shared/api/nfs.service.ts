@@ -2,8 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, throwError } from 'rxjs';
-import { NFSCluster } from '~/app/ceph/nfs/models/nfs-cluster-config';
-
+import {
+  bwTypeItem,
+  NFSBwIopConfig,
+  NFSCluster,
+  QOSTypeItem
+} from '~/app/ceph/nfs/models/nfs-cluster-config';
 import { NfsFSAbstractionLayer, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { ApiClient } from '~/app/shared/api/api-client';
 
@@ -45,13 +49,36 @@ export class NfsService extends ApiClient {
       disabled: false
     }
   ];
+  qosType: QOSTypeItem[] = [
+    {
+      key: 'Per Share',
+      value: 'PerShare',
+      help: $localize`Allows individual per share setting of export and client bandwidth`
+    },
+    {
+      key: 'Per Client',
+      value: 'PerClient',
+      help: $localize`Allows individual per client setting of export and client bandwidth`
+    },
+    {
+      key: 'Per Share Per Client',
+      value: 'PerShare_PerClient',
+      help: $localize`Allows individual per share and per client setting of export and client bandwidth`
+    }
+  ];
+  bwType: bwTypeItem[] = [
+    {
+      value: 'Individual',
+      help: $localize`Allows Individual IOPS limit for read and write operations`
+    }
+  ];
+
   nfsSquash = {
     no_root_squash: ['no_root_squash', 'noidsquash', 'none'],
     root_id_squash: ['root_id_squash', 'rootidsquash', 'rootid'],
     root_squash: ['root_squash', 'rootsquash', 'root'],
     all_squash: ['all_squash', 'allsquash', 'all', 'allanonymous', 'all_anonymous']
   };
-
   constructor(private http: HttpClient) {
     super();
   }
@@ -113,5 +140,29 @@ export class NfsService extends ApiClient {
       headers: { Accept: this.getVersionHeaderValue(0, 1) },
       params: { info: true }
     });
+  }
+
+  enableQosBandwidthForCLuster(obj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/cluster/qos/bw`, obj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  getClusterBandwidthOpsConfig(clusterId: string) {
+    return this.http.get(`${this.apiPath}/cluster/qos/${clusterId}`);
+  }
+
+  enableQosForExports(exportObj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/export/qos`, exportObj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  getexportBandwidthOpsConfig(clusterId: string, pseudoPath: string) {
+    return this.http.get(
+      `${this.apiPath}/export/qos/${clusterId}/${encodeURIComponent(pseudoPath)}`
+    );
   }
 }

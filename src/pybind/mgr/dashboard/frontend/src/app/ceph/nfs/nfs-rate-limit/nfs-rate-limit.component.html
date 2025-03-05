@@ -1,0 +1,338 @@
+<ng-container *ngIf="allowQoS">
+  <form name="rateLimitForm"
+        #formDir="ngForm"
+        [formGroup]="rateLimitForm"
+        novalidate>
+    <cd-alert-panel type="info"
+                    class="me-1"
+                    spacingClass="mt-1"
+                    *ngIf="clusterQoSDisabled"
+                    i18n>Cluster level QoS setting is disabled.
+    </cd-alert-panel>
+
+    <cd-alert-panel type="info"
+                    class="me-1"
+                    spacingClass="mt-1"
+                    *ngIf="showDisableWarning"
+                    i18n>Disable QoS will set QoS Bandwidth limit to Maximum.
+    </cd-alert-panel>
+
+    <cd-alert-panel type="info"
+                    class="me-1"
+                    spacingClass="mt-1"
+                    *ngIf="showQoStypeChangeNote"
+                    i18n>If changing from already set one then please make sure to update exports bandwidths according to QoS type.
+    </cd-alert-panel>
+    <!-- qos_type is perclient, then can't enable export level QoS -->
+    <div
+      class="form-item"
+      *ngIf="type === 'cluster' || (type === 'export' && nfsClusterData?.qos_type !== 'PerClient')"
+    >
+      <cds-checkbox
+        id="enable_qos"
+        type="checkbox"
+        (checkedChange)="showMaxBwNote()"
+        formControlName="enable_qos"
+        i18n
+        >Enable Bandwidth QoS
+      </cds-checkbox>
+    </div>
+    <span *ngIf="showMaxBw">Disable QoS will set QoS Bandwidth limit to Maximum.</span>
+
+    <div class="form-item"
+         *ngIf="rateLimitForm.getValue('enable_qos') && type !== 'export'">
+      <cds-select
+        formControlName="bwType"
+        for="bwType"
+        label="Rate Limit"
+        id="bwType"
+        [helperText]="bwTypeHelper"
+        [skeleton]="bwTypeArr === null"
+      >
+        <option *ngIf="bwTypeArr === null"
+                [ngValue]="null">Loading...</option>
+        <option *ngIf="bwTypeArr !== null && bwTypeArr.length === 0"
+                i18n
+                [ngValue]="null">
+          -- No RateLimit type available --
+        </option>
+        <option *ngIf="bwTypeArr !== null && bwTypeArr.length > 0"
+                i18n
+                [ngValue]="null">
+          -- Select a RateLimit Type --
+        </option>
+        <option *ngFor="let type of bwTypeArr"
+                i18n
+                [value]="type.value">{{ type.value }}</option>
+      </cds-select>
+      <ng-template #bwTypeHelper>
+        <span *ngIf="rateLimitForm.getValue('bwType')">
+          {{ getbwTypeHelp(rateLimitForm.getValue('bwType')) }}
+        </span>
+      </ng-template>
+    </div>
+
+
+    <!-- qos type -->
+    <div class="form-item"
+         *ngIf="rateLimitForm.getValue('enable_qos') && type !== 'export'">
+      <cds-select
+        formControlName="qos_type"
+        label="Bandwidth QOS Type"
+        id="qos_type"
+        [helperText]="qosTypeHelper"
+        [skeleton]="qosType === null"
+        (change)="registerQoSChange($event.target.value)"
+        i18n-label
+      >
+        <option *ngIf="qosType === null"
+                value="">Loading...</option>
+        <option *ngIf="qosType !== null && qosType.length === 0"
+                i18n
+                value="null">
+          -- No Bandwidth Qos type available --
+        </option>
+        <option *ngIf="qosType !== null && qosType?.length > 0"
+                value=""
+                i18n>
+          -- Select a Bandwidth QOS Type --
+        </option>
+        <option *ngFor="let type of qosType"
+                i18n
+                [value]="type.value">{{ type.key }}</option>
+      </cds-select>
+      <ng-template #qosTypeHelper>
+        <span *ngIf="rateLimitForm.getValue('qos_type')">
+          {{ getQoSTypeHelper(rateLimitForm.getValue('qos_type')) }}
+        </span>
+      </ng-template>
+    </div>
+
+    <ng-container
+      *ngIf="
+        rateLimitForm?.getValue('enable_qos') &&
+        (qosTypeVal === 'PerShare' || qosTypeVal === 'PerShare_PerClient')
+      "
+    >
+      <div class="form-group row">
+        <cds-text-label
+          for="max_export_read_bw"
+          i18n
+          i18n-helperText
+          helperText="Limits the maximum bandwidth that can be used for export read per second"
+          cdRequiredField="Export read bandwidth"
+          [invalid]="
+            rateLimitForm.controls.max_export_read_bw.invalid &&
+            rateLimitForm.controls.max_export_read_bw.dirty
+          "
+          [invalidText]="Export_readbw_Error"
+          >Export Write Bandwidth
+          <input
+            cdsText
+            type="text"
+            placeholder="Export read bandwidth..."
+            i18n-placeholder
+            id="max_export_read_bw"
+            name="max_export_read_bw"
+            formControlName="max_export_read_bw"
+            [invalid]="
+              rateLimitForm.controls.max_export_read_bw.invalid &&
+              rateLimitForm.controls.max_export_read_bw.dirty
+            "
+            defaultUnit="b"
+            defaultEmptyValue="true"
+            cdDimlessBinaryPerSecond
+          />
+        </cds-text-label>
+        <ng-template #Export_readbw_Error>
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_export_read_bw', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_export_read_bw', formDir, 'rateByteMaxSize')"
+            i18n
+            >The value is not valid.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_export_read_bw', formDir, 'min')"
+            i18n
+            >Enter a positive number.</span
+          >
+        </ng-template>
+      </div>
+      <div class="form-group row">
+        <cds-text-label
+          for="max_export_write_bw"
+          i18n
+          i18n-helperText
+          helperText="Limits the maximum bandwidth that can be used for export write per second"
+          cdRequiredField="Export write bandwidth"
+          [invalid]="
+            rateLimitForm.controls.max_export_write_bw.invalid &&
+            rateLimitForm.controls.max_export_write_bw.dirty
+          "
+          [invalidText]="Export_writebw_Error"
+          >Export Write Bandwidth
+          <input
+            cdsText
+            type="text"
+            placeholder="Export write bandwidth..."
+            i18n-placeholder
+            id="max_export_write_bw"
+            name="max_export_write_bw"
+            formControlName="max_export_write_bw"
+            [invalid]="
+              rateLimitForm.controls.max_export_write_bw.invalid &&
+              rateLimitForm.controls.max_export_write_bw.dirty
+            "
+            defaultUnit="b"
+            defaultEmptyValue="true"
+            cdDimlessBinaryPerSecond
+          />
+        </cds-text-label>
+
+        <ng-template #Export_writebw_Error>
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_export_write_bw', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_export_write_bw', formDir, 'rateByteMaxSize')"
+            i18n
+            >The value is not valid.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_export_write_bw', formDir, 'min')"
+            i18n
+            >Enter a positive number.</span
+          >
+        </ng-template>
+      </div>
+    </ng-container>
+
+    <ng-container
+      *ngIf="
+        rateLimitForm?.getValue('enable_qos') &&
+        ((this.type === 'cluster' &&
+          (this.qosTypeVal === 'PerClient' || this.qosTypeVal === 'PerShare_PerClient')) ||
+          (this.type === 'export' &&
+            this.qosTypeVal !== 'PerClient' &&
+            this.qosTypeVal !== 'PerShare'))
+      "
+    >
+      <div class="form-group row">
+        <cds-text-label
+          for="max_client_read_bw"
+          i18n
+          i18n-helperText
+          helperText="Limits the maximum bandwidth that client can use for read per second"
+          cdRequiredField="Client read bandwidth"
+          [invalid]="
+            rateLimitForm.controls.max_client_read_bw.invalid &&
+            rateLimitForm.controls.max_client_read_bw.dirty
+          "
+          [invalidText]="client_read_bw_Error"
+          >Client Read Bandwidth
+          <input
+            cdsText
+            type="text"
+            id="max_client_read_bw"
+            name="max_client_read_bw"
+            formControlName="max_client_read_bw"
+            placeholder="Client read bandwidth..."
+            i18n-placeholder
+            [invalid]="
+              rateLimitForm.controls.max_client_read_bw.invalid &&
+              rateLimitForm.controls.max_client_read_bw.dirty
+            "
+            defaultUnit="b"
+            defaultEmptyValue="true"
+            cdDimlessBinaryPerSecond
+          />
+        </cds-text-label>
+
+        <ng-template #client_read_bw_Error>
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_client_read_bw', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_client_read_bw', formDir, 'rateByteMaxSize')"
+            i18n
+            >The value is not valid.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_client_read_bw', formDir, 'min')"
+            i18n
+            >Enter a positive number.</span
+          >
+        </ng-template>
+      </div>
+      <div class="form-group row">
+        <cds-text-label
+          for="max_client_write_bw"
+          i18n
+          i18n-helperText
+          helperText="Limits the maximum bandwidth that client can use for write per second"
+          cdRequiredField="Client write bandwidth"
+          [invalid]="
+            rateLimitForm.controls.max_client_write_bw.invalid &&
+            rateLimitForm.controls.max_client_write_bw.dirty
+          "
+          [invalidText]="client_write_bw_Error"
+          >Client Write Bandwidth
+          <input
+            cdsText
+            type="text"
+            placeholder="Client write bandwidth..."
+            i18n-placeholder
+            id="max_client_write_bw"
+            name="max_client_write_bw"
+            formControlName="max_client_write_bw"
+            [invalid]="
+              rateLimitForm.controls.max_client_write_bw.invalid &&
+              rateLimitForm.controls.max_client_write_bw.dirty
+            "
+            defaultUnit="b"
+            defaultEmptyValue="true"
+            cdDimlessBinaryPerSecond
+          />
+        </cds-text-label>
+        <!-- [ngbTypeahead]="pathDataSource" -->
+        <ng-template #client_write_bw_Error>
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_client_write_bw', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_client_write_bw', formDir, 'rateByteMaxSize')"
+            i18n
+            >The value is not valid.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="rateLimitForm.showError('max_client_write_bw', formDir, 'min')"
+            i18n
+            >Enter a positive number.</span
+          >
+        </ng-template>
+      </div>
+    </ng-container>
+  </form>
+</ng-container>
