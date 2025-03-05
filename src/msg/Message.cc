@@ -1163,11 +1163,7 @@ void encode_message(Message *msg, uint64_t features, ceph::bufferlist& payload)
 // We've slipped in a 0 signature at this point, so any signature checking after this will
 // fail.  PLR
 
-Message *decode_message(
-  CephContext *cct,
-  int crcflags,
-  ceph::bufferlist::const_iterator& p,
-  uint64_t features)
+Message *decode_message(CephContext *cct, int crcflags, ceph::bufferlist::const_iterator& p)
 {
   ceph_msg_header h;
   ceph_msg_footer_old fo;
@@ -1185,5 +1181,5 @@ Message *decode_message(
   decode(mi, p);
   decode(da, p);
   return decode_message(
-    cct, crcflags, h, f, std::move(fr), std::move(mi), std::move(da), nullptr, features);
+    cct, crcflags, h, f, std::move(fr), std::move(mi), std::move(da), nullptr, 0);
 }
