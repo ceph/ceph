@@ -624,12 +624,11 @@ void ECTransaction::generate_transactions(
            * To solve this, we use an interesting quirk of "truncate" where we
            * can actually truncate to a size larger than the object!
            */
-          shard_id_t shard_id(shard);
-          if (transactions->contains(shard_id)) {
-            auto &t = transactions->at(shard_id);
+          if (transactions->contains(shard)) {
+            auto &t = transactions->at(shard);
             t.truncate(
-	      coll_t(spg_t(pgid, shard_id)),
-              ghobject_t(oid, ghobject_t::NO_GEN, shard_id),
+	      coll_t(spg_t(pgid, shard)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard),
               new_shard_size);
           }
 	  // Update written_shards because this must complete to consider
@@ -670,35 +669,40 @@ void ECTransaction::generate_transactions(
           if (!eset.intersects(start, len)) continue;
 
           // We need a clone...
-          auto &&t = (*transactions)[shard];
+          if (transactions->contains(shard)) {
+            auto &t = transactions->at(shard);
 
-          // Only touch once.
-          if (!touched.contains(shard)) {
-            t.touch(
-              coll_t(spg_t(pgid, shard)),
-              ghobject_t(oid, entry->version.version, shard));
-            touched.insert(shard_id_t(shard));
-          }
-          t.clone_range(
-            coll_t(spg_t(pgid, shard)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard),
-            ghobject_t(oid, entry->version.version, shard),
-            start,
-            shard_end - start,
-            start);
+	    // Only touch once.
+	    if (!touched.contains(shard)) {
+	      t.touch(
+		coll_t(spg_t(pgid, shard)),
+		ghobject_t(oid, entry->version.version, shard));
+	        touched.insert(shard_id_t(shard));
+	    }
+	    t.clone_range(
+	      coll_t(spg_t(pgid, shard)),
+	      ghobject_t(oid, ghobject_t::NO_GEN, shard),
+	      ghobject_t(oid, entry->version.version, shard),
+	      start,
+	      shard_end - start,
+	      start);
 
-          // We have done a clone, so tell the rollback.
-          to_clone_shards.insert(shard);
+	    // We have done a clone, so tell the rollback.
+	    to_clone_shards.insert(shard);
+	  }
         }
 
-        // It is more efficent to store an empty set to represent the common
-        // all shards case.
-        if (to_clone_shards.size() == sinfo.get_k_plus_m()) {
-          to_clone_shards.clear();
-        }
-        if (clone_end > start) {
-	  rollback_extents.emplace_back(make_pair(start, clone_end - start));
-	  rollback_shards.emplace_back(to_clone_shards);
+	if (!to_clone_shards.empty()) {
+          // It is more efficent to store an empty set to represent the common
+          // all shards case.
+	  if (to_clone_shards.size() == sinfo.get_k_plus_m()) {
+	    to_clone_shards.clear();
+	  }
+	  if (clone_end > start) {
+	    rollback_extents.emplace_back(make_pair(start, clone_end - start));
+	    ldpp_dout(dpp,20) << "BILLCL: " << to_clone_shards << dendl;
+	    rollback_shards.emplace_back(to_clone_shards);
+	  }
         }
       }
 
@@ -735,14 +739,12 @@ void ECTransaction::generate_transactions(
         }
 	// Calculate set of present shards
 	for (auto &&[shard, t]: *transactions) {
-          ldpp_dout(dpp,20) << "BILLPR: adding shard " << shard << dendl;
 	  entry->present_shards.insert(shard);
 	}
 	if (entry->present_shards.size() == sinfo.get_k_plus_m()) {
           // More efficient to encode an empty set for all shards
 	  entry->present_shards.clear();
 	}
-        ldpp_dout(dpp,20) << "BILLPR: " << entry->present_shards << dendl;
         if (plan.hinfo) {
           plan.hinfo->set_total_chunk_size_clear_hash(
             sinfo.ro_offset_to_next_stripe_ro_offset(plan.projected_size));
@@ -758,16 +760,13 @@ void ECTransaction::generate_transactions(
 
       // Update shard_versions in object_info to record which shards are being
       // written
-      if (entry) {
-	object_info_t& oi = obc->obs.oi;
+      if (entry && op.attr_updates.contains(OI_ATTR)) {
+	object_info_t oi(*(op.attr_updates[OI_ATTR]));
 	bool update = false;
 	if (entry->written_shards.empty()) {
 	  if (!oi.shard_versions.empty()) {
 	    oi.shard_versions.clear();
-	    ldpp_dout(dpp, 20) << "BILLOI: Full shard write, clearing shard versions -  version " << oi.version << dendl;
 	    update = true;
-	  } else {
-	    ldpp_dout(dpp, 20) << "BILLOI: Full shard write, no prev shard versions -  version " << oi.version << dendl;
 	  }
 	} else {
           for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
@@ -777,19 +776,15 @@ void ECTransaction::generate_transactions(
 		if (oi.shard_versions.erase(shard)) {
 		  update = true;
 		}
-		ldpp_dout(dpp, 20) << "BILLOI: Shard " << shard << " erased to " << oi.version << dendl;
 	      } else if (!oi.shard_versions.count(shard)) {
 		// Unwritten shard, previously up to date
 		oi.shard_versions[shard] = oi.prior_version;
-		ldpp_dout(dpp, 20) << "BILLOI: Shard " << shard << " set to " << oi.prior_version << dendl;
 		update = true;
 	      } else {
 		// Unwritten shard, already out of date
-		ldpp_dout(dpp, 20) << "BILLOI: Shard " << shard << " left at " << oi.shard_versions[shard] << dendl;
               }
 	    } else {
 	      // Primary shards are always written and use oi.version
-	      ldpp_dout(dpp, 20) << "BILLOI: Shard " << shard << " blank at " << oi.version << dendl;
 	    }
           }
 	}
@@ -797,7 +792,13 @@ void ECTransaction::generate_transactions(
 	  bufferlist bl;
 	  oi.encode(bl,osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 	  op.attr_updates[OI_ATTR] = bl;
+	  // Update cached OI
+	  obc->obs.oi.shard_versions = oi.shard_versions;
 	}
+        ldpp_dout(dpp,20) << "BILLOI: version=" << entry->version
+			  << " present=" << entry->present_shards
+			  << " written=" << entry->written_shards
+			  << " shard_versions=" << oi.shard_versions << dendl;
       }
 
       if (!op.attr_updates.empty()) {

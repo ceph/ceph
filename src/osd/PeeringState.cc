@@ -335,22 +335,6 @@ void PeeringState::update_peer_info(const pg_shard_t &from, const pg_info_t &oin
         psdout(0) << "BILLPROCREPINFO osd." << from << " setting shard " << shard << " to " << versionrange << dendl;
 	info.partial_writes_last_complete[shard] = versionrange;
       }
-//FIXME: BILL: No need to update other shards info - it is updated from our info before sending the info back to the shard
-#if 0      
-      //FIXME:BILL: Is it correct just to look at the info for the acting shard?
-      auto other = peer_info.find(pg_shard_t(acting[int(shard)],shard_id_t(shard)));
-      if (other != peer_info.end()) {
-	if (fromversion <= other->second.last_complete) {
-	  psdout(0) << "BILLPROCREPINFO2 osd." << other->first << " has last_complete " << other->second.last_complete << " but partial_writes_last_complete says its at " << toversion << dendl;
-	  other->second.last_complete = toversion;
-	  if (toversion > other->second.last_update) {
-	    other->second.last_update = toversion;
-	  }
-	} else if (toversion > other->second.last_complete) {
-	  psdout(0) << "BILLPROCREPINFO2 osd." << other->first << " has last_complete " << other->second.last_complete << " cannot apply partial_writes_last_complete from " << fromversion << " to " << toversion << dendl;
-	}
-      }
-#endif
     }
   }
   if (info.partial_writes_last_complete.contains(from.shard)) {
@@ -3164,6 +3148,17 @@ void PeeringState::proc_primary_info(
   }
 }
 
+void PeeringState::consider_rollback_pwlc()
+{
+  for (const auto & [shard, versionrange] : info.partial_writes_last_complete) {
+    auto & [fromversion, toversion] = versionrange;
+    if (info.last_complete < toversion) {
+      info.partial_writes_last_complete[shard].second = info.last_complete;
+      psdout(10) << "BILLPROCMASTERLOG shard " << shard << " pwlc was " << versionrange << " rolled back to " << info.partial_writes_last_complete[shard] << dendl;
+    }
+  }
+}
+
 void PeeringState::proc_master_log(
   ObjectStore::Transaction& t, pg_info_t &oinfo,
   pg_log_t&& olog, pg_missing_t&& omissing, pg_shard_t from)
@@ -3201,8 +3196,11 @@ void PeeringState::proc_master_log(
 	break;
       }
     }
-    psdout(0) << "BILLPROCMASTERLOG checking entries from " << p->version << " olog head is " << olog.head << dendl;
+    psdout(0) << "BILLPROCMASTERLOG checking entries after " << p->version << " olog head is " << olog.head << dendl;
     // See if we can wind forward partially written entries
+
+    map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
+    all_info[pg_whoami] = info;
     while (p->version == olog.head) {
       ++p;
       if (p == pg_log.get_log().log.end()) {
@@ -3217,18 +3215,17 @@ void PeeringState::proc_master_log(
 	// Might be able to keep this entry
 	shard_id_set keepme;
 	shard_id_set missme;
-        for (const auto& i : acting_recovery_backfill) {
-	  dout(20) << "BILLPROCMASTERLOG: version " << p->version << " testing osd" << i.osd << "(" << i.shard << ")" << "written=" << p->written_shards << " present=" << p->present_shards << dendl;
-	  const pg_info_t& pi = (i == get_primary()) ? info : peer_info[i];
-	  if (p->is_present_shard(i.shard) && p->is_written_shard(i.shard)) {
+        for (auto&& [pg_shard, pi] : all_info) {
+	  dout(20) << "BILLPROCMASTERLOG: version " << p->version << " testing osd" << pg_shard.osd << "(" << pg_shard.shard << ")" << "written=" << p->written_shards << " present=" << p->present_shards << dendl;
+	  if (p->is_present_shard(pg_shard.shard) && p->is_written_shard(pg_shard.shard)) {
 	    if (pi.last_update < p->version) {
-	      dout(20) << "BILLPROCMASTERLOG: osd " << i.osd << "(" << i.shard << ") is missing the update for " << p->version << dendl;
-	      if (!keepme.contains(i.shard)) {
-		missme.insert(i.shard);
+	      dout(20) << "BILLPROCMASTERLOG: osd " << pg_shard.osd << "(" << pg_shard.shard << ") is missing the update for " << p->version << dendl;
+	      if (!keepme.contains(pg_shard.shard)) {
+		missme.insert(pg_shard.shard);
 	      }
 	    } else {
-	      keepme.insert(i.shard);
-	      missme.erase(i.shard);
+	      keepme.insert(pg_shard.shard);
+	      missme.erase(pg_shard.shard);
 	    }
 	  }
 	}
@@ -3253,6 +3250,8 @@ void PeeringState::proc_master_log(
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
   might_have_unfound.insert(from);
+
+  consider_rollback_pwlc();
 
   // See doc/dev/osd_internals/last_epoch_started
   if (oinfo.last_epoch_started > info.last_epoch_started) {

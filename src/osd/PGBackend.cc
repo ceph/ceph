@@ -280,8 +280,9 @@ void PGBackend::rollback(
         if (shards.empty() || shards[i].empty() || shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
 	  // Written shard - rollback extents
 	  const uint64_t shard_size = pg->object_size_to_shard_size(object_size, pg->get_parent()->whoami_shard().shard);
-	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " written shard rollback_extents " <<
-	                        entry.written_shards << " " <<
+	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version
+			     << " written shard rollback_extents " << entry.written_shards
+			     << " shards " << shards[i] << " " <<
 	                        pg->get_parent()->whoami_shard().shard << " " <<
 	                        object_size << " " <<
 	                        shard_size << dendl;
