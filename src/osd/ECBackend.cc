@@ -383,8 +383,10 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   }
 
   uint64_t ro_end = op.returned_data->get_ro_end();
-  if (ro_end == op.recovery_info.size)
-  op.returned_data->append_zeros_to_ro_offset(sinfo.ro_offset_to_next_stripe_ro_offset(op.returned_data->get_ro_end()));
+  if (ro_end == op.recovery_info.size) {
+    op.returned_data->append_zeros_to_ro_offset(
+      sinfo.ro_offset_to_next_stripe_ro_offset(op.returned_data->get_ro_end()));
+  }
 
   uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
 
@@ -395,13 +397,19 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   r = op.returned_data->encode(ec_impl, NULL, 0);
   ceph_assert(r==0);
 
-  for (auto && shard : op.missing_on_shards) {
-    ceph_assert(op.returned_data->contains(shard));
-  }
+  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+  sinfo.ro_size_to_read_mask(aligned_size, read_mask);
 
   // Finally, we don't want to write any padding, so truncate the buffer
   // to remove it.
   op.returned_data->erase_after_ro_offset(aligned_size);
+
+  for (auto && shard : op.missing_on_shards) {
+    if (read_mask.contains(shard)) {
+      ceph_assert(read_mask.at(shard).range_end() >=
+        op.returned_data->get_extent_map(shard).get_end_off());
+    }
+  }
 
   dout(20) << __func__ << ": oid=" << op.hoid << " "
            << op.returned_data->debug_string(2048, 8) << dendl;
