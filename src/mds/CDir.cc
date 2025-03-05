@@ -2394,6 +2394,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (dnl->is_primary() && dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
       undef_inodes.push_back(dnl->get_inode());
+    if (dnl->is_referent_remote() && dnl->get_referent_inode()->state_test(CInode::STATE_REJOINUNDEF))
+      undef_inodes.push_back(dnl->get_referent_inode());
   }
 
   if (complete) {
