@@ -895,7 +895,7 @@ COMMAND("osd unset "
 	"notieragent|nosnaptrim|noautoscale",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef|squid "
+	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef|squid|tentacle "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")

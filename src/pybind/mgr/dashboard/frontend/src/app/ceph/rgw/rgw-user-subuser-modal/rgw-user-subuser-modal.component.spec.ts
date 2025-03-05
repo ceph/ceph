@@ -2,11 +2,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal.component';
+import { SelectModule } from 'carbon-components-angular';
 
 describe('RgwUserSubuserModalComponent', () => {
   let component: RgwUserSubuserModalComponent;
@@ -14,8 +13,7 @@ describe('RgwUserSubuserModalComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserSubuserModalComponent],
-    imports: [ReactiveFormsModule, SharedModule, RouterTestingModule],
-    providers: [NgbActiveModal]
+    imports: [ReactiveFormsModule, SharedModule, RouterTestingModule, SelectModule]
   });
 
   beforeEach(() => {

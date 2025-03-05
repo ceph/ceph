@@ -93,6 +93,7 @@ static const std::map<uint32_t, std::set<std::string>>& always_on_modules() {
     { CEPH_RELEASE_QUINCY, octopus_modules },
     { CEPH_RELEASE_REEF, octopus_modules },
     { CEPH_RELEASE_SQUID, octopus_modules },
+    { CEPH_RELEASE_TENTACLE, octopus_modules },
   };
   return always_on_modules_map;
 };

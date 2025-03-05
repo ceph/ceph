@@ -19,6 +19,8 @@ import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { CheckboxModule, SelectModule } from 'carbon-components-angular';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
@@ -36,8 +38,11 @@ describe('RgwBucketFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
-    ]
+      ToastrModule.forRoot(),
+      SelectModule,
+      CheckboxModule
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {

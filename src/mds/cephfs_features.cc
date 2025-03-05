@@ -33,6 +33,7 @@ static const std::array feature_names
   "new_snaprealm_info",
   "has_owner_uidgid",
   "client_mds_auth_caps",
+  "charmap",
 };
 static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 

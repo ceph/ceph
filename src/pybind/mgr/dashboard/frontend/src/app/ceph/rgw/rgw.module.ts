@@ -82,7 +82,8 @@ import {
   TabsModule,
   AccordionModule,
   TagModule,
-  TooltipModule
+  TooltipModule,
+  ComboBoxModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -126,13 +127,10 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
     SelectModule,
     NumberModule,
     TabsModule,
-    IconModule,
-    SelectModule,
     RadioModule,
-    SelectModule,
-    NumberModule,
     TagModule,
-    TooltipModule
+    TooltipModule,
+    ComboBoxModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -354,6 +352,11 @@ const routes: Routes = [
         path: URLVerbs.CREATE,
         component: RgwStorageClassFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class`,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },

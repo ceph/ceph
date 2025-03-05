@@ -24,7 +24,7 @@ MetricsHandler::MetricsHandler(CephContext *cct, MDSRank *mds)
     mds(mds) {
 }
 
-bool MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
+Dispatcher::dispatch_result_t MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
   if (m->get_type() == CEPH_MSG_CLIENT_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
     handle_client_metrics(ref_cast<MClientMetrics>(m));

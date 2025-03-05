@@ -483,8 +483,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
           }
 
           r = librbd::api::DiffIterate<I>::diff_iterate(
-            ictx, cls::rbd::UserSnapshotNamespace(), nullptr, 0, ictx->size,
-            false, true,
+            ictx, 0, 0, ictx->size, false, true,
             [](uint64_t offset, size_t len, int exists, void *arg) {
                 auto *to_free = reinterpret_cast<uint64_t *>(arg);
                 if (exists)

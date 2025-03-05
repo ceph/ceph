@@ -29,7 +29,7 @@ namespace ceph {
 // and update Server::update_required_client_features(). This feature bit
 // is used to indicate that operator only wants clients from that release or
 // later to mount CephFS.
-#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_SQUID
+#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_TENTACLE
 
 // The first 5 bits are reserved for old ceph releases.
 #define CEPHFS_FEATURE_JEWEL                5
@@ -51,7 +51,8 @@ namespace ceph {
 #define CEPHFS_FEATURE_NEW_SNAPREALM_INFO   19
 #define CEPHFS_FEATURE_HAS_OWNER_UIDGID     20
 #define CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK  21
-#define CEPHFS_FEATURE_MAX                  21
+#define CEPHFS_FEATURE_CHARMAP              22
+#define CEPHFS_FEATURE_MAX                  22
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -73,7 +74,8 @@ namespace ceph {
   CEPHFS_FEATURE_32BITS_RETRY_FWD,      \
   CEPHFS_FEATURE_NEW_SNAPREALM_INFO,    \
   CEPHFS_FEATURE_HAS_OWNER_UIDGID,      \
-  CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK    \
+  CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK,   \
+  CEPHFS_FEATURE_CHARMAP,      \
 }
 
 #define CEPHFS_METRIC_FEATURES_ALL {		\

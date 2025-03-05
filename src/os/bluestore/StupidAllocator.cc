@@ -14,7 +14,7 @@ StupidAllocator::StupidAllocator(CephContext* cct,
                                  int64_t capacity,
                                  int64_t _block_size,
                                  std::string_view name)
-  : Allocator(name, capacity, _block_size),
+  : AllocatorBase(name, capacity, _block_size),
     cct(cct), num_free(0),
     free(10)
 {

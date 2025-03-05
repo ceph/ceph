@@ -7,6 +7,7 @@
 #include <boost/intrusive/avl_set.hpp>
 
 #include "Allocator.h"
+#include "AllocatorBase.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
 
@@ -49,7 +50,7 @@ struct range_seg_t {
   boost::intrusive::avl_set_member_hook<> size_hook;
 };
 
-class AvlAllocator : public Allocator {
+class AvlAllocator : public AllocatorBase {
   struct dispose_rs {
     void operator()(range_seg_t* p)
     {

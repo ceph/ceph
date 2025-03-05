@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -9,13 +8,14 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-user-s3-key-modal',
   templateUrl: './rgw-user-s3-key-modal.component.html',
   styleUrls: ['./rgw-user-s3-key-modal.component.scss']
 })
-export class RgwUserS3KeyModalComponent {
+export class RgwUserS3KeyModalComponent extends BaseModal {
   /**
    * The event that is triggered when the 'Add' button as been pressed.
    */
@@ -28,11 +28,8 @@ export class RgwUserS3KeyModalComponent {
   resource: string;
   action: string;
 
-  constructor(
-    private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
-    public actionLabels: ActionLabelsI18n
-  ) {
+  constructor(private formBuilder: CdFormBuilder, public actionLabels: ActionLabelsI18n) {
+    super();
     this.resource = $localize`S3 Key`;
     this.createForm();
   }
@@ -79,6 +76,6 @@ export class RgwUserS3KeyModalComponent {
   onSubmit() {
     const key: RgwUserS3Key = this.formGroup.value;
     this.submitAction.emit(key);
-    this.activeModal.close();
+    this.closeModal();
   }
 }

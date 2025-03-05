@@ -1318,8 +1318,14 @@ struct ReplicationConfiguration {
       // Here we are sure that s->owner.id is of type rgw_user
       const auto& tenant_owner = std::get_if<rgw_user>(&s->owner.id)->tenant;
 
+      auto dest_bk_arn = ARN::parse(destination.bucket);
+      if (!dest_bk_arn || dest_bk_arn->service != rgw::Service::s3 || dest_bk_arn->resource.empty()) {
+        s->err.message = "Invalid bucket ARN";
+        return -EINVAL;
+      }
+
       rgw_bucket_key dest_bk(tenant_owner,
-                             destination.bucket);
+                             dest_bk_arn->resource);
 
       if (source && !source->zone_names.empty()) {
         pipe->source.zones = get_zone_ids_from_names(driver, source->zone_names);
@@ -1386,7 +1392,7 @@ struct ReplicationConfiguration {
       }
 
       if (pipe.dest.bucket) {
-        destination.bucket = pipe.dest.bucket->get_key();
+        destination.bucket = ARN(*pipe.dest.bucket).to_string();
       }
 
       filter.emplace();

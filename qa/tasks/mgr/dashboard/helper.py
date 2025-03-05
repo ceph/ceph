@@ -336,9 +336,20 @@ class DashboardTestCase(MgrTestCase):
             raise ex
 
     @classmethod
-    def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False, headers=None):
-        return cls._request(url, 'GET', params=params, version=version,
-                            set_cookies=set_cookies, headers=headers)
+    def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False, headers=None,
+             retries=0, wait_func=None):
+        while retries >= 0:
+            try:
+                return cls._request(url, 'GET', params=params, version=version,
+                                    set_cookies=set_cookies, headers=headers)
+            except requests.RequestException as e:
+                if retries == 0:
+                    raise e from None
+
+                log.info("Retrying the GET req. Total retries left is... %s", retries)
+                if wait_func:
+                    wait_func()
+                retries -= 1
 
     @classmethod
     def _view_cache_get(cls, url, retries=5):
@@ -510,9 +521,11 @@ class DashboardTestCase(MgrTestCase):
             self.assertEqual(body['detail'], detail)
 
     @classmethod
-    def _ceph_cmd(cls, cmd):
+    def _ceph_cmd(cls, cmd, wait=0):
         res = cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
         log.debug("command result: %s", res)
+        if wait:
+            time.sleep(wait)
         return res
 
     @classmethod

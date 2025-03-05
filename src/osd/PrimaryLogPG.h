@@ -31,7 +31,6 @@
 #include "common/sharedptr_registry.hpp"
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
-#include "ECBackend.h"
 #include "PGTransaction.h"
 #include "cls/cas/cls_cas_ops.h"
 

@@ -120,6 +120,8 @@ using ceph::mono_clock;
 using ceph::mono_time;
 using ceph::timespan_str;
 
+using namespace std::literals;
+
 // kv store prefixes
 const string PREFIX_SUPER = "S";       // field -> value
 const string PREFIX_STAT = "T";        // field -> value(int64 array)
@@ -5761,53 +5763,51 @@ BlueStore::~BlueStore()
   buffer_cache_shards.clear();
 }
 
-const char **BlueStore::get_tracked_conf_keys() const
+std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "bluestore_csum_type",
-    "bluestore_compression_mode",
-    "bluestore_compression_algorithm",
-    "bluestore_compression_min_blob_size",
-    "bluestore_compression_min_blob_size_ssd",
-    "bluestore_compression_min_blob_size_hdd",
-    "bluestore_compression_max_blob_size",
-    "bluestore_compression_max_blob_size_ssd",
-    "bluestore_compression_max_blob_size_hdd",
-    "bluestore_compression_required_ratio",
-    "bluestore_max_alloc_size",
-    "bluestore_prefer_deferred_size",
-    "bluestore_prefer_deferred_size_hdd",
-    "bluestore_prefer_deferred_size_ssd",
-    "bluestore_deferred_batch_ops",
-    "bluestore_deferred_batch_ops_hdd",
-    "bluestore_deferred_batch_ops_ssd",
-    "bluestore_throttle_bytes",
-    "bluestore_throttle_deferred_bytes",
-    "bluestore_throttle_cost_per_io_hdd",
-    "bluestore_throttle_cost_per_io_ssd",
-    "bluestore_throttle_cost_per_io",
-    "bluestore_max_blob_size",
-    "bluestore_max_blob_size_ssd",
-    "bluestore_max_blob_size_hdd",
-    "osd_memory_target",
-    "osd_memory_target_cgroup_limit_ratio",
-    "osd_memory_base",
-    "osd_memory_cache_min",
-    "osd_memory_expected_fragmentation",
-    "bluestore_cache_autotune",
-    "bluestore_cache_autotune_interval",
-    "bluestore_cache_age_bin_interval",
-    "bluestore_cache_kv_age_bins",
-    "bluestore_cache_kv_onode_age_bins",
-    "bluestore_cache_meta_age_bins",
-    "bluestore_cache_data_age_bins",
-    "bluestore_warn_on_legacy_statfs",
-    "bluestore_warn_on_no_per_pool_omap",
-    "bluestore_warn_on_no_per_pg_omap",
-    "bluestore_max_defer_interval",
-    NULL
+  return {
+    "bluestore_csum_type"s,
+    "bluestore_compression_mode"s,
+    "bluestore_compression_algorithm"s,
+    "bluestore_compression_min_blob_size"s,
+    "bluestore_compression_min_blob_size_ssd"s,
+    "bluestore_compression_min_blob_size_hdd"s,
+    "bluestore_compression_max_blob_size"s,
+    "bluestore_compression_max_blob_size_ssd"s,
+    "bluestore_compression_max_blob_size_hdd"s,
+    "bluestore_compression_required_ratio"s,
+    "bluestore_max_alloc_size"s,
+    "bluestore_prefer_deferred_size"s,
+    "bluestore_prefer_deferred_size_hdd"s,
+    "bluestore_prefer_deferred_size_ssd"s,
+    "bluestore_deferred_batch_ops"s,
+    "bluestore_deferred_batch_ops_hdd"s,
+    "bluestore_deferred_batch_ops_ssd"s,
+    "bluestore_throttle_bytes"s,
+    "bluestore_throttle_deferred_bytes"s,
+    "bluestore_throttle_cost_per_io_hdd"s,
+    "bluestore_throttle_cost_per_io_ssd"s,
+    "bluestore_throttle_cost_per_io"s,
+    "bluestore_max_blob_size"s,
+    "bluestore_max_blob_size_ssd"s,
+    "bluestore_max_blob_size_hdd"s,
+    "osd_memory_target"s,
+    "osd_memory_target_cgroup_limit_ratio"s,
+    "osd_memory_base"s,
+    "osd_memory_cache_min"s,
+    "osd_memory_expected_fragmentation"s,
+    "bluestore_cache_autotune"s,
+    "bluestore_cache_autotune_interval"s,
+    "bluestore_cache_age_bin_interval"s,
+    "bluestore_cache_kv_age_bins"s,
+    "bluestore_cache_kv_onode_age_bins"s,
+    "bluestore_cache_meta_age_bins"s,
+    "bluestore_cache_data_age_bins"s,
+    "bluestore_warn_on_legacy_statfs"s,
+    "bluestore_warn_on_no_per_pool_omap"s,
+    "bluestore_warn_on_no_per_pg_omap"s,
+    "bluestore_max_defer_interval"s
   };
-  return KEYS;
 }
 
 void BlueStore::handle_conf_change(const ConfigProxy& conf,
@@ -5894,8 +5894,6 @@ void BlueStore::_set_compression()
     _set_compression_alert(true, s.c_str());
   }
 
-  compressor = nullptr;
-
   if (cct->_conf->bluestore_compression_min_blob_size) {
     comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
   } else {
@@ -5917,19 +5915,36 @@ void BlueStore::_set_compression()
       comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
     }
   }
-
-  auto& alg_name = cct->_conf->bluestore_compression_algorithm;
-  if (!alg_name.empty()) {
-    compressor = Compressor::create(cct, alg_name);
-    if (!compressor) {
+  if (compressors.size() == 0) {
+    compressors.resize(Compressor::COMP_ALG_LAST);
+    compressors[Compressor::COMP_ALG_NONE] = nullptr;
+    int alg = Compressor::COMP_ALG_NONE + 1;
+    while (alg < Compressor::COMP_ALG_LAST) {
+      compressors[alg] = Compressor::create(cct, alg);
+      ++alg;
+    }
+  }
+  auto alg_name = cct->_conf->bluestore_compression_algorithm;
+  CompressorRef c =
+   !alg_name.empty() ? Compressor::create(cct, alg_name) : CompressorRef();
+  if (c) {
+    ceph_assert(c->get_type() < int(compressors.size()));
+    def_compressor_alg = c->get_type();
+    alg_name = c->get_type_name(); // let's use actual resulting alg name
+  } else {
+    if (!alg_name.empty()) {
       derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
            << dendl;
       _set_compression_alert(false, alg_name.c_str());
+    } else {
+      _clear_compression_alert();
     }
+    def_compressor_alg = Compressor::COMP_ALG_NONE;
+    alg_name = "(none)";
   }
- 
+
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
-	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
+	   << " alg " << alg_name
 	   << " min_blob " << comp_min_blob_size
 	   << " max_blob " << comp_max_blob_size
 	   << dendl;
@@ -6702,13 +6717,18 @@ int BlueStore::_read_bdev_label(
     decode(expected_crc, p);
   }
   catch (ceph::buffer::error& e) {
-    derr << __func__ << " " << path.c_str() << " data at " << std::hex << disk_position
-      << std::dec << ", " << "unable to decode label " << dendl;
+    // We can still get here in non-erroneous scenarios,
+    // hence do not log that as an error
+    dout(0) << __func__ << " " << path.c_str() << " data at 0x" << std::hex << disk_position
+      << std::dec << ", " << "unable to decode label "
+      << dendl;
     return -ENOENT;
   }
   if (crc != expected_crc) {
-    derr << __func__ << " bad crc on label, expected " << expected_crc
-	 << " != actual " << crc << dendl;
+    // We can still get here in non-erroneousscenarios,
+    // hence do not log that as an error
+    dout(0) << __func__ << " bad crc on label, expected " << expected_crc
+	    << " != actual " << crc << dendl;
     return -EIO;
   }
   dout(10) << __func__ << " got " << *label << dendl;
@@ -6813,7 +6833,9 @@ int BlueStore::_read_multi_bdev_label(
     return -ENOENT;
   }
   done:
-  dout(10) << __func__ << " got " << *out_label << dendl;
+  dout(10) << __func__ << " got " << *out_label
+           << (all_labels_valid ? " all labels valid " : " some labels missing ")
+           << dendl;
   return all_labels_valid ? 0 : 1;
 }
 
@@ -6828,6 +6850,7 @@ void BlueStore::_main_bdev_label_try_reserve()
   ceph_assert(bdev_label_multi == true);
   vector<uint64_t> candidate_positions;
   vector<uint64_t> accepted_positions;
+  dout(20) << __func__ << " input " << bdev_label_valid_locations << dendl;
   uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
   for (uint64_t location : bdev_label_valid_locations) {
     if (location != BDEV_FIRST_LABEL_POSITION) {
@@ -6861,6 +6884,7 @@ void BlueStore::_main_bdev_label_try_reserve()
          << " occupied by BlueStore object or BlueFS file, disabling" << dendl;
     std::erase(bdev_label_valid_locations, candidate_positions[i]);
   }
+  dout(20) << __func__ << " result " << bdev_label_valid_locations << dendl;
 }
 
 void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
@@ -6955,12 +6979,34 @@ int BlueStore::_check_main_bdev_label()
         ++valid_locations;
       }
     }
-    if (valid_locations != bdev_label_valid_locations.size()) {
-      derr << __func__ << " not all labels read properly" << dendl;
+    if (valid_locations > bdev_label_valid_locations.size()) {
+      derr << __func__ << " not all labels read properly, "
+           << valid_locations << "!=" << bdev_label_valid_locations.size()
+           << dendl;
       return -EIO;
     }
   }
   return 0;
+}
+
+int BlueStore::read_bdev_label_at_pos(
+  CephContext* cct,
+  const std::string &bdev_path,
+  uint64_t disk_position,
+  bluestore_bdev_label_t *label)
+{
+  unique_ptr<BlockDevice> bdev(BlockDevice::create(
+    cct, bdev_path, nullptr, nullptr, nullptr, nullptr));
+  if (!bdev) {
+    return -EIO;
+  }
+  bdev->set_no_exclusive_lock();
+  int r = bdev->open(bdev_path);
+  if (r < 0)
+    return r;
+  r = _read_bdev_label(cct, bdev.get(), bdev_path, label, disk_position);
+  bdev->close();
+  return r;
 }
 
 int BlueStore::read_bdev_label(
@@ -7296,7 +7342,16 @@ int BlueStore::_init_alloc()
 	return -ENOTRECOVERABLE;
       }
     }
+    if (before_expansion_bdev_size > 0 &&
+        before_expansion_bdev_size < bdev_label.size) {
+      // we grow the allocation range, must reflect it in the allocation file
+      alloc->init_add_free(before_expansion_bdev_size,
+                           bdev_label.size - before_expansion_bdev_size);
+      need_to_destage_allocation_file = true;    
+    }
   }
+  before_expansion_bdev_size = 0;
+
   dout(1) << __func__
           << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
           << std::hex
@@ -8926,99 +8981,132 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
-int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
-{
-  bluestore_bdev_label_t label;
-  int r = _read_bdev_label(cct, bdev, path, &label);
-  if (r < 0) {
-    derr << "unable to read label for " << path << ": "
-          << cpp_strerror(r) << dendl;
-  } else {
-    label.size = size;
-    r = _write_bdev_label(cct, bdev, path, label);
-    if (r < 0) {
-      derr << "unable to write label for " << path << ": "
-            << cpp_strerror(r) << dendl;
-    }
-  }
-  return r;
-}
-
 int BlueStore::expand_devices(ostream& out)
 {
+  // let's open in read-only mode first to be able to recover
+  // from the out-of-space state at DB/shared volume(s)
+  // Opening in R/W mode might cause extra space allocation
+  // which is effectively a show stopper for volume expansion.
   int r = _open_db_and_around(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
+  // updating dedicated devices first
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
-    if (devid == bluefs_layout.shared_bdev ) {
+    if (devid == bluefs_layout.shared_bdev) {
       continue;
     }
-    uint64_t size = bluefs->get_block_device_size(devid);
+    auto my_bdev = bluefs->get_block_device(devid);
+    uint64_t size = my_bdev ? my_bdev->get_size() : 0;
     if (size == 0) {
       // no bdev
       continue;
     }
-
-    out << devid
-	<<" : expanding " << " to 0x" << size << std::dec << std::endl;
-    string p = get_device_path(devid);
-    const char* path = p.c_str();
-    if (path == nullptr) {
-      derr << devid
-	    <<": can't find device path " << dendl;
-      continue;
-    }
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
-        out << devid
-          << " : size label updated to " << size
-          << std::endl;
-      }
-    }
-  }
-  uint64_t size0 = fm->get_size();
-  uint64_t size = bdev->get_size();
-  if (size0 < size) {
-    out << bluefs_layout.shared_bdev
-      << " : expanding " << " from 0x" << std::hex
-      << size0 << " to 0x" << size << std::dec << std::endl;
-    _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
-      }
-      if (bdev_label_multi) {
-        uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-        for (uint64_t loc : bdev_label_positions) {
-          if ((loc >= size0) && (loc + lsize <= size)) {
-            bdev_label_valid_locations.push_back(loc);
+    if (my_bdev->supported_bdev_label()) {
+      string my_path = get_device_path(devid);
+      bluestore_bdev_label_t my_label;
+      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      if (r < 0) {
+        derr << "unable to read label for " << my_path << ": "
+              << cpp_strerror(r) << dendl;
+        continue;
+      } else {
+        if (size == my_label.size) {
+          // no need to expand
+          out << devid
+	      << " : nothing to do, skipped"
+	      << std::endl;
+          continue;
+        } else if (size < my_label.size) {
+          // something weird in bdev label
+          out << devid
+	      <<" : ERROR: bdev label is above device size, skipped"
+	      << std::endl;
+          continue;
+        } else {
+          my_label.size = size;
+          out << devid
+	      << " : Expanding to 0x" << std::hex << size
+	      << std::dec << "(" << byte_u_t(size) << ")"
+	      << std::endl;
+          r = _write_bdev_label(cct, my_bdev, my_path, my_label);
+          if (r < 0) {
+            derr << "unable to write label for " << my_path << ": "
+                  << cpp_strerror(r) << dendl;
+          } else {
+            out << devid
+                << " : size updated to 0x" << std::hex << size
+                << std::dec << "(" << byte_u_t(size) << ")"
+                << std::endl;
           }
         }
-        _write_bdev_label(cct, bdev, path + "/block", bdev_label, bdev_label_valid_locations);
       }
     }
-    _close_db_and_around();
-
-    // mount in read/write to sync expansion changes
-    if (bdev_label_multi) {
-      // We need not do fsck, because we can be broken - size is increased,
-      // but we might not have labels set.
-      cct->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
-    }
-    r = _mount();
-    ceph_assert(r == 0);
-    if (fm && fm->is_null_manager()) {
-      // we grow the allocation range, must reflect it in the allocation file
-      alloc->init_add_free(size0, size - size0);
-      need_to_destage_allocation_file = true;
-    }
-    umount();
-  } else {
-    _close_db_and_around();
   }
+  // now proceed with a shared device
+  uint64_t size0 = fm->get_size();
+  uint64_t size = bdev->get_size();
+  auto devid = bluefs_layout.shared_bdev;
+  auto aligned_size = p2align(size, min_alloc_size);
+  if (aligned_size == size0) {
+    // no need to expand
+    out << devid
+        << " : nothing to do, skipped"
+        << std::endl;
+  } else if (aligned_size < size0) {
+    // something weird in bdev label
+    out << devid
+        << " : ERROR: previous device size is above the current one, skipped"
+	<< std::endl;
+  } else {
+    auto my_path = get_device_path(devid);
+    out << devid
+	<<" : Expanding to 0x" << std::hex << size
+	<< std::dec << "(" << byte_u_t(size) << ")"
+	<< std::endl;  
+    r = _write_out_fm_meta(size);
+    if (r != 0) {
+      derr << "unable to write out fm meta for " << my_path << ": "
+           << cpp_strerror(r) << dendl;
+    } else if (bdev->supported_bdev_label()) {
+      bdev_label.size = size;
+      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      for (uint64_t loc : bdev_label_positions) {
+        if ((loc >= size0) && (loc + lsize <= size)) {
+          bdev_label_valid_locations.push_back(loc);
+          if (!bdev_label_multi) {
+            break;
+          }
+        }
+      }
+      r = _write_bdev_label(cct, bdev, my_path,
+        bdev_label, bdev_label_valid_locations);
+      if (r != 0) {
+        derr << "unable to write label(s) for " << my_path << ": "
+             << cpp_strerror(r) << dendl;
+      }
+    }
+    if (r == 0) {
+      out << devid
+          << " : size updated to 0x" << std::hex << size
+          << std::dec << "(" << byte_u_t(size) << ")"
+          << std::endl;
+      _close_db_and_around();
+
+       //
+      // Mount in read/write to sync expansion changes
+      // and make sure everything is all right.
+      //
+      before_expansion_bdev_size = size0; // preserve orignal size to permit
+                                          // following _db_open_and_around()
+                                          // do some post-init stuff on opened
+                                          // allocator.
+
+      r = _open_db_and_around(false);
+      ceph_assert(r == 0);
+    }
+  }
+  _close_db_and_around();
   return r;
 }
 
@@ -10782,7 +10870,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   if (bdev->supported_bdev_label() && bdev_label_multi) {
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t location = bdev_label_positions[i];
-      if (location + BDEV_LABEL_BLOCK_SIZE > bdev->get_size()) {
+      if (location + BDEV_LABEL_BLOCK_SIZE > bdev_label.size) {
         continue;
       }
       if (std::find(
@@ -10805,7 +10893,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   if (bluefs) {
     interval_set<uint64_t> bluefs_extents;
-
     bluefs->foreach_block_extents(
       bluefs_layout.shared_bdev,
       [&](uint64_t start, uint32_t len) {
@@ -10849,7 +10936,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t position = bdev_label_positions[i];
       uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
-      if (position + length <= bdev->get_size()) {
+      if (position + length <= bdev_label.size) {
         apply_for_bitset_range(position, length, alloc_size, used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset& bs) {
             bs.set(pos);
@@ -12334,6 +12421,67 @@ int BlueStore::set_collection_opts(
     return -ENOENT;
   std::unique_lock l{c->lock};
   c->pool_opts = opts;
+
+  string val;
+  c->compression_algorithm.reset();
+  if (c->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
+    auto alg = Compressor::get_comp_alg_type(val);
+    CompressorRef cp;
+    if (alg.has_value() && *alg != Compressor::COMP_ALG_NONE) {
+      cp = *alg < compressors.size() ? compressors[*alg] : cp;
+      if (!cp) {
+        _set_compression_alert(false, val.c_str());
+        derr << __func__ << " unable to load compressor plugin for " << val.c_str()
+             << dendl;
+      } else {
+        ceph_assert(cp->get_type() == *alg);
+        c->compression_algorithm = cp->get_type();
+      }
+    }
+  }
+  c->compression_mode.reset();
+  if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
+    auto cm = Compressor::get_comp_mode_type(val);
+    if (!cm) {
+      derr << __func__ << " unrecognized compression mode: " << val.c_str()
+           << dendl;
+    } else {
+      c->compression_mode = cm;
+    }
+  }
+  int64_t ival;
+  c->csum_type.reset();
+  if (c->pool_opts.get(pool_opts_t::CSUM_TYPE, &ival)) {
+    if (ival >= Checksummer::CSUM_MAX) {
+      derr << __func__ << " unrecognized checksum type: " << ival
+           << dendl;
+    } else {
+      c->csum_type = Checksummer::CSumType(ival);
+    }
+  }
+  c->comp_min_blob_size.reset();
+  if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &ival)) {
+    if (ival <= 0) {
+      derr << __func__ << " invalid min compression blob size: " << ival
+           << dendl;
+    } else {
+      c->comp_min_blob_size = ival;
+    }
+  }
+  c->comp_max_blob_size.reset();
+  if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &ival)) {
+    if (ival <= 0) {
+      derr << __func__ << " invalid max compression blob size: " << ival
+           << dendl;
+    } else {
+      c->comp_max_blob_size = ival;
+    }
+  }
+  double dval;
+  c->compression_req_ratio.reset();
+  if (c->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &dval)) {
+    c->compression_req_ratio = dval;
+  }
   return 0;
 }
 
@@ -12844,20 +12992,25 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bluestore_compression_header_t chdr;
   decode(chdr, i);
   int alg = int(chdr.type);
-  CompressorRef cp = compressor;
-  if (!cp || (int)cp->get_type() != alg) {
-    cp = Compressor::create(cct, alg);
-  }
-
+  CompressorRef cp =
+    alg < int(compressors.size()) ? compressors[alg] : CompressorRef();
   if (!cp.get()) {
-    // if compressor isn't available - error, because cannot return
-    // decompressed data?
-    
-    const char* alg_name = Compressor::get_comp_alg_name(alg);
-    derr << __func__ << " can't load decompressor " << alg_name << dendl;
-    _set_compression_alert(false, alg_name);
-    r = -EIO;
+    if (alg != Compressor::COMP_ALG_NONE) {
+      // if compressor isn't available - error, because cannot return
+      // decompressed data?
+      const char* alg_name = Compressor::get_comp_alg_name(alg);
+      derr << __func__ << " can't locate compressor plugin for " << alg_name
+           << dendl;
+      _set_compression_alert(false, alg_name);
+      r = -EIO;
+    } else {
+      dout(0) << __func__
+              << " [warn] Compressed Blob has got no alg in the header "
+              << dendl;
+      i.copy_all(*result);
+    }
   } else {
+    ceph_assert((int)cp->get_type() == alg);
     r = cp->decompress(i, chdr.length, *result, chdr.compressor_message);
     if (r < 0) {
       derr << __func__ << " decompression failed with exit code " << r << dendl;
@@ -13810,7 +13963,7 @@ int BlueStore::omap_iterate(
     if (ret == omap_iter_ret_t::STOP) {
       break;
     } else if (ret == omap_iter_ret_t::NEXT) {
-      ceph::time_guard<ceph::mono_clock>{next_lat_acc};
+      ceph::time_guard<ceph::mono_clock> measure_next{next_lat_acc};
       it->next();
     } else {
       ceph_abort();
@@ -16802,39 +16955,12 @@ int BlueStore::_do_alloc_write(
   CompressorRef c;
   double crr = 0;
   if (wctx->compress) {
-    c = select_option(
-      "compression_algorithm",
-      compressor,
-      [&]() {
-        string val;
-        if (coll->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
-          CompressorRef cp = compressor;
-          if (!cp || cp->get_type_name() != val) {
-            cp = Compressor::create(cct, val);
-	    if (!cp) {
-	      if (_set_compression_alert(false, val.c_str())) {
-	        derr << __func__ << " unable to initialize " << val.c_str()
-		     << " compressor" << dendl;
-	      }
-	    }
-          }
-          return std::optional<CompressorRef>(cp);
-        }
-        return std::optional<CompressorRef>();
-      }
-    );
-
-    crr = select_option(
-      "compression_required_ratio",
-      cct->_conf->bluestore_compression_required_ratio,
-      [&]() {
-        double val;
-        if (coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
-          return std::optional<double>(val);
-        }
-        return std::optional<double>();
-      }
-    );
+    c = coll->compression_algorithm.has_value() ?
+      compressors[*(coll->compression_algorithm)]:
+      compressors[def_compressor_alg];
+    crr = coll->compression_req_ratio.has_value() ?
+      *(coll->compression_req_ratio) :
+      cct->_conf->bluestore_compression_required_ratio;
   }
 
   // checksum
@@ -17243,34 +17369,16 @@ void BlueStore::_choose_write_options(
   wctx->csum_order = block_size_order;
 
   // checksum
-  int64_t csum = csum_type.load();
-  csum = select_option(
-    "csum_type",
-    csum,
-    [&]() {
-      int64_t val;
-      if (c->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-        return std::optional<int64_t>(val);
-      }
-      return std::optional<int64_t>();
-    }
-  );
-  wctx->csum_type = csum;
+  wctx->csum_type= c->csum_type.has_value() ?
+    *(c->csum_type):
+    csum_type.load();
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
-  auto cm = select_option(
-    "compression_mode",
-    comp_mode.load(),
-    [&]() {
-      string val;
-      if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
-	return std::optional<Compressor::CompressionMode>(
-	  Compressor::get_comp_mode_type(val));
-      }
-      return std::optional<Compressor::CompressionMode>();
-    }
-  );
+
+  auto cm = c->compression_mode.has_value() ?
+    *(c->compression_mode) :
+    comp_mode.load();
 
   wctx->compress = (cm != Compressor::COMP_NONE) &&
     ((cm == Compressor::COMP_FORCE) ||
@@ -17295,31 +17403,15 @@ void BlueStore::_choose_write_options(
     }
 
     if (wctx->compress) {
-      wctx->target_blob_size = select_option(
-        "compression_max_blob_size",
-        comp_max_blob_size.load(),
-        [&]() {
-          int64_t val;
-          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
-   	    return std::optional<uint64_t>((uint64_t)val);
-          }
-          return std::optional<uint64_t>();
-        }
-      );
+      wctx->target_blob_size = c->comp_max_blob_size.has_value() ?
+        *(c->comp_max_blob_size):
+        comp_max_blob_size.load();
     }
   } else {
     if (wctx->compress) {
-      wctx->target_blob_size = select_option(
-        "compression_min_blob_size",
-        comp_min_blob_size.load(),
-        [&]() {
-          int64_t val;
-          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
-   	    return std::optional<uint64_t>((uint64_t)val);
-          }
-          return std::optional<uint64_t>();
-        }
-      );
+      wctx->target_blob_size = c->comp_min_blob_size.has_value() ?
+        *(c->comp_min_blob_size):
+        comp_min_blob_size.load();
     }
   }
 
@@ -17529,7 +17621,9 @@ int BlueStore::_do_write_v2(
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
   }
-  o->extent_map.fault_range(db, offset, length);
+  uint64_t start = p2align(offset, min_alloc_size);
+  uint64_t end = p2roundup(offset + length, min_alloc_size);
+  o->extent_map.fault_range(db, start, end - start);
   BlueStore::Writer wr(this, txc, &wctx, o);
   wr.do_write(offset, bl);
   return r;

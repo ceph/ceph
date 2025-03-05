@@ -3495,7 +3495,12 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  // alternative defaults for radosgw-admin
+  map<std::string,std::string> defaults = {
+    { "rgw_thread_pool_size", "8" },
+  };
+
+  auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
   ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
 
@@ -11951,6 +11956,7 @@ next:
       .max_groups = max_groups,
       .max_access_keys = max_access_keys,
       .max_buckets = max_buckets,
+      .purge_data = static_cast<bool>(purge_data),
     };
 
     std::string err_msg;

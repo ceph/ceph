@@ -12,8 +12,7 @@
  *
  */
 
-#ifndef ECBACKEND_H
-#define ECBACKEND_H
+#pragma once
 
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
@@ -25,38 +24,40 @@
 #include "ECUtil.h"
 #include "ECTransaction.h"
 #include "ExtentCache.h"
+#include "ECListener.h"
 
 //forward declaration
 struct ECSubWrite;
 struct ECSubWriteReply;
 struct ECSubRead;
 struct ECSubReadReply;
+class ECSwitch;
 
 struct RecoveryMessages;
 
-class ECBackend : public PGBackend, public ECCommon {
+class ECBackend : public ECCommon {
 public:
-  RecoveryHandle *open_recovery_op() override;
+    PGBackend::RecoveryHandle *open_recovery_op();
 
   void run_recovery_op(
-    RecoveryHandle *h,
+      PGBackend::RecoveryHandle *h,
     int priority
-    ) override;
+      );
 
   int recover_object(
     const hobject_t &hoid,
     eversion_t v,
     ObjectContextRef head,
     ObjectContextRef obc,
-    RecoveryHandle *h
-    ) override;
+      PGBackend::RecoveryHandle *h
+      );
 
   bool _handle_message(
     OpRequestRef op
-    ) override;
+      );
   bool can_handle_while_inactive(
     OpRequestRef op
-    ) override;
+      );
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_committed(
@@ -89,14 +90,14 @@ public:
     );
 
   /// @see ReadOp below
-  void check_recovery_sources(const OSDMapRef& osdmap) override;
+  void check_recovery_sources(const OSDMapRef& osdmap);
 
-  void on_change() override;
-  void clear_recovery_state() override;
+  void on_change();
+  void clear_recovery_state();
 
-  void dump_recovery_info(ceph::Formatter *f) const override;
+  void dump_recovery_info(ceph::Formatter *f) const;
 
-  void call_write_ordered(std::function<void(void)> &&cb) override {
+  void call_write_ordered(std::function<void(void)> &&cb) {
     rmw_pipeline.call_write_ordered(std::move(cb));
   }
 
@@ -113,14 +114,14 @@ public:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     OpRequestRef op
-    ) override;
+    );
 
   int objects_read_sync(
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
     uint32_t op_flags,
-    ceph::buffer::list *bl) override;
+    ceph::buffer::list *bl);
 
   /**
    * Async read mechanism
@@ -141,16 +142,17 @@ public:
    * check_recovery_sources.
    */
   void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
+    const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
     GenContextURef<ECCommon::ec_extents_t &&> &&func) override;
 
   void objects_read_async(
     const hobject_t &hoid,
-    const std::list<std::pair<ECCommon::ec_align_t,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
                               std::pair<ceph::buffer::list*, Context*>>> &to_read,
     Context *on_complete,
-    bool fast_read = false) override;
+    bool fast_read = false);
 
 private:
   friend struct ECRecoveryHandle;
@@ -269,7 +271,7 @@ public:
     std::map<int, MOSDPGPushReply*> replies) = 0;
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
-  RecoveryHandle *open_recovery_op();
+  PGBackend::RecoveryHandle *open_recovery_op();
   void run_recovery_op(
     struct ECRecoveryHandle &h,
     int priority);
@@ -278,7 +280,7 @@ public:
     eversion_t v,
     ObjectContextRef head,
     ObjectContextRef obc,
-    RecoveryHandle *h);
+    PGBackend::RecoveryHandle *h);
   void continue_recovery_op(
     RecoveryBackend::RecoveryOp &op,
     RecoveryMessages *m);
@@ -308,7 +310,7 @@ public:
 		      const ECUtil::stripe_info_t& sinfo,
 		      ReadPipeline& read_pipeline,
 		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
-		      Listener* parent,
+		      PGBackend::Listener* parent,
 		      ECBackend* ecbackend)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener(), ecbackend),
 	parent(parent) {
@@ -318,10 +320,10 @@ public:
       ceph::os::Transaction&& txn,
       std::map<int, MOSDPGPushReply*> replies) override;
 
-    Listener *get_parent() const { return parent; }
+    PGBackend::Listener *get_parent() const { return parent; }
 
   private:
-    Listener *parent;
+    PGBackend::Listener *parent;
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryBackend::RecoveryOp &rhs);
   friend struct RecoveryMessages;
@@ -334,12 +336,16 @@ public:
     bool is_repair);
 
 public:
+    PGBackend::Listener *parent;
+    CephContext *cct;
+    ECSwitch *switcher;
   struct ReadPipeline read_pipeline;
   struct RMWPipeline rmw_pipeline;
   struct ECRecoveryBackend recovery_backend;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
 
+  PGBackend::Listener *get_parent() { return parent; }
 
   /**
    * ECRecPred
@@ -366,17 +372,19 @@ public:
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
-    return new ECRecPred(ec_impl);
+  std::unique_ptr<ECRecPred> get_is_recoverable_predicate() const {
+    return std::make_unique<ECRecPred>(ec_impl);
   }
 
-  int get_ec_data_chunk_count() const override {
+    unsigned get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
-  int get_ec_stripe_chunk_size() const override {
+  int get_ec_stripe_chunk_size() const {
     return sinfo.get_chunk_size();
   }
-
+  uint64_t object_size_to_shard_size(const uint64_t size, int shard) const {
+    return sinfo.logical_to_next_chunk_offset(size);
+  }
   /**
    * ECReadPred
    *
@@ -393,10 +401,9 @@ public:
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() const override {
-    return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
+  std::unique_ptr<ECReadPred> get_is_readable_predicate(pg_shard_t whoami) const {
+    return std::make_unique<ECReadPred>(whoami, ec_impl);
   }
-
 
   const ECUtil::stripe_info_t sinfo;
 
@@ -413,34 +420,25 @@ public:
   int object_stat(const hobject_t &hoid, struct stat* st);
   ECBackend(
     PGBackend::Listener *pg,
-    const coll_t &coll,
-    ObjectStore::CollectionHandle &ch,
-    ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width);
+    uint64_t stripe_width,
+    ECSwitch *s);
 
   int objects_get_attrs(
     const hobject_t &hoid,
-    std::map<std::string, ceph::buffer::list, std::less<>> *out) override;
+    std::map<std::string, ceph::buffer::list, std::less<>> *out);
 
-  void rollback_append(
-    const hobject_t &hoid,
-    uint64_t old_size,
-    ObjectStore::Transaction *t) override;
-
-  bool auto_repair_supported() const override { return true; }
+  bool auto_repair_supported() const { return true; }
 
   int be_deep_scrub(
     const hobject_t &poid,
     ScrubMap &map,
     ScrubMapBuilder &pos,
-    ScrubMap::object &o) override;
+    ScrubMap::object &o);
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
+  uint64_t be_get_ondisk_size(uint64_t logical_size) const {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
 ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
-
-#endif

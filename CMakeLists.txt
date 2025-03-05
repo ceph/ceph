@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 19.0.0
+  VERSION 20.0.0
   LANGUAGES CXX C ASM)
 
 foreach(policy CMP0127 CMP0135)
@@ -727,6 +727,11 @@ endif()
 
 if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND BOOST_COMPONENTS filesystem)
+endif()
+
+if(WITH_LIBCEPHFS)
+  find_package(ICU REQUIRED COMPONENTS uc i18n)
+  list(APPEND BOOST_COMPONENTS locale)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)

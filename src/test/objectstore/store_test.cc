@@ -240,13 +240,7 @@ class MultiLabelTest : public StoreTestDeferredSetup {
   }
   bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
-    unique_ptr<BlockDevice> bdev(BlockDevice::create(
-      g_ceph_context, bdev_path, nullptr, nullptr, nullptr, nullptr));
-    int r = bdev->open(bdev_path);
-    if (r < 0)
-      return r;
-    r = BlueStore::debug_read_bdev_label(g_ceph_context, bdev.get(), bdev_path, label, position);
-    bdev->close();
+    int r = BlueStore::read_bdev_label_at_pos(g_ceph_context, bdev_path, position, label);
     return r;
   }
   bool write_bdev_label(const bluestore_bdev_label_t& label, uint64_t position) {
@@ -1350,12 +1344,15 @@ void StoreTest::doCompressionTest()
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
   {
+    C_SaferCond c;
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
+    t.register_on_commit(&c);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
+      c.wait();
   }
 }
 

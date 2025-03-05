@@ -55,6 +55,7 @@
 #include "osd/scrubber/PrimaryLogScrub.h"
 #include "osd/scrubber/ScrubStore.h"
 #include "osd/scrubber/pg_scrubber.h"
+#include "ECInject.h"
 
 #include "OSD.h"
 #include "OpRequest.h"
@@ -295,17 +296,18 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
 	    pair<bufferlist*, Context*> > > in;
   in.swap(pending_async_reads);
   // TODO: drop the converter
-  list<pair<ECCommon::ec_align_t,
+  list<pair<ec_align_t,
 	    pair<bufferlist*, Context*> > > in_native;
   for (auto [align_tuple, ctx_pair] : in) {
     in_native.emplace_back(
-      ECCommon::ec_align_t{
+      ec_align_t{
         align_tuple.get<0>(), align_tuple.get<1>(), align_tuple.get<2>()
       },
       std::move(ctx_pair));
   }
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
+    obc->obs.oi.size,
     in_native,
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
 }
@@ -2289,7 +2291,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (cct->_conf->bluestore_debug_inject_read_err &&
       op->may_write() &&
       pool.info.is_erasure() &&
-      ec_inject_test_write_error0(m->get_hobj(), m->get_reqid())) {
+      ECInject::test_write_error0(m->get_hobj(), m->get_reqid())) {
     // Fail retried write with error
     dout(0) << __func__ << " Error inject - Fail retried write with EINVAL" << dendl;
     osd->reply_op_error(op, -EINVAL);
