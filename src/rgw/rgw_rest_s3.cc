@@ -528,7 +528,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 			  __func__, cksum.element_name(), cksum.to_armor());
 	    dump_header(s, cksum.header_name(), armored_cksum);
 	  }
+	  dump_header(s, "ChecksumType", std::get<1>(cksum_type));
 	  s->formatter->dump_string("ChecksumType", std::get<1>(cksum_type));
+	  
 	}  catch (buffer::error& err) {
 	  ldpp_dout(this, 0) << "ERROR: failed to decode rgw::cksum::Cksum"
 			     << dendl;
