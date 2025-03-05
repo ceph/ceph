@@ -29,6 +29,7 @@ if(WITH_BLUESTORE)
     bluestore/Writer.cc
     bluestore/Compression.cc
     bluestore/BlueAdmin.cc
+    bluestore/BlueEnv.cc
   )
 endif(WITH_BLUESTORE)
 
