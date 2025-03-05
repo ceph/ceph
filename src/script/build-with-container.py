@@ -73,6 +73,7 @@ import glob
 import logging
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -179,6 +180,8 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append("--pids-limit=-1")
     if ctx.map_user:
         cmd.append("--user=0")
+    if ctx.cli.env_file:
+        cmd.append(f"--env-file={ctx.cli.env_file.absolute()}")
     if workdir:
         cmd.append(f"--workdir={workdir}")
     cwd = pathlib.Path(".").absolute()
@@ -580,12 +583,15 @@ def bc_run_tests(ctx):
 def bc_make_source_rpm(ctx):
     """Build SPRMs."""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
+    if ctx.cli.ceph_version:
+        make_srpm_cmd = f"{make_srpm_cmd} {ctx.cli.ceph_version}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && ./make-srpm.sh",
+            make_srpm_cmd,
         ],
     )
     with ctx.user_command():
@@ -597,8 +603,21 @@ def bc_build_rpm(ctx):
     """Build RPMs from SRPM."""
     srpm_glob = "ceph*.src.rpm"
     if ctx.cli.rpm_match_sha:
-        head_sha = _git_current_sha(ctx)
-        srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        if not ctx.cli.ceph_version:
+            head_sha = _git_current_sha(ctx)
+            srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        else:
+            # Given a tarball with a name like
+            #   ceph-19.3.0-7462-g565e5c65.tar.bz2
+            # The SRPM name would be:
+            #   ceph-19.3.0-7462.g565e5c65.el9.src.rpm
+            # This regex replaces the second '-' with a '.'
+            srpm_version = re.sub(
+                r"(\d+\.\d+\.\d+-\d+)-(.*)",
+                r"\1.\2",
+                ctx.cli.ceph_version
+            )
+            srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
     paths = glob.glob(srpm_glob)
     if len(paths) > 1:
         raise RuntimeError(
@@ -617,12 +636,18 @@ def bc_build_rpm(ctx):
         topdir = (
             pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
         )
+    rpmbuild_args = [
+        'rpmbuild',
+        '--rebuild',
+        f'-D_topdir {topdir}',
+    ] + list(ctx.cli.rpmbuild_arg) + [str(srpm_path)]
+    rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"set -x; mkdir -p {topdir} && rpmbuild --rebuild -D'_topdir {topdir}' {srpm_path}",
+            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd}",
         ],
     )
     with ctx.user_command():
@@ -837,12 +862,27 @@ def parse_cli(build_step_names):
         ),
     )
     parser.add_argument(
+        "--rpmbuild-arg",
+        '-R',
+        action="append",
+        help="Pass this extra argument to rpmbuild",
+    )
+    parser.add_argument(
+        "--ceph-version",
+        help="Rather than infer the Ceph version, use this value",
+    )
+    parser.add_argument(
         "--execute",
         "-e",
         dest="steps",
         action="append",
         choices=build_step_names,
         help="Execute the target build step(s)",
+    )
+    parser.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        help="Use this environment file when building",
     )
     parser.add_argument(
         "--dry-run",
