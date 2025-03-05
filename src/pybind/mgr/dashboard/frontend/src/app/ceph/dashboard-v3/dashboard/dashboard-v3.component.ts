@@ -166,12 +166,14 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   getCapacityCardData() {
-    this.osdSettingsService = this.osdService
-      .getOsdSettings()
-      .pipe(take(1))
-      .subscribe((data: any) => {
-        this.osdSettings = data;
-      });
+    if (this.permissions.configOpt.read) {
+      this.osdSettingsService = this.osdService
+        .getOsdSettings()
+        .pipe(take(1))
+        .subscribe((data: any) => {
+          this.osdSettings = data;
+        });
+    }
     this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
       this.capacity = data;
     });
