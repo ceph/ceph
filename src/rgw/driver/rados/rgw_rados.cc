@@ -3316,7 +3316,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   if (!index_op->is_prepared()) {
     tracepoint(rgw_rados, prepare_enter, req_id.c_str());
-    r = index_op->prepare(rctx.dpp, CLS_RGW_OP_ADD, &state->write_tag, rctx.y, log_op);
+    r = index_op->prepare(rctx.dpp, CLS_RGW_OP_ADD, &state->write_tag, rctx.y);
     tracepoint(rgw_rados, prepare_exit, req_id.c_str());
     if (r < 0)
       return r;
@@ -6162,7 +6162,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   }
 
 
-  r = index_op.prepare(dpp, CLS_RGW_OP_DEL, &state->write_tag, y, log_op);
+  r = index_op.prepare(dpp, CLS_RGW_OP_DEL, &state->write_tag, y);
   if (r < 0)
     return r;
 
@@ -6891,7 +6891,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
     state->write_tag = tag;
-    r = index_op.prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y, log_op);
+    r = index_op.prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y);
 
     if (r < 0)
       return r;
@@ -7338,7 +7338,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
 }
 
 int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWModifyOp op, const string *write_tag,
-                                           optional_yield y, bool log_op)
+                                           optional_yield y)
 {
   if (blind) {
     return 0;
@@ -7353,10 +7353,8 @@ int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWMod
     }
   }
 
-  bool add_log = log_op && store->svc.zone->need_to_log_data();
-
   int r = guard_reshard(dpp, obj, nullptr, [&](BucketShard *bs) -> int {
-				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, bilog_flags, y, zones_trace, add_log);
+				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, y);
 				 }, y);
   if (r < 0) {
     return r;
@@ -9751,25 +9749,18 @@ bool RGWRados::process_expired_objects(const DoutPrefixProvider *dpp, optional_y
 }
 
 int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, string& tag,
-                                 rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *_zones_trace,
-                                 bool log_op)
+                                 rgw_obj& obj, optional_yield y)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs << " obj=" << obj << " tag=" << tag << " op=" << op << dendl_bitx;
   ldout_bitx(bitx, dpp, 25) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl_bitx;
-
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  zones_trace.insert(svc.zone->get_zone().id, bs.bucket.get_key());
 
   ObjectWriteOperation o;
   o.assert_exists(); // bucket index shard must exist
 
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), log_op, bilog_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc());
   int ret = bs.bucket_obj.operate(dpp, std::move(o), y);
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
