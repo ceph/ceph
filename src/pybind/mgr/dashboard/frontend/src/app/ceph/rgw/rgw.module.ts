@@ -94,6 +94,9 @@ import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-buc
 import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwCreateTopicFormComponent } from './rgw-create-topic-form/rgw-create-topic-form.component';
 
 @NgModule({
   imports: [
@@ -126,13 +129,13 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
     SelectModule,
     NumberModule,
     TabsModule,
-    IconModule,
     SelectModule,
     RadioModule,
     SelectModule,
     NumberModule,
     TagModule,
-    TooltipModule
+    TooltipModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -194,7 +197,10 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
     RgwStorageClassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
-    RgwRateLimitDetailsComponent
+    RgwRateLimitDetailsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent,
+    RgwCreateTopicFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -393,6 +399,18 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'topic',
+    data: { breadcrumbs: 'Topic' },
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwCreateTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      }
+    ]
   }
 ];
 
