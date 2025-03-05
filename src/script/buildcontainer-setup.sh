@@ -26,7 +26,7 @@ fi
 # ceph for the given <branch>~<distro_kind> pair. Some distros need extra
 # tools in the container image vs. vm hosts or extra tools needed to build
 # packages etc.
-case "${CEPH_BRANCH}~${DISTRO_KIND}" in
+case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     *~*centos*8)
         dnf install -y java-1.8.0-openjdk-headless /usr/bin/rpmbuild wget
         install_container_deps
@@ -43,7 +43,7 @@ case "${CEPH_BRANCH}~${DISTRO_KIND}" in
         install_container_deps
     ;;
     *)
-        echo "Unknown action, branch or build: ${CEPH_BRANCH}~${DISTRO_KIND}" >&2
+        echo "Unknown action, branch or build: ${CEPH_BASE_BRANCH}~${DISTRO_KIND}" >&2
         exit 2
     ;;
 esac

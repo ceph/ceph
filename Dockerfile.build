@@ -21,12 +21,12 @@ ENV FOR_MAKE_CHECK=1
 ARG DISTRO
 ARG CEPH_CTR_SRC=/usr/local/src/ceph
 ARG CLEAN_DNF=yes
-ARG CEPH_BRANCH=main
+ARG CEPH_BASE_BRANCH=main
 COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
 # Note that we do not use ENV for the following. This is because we do not
 # want them permamently stored in the container's layer.
 RUN DISTRO=$DISTRO \
-    CEPH_BRANCH=$CEPH_BRANCH \
+    CEPH_BASE_BRANCH=$CEPH_BASE_BRANCH \
     CLEAN_DNF=$CLEAN_DNF \
     CEPH_CTR_SRC=${CEPH_CTR_SRC} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
