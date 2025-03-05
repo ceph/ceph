@@ -13,7 +13,7 @@ overrides:
       - \(CACHE_POOL_
       - \(SMALLER_PGP_NUM\)
       - \(OBJECT_
-      - \(SLOW_OPS\)
+      - SLOW_OPS
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
       - slow request
@@ -30,3 +30,8 @@ overrides:
       - out of quorum
       - noscrub
       - nodeep-scrub
+      - is down
+      - osds down
+      - pg .*? is .*?degraded.*?, acting
+      - pg .*? is stuck inactive for .*?m, current state .*?degraded.*?, last acting
+      - pg degraded
