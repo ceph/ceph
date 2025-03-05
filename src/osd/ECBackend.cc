@@ -598,22 +598,29 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
         op.hoid, true, false, read_request);
 
       if (r != 0) {
-	// we must have lost a recovery source
-	ceph_assert(!op.recovery_progress.first);
-	dout(10) << __func__ << ": canceling recovery op for obj " << op.hoid
-		 << dendl;
-	// in crimson
-	get_parent()->cancel_pull(op.hoid);
-	recovery_ops.erase(op.hoid);
-	return;
+        // we must have lost a recovery source
+        ceph_assert(!op.recovery_progress.first);
+        dout(10) << __func__ << ": canceling recovery op for obj " << op.hoid
+                 << dendl;
+        // in crimson
+        get_parent()->cancel_pull(op.hoid);
+        recovery_ops.erase(op.hoid);
+        return;
       }
-      m->recovery_read(
-	op.hoid,
-	std::move(want),
-	read_request);
-      dout(10) << __func__ << ": IDLE return " << op << dendl;
-      return;
+      if (read_request.shard_reads.empty()) {
+        dout(10) << __func__ << "Zero size object recovery, skipping reads." << op << dendl;
+        // Create an empty read result and fall through.
+        op.returned_data.emplace(&sinfo);
+      } else {
+        m->recovery_read(
+          op.hoid,
+          std::move(want),
+          read_request);
+        dout(10) << __func__ << ": IDLE return " << op << dendl;
+        return;
+      }
     }
+    [[fallthrough]];
     case RecoveryOp::READING: {
       // read completed, start write
       ceph_assert(op.xattrs.size());
