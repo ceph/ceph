@@ -1,0 +1,348 @@
+<div cdsCol
+     [columnNumbers]="{ md: 4 }">
+  <ng-container *cdFormLoading="loading">
+    <form name="storageClassForm"
+          #formDir="ngForm"
+          [formGroup]="storageClassForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+
+        <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+      </div>
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <!-- Zone Group -->
+          <cds-select
+            label="Zone Group Name"
+            i18n-label
+            formControlName="zonegroup"
+            id="zonegroup"
+            [invalid]="
+              storageClassForm.showError('zonegroup', formDir, 'required')
+            "
+            (change)="onZonegroupChange()"
+            [invalidText]="zonegroupError"
+          >
+            <option *ngFor="let zonegrp of zonegroupNames"
+                    [value]="zonegrp.name"
+                    [selected]="zonegrp.name === storageClassForm.getValue('zonegroup')"
+                    i18n>
+              {{ zonegrp.name }}
+            </option>
+          </cds-select>
+          <ng-template #zonegroupError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('zonegroup', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+        <div cdsCol>
+          <!-- Placement Target -->
+          <cds-select
+            label="Placement Target"
+            i18n-label
+            formControlName="placement_target"
+            id="placement_target"
+            [invalid]="
+              storageClassForm.showError('placement_target', formDir, 'required')
+            "
+            [invalidText]="placementError"
+          >
+          <option [value]=""
+                  i18n> --Select-- </option>
+          <option *ngFor="let placementTarget of placementTargets"
+                  [value]="placementTarget"
+                  [selected]="placementTarget === storageClassForm.getValue('placement_target')"
+                  i18n>
+              {{ placementTarget }}
+          </option>
+          </cds-select>
+          <ng-template #placementError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('placement_target', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+      </div>
+      <!-- Storage Class -->
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="storage_class"
+          i18n
+          [disabled]="editing"
+          [invalid]="
+            storageClassForm.controls.storage_class.invalid &&
+            storageClassForm.controls.storage_class.dirty
+          "
+          [invalidText]="storageError"
+          >Storage Class Name
+          <input
+            cdsText
+            type="type"
+            id="storage_class"
+            formControlName="storage_class"
+            [invalid]="
+            storageClassForm.showError('storage_class', formDir, 'required')
+            "
+          />
+        </cds-text-label>
+        <ng-template #storageError>
+          <span
+            class="invalid-feedback"
+            *ngIf="storageClassForm.showError('storage_class', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <!-- Target Region -->
+          <cds-text-label
+            labelInputID="region"
+            i18n
+            [invalid]="
+            storageClassForm.showError('region', formDir, 'required')
+            "
+            [invalidText]="regionError"
+            [helperText]="targetRegionText"
+            >Target Region
+            <input
+              cdsText
+              type="text"
+              id="region"
+              formControlName="region"
+              placeholder="e.g, us-east-1"
+              i18n-placeholder
+              [invalid]="
+              storageClassForm.showError('region', formDir, 'required')
+              "
+            />
+          </cds-text-label>
+          <ng-template #regionError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('region', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+        <div cdsCol>
+          <!-- Target Endpoint -->
+          <cds-text-label
+            labelInputID="endpoint"
+            i18n
+            [invalid]="
+            storageClassForm.showError('endpoint', formDir, 'required')
+            "
+            [invalidText]="endpointError"
+            [helperText]="targetEndpointText"
+            >Target Endpoint
+            <input
+              cdsText
+              type="text"
+              placeholder="e.g, http://ceph-node-00.com:80"
+              i18n-placeholder
+              id="endpoint"
+              formControlName="endpoint"
+              [invalid]="
+              storageClassForm.showError('endpoint', formDir, 'required')
+              "
+            />
+          </cds-text-label>
+          <ng-template #endpointError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('endpoint', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Access Key  -->
+      <div class="form-item">
+        <div cdsCol
+             [columnNumbers]="{ md: 12 }"
+             class="d-flex">
+          <cds-password-label
+            labelInputID="access_key"
+            [invalid]="
+            storageClassForm.showError('access_key', formDir, 'required')
+            "
+            [invalidText]="accessError"
+            [helperText]="targetAccessKeyText"
+            i18n
+            >Target Access Key
+            <input
+              cdsPassword
+              type="password"
+              id="access_key"
+              formControlName="access_key"
+              [invalid]="
+              storageClassForm.showError('access_key', formDir, 'required')
+              "
+            />
+          </cds-password-label>
+          <cd-copy-2-clipboard-button class="clipboard"> </cd-copy-2-clipboard-button>
+          <ng-template #accessError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('access_key', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Secret Key  -->
+      <div class="form-item">
+        <div cdsCol
+             [columnNumbers]="{ md: 12 }"
+             class="d-flex">
+          <cds-password-label
+            labelInputID="secret_key"
+            [helperText]="targetSecretKeyText"
+            [invalid]="
+            storageClassForm.showError('secret_key', formDir, 'required')
+            "
+            [invalidText]="secretError"
+            i18n
+            >Target Secret Key
+            <input
+              cdsPassword
+              type="password"
+              id="secret_key"
+              formControlName="secret_key"
+              [invalid]="
+              storageClassForm.showError('secret_key', formDir, 'required')
+              "
+            />
+          </cds-password-label>
+          <cd-copy-2-clipboard-button class="clipboard"> </cd-copy-2-clipboard-button>
+          <ng-template #secretError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('secret_key', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Target Path -->
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="target_path"
+          i18n
+          [invalid]="
+          storageClassForm.showError('target_path', formDir, 'required')
+          "
+          [invalidText]="targetError"
+          [helperText]="targetPathText"
+          >Target Path
+          <input
+            cdsText
+            type="text"
+            id="target_path"
+            formControlName="target_path"
+            [invalid]="
+            storageClassForm.showError('target_path', formDir, 'required')
+            "
+          />
+        </cds-text-label>
+        <ng-template #targetError>
+          <span
+            class="invalid-feedback"
+            *ngIf="storageClassForm.showError('target_path', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <fieldset>
+        <cds-accordion size="lg"
+                       class="form-item">
+          <cds-accordion-item
+            [title]="title"
+            id="advanced-fieldset"
+            (selected)="showAdvanced = !showAdvanced"
+          >
+            <!-- Multi Part Sync Threshold -->
+            <div class="form-item form-item-append"
+                 cdsRow>
+              <div cdsCol>
+                <cds-text-label
+                  labelInputID="multipart_sync_threshold"
+                  i18n
+                  [helperText]="multipartSyncThreholdText"
+                  cdOptionalField="Multipart Sync Threshold"
+                  >Multipart Sync Threshold
+                  <input
+                    cdsText
+                    type="text"
+                    id="multipart_sync_threshold"
+                    formControlName="multipart_sync_threshold"
+                  />
+                </cds-text-label>
+              </div>
+              <div cdsCol>
+                <cds-text-label
+                  labelInputID="multipart_min_part_size"
+                  i18n
+                  [helperText]="multipartMinPartText"
+                  cdOptionalField="Multipart Minimum Part Size"
+                  >Multipart Minimum Part Size
+                  <input
+                    cdsText
+                    type="text"
+                    id="multipart_min_part_size"
+                    formControlName="multipart_min_part_size"
+                  />
+                </cds-text-label>
+              </div>
+            </div>
+            <div class="form-item">
+              <cds-checkbox
+                id="retain_head_object"
+                formControlName="retain_head_object"
+                cdOptionalField="Retain Head Object"
+                i18n-label
+                >Retain Head Object
+                <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
+              </cds-checkbox>
+            </div>
+          </cds-accordion-item>
+        </cds-accordion>
+        <ng-template #title>
+          <h5 class="cds--accordion__title cd-header">Advanced</h5>
+        </ng-template>
+      </fieldset>
+      <cd-alert-panel type="warning"
+                      spacingClass="mb-2">
+        <span i18n>RGW service would be restarted after creating the storage class.</span>
+      </cd-alert-panel>
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="storageClassForm"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>
