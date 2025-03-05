@@ -813,7 +813,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   std::optional<uint64_t> bytes_transferred;
   const req_context rctx{dpp, null_yield, nullptr};
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
-                       user_id.value_or(rgw_user()),
+                       NULL, /* uid */
+                       user_id ? &*user_id : nullptr, /* replication uid */
                        NULL, /* req_info */
                        source_zone,
                        dest_obj.get_obj(),
@@ -875,7 +876,6 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 {
   RGWObjectCtx obj_ctx(store);
 
-  string user_id;
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
@@ -884,7 +884,7 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
 
   int r = store->getRados()->stat_remote_obj(dpp,
                        obj_ctx,
-                       rgw_user(user_id),
+                       nullptr, /* user_id */
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
