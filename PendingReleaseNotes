@@ -132,6 +132,10 @@
 
 * RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
   configuration.
+* CephFS: The "ceph fs volume create" command now allows users to pass a list of
+  data pool names instead of a single data pool name, and the command adds all
+  of these data pools to the created volume right after its creation.
+
 
 >=19.2.1
 
