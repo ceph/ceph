@@ -89,7 +89,7 @@ class OAuth2ProxyService(CephadmService):
 
         return daemon_config, []
 
-    def pre_remove(self, daemon: DaemonDescription) -> None:
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
         Called before mgmt-gateway daemon is removed.
         """

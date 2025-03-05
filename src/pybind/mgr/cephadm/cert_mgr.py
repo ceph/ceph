@@ -42,7 +42,7 @@ class CertInfo:
         return self.is_valid and not self.is_close_to_expiration
 
     def get_status_description(self) -> str:
-        cert_source = 'user-made' if self.user_made else 'self-signed'
+        cert_source = 'user-made' if self.user_made else 'cephadm-signed'
         cert_target = f' ({self.target})' if self.target else ''
         cert_details = f"'{self.cert_name}{cert_target}' ({cert_source})"
         if not self.is_valid:
@@ -66,7 +66,7 @@ class CertMgr:
     It tracks known certificates and private keys, associates them with services, and ensures
     their validity. If certificates are close to expiration or invalid, depending on the configuration
     (governed by the mgr/cephadm/certificate_automated_rotation_enabled parameter), CertMgr generates
-    warnings or attempts renewal for self-signed certificates.
+    warnings or attempts renewal for cephadm-signed certificates.
 
     Additionally, CertMgr provides methods for certificate management, including retrieving, saving,
     and removing certificates and keys, as well as reporting certificate health status in case of issues.
@@ -385,8 +385,8 @@ class CertMgr:
                                f'error: {cert_info.error_info}')
 
         # Reaching this point means either certificates are not present or they are
-        # invalid self-signed certificates. Either way, we will just generate new ones.
-        logger.info(f'Generating cephadm self-signed certificates for {cert_name}/{key_name}')
+        # invalid cephadm-signed certificates. Either way, we will just generate new ones.
+        logger.info(f'Generating cephadm-signed certificates for {cert_name}/{key_name}')
         cert, pkey = self.generate_cert(host_fqdns, host_ips)
         self.mgr.cert_mgr.save_cert(cert_name, cert, host=target_host, service_name=target_service)
         self.mgr.cert_mgr.save_key(key_name, pkey, host=target_host, service_name=target_service)
@@ -434,7 +434,7 @@ class CertMgr:
 
     def _renew_self_signed_certificate(self, cert_info: CertInfo, cert_obj: Cert) -> bool:
         try:
-            logger.info(f'Renewing self-signed certificate for {cert_info.cert_name}')
+            logger.info(f'Renewing cephadm-signed certificate for {cert_info.cert_name}')
             new_cert, new_key = self.ssl_certs.renew_cert(cert_obj.cert, self.mgr.certificate_duration_days)
             service_name, host = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
             self.cert_store.save_tlsobject(cert_info.cert_name, new_cert, service_name=service_name, host=host)
@@ -442,7 +442,7 @@ class CertMgr:
             self.key_store.save_tlsobject(key_name, new_key, service_name=service_name, host=host)
             return True
         except SSLConfigException as e:
-            logger.error(f'Error while trying to renew self-signed certificate for {cert_info.cert_name}: {e}')
+            logger.error(f'Error while trying to renew cephadm-signed certificate for {cert_info.cert_name}: {e}')
             return False
 
     def check_services_certificates(self, fix_issues: bool = False) -> Tuple[List[str], List[CertInfo]]:
@@ -466,7 +466,7 @@ class CertMgr:
             if not self.mgr.certificate_automated_rotation_enabled or cert_obj.user_made:
                 return False
 
-            # This is a self-signed certificate, let's try to fix it
+            # This is a cephadm-signed certificate, let's try to fix it
             if not cert_info.is_valid:
                 # Remove the invalid certificate to force regeneration
                 service_name, host = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)

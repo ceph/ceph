@@ -143,7 +143,7 @@ class TLSObjectStore():
         for k, v in self.mgr.get_store_prefix(self.store_prefix).items():
             entity = k[len(self.store_prefix):]
             if entity not in self.known_entities:
-                logger.warning(f"TLSObjectStore: Discarding unkown entity '{entity}'")
+                logger.warning(f"TLSObjectStore: Discarding unknown entity '{entity}'")
                 continue
             entity_targets = json.loads(v)
             if entity in self.per_service_name_tlsobjects or entity in self.per_host_tlsobjects:
