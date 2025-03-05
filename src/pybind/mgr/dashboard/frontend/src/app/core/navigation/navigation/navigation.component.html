@@ -39,7 +39,8 @@
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
-      <div class="cds--btn cds--btn--icon-only cds--header__action">
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           *ngIf="permissions.user.read">
         <cd-administration></cd-administration>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
@@ -93,6 +94,7 @@
         </cds-sidenav-item>
         <!-- Multi-cluster Dashboard -->
         <cds-sidenav-menu title="Multi-Cluster"
+                          *ngIf="permissions.configOpt.read"
                           i18n-title>
           <svg cdsIcon="edge-cluster"
                icon
