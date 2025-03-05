@@ -222,6 +222,7 @@ BLOCK_MGR_ROLE = Role(
         Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.PROMETHEUS: [_P.READ]
     })
 
 
@@ -230,6 +231,7 @@ RGW_MGR_ROLE = Role(
     'rgw-manager', 'allows full permissions for the rgw scope', {
         Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.PROMETHEUS: [_P.READ]
     })
 
 
@@ -253,6 +255,7 @@ POOL_MGR_ROLE = Role(
     'pool-manager', 'allows full permissions for the pool scope', {
         Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.PROMETHEUS: [_P.READ]
     })
 
 # CephFS manager role provides all permissions for CephFS related scopes
@@ -260,6 +263,7 @@ CEPHFS_MGR_ROLE = Role(
     'cephfs-manager', 'allows full permissions for the cephfs scope', {
         Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.PROMETHEUS: [_P.READ]
     })
 
 GANESHA_MGR_ROLE = Role(
@@ -268,6 +272,7 @@ GANESHA_MGR_ROLE = Role(
         Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.PROMETHEUS: [_P.READ]
     })
 
 

@@ -19,7 +19,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Permission } from '~/app/shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -59,7 +59,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   blockUI: NgBlockUI;
 
   icons = Icons;
-  permission: Permission;
+  permissions: Permissions;
   selection = new CdTableSelection();
   createTableActions: CdTableAction[];
   migrateTableAction: CdTableAction[];
@@ -114,7 +114,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     public mgrModuleService: MgrModuleService,
     private notificationService: NotificationService
   ) {
-    this.permission = this.authStorageService.getPermissions().rgw;
+    this.permissions = this.authStorageService.getPermissions();
   }
 
   openModal(entity: any, edit = false) {
@@ -260,23 +260,17 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         },
         (_error) => {}
       );
-    this.mgrModuleService.list().subscribe((moduleData: any) => {
-      this.rgwModuleData = moduleData.filter((module: object) => module['name'] === 'rgw');
-      if (this.rgwModuleData.length > 0) {
-        this.rgwModuleStatus = this.rgwModuleData[0].enabled;
-      }
-    });
-  }
 
-  /* setConfigValues() {
-    this.rgwDaemonService
-      .setMultisiteConfig(
-        this.defaultsInfo['defaultRealmName'],
-        this.defaultsInfo['defaultZonegroupName'],
-        this.defaultsInfo['defaultZoneName']
-      )
-      .subscribe(() => {});
-  }*/
+    // Only get the module status if you can read from configOpt
+    if (this.permissions.configOpt.read) {
+      this.mgrModuleService.list().subscribe((moduleData: any) => {
+        this.rgwModuleData = moduleData.filter((module: object) => module['name'] === 'rgw');
+        if (this.rgwModuleData.length > 0) {
+          this.rgwModuleStatus = this.rgwModuleData[0].enabled;
+        }
+      });
+    }
+  }
 
   ngOnDestroy() {
     this.sub.unsubscribe();
