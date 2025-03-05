@@ -560,6 +560,20 @@ public:
     return peering_state.get_primary();
   }
 
+  eversion_t get_last_complete() const {
+    return peering_state.get_info().last_complete;
+  }
+
+  void complete_write(eversion_t v, eversion_t lc) {
+    peering_state.complete_write(v, lc);
+  }
+
+  void update_peer_last_complete_ondisk(
+    pg_shard_t fromosd,
+    eversion_t lcod) {
+    peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
+  }
+
   /// initialize created PG
   seastar::future<> init(
     int role,
