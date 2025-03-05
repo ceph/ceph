@@ -188,8 +188,7 @@ ReplicatedBackend::submit_transaction(
     if (!to_push_delete.empty()) {
       pg.enqueue_delete_for_backfill(hoid, {}, to_push_delete);
     }
-    return seastar::make_ready_future<
-      crimson::osd::acked_peers_t>(std::move(acked_peers));
+    return seastar::now();
   });
 
   auto sends_complete = seastar::when_all_succeed(
