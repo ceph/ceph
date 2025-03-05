@@ -4140,7 +4140,7 @@ public:
 
 int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
                RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
+               const rgw_owner* user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& src_obj,
@@ -4208,11 +4208,11 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
-    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                        prepend_meta, get_op, rgwx_stat,
-                        sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
-                        true, &cb, &in_stream_req);
+    int ret = conn->get_obj(dpp, user_id, nullptr, info, src_obj, pmod, unmod_ptr,
+                            dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
+                            prepend_meta, get_op, rgwx_stat,
+                            sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
+                            true, &cb, &in_stream_req);
     if (ret < 0) {
       return ret;
     }
@@ -4288,7 +4288,8 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
 }
 
 int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
-               const rgw_user& user_id,
+               const rgw_owner* user_id,
+               const rgw_user* perm_check_uid,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& dest_obj,
@@ -4448,7 +4449,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
   static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
   for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
-    ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
+    ret = conn->get_obj(rctx.dpp, user_id, perm_check_uid, info, src_obj, pmod, unmod_ptr,
                         dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver, prepend_meta, get_op, rgwx_stat,
                         sync_manifest, skip_decrypt, &dst_zone_trace,
                         sync_cloudtiered, true,
@@ -4831,7 +4832,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     // response to the frontend socket. call fetch_remote_obj() synchronously so
     // that only one thread tries to suspend that coroutine
     const req_context rctx{dpp, null_yield, nullptr};
-    return fetch_remote_obj(dest_obj_ctx, remote_user, info, source_zone,
+    const rgw_owner remote_user_owner(remote_user);
+    return fetch_remote_obj(dest_obj_ctx, &remote_user_owner, nullptr, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
