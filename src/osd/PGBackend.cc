@@ -210,8 +210,9 @@ void PGBackend::rollback(
       const pg_log_entry_t &entry) : hoid(hoid), pg(pg), entry(entry) {}
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
-      const uint64_t shard_size = pg->object_size_to_shard_size(old_size,
-        pg->get_parent()->whoami_shard().shard);
+      auto dpp = pg->get_parent()->get_dpp();
+      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, pg->get_parent()->whoami_shard().shard);
+      ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " rollback append object_size " << old_size << " shard_size " << shard_size << dendl;
       pg->rollback_append(hoid, shard_size, &temp);
       temp.append(t);
       temp.swap(t);
@@ -222,18 +223,18 @@ void PGBackend::rollback(
       if (pool.is_nonprimary_shard(pg->get_parent()->whoami_shard().shard)) {
         if (entry.is_written_shard(pg->get_parent()->whoami_shard().shard)) {
 	  // Written shard - only rollback OI attr
-	  ldpp_dout(dpp, 20) << "BILLR: written shard OI attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
+	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " written shard OI attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
 	  ObjectStore::Transaction temp;
 	  pg->rollback_setattrs(hoid, attrs, &temp, true);
 	  temp.append(t);
 	  temp.swap(t);
 	} else {
 	  // Unwritten shard - nothing to rollback
-	  ldpp_dout(dpp, 20) << "BILLR: unwritten shard skipping attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
+	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " unwritten shard skipping attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
 	}
       } else {
 	// Primary shard - rollback all attrs
-	ldpp_dout(dpp, 20) << "BILLR: primary_shard attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
+	ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " primary_shard attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
 	ObjectStore::Transaction temp;
 	pg->rollback_setattrs(hoid, attrs, &temp, false);
 	temp.append(t);
@@ -279,7 +280,7 @@ void PGBackend::rollback(
         if (shards.empty() || shards[i].empty() || shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
 	  // Written shard - rollback extents
 	  const uint64_t shard_size = pg->object_size_to_shard_size(object_size, pg->get_parent()->whoami_shard().shard);
-	  ldpp_dout(dpp, 20) << "BILLR: written shard rollback_extents " <<
+	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " written shard rollback_extents " <<
 	                        entry.written_shards << " " <<
 	                        pg->get_parent()->whoami_shard().shard << " " <<
 	                        object_size << " " <<
@@ -288,7 +289,7 @@ void PGBackend::rollback(
 	  donework = true;
 	} else {
 	  // Unwritten shard - nothing to rollback
-	  ldpp_dout(dpp, 20) << "BILLR: unwritten shard skipping rollback_extents " << entry.written_shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
+	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " unwritten shard skipping rollback_extents " << entry.written_shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
 	}
       }
       if (donework) {
@@ -388,35 +389,39 @@ void PGBackend::partialwrite(
     // Must provide *info if log contains partial writes and mark it dirty
     ceph_assert(info != nullptr);
     // Skip the metadata shards (0 and the coding parity shards)
-    ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW version=" << entry.version << " last_update=" << info->last_update << " last_complete=" << info->last_complete << dendl;
-    ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW partial_writes_last_complete=" << info->partial_writes_last_complete << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW version=" << entry.version
+		       << " last_update=" << info->last_update
+		       << " last_complete=" << info->last_complete
+		       << " entry = " << entry << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW written_shards=" << entry.written_shards
+		       << " present_shards=" << entry.present_shards << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW before partial_writes_last_complete=" << info->partial_writes_last_complete << dendl;
     const pg_pool_t &pool = get_parent()->get_pool();
-    for (shard_id_t shard; shard < get_parent()->get_pool().size; ++shard) {
-      if (pool.is_nonprimary_shard(shard)) {
-        if (!entry.is_written_shard(shard)) {
-	  if (!info->partial_writes_last_complete.contains(shard)) {
+    for (unsigned int shard = 0; shard < get_parent()->get_pool().size; shard++) {
+      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+        if (entry.is_present_shard(shard_id_t(shard))&&
+	    !entry.is_written_shard(shard_id_t(shard))) {
+	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
 	    // 1st partial write since all logs were updated
-            ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW set shard=" << shard << " entry=" << entry << dendl;
-	    info->partial_writes_last_complete[shard] = entry.version;
-	  } else if (info->partial_writes_last_complete[shard].version + 1  == entry.version.version) {
+	    info->partial_writes_last_complete[shard_id_t(shard)] =
+	      std::pair(entry.prior_version, entry.version);
+	  } else if (info->partial_writes_last_complete[shard_id_t(shard)].second.version + 1 == entry.version.version) {
 	    // Subsequent partial write, version is sequential
-            ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW inc shard=" << shard << " entry=" << entry << dendl;
-	    info->partial_writes_last_complete[shard] = entry.version;
+	    info->partial_writes_last_complete[shard_id_t(shard)].second = entry.version;
 	  } else {
 	    // Subsequent partial write, discontiguous versions  - recovery will be required
-            ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW discontiguous shard=" << shard << " entry=" << entry << dendl;
 	  }
         } else {
-	  // Log updated, partial write entry not required
-          ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW clear shard=" << shard << " entry=" << entry << dendl;
-          info->partial_writes_last_complete.erase(shard);
+	  // Log updated or shard absent, partial write entry not required
+          info->partial_writes_last_complete.erase(shard_id_t(shard));
 	}
       }
     }
+    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW after partial_writes_last_complete=" << info->partial_writes_last_complete << dendl;
   } else if (info != nullptr) {
     // All shard logs updated - no partial write entries not required
     if (!info->partial_writes_last_complete.empty()) {
-      ldpp_dout(dpp, 10) << __func__ << ": BILL_LOG_PW clear all shards" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW clear all shards" << dendl;
     }
     info->partial_writes_last_complete.clear();
   }

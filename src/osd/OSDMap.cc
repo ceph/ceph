@@ -2692,6 +2692,9 @@ void OSDMap::_pg_to_raw_osds(
 
 int OSDMap::_pick_primary(const pg_pool_t& pool, const vector<int>& osds) const
 {
+  //FIXME: BILL - Need to delete this and switch to using pg_temp instead to
+  //change primary, otherwise we need to pre-req clients running tentacle to
+  //use allow_ec_optimizations
   shard_id_t shard(0);
   for (auto osd : osds) {
     if (!pool.is_nonprimary_shard(shard) && osd != CRUSH_ITEM_NONE) {
@@ -2857,6 +2860,28 @@ void OSDMap::_apply_primary_affinity(ps_t seed,
   }
 }
 
+static std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool, std::vector<int> *pg_temp)
+{
+#if 0
+  //FIXME: BILL - This is in the wrong place, think this needs to be in PeeringState??
+  if (!pool.nonprimary_shards.empty()) {
+    std::vector<int> result;
+    int primaryshard = 0;
+    int nonprimaryshard = pool.size - pool.nonprimary_shards.size();
+    assert(pg_temp->size() == pool.size);
+    for (auto shard = 0; shard < pool.size; shard++) {
+      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+       result.emplace_back((*pg_temp)[nonprimaryshard++]);
+      } else {
+       result.emplace_back((*pg_temp)[primaryshard++]);
+      }
+    }
+    return result;
+  }
+#endif
+  return *pg_temp;
+}
+
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
                             vector<int> *temp_pg, int *temp_primary) const
 {
@@ -2881,20 +2906,22 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
   if (pp != primary_temp->end()) {
     *temp_primary = pp->second;
   } else if (!temp_pg->empty()) { // apply pg_temp's primary
-    for (unsigned i = 0; i < temp_pg->size(); ++i) {
+    vector<int> temp_pg_shard = pgtemp_undo_primaryfirst(pool, temp_pg);
+    //FIXME: BILL: Delete the nonprimary_shard stuff here - need to set pg_temp instead :-(
+    for (unsigned i = 0; i < temp_pg_shard.size(); ++i) {
       if (pool.is_nonprimary_shard(shard_id_t(i))) {
 	// Shard cannot be a primary
 	continue;
       }
-      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
-	*temp_primary = (*temp_pg)[i];
+      if ((temp_pg_shard)[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = temp_pg_shard[i];
 	return;
       }
     }
     // PG is incomplete - choose any shard
-    for (unsigned i = 0; i < temp_pg->size(); ++i) {
-      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
-	*temp_primary = (*temp_pg)[i];
+    for (unsigned i = 0; i < temp_pg_shard.size(); ++i) {
+      if (temp_pg_shard[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = temp_pg_shard[i];
 	return;
       }
     }

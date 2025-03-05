@@ -4061,6 +4061,38 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 // -------------
 // pg_temp changes
 
+bool OSDMonitor::validate_pgtemp_update(const pg_t &pg, const std::vector<int32_t> &pg_temp, int from)
+{
+  // does the pool exist?
+  if (!osdmap.have_pg_pool(pg.pool())) {
+    /*
+     * 1. If the osdmap does not have the pool, it means the pool has been
+     *    removed in-between the osd sending this message and us handling it.
+     * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
+     *    not exist in the pending either, as the osds would not send a
+     *    message about a pool they know nothing about (yet).
+     * 3. However, if the pool does exist in the pending, then it must be a
+     *    new pool, and not relevant to this message (see 1).
+     */
+    dout(10) << __func__ << " ignore " << pg << " -> " << pg_temp
+             << ": pool has been removed" << dendl;
+    return false;
+  }
+  int acting_primary = -1;
+  osdmap.pg_to_up_acting_osds(pg, nullptr, nullptr, nullptr, &acting_primary);
+  if (acting_primary != from) {
+    /* If the source isn't the primary based on the current osdmap, we know
+     * that the interval changed and that we can discard this message.
+     * Indeed, we must do so to avoid 16127 since we can't otherwise determine
+     * which of two pg temp mappings on the same pg is more recent.
+     */
+    dout(10) << __func__ << " ignore " << pg << " -> " << pg_temp
+	     << ": primary has changed" << dendl;
+    return false;
+  }
+  return true;
+}
+
 bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 {
   auto m = op->get_req<MOSDPGTemp>();
@@ -4095,35 +4127,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
              << " -> " << p->second << dendl;
-
-    // does the pool exist?
-    if (!osdmap.have_pg_pool(p->first.pool())) {
-      /*
-       * 1. If the osdmap does not have the pool, it means the pool has been
-       *    removed in-between the osd sending this message and us handling it.
-       * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
-       *    not exist in the pending either, as the osds would not send a
-       *    message about a pool they know nothing about (yet).
-       * 3. However, if the pool does exist in the pending, then it must be a
-       *    new pool, and not relevant to this message (see 1).
-       */
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-               << ": pool has been removed" << dendl;
-      ignore_cnt++;
-      continue;
-    }
-
-    int acting_primary = -1;
-    osdmap.pg_to_up_acting_osds(
-      p->first, nullptr, nullptr, nullptr, &acting_primary);
-    if (acting_primary != from) {
-      /* If the source isn't the primary based on the current osdmap, we know
-       * that the interval changed and that we can discard this message.
-       * Indeed, we must do so to avoid 16127 since we can't otherwise determine
-       * which of two pg temp mappings on the same pg is more recent.
-       */
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-	       << ": primary has changed" << dendl;
+    if (!validate_pgtemp_update(p->first, p->second, from)) {
       ignore_cnt++;
       continue;
     }
@@ -4168,6 +4172,29 @@ void OSDMonitor::update_up_thru(int from, epoch_t up_thru)
   }
 }
 
+static std::vector<int> pgtemp_primaryfirst(pg_pool_t& pool, const std::vector<int>& pg_temp)
+{
+#if 0
+  //FIXME: BILL - Enable this
+  if (!pool.nonprimary_shards.empty()) {
+    std::vector<int> result;
+    std::vector<int> nonprimary;
+    int shard = 0;
+    for (auto osd : pg_temp) {
+      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+	nonprimary.emplace_back(osd);
+      } else {
+	result.emplace_back(osd);
+      }
+      shard++;
+    }
+    result.insert( result.end(), nonprimary.begin(), nonprimary.end() );
+    return result;
+  }
+#endif
+  return pg_temp;
+}
+
 bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -4181,13 +4208,24 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
                << ": pool pending removal" << dendl;
       continue;
     }
-    if (!osdmap.have_pg_pool(pool)) {
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-               << ": pool has been removed" << dendl;
+
+    if (!validate_pgtemp_update(p->first, p->second, from)) {
       continue;
     }
+    // Pools with allow_ec_optimizations set store pg_temp in a different
+    // order to change the primary selection algorithm without breaking
+    // old clients. If necessary re-order the new pg_temp now
+    pg_pool_t pg_pool;
+    if (pending_inc.new_pools.count(pool))
+      pg_pool = pending_inc.new_pools[pool];
+    else
+      pg_pool = *osdmap.get_pg_pool(pool);
+
+    dout(10) << __func__ << "BILL_PGTEMP: from " << p->second << dendl;
+    std::vector<int> pg_temp = pgtemp_primaryfirst(pg_pool, p->second);
+    dout(10) << __func__ << "BILL_PGTEMP: to " << pg_temp << dendl;
     pending_inc.new_pg_temp[p->first] =
-      mempool::osdmap::vector<int>(p->second.begin(), p->second.end());
+      mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end());
 
     // unconditionally clear pg_primary (until this message can encode
     // a change for that, too.. at which point we need to also fix
@@ -8846,25 +8884,30 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       // the other shards (including local parity for LRC) may not have
       // up to date copies of xattrs including OI
       p.nonprimary_shards.clear();
-// FIXME: BILL: Enable EC partial metadata writes
-#if 0
-      p.nonprimary_shards.resize(total, true);
-      for (raw_shard_id_t raw_shard = 0; raw_shard < k + m; raw_shard++) {
-        shard_id_t shard;
+      for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
         if (raw_shard > 0 && raw_shard < k) {
-          continue;
-        }
-        if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
-          shard = shard_id_t(erasure_code->get_chunk_mapping().at(raw_shard));
-        } else {
-          shard = shard_id_t(raw_shard);
-        }
-
-        p.nonprimary_shards[shard] = false;
+	  shard_id_t shard;
+	  if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
+	    shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
+	  } else {
+	    shard = shard_id_t(int(raw_shard));
+	  }
+          p.nonprimary_shards.insert(shard);
+	}
       }
-#else
-      ceph_assert(total == k + m); // Keep compiler happy.
-#endif
+      // Pools with allow_ec_optimizations set store pg_temp in a different
+      // order to change the primary selection algorithm without breaking
+      // old clients. Modify any existing pg_temp for the pool now
+      for (auto pg_temp = osdmap.pg_temp->begin();
+	   pg_temp != osdmap.pg_temp->end();
+	   ++pg_temp) {
+	if (pg_temp->first.pool() == pool) {
+	  dout(10) << __func__ << " BILL_PGTEMP " << pg_temp->first << " re-encoding pg_temp " << pg_temp->second << dendl;
+	  std::vector<int> new_pg_temp = pgtemp_primaryfirst(p, pg_temp->second);
+	  dout(10) << __func__ << " BILL_PGTEMP " << new_pg_temp << dendl;
+	  pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
+	}
+      }
       p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
