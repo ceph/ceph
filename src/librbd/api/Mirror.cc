@@ -387,8 +387,6 @@ template <typename I>
 struct C_ImageSnapshotCreate : public Context {
   I *ictx;
   uint64_t snap_create_flags;
-  int64_t group_pool_id;
-  std::string group_id;
   std::string group_snap_id;
   uint64_t *snap_id;
   Context *on_finish;
@@ -398,13 +396,10 @@ struct C_ImageSnapshotCreate : public Context {
   std::string primary_mirror_uuid;
 
   C_ImageSnapshotCreate(I *ictx, uint64_t snap_create_flags,
-                        int64_t group_pool_id,
-                        const std::string &group_id,
                         const std::string &group_snap_id,
                         uint64_t *snap_id,
                         Context *on_finish)
     : ictx(ictx), snap_create_flags(snap_create_flags),
-      group_pool_id(group_pool_id), group_id(group_id),
       group_snap_id(group_snap_id), snap_id(snap_id),
       on_finish(on_finish) {
   }
@@ -424,7 +419,7 @@ struct C_ImageSnapshotCreate : public Context {
 
     auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
       ictx, mirror_image.global_image_id, CEPH_NOSNAP, snap_create_flags, 0U,
-      group_pool_id, group_id, group_snap_id, snap_id, on_finish);
+      group_snap_id, snap_id, on_finish);
     req->send();
   }
 };
@@ -704,7 +699,7 @@ int Mirror<I>::image_enable(I *ictx,
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<ImageCtx>::create(
       ictx, static_cast<cls::rbd::MirrorImageMode>(mode), "", false,
-      ictx->group_spec.pool_id, ictx->group_spec.group_id, group_snap_id, snap_id, &ctx);
+      group_snap_id, snap_id, &ctx);
   req->send();
 
   r = ctx.wait();
@@ -960,8 +955,6 @@ void Mirror<I>::image_promote(I *ictx,
       }
 
       auto req = mirror::PromoteRequest<>::create(*ictx, force,
-                                                  ictx->group_spec.pool_id,
-                                                  ictx->group_spec.group_id,
                                                   group_snap_id, snap_id,
                                                   on_promote);
       req->send();
@@ -1022,8 +1015,6 @@ void Mirror<I>::image_demote(I *ictx,
       }
 
       auto req = mirror::DemoteRequest<>::create(*ictx,
-                                                 ictx->group_spec.pool_id,
-                                                 ictx->group_spec.group_id,
                                                  group_snap_id,
                                                  snap_id, on_cleanup);
       req->send();
@@ -2440,8 +2431,6 @@ void Mirror<I>::image_snapshot_create(I *ictx, uint32_t flags,
       }
 
       auto ctx = new C_ImageSnapshotCreate<I>(ictx, snap_create_flags,
-                                              ictx->group_spec.pool_id,
-                                              ictx->group_spec.group_id,
                                               group_snap_id, snap_id,
                                               on_finish);
       auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
