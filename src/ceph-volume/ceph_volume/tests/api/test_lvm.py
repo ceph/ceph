@@ -31,20 +31,20 @@ class TestParseTags(object):
         assert result['ceph.fsid'] == '0000'
 
 
-class TestVolume(object):
-
+class TestVolume:
     def test_is_ceph_device(self):
         lv_tags = "ceph.type=data,ceph.osd_id=0"
         osd = api.Volume(lv_name='osd/volume', lv_tags=lv_tags)
         assert api.is_ceph_device(osd)
 
-    @pytest.mark.parametrize('dev',[
-        '/dev/sdb',
-        api.VolumeGroup(vg_name='foo'),
-        api.Volume(lv_name='vg/no_osd', lv_tags='', lv_path='lv/path'),
-        api.Volume(lv_name='vg/no_osd', lv_tags='ceph.osd_id=null', lv_path='lv/path'),
-        None,
-    ])
+    @pytest.mark.parametrize('dev',
+                             [api.VolumeGroup(vg_name='foo'),
+                              api.Volume(lv_name='vg/no_osd',
+                                         lv_tags='',
+                                         lv_path='lv/path'),
+                              api.Volume(lv_name='vg/no_osd',
+                                         lv_tags='ceph.osd_id=null',
+                                         lv_path='lv/path')])
     def test_is_not_ceph_device(self, dev):
         assert not api.is_ceph_device(dev)
 

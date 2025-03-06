@@ -6,7 +6,6 @@ set of utilities for interacting with LVM.
 import logging
 import os
 import uuid
-from itertools import repeat
 from math import floor
 from ceph_volume import process, util, conf
 from ceph_volume.exceptions import SizeAllocationError
@@ -323,17 +322,103 @@ def dmsetup_splitname(dev: str) -> Dict[str, Any]:
 
 
 def is_ceph_device(lv: "Volume") -> bool:
-    try:
-        lv.tags['ceph.osd_id']
-    except (KeyError, AttributeError):
-        logger.warning('device is not part of ceph: %s', lv)
-        return False
+    osd_id = lv.tags.get('ceph.osd_id', 'null')
 
-    if lv.tags['ceph.osd_id'] == 'null':
-        return False
-    else:
-        return True
+    if osd_id == 'null':
+         logger.warning('device is not part of ceph: %s', lv)
+         return False
 
+    return True
+
+class Lvm:
+    def __init__(self, name_key: str, tags_key: str, **kw: Any) -> None:
+        self.name: str = kw.get(name_key, '')
+        self.binary_change: str = ''
+        self.path: str = ''
+        if not self.name:
+            raise ValueError(f'{self.__class__.__name__} must have a non-empty name')
+
+        self.api_data = kw
+        self.tags = parse_tags(kw.get(tags_key, ''))
+
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+    def __str__(self) -> str:
+        return f'<{self.name}>'
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def _format_tag_args(self, op: str, tags: Dict[str, Any]) -> List[str]:
+        result: List[str] = []
+        for k, v in tags.items():
+            result.extend([op, f'{k}={v}'])
+        return result
+
+    def clear_tags(self, keys: Optional[List[str]] = None) -> None:
+        """
+        Removes all or passed tags.
+        """
+        if not keys:
+            keys = list(self.tags.keys())
+
+        del_tags = {k: self.tags[k] for k in keys if k in self.tags}
+        if not del_tags:
+            # nothing to clear
+            return
+        del_tag_args = self._format_tag_args('--deltag', del_tags)
+        # --deltag returns successful even if the to be deleted tag is not set
+        process.call([self.binary_change] + del_tag_args + [self.path], run_on_host=True)
+        for k in del_tags.keys():
+            del self.tags[k]
+
+    def clear_tag(self, key: str) -> None:
+        if self.tags.get(key):
+            current_value = self.tags[key]
+            tag = "%s=%s" % (key, current_value)
+            process.call([self.binary_change, '--deltag', tag, self.path], run_on_host=True)
+            del self.tags[key]
+
+    def set_tag(self, key: str, value: str) -> None:
+        """
+        Set the key/value pair as an LVM tag.
+        """
+        # remove it first if it exists
+        self.clear_tag(key)
+
+        process.call(
+            [
+                self.binary_change,
+                '--addtag', '%s=%s' % (key, value), self.path
+            ],
+            run_on_host=True
+        )
+        self.tags[key] = value
+
+    def set_tags(self, tags: Dict[str, Any]) -> None:
+        """
+        :param tags: A dictionary of tag names and values, like::
+
+            {
+                "ceph.osd_fsid": "aaa-fff-bbbb",
+                "ceph.osd_id": "0"
+            }
+
+        At the end of all modifications, the tags are refreshed to reflect
+        LVM's most current view.
+        """
+        self.clear_tags(list(tags.keys()))
+        add_tag_args = self._format_tag_args('--addtag', tags)
+        process.call([self.binary_change] + add_tag_args + [self.path], run_on_host=True)
+        for k, v in tags.items():
+            self.tags[k] = v
+
+    def deactivate(self) -> None:
+        """
+        Deactivate the LV by calling lvchange -an
+        """
+        process.call([self.binary_change, '-an', self.path], run_on_host=True)
 
 ####################################
 #
@@ -343,7 +428,7 @@ def is_ceph_device(lv: "Volume") -> bool:
 
 PV_FIELDS = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
-class PVolume:
+class PVolume(Lvm):
     """
     Represents a Physical Volume from LVM, with some top-level attributes like
     ``pv_name`` and parsed tags as a dictionary of key/value pairs.
@@ -352,18 +437,10 @@ class PVolume:
     def __init__(self, **kw: Any) -> None:
         self.pv_name: str = ''
         self.pv_uuid: str = ''
-        self.lv_uuid: str = ''
-        for k, v in kw.items():
-            setattr(self, k, v)
+        super().__init__('pv_name', 'pv_tags', **kw)
         self.pv_api = kw
-        self.name = kw['pv_name']
-        self.tags = parse_tags(kw['pv_tags'])
-
-    def __str__(self) -> str:
-        return '<%s>' % self.pv_api['pv_name']
-
-    def __repr__(self) -> str:
-        return self.__str__()
+        self.binary_change: str = 'pvchange'
+        self.path: str = self.pv_name
 
     def set_tags(self, tags: Dict[str, Any]) -> None:
         """
@@ -513,7 +590,7 @@ VG_FIELDS = 'vg_name,pv_count,lv_count,vg_attr,vg_extent_count,vg_free_count,vg_
 VG_CMD_OPTIONS = ['--noheadings', '--readonly', '--units=b', '--nosuffix', '--separator=";"']
 
 
-class VolumeGroup(object):
+class VolumeGroup(Lvm):
     """
     Represents an LVM group, with some top-level attributes like ``vg_name``
     """
@@ -524,18 +601,8 @@ class VolumeGroup(object):
         self.vg_free_count: str = ''
         self.vg_extent_size: str = ''
         self.vg_extent_count: str = ''
-        for k, v in kw.items():
-            setattr(self, k, v)
-        self.name = kw['vg_name']
-        if not self.name:
-            raise ValueError('VolumeGroup must have a non-empty name')
-        self.tags = parse_tags(kw.get('vg_tags', ''))
-
-    def __str__(self) -> str:
-        return '<%s>' % self.name
-
-    def __repr__(self) -> str:
-        return self.__str__()
+        super().__init__('vg_name', 'vg_tags', **kw)
+        self.vg_api = kw
 
     @property
     def free(self) -> int:
@@ -825,7 +892,7 @@ LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a',
                    '--units=b', '--nosuffix']
 
 
-class Volume:
+class Volume(Lvm):
     """
     Represents a Logical Volume from LVM, with some top-level attributes like
     ``lv_name`` and parsed tags as a dictionary of key/value pairs.
@@ -837,22 +904,17 @@ class Volume:
         self.lv_uuid: str = ''
         self.vg_name: str = ''
         self.lv_size: str = ''
+        self.tags: Dict[str, Any] = {}
         self.lv_tags: Dict[str, Any] = {}
-        for k, v in kw.items():
-            setattr(self, k, v)
+        super().__init__('lv_name', 'lv_tags', **kw)
         self.lv_api = kw
-        self.name = kw['lv_name']
-        if not self.name:
-            raise ValueError('Volume must have a non-empty name')
-        self.tags = parse_tags(kw['lv_tags'])
         self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
         self.used_by_ceph = 'ceph.osd_id' in self.tags
+        self.binary_change: str = 'lvchange'
+        self.path: str = self.lv_path
 
     def __str__(self) -> str:
-        return '<%s>' % self.lv_api['lv_path']
-
-    def __repr__(self) -> str:
-        return self.__str__()
+        return f'<{self.api_data.get("lv_path", self.name)}>'
 
     def as_dict(self) -> Dict[Any, Any]:
         obj: Dict[Any, Any] = {}
@@ -883,79 +945,6 @@ class Volume:
             type_uuid = '{}_uuid'.format(type_)
             report[type_uuid] = self.tags['ceph.{}'.format(type_uuid)]
             return report
-
-    def _format_tag_args(self, op: str, tags: Dict[str, Any]) -> List[str]:
-        tag_args = ['{}={}'.format(k, v) for k, v in tags.items()]
-        # weird but efficient way of ziping two lists and getting a flat list
-        return list(sum(zip(repeat(op), tag_args), ()))
-
-    def clear_tags(self, keys: Optional[List[str]] = None) -> None:
-        """
-        Removes all or passed tags from the Logical Volume.
-        """
-        if not keys:
-            keys = list(self.tags.keys())
-
-        del_tags = {k: self.tags[k] for k in keys if k in self.tags}
-        if not del_tags:
-            # nothing to clear
-            return
-        del_tag_args = self._format_tag_args('--deltag', del_tags)
-        # --deltag returns successful even if the to be deleted tag is not set
-        process.call(['lvchange'] + del_tag_args + [self.lv_path], run_on_host=True)
-        for k in del_tags.keys():
-            del self.tags[k]
-
-
-    def set_tags(self, tags: Dict[str, Any]) -> None:
-        """
-        :param tags: A dictionary of tag names and values, like::
-
-            {
-                "ceph.osd_fsid": "aaa-fff-bbbb",
-                "ceph.osd_id": "0"
-            }
-
-        At the end of all modifications, the tags are refreshed to reflect
-        LVM's most current view.
-        """
-        self.clear_tags(list(tags.keys()))
-        add_tag_args = self._format_tag_args('--addtag', tags)
-        process.call(['lvchange'] + add_tag_args + [self.lv_path], run_on_host=True)
-        for k, v in tags.items():
-            self.tags[k] = v
-
-
-    def clear_tag(self, key: str) -> None:
-        if self.tags.get(key):
-            current_value = self.tags[key]
-            tag = "%s=%s" % (key, current_value)
-            process.call(['lvchange', '--deltag', tag, self.lv_path], run_on_host=True)
-            del self.tags[key]
-
-
-    def set_tag(self, key: str, value: str) -> None:
-        """
-        Set the key/value pair as an LVM tag.
-        """
-        # remove it first if it exists
-        self.clear_tag(key)
-
-        process.call(
-            [
-                'lvchange',
-                '--addtag', '%s=%s' % (key, value), self.lv_path
-            ],
-            run_on_host=True
-        )
-        self.tags[key] = value
-
-    def deactivate(self) -> None:
-        """
-        Deactivate the LV by calling lvchange -an
-        """
-        process.call(['lvchange', '-an', self.lv_path], run_on_host=True)
-
 
 def create_lv(name_prefix: str,
               uuid: str,
