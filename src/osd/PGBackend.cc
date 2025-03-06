@@ -658,7 +658,8 @@ PGBackend *PGBackend::build_pg_backend(
   coll_t coll,
   ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
-  CephContext *cct)
+  CephContext *cct,
+  ECExtentCache::LRU &ec_extent_cache_lru)
 {
   ErasureCodeProfile ec_profile = profile;
   switch (pool.type) {
@@ -682,7 +683,8 @@ PGBackend *PGBackend::build_pg_backend(
       store,
       cct,
       ec_impl,
-      pool.stripe_width);
+      pool.stripe_width,
+      ec_extent_cache_lru);
   }
   default:
     ceph_abort();

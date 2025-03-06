@@ -20,6 +20,7 @@
 
 #include "ECListener.h"
 #include "ECTypes.h"
+#include "ECExtentCache.h"
 #include "osd_types.h"
 #include "pg_features.h"
 #include "common/intrusive_timer.h"
@@ -614,7 +615,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      coll_t coll,
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
-     CephContext *cct);
+     CephContext *cct,
+     ECExtentCache::LRU &ec_extent_cache_lru);
 };
 
 #endif
