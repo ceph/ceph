@@ -4662,11 +4662,23 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case ROLLBACK_EXTENTS: {
-	vector<pair<uint64_t, uint64_t> > extents;
+	vector<pair<uint64_t, uint64_t>> extents;
 	version_t gen;
+	uint64_t object_size;
+	vector<shard_id_set> shards;
 	decode(gen, bp);
 	decode(extents, bp);
-	visitor->rollback_extents(gen,extents);
+	if (struct_v < 3) {
+	  // Object size is used by newer code which does not pad objects to a
+	  // multiple of the strip size to truncate the rollback clone
+	  // operations. Older code pads the object so use a large object size
+	  // to avoid doing any truncation.
+	  object_size = 0xffffffffffffffffUL;
+	} else {
+	  decode(object_size, bp);
+	  decode(shards, bp);
+	}
+	visitor->rollback_extents(gen, extents, object_size, shards);
 	break;
       }
       default:
@@ -4722,11 +4734,16 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->close_section();
   }
   void rollback_extents(
-    version_t gen,
-    const vector<pair<uint64_t, uint64_t> > &extents) override {
+    const version_t gen,
+    const vector<pair<uint64_t, uint64_t>> &extents,
+    const uint64_t object_size,
+    const vector<shard_id_set> &shards) override {
     f->open_object_section("op");
     f->dump_string("code", "ROLLBACK_EXTENTS");
     f->dump_unsigned("gen", gen);
+    f->dump_unsigned("object_size", object_size);
+    f->dump_stream("extents") << extents;
+    f->dump_stream("shards") << shards;
     f->dump_stream("snaps") << extents;
     f->close_section();
   }

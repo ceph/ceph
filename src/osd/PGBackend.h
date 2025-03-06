@@ -504,7 +504,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    void rollback_setattrs(
      const hobject_t &hoid,
      std::map<std::string, std::optional<ceph::buffer::list> > &old_attrs,
-     ObjectStore::Transaction *t);
+     ObjectStore::Transaction *t,
+     bool only_oi);
 
    /// Truncate object to rollback append
    void rollback_append(
@@ -534,8 +535,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    /// Clone the extents back into place
    void rollback_extents(
      version_t gen,
-     const std::vector<std::pair<uint64_t, uint64_t> > &extents,
+     const uint64_t offset,
+     uint64_t length,
      const hobject_t &hoid,
+     const uint64_t shard_size,
      ObjectStore::Transaction *t);
  public:
 
