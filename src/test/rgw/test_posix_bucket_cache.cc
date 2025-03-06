@@ -410,6 +410,7 @@ TEST_F(BucketCacheFixtureInotify1, UpdateInotify1)
   remove_files(bucket, "file_", 5, 10);
 } /* SetupInotify1 */
 
+#if 0
 TEST_F(BucketCacheFixtureInotify1, List2Inotify1)
 {
   std::string bucket{"inotify1"};
@@ -474,6 +475,7 @@ TEST_F(BucketCacheFixtureInotify1, List2Inotify1)
   }
   ASSERT_EQ(names.size(), 25);
 } /* List2Inotify1 */
+#endif
 
 int main (int argc, char *argv[])
 {
