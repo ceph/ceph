@@ -2966,7 +2966,12 @@ void OSDMap::_pg_to_up_acting_osds(
     if (up_primary)
       *up_primary = _up_primary;
   }
-
+  if (std::find(_acting.begin(), _acting.end(), _acting_primary) == _acting.end()) {
+    // https://tracker.ceph.com/issues/59491
+    // primary-temp has selected an OSD outside of the acting
+    // set - ignore it and make a sensible choice
+    _acting_primary = _pick_primary(*pool, _acting);
+  }
   if (acting)
     acting->swap(_acting);
   if (acting_primary)
