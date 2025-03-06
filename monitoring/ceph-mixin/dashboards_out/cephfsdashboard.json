@@ -1,0 +1,2025 @@
+{
+   "__inputs": [ ],
+   "__requires": [ ],
+   "annotations": {
+      "list": [
+         {
+            "builtIn": 1,
+            "datasource": {
+               "type": "datasource",
+               "uid": "grafana"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "showIn": 0,
+            "tags": [ ],
+            "type": "dashboard"
+         }
+      ]
+   },
+   "description": "Ceph CephFS overview for official Ceph Prometheus plugin.",
+   "editable": false,
+   "gnetId": null,
+   "graphTooltip": 0,
+   "hideControls": false,
+   "id": null,
+   "links": [ ],
+   "panels": [
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+         },
+         "id": 2,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Summary",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 3,
+            "x": 0,
+            "y": 1
+         },
+         "id": 3,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "count(ceph_mds_metadata)",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Active MDS",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 3,
+            "y": 1
+         },
+         "id": 4,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "ceph_pool_bytes_used{pool_id=\"$mdatapool\"}",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "MetaData Used",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "Bps"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 6,
+            "y": 1
+         },
+         "id": 5,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_rd_bytes{pool_id=\"$mdatapool\"}[$interval])",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "MetaData Read",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 9,
+            "y": 1
+         },
+         "id": 6,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "ceph_pool_bytes_used{pool_id=\"$datapool\"}",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Data Used",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "Bps"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 12,
+            "y": 1
+         },
+         "id": 7,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_rd_bytes{pool_id=\"$datapool\"}[$interval])",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "Data Read",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 15,
+            "y": 1
+         },
+         "id": 8,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(irate(ceph_mds_server_handle_client_request[$interval]))",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Client Requests",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 18,
+            "y": 1
+         },
+         "id": 9,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(ceph_mds_sessions_session_count)",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Client Sessions",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 21,
+            "y": 1
+         },
+         "id": 10,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(ceph_mds_inodes)",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "MDS Inodes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 21,
+            "y": 1
+         },
+         "id": 11,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(ceph_mds_inodes)",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "MDS Inodes",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "Bps"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 6,
+            "y": 3
+         },
+         "id": 12,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_wr_bytes{pool_id=\"$mdatapool\"}[$interval])",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "MetaData Write",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "Bps"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 12,
+            "y": 3
+         },
+         "id": 13,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_wr_bytes{pool_id=\"$datapool\"}[$interval])",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "Data Write",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "max": 100,
+               "min": 0,
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 70
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 3,
+            "y": 5
+         },
+         "id": 14,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "ceph_pool_max_avail{pool_id=\"$mdatapool\"} / (ceph_pool_bytes_used{pool_id=\"$mdatapool\"} + ceph_pool_max_avail{pool_id=\"$mdatapool\"})",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "MetaData Available",
+         "transparent": false,
+         "type": "gauge"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "#d44a3a",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0
+                     },
+                     {
+                        "color": "#508642",
+                        "value": 0
+                     }
+                  ]
+               },
+               "unit": "iops"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 6,
+            "y": 5
+         },
+         "id": 15,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_rd{pool_id=\"$mdatapool\"}[$interval])",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "MetaData Read",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "max": 100,
+               "min": 0,
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 70
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 9,
+            "y": 5
+         },
+         "id": 16,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "ceph_pool_max_avail{pool_id=\"$datapool\"} / (ceph_pool_bytes_used{pool_id=\"$datapool\"} + ceph_pool_max_avail{pool_id=\"$datapool\"})",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Data Available",
+         "transparent": false,
+         "type": "gauge"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "#d44a3a",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0
+                     },
+                     {
+                        "color": "#508642",
+                        "value": 0
+                     }
+                  ]
+               },
+               "unit": "iops"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 12,
+            "y": 5
+         },
+         "id": 17,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_rd{pool_id=\"$datapool\"}[$interval])",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "Data Read",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 15,
+            "y": 5
+         },
+         "id": 18,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(irate(ceph_mds_forward[$interval]))",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Forward Requests",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 0,
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  },
+                  {
+                     "id": 1,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 18,
+            "y": 5
+         },
+         "id": 19,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(increase(ceph_mds_reply_latency_sum[$interval])) * 1000 / sum(increase(ceph_mds_reply_latency_count[$interval]))",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "range": true,
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "Reply Latency(ms)",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "rgba(50, 172, 45, 0.97)",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0.025000000000000001
+                     },
+                     {
+                        "color": "rgba(245, 54, 54, 0.9)",
+                        "value": 0.10000000000000001
+                     }
+                  ]
+               },
+               "unit": "short"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 3,
+            "x": 21,
+            "y": 5
+         },
+         "id": 20,
+         "interval": "1m",
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(ceph_mds_caps)",
+               "format": "time_series",
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A",
+               "step": 60
+            }
+         ],
+         "title": "MDS Caps",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "#d44a3a",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0
+                     },
+                     {
+                        "color": "#508642",
+                        "value": 0
+                     }
+                  ]
+               },
+               "unit": "iops"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 6,
+            "y": 7
+         },
+         "id": 21,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_wr{pool_id=\"$mdatapool\"}[$interval])",
+               "format": "time_series",
+               "instant": true,
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "MetaData Write",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "text": "N/A"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "#d44a3a",
+                        "value": null
+                     },
+                     {
+                        "color": "rgba(237, 129, 40, 0.89)",
+                        "value": 0
+                     },
+                     {
+                        "color": "#508642",
+                        "value": 0
+                     }
+                  ]
+               },
+               "unit": "iops"
+            }
+         },
+         "gridPos": {
+            "h": 2,
+            "w": 3,
+            "x": 12,
+            "y": 7
+         },
+         "id": 22,
+         "links": [ ],
+         "maxDataPoints": 100,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.4.7",
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "irate(ceph_pool_wr{pool_id=\"$datapool\"}[$interval])",
+               "format": "time_series",
+               "instant": true,
+               "interval": "$interval",
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "title": "Data Write",
+         "transparent": false,
+         "type": "stat"
+      }
+   ],
+   "refresh": "30s",
+   "rows": [ ],
+   "schemaVersion": 38,
+   "style": "dark",
+   "tags": [
+      "ceph-mixin"
+   ],
+   "templating": {
+      "list": [
+         {
+            "current": {
+               "text": "default",
+               "value": "default"
+            },
+            "hide": 0,
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [ ],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_health_status, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "auto": true,
+            "auto_count": 10,
+            "auto_min": "1m",
+            "current": {
+               "text": "$__auto_interval_interval",
+               "value": "$__auto_interval_interval"
+            },
+            "hide": 0,
+            "label": "Interval",
+            "name": "interval",
+            "options": [
+               {
+                  "selected": true,
+                  "text": "auto",
+                  "value": "$__auto_interval_interval"
+               },
+               {
+                  "selected": false,
+                  "text": "1m",
+                  "value": "1m"
+               },
+               {
+                  "selected": false,
+                  "text": "10m",
+                  "value": "10m"
+               },
+               {
+                  "selected": false,
+                  "text": "30m",
+                  "value": "30m"
+               },
+               {
+                  "selected": false,
+                  "text": "1h",
+                  "value": "1h"
+               },
+               {
+                  "selected": false,
+                  "text": "6h",
+                  "value": "6h"
+               },
+               {
+                  "selected": false,
+                  "text": "12h",
+                  "value": "12h"
+               },
+               {
+                  "selected": false,
+                  "text": "1d",
+                  "value": "1d"
+               },
+               {
+                  "selected": false,
+                  "text": "7d",
+                  "value": "7d"
+               },
+               {
+                  "selected": false,
+                  "text": "14d",
+                  "value": "14d"
+               },
+               {
+                  "selected": false,
+                  "text": "30d",
+                  "value": "30d"
+               }
+            ],
+            "query": "1m,10m,30m,1h,6h,12h,1d,7d,14d,30d",
+            "refresh": 2,
+            "type": "interval",
+            "valuelabels": { }
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": {
+                  "selected": false,
+                  "text": "a",
+                  "value": "a"
+               },
+               "value": {
+                  "selected": false,
+                  "text": "a",
+                  "value": "a"
+               }
+            },
+            "datasource": {
+               "type": "prometheus",
+               "uid": "${datasource}"
+            },
+            "hide": 2,
+            "includeAll": false,
+            "label": "name",
+            "multi": false,
+            "name": "name",
+            "options": [ ],
+            "query": {
+               "query": "label_values(ceph_fs_metadata, name)",
+               "refId": "StandardVariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               },
+               "value": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               }
+            },
+            "datasource": {
+               "type": "prometheus",
+               "uid": "${datasource}"
+            },
+            "hide": 2,
+            "includeAll": true,
+            "label": "metadata pool",
+            "multi": false,
+            "name": "mdatapool",
+            "options": [ ],
+            "query": {
+               "query": "label_values(ceph_fs_metadata{name=~\"$name\"}, metadata_pool)",
+               "refId": "StandardVariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               },
+               "value": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               }
+            },
+            "datasource": {
+               "type": "prometheus",
+               "uid": "${datasource}"
+            },
+            "hide": 2,
+            "includeAll": true,
+            "label": "data pool",
+            "multi": false,
+            "name": "datapool",
+            "options": [ ],
+            "query": {
+               "query": "label_values(ceph_fs_metadata{name=~\"$name\"}, data_pools)",
+               "refId": "StandardVariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         }
+      ]
+   },
+   "time": {
+      "from": "now-6h",
+      "to": "now"
+   },
+   "timepicker": {
+      "refresh_intervals": [
+         "5s",
+         "10s",
+         "30s",
+         "1m",
+         "5m",
+         "15m",
+         "30m",
+         "1h",
+         "2h",
+         "1d"
+      ],
+      "time_options": [
+         "5m",
+         "15m",
+         "1h",
+         "6h",
+         "12h",
+         "24h",
+         "2d",
+         "7d",
+         "30d"
+      ]
+   },
+   "timezone": "",
+   "title": "Ceph - CephFS",
+   "uid": "718Bruins",
+   "version": 0
+}
