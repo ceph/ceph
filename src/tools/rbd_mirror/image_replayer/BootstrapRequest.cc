@@ -407,9 +407,9 @@ void BootstrapRequest<I>::image_sync() {
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
   m_image_sync = ImageSync<I>::create(
-    m_threads, m_local_group_ctx, state_builder->local_image_ctx,
-    state_builder->remote_image_ctx, m_local_mirror_uuid, sync_point_handler,
-    m_instance_watcher, m_progress_ctx, ctx);
+    m_threads, state_builder->local_image_ctx, state_builder->remote_image_ctx,
+    m_local_mirror_uuid, sync_point_handler, m_instance_watcher,
+    m_progress_ctx, ctx);
   m_image_sync->get();
   locker.unlock();
 
