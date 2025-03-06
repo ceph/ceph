@@ -1130,6 +1130,9 @@ protected:
     void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
     }
+    void partialwrite(pg_info_t *info, const pg_log_entry_t &entry) override {
+      pg->get_pgbackend()->partialwrite(info, entry);
+    }
   };
 
   void update_object_snap_mapping(
