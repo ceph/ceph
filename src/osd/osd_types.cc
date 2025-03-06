@@ -3627,7 +3627,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(32, 26, bl);
+  ENCODE_START(33, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3643,12 +3643,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_backfill, bl);
   encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
+  encode(partial_writes_last_complete, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(32, bl);
+  DECODE_START(33, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3677,6 +3678,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     last_interval_started = last_epoch_started;
   }
+  if (struct_v >= 33) {
+    decode(partial_writes_last_complete, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3691,6 +3695,16 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
+  f->open_array_section("partial_writes_last_complete");
+  for (const auto & [shard, versionrange] : partial_writes_last_complete) {
+    auto & [from, to] = versionrange;
+    f->open_object_section("shard");
+    f->dump_int("id", int(shard));
+    f->dump_stream("from") << from;
+    f->dump_stream("to") << to;
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();

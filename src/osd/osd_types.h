@@ -3057,6 +3057,9 @@ struct pg_info_t {
 
   interval_set<snapid_t> purged_snaps;
 
+  std::map<shard_id_t,std::pair<eversion_t, eversion_t>>
+    partial_writes_last_complete; ///< last_complete for shards not modified by a partial write
+
   pg_stat_t stats;
 
   pg_history_t history;
@@ -3073,6 +3076,7 @@ struct pg_info_t {
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
       l.purged_snaps == r.purged_snaps &&
+      l.partial_writes_last_complete == r.partial_writes_last_complete &&
       l.stats == r.stats &&
       l.history == r.history &&
       l.hit_set == r.hit_set;
@@ -3149,6 +3153,7 @@ struct pg_fast_info_t {
   eversion_t last_update;
   eversion_t last_complete;
   version_t last_user_version;
+  std::map<shard_id_t,std::pair<eversion_t,eversion_t>> partial_writes_last_complete;
   struct { // pg_stat_t stats
     eversion_t version;
     version_t reported_seq;
@@ -3178,6 +3183,7 @@ struct pg_fast_info_t {
     last_update = info.last_update;
     last_complete = info.last_complete;
     last_user_version = info.last_user_version;
+    partial_writes_last_complete = info.partial_writes_last_complete;
     stats.version = info.stats.version;
     stats.reported_seq = info.stats.reported_seq;
     stats.last_fresh = info.stats.last_fresh;
@@ -3204,6 +3210,7 @@ struct pg_fast_info_t {
     info->last_update = last_update;
     info->last_complete = last_complete;
     info->last_user_version = last_user_version;
+    info->partial_writes_last_complete = partial_writes_last_complete;
     info->stats.version = stats.version;
     info->stats.reported_seq = stats.reported_seq;
     info->stats.last_fresh = stats.last_fresh;
@@ -3227,7 +3234,7 @@ struct pg_fast_info_t {
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(last_update, bl);
     encode(last_complete, bl);
     encode(last_user_version, bl);
@@ -3249,10 +3256,11 @@ struct pg_fast_info_t {
     encode(stats.stats.sum.num_wr, bl);
     encode(stats.stats.sum.num_wr_kb, bl);
     encode(stats.stats.sum.num_objects_dirty, bl);
+    encode(partial_writes_last_complete, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     decode(last_update, p);
     decode(last_complete, p);
     decode(last_user_version, p);
@@ -3274,12 +3282,24 @@ struct pg_fast_info_t {
     decode(stats.stats.sum.num_wr, p);
     decode(stats.stats.sum.num_wr_kb, p);
     decode(stats.stats.sum.num_objects_dirty, p);
+    if (struct_v >= 2)
+      decode(partial_writes_last_complete, p);
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_stream("last_update") << last_update;
     f->dump_stream("last_complete") << last_complete;
     f->dump_stream("last_user_version") << last_user_version;
+    f->open_array_section("partial_writes_last_complete");
+    for (const auto & [shard, versionrange] : partial_writes_last_complete) {
+      auto & [from, to]  = versionrange;
+      f->open_object_section("shard");
+      f->dump_int("id", int(shard));
+      f->dump_stream("from") << from;
+      f->dump_stream("to") << to;
+      f->close_section();
+    }
+    f->close_section();
     f->open_object_section("stats");
     f->dump_stream("version") << stats.version;
     f->dump_unsigned("reported_seq", stats.reported_seq);
