@@ -467,7 +467,7 @@ class mini_flat_map {
 
   template<size_t N>
   void populate_bitset_set(bitset_set<N, KeyT> &set) const {
-    for (IntT ki = 0; ki < data.size(); ++ki) {
+    for (IntT ki = 0; static_cast<unsigned>(ki) < data.size(); ++ki) {
       KeyT k(ki);
       if (_at(k)) {
         set.insert(k);

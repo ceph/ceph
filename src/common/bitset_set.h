@@ -144,14 +144,14 @@ class bitset_set {
 
   /** insert k into set.  */
   void insert(const KeyT k) {
-    ceph_assert(int(k) < max_bits);
+    ceph_assert(unsigned(k) < max_bits);
     ceph_assert(int(k) >= 0);
     words[int(k) / bits_per_uint64_t] |= 1ULL << (int(k) % bits_per_uint64_t);
   }
 
   /** insert k into set.  */
   void insert(const bitset_set &other) {
-    for (int i = 0; i < word_count; ++i) {
+    for (unsigned i = 0; i < word_count; ++i) {
       words[i] |= other.words[i];
     }
   }
@@ -176,7 +176,7 @@ class bitset_set {
 
   /** erase key from set. Unlike std::set does not return anything */
   void erase(const KeyT k) {
-    ceph_assert(int(k) < max_bits);
+    ceph_assert(unsigned(k) < max_bits);
     ceph_assert(int(k) >= 0);
     words[int(k) / bits_per_uint64_t] &= ~(1ULL << (int(k) % bits_per_uint64_t));
   }
@@ -185,11 +185,11 @@ class bitset_set {
    * essentially an O(1) algorithm, although technically it is O(N)
    */
   void insert_range(const KeyT start, int length) {
-    int start_word = int(start) / bits_per_uint64_t;
+    unsigned start_word = int(start) / bits_per_uint64_t;
     // This is not an off-by-one error. Conventionally this would have length
     // - 1, but the logic below is simpler with it as follows.
-    int end_word = (int(start) + length) / bits_per_uint64_t;
-    ceph_assert(0 <= end_word && end_word < word_count + 1);
+    unsigned end_word = (int(start) + length) / bits_per_uint64_t;
+    ceph_assert(end_word < word_count + 1);
 
     if (start_word == end_word) {
       words[start_word] |=
@@ -210,10 +210,10 @@ class bitset_set {
    * essentially an O(1) algorithm, although technically it is O(N)
    */
   void erase_range(const KeyT start, int length) {
-    int start_word = int(start) / bits_per_uint64_t;
+    unsigned start_word = int(start) / bits_per_uint64_t;
     // This is not an off-by-one error. Conventionally this would have length
     // - 1, but the logic below is simpler with it as follows.
-    int end_word = (int(start) + length) / bits_per_uint64_t;
+    unsigned end_word = (int(start) + length) / bits_per_uint64_t;
     ceph_assert(0 <= end_word && end_word < word_count + 1);
 
     if (start_word == end_word) {
@@ -252,7 +252,7 @@ class bitset_set {
 
   /** @return true if the container contains Key k. */
   bool contains(KeyT k) const {
-    ceph_assert(int(k) < max_bits);
+    ceph_assert(unsigned(k) < max_bits);
     ceph_assert(int(k) >= 0);
     return (words[int(k) / bits_per_uint64_t]
       & 1ULL << (int(k) % bits_per_uint64_t));
