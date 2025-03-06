@@ -457,6 +457,7 @@ private:
   bool prepare_alive(MonOpRequestRef op);
   void _reply_map(MonOpRequestRef op, epoch_t e);
 
+  bool validate_pgtemp_update(const pg_t &pg, const std::vector<int32_t> &pg_temp, int from);
   bool preprocess_pgtemp(MonOpRequestRef op);
   bool prepare_pgtemp(MonOpRequestRef op);
 
