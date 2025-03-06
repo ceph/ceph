@@ -3886,3 +3886,64 @@ def test_bucket_replication_lock_disabled_to_lock_enabled():
     # check the source object has replication status set to FAILED
     res = source.s3_client.head_object(Bucket=source_bucket.name, Key=objname)
     assert_equal(res['ReplicationStatus'], 'FAILED')
+
+@allow_bucket_replication
+def test_bucket_replication_reject_versioning_identical():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    e = assert_raises(ClientError,
+                      source.s3_client.put_bucket_replication,
+                      Bucket=source_bucket.name,
+                      ReplicationConfiguration={
+                          'Role': '',
+                          'Rules': [{
+                              'ID': 'rule1',
+                              'Status': 'Enabled',
+                              'Destination': {
+                                  'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                              }
+                          }]
+                      })
+    assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
+
+@allow_bucket_replication
+def test_bucket_replicaion_reject_objectlock_identical():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket_name = gen_bucket_name()
+    dest.s3_client.create_bucket(Bucket=dest_bucket_name, ObjectLockEnabledForBucket=True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    e = assert_raises(ClientError,
+                      source.s3_client.put_bucket_replication,
+                      Bucket=source_bucket.name,
+                      ReplicationConfiguration={
+                          'Role': '',
+                          'Rules': [{
+                              'ID': 'rule1',
+                              'Status': 'Enabled',
+                              'Destination': {
+                                  'Bucket': f'arn:aws:s3:::{dest_bucket_name}',
+                              }
+                          }]
+                      })
+    assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
