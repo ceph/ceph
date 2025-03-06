@@ -69,6 +69,7 @@ unsigned int ErasureCodeShec::get_chunk_size(unsigned int stripe_width) const
   return padded_length / k;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
 				       const set<int> &available_chunks,
@@ -123,6 +124,7 @@ int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
 
   return 0;
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCodeShec::_minimum_to_decode(const shard_id_set &want_to_read,
 				       const shard_id_set &available_chunks,
@@ -174,6 +176,7 @@ int ErasureCodeShec::_minimum_to_decode(const shard_id_set &want_to_read,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
 						 const map<int, int> &available,
@@ -188,6 +191,7 @@ int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
 
   return _minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCodeShec::minimum_to_decode_with_cost(const shard_id_set &want_to_read,
 						 const shard_id_map<int> &available,
@@ -203,6 +207,7 @@ int ErasureCodeShec::minimum_to_decode_with_cost(const shard_id_set &want_to_rea
   return _minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCodeShec::encode(const set<int> &want_to_encode,
 			    const bufferlist &in,
@@ -238,6 +243,7 @@ int ErasureCodeShec::encode_chunks(const set<int> &want_to_encode,
   shec_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
   return 0;
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCodeShec::encode_chunks(const shard_id_map<bufferptr> &in,
                                    shard_id_map<bufferptr> &out)
@@ -278,6 +284,7 @@ int ErasureCodeShec::encode_chunks(const shard_id_map<bufferptr> &in,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCodeShec::_decode(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
@@ -361,6 +368,7 @@ int ErasureCodeShec::decode_chunks(const set<int> &want_to_read,
     return 0;
   }
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCodeShec::decode_chunks(const shard_id_set &want_to_read,
                                    shard_id_map<bufferptr> &in,

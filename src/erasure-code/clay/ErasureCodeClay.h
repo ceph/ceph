@@ -74,10 +74,12 @@ public:
 
   unsigned int get_minimum_granularity() override;
 
+  using ErasureCode::minimum_to_decode;
   int minimum_to_decode(const std::set<int> &want_to_read,
 			const std::set<int> &available,
 			std::map<int, std::vector<std::pair<int, int>>> *minimum) override;
 
+  using ErasureCode::decode;
   int decode(const std::set<int> &want_to_read,
              const std::map<int, ceph::bufferlist> &chunks,
              std::map<int, ceph::bufferlist> *decoded, int chunk_size) override;

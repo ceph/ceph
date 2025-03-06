@@ -53,6 +53,7 @@ public:
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
 
+  IGNORE_DEPRECATED
   [[deprecated]]
   int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
                                           const std::map<int, int> &available,
@@ -83,6 +84,7 @@ public:
       available_chunks.insert(i->first);
     return _minimum_to_decode(want_to_read, available_chunks, minimum);
   }
+  END_IGNORE_DEPRECATED
 
   int minimum_to_decode_with_cost(const shard_id_set &want_to_read,
                                           const shard_id_map<int> &available,
@@ -134,6 +136,7 @@ public:
     return 1;
   }
 
+  [[deprecated]]
   int encode(const std::set<int> &want_to_encode,
                      const bufferlist &in,
                      std::map<int, bufferlist> *encoded) override {

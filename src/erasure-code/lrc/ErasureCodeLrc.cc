@@ -905,6 +905,7 @@ int ErasureCodeLrc::_minimum_to_decode(const shard_id_set &want_to_read,
   return -EIO;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
 				  map<int, bufferlist> *encoded)
@@ -945,7 +946,7 @@ int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
   }
   return 0;
 }
-
+END_IGNORE_DEPRECATED
 
 int ErasureCodeLrc::encode_chunks(const shard_id_map<bufferptr> &in,
                                   shard_id_map<bufferptr> &out)
@@ -1000,6 +1001,7 @@ int ErasureCodeLrc::encode_chunks(const shard_id_map<bufferptr> &in,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
 				  const map<int, bufferlist> &chunks,
@@ -1085,6 +1087,7 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
     return 0;
   }
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
                                   shard_id_map<bufferptr> &in,

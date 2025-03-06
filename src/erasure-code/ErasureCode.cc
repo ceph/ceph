@@ -168,6 +168,7 @@ int ErasureCode::_minimum_to_decode(const shard_id_set &want_to_read,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
                                    const set<int> &available_chunks,
@@ -185,6 +186,7 @@ int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
   }
   return 0;
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCode::minimum_to_decode(const shard_id_set &want_to_read,
                                    const shard_id_set &available_chunks,
@@ -204,6 +206,7 @@ int ErasureCode::minimum_to_decode(const shard_id_set &want_to_read,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCode::minimum_to_decode_with_cost(const set<int> &want_to_read,
                                              const map<int, int> &available,
@@ -216,6 +219,7 @@ int ErasureCode::minimum_to_decode_with_cost(const set<int> &want_to_read,
     available_chunks.insert(i->first);
   return _minimum_to_decode(want_to_read, available_chunks, minimum);
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCode::minimum_to_decode_with_cost(const shard_id_set &want_to_read,
                                              const shard_id_map<int> &available,
@@ -229,6 +233,7 @@ int ErasureCode::minimum_to_decode_with_cost(const shard_id_set &want_to_read,
   return _minimum_to_decode(want_to_read, available_chunks, minimum);
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCode::encode_prepare(const bufferlist &raw,
                                 map<int, bufferlist> &encoded) const
@@ -266,6 +271,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
 
   return 0;
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCode::encode_prepare(const bufferlist &raw,
                                 shard_id_map<bufferlist> &encoded) const
@@ -304,6 +310,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCode::encode(const set<int> &want_to_encode,
                         const bufferlist &in,
@@ -322,6 +329,7 @@ int ErasureCode::encode(const set<int> &want_to_encode,
   }
   return 0;
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCode::encode(const shard_id_set &want_to_encode,
                         const bufferlist &in,
@@ -359,6 +367,7 @@ int ErasureCode::encode(const shard_id_set &want_to_encode,
   return 0;
 }
 
+IGNORE_DEPRECATED
 [[deprecated]]
 int ErasureCode::_decode(const set<int> &want_to_read,
 			 const map<int, bufferlist> &chunks,
@@ -397,6 +406,7 @@ int ErasureCode::_decode(const set<int> &want_to_read,
   }
   return decode_chunks(want_to_read, chunks, decoded);
 }
+END_IGNORE_DEPRECATED
 
 int ErasureCode::_decode(const shard_id_set &want_to_read,
 			 const shard_id_map<bufferlist> &chunks,
@@ -548,6 +558,8 @@ int ErasureCode::to_string(const std::string &name,
   return 0;
 }
 
+IGNORE_DEPRECATED
+[[deprecated]]
 int ErasureCode::decode_concat(const set<int>& want_to_read,
 			       const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
@@ -570,6 +582,7 @@ int ErasureCode::decode_concat(const set<int>& want_to_read,
   return r;
 }
 
+[[deprecated]]
 int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
@@ -579,4 +592,5 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
   }
   return decode_concat(want_to_read, chunks, decoded);
 }
+END_IGNORE_DEPRECATED
 }
