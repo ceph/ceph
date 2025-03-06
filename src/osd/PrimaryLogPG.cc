@@ -4508,11 +4508,11 @@ void PrimaryLogPG::do_scan(
 	return;
       }
 
-      BackfillInterval bi;
+      ReplicaBackfillInterval bi;
       bi.begin = m->begin;
       // No need to flush, there won't be any in progress writes occuring
       // past m->begin
-      scan_range(
+      scan_range_replica(
 	cct->_conf->osd_backfill_scan_min,
 	cct->_conf->osd_backfill_scan_max,
 	&bi,
@@ -4534,7 +4534,7 @@ void PrimaryLogPG::do_scan(
       // Check that from is in backfill_targets vector
       ceph_assert(is_backfill_target(from));
 
-      BackfillInterval& bi = peer_backfill_info[from];
+      ReplicaBackfillInterval& bi = peer_backfill_info[from];
       bi.begin = m->begin;
       bi.end = m->end;
       auto p = m->get_data().cbegin();
@@ -13888,7 +13888,7 @@ bool PrimaryLogPG::all_peer_done() const
   for (const pg_shard_t& bt : get_backfill_targets()) {
     const auto piter = peer_backfill_info.find(bt);
     ceph_assert(piter != peer_backfill_info.end());
-    const BackfillInterval& pbi = piter->second;
+    const ReplicaBackfillInterval& pbi = piter->second;
     // See if peer has more to process
     if (!pbi.extends_to_end() || !pbi.empty())
 	return false;
@@ -14001,7 +14001,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	 i != get_backfill_targets().end();
 	 ++i) {
       pg_shard_t bt = *i;
-      BackfillInterval& pbi = peer_backfill_info[bt];
+      ReplicaBackfillInterval& pbi = peer_backfill_info[bt];
 
       dout(20) << " peer shard " << bt << " backfill " << pbi << dendl;
       if (pbi.begin <= backfill_info.begin &&
@@ -14048,7 +14048,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	   i != get_backfill_targets().end();
 	   ++i) {
         pg_shard_t bt = *i;
-        BackfillInterval& pbi = peer_backfill_info[bt];
+        ReplicaBackfillInterval& pbi = peer_backfill_info[bt];
         if (pbi.begin == check)
           check_targets.insert(bt);
       }
@@ -14060,7 +14060,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	   i != check_targets.end();
 	   ++i) {
         pg_shard_t bt = *i;
-        BackfillInterval& pbi = peer_backfill_info[bt];
+        ReplicaBackfillInterval& pbi = peer_backfill_info[bt];
         ceph_assert(pbi.begin == check);
 
         to_remove.push_back(boost::make_tuple(check, pbi.objects.begin()->second, bt));
@@ -14074,17 +14074,31 @@ uint64_t PrimaryLogPG::recover_backfill(
       // and we can't increment ops without requeueing ourself
       // for recovery.
     } else {
-      eversion_t& obj_v = backfill_info.objects.begin()->second;
-
+      // Unpack versions for the object being backfilled
+      auto it = backfill_info.objects.begin();
+      eversion_t obj_v;
+      std::map<shard_id_t,eversion_t> versions;
+      while (it->first == check) {
+	obj_v = std::max(obj_v, it->second.second);
+	versions[it->second.first] = it->second.second;
+	++it;
+      }
+      dout(0) << "BILL:BACKFILL: versions = " << versions << dendl;
       vector<pg_shard_t> need_ver_targs, missing_targs, keep_ver_targs, skip_targs;
       for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
 	   i != get_backfill_targets().end();
 	   ++i) {
 	pg_shard_t bt = *i;
-	BackfillInterval& pbi = peer_backfill_info[bt];
+	ReplicaBackfillInterval& pbi = peer_backfill_info[bt];
         // Find all check peers that have the wrong version
 	if (check == backfill_info.begin && check == pbi.begin) {
-	  if (pbi.objects.begin()->second != obj_v) {
+	  eversion_t replicaobj_v;
+	  if (versions.contains(bt.shard)) {
+	    replicaobj_v = versions.at(bt.shard);
+	  } else {
+	    replicaobj_v = versions.at(shard_id_t::NO_SHARD);
+	  }
+	  if (pbi.objects.begin()->second != replicaobj_v) {
 	    need_ver_targs.push_back(bt);
 	  } else {
 	    keep_ver_targs.push_back(bt);
@@ -14156,7 +14170,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	   i != check_targets.end();
 	   ++i) {
         pg_shard_t bt = *i;
-        BackfillInterval& pbi = peer_backfill_info[bt];
+        ReplicaBackfillInterval& pbi = peer_backfill_info[bt];
         pbi.pop_front();
       }
     }
@@ -14324,17 +14338,18 @@ int PrimaryLogPG::prep_backfill_object_push(
 }
 
 void PrimaryLogPG::update_range(
-  BackfillInterval *bi,
+  PrimaryBackfillInterval *bi,
   ThreadPool::TPHandle &handle)
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
+  const std::set<pg_shard_t>& backfill_targets = get_backfill_targets();
 
   if (bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
     bi->version = info.last_update;
-    scan_range(local_min, local_max, bi, handle);
+    scan_range_primary(local_min, local_max, bi, handle, backfill_targets);
   }
 
   if (bi->version >= projected_last_update) {
@@ -14365,14 +14380,41 @@ void PrimaryLogPG::update_range(
 	if (e.is_update()) {
 	  dout(10) << __func__ << ": " << e.soid << " updated to version "
 		   << e.version << dendl;
-	  bi->objects.erase(e.soid);
-	  bi->objects.insert(
-	    make_pair(
-	      e.soid,
-	      e.version));
+	  if (e.written_shards.empty()) {
+	    // Log entry updates all shards, replace all entries for e.soid in backfill interval
+	    bi->objects.erase(e.soid);
+	    bi->objects.insert(make_pair(e.soid, make_pair(shard_id_t::NO_SHARD, e.version)));
+	  } else {
+	    // Update backfill interval for shards modified by log entry
+	    std::map<shard_id_t,eversion_t> versions;
+	    // Create map from existing entries in backfill entry
+	    auto range = bi->objects.equal_range(e.soid);
+	    for (auto entry = range.first; entry != range.second; ++entry) {
+	      const auto & [shard, version] = entry->second;
+	      versions[shard] = version;
+	    }
+	    // Update entries in map that are modified by log entry
+            bool uses_default = false;
+            for (auto & shard : backfill_targets) {
+	      if (!pool.info.is_nonprimary_shard(shard.shard) ||
+		  e.is_written_shard(shard.shard)) {
+		versions[shard.shard] = e.version;
+	      } else if (!versions.contains(shard.shard)) {
+		uses_default = true;
+	      }
+	    }
+	    if (!uses_default) {
+	      versions.erase(shard_id_t::NO_SHARD);
+	    }
+	    // Erase and recreate backfill interval for e.soid using map
+	    bi->objects.erase(e.soid);
+	    for (auto & [shard, version] : versions) {
+	      bi->objects.insert(make_pair(e.soid, make_pair(shard, version)));
+	    }
+	  }
 	} else if (e.is_delete()) {
 	  dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
-	  bi->objects.erase(e.soid);
+	  bi->objects.erase(e.soid); // Erasure all entries for e.soid
 	}
       }
     };
@@ -14382,16 +14424,18 @@ void PrimaryLogPG::update_range(
     projected_log.scan_log_after(bi->version, func);
     bi->version = projected_last_update;
   } else {
-    ceph_abort_msg("scan_range should have raised bi->version past log_tail");
+    ceph_abort_msg("scan_range_primary should have raised bi->version past log_tail");
   }
 }
 
-void PrimaryLogPG::scan_range(
-  int min, int max, BackfillInterval *bi,
-  ThreadPool::TPHandle &handle)
+void PrimaryLogPG::scan_range_primary(
+  int min, int max, PrimaryBackfillInterval *bi,
+  ThreadPool::TPHandle &handle,
+  const std::set<pg_shard_t> &backfill_targets)
 {
   ceph_assert(is_locked());
-  dout(10) << "scan_range from " << bi->begin << dendl;
+  dout(10) << "scan_range_primary from " << bi->begin <<
+              " backfill_targets " << backfill_targets << dendl;
   bi->clear_objects();
 
   vector<hobject_t> ls;
@@ -14403,9 +14447,13 @@ void PrimaryLogPG::scan_range(
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     handle.reset_tp_timeout();
-    ObjectContextRef obc;
-    if (is_primary())
-      obc = object_contexts.lookup(*p);
+
+    ceph_assert(is_primary());
+
+    eversion_t version;
+    std::map<shard_id_t,eversion_t> shard_versions;
+    ObjectContextRef obc = object_contexts.lookup(*p);
+
     if (obc) {
       if (!obc->obs.exists) {
 	/* If the object does not exist here, it must have been removed
@@ -14414,8 +14462,8 @@ void PrimaryLogPG::scan_range(
 	 */
 	continue;
       }
-      bi->objects[*p] = obc->obs.oi.version;
-      dout(20) << "  " << *p << " " << obc->obs.oi.version << dendl;
+      version = obc->obs.oi.version;
+      shard_versions = obc->obs.oi.shard_versions;
     } else {
       bufferlist bl;
       int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
@@ -14428,12 +14476,62 @@ void PrimaryLogPG::scan_range(
 
       ceph_assert(r >= 0);
       object_info_t oi(bl);
-      bi->objects[*p] = oi.version;
-      dout(20) << "  " << *p << " " << oi.version << dendl;
+      version = oi.version;
+      shard_versions = oi.shard_versions;
     }
+    dout(0) << "BILLBACKFILL: " << *p << " versions " << version << " " << shard_versions << dendl;
+    if (shard_versions.empty()) {
+      bi->objects.insert(make_pair(*p, std::make_pair(shard_id_t::NO_SHARD, version)));
+    } else {
+      bool added_default = false;
+      for (auto & shard: backfill_targets) {
+	if (shard_versions.contains(shard.shard)) {
+	  version = shard_versions.at(shard.shard);
+	  bi->objects.insert(make_pair(*p, std::make_pair(shard.shard, version)));
+	} else if (!added_default) {
+	  bi->objects.insert(make_pair(*p, std::make_pair(shard_id_t::NO_SHARD, version)));
+	  added_default = true;
+	}
+      }
+    }
+    dout(20) << "  BILLBACKFILL: adding " << *p << " " << version << dendl;
   }
 }
 
+void PrimaryLogPG::scan_range_replica(
+  int min, int max, ReplicaBackfillInterval *bi,
+  ThreadPool::TPHandle &handle)
+{
+  ceph_assert(is_locked());
+  dout(10) << "scan_range_replica from " << bi->begin << dendl;
+  bi->clear_objects();
+
+  vector<hobject_t> ls;
+  ls.reserve(max);
+  int r = pgbackend->objects_list_partial(bi->begin, min, max, &ls, &bi->end);
+  ceph_assert(r >= 0);
+  dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
+  dout(20) << ls << dendl;
+
+  for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    handle.reset_tp_timeout();
+
+    ceph_assert(!is_primary());
+    bufferlist bl;
+    int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
+    /* If the object does not exist here, it must have been removed
+     * between the collection_list_partial and here.  This can happen
+     * for the first item in the range, which is usually last_backfill.
+     */
+    if (r == -ENOENT)
+      continue;
+
+    ceph_assert(r >= 0);
+    object_info_t oi(bl);
+    bi->objects[*p] = oi.version;
+    dout(20) << "  BILLBACKFILL: adding " << *p << " " << oi.version << dendl;
+  }
+}
 
 /** check_local
  *

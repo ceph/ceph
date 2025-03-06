@@ -1145,7 +1145,7 @@ protected:
     }
     {
       f->open_array_section("peer_backfill_info");
-      for (std::map<pg_shard_t, BackfillInterval>::const_iterator pbi =
+      for (std::map<pg_shard_t, ReplicaBackfillInterval>::const_iterator pbi =
 	     peer_backfill_info.begin();
           pbi != peer_backfill_info.end(); ++pbi) {
         f->dump_stream("osd") << pbi->first;
@@ -1334,14 +1334,20 @@ protected:
    * @bi.begin first item should be >= this value
    * @bi [out] resulting std::map of objects to eversion_t's
    */
-  void scan_range(
-    int min, int max, BackfillInterval *bi,
+  void scan_range_replica(
+    int min, int max, ReplicaBackfillInterval *bi,
     ThreadPool::TPHandle &handle
+    );
+
+  void scan_range_primary(
+    int min, int max, PrimaryBackfillInterval *bi,
+    ThreadPool::TPHandle &handle,
+    const std::set<pg_shard_t> &backfill_targets
     );
 
   /// Update a hash range to reflect changes since the last scan
   void update_range(
-    BackfillInterval *bi,        ///< [in,out] interval to update
+    PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
