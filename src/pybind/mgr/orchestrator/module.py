@@ -1251,6 +1251,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         force: Optional[bool] = False,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
+        """
+        Sets the cert-key pair from -i <pem-file>, which must be a valid PEM file containing both the certificate and the private key.
+        """
         if inbuf:
             cert_content, key_content = parse_combined_pem_file(inbuf)
             if not cert_content or not key_content:
@@ -1282,6 +1285,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         hostname: Optional[str] = None,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
+        """
+        Sets the cert from the --cert argument or from -i <cert-file>.
+        """
         cert_content = cert or inbuf
         if not cert_content:
             raise OrchestratorError('This command requires passing a certificate using --cert parameter or "-i <filepath>" option')
@@ -1305,6 +1311,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         hostname: Optional[str] = None,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
+        """
+        Sets the key from the --key argument or from -i <key-file>.
+        """
         key_content = key or inbuf
         if not key_content:
             raise OrchestratorError('This command requires passing a key using --key parameter or "-i <filepath>" option')

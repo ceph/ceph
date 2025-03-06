@@ -3216,9 +3216,12 @@ Then run the following:
     def cert_store_cert_check(self) -> List[str]:
         report = []
         _, certs_with_issues = self.cert_mgr.check_services_certificates(fix_issues=False)
-        for cert_info in certs_with_issues:
-            if not cert_info.is_operationally_valid():
-                report.append(cert_info.get_status_description())
+        if certs_with_issues:
+            for cert_info in certs_with_issues:
+                if not cert_info.is_operationally_valid():
+                    report.append(cert_info.get_status_description())
+        else:
+            report.append('All certificates are valid. No issues detected.')
         return report
 
     @handle_orch_error
