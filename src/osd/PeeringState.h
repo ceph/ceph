@@ -1973,7 +1973,7 @@ public:
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
-    pg_log.missing_add_next_entry(e);
+    pg_log.missing_add_next_entry(e, pool.info, pg_whoami.shard);
   }
 
   /// Update log trim boundary

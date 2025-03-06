@@ -2887,7 +2887,7 @@ void PeeringState::activate(
 	    if (perform_deletes_during_peering() && p->is_delete()) {
 	      pm.rm(p->soid, p->version);
 	    } else {
-	      pm.add_next_event(*p);
+	      pm.add_next_event(*p, pool.info, peer.shard);
 	    }
 	  }
 	}
@@ -4410,7 +4410,7 @@ void PeeringState::pre_submit_op(
       continue;
     requires_missing_loc = true;
     for (auto &&entry: logv) {
-      peer_missing[i].add_next_event(entry);
+      peer_missing[i].add_next_event(entry, pool.info, i.shard);
     }
   }
 
