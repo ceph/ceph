@@ -388,7 +388,11 @@ public:
   int get_ec_stripe_chunk_size() const {
     return sinfo.get_chunk_size();
   }
-  uint64_t object_size_to_shard_size(const uint64_t size, int shard) const {
+  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
+    ) const {
+    if (size == std::numeric_limits<uint64_t>::max()) {
+      return size;
+    }
     return sinfo.logical_to_next_chunk_offset(size);
   }
   /**

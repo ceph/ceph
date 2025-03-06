@@ -427,7 +427,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
    virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
-   virtual uint64_t object_size_to_shard_size(const uint64_t size, int shard) const { return size; };
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
 
  private:
@@ -509,7 +509,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    void rollback_setattrs(
      const hobject_t &hoid,
      std::map<std::string, std::optional<ceph::buffer::list> > &old_attrs,
-     ObjectStore::Transaction *t);
+     ObjectStore::Transaction *t,
+     bool only_oi);
 
    /// Truncate object to rollback append
    void rollback_append(
@@ -539,8 +540,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    /// Clone the extents back into place
    void rollback_extents(
      version_t gen,
-     const std::vector<std::pair<uint64_t, uint64_t> > &extents,
+     const uint64_t offset,
+     uint64_t length,
      const hobject_t &hoid,
+     const uint64_t shard_size,
      ObjectStore::Transaction *t);
  public:
 
