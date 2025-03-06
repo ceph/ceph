@@ -426,7 +426,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
    virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
-   virtual uint64_t object_size_to_shard_size(const uint64_t size, int shard) const { return size; };
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
 
  private:
@@ -595,8 +595,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ScrubMap &map,
      ScrubMapBuilder &pos);
 
-   virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) const = 0;
+   virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
+                                       shard_id_t shard_id) const = 0;
 
    virtual int be_deep_scrub(
      const hobject_t &oid,
