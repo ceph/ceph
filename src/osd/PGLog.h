@@ -137,6 +137,9 @@ struct PGLog : DoutPrefixProvider {
     virtual void try_stash(
       const hobject_t &hoid,
       version_t v) = 0;
+    virtual void partialwrite(
+      pg_info_t *info,
+      const pg_log_entry_t &entry) = 0;
     virtual ~LogEntryHandler() {}
   };
   using LogEntryHandlerRef = std::unique_ptr<LogEntryHandler>;
@@ -240,18 +243,20 @@ public:
       return *this;
     }
 
-    void trim_rollback_info_to(eversion_t to, LogEntryHandler *h) {
+    void trim_rollback_info_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       advance_can_rollback_to(
 	to,
 	[&](pg_log_entry_t &entry) {
 	  h->trim(entry);
+	  h->partialwrite(info, entry);
 	});
     }
-    bool roll_forward_to(eversion_t to, LogEntryHandler *h) {
+    bool roll_forward_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       return advance_can_rollback_to(
 	to,
 	[&](pg_log_entry_t &entry) {
 	  h->rollforward(entry);
+	  h->partialwrite(info, entry);
 	});
     }
 
@@ -774,8 +779,8 @@ public:
     missing.add(oid, need, have, is_delete);
   }
 
-  void missing_add_next_entry(const pg_log_entry_t& e) {
-    missing.add_next_event(e);
+  void missing_add_next_entry(const pg_log_entry_t& e, const pg_pool_t &pool, shard_id_t shard) {
+    missing.add_next_event(e, pool, shard);
   }
 
   //////////////////// get or std::set log ////////////////////
@@ -811,15 +816,17 @@ public:
 
   void trim(
     eversion_t trim_to,
-    pg_info_t &info,
+    pg_info_t& info,
     bool transaction_applied = true,
     bool async = false);
 
   void roll_forward_to(
     eversion_t roll_forward_to,
+    pg_info_t *info,
     LogEntryHandler *h) {
     if (log.roll_forward_to(
 	  roll_forward_to,
+	  info,
 	  h))
       dirty_log = true;
   }
@@ -828,9 +835,10 @@ public:
     return log.get_can_rollback_to();
   }
 
-  void roll_forward(LogEntryHandler *h) {
+  void roll_forward(pg_info_t *info, LogEntryHandler *h) {
     roll_forward_to(
       log.head,
+      info,
       h);
   }
 
@@ -840,8 +848,8 @@ public:
 
   //////////////////// get or std::set log & missing ////////////////////
 
-  void reset_backfill_claim_log(const pg_log_t &o, LogEntryHandler *h) {
-    log.trim_rollback_info_to(log.head, h);
+  void reset_backfill_claim_log(const pg_log_t &o, pg_info_t *info, LogEntryHandler *h) {
+    log.trim_rollback_info_to(log.head, info, h);
     log.claim_log_and_clear_rollback_info(o);
     missing.clear();
     mark_dirty_to(eversion_t::max());
@@ -903,7 +911,7 @@ public:
     ceph_assert(log.get_can_rollback_to() >= v);
   }
 
-  void reset_complete_to(pg_info_t *info) {
+  void reset_complete_to(pg_info_t *info, bool ec_optimizations_enabled) {
     if (log.log.empty()) // caller is split_into()
       return;
     log.complete_to = log.log.begin();
@@ -912,13 +920,22 @@ public:
     if (oldest_need != eversion_t()) {
       while (log.complete_to->version < oldest_need) {
         ++log.complete_to;
+	// partial writes allow a shard which did not participate in a write to
+	// have a missing version that is newer that the most recent log entry
+	if (ec_optimizations_enabled && (log.complete_to == log.log.end())) {
+	  break;
+	}
         ceph_assert(log.complete_to != log.log.end());
       }
     }
     if (!info)
       return;
     if (log.complete_to == log.log.begin()) {
-      info->last_complete = eversion_t();
+      // partial writes use last complete to track shards that did not
+      // participate in a write - do not reset it
+      if (!ec_optimizations_enabled) {
+	info->last_complete = eversion_t();
+      }
     } else {
       --log.complete_to;
       info->last_complete = log.complete_to->version;
@@ -926,14 +943,15 @@ public:
     }
   }
 
-  void activate_not_complete(pg_info_t &info) {
-    reset_complete_to(&info);
+  void activate_not_complete(pg_info_t &info, bool ec_optimizations_enabled) {
+    reset_complete_to(&info, ec_optimizations_enabled);
     log.last_requested = 0;
   }
 
   void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from) const;
+			pg_missing_t& omissing, pg_shard_t from,
+			bool ec_optimizations_enabled) const;
 
   void set_missing_may_contain_deletes() {
     missing.may_include_deletes = true;
@@ -983,6 +1001,7 @@ protected:
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input InedexedLog
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
+    bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
@@ -1023,7 +1042,13 @@ protected:
 	// in increasing order of version
 	ceph_assert(i->version > last);
 	// prior_version correct (unless it is an ERROR entry)
-	ceph_assert(i->prior_version == last || i->is_error());
+	if (ec_optimizations_enabled) {
+	  // With partial writes prior_verson may be > last because of
+	  // skipped log entries
+	  ceph_assert(i->prior_version >= last || i->is_error());
+	} else {
+	  ceph_assert(i->prior_version == last || i->is_error());
+	}
       }
       if (i->is_error()) {
 	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
@@ -1064,8 +1089,15 @@ protected:
       // ensure missing has been updated appropriately
       if (objiter->second->is_update() ||
 	  (missing.may_include_deletes && objiter->second->is_delete())) {
-	ceph_assert(missing.is_missing(hoid) &&
-	       missing.get_items().at(hoid).need == objiter->second->version);
+	if (ec_optimizations_enabled) {
+	  // relax the assert for partial writes - missing may be newer than the
+	  // most recent log entry
+	  ceph_assert(missing.is_missing(hoid) &&
+		      missing.get_items().at(hoid).need >= objiter->second->version);
+	} else {
+	  ceph_assert(missing.is_missing(hoid) &&
+		      missing.get_items().at(hoid).need == objiter->second->version);
+	}
       } else {
 	ceph_assert(!missing.is_missing(hoid));
       }
@@ -1196,6 +1228,7 @@ protected:
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input IndexedLog
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
+    bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     std::map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t> > split;
@@ -1209,6 +1242,7 @@ protected:
 	olog_can_rollback_to,
 	omissing,
 	rollbacker,
+	ec_optimizations_enabled,
 	dpp);
     }
   }
@@ -1232,6 +1266,7 @@ protected:
       log.get_can_rollback_to(),
       missing,
       rollbacker,
+      false, // not allow_ec_optimizations pool
       this);
   }
 
@@ -1243,13 +1278,18 @@ public:
                             pg_info_t &info,
                             LogEntryHandler *rollbacker,
                             bool &dirty_info,
-                            bool &dirty_big_info);
+                            bool &dirty_big_info,
+			    bool ec_optimizations_enabled);
 
   void merge_log(pg_info_t &oinfo,
 		 pg_log_t&& olog,
 		 pg_shard_t from,
-		 pg_info_t &info, LogEntryHandler *rollbacker,
-		 bool &dirty_info, bool &dirty_big_info);
+		 pg_info_t &info,
+		 const pg_pool_t &pool,
+		 pg_shard_t to,
+		 LogEntryHandler *rollbacker,
+		 bool &dirty_info, bool &dirty_big_info,
+		 bool ec_optimizations_enabled);
 
   template <typename missing_type>
   static bool append_log_entries_update_missing(
@@ -1257,8 +1297,11 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     bool maintain_rollback,
     IndexedLog *log,
+    pg_info_t *info,
     missing_type &missing,
     LogEntryHandler *rollbacker,
+    const pg_pool_t &pool,
+    shard_id_t shard,
     const DoutPrefixProvider *dpp) {
     bool invalidate_stats = false;
     if (log && !entries.empty()) {
@@ -1268,17 +1311,21 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-	log->add(*p);
+        // Skip the log entry if it is a partial write that did not involve
+        // this shard
+        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
+	  log->add(*p);
+	}
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
 	if (missing.may_include_deletes) {
-	  missing.add_next_event(*p);
+	  missing.add_next_event(*p, pool, shard);
 	} else {
 	  if (p->is_delete()) {
 	    missing.rm(p->soid, p->version);
 	  } else {
-	    missing.add_next_event(*p);
+	    missing.add_next_event(*p, pool, shard);
 	  }
 	  if (rollbacker) {
 	    // hack to match PG::mark_all_unfound_lost
@@ -1296,14 +1343,21 @@ public:
   bool append_new_log_entries(
     const hobject_t &last_backfill,
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    LogEntryHandler *rollbacker) {
+    pg_info_t *info,
+    LogEntryHandler *rollbacker,
+    const pg_pool_t &pool,
+    shard_id_t shard,
+    bool ec_optimizations_enabled) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
       entries,
       true,
       &log,
+      info,
       missing,
       rollbacker,
+      pool,
+      shard,
       this);
     if (!entries.empty()) {
       mark_writeout_from(entries.begin()->version);
@@ -1316,7 +1370,7 @@ public:
 	// always in a std::list of solely lost_delete entries, so it is
 	// sufficient to check whether the first entry is a
 	// lost_delete
-	reset_complete_to(nullptr);
+	reset_complete_to(nullptr, ec_optimizations_enabled);
       }
     }
     return invalidate_stats;

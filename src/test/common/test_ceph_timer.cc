@@ -169,6 +169,12 @@ TEST(RunSome, Wall)
   run_some<std::chrono::system_clock>();
 }
 
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::chrono::time_point<T>& result)
+{
+  return os << result.time_since_epoch().count();
+}
+
 TEST(RunOrderly, Steady)
 {
   run_orderly<std::chrono::steady_clock>();
