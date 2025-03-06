@@ -17862,7 +17862,6 @@ int BlueStore::_do_write_v2_compressed(
     } else {
       wr.do_write(i.offset, data_bl);
     }
-    txc->statfs_delta += wr.statfs_delta;
   }
   estimator->finish();
   uint32_t changes_start = regions.front().offset;
