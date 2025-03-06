@@ -200,13 +200,14 @@ class KeyServer : public KeyStore {
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
 			       const AuthTicket& parent_ticket,
+                               std::optional<int> key_type,
 			       CephXSessionAuthInfo& info,
 			       double ttl);
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
   KeyServer(CephContext *cct_, KeyRing *extra_secrets);
-  bool generate_secret(CryptoKey& secret);
+  bool generate_secret(CryptoKey& secret, std::optional<int> type = std::nullopt);
 
   bool get_secret(const EntityName& name, CryptoKey& secret) const override;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
@@ -224,11 +225,13 @@ public:
   
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
+                              std::optional<int> key_type,
 			      CephXSessionAuthInfo& info);
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
 			      const CryptoKey& service_secret,
 			      uint64_t secret_id,
+                              std::optional<int> key_type,
 			      CephXSessionAuthInfo& info);
 
   /* get current secret for specific service type */

@@ -243,7 +243,7 @@ int CephxServiceHandler::handle_request(
       info.ticket.init_timestamps(ceph_clock_now(), ttl);
       info.validity.set_from_double(ttl);
 
-      key_server->generate_secret(session_key);
+      key_server->generate_secret(session_key, eauth.key.get_type());
 
       info.session_key = session_key;
       if (psession_key) {
@@ -308,6 +308,7 @@ int CephxServiceHandler::handle_request(
 	      key_server->build_session_auth_info(
 		service_id,
 		info.ticket,
+                eauth.key.get_type(),
 		svc_info);
 	      info_vec.push_back(svc_info);
 	    }
@@ -370,6 +371,7 @@ int CephxServiceHandler::handle_request(
           int r = key_server->build_session_auth_info(
 	    service_id,
 	    auth_ticket_info.ticket,  // parent ticket (client's auth ticket)
+            auth_ticket_info.session_key.get_type(), /* keep the same encryption type as in the session key */
 	    info);
 	  // tolerate missing MGR rotating key for the purposes of upgrades.
           if (r < 0) {

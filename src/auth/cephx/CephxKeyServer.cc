@@ -257,17 +257,18 @@ std::map<EntityName,CryptoKey> KeyServer::get_used_pending_keys()
   return ret;
 }
 
-bool KeyServer::generate_secret(CryptoKey& secret)
+bool KeyServer::generate_secret(CryptoKey& secret, std::optional<int> key_type)
 {
+  int type = key_type.value_or(CEPH_CRYPTO_AES256KRB5);
   bufferptr bp;
-  auto crypto = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+  auto crypto = cct->get_crypto_manager()->get_handler(type);
   if (!crypto)
     return false;
 
   if (crypto->create(cct->random(), bp) < 0)
     return false;
 
-  secret.set_secret(CEPH_CRYPTO_AES256KRB5, bp, ceph_clock_now());
+  secret.set_secret(type, bp, ceph_clock_now());
 
   return true;
 }
@@ -429,6 +430,7 @@ bool KeyServer::get_service_caps(const EntityName& name, uint32_t service_id,
 
 int KeyServer::_build_session_auth_info(uint32_t service_id,
 					const AuthTicket& parent_ticket,
+                                        std::optional<int> key_type,
 					CephXSessionAuthInfo& info,
 					double ttl)
 {
@@ -437,7 +439,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id,
   info.ticket.init_timestamps(ceph_clock_now(), ttl);
   info.validity.set_from_double(ttl);
 
-  generate_secret(info.session_key);
+  generate_secret(info.session_key, key_type);
 
   // mon keys are stored externally.  and the caps are blank anyway.
   if (service_id != CEPH_ENTITY_TYPE_MON) {
@@ -451,6 +453,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id,
 
 int KeyServer::build_session_auth_info(uint32_t service_id,
 				       const AuthTicket& parent_ticket,
+                                       std::optional<int> key_type,
 				       CephXSessionAuthInfo& info)
 {
   double ttl;
@@ -459,21 +462,35 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
     return -EACCES;
   }
 
+  /* either use the provided key type, or the one that the service
+   * is using. As things are, there are two different cases:
+   * one that this is being called as a result of a client call
+   * and in which case we'll be provided with the client's key type.
+   * The second case is when the monitor generates tickets to
+   * connects to the manager, in which case we want to use
+   * the manager's key type. In any case, we assume that services
+   * are upgraded first before clients, so we prioritize client's
+   * key type over the service key type.
+   */
+  int ktype = key_type.value_or(info.service_secret.get_type());
+
   std::scoped_lock l{lock};
-  return _build_session_auth_info(service_id, parent_ticket, info, ttl);
+  return _build_session_auth_info(service_id, parent_ticket,
+                                  ktype, info, ttl);
 }
 
 int KeyServer::build_session_auth_info(uint32_t service_id,
 				       const AuthTicket& parent_ticket,
 				       const CryptoKey& service_secret,
 				       uint64_t secret_id,
+                                       std::optional<int> key_type,
 				       CephXSessionAuthInfo& info)
 {
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
   std::scoped_lock l{lock};
-  return _build_session_auth_info(service_id, parent_ticket, info,
+  return _build_session_auth_info(service_id, parent_ticket, key_type, info,
 				  cct->_conf->auth_service_ticket_ttl);
 }
 
