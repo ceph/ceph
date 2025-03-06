@@ -1437,6 +1437,7 @@ public:
 
   /// union of acting, recovery, and backfill targets
   std::set<pg_shard_t> acting_recovery_backfill;
+  shard_id_set acting_recovery_backfill_shard_id_set;
 
   std::vector<HeartbeatStampsRef> hb_stamps;
 
@@ -1553,6 +1554,7 @@ public:
   std::set<pg_shard_t> peer_activated;
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  shard_id_set backfill_target_shard_id_set;
   std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
@@ -2290,6 +2292,10 @@ public:
   const std::set<pg_shard_t> &get_backfill_targets() const {
     return backfill_targets;
   }
+  const shard_id_set &get_backfill_target_shard_id_set() const
+  {
+    return backfill_target_shard_id_set;
+  }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return async_recovery_targets.count(peer);
   }
@@ -2298,6 +2304,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return acting_recovery_backfill;
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return acting_recovery_backfill_shard_id_set;
   }
 
   const PGLog &get_pg_log() const {

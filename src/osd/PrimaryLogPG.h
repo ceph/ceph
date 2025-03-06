@@ -392,11 +392,18 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const override {
+    return PG::get_acting_recovery_backfill_shard_id_set();
+  }
   const std::set<pg_shard_t> &get_acting_shards() const override {
     return recovery_state.get_actingset();
   }
   const std::set<pg_shard_t> &get_backfill_shards() const override {
     return get_backfill_targets();
+  }
+
+  const shard_id_set &get_backfill_shard_id_set() const override {
+    return get_backfill_target_shard_id_set();
   }
 
   std::ostream& gen_dbg_prefix(std::ostream& out) const override {
@@ -1897,6 +1904,9 @@ public:
   }
   const std::set<pg_shard_t> &get_backfill_targets() const {
     return recovery_state.get_backfill_targets();
+  }
+  const shard_id_set &get_backfill_target_shard_id_set() const {
+    return recovery_state.get_backfill_target_shard_id_set();
   }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return recovery_state.is_async_recovery_target(peer);
