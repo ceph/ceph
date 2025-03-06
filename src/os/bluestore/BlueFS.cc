@@ -1861,6 +1861,26 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   return 0;
 }
 
+int BlueFS::super_dump()
+{
+  // only dump superblock's content
+  _init_logger();
+  int r = _open_super();
+  if (r < 0) {
+    derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ceph::JSONFormatter f(true);
+  f.open_object_section("superblock");
+  super.dump(&f);
+  f.close_section();
+  f.flush(std::cout);
+
+  _shutdown_logger();
+  super = bluefs_super_t();
+  return r;
+}
+
 int BlueFS::log_dump()
 {
   // only dump log file's content
