@@ -3102,7 +3102,7 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
   ceph_tid_t tid = osd->objecter->read(
     soid.oid, oloc, obj_op,
     m->get_snapid(), NULL,
-    flags, new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())),
+    flags, new C_OnFinisher(fin, osd->get_objecter_finisher(shard_id_t(get_pg_shard()))),
     &prdop->user_version,
     &prdop->data_offset,
     m->get_features());
@@ -3298,7 +3298,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
   ceph_tid_t tid = osd->objecter->mutate(
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(pwop->mtime),
-    flags, new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())),
+    flags, new C_OnFinisher(fin, osd->get_objecter_finisher(shard_id_t(get_pg_shard()))),
     &pwop->user_version, pwop->reqid);
   fin->tid = tid;
   pwop->objecter_tid = tid;
@@ -3809,7 +3809,7 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
 
   Context *c = nullptr;
   if (cb) {
-    c = new C_OnFinisher(cb, osd->get_objecter_finisher(get_pg_shard()));
+    c = new C_OnFinisher(cb, osd->get_objecter_finisher(shard_id_t(get_pg_shard())));
   }
 
   object_locator_t oloc(tgt_soid);
@@ -3880,7 +3880,7 @@ void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, 
   ceph_tid_t tid = osd->objecter->read(
     soid.oid, oloc, obj_op,
     m->get_snapid(), NULL,
-    flags, new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())),
+    flags, new C_OnFinisher(fin, osd->get_objecter_finisher(shard_id_t(get_pg_shard()))),
     &prdop->user_version,
     &prdop->data_offset,
     m->get_features());
@@ -9572,7 +9572,7 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
 				   get_last_peering_reset(), cop);
   gather.set_finisher(new C_OnFinisher(fin,
-				       osd->get_objecter_finisher(get_pg_shard())));
+				       osd->get_objecter_finisher(shard_id_t(get_pg_shard()))));
 
   ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				  cop->src.snap, NULL,
@@ -9660,7 +9660,7 @@ void PrimaryLogPG::_copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint
       soid.oid, oloc, op,
       sub_cop->src.snap, NULL,
       flags,
-      new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard())),
+      new C_OnFinisher(fin, osd->get_objecter_finisher(shard_id_t(get_pg_shard()))),
       // discover the object version if we don't know it yet
       sub_cop->results.user_version ? NULL : &sub_cop->results.user_version);
     fin->tid = tid;
@@ -10525,7 +10525,7 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
 
   C_gather *fin = new C_gather(this, soid, get_last_peering_reset(), &(*ctx->ops)[ctx->current_osd_subop_num]);
   gather.set_finisher(new C_OnFinisher(fin,
-				       osd->get_objecter_finisher(get_pg_shard())));
+				       osd->get_objecter_finisher(shard_id_t(get_pg_shard()))));
   gather.activate();
 
   return -EINPROGRESS;
@@ -11092,7 +11092,7 @@ int PrimaryLogPG::start_flush(
     ceph::real_clock::from_ceph_timespec(oi.mtime),
     CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
     new C_OnFinisher(fin,
-		     osd->get_objecter_finisher(get_pg_shard())));
+		     osd->get_objecter_finisher(shard_id_t(get_pg_shard()))));
   /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;
