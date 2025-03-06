@@ -307,7 +307,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
   if (r < 0) {
     derr << "error listing local mirror group snapshots: " << cpp_strerror(r)
          << dendl;
-    schedule_load_group_snapshots();
+    notify_group_listener_stop();
     return;
   }
 
@@ -360,10 +360,10 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   }
   m_in_flight_op_tracker.finish_op();
 
-  if (r < 0) {
+  if (r < 0) {  // may be remote group is deleted?
     derr << "error listing remote mirror group snapshots: " << cpp_strerror(r)
          << dendl;
-    load_remote_group_snapshots();
+    notify_group_listener_stop();
     return;
   }
 
