@@ -17754,10 +17754,6 @@ int BlueStore::_do_write_v2(
     o->extent_map.fault_range(db, start, end - start);
     BlueStore::Writer wr(this, txc, &wctx, o);
     wr.do_write(offset, bl);
-    // equivalent of wctx_finish
-    // do_write updates allocations itself
-    // update statfs
-    txc->statfs_delta += wr.statfs_delta;
     o->extent_map.compress_extent_map(start, end - start);
     o->extent_map.dirty_range(start, end - start);
     o->extent_map.maybe_reshard(start, end);
@@ -17821,7 +17817,6 @@ int BlueStore::_do_write_v2_compressed(
     } else {
       wr.do_write(i.offset, data_bl);
     }
-    txc->statfs_delta += wr.statfs_delta;
   }
   estimator->finish();
   uint32_t changes_start = regions.front().offset;
