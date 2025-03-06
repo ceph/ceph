@@ -250,7 +250,6 @@ public:
       return ext->template cast<T>();
     });
   }
-  virtual void account_absent_access(Transaction::src_t) = 0;
   virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
   virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
   virtual ~ExtentTransViewRetriever() {}
@@ -350,11 +349,9 @@ public:
 	return etvr.get_extent_viewable_by_trans<ChildT>(
 	  t, static_cast<ChildT*>(child));
       } else {
-        etvr.account_absent_access(t.get_src());
 	return child_pos_t<T>(&sparent, spos);
       }
     } else {
-      etvr.account_absent_access(t.get_src());
       return child_pos_t<T>(&me, pos);
     }
   }
