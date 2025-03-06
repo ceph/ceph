@@ -8831,6 +8831,34 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         return -EINVAL;
       }
     if (val == "true" || (interr.empty() && n == 1)) {
+      ErasureCodeInterfaceRef erasure_code;
+      unsigned int k, m, total;
+      stringstream tmp;
+      int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        k = erasure_code->get_data_chunk_count();
+        m = erasure_code->get_coding_chunk_count();
+        total = erasure_code->get_chunk_count();
+      } else {
+        ss << "get_erasure_code failed: " << tmp.str();
+        return -EINVAL;
+      }
+      // Restrict the set of shards that can be a primary to the 1st data
+      // raw_shard (raw_shard 0) and the coding parity raw_shards because
+      // the other shards (including local parity for LRC) may not have
+      // up to date copies of xattrs including OI
+      p.nonprimary_shards.clear();
+      for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+        if (raw_shard > 0 && raw_shard < k) {
+	  shard_id_t shard;
+	  if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
+	    shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
+	  } else {
+	    shard = shard_id_t(int(raw_shard));
+	  }
+          p.nonprimary_shards.insert(shard);
+	}
+      }
       p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
