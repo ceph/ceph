@@ -282,7 +282,7 @@ void PGBackend::rollback(
 	  const uint64_t shard_size = pg->object_size_to_shard_size(object_size, pg->get_parent()->whoami_shard().shard);
 	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version
 			     << " written shard rollback_extents " << entry.written_shards
-			     << " shards " << shards[i] << " " <<
+			     << " shards " << (shards.empty()?shard_id_set():shards[i]) << " " <<
 	                        pg->get_parent()->whoami_shard().shard << " " <<
 	                        object_size << " " <<
 	                        shard_size << dendl;
