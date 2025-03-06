@@ -445,7 +445,7 @@ void PeeringState::advance_map(
 {
   ceph_assert(lastmap == osdmap_ref);
   psdout(10) << "handle_advance_map "
-	    << newup << "/" << newacting
+	    << pg_vector_string(newup) << "/" << pg_vector_string(newacting)
 	    << " -- " << up_primary << "/" << acting_primary
 	    << dendl;
 
@@ -550,8 +550,8 @@ bool PeeringState::should_restart_peering(
 	osdmap.get(),
 	lastmap.get(),
 	info.pgid.pgid)) {
-    psdout(20) << "new interval newup " << newup
-	       << " newacting " << newacting << dendl;
+    psdout(20) << "new interval newup " << pg_vector_string(newup)
+	       << " newacting " << pg_vector_string(newacting) << dendl;
     return true;
   }
   if (!lastmap->is_up(pg_whoami.osd) && osdmap->is_up(pg_whoami.osd)) {
@@ -676,8 +676,8 @@ void PeeringState::start_peering_interval(
 
   on_new_interval();
 
-  psdout(1) << "up " << oldup << " -> " << up
-	    << ", acting " << oldacting << " -> " << acting
+  psdout(1) << "up " << pg_vector_string(oldup) << " -> " << pg_vector_string(up)
+	    << ", acting " << pg_vector_string(oldacting) << " -> " << pg_vector_string(acting)
 	    << ", acting_primary " << old_acting_primary << " -> "
 	    << new_acting_primary
 	    << ", up_primary " << old_up_primary << " -> " << new_up_primary
@@ -725,7 +725,8 @@ void PeeringState::start_peering_interval(
     // no role change.
     // did primary change?
     if (get_primary() != old_acting_primary) {
-      psdout(10) << oldacting << " -> " << acting
+      psdout(10) << pg_vector_string(oldacting) << " -> "
+	       << pg_vector_string(acting)
 	       << ", acting primary "
 	       << old_acting_primary << " -> " << get_primary()
 	       << dendl;
@@ -735,7 +736,8 @@ void PeeringState::start_peering_interval(
 	// i am (still) primary. but my replica set changed.
 	state_clear(PG_STATE_CLEAN);
 
-	psdout(10) << oldacting << " -> " << acting
+	psdout(10) << pg_vector_string(oldacting) << " -> "
+		 << pg_vector_string(acting)
 		 << ", replicas changed" << dendl;
       }
     }
@@ -770,7 +772,8 @@ void PeeringState::on_new_interval()
   }
   psdout(20) << "upacting_features 0x" << std::hex
 	     << upacting_features << std::dec
-	     << " from " << acting << "+" << up << dendl;
+	     << " from " << pg_vector_string(acting)
+	     << "+" << pg_vector_string(up) << dendl;
 
   psdout(20) << "checking missing set deletes flag. missing = "
 	     << get_pg_log().get_missing() << dendl;
@@ -2235,7 +2238,7 @@ void PeeringState::choose_async_recovery_ec(
       async_recovery->insert(cur_shard);
     }
   }
-  psdout(20) << "result want=" << *want
+  psdout(20) << "result want=" << pg_vector_string(*want)
 	     << " async_recovery=" << *async_recovery << dendl;
 }
 
@@ -2442,7 +2445,8 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     want.pop_back();
   }
   if (want != acting) {
-    psdout(10) << "want " << want << " != acting " << acting
+    psdout(10) << "want " << pg_vector_string(want)
+	       << " != acting " << pg_vector_string(acting)
 	       << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
@@ -2485,9 +2489,9 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   for (auto i = want_backfill.begin(); i != want_backfill.end(); ++i) {
     ceph_assert(stray_set.find(*i) == stray_set.end());
   }
-  psdout(10) << "choose_acting want=" << want << " backfill_targets="
-           << want_backfill << " async_recovery_targets="
-           << async_recovery_targets << dendl;
+  psdout(10) << "choose_acting want=" << pg_vector_string(want)
+	     << " backfill_targets=" << want_backfill
+	     << " async_recovery_targets=" << async_recovery_targets << dendl;
   return true;
 }
 
@@ -3979,8 +3983,9 @@ void PeeringState::init(
   const PastIntervals& pi,
   ObjectStore::Transaction &t)
 {
-  psdout(10) << "init role " << role << " up "
-	     << newup << " acting " << newacting
+  psdout(10) << "init role " << role
+	     << " up " << pg_vector_string(newup)
+	     << " acting " << pg_vector_string(newacting)
 	     << " history " << history
 	     << " past_intervals " << pi
 	     << dendl;
@@ -7120,7 +7125,9 @@ boost::statechart::result PeeringState::WaitActingChange::react(const AdvMap& ad
   DECLARE_LOCALS;
   OSDMapRef osdmap = advmap.osdmap;
 
-  psdout(10) << "verifying no want_acting " << ps->want_acting << " targets didn't go down" << dendl;
+  psdout(10) << "verifying no want_acting "
+	     << pg_vector_string(ps->want_acting)
+	     << " targets didn't go down" << dendl;
   for (auto p = ps->want_acting.begin(); p != ps->want_acting.end(); ++p) {
     if (!osdmap->is_up(*p)) {
       psdout(10) << " want_acting target osd." << *p << " went down, resetting" << dendl;

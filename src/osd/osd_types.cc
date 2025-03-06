@@ -3834,8 +3834,10 @@ ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
 std::string PastIntervals::pg_interval_t::fmt_print() const
 {
   return fmt::format(
-      "interval({}-{} up {}({}) acting {}({}){})", first, last, up, up_primary,
-      acting, primary, maybe_went_rw ? " maybe_went_rw" : "");
+      "interval({}-{} up {}({}) acting {}({}){})", first, last,
+      pg_vector_string(up), up_primary,
+      pg_vector_string(acting), primary,
+      maybe_went_rw ? " maybe_went_rw" : "");
 }
 
 void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
