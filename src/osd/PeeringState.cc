@@ -6004,6 +6004,7 @@ PeeringState::Active::Active(my_context ctx)
        p != ps->acting_recovery_backfill.end();
        ++p) {
     if (p->shard != ps->pg_whoami.shard) {
+      // FIXME?: Should this not be an OSD?
       ps->blocked_by.insert(static_cast<int>(p->shard));
     }
   }
@@ -6180,6 +6181,7 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
       ps->peer_activated.insert(infoevt.from).second) {
     psdout(10) << " peer osd." << infoevt.from
 	       << " activated and committed" << dendl;
+    // FIXME?: Should this not be an OSD?
     ps->blocked_by.erase(static_cast<int>(infoevt.from.shard));
     pl->publish_stats_to_osd();
     if (ps->peer_activated.size() == ps->acting_recovery_backfill.size()) {
