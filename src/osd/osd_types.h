@@ -6088,6 +6088,8 @@ struct object_info_t {
 
   struct object_manifest_t manifest;
 
+  std::map<shard_id_t,eversion_t> shard_versions;
+
   void copy_user_bits(const object_info_t& other);
 
   bool test_flag(flag_t f) const {

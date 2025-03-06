@@ -6439,7 +6439,7 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(17, 8, bl);
+  ENCODE_START(18, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6473,13 +6473,14 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (has_manifest()) {
     encode(manifest, bl);
   }
+  encode(shard_versions, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   decode(soid, bl);
   decode(myoloc, bl);
@@ -6565,6 +6566,9 @@ void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
       decode(manifest, bl);
     }
   }
+  if (struct_v >= 18) {
+    decode(shard_versions, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6601,6 +6605,14 @@ void object_info_t::dump(Formatter *f) const
     *css << p->first.second;
     f->open_object_section(css->strv());
     p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("shard_versions");
+  for (auto p = shard_versions.cbegin(); p != shard_versions.cend(); ++p) {
+    f->open_object_section("shard");
+    f->dump_int("id", int(p->first));
+    f->dump_stream("version") << p->second;
     f->close_section();
   }
   f->close_section();
