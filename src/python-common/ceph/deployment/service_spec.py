@@ -1514,9 +1514,9 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``cluster_connections`` number of ceph cluster connections
         self.cluster_connections = cluster_connections
         # set default only if all spdk alloc stratgies are None (no parameters explicitly defined)
-        if not any([self.bdevs_per_cluster is not None,
-                   self.flat_bdevs_per_cluster is not None,
-                   self.cluster_connections is not None]):
+        if all([self.bdevs_per_cluster is None,
+                   self.flat_bdevs_per_cluster is None,
+                   self.cluster_connections is None]):
             self.cluster_connections = 32
         #: ``server_key`` gateway server key
         self.server_key = server_key
