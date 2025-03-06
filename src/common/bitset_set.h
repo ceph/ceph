@@ -105,6 +105,12 @@ class bitset_set {
   const_iterator _end;
 
  public:
+
+  static unsigned int unsigned_cast(KeyT const k) {
+    int8_t i = static_cast<int8_t>(k);
+    return static_cast<unsigned int>(i);
+  }
+
   /** default constructor */
   bitset_set() : _end(this, end_pos) {
     clear();
@@ -144,7 +150,7 @@ class bitset_set {
 
   /** insert k into set.  */
   void insert(const KeyT k) {
-    ceph_assert(unsigned(k) < max_bits);
+    ceph_assert( unsigned_cast(k) < max_bits);
     ceph_assert(int(k) >= 0);
     words[int(k) / bits_per_uint64_t] |= 1ULL << (int(k) % bits_per_uint64_t);
   }
@@ -176,7 +182,7 @@ class bitset_set {
 
   /** erase key from set. Unlike std::set does not return anything */
   void erase(const KeyT k) {
-    ceph_assert(unsigned(k) < max_bits);
+    ceph_assert(unsigned_cast(k) < max_bits);
     ceph_assert(int(k) >= 0);
     words[int(k) / bits_per_uint64_t] &= ~(1ULL << (int(k) % bits_per_uint64_t));
   }
@@ -252,7 +258,7 @@ class bitset_set {
 
   /** @return true if the container contains Key k. */
   bool contains(KeyT k) const {
-    ceph_assert(unsigned(k) < max_bits);
+    ceph_assert(unsigned_cast(k) < max_bits);
     ceph_assert(int(k) >= 0);
     return (words[int(k) / bits_per_uint64_t]
       & 1ULL << (int(k) % bits_per_uint64_t));
