@@ -374,10 +374,12 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
     workunits_file = '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)
     workunits = sorted(remote.read_file(workunits_file).decode().split('\0'))
     assert workunits
+    log.info(f"WORKUNITS={workunits}")
 
     try:
         assert isinstance(tests, list)
         for spec in tests:
+            log.info(f"WORKUNITS= {workunits} and SPEC= {spec}")
             dir_or_fname, *optional_args = shlex.split(spec)
             log.info('Running workunits matching %s on %s...', dir_or_fname, role)
             # match executables named "foo" or "foo/*" with workunit named
