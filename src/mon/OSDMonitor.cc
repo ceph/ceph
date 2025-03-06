@@ -4187,8 +4187,18 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
                << ": pool has been removed" << dendl;
       continue;
     }
+    // Pools with allow_ec_optimizations set store pg_temp in a different
+    // order to change the primary selection algorithm without breaking
+    // old clients. If necessary re-order the new pg_temp now
+    pg_pool_t pg_pool;
+    if (pending_inc.new_pools.count(pool))
+      pg_pool = pending_inc.new_pools[pool];
+    else
+      pg_pool = *osdmap.get_pg_pool(pool);
+
+    std::vector<int> pg_temp = osdmap.pgtemp_primaryfirst(pg_pool, p->second);
     pending_inc.new_pg_temp[p->first] =
-      mempool::osdmap::vector<int>(p->second.begin(), p->second.end());
+      mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end());
 
     // unconditionally clear pg_primary (until this message can encode
     // a change for that, too.. at which point we need to also fix
