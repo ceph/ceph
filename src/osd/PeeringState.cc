@@ -1476,7 +1476,7 @@ void PeeringState::reject_reservation()
  * find_best_info
  *
  * Returns an iterator to the best info in infos sorted by:
- *  1) Prefer newer last_update
+ *  1) Prefer newer (oldest for ec_pool) last_update
  *  2) Prefer longer tail if it brings another info into contiguity
  *  3) Prefer current primary
  */
@@ -2457,8 +2457,9 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 	ceph_assert(want_backfill.empty());
 	vector<int> empty;
 	pl->queue_want_pg_temp(empty);
-      } else
+      } else {
 	pl->queue_want_pg_temp(want);
+      }
     }
     return false;
   }
