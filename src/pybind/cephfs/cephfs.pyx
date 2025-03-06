@@ -1,3 +1,6 @@
+# cython: language_level=3
+# cython: legacy_implicit_noexcept=True
+
 """
 This module is a thin wrapper around libcephfs.
 """
@@ -114,10 +117,14 @@ cdef extern from "Python.h":
 cdef void completion_callback(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud) nogil:
     # This GIL awkwardness is due to incompatible types with function pointers defined with mds_command2:
     with gil:
-        pyout = (<unsigned char*>out)[:outlen]
-        pyouts = (<unsigned char*>outs)[:outslen]
-        (<object>ud).complete(rc, pyout, pyouts)
-        ref.Py_DECREF(<object>ud)
+        try:
+            pyout = (<unsigned char*>out)[:outlen]
+            pyouts = (<unsigned char*>outs)[:outslen]
+            (<object>ud).complete(rc, pyout, pyouts)
+        except:
+            pass # we can't handle this in any useful way: e.g. which thread should get the exception?
+        finally:
+            ref.Py_DECREF(<object>ud)
 
 class Error(Exception):
     def get_error_code(self):
@@ -2316,6 +2323,7 @@ cdef class LibCephFS(object):
 
 
         try:
+            ref.Py_INCREF(result)
             with nogil:
                 ret = ceph_mds_command2(self.cluster, _mds_spec,
                                         <const char **>_cmd, _cmdlen,
@@ -2323,9 +2331,8 @@ cdef class LibCephFS(object):
                                         _one_shot,
                                         completion_callback,
                                         <void*>result)
-            if ret == 0:
-                ref.Py_INCREF(result)
-            else:
+            if ret != 0:
+                ref.Py_DECREF(result)
                 raise make_ex(ret, "error in mds_command2")
         finally:
             free(_cmd)
