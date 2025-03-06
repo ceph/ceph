@@ -48,6 +48,9 @@ ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_BOOST=ON
   extraopts += -DWITH_SYSTEM_PMDK=ON
 endif
+ifeq ($(SCCACHE), true)
+extraopts += -DWITH_SCCACHE=ON
+endif
 
 ifeq ($(DWZ), false)
 override_dh_dwz:
