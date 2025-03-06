@@ -294,7 +294,7 @@ public:
     bool dirty_big_info = false;
     merge_log(
       oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
-      &h, dirty_info, dirty_big_info);
+      pg_pool_t(), pg_shard_t(), &h, dirty_info, dirty_big_info, false);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
     verify_missing(tcase, missing);
@@ -328,7 +328,7 @@ public:
 	if (i->is_delete() && tcase.deletes_during_peering) {
 	  omissing.rm(i->soid, i->version);
 	} else {
-	  omissing.add_next_event(*i);
+	  omissing.add_next_event(*i, pg_pool_t(), shard_id_t());
 	}
       }
     }
@@ -613,7 +613,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     {
       pg_log_entry_t &ne = log.log.front();
       ne.op = pg_log_entry_t::MODIFY;
-      missing.add_next_event(ne);
+      missing.add_next_event(ne, pg_pool_t(), shard_id_t());
       pg_log_entry_t oe;
       oe.mark_unrollbackable();
       oe.version = eversion_t(1,1);
@@ -692,7 +692,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     oe.version = eversion_t(2,1);
     oe.op = pg_log_entry_t::MODIFY;
-    missing.add_next_event(oe);
+    missing.add_next_event(oe, pg_pool_t(), shard_id_t());
 
     missing.flush();
     EXPECT_FALSE(is_dirty());
@@ -897,8 +897,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
@@ -947,8 +947,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h,dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
@@ -1052,8 +1052,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
@@ -1161,8 +1161,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1280,8 +1280,8 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1382,8 +1382,8 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());

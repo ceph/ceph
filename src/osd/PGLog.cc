@@ -369,8 +369,10 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
 }
 
 void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
-                      pg_info_t &info, LogEntryHandler *rollbacker,
-                      bool &dirty_info, bool &dirty_big_info)
+                      pg_info_t &info, const pg_pool_t &pool, pg_shard_t toosd,
+		      LogEntryHandler *rollbacker,
+                      bool &dirty_info, bool &dirty_big_info,
+		      bool ec_optimizations_enabled)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -476,6 +478,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       &log,
       missing,
       rollbacker,
+      pool,
+      toosd.shard,
       this);
 
     _merge_divergent_entries(
