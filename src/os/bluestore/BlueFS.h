@@ -687,6 +687,7 @@ public:
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
+  int super_dump();
 
   void collect_metadata(std::map<std::string,std::string> *pm, unsigned skip_bdev_id);
   void get_devices(std::set<std::string> *ls);
