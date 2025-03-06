@@ -95,6 +95,12 @@ public:
 			     CrushWrapper &crush,
 			     std::ostream *ss) const override;
 
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION;
+  }
+
   unsigned int get_chunk_count() const override {
     return chunk_count;
   }
@@ -105,12 +111,21 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  unsigned int get_minimum_granularity() override;
+
   int encode_chunks(const std::set<int> &want_to_encode,
 		    std::map<int, ceph::buffer::list> *encoded) override;
 
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
+
+  void encode_delta(const ceph::bufferptr &old_data,
+                    const ceph::bufferptr &new_data,
+                    ceph::bufferptr *delta);
+
+  void apply_delta(const std::map<int, ceph::bufferptr> &in,
+                   std::map <int, ceph::bufferptr> &out);
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
