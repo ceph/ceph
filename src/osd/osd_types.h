@@ -4463,6 +4463,9 @@ struct pg_log_entry_t {
   bool invalid_pool; // only when decoding pool-less hobject based entries
   ObjectCleanRegions clean_regions;
 
+  shard_id_set written_shards; // EC partial writes do not update every shard
+  shard_id_set present_shards; // EC partial writes need to know set of present shards
+
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
      invalid_hash(false), invalid_pool(false) {
@@ -4531,6 +4534,15 @@ struct pg_log_entry_t {
   }
 
   std::string get_key_name() const;
+
+  /// EC partial writes: test if a shard was written
+  bool is_written_shard(const shard_id_t shard) const {
+    return written_shards.empty() || written_shards.contains(shard);
+  }
+  bool is_present_shard(const shard_id_t shard) const {
+    return present_shards.empty() || present_shards.contains(shard);
+  }
+
   void encode_with_checksum(ceph::buffer::list& bl) const;
   void decode_with_checksum(ceph::buffer::list::const_iterator& p);
 
