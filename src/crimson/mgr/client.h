@@ -4,6 +4,7 @@
 #pragma once
 
 #include <seastar/core/timer.hh>
+#include <seastar/core/shared_mutex.hh>
 
 #include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
@@ -41,6 +42,7 @@ public:
 	 get_perf_report_cb_t cb_get);
   seastar::future<> start();
   seastar::future<> stop();
+  seastar::future<> send(MessageURef msg);
   void report();
   void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
@@ -54,6 +56,7 @@ private:
   seastar::future<> handle_mgr_conf(crimson::net::ConnectionRef conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
+  seastar::future<> retry_interval();
 
   void print(std::ostream&) const;
   friend std::ostream& operator<<(std::ostream& out, const Client& client);
@@ -62,6 +65,7 @@ private:
   crimson::net::Messenger& msgr;
   WithStats& with_stats;
   crimson::net::ConnectionRef conn;
+  seastar::shared_mutex conn_lock;
   seastar::timer<seastar::lowres_clock> report_timer;
   crimson::common::gate_per_shard gates;
   uint64_t last_config_bl_version = 0;
