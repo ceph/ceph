@@ -186,7 +186,7 @@ public:
     return t.root;
   }
 
-  void account_absent_access(Transaction::src_t src) final {
+  void account_absent_access(Transaction::src_t src) {
     ++(get_by_src(stats.cache_absent_by_src, src));
     ++stats.access.cache_absent;
   }
