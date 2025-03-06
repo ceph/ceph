@@ -492,6 +492,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const pg_log_entry_t &entry,
      ObjectStore::Transaction *t);
 
+   void partialwrite(
+     pg_info_t *info,
+     const pg_log_entry_t &entry);
+
    void remove(
      const hobject_t &hoid,
      ObjectStore::Transaction *t);
