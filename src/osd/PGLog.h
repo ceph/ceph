@@ -787,8 +787,8 @@ public:
     missing.add(oid, need, have, is_delete);
   }
 
-  void missing_add_next_entry(const pg_log_entry_t& e) {
-    missing.add_next_event(e);
+  void missing_add_next_entry(const pg_log_entry_t& e, const pg_pool_t &pool, shard_id_t shard) {
+    missing.add_next_event(e, pool, shard);
   }
 
   //////////////////// get or std::set log ////////////////////
@@ -1278,8 +1278,12 @@ public:
   void merge_log(pg_info_t &oinfo,
 		 pg_log_t&& olog,
 		 pg_shard_t from,
-		 pg_info_t &info, LogEntryHandler *rollbacker,
-		 bool &dirty_info, bool &dirty_big_info);
+		 pg_info_t &info,
+		 const pg_pool_t &pool,
+		 pg_shard_t to,
+		 LogEntryHandler *rollbacker,
+		 bool &dirty_info, bool &dirty_big_info,
+		 bool ec_optimizations_enabled);
 
   template <typename missing_type>
   static bool append_log_entries_update_missing(
@@ -1289,6 +1293,8 @@ public:
     IndexedLog *log,
     missing_type &missing,
     LogEntryHandler *rollbacker,
+    const pg_pool_t &pool,
+    shard_id_t shard,
     const DoutPrefixProvider *dpp) {
     bool invalidate_stats = false;
     if (log && !entries.empty()) {
@@ -1303,12 +1309,12 @@ public:
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
 	if (missing.may_include_deletes) {
-	  missing.add_next_event(*p);
+	  missing.add_next_event(*p, pool, shard);
 	} else {
 	  if (p->is_delete()) {
 	    missing.rm(p->soid, p->version);
 	  } else {
-	    missing.add_next_event(*p);
+	    missing.add_next_event(*p, pool, shard);
 	  }
 	  if (rollbacker) {
 	    // hack to match PG::mark_all_unfound_lost
@@ -1326,7 +1332,10 @@ public:
   bool append_new_log_entries(
     const hobject_t &last_backfill,
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
+    pg_info_t *info,
     LogEntryHandler *rollbacker,
+    const pg_pool_t &pool,
+    shard_id_t shard,
     bool ec_optimizations_enabled) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
@@ -1335,6 +1344,8 @@ public:
       &log,
       missing,
       rollbacker,
+      pool,
+      shard,
       this);
     if (!entries.empty()) {
       mark_writeout_from(entries.begin()->version);
