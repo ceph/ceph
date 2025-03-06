@@ -72,7 +72,10 @@ fi
 if test $NPROC -gt 1 ; then
     j=-j${NPROC}
 fi
-PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
+if [ "$SCCACHE" != "true" ] ; then
+    PATH=/usr/lib/ccache:$PATH
+fi
+PATH=$PATH dpkg-buildpackage $j -uc -us
 cd ../..
 mkdir -p $VERSION_CODENAME/conf
 cat > $VERSION_CODENAME/conf/distributions <<EOF
