@@ -1642,6 +1642,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
+  f->dump_stream("nonprimary_shards") << nonprimary_shards;
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -1961,7 +1962,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 31;
+  uint8_t v = 32;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
@@ -2080,12 +2081,15 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     auto maybe_peering_crush_data1 = maybe_peering_crush_data();
     encode(maybe_peering_crush_data1, bl);
   }
+  if (v >= 32) {
+    encode(nonprimary_shards, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(31, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(32, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2276,6 +2280,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
                  peering_crush_mandatory_member) = *peering_crush_data;
     }
   }
+  if (struct_v >= 32) {
+    decode(nonprimary_shards, bl);
+  } else {
+    nonprimary_shards.clear();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2377,6 +2386,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.nonprimary_shards.clear();
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 
