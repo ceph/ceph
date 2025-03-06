@@ -143,8 +143,13 @@ private:
   void _align_to_disk_block(
     uint32_t& location,
     uint32_t& ref_end,
-    blob_vec& blobs
-  );
+    blob_vec& blobs);
+
+  void _place_extent_in_blob(
+    Extent* target,
+    uint32_t map_begin,
+    uint32_t map_end,
+    uint32_t in_blob_offset);
 
   inline void _blob_put_data_subau(
     Blob* blob,
