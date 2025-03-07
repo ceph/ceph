@@ -54,7 +54,9 @@ public:
       const cls::rbd::MirrorGroupSiteStatus& mirror_group_site_status,
       bool immediate_update);
   void remove_mirror_group_status(const std::string& global_group_id,
-                                  Context* on_finish);
+                                  bool immediate_update, Context* on_finish);
+  void remove_refresh_mirror_group_status(const std::string& global_group_id,
+                                          Context* on_finish);
 
   bool mirror_group_image_exists(const std::string& global_group_id,
                                  int64_t image_pool_id,
@@ -123,6 +125,7 @@ private:
                                       Context* on_finish);
 
   bool try_remove_mirror_group_status(const std::string& global_image_id,
+                                      bool queue_update, bool immediate_update,
                                       Context* on_finish);
 
   void init_mirror_status_watcher(Context* on_finish);
