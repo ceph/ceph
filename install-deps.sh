@@ -191,11 +191,6 @@ function install_boost_on_ubuntu {
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
-    if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$boost_ver"; then
-            return
-        fi
-    fi
     local codename=$1
     local project=libboost
     local sha1=2804368f5b807ba8334b0ccfeb8af191edeb996f
@@ -212,6 +207,7 @@ function install_boost_on_ubuntu {
         ceph-libboost-date-time${boost_ver}-dev \
         ceph-libboost-filesystem${boost_ver}-dev \
         ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-locale${boost_ver}-dev \
         ceph-libboost-program-options${boost_ver}-dev \
         ceph-libboost-python${boost_ver}-dev \
         ceph-libboost-random${boost_ver}-dev \

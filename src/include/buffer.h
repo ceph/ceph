@@ -700,6 +700,12 @@ struct error_code;
       void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
+      template<typename A>
+      void copy(unsigned len, std::vector<uint8_t,A>& u8v) {
+        u8v.resize(len);
+        copy(len, (char*)u8v.data());
+      }
+
       void copy_all(list &dest);
 
       // get a pointer to the currenet iterator position, return the
@@ -1139,6 +1145,10 @@ struct error_code;
     }
     void append(std::string_view s) {
       append(s.data(), s.length());
+    }
+    template<typename A>
+    void append(const std::vector<uint8_t,A>& u8v) {
+      append((const char *)u8v.data(), u8v.size());
     }
 #endif // __cplusplus >= 201703L
     void append(const ptr& bp);

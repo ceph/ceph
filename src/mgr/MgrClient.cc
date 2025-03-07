@@ -97,7 +97,7 @@ void MgrClient::shutdown()
   }
 }
 
-bool MgrClient::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t MgrClient::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
 
