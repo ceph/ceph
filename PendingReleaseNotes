@@ -98,6 +98,12 @@
   data pool names instead of a single data pool name, and the command adds all
   of these data pools to the created volume right after its creation.
 
+* CephFS: The "ceph fs volume create" command now creates pools if the pool
+  names passed to the command are non-existent. If the list of pool names
+  passed is a mix of existing and unexisting pools, the command will create
+  the ones that are unexisting and then will add all pools to the created
+  volume.
+
 
 >=19.2.1
 
