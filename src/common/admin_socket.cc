@@ -15,6 +15,8 @@
 #include <sys/un.h>
 #include <optional>
 
+#include <stdlib.h>
+
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
@@ -506,7 +508,46 @@ void AdminSocket::execute_command(
 		     empty);
   }
 
-  auto f = Formatter::create(format, "json-pretty", "json-pretty");
+  ldout(m_cct, 20) << __func__ << ": format is " << format << " prefix is " << prefix << dendl;
+
+  string output;
+  try {
+    cmd_getval(cmdmap, "output-file", output);
+    if (!output.empty()) {
+      ldout(m_cct, 20) << __func__ << ": output file is " << output << dendl;
+    }
+  } catch (const bad_cmd_get& e) {
+    output = "";
+  }
+
+  if (output == ":tmp:") {
+    auto path = m_cct->_conf.get_val<std::string>("tmp_file_template");
+    if (int fd = mkstemp(path.data()); fd >= 0) {
+      close(fd);
+      output = path;
+      ldout(m_cct, 20) << __func__ << ": output file created in tmp_dir is " << output << dendl;
+    } else {
+      return on_finish(-errno, "temporary output file could not be opened", empty);
+    }
+  }
+
+  Formatter* f;
+  if (!output.empty()) {
+    if (!(format == "json" || format == "json-pretty")) {
+      return on_finish(-EINVAL, "unsupported format for --output-file", empty);
+    }
+    ldout(m_cct, 10) << __func__ << ": opening file for json output: " << output << dendl;
+    bool pretty = (format == "json-pretty");
+    auto* jff = new JSONFormatterFile(output, pretty);
+    auto&& of = jff->get_ofstream();
+    if (!of.is_open()) {
+      delete jff;
+      return on_finish(-EIO, "output file could not be opened", empty);
+    }
+    f = jff;
+  } else {
+    f = Formatter::create(format, "json-pretty", "json-pretty");
+  }
 
   auto [retval, hook] = find_matched_hook(prefix, cmdmap);
   switch (retval) {
@@ -524,10 +565,27 @@ void AdminSocket::execute_command(
 
   hook->call_async(
     prefix, cmdmap, f, inbl,
-    [f, on_finish](int r, std::string_view err, bufferlist& out) {
+    [f, output, on_finish, m_cct=m_cct](int r, std::string_view err, bufferlist& out) {
       // handle either existing output in bufferlist *or* via formatter
-      if (r >= 0 && out.length() == 0) {
-	f->flush(out);
+      ldout(m_cct, 10) << __func__ << ": command completed with result " << r << dendl;
+      if (auto* jff = dynamic_cast<JSONFormatterFile*>(f); jff != nullptr) {
+        ldout(m_cct, 25) << __func__ << ": flushing file" << dendl;
+        jff->flush();
+        auto* outf = new JSONFormatter(true);
+        outf->open_object_section("result");
+        outf->dump_string("path", output);
+        outf->dump_int("result", r);
+        outf->dump_string("output", out.to_str());
+        outf->dump_int("len", jff->get_len());
+        outf->close_section();
+        CachedStackStringStream css;
+        outf->flush(*css);
+        delete outf;
+        out.clear();
+        out.append(css->strv());
+      } else if (r >= 0 && out.length() == 0) {
+        ldout(m_cct, 25) << __func__ << ": out is empty, dumping formatter" << dendl;
+        f->flush(out);
       }
       delete f;
       on_finish(r, err, out);
