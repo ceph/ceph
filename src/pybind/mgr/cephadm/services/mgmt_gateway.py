@@ -56,9 +56,9 @@ class MgmtGatewayService(CephadmService):
         key = self.mgr.cert_key_store.get_key('mgmt_gw_key')
         if not (cert and key):
             # not available on store, check if provided on the spec
-            if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
-                cert = svc_spec.ssl_certificate
-                key = svc_spec.ssl_certificate_key
+            if svc_spec.ssl_cert and svc_spec.ssl_key:
+                cert = svc_spec.ssl_cert
+                key = svc_spec.ssl_key
             else:
                 # not provided on the spec, let's generate self-sigend certificates
                 ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
@@ -142,7 +142,6 @@ class MgmtGatewayService(CephadmService):
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
-        cert, key = self.get_external_certificates(svc_spec, daemon_spec)
         internal_cert, internal_pkey = self.get_internal_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
@@ -154,7 +153,8 @@ class MgmtGatewayService(CephadmService):
                 "ca.crt": self.mgr.cert_mgr.get_root_ca()
             }
         }
-        if not svc_spec.disable_https:
+        if svc_spec.ssl:
+            cert, key = self.get_external_certificates(svc_spec, daemon_spec)
             daemon_config["files"]["nginx.crt"] = cert
             daemon_config["files"]["nginx.key"] = key
 

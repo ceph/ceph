@@ -1579,8 +1579,8 @@ class TestMonitoring:
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
-                                      ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key)
 
         with with_host(cephadm_module, "test"):
             cephadm_module.cert_key_store.save_cert('grafana_cert', ceph_generated_cert, host='test')
@@ -3946,8 +3946,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
-                               ssl_certificate=ceph_generated_cert,
-                               ssl_certificate_key=ceph_generated_key)
+                               ssl_cert=ceph_generated_cert,
+                               ssl_key=ceph_generated_key)
 
         expected = {
             "fsid": "fsid",
@@ -4193,8 +4193,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,
-                               ssl_certificate=ceph_generated_cert,
-                               ssl_certificate_key=ceph_generated_key,
+                               ssl_cert=ceph_generated_cert,
+                               ssl_key=ceph_generated_key,
                                enable_auth=True)
 
         expected = {
@@ -4542,8 +4542,8 @@ class TestMgmtGateway:
 
         server_port = 5555
         mgmt_gw_spec = MgmtGatewaySpec(port=server_port,
-                                       ssl_certificate=ceph_generated_cert,
-                                       ssl_certificate_key=ceph_generated_key,
+                                       ssl_cert=ceph_generated_cert,
+                                       ssl_key=ceph_generated_key,
                                        enable_auth=True,
                                        virtual_ip=virtual_ip)
 
@@ -4552,8 +4552,8 @@ class TestMgmtGateway:
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
-                                      ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_cert=ceph_generated_cert,
+                                      ssl_key=ceph_generated_key)
 
         redirect_url = f"https://{virtual_ip if virtual_ip else 'host_fqdn'}:5555/oauth2/callback"
         expected = {

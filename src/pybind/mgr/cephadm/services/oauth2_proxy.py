@@ -45,9 +45,9 @@ class OAuth2ProxyService(CephadmService):
         key = self.mgr.cert_key_store.get_key('oauth2_proxy_key')
         if not (cert and key):
             # not available on store, check if provided on the spec
-            if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
-                cert = svc_spec.ssl_certificate
-                key = svc_spec.ssl_certificate_key
+            if svc_spec.ssl_cert and svc_spec.ssl_key:
+                cert = svc_spec.ssl_cert
+                key = svc_spec.ssl_key
             else:
                 # not provided on the spec, let's generate self-sigend certificates
                 addr = self.mgr.inventory.get_addr(daemon_spec.host)
