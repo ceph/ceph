@@ -2892,6 +2892,20 @@ int mirror_group_status_get_summary_finish(
   return 0;
 }
 
+int mirror_group_status_remove(librados::IoCtx *ioctx,
+                               const std::string &global_group_id) {
+  librados::ObjectWriteOperation op;
+  mirror_group_status_remove(&op, global_group_id);
+  return ioctx->operate(RBD_MIRRORING, &op);
+}
+
+void mirror_group_status_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_group_id) {
+  bufferlist bl;
+  encode(global_group_id, bl);
+  op->exec("rbd", "mirror_group_status_remove", bl);
+}
+
 int mirror_group_status_remove_down(librados::IoCtx *ioctx) {
   librados::ObjectWriteOperation op;
   mirror_group_status_remove_down(&op);
