@@ -10,6 +10,7 @@
 #include "librbd/internal.h"
 #include "librbd/group/ListSnapshotsRequest.h"
 #include "librbd/group/RemoveImageRequest.h"
+#include "librbd/MirroringWatcher.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
@@ -1162,7 +1163,7 @@ void BootstrapRequest<I>::handle_remove_local_group_id(int r) {
     return;
   }
 
-  finish(0);
+  notify_mirroring_watcher();
 }
 
 template <typename I>
@@ -1307,6 +1308,31 @@ void BootstrapRequest<I>::handle_create_local_non_primary_group_snapshot(int r) 
          << cpp_strerror(r) << dendl;
     finish(r);
     return;
+  }
+
+  notify_mirroring_watcher();
+}
+
+template <typename I>
+void BootstrapRequest<I>::notify_mirroring_watcher() {
+  dout(10) << dendl;
+
+  auto ctx = create_context_callback<
+    BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_notify_mirroring_watcher>(this);
+
+  librbd::MirroringWatcher<I>::notify_group_updated(
+    m_local_io_ctx, m_local_mirror_group.state, *m_local_group_id,
+    m_global_group_id, m_local_images.size(), ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_notify_mirroring_watcher(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to notify mirror group update: " << cpp_strerror(r)
+         << dendl;
   }
 
   finish(0);
