@@ -38,6 +38,8 @@ Multiple data pools can be specified with a comma-spearated list::
 
     ceph fs volume create <vol-name> --meta-pool <meta-pool-name> --data-pool <data-pool-1>,<data-pool-2>,<data-pool-3>
 
+If any specified pool does not exist, it will be created.
+
 
 Securing access
 ---------------
