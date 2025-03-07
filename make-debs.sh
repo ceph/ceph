@@ -49,11 +49,11 @@ cd $releasedir
 perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
 perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
 #
-# always set the debian version to 1 which is ok because the debian
-# directory is included in the sources and the upstream version will
-# change each time it is modified.
+# if no debian version is manually specified, set the debian version to 1 which
+# is ok because the debian directory is included in the sources and the upstream
+# version will change each time it is modified.
 #
-dvers="$vers-1"
+dvers="$vers-1$3"
 #
 # update the changelog to match the desired version
 #
