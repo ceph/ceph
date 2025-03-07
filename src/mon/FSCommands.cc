@@ -605,6 +605,11 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         return r;
       }
 
+      if (!allow_referent_inodes && !fsp->get_mds_map().use_global_snaprealm()) {
+	ss << "Error! Can't disable referent inodes, the dependant feature use_global_snaprealm is disabled.";
+        return -EOPNOTSUPP;
+      }
+
       if (!allow_referent_inodes) {
         modify_filesystem(fsmap, fsv,
             [](auto&& fs)
@@ -625,6 +630,11 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       int r = parse_bool(val, &use_global_snaprealm, ss);
       if (r != 0) {
         return r;
+      }
+
+      if (!use_global_snaprealm && !fsp->get_mds_map().allow_referent_inodes()) {
+	ss << "Error! Can't disable global snaprealm, the dependant feature allow_referent_inodes is disabled";
+        return -EOPNOTSUPP;
       }
 
       if (!use_global_snaprealm) {
