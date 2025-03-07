@@ -216,6 +216,17 @@ class FsNewHandler : public FileSystemCommandHandler
 	  return -EINVAL;
 	}
       }
+
+      const pool_stat_t *data_pool_stat = mon->mgrstatmon()->get_pool_stat(data);
+      if (data_pool_stat) {
+	int64_t data_num_objects = data_pool_stat->stats.sum.num_objects;
+	if (!force && data_num_objects > 0) {
+	  ss << "pool '" << data_name << "' already contains some objects. Use "
+		"an empty pool instead. Pass --force if you are sure that you "
+		" wish to continue";
+	  return -EINVAL;
+	}
+      }
     }
 
     if (fsmap.filesystem_count() > 0
