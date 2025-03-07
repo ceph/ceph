@@ -217,6 +217,8 @@ private:
   bool m_manual_stop = false;
   bool m_finished = false;
 
+  bool m_delete_requested = false;
+  bool m_status_removed = false;
 
   AdminSocketHook *m_asok_hook = nullptr;
 
@@ -272,6 +274,9 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
+  void remove_group_status(bool force, Context *on_finish);
+  void remove_group_status_remote(bool force, Context *on_finish);
 
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
