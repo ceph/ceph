@@ -182,7 +182,14 @@ int KeyServer::_rotate_secret(uint32_t service_id, KeyServerData &pending_data)
 
   while (r.need_new_secrets(now)) {
     ExpiringCryptoKey ek;
-    generate_secret(ek.key);
+    auto s = cct->_conf.get_val<string>("auth_service_cipher");
+
+    int key_type = CryptoManager::get_key_type(s);
+    if (key_type < 0 || key_type == CEPH_CRYPTO_NONE) {
+      key_type = CEPH_CRYPTO_AES256KRB5;
+    }
+    
+    generate_secret(ek.key, key_type);
     if (r.empty()) {
       ek.expiration = now;
     } else {
