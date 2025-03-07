@@ -57,7 +57,7 @@ public:
 };
 
 TEST(TestOSDScrub, scrub_time_permit) {
-  ceph::async::io_context_pool icp(1);
+  ceph::async::io_context_pool icp("TestOSDScrub", 1);
   std::unique_ptr<ObjectStore> store = ObjectStore::create(g_ceph_context,
              g_conf()->osd_objectstore,
              g_conf()->osd_data,

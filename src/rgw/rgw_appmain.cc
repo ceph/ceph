@@ -202,6 +202,7 @@ void rgw::AppMain::init_numa()
 void rgw::AppMain::need_context_pool() {
   if (!context_pool) {
     context_pool.emplace(
+      "RGWAppMain",
       dpp->get_cct()->_conf->rgw_thread_pool_size,
       [] {
 	// request warnings on synchronous librados calls in this thread

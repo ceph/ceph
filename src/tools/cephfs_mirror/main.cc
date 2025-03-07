@@ -89,7 +89,7 @@ int main(int argc, const char **argv) {
   msgr->set_default_policy(Messenger::Policy::lossy_client(0));
 
   std::string reason;
-  ceph::async::io_context_pool ctxpool(1);
+  ceph::async::io_context_pool ctxpool("cephfs_mirror", 1);
   MonClient monc(MonClient(g_ceph_context, ctxpool));
   int r = monc.build_initial_monmap();
   if (r < 0) {

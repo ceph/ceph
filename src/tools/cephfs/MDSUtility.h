@@ -39,7 +39,7 @@ protected:
 
   ceph::mutex lock = ceph::make_mutex("MDSUtility::lock");
   Finisher finisher;
-  ceph::async::io_context_pool poolctx;
+  ceph::async::io_context_pool poolctx{"MDSUtility"};
 
   Context *waiting_for_mds_map;
 

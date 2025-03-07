@@ -171,6 +171,7 @@ tracing::Tracer tracer;
 
 inline std::unique_ptr<sal::RadosStore> make_store() {
   auto context_pool = std::make_unique<ceph::async::io_context_pool>(
+    "test_rgw_lua",
     g_cct->_conf->rgw_thread_pool_size);
 
   struct StoreBundle : public sal::RadosStore {

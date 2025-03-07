@@ -1107,7 +1107,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
-  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size); \
+  ceph::async::io_context_pool context_pool("IPPolicyTest", cct->_conf->rgw_thread_pool_size); \
   rgw::sal::RadosStore store(context_pool);
   std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");

@@ -686,6 +686,7 @@ flushjournal_out:
   srand(time(NULL) + getpid());
 
   ceph::async::io_context_pool poolctx(
+    "ceph_osd",
     cct->_conf.get_val<std::uint64_t>("osd_asio_thread_count"));
 
   MonClient mc(g_ceph_context, poolctx);

@@ -54,7 +54,7 @@ private:
 
 public:
   const ConfigProxy& conf{cct->_conf};
-  ceph::async::io_context_pool poolctx;
+  ceph::async::io_context_pool poolctx{"RadosClient"};
 private:
   enum {
     DISCONNECTED,

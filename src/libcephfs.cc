@@ -59,7 +59,7 @@ std::shared_ptr<ceph::async::io_context_pool> get_icp(CephContext* cct)
   if (icp)
     return icp;
 
-  icp = std::make_shared<ceph::async::io_context_pool>();
+  icp = std::make_shared<ceph::async::io_context_pool>("libcephfs");
   icwp = icp;
   icp->start(cct->_conf.get_val<std::uint64_t>("client_asio_thread_count"));
   return icp;

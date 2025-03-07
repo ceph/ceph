@@ -27,11 +27,14 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 
+#include <fmt/format.h>
+
 #include "common/ceph_mutex.h"
 #include "common/Thread.h"
 
 namespace ceph::async {
 class io_context_pool {
+  std::string thread_prefix;
   std::vector<std::thread> threadvec;
   boost::asio::io_context ioctx;
   std::optional<boost::asio::executor_work_guard<
@@ -46,13 +49,17 @@ class io_context_pool {
     threadvec.clear();
   }
 public:
-  io_context_pool() noexcept {}
+  io_context_pool(std::string thread_prefix) noexcept
+    : thread_prefix(std::move(thread_prefix)) {}
 
-  io_context_pool(std::int64_t threadcnt) noexcept {
+  io_context_pool(std::string thread_prefix, std::int64_t threadcnt) noexcept
+    : thread_prefix(std::move(thread_prefix)) {
     start(threadcnt);
   }
   template<std::invocable<> Init>
-  io_context_pool(std::int64_t threadcnt, Init&& init) noexcept {
+  io_context_pool(std::string thread_prefix, std::int64_t threadcnt,
+		  Init&& init) noexcept
+    : thread_prefix(thread_prefix) {
     start(threadcnt, std::move(init));
   }
   ~io_context_pool() {
@@ -64,10 +71,11 @@ public:
       guard.emplace(boost::asio::make_work_guard(ioctx));
       ioctx.restart();
       for (std::int16_t i = 0; i < threadcnt; ++i) {
-	threadvec.emplace_back(make_named_thread("io_context_pool",
-						 [this] {
-						   ioctx.run();
-						 }));
+	threadvec.emplace_back(make_named_thread(
+				 fmt::format("{}_{}", thread_prefix, i),
+				 [this] {
+				   ioctx.run();
+				 }));
       }
     }
   }
@@ -78,11 +86,12 @@ public:
       guard.emplace(boost::asio::make_work_guard(ioctx));
       ioctx.restart();
       for (std::int16_t i = 0; i < threadcnt; ++i) {
-	threadvec.emplace_back(make_named_thread("io_context_pool",
-						 [this, init=std::move(init)] {
-						   std::move(init)();
-						   ioctx.run();
-						 }));
+	threadvec.emplace_back(make_named_thread(
+				 fmt::format("{}_{}", thread_prefix, i),
+				 [this, init=std::move(init)] {
+				   std::move(init)();
+				   ioctx.run();
+				 }));
       }
     }
   }

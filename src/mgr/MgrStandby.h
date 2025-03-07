@@ -39,7 +39,7 @@ public:
 			  const std::set <std::string> &changed) override;
 
 protected:
-  ceph::async::io_context_pool poolctx;
+  ceph::async::io_context_pool poolctx{"MgrStandby_ctx"};
   MonClient monc;
   std::unique_ptr<Messenger> client_messenger;
   Objecter objecter;

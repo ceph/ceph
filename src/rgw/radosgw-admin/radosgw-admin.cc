@@ -3502,7 +3502,8 @@ int main(int argc, const char **argv)
 
   auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
-  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
+  ceph::async::io_context_pool context_pool("radosgw-admin",
+                                            cct->_conf->rgw_thread_pool_size);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {

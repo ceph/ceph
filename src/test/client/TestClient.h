@@ -170,7 +170,7 @@ public:
     }
     // TODO expose altname versions
 protected:
-    static inline ceph::async::io_context_pool icp;
+    static inline ceph::async::io_context_pool icp{"TestClient"};
     static inline UserPerm myperm{0,0};
     MonClient* mc = nullptr;
     Messenger* messenger = nullptr;

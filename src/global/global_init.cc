@@ -370,7 +370,7 @@ global_init(const std::map<std::string,std::string> *defaults,
     // make sure our mini-session gets legacy values
     g_conf().apply_changes(nullptr);
 
-    ceph::async::io_context_pool cp(1);
+    ceph::async::io_context_pool cp("monclient_boostrap", 1);
     MonClient mc_bootstrap(g_ceph_context, cp);
     if (mc_bootstrap.get_monmap_and_config() < 0) {
       cp.stop();

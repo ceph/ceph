@@ -49,7 +49,7 @@
 
 using namespace std;
 
-ceph::async::io_context_pool icp;
+ceph::async::io_context_pool icp{"ceph_fuser"};
 
 static void fuse_usage()
 {
