@@ -16,6 +16,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
+from cephadm.tlsobject_store import TLSObjectScope
 from .. import utils
 
 if TYPE_CHECKING:
@@ -27,10 +28,16 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
+    SCOPE = TLSObjectScope.HOST
     DEFAULT_SERVICE_PORT = 3000
+
+    @property
+    def needs_certificates(self) -> bool:
+        return True
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        super().prepare_create(daemon_spec)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -143,9 +150,10 @@ class GrafanaService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
+        spec: GrafanaSpec = cast(GrafanaSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
         host_fqdns = [socket.getfqdn(daemon_spec.host), 'grafana_servers']
-        host_ips = self.mgr.inventory.get_addr(daemon_spec.host)
-        cert, pkey = self.mgr.cert_mgr.prepare_certificate('grafana_cert', 'grafana_key', host_fqdns, host_ips, target_host=daemon_spec.host)
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        cert, pkey = self.get_certificates(spec, daemon_spec, host_ips, host_fqdns)
         if not cert or not pkey:
             logger.error(f'Cannot generate the needed certificates to deploy Grafana on {daemon_spec.host}')
             cert, pkey = ('', '')  # this will lead to an error in the daemon as certificates are needed
@@ -226,15 +234,6 @@ class GrafanaService(CephadmService):
                 'dashboard set-grafana-api-url',
                 service_url
             )
-
-    def pre_remove(self, daemon: DaemonDescription) -> None:
-        """
-        Called before grafana daemon is removed.
-        """
-        if daemon.hostname is not None:
-            # delete cert/key entires for this grafana daemon
-            self.mgr.cert_mgr.rm_cert('grafana_cert', host=daemon.hostname)
-            self.mgr.cert_mgr.rm_key('grafana_key', host=daemon.hostname)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
