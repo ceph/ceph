@@ -951,6 +951,46 @@ class TestVolumeCreate(TestVolumesHelper):
         for i in data.split(','):
             self.assertIn(f'{i}', output)
 
+    def test_passing_list_of_unexisting_data_pool(self):
+        v = self._gen_vol_name()
+
+        meta = f'ceph.{v}.meta'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+
+        data = f'ceph.{v}.data1,ceph.{v}.data2,ceph.{v}.data3'
+
+        self.run_ceph_cmd(f'fs volume create {v} --meta-pool {meta} --data-pool {data}')
+
+        # ensure that the volume was created by above "fs volume create"
+        output = self.get_ceph_cmd_stdout('fs ls')
+        self.assertIn(f'name: {v}', output)
+
+        # ensure that all data pools were created by above "fs volume create"
+        # command.
+        for i in data.split(','):
+            self.assertIn(f'{i}', output)
+
+    def test_mix_of_existing_and_unexisting_data_pool_names(self):
+        v = self._gen_vol_name()
+
+        meta = f'ceph.{v}.meta'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+
+        data = f'ceph.{v}.data1,ceph.{v}.data2,ceph.{v}.data3'
+        for i in data.split(',')[:-1]:
+            self.run_ceph_cmd(f'osd pool create {i}')
+
+        self.run_ceph_cmd(f'fs volume create {v} --meta-pool {meta} --data-pool {data}')
+
+        # ensure that the volume was created by above "fs volume create"
+        output = self.get_ceph_cmd_stdout('fs ls')
+        self.assertIn(f'name: {v}', output)
+
+        # ensure that all the data pools were created by above "fs volume
+        # create" command.
+        for i in data.split(','):
+            self.assertIn(f'{i}', output)
+
 
 class TestRenameCmd(TestVolumesHelper):
 
