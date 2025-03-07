@@ -10,6 +10,7 @@ from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_store import TLSObjectScope
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class IngressService(CephService):
     TYPE = 'ingress'
+    SCOPE = TLSObjectScope.SERVICE
     MAX_KEEPALIVED_PASS_LEN = 8
 
     @classmethod
@@ -57,6 +59,7 @@ class IngressService(CephService):
             self,
             daemon_spec: CephadmDaemonDeploySpec,
     ) -> CephadmDaemonDeploySpec:
+        super().prepare_create(daemon_spec)
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_prepare_create(daemon_spec)
         if daemon_spec.daemon_type == 'keepalived':
@@ -233,11 +236,10 @@ class IngressService(CephService):
             }
         }
 
-        if spec.ssl_cert:
-            config_files['files']['haproxy.pem'] = spec.ssl_cert
-
-        if spec.ssl_key:
-            config_files['files']['haproxy.pem.key'] = spec.ssl_key
+        if spec.ssl:
+            cert, key = self.get_certificates(daemon_spec)
+            config_files['files']['haproxy.pem'] = cert
+            config_files['files']['haproxy.pem.key'] = key
 
         return config_files, self.get_haproxy_dependencies(self.mgr, spec)
 
