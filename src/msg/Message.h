@@ -537,6 +537,13 @@ public:
     return get_source_addrs();
   }
 
+  virtual bool encode_should_dezeroize(uint64_t features) const {
+    return false;
+  }
+  virtual bool decode_should_rezeroize() const {
+    return false;
+  }
+
   // virtual bits
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;

@@ -36,7 +36,7 @@ namespace _mosdop {
 template<typename V>
 class MOSDOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 9;
+  static constexpr int HEAD_VERSION = 10;
   static constexpr int COMPAT_VERSION = 3;
 
 private:
@@ -252,6 +252,12 @@ public:
   }
 
   // marshalling
+  bool encode_should_dezeroize(uint64_t features) const override {
+    return header.version >= 10;
+  }
+  bool decode_should_rezeroize() const override {
+    return header.version >= 10;
+  }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     if( false == bdata_encode ) {
@@ -395,8 +401,13 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);
     } else {
-      // latest v9 opentelemetry trace
-      header.version = HEAD_VERSION;
+      if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
+        // latest v9 opentelemetry trace
+        header.version = 9;
+      } else {
+        // latest v10. The only diff is the bl dezeroization
+        header.version = HEAD_VERSION;
+      }
 
       encode(pgid, payload);
       encode(hobj.get_hash(), payload);
@@ -433,7 +444,7 @@ struct ceph_osd_request_head {
     p = std::cbegin(payload);
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version == 9 || header.version == HEAD_VERSION) {
       decode(pgid, p);
       uint32_t hash;
       decode(hash, p);
