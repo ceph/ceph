@@ -327,6 +327,8 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
       m_image_replayer_index.clear();
       m_manual_stop = false;
       m_finished = false;
+      m_delete_requested = false;
+      m_status_removed = false;
       ceph_assert(m_on_start_finish == nullptr);
       std::swap(m_on_start_finish, on_finish);
     }
@@ -715,6 +717,7 @@ void GroupReplayer<I>::finish_start_fail(int r, const std::string &desc) {
 	if (r == -ECANCELED) {
 	  dout(10) << "start canceled" << dendl;
 	} else if (r == -ENOENT) {
+          m_delete_requested = true;
 	  dout(10) << "mirroring group removed" << dendl;
 	} else if (r == -EREMOTEIO) {
 	  dout(10) << "mirroring group demoted" << dendl;
@@ -788,6 +791,23 @@ void GroupReplayer<I>::shut_down(int r) {
 
 template <typename I>
 void GroupReplayer<I>::handle_shut_down(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r == -ENOENT) { // group removed
+    if (!m_resync_requested) {
+      set_finished(true);
+    }
+    unregister_admin_socket_hook();
+  }
+
+  if (!m_status_removed) {
+    auto ctx = new LambdaContext([this, r](int) {
+      m_status_removed = true;
+      handle_shut_down(r);
+    });
+    remove_group_status(m_delete_requested, ctx);
+    return;
+  }
 
   dout(10) << "stop complete" << dendl;
   Context *on_start = nullptr;
@@ -801,13 +821,6 @@ void GroupReplayer<I>::handle_shut_down(int r) {
     m_state = STATE_STOPPED;
   }
 
-  if (r == -ENOENT) { // group removed
-    if (!m_resync_requested) {
-      set_finished(true);
-    }
-    unregister_admin_socket_hook();
-  }
-
   if (on_start != nullptr) {
     dout(10) << "on start finish complete, r=" << r << dendl;
     on_start->complete(r);
@@ -818,7 +831,6 @@ void GroupReplayer<I>::handle_shut_down(int r) {
     ctx->complete(r);
   }
 }
-
 
 template <typename I>
 void GroupReplayer<I>::register_admin_socket_hook() {
@@ -876,6 +888,50 @@ void GroupReplayer<I>::reregister_admin_socket_hook() {
 
   unregister_admin_socket_hook();
   register_admin_socket_hook();
+}
+
+template <typename I>
+void GroupReplayer<I>::remove_group_status(bool force, Context *on_finish)
+{
+  auto ctx = new LambdaContext([this, force, on_finish](int) {
+    remove_group_status_remote(force, on_finish);
+  });
+
+  if (m_local_status_updater->mirror_group_exists(m_global_group_id)) {
+    dout(15) << "removing local mirror group status: "
+             << m_global_group_id << dendl;
+    if (force) {
+      m_local_status_updater->remove_mirror_group_status(
+          m_global_group_id, true, ctx);
+    } else {
+      m_local_status_updater->remove_refresh_mirror_group_status(
+          m_global_group_id, ctx);
+    }
+    return;
+  }
+
+  ctx->complete(0);
+}
+
+template <typename I>
+void GroupReplayer<I>::remove_group_status_remote(bool force, Context *on_finish)
+{
+  if (m_remote_group_peer.mirror_status_updater != nullptr &&
+      m_remote_group_peer.mirror_status_updater->mirror_group_exists(m_global_group_id)) {
+    dout(15) << "removing remote mirror group status: "
+             << m_global_group_id << dendl;
+    if (force) {
+      m_remote_group_peer.mirror_status_updater->remove_mirror_group_status(
+          m_global_group_id, true, on_finish);
+    } else {
+      m_remote_group_peer.mirror_status_updater->remove_refresh_mirror_group_status(
+          m_global_group_id, on_finish);
+    }
+    return;
+  }
+  if (on_finish) {
+    on_finish->complete(0);
+  }
 }
 
 template <typename I>
