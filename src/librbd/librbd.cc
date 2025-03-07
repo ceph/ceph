@@ -8104,6 +8104,15 @@ extern "C" int rbd_group_snap_get_mirror_namespace(rados_ioctx_t group_p,
   return 0;
 }
 
+extern "C" int rbd_group_snap_mirror_namespace_cleanup(
+    rbd_group_snap_mirror_namespace_t *mirror_snap) {
+
+  free(mirror_snap->primary_mirror_uuid);
+  free(mirror_snap->mirror_peer_uuids);
+  return 0;
+
+}
+
 extern "C" int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
                                                      const char *group_name,
                                                      const char *snap_name,

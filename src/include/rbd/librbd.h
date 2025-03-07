@@ -1655,6 +1655,8 @@ CEPH_RBD_API int rbd_mirror_group_enable(rados_ioctx_t p, const char *name,
 CEPH_RBD_API int rbd_group_snap_get_mirror_namespace(rados_ioctx_t p,
                                       const char *group_id, const char *snap_id,
                                       rbd_group_snap_mirror_namespace_t* mirror_namespace);
+CEPH_RBD_API int rbd_group_snap_mirror_namespace_cleanup(
+                                      rbd_group_snap_mirror_namespace_t *mirror_snap);
 CEPH_RBD_API int rbd_mirror_group_disable(rados_ioctx_t p, const char *name,
                                           bool force);
 CEPH_RBD_API int rbd_mirror_group_promote(rados_ioctx_t p,
