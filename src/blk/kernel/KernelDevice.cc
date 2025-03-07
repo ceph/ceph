@@ -818,7 +818,7 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_running ++;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
-      logger->inc(l_blk_kernel_device_discard_op, discard_processing.size());
+      logger->inc(l_blk_kernel_device_discard_op, discard_processing.num_intervals());
       for (auto p = discard_processing.begin(); p != discard_processing.end(); ++p) {
         _discard(p.get_start(), p.get_len());
       }
