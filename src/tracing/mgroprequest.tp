@@ -1,0 +1,27 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(mgroprequest, set_rmw_flags,
+    TP_ARGS(
+        int,      flag,
+        int,      old_rmw_flags,
+        int,      new_rmw_flags),
+    TP_FIELDS(
+        ctf_integer_hex(int, flag, flag)
+        ctf_integer_hex(int, old_rmw_flags, old_rmw_flags)
+        ctf_integer_hex(int, new_rmw_flags, new_rmw_flags)
+    )
+)
+
+TRACEPOINT_EVENT(mgroprequest, mark_flag_point,
+    TP_ARGS(
+        uint8_t,  flag,
+        const char*,    msg,
+        uint8_t,  old_hit_flag_points,
+        uint8_t,  new_hit_flag_points),
+    TP_FIELDS(
+        ctf_integer_hex(uint8_t, flag, flag)
+        ctf_string(msg, msg)
+        ctf_integer_hex(uint8_t, old_hit_flag_points, old_hit_flag_points)
+        ctf_integer_hex(uint8_t, new_hit_flag_points, new_hit_flag_points)
+    )
+)

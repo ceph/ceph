@@ -1,0 +1,224 @@
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()"
+                    i18n>{{editing ? 'Edit' : 'Create'}} Tiering configuration
+    <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  </cds-modal-header>
+
+<ng-container *cdFormLoading="loading">
+  <section cdsModalContent>
+    <cd-alert-panel
+      *ngIf="(snapScheduleModuleStatus$ | async) === false"
+      type="info"
+      spacingClass="mb-3"
+      i18n
+      class="align-items-center"
+      actionName="Enable"
+      (action)="enableSnapshotSchedule()"
+>
+  In order to access the snapshot scheduler feature, the snap_scheduler module must be enabled
+    </cd-alert-panel>
+      <cd-alert-panel *ngIf="storageClassList?.length === 0 &&
+                      isStorageClassFetched"
+                      type="info"
+                      spacingClass="mb-3"
+                      class="align-items-center"
+                      actionName="Create"
+                      i18n
+                      (action)="goToCreateStorageClass()">
+      No storage class found. Consider creating it first to proceed.
+    </cd-alert-panel>
+    <form name="tieringForm"
+          #formDir="ngForm"
+          [formGroup]="tieringForm"
+          novalidate>
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="rule_name"
+          [invalid]="!tieringForm.controls.name.valid && tieringForm.controls.name.dirty"
+          [invalidText]="ruleNameError"
+          [helperText]="ruleHelper"
+          i18n
+          >Rule Name
+          <input
+            cdsText
+            type="text"
+            id="rule_name"
+            maxlength="255"
+            formControlName="name"
+          />
+        </cds-text-label>
+        <ng-template #ruleHelper>
+          <span i18n>Unique identifier for the rule. The value cannot be longer than 255 characters.
+          </span>
+        </ng-template>
+        <ng-template #ruleNameError>
+          <span *ngIf="tieringForm.showError('name', formDir, 'required')"
+                class="invalid-feedback">
+            <ng-container i18n>This field is required.</ng-container>
+          </span>
+          <span *ngIf="tieringForm.showError('name', formDir, 'duplicate')"
+                class="invalid-feedback">
+            <ng-container i18n>Please enter a unique name.</ng-container>
+          </span>
+        </ng-template>
+      </div>
+      <div class="form-item">
+        <cds-select id="storageClass"
+                    formControlName="storageClass"
+                    label="Storage Class"
+                    [helperText]="storageClassHelper">
+          <option *ngIf="storageClassList === null"
+                  value="">Loading...</option>
+          <option *ngIf="storageClassList !== null && storageClassList.length === 0"
+                  value="">-- No storage class available --</option>
+          <option *ngIf="storageClassList !== null && storageClassList.length > 0"
+                  value="">-- Select the storage class --</option>
+          <option *ngFor="let tier of storageClassList"
+                  [value]="tier.storage_class">
+            {{ tier.storage_class }}
+          </option>
+        </cds-select>
+        <ng-template #storageClassHelper>
+          <span i18n>The storage class to which you want the object to transition.
+          </span>
+        </ng-template>
+      </div>
+      <legend class="cds--label">Choose a configuration scope</legend>
+      <div>
+        <cds-radio-group
+          formControlName="hasPrefix"
+        >
+        <cds-radio [value]="false"
+                   i18n>
+            {{ 'Apply to all objects in the bucket' }}
+          </cds-radio>
+          <cds-radio [value]="true"
+                     i18n>
+            {{ 'Limit the scope of this rule to selected filter criteria' }}
+          </cds-radio>
+        </cds-radio-group>
+      </div>
+      <div class="form-item"
+           *ngIf="tieringForm.controls.hasPrefix.value">
+        <cds-text-label labelInputID="prefix"
+                        [invalid]="!tieringForm.controls.prefix.valid && tieringForm.controls.prefix.dirty"
+                        [invalidText]="prefixError"
+                        [helperText]="prefixHelper"
+                        i18n>Prefix
+          <input cdsText
+                 type="text"
+                 id="prefix"
+                 formControlName="prefix"/>
+        </cds-text-label>
+        <ng-template #prefixHelper>
+          <span i18n>
+          Prefix identifying one or more objects to which the rule applies
+          </span>
+        </ng-template>
+        <ng-template #prefixError>
+          <span *ngIf="tieringForm.showError('prefix', formDir, 'required')"
+                class="invalid-feedback">
+            <ng-container i18n>This field is required.</ng-container>
+          </span>
+        </ng-template>
+      </div>
+
+      <!-- tags -->
+      <div *ngIf="tieringForm.controls.hasPrefix.value">
+        <div class="form-group-header">Tags</div>
+        <div>All the tags must exist in the object's tag set for the rule to apply.</div>
+        <ng-container formArrayName="tags"
+                      *ngFor="let tags of tags.controls; index as i">
+          <ng-container [formGroupName]="i">
+            <div cdsRow
+                 class="form-item form-item-append">
+              <div cdsCol>
+                <cds-text-label labelInputID="Key"
+                                i18n>Name of the object key
+                  <input cdsText
+                         type="text"
+                         placeholder="Enter name of the object key"
+                         id="Key"
+                         formControlName="Key"
+                         i18n-placeholder/>
+                </cds-text-label>
+              </div>
+              <div cdsCol>
+                <cds-text-label labelInputID="Value"
+                                i18n>Value of the tag
+                  <input cdsText
+                         type="text"
+                         placeholder="Enter value of the tag"
+                         id="Value"
+                         formControlName="Value"
+                         i18n-placeholder/>
+                </cds-text-label>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 2, md: 2 }"
+                   class="item-action-btn">
+                <cds-icon-button kind="tertiary"
+                                 size="sm"
+                                 (click)="removeTags(i)">
+                  <svg cdsIcon="trash-can"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                </cds-icon-button>
+              </div>
+            </div>
+          </ng-container>
+        </ng-container>
+        <div class="form-item">
+          <button cdsButton="tertiary"
+                  type="button"
+                  (click)="addTags()"
+                  i18n>Add tags
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"
+                 icon></svg>
+          </button>
+        </div>
+      </div>
+
+      <legend class="cds--label">Status</legend>
+      <div>
+        <cds-radio-group
+          formControlName="status">
+        <cds-radio [value]="'Enabled'"
+                   i18n>Enabled </cds-radio>
+          <cds-radio [value]="'Disabled'"
+                     i18n>Disabled </cds-radio>
+        </cds-radio-group>
+      </div>
+      <div class="form-item">
+        <cds-number formControlName="days"
+                    label="Number of days"
+                    [min]="1"
+                    [invalid]="!tieringForm.controls.days.valid && tieringForm.controls.days.dirty"
+                    [invalidText]="daysError"
+                    [helperText]="daysHelper"></cds-number>
+        <ng-template #daysHelper>
+          <span i18n>Select the number of days to transition the objects to the specified storage class. The value must be a positive integer.
+          </span>
+        </ng-template>
+        <ng-template #daysError>
+          <span *ngIf="tieringForm.showError('days', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span *ngIf="tieringForm.showError('days', formDir, 'pattern')"
+                i18n>Enter a valid positive number</span>
+        </ng-template>
+      </div>
+    </form>
+  </section>
+</ng-container>
+  <cd-form-button-panel
+    (submitActionEvent)="submitTieringConfig()"
+    [form]="tieringForm"
+    [submitText]="editing ? actionLabels.EDIT : actionLabels.CREATE"
+    [modalForm]="true"
+    [disabled]="storageClassList?.length === 0 && isStorageClassFetched"
+  ></cd-form-button-panel>
+</cds-modal>
