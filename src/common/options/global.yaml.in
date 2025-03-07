@@ -2155,6 +2155,33 @@ options:
    Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
   with_legacy: true
+- name: auth_service_cipher
+  type: str
+  level: advanced
+  desc: cipher type that is used to encrypt service tickets.
+  fmt_desc: When service tickets are being generaeted, this would
+   be the cipher that will be used to encrypt them. This requires
+   that all the services support the specific cipher. Valid settings
+   are ``aes` or ``aes256k``.
+  default: aes
+  services:
+  - mon
+  enum_values:
+  - aes
+  - aes256k
+  with_legacy: false
+  flags:
+  - runtime
+- name: auth_cipher_allow
+  type: str
+  level: advanced
+  desc: cipher types that are allowed to be used for authentication
+  fmt_desc: This list of cipher types determines which ciphers are
+   allowed to be used for the clients and services to establish
+   a connection to the cluster via the cephx autentication protocol.
+   Valid options are ``aes` or ``aes256k``.
+  default: aes, aes256k
+  with_legacy: true
 # what clients require of daemons
 - name: auth_client_required
   type: str
