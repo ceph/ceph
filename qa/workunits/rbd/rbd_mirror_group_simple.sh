@@ -395,7 +395,7 @@ test_create_group_stop_daemon_then_recreate()
     wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 0
 
     count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
-    test "${key_count}" = 2 || fail "unexpected key count:${key_count}"
+    test "${key_count}" = 1 || fail "unexpected key count:${key_count}"
   elif  [ "${scenario}" = 'stop_restart_after_recreate' ]; then
     echo "stopping daemon on secondary"
     stop_mirrors "${secondary_cluster}"
@@ -413,7 +413,7 @@ test_create_group_stop_daemon_then_recreate()
     wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' 0
 
     count_omap_keys_with_filter "${secondary_cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
-    test "${key_count}" = 2 || fail "unexpected key count:${key_count}"
+    test "${key_count}" = 1 || fail "unexpected key count:${key_count}"
   fi
 
   mirror_group_disable "${primary_cluster}" "${pool}/${group}"

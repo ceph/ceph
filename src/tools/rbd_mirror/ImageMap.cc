@@ -430,7 +430,7 @@ void ImageMap<I>::update_images_added(
   for (auto &entity : entities) {
     auto global_id = GlobalId(entity.type, entity.global_id);
     auto result = m_peer_map[global_id].insert(mirror_uuid);
-    if ((result.second && m_peer_map[global_id].size() == 1) || entity.type == MIRROR_ENTITY_TYPE_GROUP) {
+    if ((result.second && m_peer_map[global_id].size() == 1)) {
       if (m_policy->add_entity(global_id, entity.count)) {
         schedule_action(global_id);
       }
