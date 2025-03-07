@@ -931,6 +931,93 @@ class TestVolumeCreate(TestVolumesHelper):
         self.assertIn(data_pool, o)
         self.assertNotIn(non_existent_meta_pool, o)
 
+    def test_with_nonempty_data_pool_name(self):
+        '''
+        Test that when data pool name passed to the command "ceph fs volume
+        create" is an non-empty of pool, the command aborts with an appropriate
+        error number and error message.
+        '''
+        v = self._gen_vol_name()
+        meta = f'cephfs.{v}.meta'
+        data = f'cephfs.{v}.data'
+
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.mon_manager.controller.run(args='echo somedata > file1')
+        self.mon_manager.do_rados(['put', 'obj1', 'file1', '--pool', data])
+        # XXX some time is required for stats to be generated so that "fs new"
+        # command, which is called by "fs volume create" command, can detect
+        # that the meta pool is not empty and therefore abort with an error.
+        time.sleep(5)
+
+        try:
+            # actual test...
+            self.negtest_ceph_cmd(f'fs volume create {v} --meta-pool {meta} '
+                                  f'--data-pool {data}',
+                                  retval=errno.EINVAL,
+                                  errmsgs=('already contains some objects. use '
+                                           'an empty pool instead'))
+
+            # being extra sure that volume wasn't created
+            output = self.get_ceph_cmd_stdout('fs ls').lower()
+            self.assertNotIn(v, output)
+        # regardless of how this test goes, ensure that these leftover pools
+        # are deleted. else, they might mess up the teardown or setup code
+        # somehow.
+        finally:
+            self.run_ceph_cmd(f'osd pool rm {meta} {meta} '
+                               '--yes-i-really-really-mean-it')
+            self.run_ceph_cmd(f'osd pool rm {data} {data} '
+                               '--yes-i-really-really-mean-it')
+
+    def test_mix_of_empty_and_nonempty_data_pool_names(self):
+        '''
+        Test that "ceph fs volume create" command fail with appropriate error
+        code and error message when a list of empty and non-empty data pool
+        names are passed to it.
+        '''
+        v = self._gen_vol_name()
+
+        meta = f'ceph.{v}.meta'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+
+        data = f'ceph.{v}.data1,ceph.{v}.data2,ceph.{v}.data3'
+        for i in data.split(','):
+            self.run_ceph_cmd(f'osd pool create {i}')
+
+        # add some object to the last pool
+        obj_name = 'obj1'
+        file_name = 'file1'
+        last_data_pool_name = data.split(',')[-1]
+        self.mon_manager.controller.run(args=f'echo somedata > {file_name}')
+        self.mon_manager.do_rados(['put', obj_name, file_name, '--pool',
+                                  last_data_pool_name])
+
+        try:
+            self.negtest_ceph_cmd(f'fs volume create {v} --meta-pool {meta} '
+                                  f'--data-pool {data}',
+                                  retval=errno.EINVAL,
+                                  errmsgs=('already contains some objects. use '
+                                           'an empty pool instead'))
+        except:
+            # ensure that the volume was created by above "fs volume create"
+            output = self.get_ceph_cmd_stdout('fs ls')
+            self.assertIn(f'name: {v}', output)
+
+            # ensure that all the data pools except the last one are part of the
+            # volume that was created by above
+            for i in data.split(',')[:-1]:
+                self.assertIn(f'{i}', output)
+
+            # test that last pool name is not in the output since it was not empty.
+            self.assertNotIn(last_data_pool_name, output)
+
+            # remove this data pool so that it won't somehow mess up teardown
+            # or setup code.
+            self.run_ceph_cmd(f'osd pool rm {data} {data} '
+                               '--yes-i-really-really-mean-it')
+
+
 class TestRenameCmd(TestVolumesHelper):
 
     def test_volume_rename(self):
