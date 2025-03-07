@@ -280,21 +280,6 @@ bool KeyServer::generate_secret(CryptoKey& secret, std::optional<int> key_type)
   return true;
 }
 
-bool KeyServer::generate_secret(EntityName& name, CryptoKey& secret)
-{
-  if (!generate_secret(secret))
-    return false;
-
-  std::scoped_lock l{lock};
-
-  EntityAuth auth;
-  auth.key = secret;
-
-  data.add_auth(name, auth);
-
-  return true;
-}
-
 bool KeyServer::contains(const EntityName& name) const
 {
   std::scoped_lock l{lock};
