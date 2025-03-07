@@ -62,6 +62,8 @@ This command can also accept a comma-separated list of data pools names::
 
     ceph fs volume create <vol_name> --data-pool <data-pool-1>,<data-pool-2>,<data-pool-3>
 
+.. note:: If a specified pool does not exist, it will be created.
+
 .. note:: Specifying placement via a YAML file is not supported through the
           volume interface.
 
