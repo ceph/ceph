@@ -311,8 +311,13 @@ public:
       const RGWHTTPArgs& args) : 
         topic(_topic),
         ack_level(get_ack_level(args)) {
-    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
-          args.get_optional("ca-location"), args.get_optional("mechanism"))) {
+    if (!kafka::connect(conn_name, _endpoint,
+                        get_bool(args, "use-ssl", false),
+                        get_bool(args, "verify-ssl", true),
+                        args.get_optional("ca-location"),
+                        args.get_optional("mechanism"),
+                        args.get_optional("user-name"),
+                        args.get_optional("password"))) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
