@@ -250,7 +250,7 @@ void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
     if (header.compat_version == 0)
       header.compat_version = header.version;
   }
-  if (true && (features & CEPH_FEATURE_DEZEROIZE_BL) != 0) {
+  if (encode_should_dezeroize(features)) {
     auto [new_payload, payload_layout] =
       bufferlist_layout_t::dezeroize(get_payload());
     auto [new_middle, middle_layout] =
@@ -1032,7 +1032,7 @@ Message *decode_message(CephContext *cct,
   m->set_connection(std::move(conn));
   m->set_header(header);
   m->set_footer(footer);
-  if (true && (features & CEPH_FEATURE_DEZEROIZE_BL) != 0) {
+  if (m->decode_should_rezeroize()) {
     bufferlist layout_meta;
     bufferlist_layout_t payload_layout, middle_layout, data_layout;
     unsigned layout_len = 0;
@@ -1049,9 +1049,9 @@ Message *decode_message(CephContext *cct,
     ceph_assert(layout_meta.length() == layout_len);
 
     auto p = layout_meta.cbegin();
-    payload_layout.decode(p, features);
-    middle_layout.decode(p, features);
-    data_layout.decode(p, features);
+    payload_layout.decode(p);
+    middle_layout.decode(p);
+    data_layout.decode(p);
 
     m->set_payload(payload_layout.rezeroize(front));
     m->set_middle(middle_layout.rezeroize(middle));
