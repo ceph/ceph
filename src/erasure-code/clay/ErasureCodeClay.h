@@ -60,6 +60,8 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
+  size_t get_minimum_granularity() override;
+
   int minimum_to_decode(const std::set<int> &want_to_read,
 			const std::set<int> &available,
 			std::map<int, std::vector<std::pair<int, int>>> *minimum) override;
