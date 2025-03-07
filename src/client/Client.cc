@@ -1302,19 +1302,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     }
     Inode *diri = dir->parent_inode;
     clear_dir_complete_and_ordered(diri, false);
-
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
-    if (fscrypt_denc) {
-      string _enc_name;
-      string _alt_name;
-      int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name);
-      if (r < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      }
-      dn = link(dir, dname, _enc_name, in, dn);
-    } else {
-      dn = link(dir, dname, std::nullopt, in, dn);
-    }
+    dn = link(dir, dname, in, dn);
 
     if (old_dentry) {
       dn->is_renaming = false;
@@ -1326,10 +1314,12 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   return dn;
 }
 
-bool Client::_wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name)
+bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_name)
 {
   ldout(cct, 20) << __func__ << ": (" << dname << " len=" << dname.size() << ", " << alternate_name << ") on " << diri << dendl;
   ceph_assert(dname.size() > 0);
+  alternate_name = "";
+
   if (diri.has_charmap()) {
     auto& cs = diri.get_charmap();
     ldout(cct, 25) << __func__ << ":  " << cs << dendl;
@@ -1402,15 +1392,63 @@ bool Client::_wrap_name(const Inode& diri, std::string& dname, std::string& alte
       dname = normalized;
     } /* else: no normalization / folding / encoding */
   }
+
+  auto fscrypt_denc = fscrypt->get_fname_denc(diri.fscrypt_ctx, &diri.fscrypt_key_validator, true);
+  if (fscrypt_denc) {
+    string _enc_name;
+    string _alt_name;
+    int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name);
+    if (r < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+      return r;
+    }
+    dname = std::move(_enc_name);
+    if (alternate_name.empty()) {
+      /* no other wrapping */
+      alternate_name = std::move(_alt_name);
+    } else {
+      /* encrypt wrapped name */
+      int r = fscrypt_denc->get_encrypted_fname(alternate_name, &_enc_name, &_alt_name);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+        return r;
+      }
+      alternate_name = _alt_name.empty() ? std::move(_enc_name) : std::move(_alt_name);
+    }
+  }
+
   return true;
 }
 
-std::string Client::_unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name)
+std::string Client::_unwrap_name(Inode& diri, const std::string& dname, const std::string& alternate_name)
 {
   ldout(cct, 20) << __func__ << ": (" << dname << ", " << alternate_name << ") on " << diri << dendl;
   std::string newdname = dname;
+  std::string newaltn = alternate_name;
 
-  /* TODO: annotate alternate_name with metadata for multiple wrappings? */
+  auto fscrypt_denc = fscrypt->get_fname_denc(diri.fscrypt_ctx, &diri.fscrypt_key_validator, true);
+  if (fscrypt_denc) {
+    if (newaltn.empty()) {
+      std::string plaintext;
+      int r = fscrypt_denc->get_decrypted_fname(newdname, "", &plaintext);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+        return "???";
+      }
+      newdname = std::move(plaintext);
+    } else {
+      /* the dname is irrelevant, the altname has what we want to present to the application */
+      std::string plaintext;
+      int r = fscrypt_denc->get_decrypted_fname(newaltn, "", &plaintext);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+        return "???";
+      }
+      newdname = std::move(plaintext);
+      newaltn = newdname;
+    }
+  }
+
   if (diri.has_charmap()) {
     auto& cs = diri.get_charmap();
     ldout(cct, 25) << __func__ << ":  " << cs << dendl;
@@ -1420,7 +1458,7 @@ std::string Client::_unwrap_name(const Inode& diri, const std::string& dname, co
 
     if (is_insensitive) {
       ldout(cct, 25) << __func__ << ":  = " << alternate_name << dendl;
-      newdname = alternate_name;
+      newdname = newaltn;
     }
   }
 
@@ -1567,21 +1605,10 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     string readdir_start = dirp->last_name;
     ceph_assert(!readdir_start.empty() || readdir_offset == 2);
 
-    string readdir_start_enc;
-
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
-    if (!readdir_start.empty() && fscrypt_denc) {
-      string alt;
-      int r = fscrypt_denc->get_encrypted_fname(readdir_start, &readdir_start_enc, &alt);
-      if (r < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
-      }
-    }
-
     unsigned last_hash = 0;
     if (hash_order) {
       if (!readdir_start.empty()) {
-	last_hash = ceph_frag_value(diri->hash_dentry_name((readdir_start_enc.empty() ? readdir_start : readdir_start_enc)));
+	last_hash = ceph_frag_value(diri->hash_dentry_name(readdir_start));
       } else if (flags & CEPH_READDIR_OFFSET_HASH) {
 	/* mds understands offset_hash */
 	last_hash = offset_hash;
@@ -1618,31 +1645,17 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
 
-    string orig_dname;
-    std::optional<string> enc_name;
     string dname;
     LeaseStat dlease;
-
     for (unsigned i=0; i<numdn; i++) {
-      decode(orig_dname, p);
+      decode(dname, p);
       dlease.decode(p, features);
       InodeStat ist(p, features);
 
-      ldout(cct, 15) << "" << i << ": '" << orig_dname << "'" << dendl;
-
-      if (fscrypt_denc) {
-        enc_name = orig_dname;
-        int r = fscrypt_denc->get_decrypted_fname(orig_dname, dlease.alternate_name, &dname);
-        if (r < 0) {
-          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
-          dname = orig_dname;
-      	}
-      } else {
-        dname = orig_dname;
-      }
+      ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
 
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
-                                   request->perms);
+				   request->perms);
       auto *effective_dir = dir;
       auto *effective_diri = diri;
 
@@ -1659,7 +1672,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 	if (olddn->inode != in) {
 	  // replace incorrect dentry
 	  unlink(olddn, true, true);  // keep dir, dentry
-	  dn = link(effective_dir, dname, enc_name, in, olddn);
+	  dn = link(effective_dir, dname, in, olddn);
 	  ceph_assert(dn == olddn);
 	} else {
 	  // keep existing dn
@@ -1667,24 +1680,24 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 	  touch_dn(dn);
 	}
       } else {
-        // new dn
-        dn = link(effective_dir, dname, enc_name, in, NULL);
+	// new dn
+	dn = link(effective_dir, dname, in, NULL);
       }
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
-        unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(orig_dname));
-        if (hash != last_hash)
-          readdir_offset = 2;
-        last_hash = hash;
-        dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
+	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(dname));
+	if (hash != last_hash)
+	  readdir_offset = 2;
+	last_hash = hash;
+	dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
       } else {
-        dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
+	dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
       }
       // add to readdir cache
       if (!snapdiff_req &&
           dirp->release_count == effective_diri->dir_release_count &&
-          dirp->ordered_count == effective_diri->dir_ordered_count &&
+	  dirp->ordered_count == effective_diri->dir_ordered_count &&
 	  dirp->start_shared_gen == effective_diri->shared_gen) {
 	if (dirp->cache_index == effective_dir->readdir_cache.size()) {
 	  if (i == 0) {
@@ -1708,7 +1721,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     }
 
     if (numdn > 0)
-      dirp->last_name = orig_dname;
+      dirp->last_name = dname;
     if (end)
       dirp->next_offset = 2;
     else
@@ -1791,11 +1804,8 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   InodeStat dirst;
   DirStat dst;
   string dname;
-  string enc_name;
   LeaseStat dlease;
   InodeStat ist;
-
-  Inode *diri = NULL;
 
   if (reply->head.is_dentry) {
     dirst.decode(p, features);
@@ -1803,18 +1813,6 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     dst.decode(p, features);
     decode(dname, p);
     dlease.decode(p, features);
-
-    diri = add_update_inode(&dirst, request->sent_stamp, session,
-			    request->perms);
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
-    if (fscrypt_denc) {
-      enc_name = dname;
-      int r = fscrypt_denc->get_decrypted_fname(enc_name, dlease.alternate_name, &dname);
-      if (r < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
-        dname = enc_name;
-      }
-    }
   }
 
   Inode *in = 0;
@@ -1838,21 +1836,12 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       ldout(cct, 20) << __func__ << " subv_metric adding " << in->ino << "-" << ist.subvolume_id << dendl;
       subvolume_tracker->add_inode(in->ino, ist.subvolume_id);
     }
-
-    auto fscrypt_denc = fscrypt->get_fname_denc(in->fscrypt_ctx, &in->fscrypt_key_validator, true);
-    if (in->is_symlink()) {
-      if (fscrypt_denc) {
-        string slname;
-        int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &slname);
-        if (ret < 0) {
-          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
-        }
-        in->symlink_plain = slname;
-      }
-    }
   }
 
+  Inode *diri = NULL;
   if (reply->head.is_dentry) {
+    diri = add_update_inode(&dirst, request->sent_stamp, session,
+			    request->perms);
     mds_rank_t from_mds = mds_rank_t(reply->get_source().num());
     update_dir_dist(diri, &dst, from_mds);  // dir stat info is attached to ..
 
@@ -1875,8 +1864,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (dlease.duration_ms > 0) {
 	if (!dn) {
 	  Dir *dir = diri->open_dir();
-#warning revisit nullopt here
-	  dn = link(dir, dname, std::nullopt, NULL, NULL);
+	  dn = link(dir, dname, NULL, NULL);
 	}
 	update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       }
@@ -1893,16 +1881,6 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     
     string dname = request->path.last_dentry();
     
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
-    if (fscrypt_denc) {
-      enc_name = dname;
-      int r = fscrypt_denc->get_decrypted_fname(enc_name, dlease.alternate_name, &dname);
-      if (r < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
-        dname = enc_name;
-      }
-    }
-
     LeaseStat dlease;
     dlease.duration_ms = 0;
 
@@ -3756,12 +3734,11 @@ void Client::close_dir(Dir *dir)
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-Dentry* Client::link(Dir *dir, const string& name, std::optional<std::string> enc_name, Inode *in, Dentry *dn)
+Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 {
   if (!dn) {
     // create a new Dentry
     dn = new Dentry(dir, name);
-    dn->enc_name = enc_name;
 
     lru.lru_insert_mid(dn);    // mid or top?
 
@@ -7618,50 +7595,6 @@ void Client::renew_caps(MetaSession *session)
   session->con->send_message2(std::move(m));
 }
 
-int Client::_prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, const char *name,
-                              bool set_filepath, Dentry **pdn)
-{
-  dir->make_nosnap_relative_path(path);
-
-  std::optional<string> enc_name;
-  std::optional<string> alt_name;
-  const char *plain_name = name;
-  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
-  if (fscrypt_denc) {
-    string _enc_name;
-    string _alt_name;
-    int r = fscrypt_denc->get_encrypted_fname(name, &_enc_name, &_alt_name);
-    if (r < 0) {
-      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
-    }
-    path.push_dentry(_enc_name);
-    enc_name = std::move(_enc_name);
-    alt_name = std::move(_alt_name);
-  } else {
-    path.push_dentry(plain_name);
-  }
-
-  if (set_filepath) {
-    req->set_filepath(path);
-    if (alt_name) {
-      req->set_alternate_name(*alt_name);
-    }
-  }
-
-  if (pdn) {
-    *pdn = get_or_create(dir, plain_name, enc_name);
-    if (alt_name) {
-      if (alt_name->size() > 0) {
-        ldout(cct, 20) << __func__ << " " << *dir << " alt_name=" << fscrypt_hex_str(alt_name->c_str(), alt_name->size()) << dendl;
-      }
-      (*pdn)->alternate_name = *alt_name;
-    }
-  }
-
-  return 0;
-}
-
 
 // ===============================================================
 // high level (POSIXy) interface
@@ -7672,13 +7605,9 @@ int Client::_do_lookup(const InodeRef& dir, const string& name, int mask,
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
   filepath path;
-
-  int r = _prepare_req_path(dir, req, path, name.c_str(), true, nullptr);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
+  dir->make_nosnap_relative_path(path);
+  path.push_dentry(name);
+  req->set_filepath(path);
   req->set_inode(dir);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
       mask |= DEBUG_GETATTR_CAPS;
@@ -7686,22 +7615,8 @@ int Client::_do_lookup(const InodeRef& dir, const string& name, int mask,
 
   ldout(cct, 10) << __func__ << " on " << path << dendl;
 
-  r = make_request(req, perms, target);
+  int r = make_request(req, perms, target);
   ldout(cct, 10) << __func__ << " res is " << r << dendl;
-
-  auto inode = *target;
-  if (r == 0 && inode->is_symlink()) {
-    auto fscrypt_denc = fscrypt->get_fname_denc(inode->fscrypt_ctx, &inode->fscrypt_key_validator, true);
-    if (fscrypt_denc) {
-      string slname;
-      int ret = fscrypt_denc->get_decrypted_symlink(inode->symlink, &slname);
-      if (ret < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
-      }
-      inode->symlink_plain = slname;
-    }
-  }
-
   return r;
 }
 
@@ -7875,21 +7790,16 @@ relookup:
   return r;
 }
 
-Dentry *Client::get_or_create(Inode *dir, const std::string& plain_name)
+Dentry *Client::get_or_create(Inode *dir, const std::string& name)
 {
   // lookup
-  ldout(cct, 20) << __func__ << " " << *dir << " plain_name " << plain_name << " enc_name=" << enc_name.value_or(string()) << dendl;
+  ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
   dir->open_dir();
-  auto it = dir->dir->dentries.find(plain_name);
-  if (it != dir->dir->dentries.end()) {
-    auto dn = it->second;
-    if (!dn->enc_name && enc_name) {
-      dn->enc_name = enc_name;
-    }
-    return dn;
-  } else { // otherwise link up a new one
-    return link(dir->dir, plain_name, enc_name, NULL, NULL);
-  }
+  auto it = dir->dir->dentries.find(name);
+  if (it != dir->dir->dentries.end())
+    return it->second;
+  else // otherwise link up a new one
+    return link(dir->dir, name, NULL, NULL);
 }
 
 int Client::walk(std::string_view path, walk_dentry_result* wdr, const UserPerm& perms, bool followsym)
@@ -8016,41 +7926,43 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
         goto out;
       }
 
-      const char *slink = (next->symlink_plain.empty() ? next->symlink.c_str() : next->symlink_plain.c_str());
+      auto fscrypt_denc = fscrypt->get_fname_denc(next->fscrypt_ctx, &next->fscrypt_key_validator, true);
+
+      std::string symlink;
+      if (fscrypt_denc) {
+        int ret = fscrypt_denc->get_decrypted_symlink(next->symlink, &symlink);
+        if (ret < 0) {
+          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+          ret = -EPERM;
+          goto out;
+        }
+      } else {
+        symlink = next->symlink;
+      }
+
       if (i < path.depth() - 1) {
 	// dir symlink
 	// replace consumed components of path with symlink dir target
-	filepath resolved(slink);
-	resolved.append(path.postfixpath(i + 1));
-	path = resolved;
-	i = 0;
-	if (next->symlink[0] == '/') {
+	if (symlink[0] == '/') {
 	  diri = root;
 	}
+	filepath resolved(std::move(symlink));
+	resolved.append(path.postfixpath(i + 1));
+	path = std::move(resolved);
+	i = 0;
 	continue;
       } else if (extra_options.followsym) {
-	if (next->symlink[0] == '/') {
-	  path = next->symlink.c_str();
-#if 0
-OLD
-	if (slink[0] == '/') {
-	  cur = root;
-	}
-	continue;
-      } else if (followsym) {
-	if (slink[0] == '/') {
-	  path = slink;
-#endif
+	if (symlink[0] == '/') {
+	  path = filepath(std::move(symlink));
 	  i = 0;
 	  // reset position
 	  diri = root;
 	} else {
-	  filepath more(slink);
 	  // we need to remove the symlink component from off of the path
 	  // before adding the target that the symlink points to.  remain
 	  // at the same position in the path.
 	  path.pop_dentry();
-	  path.append(more);
+	  path.append(filepath(std::move(symlink)));
 	}
 	continue;
       }
@@ -8298,19 +8210,13 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
   // 2. Encrypted symlink decrypted into memory
   // 3. Regular symlink
   if (fscrypt_denc) {
-    if (in->symlink_plain.empty()) {
-      string dname;
-      int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &dname);
-      if (ret < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
-      }
-      memcpy(buf, dname.c_str(), dname.size());
-      r = dname.size();
-    } else {
-      // already buffered, copy plaintext to buf
-      memcpy(buf, in->symlink_plain.c_str(), in->symlink_plain.length());
-      r = in->symlink_plain.length();
+    string dname;
+    int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &dname);
+    if (ret < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
     }
+    memcpy(buf, dname.c_str(), dname.size());
+    r = dname.size();
   } else {
     memcpy(buf, in->symlink.c_str(), r);
   }
@@ -9903,7 +9809,6 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 						  dirp->offset, dentry_off_lt());
 
   string dn_name;
-  std::optional<string> enc_name;
   for (unsigned idx = pd - dir->readdir_cache.begin();
        idx < dir->readdir_cache.size();
        ++idx) {
@@ -9954,14 +9859,13 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     }
 
     dn_name = dn->name; // fill in name while we have lock
-    enc_name = dn->enc_name; // fill in name while we have lock
 
     // the content of readdir_cache may change after unlocking
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
-		   << " idx " << idx << " cache.size=" << dir->readdir_cache.size() << " = " << r << dendl;
+		   << " = " << r << dendl;
     if (r < 0) {
       return r;
     }
@@ -9971,7 +9875,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       dirp->next_offset = 2;
     else
       dirp->next_offset = dirp->offset_low();
-    dirp->last_name = (enc_name ? *enc_name : dn_name); // we successfully returned this one; update!
+    dirp->last_name = dn_name; // we successfully returned this one; update!
     dirp->release_count = 0; // last_name no longer match cache index
     if (r > 0)
       return r;
@@ -16155,12 +16059,27 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
 
+  wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+  auto fscrypt_ctx = fscrypt->init_ctx(req->fscrypt_auth);
+  if (fscrypt_ctx) {
+    auto fscrypt_denc = fscrypt->get_fname_denc(fscrypt_ctx, nullptr, true);
+
+    string enc_target;
+    int r = fscrypt_denc->get_encrypted_symlink(target, &enc_target);
+    if (r < 0) {
+      delete req;
+      return r;
+    }
+    req->set_string2(enc_target.c_str());
+  } else {
+    req->set_string2(target);
+  }
+
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
 
   req->set_filepath(wdr.getpath());
   req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
   req->set_inode(wdr.diri);
-  req->set_string2(target); 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_dentry(wdr.dn);
@@ -16453,7 +16372,7 @@ int Client::get_keyhandler(FSCryptContextRef fscrypt_ctx, FSCryptKeyHandlerRef& 
   return 0;
 }
 
-bool Client::is_inode_locked(Inode *to_check)
+bool Client::is_inode_locked(const InodeRef& to_check)
 {
   if (to_check && to_check->fscrypt_ctx) {
     FSCryptKeyHandlerRef kh;
@@ -16504,8 +16423,8 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     return -EINVAL;
   }
 
-  bool source_locked = is_inode_locked(fromdir);
-  bool dest_locked = is_inode_locked(todir);
+  bool source_locked = is_inode_locked(wdr_from.diri);
+  bool dest_locked = is_inode_locked(wdr_to.diri);
   if (source_locked || dest_locked)
     return -ENOKEY;
 

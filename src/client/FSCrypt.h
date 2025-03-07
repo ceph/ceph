@@ -251,7 +251,7 @@ public:
   virtual bool setup_cipher() = 0;
 
   void init_cipher(EVP_CIPHER *cipher, std::vector<OSSL_PARAM> params);
-  bool setup(FSCryptContextRef& _ctx,
+  bool setup(const FSCryptContextRef& _ctx,
              FSCryptKeyRef& _master_key);
 
   int calc_fname_key() {
@@ -382,7 +382,7 @@ class FSCrypt {
 
   FSCryptKeyStore key_store;
 
-  FSCryptDenc *init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
+  FSCryptDenc *init_denc(const FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                          std::function<FSCryptDenc *()> gen_denc);
 public:
   FSCrypt(CephContext *_cct) : cct(_cct), key_store(cct) {}
@@ -393,10 +393,10 @@ public:
     return key_store;
   }
 
-  FSCryptFNameDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key);
-  FSCryptFDataDencRef get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
+  FSCryptFNameDencRef get_fname_denc(const FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key);
+  FSCryptFDataDencRef get_fdata_denc(const FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
 
-  void prepare_data_read(FSCryptContextRef& ctx,
+  void prepare_data_read(const FSCryptContextRef& ctx,
                          FSCryptKeyValidatorRef *kv,
                          uint64_t off,
                          uint64_t len,

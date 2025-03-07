@@ -1050,8 +1050,8 @@ protected:
 
   void check_caps(const InodeRef& in, unsigned flags);
 
-  bool _wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name);
-  std::string _unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name);
+  bool _wrap_name(Inode& diri, std::string& dname, std::string& alternate_name);
+  std::string _unwrap_name(Inode& diri, const std::string& dname, const std::string& alternate_name);
 
   void set_cap_epoch_barrier(epoch_t e);
 
@@ -1203,7 +1203,7 @@ protected:
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-  Dentry* link(Dir *dir, const std::string& name, std::optional<std::string> enc_name, Inode *in, Dentry *dn);
+  Dentry* link(Dir *dir, const std::string& name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
 
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
@@ -2037,9 +2037,6 @@ private:
 
   bool _dentry_valid(const Dentry *dn);
 
-  int _prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, const char *name,
-                        bool set_filepath, Dentry **pdn);
-
   // internal interface
   //   call these with client_lock held!
   int _do_lookup(const InodeRef& dir, const std::string& name, int mask, InodeRef *target,
@@ -2051,7 +2048,7 @@ private:
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int get_keyhandler(FSCryptContextRef fscrypt_ctx, FSCryptKeyHandlerRef& kh);
-  bool is_inode_locked(Inode *to_check);
+  bool is_inode_locked(const InodeRef& to_check);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},

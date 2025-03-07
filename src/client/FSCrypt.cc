@@ -612,7 +612,7 @@ bool FSCryptFDataDenc::setup_cipher()
   return do_setup_cipher(ctx->contents_encryption_mode);
 }
 
-bool FSCryptDenc::setup(FSCryptContextRef& _ctx,
+bool FSCryptDenc::setup(const FSCryptContextRef& _ctx,
                         FSCryptKeyRef& _master_key)
 {
   ctx = _ctx;
@@ -1043,7 +1043,7 @@ FSCryptContextRef FSCrypt::init_ctx(const std::vector<unsigned char>& fscrypt_au
   return ctx;
 }
 
-FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
+FSCryptDenc *FSCrypt::init_denc(const FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                                   std::function<FSCryptDenc *()> gen_denc)
 {
   if (!ctx) {
@@ -1083,7 +1083,7 @@ FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *
   return fscrypt_denc;
 }
 
-FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key)
+FSCryptFNameDencRef FSCrypt::get_fname_denc(const FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key)
 {
   auto pdenc = init_denc(ctx, kv,
                          [&]() { return new FSCryptFNameDenc(cct); });
@@ -1104,7 +1104,7 @@ FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyVa
   return denc;
 }
 
-FSCryptFDataDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
+FSCryptFDataDencRef FSCrypt::get_fdata_denc(const FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
 {
   auto pdenc = init_denc(ctx, kv,
                          [&]() { return new FSCryptFDataDenc(cct); });
@@ -1115,7 +1115,7 @@ FSCryptFDataDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyVa
   return std::shared_ptr<FSCryptFDataDenc>((FSCryptFDataDenc *)pdenc);
 }
 
-void FSCrypt::prepare_data_read(FSCryptContextRef& ctx,
+void FSCrypt::prepare_data_read(const FSCryptContextRef& ctx,
                                 FSCryptKeyValidatorRef *kv,
                                 uint64_t off,
                                 uint64_t len,
