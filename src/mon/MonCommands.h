@@ -441,7 +441,8 @@ COMMAND("fs required_client_features "
         "add/remove required features of clients", "mds", "rw")
 
 COMMAND("fs add_data_pool name=fs_name,type=CephString "
-	"name=pool,type=CephString",
+	"name=pool,type=CephString "
+	"name=force,type=CephBool,req=false",
 	"add data pool <pool>", "mds", "rw")
 COMMAND("fs rm_data_pool name=fs_name,type=CephString "
 	"name=pool,type=CephString",
