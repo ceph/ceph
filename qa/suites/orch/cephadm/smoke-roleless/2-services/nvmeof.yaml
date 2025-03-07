@@ -3,6 +3,6 @@ tasks:
     host.a:
       - ceph osd pool create foo
       - rbd pool init foo
-      - ceph orch apply nvmeof foo
+      - ceph orch apply nvmeof foo default
 - cephadm.wait_for_service:
-    service: nvmeof.foo
+    service: nvmeof.foo.default
