@@ -2266,6 +2266,17 @@ options:
   fmt_desc: If the Ceph version supports message signing, Ceph will sign
    all messages so they are more difficult to spoof.
   with_legacy: true
+- name: cephx_allowed_ciphers
+  type: str
+  level: advanced
+  desc: list of allowed ciphers in cephx authentication
+  fmt_desc: This can be used to enable/disable specific key types
+   that are being used for connecting different entities to the
+   cluster.
+  default: aes, aes256k
+  with_legacy: false
+  flags:
+  - runtime
 - name: auth_mon_ticket_ttl
   type: float
   level: advanced
