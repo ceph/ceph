@@ -24,7 +24,7 @@ rm -fr $(dirname $releasedir)
 # remove all files not under git so they are not
 # included in the distribution.
 
-[ -d .git ] && git clean -dxf
+[ -e .git ] && git clean -dxf
 
 # git describe provides a version that is
 # a) human readable
