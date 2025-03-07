@@ -1094,6 +1094,16 @@ class AddDataPoolHandler : public FileSystemCommandHandler
         return -ENOENT;
     }
 
+    const pool_stat_t *pool_stat = mon->mgrstatmon()->get_pool_stat(poolid);
+    if (pool_stat) {
+      int64_t data_num_objects = pool_stat->stats.sum.num_objects;
+      if (data_num_objects > 0) {
+	ss << "pool '" << poolname  << "' already contains some objects. Use "
+	      "an empty pool instead.";
+	return -EINVAL;
+      }
+    }
+
     // no-op when the data_pool already on fs
     if (fsp->get_mds_map().is_data_pool(poolid)) {
       ss << "data pool " << poolid << " is already on fs " << fs_name;
