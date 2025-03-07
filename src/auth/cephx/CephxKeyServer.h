@@ -214,10 +214,9 @@ public:
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 			  CryptoKey& secret) const override;
 
-  bool generate_secret(EntityName& name, CryptoKey& secret);
-
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
+
   void dump(ceph::Formatter *f) const;
   static std::list<KeyServer> generate_test_instances();
   bool contains(const EntityName& name) const;
