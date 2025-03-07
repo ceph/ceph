@@ -18,6 +18,7 @@
 #include "CephxKeyServer.h"
 #include <errno.h>
 #include <sstream>
+#include <shared_mutex>
 
 #include "include/random.h"
 #include "common/config.h"
@@ -30,10 +31,45 @@
 using std::dec;
 using std::hex;
 using std::vector;
+using namespace std::literals;
 
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
+
+CephxServiceHandler::CephxServiceHandler(CephContext *cct_, KeyServer *ks)
+  : AuthServiceHandler(cct_), key_server(ks), server_challenge(0) {
+  cct->_conf.add_observer(this);
+  init_conf(cct->_conf);
+}
+
+std::vector<std::string> CephxServiceHandler::get_tracked_keys() const noexcept
+{
+  return {
+    "cephx_allowed_ciphers"s
+  };
+}
+
+void CephxServiceHandler::init_conf(const ConfigProxy& conf) {
+  std::unique_lock wl(lock);
+  auto s = conf.get_val<std::string>("cephx_allowed_ciphers");
+
+  std::vector<std::string> v;
+  get_str_vec(s, ", ", v);
+
+  for (auto& cipher : v) {
+    int cipher_type = CryptoManager::get_key_type(cipher);
+    if (cipher_type > 0) {
+      allowed_ciphers.insert(cipher_type);
+    }
+  }
+}
+
+bool CephxServiceHandler::cipher_is_allowed(int cipher)
+{
+  std::shared_lock rl(lock);
+  return (allowed_ciphers.find(cipher) != allowed_ciphers.end());
+}
 
 int CephxServiceHandler::do_start_session(
   bool is_new_global_id,
@@ -175,6 +211,12 @@ int CephxServiceHandler::handle_request(
         ldout(cct, 0) << "couldn't find entity name: " << entity_name << dendl;
 	ret = -EACCES;
 	break;
+      }
+
+      if (!cipher_is_allowed(eauth.key.get_type())) {
+	ldout(cct, 20) << __func__ << " authentication failed due to unallowed cipher type: " << eauth.key.get_type() << dendl;
+        ret = -EACCES;
+        break;
       }
 
       if (!server_challenge) {
