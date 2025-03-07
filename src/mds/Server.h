@@ -129,8 +129,9 @@ public:
   version_t prepare_force_open_sessions(std::map<client_t,entity_inst_t> &cm,
 					std::map<client_t,client_metadata_t>& cmm,
 					std::map<client_t,std::pair<Session*,uint64_t> >& smap);
-  void finish_force_open_sessions(const std::map<client_t,std::pair<Session*,uint64_t> >& smap,
+  void finish_force_open_sessions(std::map<client_t,std::pair<Session*,uint64_t> >& smap,
 				  bool dec_import=true);
+  void close_forced_opened_sessions(const std::map<client_t,std::pair<Session*,uint64_t> >& smap);
   void flush_client_sessions(std::set<client_t>& client_set, MDSGatherBuilder& gather);
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
