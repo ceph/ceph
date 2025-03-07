@@ -361,7 +361,6 @@ class SpecStore():
         if update_create:
             self.spec_created[name] = datetime_now()
         self._save(name)
-        self._save_certs_and_keys(spec)
 
     def save_rank_map(self,
                       name: str,
