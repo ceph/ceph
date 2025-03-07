@@ -174,6 +174,7 @@ def send_req(ctx, cconfig, client, path, body, method='POST'):
     req.request(method, path, headers=headers, body=body)
     resp = req.getresponse()
     if not (resp.status >= 200 and resp.status < 300):
+        log.info(resp.read())
         raise Exception("Request to Vault server failed with status %d" % resp.status)
     return resp
 
