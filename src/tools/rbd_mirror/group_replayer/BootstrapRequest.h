@@ -272,6 +272,9 @@ private:
   void create_local_non_primary_group_snapshot();
   void handle_create_local_non_primary_group_snapshot(int r);
 
+  void notify_mirroring_watcher();
+  void handle_notify_mirroring_watcher(int r);
+
   void finish(int r);
 
   int create_replayers();
