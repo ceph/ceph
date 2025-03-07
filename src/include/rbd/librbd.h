@@ -51,6 +51,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WRITE_ZEROES 1
 #define LIBRBD_SUPPORTS_ENCRYPTION 1
 #define LIBRBD_SUPPORTS_ENCRYPTION_LOAD2 1
+#define LIBRBD_SUPPORTS_DIFF_ITERATE3 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API          __attribute__ ((visibility ("default")))
@@ -373,6 +374,14 @@ typedef enum {
 /* rbd_write_zeroes / rbd_aio_write_zeroes flags */
 enum {
   RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = (1U<<0), /* fully allocated zeroed extent */
+};
+
+/* rbd_diff_iterate3 flags */
+enum {
+  /* full history diff should include parent */
+  RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT = (1U<<0),
+  /* diff extents should cover whole object */
+  RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT = (1U<<1),
 };
 
 typedef enum {
@@ -1189,6 +1198,11 @@ CEPH_RBD_API int rbd_diff_iterate2(rbd_image_t image,
                                    uint8_t include_parent, uint8_t whole_object,
 		                   int (*cb)(uint64_t, size_t, int, void *),
                                    void *arg);
+CEPH_RBD_API int rbd_diff_iterate3(rbd_image_t image, uint64_t from_snap_id,
+                                   uint64_t ofs, uint64_t len, uint32_t flags,
+                                   int (*cb)(uint64_t, size_t, int, void *),
+                                   void *arg);
+
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
 /*
