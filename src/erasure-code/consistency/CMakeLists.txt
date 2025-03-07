@@ -1,4 +1,7 @@
 add_library(ec_consistency STATIC
+  ECReader.cc
+  ECEncoder.cc
+  Pool.cc
   RadosCommands.cc
 )
 
