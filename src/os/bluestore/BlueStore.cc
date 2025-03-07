@@ -7698,16 +7698,16 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     }
     if (cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
       vselector = new FitToFastVolumeSelector(
-        bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
-        bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
-        bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100);
+        bluefs->get_total(BlueFS::BDEV_WAL) * 95 / 100,
+        bluefs->get_total(BlueFS::BDEV_DB) * 95 / 100,
+        bluefs->get_total(BlueFS::BDEV_SLOW) * 95 / 100);
     } else {
       double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
       vselector =
         new RocksDBBlueFSVolumeSelector(
-          bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
-          bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
-          bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
+          bluefs->get_total(BlueFS::BDEV_WAL) * 95 / 100,
+          bluefs->get_total(BlueFS::BDEV_DB) * 95 / 100,
+          bluefs->get_total(BlueFS::BDEV_SLOW) * 95 / 100,
 	  rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number,
           rocks_opts.max_bytes_for_level_base,
           rocks_opts.max_bytes_for_level_multiplier,
