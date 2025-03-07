@@ -577,3 +577,19 @@ class TestReferentInode(CephFSTestCase):
 
     def test_referent_no_caps(self):
         pass
+
+class TestNoGlobalSnaprealm(CephFSTestCase):
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+    ALLOW_REFERENT_INODES = True
+
+    def test_use_global_snaprealm_option(self):
+        """
+        test_use_global_snaprealm_option - Test the fs option 'use_global_snaprealm'
+        """
+        mds_map = self.fs.get_mds_map()
+        # validate it's enabled by default
+        self.assertTrue(mds_map["flags_state"]["use_global_snaprealm"])
+        self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm false')
+        mds_map = self.fs.get_mds_map()
+        self.assertFalse(mds_map["flags_state"]["use_global_snaprealm"])
