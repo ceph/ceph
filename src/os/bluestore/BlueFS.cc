@@ -538,13 +538,6 @@ bool BlueFS::bdev_support_label(unsigned id)
   return bdev[id]->supported_bdev_label();
 }
 
-uint64_t BlueFS::get_block_device_size(unsigned id) const
-{
-  if (id < bdev.size() && bdev[id])
-    return bdev[id]->get_size();
-  return 0;
-}
-
 BlockDevice* BlueFS::get_block_device(unsigned id) const
 {
   if (id < bdev.size() && bdev[id])
@@ -595,7 +588,7 @@ uint64_t BlueFS::get_used(unsigned id)
 uint64_t BlueFS::_get_total(unsigned id) const
 {
   ceph_assert(id < bdev.size());
-  return get_block_device_size(id);
+  return bdev[id] ? bdev[id]->get_size() : 0;
 }
 
 uint64_t BlueFS::get_total(unsigned id)
@@ -688,9 +681,9 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   if (vselector == nullptr) {
     vselector.reset(
       new OriginalVolumeSelector(
-        get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
-        get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
-        get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+        _get_total(BlueFS::BDEV_WAL) * 95 / 100,
+        _get_total(BlueFS::BDEV_DB) * 95 / 100,
+        _get_total(BlueFS::BDEV_SLOW) * 95 / 100));
   }
 
   _init_logger();
@@ -1043,9 +1036,9 @@ int BlueFS::mount()
   if (vselector == nullptr) {
     vselector.reset(
       new OriginalVolumeSelector(
-        get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
-        get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
-        get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+        _get_total(BlueFS::BDEV_WAL) * 95 / 100,
+        _get_total(BlueFS::BDEV_DB) * 95 / 100,
+        _get_total(BlueFS::BDEV_SLOW) * 95 / 100));
   }
 
   _init_alloc();
