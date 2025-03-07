@@ -618,6 +618,10 @@ void mirror_group_status_get_summary_start(
 int mirror_group_status_get_summary_finish(
     ceph::buffer::list::const_iterator *iter,
     std::map<cls::rbd::MirrorGroupStatusState, int32_t> *states);
+int mirror_group_status_remove(librados::IoCtx *ioctx,
+                               const std::string &global_group_id);
+void mirror_group_status_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_group_id);
 int mirror_group_status_remove_down(librados::IoCtx *ioctx);
 void mirror_group_status_remove_down(librados::ObjectWriteOperation *op);
 
