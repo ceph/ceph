@@ -2,6 +2,7 @@ add_library(ec_consistency STATIC
   ECReader.cc
   ECEncoder.cc
   Pool.cc
+  ConsistencyChecker.cc
   RadosCommands.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
 )
