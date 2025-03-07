@@ -73,6 +73,19 @@ def get_pool_ids(mgr, volname):
         return None, None
     return metadata_pool_id, data_pool_ids
 
+def get_non_existent_pools(mgr, pools):
+    non_existent_pools = []
+
+    r, out, err = mgr.mon_command({'prefix': 'osd pool ls'})
+    if r != 0:
+        return r, out, err
+
+    for i in pools:
+        if i not in out:
+            non_existent_pools.append(i)
+
+    return non_existent_pools
+
 def create_fs_pools(mgr, volname, data_pool, metadata_pool):
     '''
     Generate names of metadata pool and data pool and create these pools.
@@ -88,13 +101,37 @@ def create_fs_pools(mgr, volname, data_pool, metadata_pool):
     if r != 0:
         return [False, r, outb, outs]
 
-    # default to a bulk pool for data. In case autoscaling has been disabled
-    # for the cluster with `ceph osd pool set noautoscale`, this will have
-    # no effect.
-    r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+    # in case we have multiple data pool names in the "data_pool".
+    if ',' in data_pool:
+        pools = tuple(data_pool.split(',') + metadata_pool)
+    else:
+        pools = (data_pool, metadata_pool)
+    non_existent_pools = get_non_existent_pools(mgr, pools)
+
+    if metadata_pool in non_existent_pools:
+        r, outb, outs = create_pool(mgr, metadata_pool)
+        if r != 0:
+            return r, outb, outs
+        cleanup_metadata_pool = True
+        non_existent_pools.remove(metadata_pool)
+    else:
+        cleanup_metadata_pool = False
+
+    for data_pool in non_existent_pools:
+        # default to a bulk pool for data. In case autoscaling has been disabled
+        # for the cluster with `ceph osd pool set noautoscale`, this will have
+        # no effect.
+        r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+        if r != 0:
+            break
+
     # cleanup
     if r != 0:
-        remove_pool(mgr, metadata_pool)
+        if cleanup_metadata_pool:
+            non_existent_pools.append(metadata_pool)
+        for pool in non_existent_pools:
+            # TODO: add a log.error() here and check and return retval of remove_pool()
+            remove_pool(mgr, pool)
         return [False, r, outb, outs]
 
     return [True, data_pool, metadata_pool]
@@ -148,7 +185,7 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
         data_pool = list_[0]
         rest_of_data_pools = list_[1:]
 
-    r, outb, outs = create_filesystem(mgr, volname, meta_pool, data_pool)
+    r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
         #cleanup
@@ -168,7 +205,7 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
                 break
 
     if r != 0:
-        pools = [meta_pool, data_pool] + rest_of_data_pools
+        pools = [metadata_pool, data_pool] + rest_of_data_pools
         for p in pools:
             # TODO: check retval and add log error if it is not zero
             remove_pool(mgr, p)
