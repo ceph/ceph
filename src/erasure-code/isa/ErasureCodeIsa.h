@@ -152,6 +152,11 @@ public:
 
   unsigned get_alignment() const override;
 
+  size_t get_minimum_granularity() override
+  {
+    return 1;
+  }
+
   void prepare() override;
 
  private:
