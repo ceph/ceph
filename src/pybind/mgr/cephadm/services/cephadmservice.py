@@ -1131,6 +1131,11 @@ class MdsService(CephService):
 @register_cephadm_service
 class RgwService(CephService):
     TYPE = 'rgw'
+    SCOPE = TLSObjectScope.SERVICE
+
+    @property
+    def needs_certificates(self) -> bool:
+        return True
 
     def allow_colo(self) -> bool:
         return True
@@ -1146,8 +1151,19 @@ class RgwService(CephService):
             if isinstance(ssl_cert, list):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{str(utils.md5_hash(ssl_cert))}')
+        else:
+            deps += RgwService.get_daemons_ips(mgr, rgw_spec)
 
         return sorted(deps)
+
+    @classmethod
+    def get_daemons_ips(cls, mgr: "CephadmOrchestrator", rgw_spec: RGWSpec) -> List[str]:
+        ips = []
+        for dd in mgr.cache.get_daemons_by_service(rgw_spec.service_name()):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else mgr.inventory.get_addr(dd.hostname)
+            ips.append(addr)
+        return ips
 
     def set_realm_zg_zone(self, spec: RGWSpec) -> None:
         assert self.TYPE == spec.service_type
