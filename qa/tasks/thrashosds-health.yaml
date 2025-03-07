@@ -36,3 +36,5 @@ overrides:
       - pg .*? is .*?degraded.*?, acting
       - pg .*? is stuck inactive for .*?m, current state .*?degraded.*?, last acting
       - pg degraded
+      - PG_BACKFILL_FULL
+      - Low space hindering backfill .*? backfill_toofull
