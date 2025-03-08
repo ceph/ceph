@@ -53,6 +53,7 @@ from ._interface import (
     TunedProfileSpec,
     _cli_read_command,
     _cli_write_command,
+    check_orchestrator_paused,
     json_to_generic_spec,
     raise_if_exception,
 )
@@ -492,6 +493,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return bool(self.get_module_option("fail_fs"))
 
     @_cli_write_command('orch host add')
+    @check_orchestrator_paused()
     def _add_host(self,
                   hostname: str,
                   addr: Optional[str] = None,
@@ -677,6 +679,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host rm')
+    @check_orchestrator_paused()
     def _remove_host(self, hostname: str, force: bool = False, offline: bool = False, rm_crush_entry: bool = False) -> HandleCommandResult:
         """Remove a host"""
         completion = self.remove_host(hostname, force, offline, rm_crush_entry)
@@ -684,6 +687,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host drain')
+    @check_orchestrator_paused()
     def _drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> HandleCommandResult:
         """drain all daemons from a host"""
         completion = self.drain_host(hostname, force, keep_conf_keyring, zap_osd_devices)
@@ -691,6 +695,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host set-addr')
+    @check_orchestrator_paused()
     def _update_set_addr(self, hostname: str, addr: str) -> HandleCommandResult:
         """Update a host address"""
         completion = self.update_host_addr(hostname, addr)
@@ -769,6 +774,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=output)
 
     @_cli_write_command('orch host label add')
+    @check_orchestrator_paused()
     def _host_label_add(self, hostname: str, label: str) -> HandleCommandResult:
         """Add a host label"""
         completion = self.add_host_label(hostname, label)
@@ -776,6 +782,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host label rm')
+    @check_orchestrator_paused()
     def _host_label_rm(self, hostname: str, label: str, force: bool = False) -> HandleCommandResult:
         """Remove a host label"""
         completion = self.remove_host_label(hostname, label, force)
@@ -790,6 +797,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host maintenance enter')
+    @check_orchestrator_paused()
     def _host_maintenance_enter(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
         """
         Prepare a host for maintenance by shutting down and disabling all Ceph daemons (cephadm only)
@@ -800,6 +808,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host maintenance exit')
+    @check_orchestrator_paused()
     def _host_maintenance_exit(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
         """
         Return a host from maintenance, restarting all Ceph daemons (cephadm only)
@@ -1304,6 +1313,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=json.dumps(out))
 
     @_cli_write_command('orch apply osd')
+    @check_orchestrator_paused()
     def _apply_osd(self,
                    all_available_devices: bool = False,
                    format: Format = Format.plain,
@@ -1362,6 +1372,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(-errno.EINVAL, stderr='--all-available-devices is required')
 
     @_cli_write_command('orch daemon add osd')
+    @check_orchestrator_paused()
     def _daemon_add_osd(self,
                         svc_arg: Optional[str] = None,
                         method: Optional[OSDMethod] = None) -> HandleCommandResult:
@@ -1482,6 +1493,7 @@ Usage:
         return HandleCommandResult(stdout=res)
 
     @_cli_write_command('orch daemon add')
+    @check_orchestrator_paused()
     def daemon_add_misc(self,
                         daemon_type: Optional[ServiceType] = None,
                         placement: Optional[str] = None,
@@ -1508,6 +1520,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon add mds')
+    @check_orchestrator_paused()
     def _mds_add(self,
                  fs_name: str,
                  placement: Optional[str] = None,
@@ -1524,6 +1537,7 @@ Usage:
         return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add rgw')
+    @check_orchestrator_paused()
     def _rgw_add(self,
                  svc_id: str,
                  placement: Optional[str] = None,
@@ -1544,6 +1558,7 @@ Usage:
         return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add nfs')
+    @check_orchestrator_paused()
     def _nfs_add(self,
                  svc_id: str,
                  placement: Optional[str] = None,
@@ -1559,6 +1574,7 @@ Usage:
         return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add iscsi')
+    @check_orchestrator_paused()
     def _iscsi_add(self,
                    pool: str,
                    api_user: str,
@@ -1581,6 +1597,7 @@ Usage:
         return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add nvmeof')
+    @check_orchestrator_paused()
     def _nvmeof_add(self,
                     pool: str,
                     group: str,
@@ -1615,6 +1632,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon redeploy')
+    @check_orchestrator_paused()
     def _daemon_action_redeploy(self,
                                 name: str,
                                 image: Optional[str] = None) -> HandleCommandResult:
@@ -1626,6 +1644,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon rm')
+    @check_orchestrator_paused()
     def _daemon_rm(self,
                    names: List[str],
                    force: Optional[bool] = False) -> HandleCommandResult:
@@ -1642,6 +1661,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch rm')
+    @check_orchestrator_paused()
     def _service_rm(self,
                     service_name: str,
                     force: bool = False) -> HandleCommandResult:
@@ -1653,6 +1673,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch apply')
+    @check_orchestrator_paused()
     def apply_misc(self,
                    service_type: Optional[ServiceType] = None,
                    placement: Optional[str] = None,
@@ -1770,6 +1791,7 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch apply mds')
+    @check_orchestrator_paused()
     def _apply_mds(self,
                    fs_name: str,
                    placement: Optional[str] = None,
@@ -1794,6 +1816,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply rgw')
+    @check_orchestrator_paused()
     def _apply_rgw(self,
                    svc_id: str,
                    placement: Optional[str] = None,
@@ -1838,6 +1861,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply nfs')
+    @check_orchestrator_paused()
     def _apply_nfs(self,
                    svc_id: str,
                    placement: Optional[str] = None,
@@ -1864,6 +1888,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply iscsi')
+    @check_orchestrator_paused()
     def _apply_iscsi(self,
                      pool: str,
                      api_user: str,
@@ -1895,6 +1920,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply mgmt-gateway')
+    @check_orchestrator_paused()
     def _apply_mgmt_gateway(self,
                             port: Optional[int] = None,
                             disable_https: Optional[bool] = False,
@@ -1923,6 +1949,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply oauth2-proxy')
+    @check_orchestrator_paused()
     def _apply_oauth2_proxy(self,
                             https_address: Optional[str] = None,
                             placement: Optional[str] = None,
@@ -1944,6 +1971,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply nvmeof')
+    @check_orchestrator_paused()
     def _apply_nvmeof(self,
                       pool: str,
                       group: str,
@@ -1971,6 +1999,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply snmp-gateway')
+    @check_orchestrator_paused()
     def _apply_snmp_gateway(self,
                             snmp_version: SNMPGatewaySpec.SNMPVersion,
                             destination: str,
@@ -2014,6 +2043,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply jaeger')
+    @check_orchestrator_paused()
     def _apply_jaeger(self,
                       es_nodes: Optional[str] = None,
                       without_query: bool = False,
@@ -2036,6 +2066,7 @@ Usage:
         return self._apply_misc(specs, dry_run, format, no_overwrite)
 
     @_cli_write_command('orch apply smb')
+    @check_orchestrator_paused()
     def _apply_smb(
         self,
         cluster_id: str,
@@ -2072,6 +2103,7 @@ Usage:
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch set-unmanaged')
+    @check_orchestrator_paused()
     def _set_unmanaged(self, service_name: str) -> HandleCommandResult:
         """Set 'unmanaged: true' for the given service name"""
         completion = self.set_unmanaged(service_name, True)
@@ -2080,6 +2112,7 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch set-managed')
+    @check_orchestrator_paused()
     def _set_managed(self, service_name: str) -> HandleCommandResult:
         """Set 'unmanaged: false' for the given service name"""
         completion = self.set_unmanaged(service_name, False)
@@ -2088,6 +2121,7 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch set backend')
+    @check_orchestrator_paused()
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:
         """
         Select orchestrator module backend
@@ -2390,6 +2424,7 @@ Usage:
         return HandleCommandResult(stdout="There are no upgrades in progress currently.")
 
     @_cli_write_command('orch upgrade start')
+    @check_orchestrator_paused()
     def _upgrade_start(self,
                        image: Optional[str] = None,
                        _end_positional_: int = 0,
@@ -2407,6 +2442,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch upgrade pause')
+    @check_orchestrator_paused()
     def _upgrade_pause(self) -> HandleCommandResult:
         """Pause an in-progress upgrade"""
         completion = self.upgrade_pause()
@@ -2414,6 +2450,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch upgrade resume')
+    @check_orchestrator_paused()
     def _upgrade_resume(self) -> HandleCommandResult:
         """Resume paused upgrade"""
         completion = self.upgrade_resume()
@@ -2421,6 +2458,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch upgrade stop')
+    @check_orchestrator_paused()
     def _upgrade_stop(self) -> HandleCommandResult:
         """Stop an in-progress upgrade"""
         completion = self.upgrade_stop()
