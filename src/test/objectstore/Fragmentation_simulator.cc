@@ -21,6 +21,7 @@
 #include <fstream>
 #include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/random/uniform_int.hpp>
+#include <boost/random/mersenne_twister.hpp>
 #include <fmt/core.h>
 #include <mutex>
 #include <string>
