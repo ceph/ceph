@@ -37,8 +37,8 @@ class ObjectStoreTool : public RadosDump
       ObjectStore *store, OSDriver& driver, SnapMapper& mapper, coll_t coll,
       bufferlist &bl, OSDMap &curmap, bool *skipped_objects);
     int export_file(
-        ObjectStore *store, coll_t cid, ghobject_t &obj);
-    int export_files(ObjectStore *store, coll_t coll);
+        ObjectStore *store, coll_t cid, ghobject_t &obj, bool force);
+    int export_files(ObjectStore *store, coll_t coll, bool force);
 };
 
 #endif // CEPH_OBJECSTORE_TOOL_H_

@@ -41,4 +41,10 @@ public:
   }
   void PopSettings(size_t);
   void CloseAndReopen();
+  const std::string get_type() const {
+    return type;
+  }
+  const std::string get_data_dir() const {
+    return data_dir;
+  }
 };
