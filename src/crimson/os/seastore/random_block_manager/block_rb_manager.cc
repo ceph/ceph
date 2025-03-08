@@ -144,7 +144,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
   paddr_t paddr,
-  bufferptr &bptr)
+  bufferptr_rw &bptr)
 {
   ceph_assert(device);
   ceph_assert(bptr.is_page_aligned());
@@ -170,9 +170,9 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
 {
   LOG_PREFIX(BlockRBManager::write);
   ceph_assert(device);
-  bufferptr bptr;
+  bufferptr_rw bptr;
   try {
-    bptr = bufferptr(ceph::buffer::create_page_aligned(bl.length()));
+    bptr = bufferptr_rw(ceph::buffer::create_page_aligned(bl.length()));
     auto iter = bl.cbegin();
     iter.copy(bl.length(), bptr.c_str());
   } catch (const std::exception &e) {

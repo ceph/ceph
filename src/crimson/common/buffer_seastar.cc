@@ -66,12 +66,12 @@ ceph::unique_leakable_ptr<buffer::raw> create_local(temporary_buffer&& buf) {
 
 // buffer::ptr conversions
 
-ptr::operator seastar::temporary_buffer<char>() &
+ptr_rw::operator seastar::temporary_buffer<char>() &
 {
   return {c_str(), _len, seastar::make_object_deleter(*this)};
 }
 
-ptr::operator seastar::temporary_buffer<char>() &&
+ptr_rw::operator seastar::temporary_buffer<char>() &&
 {
   auto data = c_str();
   auto length = _len;

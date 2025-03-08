@@ -13,7 +13,7 @@ struct RootMetaBlock : LogicalChildNode {
   static constexpr size_t SIZE = 4096;
   static constexpr int MAX_META_LENGTH = 1024;
 
-  explicit RootMetaBlock(ceph::bufferptr &&ptr)
+  explicit RootMetaBlock(ceph::bufferptr_rw &&ptr)
     : LogicalChildNode(std::move(ptr)) {}
   explicit RootMetaBlock(extent_len_t length)
     : LogicalChildNode(length) {}

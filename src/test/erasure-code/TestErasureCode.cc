@@ -106,7 +106,7 @@ TEST(ErasureCodeTest, encode_memory_align)
     want_to_encode.insert(i);
   string data(chunk_size + chunk_size / 2, 'X'); // uses 1.5 chunks out of 3
   // make sure nothing is memory aligned
-  bufferptr ptr(buffer::create_aligned(data.length() + 1, ErasureCode::SIMD_ALIGN));
+  bufferptr_rw ptr(buffer::create_aligned(data.length() + 1, ErasureCode::SIMD_ALIGN));
   ptr.copy_in(1, data.length(), data.c_str());
   ptr.set_offset(1);
   ptr.set_length(data.length());

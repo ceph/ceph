@@ -229,7 +229,7 @@ int main(int argc, const char **argv)
   cout << "snap_add result=" << r << std::endl;
 
   if (r > 0) {
-    char *s = bl2.c_str();
+    const char *s = bl2.c_str();
     for (int i=0; i<r; i++, s += strlen(s) + 1)
       cout << s << std::endl;
   }
