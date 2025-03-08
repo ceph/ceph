@@ -9871,6 +9871,144 @@ int Client::readdirplus_r(dir_result_t *d, struct dirent *de,
   return 0;
 }
 
+static void cleanup_state(Client *client, struct scan_state_t *sst)
+{
+  if (sst->fd1 != -1) {
+    client->_close(sst->fd1);
+  }
+  if (sst->fd2 != -1) {
+    client->_close(sst->fd2);
+  }
+  delete sst;
+}
+
+int Client::file_blockdiff_init_state(const char* path1, const char* path2,
+				      const UserPerm &perms, struct scan_state_t **state)
+{
+  ldout(cct, 20) << __func__ << dendl;
+
+  InodeRef inode1, inode2;
+  scan_state_t *sst = new scan_state_t();
+  sst->fd1 = sst->fd2 = -1;
+
+  /*
+   * lets have a constraint that both snapshot paths should be
+   * present - otherwise the caller should do a full copy or a
+   * delete on the path.
+   */
+  int r = open(path1, O_RDONLY, perms, 0);
+  if (r < 0) {
+    return r;
+  }
+  sst->fd1 = r;
+
+  r = open(path2, O_RDONLY, perms, 0);
+  if (r < 0) {
+    cleanup_state(this, sst);
+    return r;
+  }
+  sst->fd2 = r;
+
+  std::unique_lock lock(client_lock);
+  r = get_fd_inode(sst->fd1, &inode1);
+  if (r < 0) {
+    cleanup_state(this, sst);
+    return r;
+  }
+  r = get_fd_inode(sst->fd2, &inode2);
+  if (r < 0) {
+    cleanup_state(this, sst);
+    return r;
+  }
+
+  ldout(cct, 20) << __func__ << ": (snapid1, ino1, size)=(" << inode1->snapid
+		 << "," << std::hex << inode1->ino << std::dec << ","
+		 << inode1->size <<")" << " (snapid2, ino2, size)=("
+		 << inode2->snapid << "," << std::hex << inode2->ino << std::dec
+		 << "," << inode2->size << ")" << dendl;
+  if (inode1->ino != inode2->ino) {
+    cleanup_state(this, sst);
+    return -EINVAL;
+  }
+
+  sst->index = 0;
+  *state = sst;
+  return 0;
+}
+
+int Client::file_blockdiff_finish(struct scan_state_t *state)
+{
+  std::unique_lock lock(client_lock);
+
+  _close(state->fd1);
+  _close(state->fd2);
+  delete state;
+  return 0;
+}
+
+int Client::file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
+			   std::vector<std::pair<uint64_t,uint64_t>> *blocks)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied()) {
+    return -ENOTCONN;
+  }
+
+  ldout(cct, 20) << __func__ << dendl;
+
+  InodeRef inode1;
+  InodeRef inode2;
+
+  std::unique_lock lock(client_lock);
+
+  int r = get_fd_inode(state->fd1, &inode1);
+  if (r < 0) {
+    return r;
+  }
+  r = get_fd_inode(state->fd2, &inode2);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(inode1->ino == inode2->ino);
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_FILE_BLOCKDIFF);
+
+  filepath path1, path2;
+  inode1->make_nosnap_relative_path(path1);
+  req->set_filepath(path1);
+
+  inode2->make_nosnap_relative_path(path2);
+  req->set_filepath2(path2);
+  req->set_inode(inode2.get());
+
+  req->head.args.blockdiff.scan_idx = state->index;
+  req->head.args.blockdiff.max_objects =
+    cct->_conf.get_val<uint64_t>("client_file_blockdiff_max_concurrent_object_scans");
+
+  bufferlist bl;
+  r = make_request(req, perms, nullptr, nullptr, -1, &bl);
+  ldout(cct, 10) << __func__ << ": result=" << r << dendl;
+
+  if (r < 0) {
+    return r;
+  }
+
+  BlockDiff block_diff;
+  auto p = bl.cbegin();
+  decode(block_diff, p);
+
+  ldout(cct, 10) << __func__ << ": block_diff=" << block_diff << dendl;
+  if (!block_diff.blocks.empty()) {
+    for (auto &block : block_diff.blocks) {
+      blocks->emplace_back(std::make_pair(block.first, block.second));
+    }
+  }
+
+  state->index = block_diff.scan_idx;
+  return block_diff.rval;
+}
+
 int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
                              struct dirent* out_de,
                              snapid_t* out_snap)
