@@ -162,8 +162,8 @@ class Module(MgrModule):
             finally:
                 self.queue.task_done()
 
-    def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+    def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
+        data = self.get_unlabeled_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
 
