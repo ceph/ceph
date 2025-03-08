@@ -15,7 +15,9 @@ overrides:
         rgw sts key: abcdefghijklmnop
         rgw s3 auth use sts: true
   rgw:
-    storage classes: LUKEWARM, FROZEN
+    storage classes:
+      LUKEWARM:
+      FROZEN:
   s3tests:
     storage classes: LUKEWARM, FROZEN
     accounts:
