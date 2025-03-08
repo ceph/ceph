@@ -25,8 +25,6 @@ class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
-  using interruptor =
-    crimson::interruptible::interruptor<crimson::osd::IOInterruptCondition>;
   template <typename T = void>
   using interruptible_future = RecoveryBackend::interruptible_future<T>;
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
@@ -103,6 +101,7 @@ private:
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
            MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
+  static std::atomic<uint64_t> ongoing_pushes;
 
   template <class EventT>
   void start_backfill_recovery(
