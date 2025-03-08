@@ -497,9 +497,55 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 void ECCommon::ReadPipeline::get_want_to_read_shards(
   std::set<int> *want_to_read) const
 {
-  for (int i = 0; i < (int)sinfo.get_k(); ++i) {
+  for (int i = 0; i < (int)sinfo.get_k(); ++i)
     want_to_read->insert(sinfo.get_shard(i));
+}
+
+void ECCommon::ReadPipeline::get_want_to_read_all_shards(
+  std::set<int> *want_to_read) const
+{
+  for (int i = 0; i < (int)sinfo.get_k_plus_m(); ++i)
+    want_to_read->insert(sinfo.get_shard(i));
+}
+
+/**
+ * Create a buffer containing both the ordered data and parity shards
+ *
+ * @param to_decode Map of shard indexes and their corresponding data buffers
+ * @param wanted_to_read Set of shard indexes to be read
+ * @param outbl Pointer to output buffer
+ */
+void ECCommon::ReadPipeline::create_parity_read_buffer(
+  std::map<int, bufferlist> to_decode,
+  std::set<int> wanted_to_read,
+  bufferlist *outbl)
+{
+  int stripe_size = (int)sinfo.get_k_plus_m();
+  int k = (int)sinfo.get_k();
+  bufferlist parity;
+
+  ceph_assert((int)to_decode.size() == stripe_size);
+  ceph_assert((int)wanted_to_read.size() == stripe_size);
+
+  for (int i = k; i < stripe_size; i++) {
+    parity.append(to_decode[i]);
+    wanted_to_read.erase(i);
+    to_decode.erase(i);
   }
+
+  dout(20) << __func__ << " going to decode: "
+            << " wanted_to_read=" << wanted_to_read
+            << " to_decode=" << to_decode
+            << dendl;
+  int r = ECUtil::decode(
+    sinfo,
+    ec_impl,
+    wanted_to_read,
+    to_decode,
+    outbl);
+
+  ceph_assert(r == 0);
+  outbl->append(parity);
 }
 
 struct ClientReadCompleter : ECCommon::ReadCompleter {
@@ -528,6 +574,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
       ceph_assert(res.returned.front().get<0>() == aligned.first);
       ceph_assert(res.returned.front().get<1>() == aligned.second);
+
       map<int, bufferlist> to_decode;
       bufferlist bl;
       for (map<pg_shard_t, bufferlist>::iterator j =
@@ -536,6 +583,18 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	   ++j) {
 	to_decode[j->first.shard] = std::move(j->second);
       }
+
+      if (cct->_conf->bluestore_debug_inject_parity_read &&
+          ECInject::test_parity_read(hoid)) {
+        bufferlist outbl;
+        read_pipeline.create_parity_read_buffer(to_decode, wanted_to_read, &outbl);
+
+        result.insert(
+          read.offset, outbl.length(), std::move(outbl));
+        res.returned.pop_front();
+        goto out;
+      }
+
       dout(20) << __func__ << " going to decode: "
                << " wanted_to_read=" << wanted_to_read
                << " to_decode=" << to_decode
@@ -551,6 +610,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         res.r = r;
         goto out;
       }
+
       bufferlist trimmed;
       // If partial stripe reads are disabled aligned_offset_in_stripe will
       // be 0 which will mean trim_offset is 0. When partial reads are enabled
@@ -576,6 +636,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	       << " trim_offset="<< trim_offset << dendl;
       ceph_assert(read.size <= bl.length() - off);
       trimmed.substr_of(bl, off, read.size);
+
       result.insert(
 	read.offset, trimmed.length(), std::move(trimmed));
       res.returned.pop_front();
@@ -616,7 +677,10 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
     set<int> want_to_read;
-    if (cct->_conf->osd_ec_partial_reads) {
+    if (cct->_conf->bluestore_debug_inject_parity_read &&
+        ECInject::test_parity_read(to_read.first)) {
+      get_want_to_read_all_shards(&want_to_read);
+    } else if (cct->_conf->osd_ec_partial_reads) {
       for (const auto& single_region : to_read.second) {
         get_min_want_to_read_shards(single_region.offset,
 				    single_region.size,
