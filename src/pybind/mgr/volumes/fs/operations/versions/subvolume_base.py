@@ -294,6 +294,16 @@ class SubvolumeBase(object):
             fs_earmark = CephFSVolumeEarmarking(self.fs, path)
             fs_earmark.set_earmark(earmark)
 
+        casesensitive = attrs.get("casesenstive")
+        if casesensitive is not None:
+            if not isinstance(casesensitive, bool):
+                raise VolumeException(-errno.EINVAL, "invalid case sensitivity")
+            value = "1" if casesensitive else "0"
+            try:
+                self.fs.setxattr(path, "ceph.dir.casesensitive", value.encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
+
     def _resize(self, path, newsize, noshrink):
         try:
             newsize = int(newsize)
