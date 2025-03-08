@@ -854,7 +854,7 @@ TEST_P(TestSingleError, SingleError) {
   bool found_selected_oi = false;
   for (const auto &shard : shards) {
     auto siter = obj_error.shards.find(
-      librados::osd_shard_t{shard.osd, shard.shard}
+      librados::osd_shard_t{shard.osd, static_cast<int8_t>(shard.shard)}
     );
     if (siter == obj_error.shards.end()) {
       EXPECT_NE(siter, obj_error.shards.end());

@@ -366,10 +366,12 @@ public:
       for (std::set<pg_shard_t>::const_iterator i = _have.begin();
 	   i != _have.end();
 	   ++i) {
-	have.insert(i->shard);
+	have.insert(static_cast<int>(i->shard));
       }
       std::map<int, std::vector<std::pair<int, int>>> min;
+IGNORE_DEPRECATED
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
+      END_IGNORE_DEPRECATED
     }
   };
   std::unique_ptr<ECRecPred> get_is_recoverable_predicate() const {
