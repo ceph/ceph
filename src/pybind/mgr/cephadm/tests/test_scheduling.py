@@ -1753,3 +1753,107 @@ def test_placement_regex_host_pattern(service_type, placement, hosts, expected_a
         daemons=[],
     ).place()
     assert sorted([h.hostname for h in to_add]) == expected_add
+
+
+class BlockingDaemonHostsTest(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[str]
+    unreachables_hosts: List[str]
+    blocking_daemon_hosts: List[str]
+    daemons: List[DaemonDescription]
+    expected_add: List[List[str]]
+    expected_remove: List[List[str]]
+
+
+@pytest.mark.parametrize("service_type,placement,hosts,unreachable_hosts,blocking_daemon_hosts,daemons,expected_add,expected_remove",
+                         [
+                             BlockingDaemonHostsTest(
+                                 'crash',
+                                 PlacementSpec(count=3),
+                                 'host1 host2 host3'.split(),
+                                 [],
+                                 ['host1'],
+                                 [],
+                                 [['host2', 'host3']],
+                                 [[]],
+                             ),
+                             BlockingDaemonHostsTest(
+                                 'crash',
+                                 PlacementSpec(hosts=['host2', 'host3']),
+                                 'host1 host2 host3'.split(),
+                                 [],
+                                 ['host2'],
+                                 [DaemonDescription('crash', 'host1', 'host1')],
+                                 [['host3']],
+                                 [['crash.host1']],
+                             ),
+                             BlockingDaemonHostsTest(
+                                 'crash',
+                                 PlacementSpec(hosts=['host1', 'host2', 'host3', 'host4']),
+                                 'host1 host2 host3 host4'.split(),
+                                 ['host1'],
+                                 ['host2'],
+                                 [DaemonDescription('crash', 'host3', 'host3')],
+                                 [['host4']],
+                                 [[]],
+                             ),
+                             BlockingDaemonHostsTest(
+                                 'crash',
+                                 PlacementSpec(count=4),
+                                 'host1 host2 host3 host4'.split(),
+                                 ['host4'],
+                                 ['host2'],
+                                 [DaemonDescription('crash', 'host3', 'host3')],
+                                 [['host1']],
+                                 [[]],
+                             ),
+                             BlockingDaemonHostsTest(
+                                 'crash',
+                                 PlacementSpec(hosts=['host1', 'host2', 'host3', 'host4']),
+                                 'host1 host2 host3 host4'.split(),
+                                 ['host1'],
+                                 ['host4'],
+                                 [DaemonDescription('crash', 'host2', 'host2')],
+                                 [['host3']],
+                                 [[]],
+                             ),
+                             BlockingDaemonHostsTest(
+                                 'crash',
+                                 PlacementSpec(count=2),
+                                 'host1 host2 host3'.split(),
+                                 [],
+                                 ['host2'],
+                                 [
+                                     DaemonDescription('crash', 'host2', 'host2'),
+                                     DaemonDescription('crash', 'host3', 'host3')
+                                 ],
+                                 [['host1']],
+                                 [['crash.host2']],
+                             ),
+                         ])
+def test_blocking_daemon_host(
+    service_type,
+    placement,
+    hosts,
+    unreachable_hosts,
+    blocking_daemon_hosts,
+    daemons,
+    expected_add,
+    expected_remove
+):
+
+    spec = ServiceSpec(service_type=service_type,
+                       service_id=None,
+                       placement=placement)
+
+    hosts, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=[HostSpec(h) for h in hosts],
+        unreachable_hosts=[HostSpec(h) for h in unreachable_hosts],
+        draining_hosts=[],
+        blocking_daemon_hosts=[HostSpec(h) for h in blocking_daemon_hosts],
+        daemons=daemons,
+    ).place()
+    assert sorted([h.hostname for h in to_add]) in expected_add
+    assert sorted([h.name() for h in to_remove]) in expected_remove
