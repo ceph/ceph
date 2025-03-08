@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { TimerService } from '../services/timer.service';
@@ -32,56 +32,14 @@ export class MultiClusterService {
       .subscribe(this.getClusterObserver());
   }
 
-  getTempMap(clustersConfig: any) {
-    const tempMap = new Map<string, { token: string; user: string }>();
-    Object.keys(clustersConfig).forEach((clusterKey: string) => {
-      const clusterDetailsList = clustersConfig[clusterKey];
-      clusterDetailsList.forEach((clusterDetails: any) => {
-        if (clusterDetails['token'] && clusterDetails['name'] && clusterDetails['user']) {
-          tempMap.set(clusterDetails['name'], {
-            token: clusterDetails['token'],
-            user: clusterDetails['user']
-          });
-        }
-      });
-    });
-    return tempMap;
-  }
-
   startClusterTokenStatusPolling() {
-    let clustersTokenMap = new Map<string, { token: string; user: string }>();
-    const dataSubscription = this.subscribeOnce((resp: any) => {
-      const clustersConfig = resp['config'];
-      let tempMap = new Map<string, { token: string; user: string }>();
-      if (clustersConfig) {
-        tempMap = this.getTempMap(clustersConfig);
-        Object.keys(clustersConfig).forEach((clusterKey: string) => {
-          const clusterDetailsList = clustersConfig[clusterKey];
-          clusterDetailsList.forEach((clusterDetails: any) => {
-            if (clusterDetails['token'] && clusterDetails['name'] && clusterDetails['user']) {
-              tempMap.set(clusterDetails['name'], {
-                token: clusterDetails['token'],
-                user: clusterDetails['user']
-              });
-            }
-          });
-        });
-
-        if (tempMap.size > 0) {
-          clustersTokenMap = tempMap;
-          if (dataSubscription) {
-            dataSubscription.unsubscribe();
-          }
-          this.checkAndStartTimer(clustersTokenMap);
-        }
-      }
-    });
+    this.checkAndStartTimer();
   }
 
-  private checkAndStartTimer(clustersTokenMap: Map<string, { token: string; user: string }>) {
-    this.checkTokenStatus(clustersTokenMap).subscribe(this.getClusterTokenStatusObserver());
+  private checkAndStartTimer() {
+    this.checkTokenStatus().subscribe(this.getClusterTokenStatusObserver());
     this.timerService
-      .get(() => this.checkTokenStatus(clustersTokenMap), this.TOKEN_CHECK_INTERVAL)
+      .get(() => this.checkTokenStatus(), this.TOKEN_CHECK_INTERVAL)
       .subscribe(this.getClusterTokenStatusObserver());
   }
 
@@ -94,11 +52,7 @@ export class MultiClusterService {
   }
 
   refreshTokenStatus() {
-    this.subscribeOnce((resp: any) => {
-      const clustersConfig = resp['config'];
-      let tempMap = this.getTempMap(clustersConfig);
-      return this.checkTokenStatus(tempMap).subscribe(this.getClusterTokenStatusObserver());
-    });
+    return this.checkTokenStatus().subscribe(this.getClusterTokenStatusObserver());
   }
 
   subscribeOnce(next: (data: any) => void, error?: (error: any) => void) {
@@ -203,15 +157,8 @@ export class MultiClusterService {
     };
   }
 
-  checkTokenStatus(
-    clustersTokenMap: Map<string, { token: string; user: string }>
-  ): Observable<object> {
-    let data = [...clustersTokenMap].map(([key, { token, user }]) => ({ name: key, token, user }));
-
-    let params = new HttpParams();
-    params = params.set('clustersTokenMap', JSON.stringify(data));
-
-    return this.http.get<object>('api/multi-cluster/check_token_status', { params });
+  checkTokenStatus(): Observable<object> {
+    return this.http.get<object>('api/multi-cluster/check_token_status');
   }
 
   showPrometheusDelayMessage(showDeletionMessage?: boolean) {

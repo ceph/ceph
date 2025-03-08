@@ -277,6 +277,5 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
 
   refresh() {
     this.multiClusterService.refresh();
-    this.multiClusterService.refreshTokenStatus();
   }
 }
