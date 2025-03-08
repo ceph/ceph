@@ -728,6 +728,12 @@ public:
     }
   }
 
+  /// mark everything as unused
+  void add_unused_all() {
+    set_flag(FLAG_HAS_UNUSED);
+    unused = ~0;
+  }
+
   /// indicate that a range has (now) been used.
   void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
@@ -746,14 +752,58 @@ public:
       }
     }
   }
-  /// todo implement me!
-  unused_t get_unused_mask(uint32_t offset, uint32_t length, uint32_t chunk_size) {
+
+  ///mark everything as used
+  void mark_used_all() {
+    clear_flag(FLAG_HAS_UNUSED);
+  }
+
+  /// create bitmap mask, io_chunk_size per bit
+  /// bit 0 is offset, bit 1 is offset + io_chunk_size, ....
+  uint64_t get_unused_mask(uint32_t offset, uint32_t length, uint32_t io_chunk_size) {
     if (has_unused()) {
-      return 0;
+      uint32_t blob_len = get_logical_length();
+      ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
+      ceph_assert(offset + length <= blob_len);
+      ceph_assert((offset % io_chunk_size) == 0);
+      ceph_assert((length % io_chunk_size) == 0);
+      if (length / io_chunk_size > 64) {
+        // the result cannot fit 64 bits, pretend all is used
+        return 0;
+      }
+      uint32_t chunk_size = blob_len / (sizeof(unused)*8);
+      uint16_t i = offset / chunk_size;
+      uint16_t j = 0;
+      uint64_t io_used = 0;
+      uint64_t next_u = round_down_to(offset + chunk_size, chunk_size);
+      uint64_t next_io = round_down_to(offset + io_chunk_size, io_chunk_size);
+      // The algorithm here is iterating 2 sequences that have different "speeds":
+      // unused bit speed (chunk_size) and output disk region speed (io_chunk_size)
+      // unused_bits : aaaaabbbbbcccccdddddeeeeefffffggggghhhhh
+      // disk_io_chnk:    AAABBBCCCDDDEEEFFFGGGHHHIIIJJJ
+      // But we operate on "used" logic, as it allows for easier summation, and return the inverse.
+      // We apply restriction from i-th unused bit to j-th io_chunk.
+      // The relative sizes of chunk_size and io_chunk_size determine
+      // how fast we increase i and j respectively.
+      for (; next_io < offset + length + io_chunk_size; ) {
+        //produce io_mask bit, by copying state from unused bit
+        (!(unused & (1 << i))) ? io_used |= uint64_t(1) << j : 0;
+        auto le = next_u <= next_io;
+        if (next_u >= next_io) {
+          j++;
+          next_io += io_chunk_size;
+        }
+        if (le) {
+          i++;
+          next_u += chunk_size;
+        }
+      }
+      return ~io_used;
     } else {
       return 0;
     }
   }
+
   // map_f_invoke templates intended to mask parameters which are not expected
   // by the provided callback
   template<class F, typename std::enable_if<std::is_invocable_r_v<

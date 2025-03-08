@@ -500,6 +500,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   _get_disk_space(blob_length - alloc_offset, blob_allocs);
   bblob.allocated(alloc_offset, blob_length - alloc_offset, blob_allocs);
   //^sets also logical_length = blob_length
+  bblob.add_unused_all();
   dout(25) << __func__ << " @0x" << std::hex << in_blob_offset
     << "~" << disk_data.length()
     << " alloc_offset=" << alloc_offset
@@ -508,6 +509,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   _crop_allocs_to_io(disk_extents, in_blob_offset - alloc_offset,
     blob_length - in_blob_offset - disk_data.length());
   _schedule_io(disk_extents, disk_data);
+  bblob.mark_used(in_blob_offset, data_length);
   return blob;
 }
 
@@ -541,7 +543,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   _get_disk_space(blob_length, blob_allocs);
   _schedule_io(blob_allocs, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
-  bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
+  bblob.mark_used_all();
   return blob;
 }
 
@@ -610,7 +612,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
 inline void BlueStore::Writer::_schedule_io_masked(
   uint64_t disk_position,
   bufferlist data,
-  bluestore_blob_t::unused_t mask,
+  uint64_t mask,
   uint32_t chunk_size)
 {
   if (test_write_divertor == nullptr) {
@@ -771,7 +773,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
     uint32_t data_size = want_subau_end - want_subau_begin;
     bufferlist data_at_left = split_left(data, data_size);
     bd.real_length -= data_size;
-    uint32_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
+    uint64_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
     _blob_put_data_subau(b, in_blob_offset, data_at_left);
     // transfer do disk
     _schedule_io_masked(subau_disk_offset, data_at_left, mask, chunk_size);
@@ -844,9 +846,9 @@ void BlueStore::Writer::_try_reuse_allocated_r(
     uint32_t data_size = want_subau_end - want_subau_begin;
     bufferlist data_at_right = split_right(data, data.length() - data_size);
     bd.real_length -= data_size;
-    uint32_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
+    uint64_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
     _blob_put_data_subau(b, in_blob_offset, data_at_right);
-    //transfer to disk
+    // transfer to disk
     _schedule_io_masked(subau_disk_offset, data_at_right, mask, chunk_size);
 
     uint32_t ref_end = std::min(ref_end_offset, want_subau_end);
