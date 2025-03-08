@@ -3812,7 +3812,8 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     uint64_t x_off = 0;
     auto p = fnode.seek(offset, &x_off);
     if (p != fnode.extents.end()) {
-      uint64_t cut_off = p2roundup(x_off, alloc_size[p->bdev]);
+      uint64_t granularity = alloc[p->bdev]->get_block_size();
+      uint64_t cut_off = p2roundup(x_off, granularity);
       if (0 == cut_off) {
         // whole pextent to remove
         fnode.allocated = offset;
