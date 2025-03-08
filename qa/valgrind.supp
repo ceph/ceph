@@ -447,7 +447,14 @@
 	rocksdb VersionStorageInfo
 	Memcheck:Leak
 	...
-	fun:*VersionStorageInfo
+	fun:*VersionStorageInfo*
+	...
+}
+{
+	rocksdb VersionStorageInfo VersionStorageInfo
+	Memcheck:Leak
+	...
+	fun:rocksdb::VersionStorageInfo::VersionStorageInfo
 	...
 }
 {
