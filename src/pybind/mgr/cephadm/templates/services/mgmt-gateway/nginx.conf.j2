@@ -52,6 +52,7 @@ http {
 
 {% if prometheus_endpoints %}
     upstream prometheus_servers {
+     ip_hash;
      {% for ep in prometheus_endpoints %}
      server {{ ep }};
      {% endfor %}
