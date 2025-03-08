@@ -30,6 +30,10 @@ public:
   ~MirrorStatusWatcher() override;
 
   void init(Context *on_finish);
+  void remove_down_image_status(Context *on_finish);
+  void handle_remove_down_image_status(int r, Context *on_finish);
+  void remove_down_group_status(Context *on_finish);
+  void handle_remove_down_group_status(int r, Context *on_finish);
   void shut_down(Context *on_finish);
 
 protected:
