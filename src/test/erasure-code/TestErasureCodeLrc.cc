@@ -602,7 +602,7 @@ TEST(ErasureCodeLrc, minimum_to_decode)
   }
 }
 
-TEST(ErasureCodeLrc, encode_decode)
+TEST(ErasureCodeLrc, encode_decode_isa)
 {
   ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
   ErasureCodeProfile profile;
@@ -610,9 +610,9 @@ TEST(ErasureCodeLrc, encode_decode)
     "__DD__DD";
   const char *description_string =
     "[ "
-    "  [ \"_cDD_cDD\", \"\" ]," // global layer
-    "  [ \"c_DD____\", \"\" ]," // first local layer
-    "  [ \"____cDDD\", \"\" ]," // second local layer
+    "  [ \"_cDD_cDD\", \"plugin=isa\" ]," // global layer
+    "  [ \"c_DD____\", \"plugin=isa\" ]," // first local layer
+    "  [ \"____cDDD\", \"plugin=isa\" ]," // second local layer
     "]";
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
@@ -735,7 +735,7 @@ TEST(ErasureCodeLrc, encode_decode)
   }
 }
 
-TEST(ErasureCodeLrc, encode_decode_2)
+TEST(ErasureCodeLrc, encode_decode_isa_2)
 {
   ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
   ErasureCodeProfile profile;
@@ -743,9 +743,323 @@ TEST(ErasureCodeLrc, encode_decode_2)
     "DD__DD__";
   const char *description_string =
     "[ "
-    " [ \"DDc_DDc_\", \"\" ],"
-    " [ \"DDDc____\", \"\" ],"
-    " [ \"____DDDc\", \"\" ],"
+    " [ \"DDc_DDc_\", \"plugin=isa\" ],"
+    " [ \"DDDc____\", \"plugin=isa\" ],"
+    " [ \"____DDDc\", \"plugin=isa\" ],"
+    "]";
+  profile["layers"] = description_string;
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  EXPECT_EQ(4U, lrc.get_data_chunk_count());
+  unsigned int chunk_size = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
+  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
+  EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
+  set<int> want_to_encode;
+  map<int, bufferlist> encoded;
+  for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
+    want_to_encode.insert(i);
+    bufferptr ptr(buffer::create_page_aligned(chunk_size));
+    bufferlist tmp;
+    tmp.push_back(ptr);
+    tmp.claim_append(encoded[i]);
+    encoded[i].swap(tmp);
+  }
+  const vector<int> &mapping = lrc.get_chunk_mapping();
+  char c = 'A';
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++) {
+    int j = mapping[i];
+    string s(chunk_size, c);
+    encoded[j].clear();
+    encoded[j].append(s);
+    c++;
+  }
+  EXPECT_EQ(0, lrc.encode_chunks(want_to_encode, &encoded));
+
+  {
+    set<int> want_to_read;
+    want_to_read.insert(0);
+    map<int, bufferlist> chunks;
+    chunks[1] = encoded[1];
+    chunks[3] = encoded[3];
+    chunks[4] = encoded[4];
+    chunks[5] = encoded[5];
+    chunks[6] = encoded[6];
+    chunks[7] = encoded[7];
+    set<int> available_chunks;
+    available_chunks.insert(1);
+    available_chunks.insert(3);
+    available_chunks.insert(4);
+    available_chunks.insert(5);
+    available_chunks.insert(6);
+    available_chunks.insert(7);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(4U, minimum.size());
+    EXPECT_EQ(1U, minimum.count(1));
+    EXPECT_EQ(1U, minimum.count(4));
+    EXPECT_EQ(1U, minimum.count(5));
+    EXPECT_EQ(1U, minimum.count(6));
+
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
+    string s(chunk_size, 'A');
+    EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
+  }
+  {
+    set<int> want_to_read;
+    for (unsigned int i = 0; i < lrc.get_chunk_count(); i++)
+      want_to_read.insert(i);
+    map<int, bufferlist> chunks;
+    chunks[1] = encoded[1];
+    chunks[3] = encoded[3];
+    chunks[5] = encoded[5];
+    chunks[6] = encoded[6];
+    chunks[7] = encoded[7];
+    set<int> available_chunks;
+    available_chunks.insert(1);
+    available_chunks.insert(3);
+    available_chunks.insert(5);
+    available_chunks.insert(6);
+    available_chunks.insert(7);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(5U, minimum.size());
+    EXPECT_EQ(1U, minimum.count(1));
+    EXPECT_EQ(1U, minimum.count(3));
+    EXPECT_EQ(1U, minimum.count(5));
+    EXPECT_EQ(1U, minimum.count(6));
+    EXPECT_EQ(1U, minimum.count(7));
+
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
+    {
+      string s(chunk_size, 'A');
+      EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'B');
+      EXPECT_EQ(s, string(decoded[1].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'C');
+      EXPECT_EQ(s, string(decoded[4].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'D');
+      EXPECT_EQ(s, string(decoded[5].c_str(), chunk_size));
+    }
+  }
+  {
+    set<int> want_to_read;
+    for (unsigned int i = 0; i < lrc.get_chunk_count(); i++)
+      want_to_read.insert(i);
+    map<int, bufferlist> chunks;
+    chunks[1] = encoded[1];
+    chunks[3] = encoded[3];
+    chunks[5] = encoded[5];
+    chunks[6] = encoded[6];
+    chunks[7] = encoded[7];
+    set<int> available_chunks;
+    available_chunks.insert(1);
+    available_chunks.insert(3);
+    available_chunks.insert(5);
+    available_chunks.insert(6);
+    available_chunks.insert(7);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(5U, minimum.size());
+    EXPECT_EQ(1U, minimum.count(1));
+    EXPECT_EQ(1U, minimum.count(3));
+    EXPECT_EQ(1U, minimum.count(5));
+    EXPECT_EQ(1U, minimum.count(6));
+    EXPECT_EQ(1U, minimum.count(7));
+
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
+    {
+      string s(chunk_size, 'A');
+      EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'B');
+      EXPECT_EQ(s, string(decoded[1].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'C');
+      EXPECT_EQ(s, string(decoded[4].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'D');
+      EXPECT_EQ(s, string(decoded[5].c_str(), chunk_size));
+    }
+  }
+  {
+    set<int> want_to_read;
+    want_to_read.insert(6);
+    map<int, bufferlist> chunks;
+    chunks[0] = encoded[0];
+    chunks[1] = encoded[1];
+    chunks[3] = encoded[3];
+    chunks[5] = encoded[5];
+    chunks[7] = encoded[7];
+    set<int> available_chunks;
+    available_chunks.insert(0);
+    available_chunks.insert(1);
+    available_chunks.insert(3);
+    available_chunks.insert(5);
+    available_chunks.insert(7);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(available_chunks, minimum);
+
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
+  }
+}
+
+TEST(ErasureCodeLrc, encode_decode_jerasure)
+{
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["mapping"] =
+    "__DD__DD";
+  const char *description_string =
+    "[ "
+    "  [ \"_cDD_cDD\", \"plugin=jerasure\" ]," // global layer
+    "  [ \"c_DD____\", \"plugin=jerasure\" ]," // first local layer
+    "  [ \"____cDDD\", \"plugin=jerasure\" ]," // second local layer
+    "]";
+  profile["layers"] = description_string;
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  EXPECT_EQ(4U, lrc.get_data_chunk_count());
+  unsigned int chunk_size = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
+  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
+  EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
+  set<int> want_to_encode;
+  map<int, bufferlist> encoded;
+  for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
+    want_to_encode.insert(i);
+    bufferptr ptr(buffer::create_page_aligned(chunk_size));
+    bufferlist tmp;
+    tmp.push_back(ptr);
+    tmp.claim_append(encoded[i]);
+    encoded[i].swap(tmp);
+  }
+  const vector<int> &mapping = lrc.get_chunk_mapping();
+  char c = 'A';
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++) {
+    int j = mapping[i];
+    string s(chunk_size, c);
+    encoded[j].clear();
+    encoded[j].append(s);
+    c++;
+  }
+  EXPECT_EQ(0, lrc.encode_chunks(want_to_encode, &encoded));
+
+  {
+    map<int, bufferlist> chunks;
+    chunks[4] = encoded[4];
+    chunks[5] = encoded[5];
+    chunks[6] = encoded[6];
+    set<int> want_to_read;
+    want_to_read.insert(7);
+    set<int> available_chunks;
+    available_chunks.insert(4);
+    available_chunks.insert(5);
+    available_chunks.insert(6);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    // only need three chunks from the second local layer
+    EXPECT_EQ(3U, minimum.size());
+    EXPECT_EQ(1U, minimum.count(4));
+    EXPECT_EQ(1U, minimum.count(5));
+    EXPECT_EQ(1U, minimum.count(6));
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
+    string s(chunk_size, 'D');
+    EXPECT_EQ(s, string(decoded[7].c_str(), chunk_size));
+  }
+  {
+    set<int> want_to_read;
+    want_to_read.insert(2);
+    map<int, bufferlist> chunks;
+    chunks[1] = encoded[1];
+    chunks[3] = encoded[3];
+    chunks[5] = encoded[5];
+    chunks[6] = encoded[6];
+    chunks[7] = encoded[7];
+    set<int> available_chunks;
+    available_chunks.insert(1);
+    available_chunks.insert(3);
+    available_chunks.insert(5);
+    available_chunks.insert(6);
+    available_chunks.insert(7);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(5U, minimum.size());
+    EXPECT_EQ(available_chunks, minimum);
+
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, encoded, &decoded));
+    string s(chunk_size, 'A');
+    EXPECT_EQ(s, string(decoded[2].c_str(), chunk_size));
+  }
+  {
+    set<int> want_to_read;
+    want_to_read.insert(3);
+    want_to_read.insert(6);
+    want_to_read.insert(7);
+    set<int> available_chunks;
+    available_chunks.insert(0);
+    available_chunks.insert(1);
+    available_chunks.insert(2);
+    // available_chunks.insert(3);
+    available_chunks.insert(4);
+    available_chunks.insert(5);
+    // available_chunks.insert(6);
+    // available_chunks.insert(7);
+    encoded.erase(3);
+    encoded.erase(6);
+    set<int> minimum;
+    EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(4U, minimum.size());
+    // only need two chunks from the first local layer
+    EXPECT_EQ(1U, minimum.count(0));
+    EXPECT_EQ(1U, minimum.count(2));
+    // the above chunks will rebuild chunk 3 and the global layer only needs
+    // three more chunks to reach the required amount of chunks (4) to recover
+    // the last two
+    EXPECT_EQ(1U, minimum.count(1));
+    EXPECT_EQ(1U, minimum.count(2));
+    EXPECT_EQ(1U, minimum.count(5));
+
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, lrc._decode(want_to_read, encoded, &decoded));
+    {
+      string s(chunk_size, 'B');
+      EXPECT_EQ(s, string(decoded[3].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'C');
+      EXPECT_EQ(s, string(decoded[6].c_str(), chunk_size));
+    }
+    {
+      string s(chunk_size, 'D');
+      EXPECT_EQ(s, string(decoded[7].c_str(), chunk_size));
+    }
+  }
+}
+
+TEST(ErasureCodeLrc, encode_decode_jerasure_2)
+{
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["mapping"] =
+    "DD__DD__";
+  const char *description_string =
+    "[ "
+    " [ \"DDc_DDc_\", \"plugin=jerasure\" ],"
+    " [ \"DDDc____\", \"plugin=jerasure\" ],"
+    " [ \"____DDDc\", \"plugin=jerasure\" ],"
     "]";
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
