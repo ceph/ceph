@@ -70,21 +70,12 @@ RepRequest::interruptible_future<> RepRequest::with_pg_interruptible(
   LOG_PREFIX(RepRequest::with_pg_interruptible);
   DEBUGI("{}", *this);
   co_await this->template enter_stage<interruptor>(repop_pipeline(*pg).process);
-  {
-    /* Splitting this expression into a fut and a seperate co_await
-     * works around a gcc 11 bug (observed on 11.4.1 and gcc 11.5.0)
-     * which results in the pg ref captured by the lambda being
-     * destructed twice.  We can probably remove these workarounds
-     * once we disallow gcc 11 */
-    auto fut = interruptor::make_interruptible(
-      this->template with_blocking_event<
-      PG_OSDMapGate::OSDMapBlocker::BlockingEvent
-      >([this, pg](auto &&trigger) {
-	return pg->osdmap_gate.wait_for_map(
-	  std::move(trigger), req->min_epoch);
-      }));
-    co_await std::move(fut);
-  }
+  co_await interruptor::make_interruptible(this->template with_blocking_event<
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+    >([this, pg](auto &&trigger) {
+      return pg->osdmap_gate.wait_for_map(
+	std::move(trigger), req->min_epoch);
+    }));
 
   if (pg->can_discard_replica_op(*req)) {
     co_return;
