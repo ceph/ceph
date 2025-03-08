@@ -23,6 +23,10 @@ overrides:
       - \(OSD_
       - \(PG_
       - \(POOL_APP_NOT_ENABLED\)
+      - do not have an application enabled
+      - POOL_APP_NOT_ENABLED
+      - application not enabled
+      - or freeform for custom applications
     conf:
       osd:
         filestore debug inject read err: true
