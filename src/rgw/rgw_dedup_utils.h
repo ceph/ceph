@@ -212,7 +212,7 @@ namespace rgw::dedup {
     uint64_t get_skipped_total() const {
       return (skipped_source_record + skipped_singleton + skipped_shared_manifest +
 	      ingress_skip_encrypted + ingress_skip_compressed + ingress_skip_changed_objs +
-	      skipped_duplicate + skipped_bad_sha256 + skipped_failed_src_load);
+	      duplicate_records + sha256_mismatch + failed_src_load);
     }
     md5_stats_t& operator +=(const md5_stats_t& other) {
       // rados_bytes_before_dedup should be identical on all systems
@@ -230,9 +230,9 @@ namespace rgw::dedup {
       this->skipped_singleton       += other.skipped_singleton;
       this->skipped_singleton_bytes += other.skipped_singleton_bytes;
       this->skipped_source_record   += other.skipped_source_record;
-      this->skipped_duplicate       += other.skipped_duplicate;
-      this->skipped_bad_sha256      += other.skipped_bad_sha256;
-      this->skipped_failed_src_load += other.skipped_failed_src_load;
+      this->duplicate_records       += other.duplicate_records;
+      this->sha256_mismatch         += other.sha256_mismatch;
+      this->failed_src_load         += other.failed_src_load;
 
       this->valid_sha256_attrs      += other.valid_sha256_attrs;
       this->invalid_sha256_attrs    += other.invalid_sha256_attrs;
@@ -267,9 +267,9 @@ namespace rgw::dedup {
     uint64_t skipped_singleton = 0;
     uint64_t skipped_singleton_bytes = 0;
     uint64_t skipped_source_record = 0;
-    uint64_t skipped_duplicate = 0;
-    uint64_t skipped_bad_sha256 = 0;
-    uint64_t skipped_failed_src_load = 0;
+    uint64_t duplicate_records = 0;
+    uint64_t sha256_mismatch = 0;
+    uint64_t failed_src_load = 0;
 
     uint64_t valid_sha256_attrs = 0;
     uint64_t invalid_sha256_attrs = 0;
@@ -306,9 +306,9 @@ namespace rgw::dedup {
     encode(m.skipped_singleton, bl);
     encode(m.skipped_singleton_bytes, bl);
     encode(m.skipped_source_record, bl);
-    encode(m.skipped_duplicate, bl);
-    encode(m.skipped_bad_sha256, bl);
-    encode(m.skipped_failed_src_load, bl);
+    encode(m.duplicate_records, bl);
+    encode(m.sha256_mismatch, bl);
+    encode(m.failed_src_load, bl);
 
     encode(m.valid_sha256_attrs, bl);
     encode(m.invalid_sha256_attrs, bl);
@@ -345,9 +345,9 @@ namespace rgw::dedup {
     decode(m.skipped_singleton, bl);
     decode(m.skipped_singleton_bytes, bl);
     decode(m.skipped_source_record, bl);
-    decode(m.skipped_duplicate, bl);
-    decode(m.skipped_bad_sha256, bl);
-    decode(m.skipped_failed_src_load, bl);
+    decode(m.duplicate_records, bl);
+    decode(m.sha256_mismatch, bl);
+    decode(m.failed_src_load, bl);
 
     decode(m.valid_sha256_attrs, bl);
     decode(m.invalid_sha256_attrs, bl);

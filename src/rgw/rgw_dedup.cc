@@ -27,7 +27,6 @@
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 
-#include "cls/cmpxattr/client.h"
 #include "osd/osd_types.h"
 #include "common/ceph_crypto.h"
 
@@ -52,7 +51,7 @@
 using namespace librados;
 using namespace std;
 using namespace rgw::dedup;
-using namespace ::cls::cmpxattr;
+
 #include "rgw_sal_rados.h"
 #include "rgw_dedup_table.h"
 #include "rgw_dedup_utils.h"
@@ -519,58 +518,19 @@ namespace rgw::dedup {
 
     return 0;
   }
-#if 0
-  //---------------------------------------------------------------------------
-  [[maybe_unused]]static int get_ioctx2(const DoutPrefixProvider* const dpp,
-					rgw::sal::Driver* driver,
-					rgw::sal::RadosStore *store,
-					const disk_record_t *p_rec,
-					librados::IoCtx *p_ioctx)
-  {
-    unique_ptr<rgw::sal::Bucket> bucket;
-    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
-    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
-    if (unlikely(ret != 0)) {
-      derr << __func__ << "::ERR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
-      return -ret;
-    }
 
-    const std::string bucket_id_key = bucket->get_key().get_key();
-    RGWBucketInfo bucket_info;
-    ret = store->getRados()->get_bucket_instance_info(bucket_id_key, bucket_info, nullptr,
-						      nullptr, null_yield, dpp);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << ":: ERROR: get_bucket_instance_info() returned ret="
-			<< ret << dendl;
-      return -1;
-    }
-    const std::string bucket_id = bucket->get_key().bucket_id;
-    const std::string oid = bucket_id + "_" + p_rec->obj_name;
-    ldpp_dout(dpp, 20) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
-
-    rgw_obj obj(b, oid);
-    ret = store->get_obj_head_ioctx(dpp, bucket_info, obj, p_ioctx);
-    if (ret < 0) {
-      derr << "ERROR: get_obj_head_ioctx() returned ret=" << ret << dendl;
-      return ret;
-    }
-
-    return 0;
-  }
-#endif
   //---------------------------------------------------------------------------
   static void init_cmp_pairs(const disk_record_t *p_rec,
 			     const bufferlist    &etag_bl,
-			     ComparisonMap       *p_cmp_pairs)
+			     librados::ObjectWriteOperation *p_op)
   {
-    (*p_cmp_pairs)[RGW_ATTR_ETAG] = etag_bl;
-    (*p_cmp_pairs)[RGW_ATTR_MANIFEST] = p_rec->manifest_bl;
-
+    p_op->cmpxattr(RGW_ATTR_ETAG, CEPH_OSD_CMPXATTR_OP_EQ, etag_bl);
+    p_op->cmpxattr(RGW_ATTR_MANIFEST, CEPH_OSD_CMPXATTR_OP_EQ, p_rec->manifest_bl);
     if (p_rec->s.flags.has_valid_sha256() ) {
       bufferlist bl;
       sha256_to_bufferlist(p_rec->s.sha256[0], p_rec->s.sha256[1],
 			   p_rec->s.sha256[2], p_rec->s.sha256[3], &bl);
-      (*p_cmp_pairs)[RGW_ATTR_SHA256] = bl;
+      p_op->cmpxattr(RGW_ATTR_SHA256, CEPH_OSD_CMPXATTR_OP_EQ, bl);
     }
   }
 
@@ -609,17 +569,11 @@ namespace rgw::dedup {
     // TBD1: used shorter hash (64bit instead of 160bit)
     crypto::digest<crypto::SHA1>(p_src_rec->manifest_bl).encode(shared_manifest_hash_bl);
     librados::ObjectWriteOperation src_op, tgt_op;
-    ComparisonMap src_cmp_pairs, tgt_cmp_pairs;
-    bufferlist src_err_bl, tgt_err_bl;
-    init_cmp_pairs(p_src_rec, etag_bl, &src_cmp_pairs);
-    init_cmp_pairs(p_tgt_rec, etag_bl, &tgt_cmp_pairs);
-    map<string, bufferlist> src_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl}};
-    map<string, bufferlist> tgt_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl},
-					     {RGW_ATTR_MANIFEST, p_src_rec->manifest_bl}};
-    ret = cmp_vals_set_vals(src_op, Mode::String, Op::EQ, std::move(src_cmp_pairs),
-			    std::move(src_set_pairs), &src_err_bl);
-    ret = cmp_vals_set_vals(tgt_op, Mode::String, Op::EQ, std::move(tgt_cmp_pairs),
-			    std::move(tgt_set_pairs), &tgt_err_bl);
+    init_cmp_pairs(p_src_rec, etag_bl, &src_op);
+    init_cmp_pairs(p_tgt_rec, etag_bl, &tgt_op);
+    src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl);
+    tgt_op.setxattr(RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl);
+    tgt_op.setxattr(RGW_ATTR_MANIFEST, p_src_rec->manifest_bl);
 
     std::string src_oid, tgt_oid;
     librados::IoCtx src_ioctx, tgt_ioctx;
@@ -636,9 +590,10 @@ namespace rgw::dedup {
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS" << dendl;
-      ret = tgt_ioctx.operate(tgt_oid, &tgt_op, librados::OPERATION_RETURNVEC);
-      if (unlikely(ret < 0 || tgt_err_bl.length())) {
-	ret = report_cmp_set_error(dpp, ret, src_err_bl, "dedup_object::TGT");
+      ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
+      if (unlikely(ret != 0)) {
+	ldpp_dout(dpp, 1) << __func__ << "::ERR: failed tgt_ioctx.operate("
+			  << tgt_oid << "), err is " << cpp_strerror(ret) << dendl;
 	rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
 	return ret;
       }
@@ -648,9 +603,10 @@ namespace rgw::dedup {
 
       if(!has_shared_manifest_src) {
 	ldpp_dout(dpp, 20) << __func__ << "::send SRC CLS" << dendl;
-	ret = src_ioctx.operate(src_oid, &src_op, librados::OPERATION_RETURNVEC);
-	if (unlikely(ret < 0 || src_err_bl.length())) {
-	  ret = report_cmp_set_error(dpp, ret, src_err_bl, "dedup_object::SRC");
+	ret = src_ioctx.operate(src_oid, &src_op);
+	if (unlikely(ret != 0)) {
+	  ldpp_dout(dpp, 1) << __func__ << "::ERR: failed src_ioctx.operate("
+			    << src_oid << "), err is " << cpp_strerror(ret) << dendl;
 	  return ret;
 	}
       }
@@ -918,6 +874,7 @@ namespace rgw::dedup {
     disk_record_t src_rec;
     ret = load_record(d_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
     if (unlikely(ret != 0)) {
+      p_stats->failed_src_load++;
       // we can withstand most errors moving to the next object
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed load_record("
 			<< src_block_id << ", " << src_rec_id << ")" << dendl;
@@ -928,7 +885,7 @@ namespace rgw::dedup {
     // verify that SRC and TGT records don't refer to the same physical object
     // This could happen in theory if we read the same objects twice
     if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
-      p_stats->skipped_duplicate++;
+      p_stats->duplicate_records++;
       ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object=" << src_rec.obj_name << dendl;
       return 0;
     }
@@ -946,7 +903,7 @@ namespace rgw::dedup {
     // temporary code until SHA256 support is added
     if (src_has_sha256 && p_tgt_rec->s.flags.has_valid_sha256()) {
       if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
-	p_stats->skipped_bad_sha256++;
+	p_stats->sha256_mismatch++;
 	derr << __func__ << "::SHA256 mismatch" << dendl;
 	return 0;
       }

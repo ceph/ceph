@@ -9126,7 +9126,11 @@ next:
 	   << "backing store." << std::endl;
       return EPERM;
     }
-    return cluster::collect_all_shard_stats(store, dpp());
+    int ret = cluster::collect_all_shard_stats(store, formatter.get(), dpp());
+    if (ret == 0) {
+      formatter->flush(cout);
+    }
+    return ret;
   }
 
   if (opt_cmd == OPT::DEDUP_ABORT || opt_cmd == OPT::DEDUP_PAUSE || opt_cmd == OPT::DEDUP_RESUME) {

@@ -15,12 +15,10 @@
 #include "include/denc.h"
 #include "rgw_sal.h"
 #include "driver/rados/rgw_sal_rados.h"
-#include "cls/cmpxattr/client.h"
 #include <cstdlib>
 #include <ctime>
 #include <string>
 
-using namespace ::cls::cmpxattr;
 namespace rgw::dedup {
   const char* DEDUP_EPOCH_TOKEN = "EPOCH_TOKEN";
 
@@ -89,7 +87,7 @@ namespace rgw::dedup {
     }
     else{
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to create " << oid
-			<<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+      <<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
       return ret;
     }
 
@@ -97,42 +95,42 @@ namespace rgw::dedup {
     dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_DRY_RUN;
     dedup_epoch_t new_epoch = { serial, dedup_type, ceph_clock_now(),
 				num_work_shards, num_md5_shards };
-    bufferlist new_epoch_bl, empty_bl, err_bl;
+    bufferlist new_epoch_bl, empty_bl;
     encode(new_epoch, new_epoch_bl);
-#if 0
-    ldpp_dout(dpp, 10) << __func__ << "::after encode(new_epoch)" << dendl;
-    {
-      try {
-	dedup_epoch_t epoch_test;
-	auto bl_iter = new_epoch_bl.cbegin();
-	decode(epoch_test, bl_iter);
-	ldpp_dout(dpp, 5) << __func__ << "::decoded epoch=" << epoch_test << dendl;
-      } catch (buffer::error& err) {
-	ldpp_dout(dpp, 5) << __func__ << "::ERR: unable to decode err_bl" << dendl;
-	return -EINVAL;
-      }
-    }
-#endif
-    ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, empty_bl}};
-    std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(cmp_pairs),
-			    std::move(set_pairs), &err_bl);
-    if (ret != 0) {
-      ldpp_dout(dpp, 5) << __func__ << "::failed cmp_vals_set_vals" << dendl;
-      return -EINVAL;
-    }
+    op.cmpxattr(RGW_DEDUP_ATTR_EPOCH, CEPH_OSD_CMPXATTR_OP_EQ, empty_bl);
+    op.setxattr(RGW_DEDUP_ATTR_EPOCH, new_epoch_bl);
+
     ldpp_dout(dpp, 10) << __func__ << "::send EPOCH CLS" << dendl;
-    ret = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
-    if (ret == 0 && err_bl.length() == 0) {
+    ret = ioctx.operate(oid, &op);
+    if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::Epoch object was written" << dendl;
     }
-    else if (ret == -EEXIST) {
-      ldpp_dout(dpp, 10) << __func__ << "::Accept existing Epoch object" << dendl;
-      ret = 0;
+    // TBD: must check for failure caused by an existing EPOCH xattr!
+    // probably best to read attribute from epoch!
+    else if (ret == -ECANCELED) {
+      dedup_epoch_t epoch;
+      ret = get_epoch(ioctx, dpp, &epoch, __func__);
+      if (ret == 0) {
+	ldpp_dout(dpp, 10) << __func__ << "::Accept existing Epoch object" << dendl;
+      }
+      return ret;
+#if 0
+      bufferlist bl;
+      ret = ioctx.getxattr(oid, RGW_DEDUP_ATTR_EPOCH, bl);
+      if (ret > 0) {
+	ldpp_dout(dpp, 10) << __func__ << "::Accept existing Epoch object" << dendl;
+	ret = 0;
+      }
+      else {
+	ldpp_dout(dpp, 5) << __func__ << "::failed ioctx.getxattr() ret="
+			  << ret << "::" << cpp_strerror(ret) << dendl;
+      }
+#endif
     }
     else {
-      ret = report_cmp_set_error(dpp, ret, err_bl, __func__);
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed ioctx.operate("
+			<< oid << "), err is " << cpp_strerror(ret) << dendl;
     }
     return ret;
   }
@@ -150,16 +148,16 @@ namespace rgw::dedup {
     bufferlist old_epoch_bl, new_epoch_bl, err_bl;
     encode(*p_old_epoch, old_epoch_bl);
     encode(new_epoch, new_epoch_bl);
-    ComparisonMap cmp_pairs = {{RGW_DEDUP_ATTR_EPOCH, old_epoch_bl}};
-    std::map<std::string, bufferlist> set_pairs = {{RGW_DEDUP_ATTR_EPOCH, new_epoch_bl}};
     librados::ObjectWriteOperation op;
-    int ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, std::move(cmp_pairs),
-				std::move(set_pairs), &err_bl);
-    ldpp_dout(dpp, 1) << __func__ << "::send EPOCH CLS" << dendl;
+    op.cmpxattr(RGW_DEDUP_ATTR_EPOCH, CEPH_OSD_CMPXATTR_OP_EQ, old_epoch_bl);
+    op.setxattr(RGW_DEDUP_ATTR_EPOCH, new_epoch_bl);
+
+    ldpp_dout(dpp, 10) << __func__ << "::send EPOCH CLS" << dendl;
     std::string oid(DEDUP_EPOCH_TOKEN);
-    ret = ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC);
-    if (ret || err_bl.length()) {
-      ret = report_cmp_set_error(dpp, ret, err_bl, __func__);
+    int ret = ioctx.operate(oid, &op);
+    if (ret != 0) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed ioctx.operate("
+			<< oid << "), err is " << cpp_strerror(ret) << dendl;
     }
 
     return ret;
@@ -704,7 +702,7 @@ namespace rgw::dedup {
     for (unsigned shard = 0; shard < shards_count; shard++) {
       sto.set_shard(shard);
       std::string oid(sto.get_buff(), sto.get_buff_size());
-      ldpp_dout(dpp, 10) << __func__ << "::checking object: " << oid << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::checking object: " << oid << dendl;
 
       uint64_t size;
       struct timespec tspec;
@@ -732,13 +730,13 @@ namespace rgw::dedup {
 	  count++;
 	}
 	catch (const buffer::error&) {
-	  ldpp_dout(dpp, 0) << __func__ << "::(1)failed shard_progress_t decode!" << dendl;
-	  return 0; //-EINVAL;
+	  ldpp_dout(dpp, 10) << __func__ << "::(1)failed shard_progress_t decode!" << dendl;
+	  return -EINVAL;
 	}
       }
       else if (ret != -ENODATA) {
-	ldpp_dout(dpp, 1) << __func__ << "::" << oid << "::failed getxattr() ret="
-			  << ret << "::" << cpp_strerror(ret) << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::" << oid << "::failed getxattr() ret="
+			   << ret << "::" << cpp_strerror(ret) << dendl;
 	continue;
       }
       bl_arr[shard] = sp.stats_bl;
@@ -786,6 +784,45 @@ namespace rgw::dedup {
 		<< " (" << sec << " seconds)" << std::endl;
       std::cout << "All work-shard aggregated time = "
 		<< all_members_time.aggregated_time.tv.tv_sec << std::endl;
+    }
+
+    return all_members_time.end_time;
+  }
+
+  //---------------------------------------------------------------------------
+  [[maybe_unused]]static utime_t
+  show_time_func_fmt(const utime_t &start_time,
+		     bool show_time,
+		     const std::map<std::string, member_time_t> &owner_map,
+		     Formatter *fmt)
+  {
+    member_time_t all_members_time;
+    all_members_time.start_time = start_time;
+    all_members_time.end_time   = start_time;
+    all_members_time.aggregated_time = utime_t();
+    fmt->open_array_section("per-shard time");
+    for (const auto& [owner, value] : owner_map) {
+      uint32_t sec = value.end_time.tv.tv_sec - value.start_time.tv.tv_sec;
+      fmt->dump_stream("member time")
+	<< owner << "::start time = [" << value.start_time.tv.tv_sec % 1000
+	<< ":" << value.start_time.tv.tv_nsec / (1000*1000) << "] "
+	<< "::aggregated time = " << value.aggregated_time.tv.tv_sec
+	<< "(" << sec << ") seconds";
+      all_members_time.aggregated_time += value.aggregated_time;
+      if (all_members_time.end_time < value.end_time) {
+	all_members_time.end_time = value.end_time;
+      }
+    }
+    fmt->close_section();
+    if (show_time) {
+      uint32_t sec = all_members_time.end_time.tv.tv_sec - all_members_time.start_time.tv.tv_sec;
+      fmt->open_object_section("All shards time");
+      fmt->dump_stream("start time") << all_members_time.start_time;
+      fmt->dump_stream("end time")
+	<< all_members_time.end_time << " (" << sec << " seconds total)";
+      encode_json("aggregated time (sec)",
+		  all_members_time.aggregated_time.tv.tv_sec, fmt);
+      fmt->close_section();
     }
 
     return all_members_time.end_time;
@@ -844,7 +881,36 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void display_progress(uint64_t progress_a, uint64_t progress_b, unsigned shard)
+  [[maybe_unused]]static void
+  show_dedup_ratio_fmt(const worker_stats_t &wrk_stats_sum,
+		       const md5_stats_t    &md5_stats_sum,
+		       Formatter *fmt)
+  {
+    uint64_t rados_bytes_before = md5_stats_sum.rados_bytes_before_dedup;
+    uint64_t s3_bytes_before    = wrk_stats_sum.ingress_obj_bytes;
+    uint64_t s3_dedup_bytes     = md5_stats_sum.duplicated_blocks_bytes;
+    uint64_t s3_bytes_after     = s3_bytes_before - s3_dedup_bytes;
+    // skipped objects should be accounted for
+    // TBD: double check the logic!
+    uint64_t skipped_bytes = (wrk_stats_sum.ingress_skip_too_small_bytes +
+			      wrk_stats_sum.non_default_storage_class_objs_bytes);
+    s3_bytes_after -= skipped_bytes;
+    if (rados_bytes_before > s3_bytes_after && s3_bytes_after) {
+      double dedup_ratio = (double)rados_bytes_before/s3_bytes_after;
+      fmt->open_object_section("dedup ratio");
+
+      encode_json("rados_bytes_before", rados_bytes_before, fmt);
+      encode_json("s3_bytes_before", s3_bytes_before, fmt);
+      encode_json("s3_bytes_after", s3_bytes_after, fmt);
+      fmt->dump_float("dedup_ratio", (float)dedup_ratio);
+      fmt->close_section();
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  static void display_progress(uint64_t progress_a,
+			       uint64_t progress_b,
+			       unsigned shard)
   {
     if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
       return;
@@ -869,6 +935,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   // command-line called from radosgw-admin.cc
   int cluster::collect_all_shard_stats(rgw::sal::RadosStore *store,
+				       Formatter *fmt,
 				       const DoutPrefixProvider *dpp)
   {
     librados::IoCtx ioctx;
@@ -920,6 +987,8 @@ namespace rgw::dedup {
       }
       std::cout << "Aggreagted work-shard stats counters:\n" << wrk_stats_sum << std::endl;
       md5_start_time = show_time_func(epoch.time, show_time, owner_map);
+      //wrk_stats_sum.dump(fmt);
+      //md5_start_time = show_time_func(epoch.time, show_time, owner_map, fmt);
     }
 
     if (completed_work_shards_count == num_work_shards) {
@@ -955,6 +1024,9 @@ namespace rgw::dedup {
       std::cout << "Aggreagted md5-shard stats counters:\n" << md5_stats_sum << std::endl;
       show_dedup_ratio(wrk_stats_sum, md5_stats_sum);
       show_time_func(md5_start_time, show_time, owner_map);
+      //md5_stats_sum.dump(fmt);
+      //show_dedup_ratio(wrk_stats_sum, md5_stats_sum, fmt);
+      //show_time_func(md5_start_time, show_time, owner_map, fmt);
     }
 
     if (completed_md5_shards_count == num_md5_shards) {
