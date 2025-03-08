@@ -433,6 +433,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: breakpad
+  type: bool
+  level: advanced
+  desc: setup breakpad crash handler
+  default: false
+  flags:
+  - startup
+  with_legacy: true
 - name: crash_dir
   type: str
   level: advanced
