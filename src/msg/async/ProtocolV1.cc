@@ -318,20 +318,42 @@ void ProtocolV1::write_event() {
     auto start = ceph::mono_clock::now();
     bool more;
     do {
-      if (connection->is_queued()) {
-	if (r = connection->_try_send(); r!= 0) {
+      const out_q_entry_t out_entry = _get_next_outgoing();
+      Message *m = out_entry.m;
+      if (!m) {
+	/* there are no more outgoing messages: submit all serialized
+           packets to the socket */
+
+	if (uint64_t left = ack_left.exchange(0); left > 0) {
+          ceph_le64 s;
+	  s = in_seq;
+          connection->outgoing_bl.append(CEPH_MSGR_TAG_ACK);
+          connection->outgoing_bl.append((char *)&s, sizeof(s));
+          ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
+			 << " messages" << dendl;
+	} else if (!connection->is_queued())
+	  break;
+
+	/* there are no more outgoing messages in the queue: submit
+           all serialized packets to the socket */
+
+	connection->write_lock.unlock();
+	r = connection->_try_send();
+	connection->write_lock.lock();
+
+	if (r!= 0) {
 	  // either fails to send or not all queued buffer is sent
 	  break;
 	}
+
+	/* check the queue again; maybe another thread has added
+           something meanwhile; we must check again each time we
+           re-lock the write_lock because write_in_progress is still
+           true */
+	continue;
       }
 
-      const out_q_entry_t out_entry = _get_next_outgoing();
-      Message *m = out_entry.m;
       ceph::buffer::list data = out_entry.bl;
-
-      if (!m) {
-        break;
-      }
 
       if (!connection->policy.lossy) {
         // put on sent list
@@ -367,24 +389,6 @@ void ProtocolV1::write_event() {
     } while (can_write == WriteStatus::CANWRITE);
     write_in_progress = false;
     connection->write_lock.unlock();
-
-    // if r > 0 mean data still lefted, so no need _try_send.
-    if (r == 0) {
-      uint64_t left = ack_left;
-      if (left) {
-        ceph_le64 s;
-        s = in_seq;
-        connection->outgoing_bl.append(CEPH_MSGR_TAG_ACK);
-        connection->outgoing_bl.append((char *)&s, sizeof(s));
-        ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
-                       << " messages" << dendl;
-        ack_left -= left;
-        left = ack_left;
-        r = connection->_try_send(left);
-      } else if (is_queued()) {
-        r = connection->_try_send();
-      }
-    }
 
     connection->logger->tinc(l_msgr_running_send_time,
                              ceph::mono_clock::now() - start);
@@ -1176,17 +1180,6 @@ ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more)
   m->trace.event("async writing message");
   ldout(cct, 2) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
-  ssize_t total_send_size = connection->outgoing_bl.length();
-  ssize_t rc = connection->_try_send(more);
-  if (rc < 0) {
-    ldout(cct, 1) << __func__ << " error sending " << m << ", "
-                  << cpp_strerror(rc) << dendl;
-  } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outgoing_bl.length());
-    ldout(cct, 10) << __func__ << " sending " << m
-                   << (rc ? " continuely." : " done.") << dendl;
-  }
 
 #if defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
@@ -1196,7 +1189,7 @@ ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more)
 #endif
   m->put();
 
-  return rc;
+  return 0;
 }
 
 void ProtocolV1::requeue_sent() {
