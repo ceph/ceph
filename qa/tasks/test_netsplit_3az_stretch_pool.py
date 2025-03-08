@@ -278,4 +278,14 @@ class TestNetSplit(CephTestCase):
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
+        # Unset the pool back to replicated rule expects PGs to be 100% active+clean
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'stretch', 'unset',
+            self.POOL, self.DEFAULT_CRUSH_RULE,
+            str(self.SIZE), str(self.MIN_SIZE))
+        self.wait_until_true_and_hold(
+            lambda: self._pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
         log.info("test_mon_netsplit passed!")
