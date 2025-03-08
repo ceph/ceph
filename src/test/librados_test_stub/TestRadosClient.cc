@@ -32,17 +32,9 @@ static int get_concurrency() {
 }
 
 using namespace std::placeholders;
+using namespace std::literals;
 
 namespace librados {
-
-namespace {
-
-const char *config_keys[] = {
-  "librados_thread_count",
-  NULL
-};
-
-} // anonymous namespace
 
 static void finish_aio_completion(AioCompletionImpl *c, int r) {
   c->lock.lock();
@@ -142,8 +134,12 @@ boost::asio::io_context& TestRadosClient::get_io_context() {
   return m_io_context_pool->get_io_context();
 }
 
-const char** TestRadosClient::get_tracked_conf_keys() const {
-  return config_keys;
+std::vector<std::string>TestRadosClient::get_tracked_keys()
+    const noexcept
+{
+  return {
+    "librados_thread_count"s
+  };
 }
 
 void TestRadosClient::handle_conf_change(
