@@ -37,10 +37,13 @@ service Gateway {
 	rpc namespace_add(namespace_add_req) returns (nsid_status) {}
 
 	// Creates a subsystem
-	rpc create_subsystem(create_subsystem_req) returns(req_status) {}
+	rpc create_subsystem(create_subsystem_req) returns(subsys_status) {}
 
 	// Deletes a subsystem
 	rpc delete_subsystem(delete_subsystem_req) returns(req_status) {}
+
+	// Changes subsystem key
+	rpc change_subsystem_key(change_subsystem_key_req) returns(req_status) {}
 
 	// List namespaces
 	rpc list_namespaces(list_namespaces_req) returns(namespaces_info) {}
@@ -57,14 +60,29 @@ service Gateway {
 	// Changes namespace's load balancing group
 	rpc namespace_change_load_balancing_group(namespace_change_load_balancing_group_req) returns (req_status) {}
 
+	// Changes namespace's visibility
+	rpc namespace_change_visibility(namespace_change_visibility_req) returns (req_status) {}
+
+	// Set namespace's RBD trash image flag
+	rpc namespace_set_rbd_trash_image(namespace_set_rbd_trash_image_req) returns (req_status) {}
+
 	// Deletes a namespace
 	rpc namespace_delete(namespace_delete_req) returns (req_status) {}
+
+	// Adds a host to a namespace
+	rpc namespace_add_host(namespace_add_host_req) returns (req_status) {}
+
+	// Deletes a host from a namespace
+	rpc namespace_delete_host(namespace_delete_host_req) returns (req_status) {}
 
 	// Adds a host to a subsystem
 	rpc add_host(add_host_req) returns (req_status) {}
 
 	// Removes a host from a subsystem
 	rpc remove_host(remove_host_req) returns (req_status) {}
+
+	// Changes a host inband authentication keys
+	rpc change_host_key(change_host_key_req) returns (req_status) {}
 
 	// List hosts
 	rpc list_hosts(list_hosts_req) returns(hosts_info) {}
@@ -107,6 +125,9 @@ service Gateway {
 
 	// Set gateway log level
 	rpc set_gateway_log_level(set_gateway_log_level_req) returns(req_status) {}
+
+	// Show gateway listeners info
+	rpc show_gateway_listeners_info(show_gateway_listeners_info_req) returns(gateway_listeners_info) {}
 }
 
 // Request messages
@@ -122,25 +143,27 @@ message namespace_add_req {
 	optional bool create_image = 8;
 	optional uint64 size = 9;
 	optional bool force = 10;
+	optional bool no_auto_visible = 11;
+	optional bool trash_image = 12;
 }
 
 message namespace_resize_req {
 	string subsystem_nqn = 1;
-	optional uint32 nsid = 2;
-	optional string uuid = 3;
+	uint32 nsid = 2;
+	optional string OBSOLETE_uuid = 3;
 	uint64 new_size = 4;
 }
 
 message namespace_get_io_stats_req {
 	string subsystem_nqn = 1;
-	optional uint32 nsid = 2;
-	optional string uuid = 3;
+	uint32 nsid = 2;
+	optional string OBSOLETE_uuid = 3;
 }
 
 message namespace_set_qos_req {
 	string subsystem_nqn = 1;
-	optional uint32 nsid = 2;
-	optional string uuid = 3;
+	uint32 nsid = 2;
+	optional string OBSOLETE_uuid = 3;
 	optional uint64 rw_ios_per_second = 4;
 	optional uint64 rw_mbytes_per_second = 5;
 	optional uint64 r_mbytes_per_second = 6;
@@ -149,15 +172,42 @@ message namespace_set_qos_req {
 
 message namespace_change_load_balancing_group_req {
 	string subsystem_nqn = 1;
-	optional uint32 nsid = 2;
-	optional string uuid = 3;
+	uint32 nsid = 2;
+	optional string OBSOLETE_uuid = 3;
 	int32 anagrpid = 4;
+        optional bool auto_lb_logic = 5;
+}
+
+message namespace_change_visibility_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+	bool auto_visible = 3;
+	optional bool force = 4;
+}
+
+message namespace_set_rbd_trash_image_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+	bool trash_image = 3;
 }
 
 message namespace_delete_req {
 	string subsystem_nqn = 1;
-	optional uint32 nsid = 2;
-	optional string uuid = 3;
+	uint32 nsid = 2;
+	optional string OBSOLETE_uuid = 3;
+	optional bool i_am_sure = 4;
+}
+
+message namespace_add_host_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+	string host_nqn = 3;
+}
+
+message namespace_delete_host_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+	string host_nqn = 3;
 }
 
 message create_subsystem_req {
@@ -165,11 +215,18 @@ message create_subsystem_req {
 	string serial_number = 2;
 	optional uint32 max_namespaces = 3;
 	bool enable_ha = 4;
+	optional bool no_group_append = 5;
+	optional string dhchap_key = 6;
 }
 
 message delete_subsystem_req {
 	string subsystem_nqn = 1;
 	optional bool force = 2;
+}
+
+message change_subsystem_key_req {
+	string subsystem_nqn = 1;
+	optional string dhchap_key = 2;
 }
 
 message list_namespaces_req {
@@ -181,6 +238,14 @@ message list_namespaces_req {
 message add_host_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
+	optional string psk = 3;
+	optional string dhchap_key = 4;
+}
+
+message change_host_key_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+	optional string dhchap_key = 3;
 }
 
 message remove_host_req {
@@ -202,6 +267,7 @@ message create_listener_req {
 	string traddr = 3;
 	optional AddressFamily adrfam = 5;
 	optional uint32 trsvcid = 6;
+	optional bool secure = 7;
 }
 
 message delete_listener_req {
@@ -247,6 +313,10 @@ message set_gateway_log_level_req {
 	GwLogLevel log_level = 1;
 }
 
+message show_gateway_listeners_info_req {
+	string subsystem_nqn = 1;
+}
+
 // From https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4-2019.06.10-Ratified.pdf page 138
 // Asymmetric Namespace Access state for all namespaces in this ANA
 // Group when accessed through this controller.
@@ -285,6 +355,12 @@ message req_status {
 	string error_message = 2;
 }
 
+message subsys_status {
+	int32 status = 1;
+	string error_message = 2;
+	string nqn = 3;
+}
+
 message nsid_status {
 	int32 status = 1;
 	string error_message = 2;
@@ -307,6 +383,7 @@ message subsystem {
         optional uint32 min_cntlid = 9;
         optional uint32 max_cntlid = 10;
         repeated namespace namespaces = 11;
+        optional bool has_dhchap_key = 12;
 }
 
 message listen_address {
@@ -315,6 +392,7 @@ message listen_address {
         string traddr = 3;
         string trsvcid = 4;
         optional string transport = 5;
+        optional bool secure = 6;
 }
 
 message namespace {
@@ -325,6 +403,8 @@ message namespace {
     optional string uuid = 5;
     optional uint32 anagrpid = 6;
     optional string nonce = 7;
+    optional bool auto_visible = 8;
+    repeated string hosts = 9;
 }
 
 message subsystems_info_cli {
@@ -343,6 +423,8 @@ message subsystem_cli {
 	uint32 namespace_count = 7;
 	string subtype = 8;
 	uint32 max_namespaces = 9;
+	optional bool has_dhchap_key = 10;
+        optional bool allow_any_host = 11;
 }
 
 message gateway_info {
@@ -358,6 +440,10 @@ message gateway_info {
 	optional string spdk_version = 10;
         uint32 load_balancing_group = 11;
 	string hostname = 12;
+	optional uint32 max_subsystems = 13;
+	optional uint32 max_namespaces = 14;
+	optional uint32 max_hosts_per_subsystem = 15;
+	optional uint32 max_namespaces_per_subsystem = 16;
 }
 
 message cli_version {
@@ -378,6 +464,7 @@ message listener_info {
 	AddressFamily adrfam = 3;
 	string traddr = 4;
 	uint32 trsvcid = 5;
+	optional bool secure = 6;
 }
 
 message listeners_info {
@@ -386,8 +473,21 @@ message listeners_info {
 	repeated listener_info listeners = 3;
 }
 
+message gateway_listener_info {
+	listener_info listener = 1;
+	repeated ana_group_state lb_states = 2;
+}
+
+message gateway_listeners_info {
+	int32 status = 1;
+	string error_message = 2;
+	repeated gateway_listener_info gw_listeners = 3;
+}
+
 message host {
-    string nqn = 1;
+	string nqn = 1;
+	optional bool use_psk = 2;
+	optional bool use_dhchap = 3;
 }
 
 message hosts_info {
@@ -407,6 +507,9 @@ message connection {
 	bool connected = 6;
 	int32 qpairs_count = 7;
 	int32 controller_id = 8;
+	optional bool secure = 9;
+	optional bool use_psk = 10;
+	optional bool use_dhchap = 11;
 }
 
 message connections_info {
@@ -429,6 +532,10 @@ message namespace_cli {
 	uint64 rw_mbytes_per_second = 10;
 	uint64 r_mbytes_per_second = 11;
 	uint64 w_mbytes_per_second = 12;
+	bool auto_visible = 13;
+	repeated string hosts = 14;
+	optional string ns_subsystem_nqn = 15;
+	optional bool trash_image = 16;
 }
 
 message namespaces_info {
@@ -438,12 +545,17 @@ message namespaces_info {
 	repeated namespace_cli namespaces = 4;
 }
 
+message namespace_io_error {
+	string name = 1;
+	uint32 value = 2;
+}
+
 message namespace_io_stats_info {
 	int32 status = 1;
 	string error_message = 2;
 	string subsystem_nqn = 3;
 	uint32 nsid = 4;
-	string uuid = 5;
+	optional string uuid = 5;
 	string bdev_name = 6;
 	uint64 tick_rate = 7;
 	uint64 ticks = 8;
@@ -465,7 +577,7 @@ message namespace_io_stats_info {
 	uint64 copy_latency_ticks = 24;
 	uint64 max_copy_latency_ticks = 25;
 	uint64 min_copy_latency_ticks = 26;
-	repeated uint32 io_error = 27;
+	repeated namespace_io_error io_error = 27;
 }
 
 message spdk_log_flag_info {
