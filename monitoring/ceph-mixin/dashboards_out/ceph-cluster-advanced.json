@@ -505,15 +505,69 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
                "unit": "none"
-            }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Out"
+                  },
+                  "properties": [
+                     {
+                        "id": "thresholds",
+                        "value": {
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "green",
+                                 "value": null
+                              },
+                              {
+                                 "color": "yellow",
+                                 "value": 1
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 10
+                              }
+                           ]
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Down"
+                  },
+                  "properties": [
+                     {
+                        "id": "thresholds",
+                        "value": {
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "green",
+                                 "value": null
+                              },
+                              {
+                                 "color": "yellow",
+                                 "value": 1
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 10
+                              }
+                           ]
+                        }
+                     }
+                  ]
+               }
+            ]
          },
          "flipCard": false,
          "flipTime": 5,
@@ -764,10 +818,6 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 1
                      }
                   ]
                },
@@ -781,10 +831,19 @@
                   },
                   "properties": [
                      {
-                        "id": "color",
+                        "id": "thresholds",
                         "value": {
-                           "fixedColor": "red",
-                           "mode": "fixed"
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "green",
+                                 "value": null
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 1
+                              }
+                           ]
                         }
                      }
                   ]
@@ -796,10 +855,23 @@
                   },
                   "properties": [
                      {
-                        "id": "color",
+                        "id": "thresholds",
                         "value": {
-                           "fixedColor": "#987d24",
-                           "mode": "fixed"
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "green",
+                                 "value": null
+                              },
+                              {
+                                 "color": "yellow",
+                                 "value": 1
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 60
+                              }
+                           ]
                         }
                      }
                   ]
