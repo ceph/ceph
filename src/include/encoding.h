@@ -1493,7 +1493,22 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param v current version of the encoding that the code supports/encodes
  * @param bl bufferlist::iterator for the encoded data
  */
-#define DECODE_START(v, bl)						\
+#define DECODE_START(_v, bl)						\
+  StructVChecker<_v> struct_v;						\
+  __u8 struct_compat;							\
+  using ::ceph::decode;							\
+  decode(struct_v.v, bl);						\
+  decode(struct_compat, bl);						\
+  if (_v < struct_compat)						\
+    throw ::ceph::buffer::malformed_input(DECODE_ERR_NO_COMPAT(__PRETTY_FUNCTION__, _v, struct_v.v, struct_compat)); \
+  __u32 struct_len;							\
+  decode(struct_len, bl);						\
+  if (struct_len > bl.get_remaining())					\
+    throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+  unsigned struct_end = bl.get_off() + struct_len;			\
+  do {
+
+#define DECODE_START_UNCHECKED(v, bl)					\
   __u8 struct_v, struct_compat;						\
   using ::ceph::decode;							\
   decode(struct_v, bl);						\
@@ -1527,22 +1542,22 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
 
 /* BEWARE: any change to this macro MUST be also reflected in the duplicative
  * DECODE_START_LEGACY_COMPAT_LEN! */
-#define __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, skip_v, bl)	\
+#define __DECODE_START_LEGACY_COMPAT_LEN(_v, compatv, lenv, skip_v, bl)	\
   using ::ceph::decode;							\
-  __u8 struct_v;							\
-  decode(struct_v, bl);						\
-  if (struct_v >= compatv) {						\
+  StructVChecker<_v> struct_v;						\
+  decode(struct_v.v, bl);						\
+  if (struct_v.v >= compatv) {						\
     __u8 struct_compat;							\
     decode(struct_compat, bl);					\
-    if (v < struct_compat)						\
-      throw ::ceph::buffer::malformed_input(DECODE_ERR_NO_COMPAT(__PRETTY_FUNCTION__, v, struct_v, struct_compat)); \
+    if (_v < struct_compat)						\
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_NO_COMPAT(__PRETTY_FUNCTION__, _v, struct_v.v, struct_compat)); \
   } else if (skip_v) {							\
     if (bl.get_remaining() < skip_v)					\
       throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     bl +=  skip_v;							\
   }									\
   unsigned struct_end = 0;						\
-  if (struct_v >= lenv) {						\
+  if (struct_v.v >= lenv) {						\
     __u32 struct_len;							\
     decode(struct_len, bl);						\
     if (struct_len > bl.get_remaining())				\
