@@ -11970,6 +11970,32 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, BlueFSReservedTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  uint64_t db_size = 1ull << 32; // 4GiB
+  uint64_t wal_extra = 0x10000;
+  uint64_t wal_size = db_size + wal_extra; // 4GiB + 64K
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(db_size).c_str());
+  SetVal(g_conf(), "bluestore_block_wal_create", "true");
+  SetVal(g_conf(), "bluestore_block_wal_size", stringify(wal_size).c_str());
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS* fs = bstore->get_bluefs();
+
+  ASSERT_EQ(fs->get_full_reserved(BlueFS::BDEV_DB),
+            g_conf()->bluefs_alloc_size);
+
+  ASSERT_EQ(fs->get_full_reserved(BlueFS::BDEV_WAL),
+            wal_extra);
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
