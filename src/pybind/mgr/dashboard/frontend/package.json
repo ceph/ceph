@@ -41,6 +41,9 @@
     "doc-serve": "compodoc --port 8444 -s tsconfig.app.json"
   },
   "private": true,
+  "browser": {
+    "timers": "timers-browserify"
+  },
   "dependencies": {
     "@angular/animations": "18.2.11",
     "@angular/common": "18.2.11",
@@ -58,6 +61,7 @@
     "@ngx-formly/bootstrap": "6.1.1",
     "@ngx-formly/core": "6.1.1",
     "@popperjs/core": "2.10.2",
+    "@softarc/native-federation-node": "^2.0.10",
     "@types/file-saver": "2.0.1",
     "async-mutex": "0.2.4",
     "bootstrap": "5.3.2",
@@ -65,6 +69,7 @@
     "chart.js": "4.4.7",
     "chartjs-adapter-moment": "1.0.1",
     "detect-browser": "5.2.0",
+    "es-module-shims": "^1.5.12",
     "file-saver": "2.0.2",
     "fork-awesome": "1.1.7",
     "lodash": "4.17.21",
@@ -84,12 +89,14 @@
     "zone.js": "0.14.10"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "18.2.11",
+    "@angular-architects/native-federation": "18.2.7",
+    "@angular-devkit/build-angular": "18.2.14",
     "@angular-eslint/builder": "18.4.0",
     "@angular-eslint/eslint-plugin": "18.4.0",
     "@angular-eslint/eslint-plugin-template": "18.4.0",
     "@angular-eslint/schematics": "18.4.0",
     "@angular-eslint/template-parser": "18.4.0",
+    "@angular/build": "18.2.14",
     "@angular/cli": "18.2.11",
     "@angular/compiler-cli": "18.2.11",
     "@angular/language-service": "18.2.11",
