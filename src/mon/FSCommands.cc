@@ -213,6 +213,16 @@ class FsNewHandler : public FileSystemCommandHandler
       }
     }
 
+    const pool_stat_t *data_pool_stat = mon->mgrstatmon()->get_pool_stat(data);
+    if (data_pool_stat) {
+      int64_t data_num_objects = data_pool_stat->stats.sum.num_objects;
+      if (!force && data_num_objects > 0) {
+	ss << "pool '" << data_name << "' already contains some objects. Use "
+	      "an empty pool instead.";
+	return -EINVAL;
+      }
+    }
+
     if (fsmap.filesystem_count() > 0
         && !fsmap.get_enable_multiple()) {
       ss << "Creation of multiple filesystems is disabled.  To enable "
@@ -1082,6 +1092,16 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     if (fsp == nullptr) {
         ss << "filesystem '" << fs_name << "' does not exist";
         return -ENOENT;
+    }
+
+    const pool_stat_t *pool_stat = mon->mgrstatmon()->get_pool_stat(poolid);
+    if (pool_stat) {
+      int64_t data_num_objects = pool_stat->stats.sum.num_objects;
+      if (data_num_objects > 0) {
+	ss << "pool '" << poolname  << "' already contains some objects. Use "
+	      "an empty pool instead.";
+	return -EINVAL;
+      }
     }
 
     // no-op when the data_pool already on fs
