@@ -7906,6 +7906,50 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
+class CloneProgressBarsUtils:
+
+    def filter_in_only_clone_pevs(self, progress_events):
+        '''
+        Progress events dictionary in output of "ceph status --format json"
+        has the progress bars and message associated with each progress bar.
+        Sometimes during testing of clone progress bars, and sometimes
+        otherwise too, an extra progress bar is seen with message "Global
+        Recovery Event". This extra progress bar interferes with testing of
+        progress bars for cloning.
+
+        This helper methods goes through this dictionary and picks only
+        (filters in) clone events.
+        '''
+        clone_pevs = {}
+
+        for k, v in progress_events.items():
+            if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
+                clone_pevs[k] = v
+
+        return clone_pevs
+
+    def get_pevs_from_ceph_status(self, clones=None, check=True):
+        o = self.get_ceph_cmd_stdout('status --format json-pretty')
+        o = json.loads(o)
+
+        try:
+            pevs = o['progress_events'] # pevs = progress events
+        except KeyError as e:
+            try:
+                if check and clones:
+                    self.__check_clone_state('completed', clone=clones, timo=1)
+            except:
+                msg = ('Didn\'t find expected entries in dictionary '
+                       '"progress_events" which is obtained from the '
+                       'output of command "ceph status".\n'
+                       f'Exception - {e}\npev -\n{pevs}')
+                raise Exception(msg)
+
+        pevs = self.filter_in_only_clone_pevs(pevs)
+
+        return pevs
+
+
 # NOTE: these tests consumes considerable amount of CPU and RAM due generation
 # random of files and due to multiple cloning jobs that are run simultaneously.
 #
@@ -8063,47 +8107,6 @@ class TestCloneProgressReporter(TestVolumesHelper):
                     break
 
         self._wait_for_clone_to_complete(c)
-
-    def filter_in_only_clone_pevs(self, progress_events):
-        '''
-        Progress events dictionary in output of "ceph status --format json"
-        has the progress bars and message associated with each progress bar.
-        Sometimes during testing of clone progress bars, and sometimes
-        otherwise too, an extra progress bar is seen with message "Global
-        Recovery Event". This extra progress bar interferes with testing of
-        progress bars for cloning.
-
-        This helper methods goes through this dictionary and picks only
-        (filters in) clone events.
-        '''
-        clone_pevs = {}
-
-        for k, v in progress_events.items():
-            if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
-                clone_pevs[k] = v
-
-        return clone_pevs
-
-    def get_pevs_from_ceph_status(self, clones=None, check=True):
-        o = self.get_ceph_cmd_stdout('status --format json-pretty')
-        o = json.loads(o)
-
-        try:
-            pevs = o['progress_events'] # pevs = progress events
-        except KeyError as e:
-            try:
-                if check and clones:
-                    self.__check_clone_state('completed', clone=clones, timo=1)
-            except:
-                msg = ('Didn\'t find expected entries in dictionary '
-                       '"progress_events" which is obtained from the '
-                       'output of command "ceph status".\n'
-                       f'Exception - {e}\npev -\n{pevs}')
-                raise Exception(msg)
-
-        pevs = self.filter_in_only_clone_pevs(pevs)
-
-        return pevs
 
     def test_clones_less_than_cloner_threads(self):
         '''
@@ -8676,6 +8679,78 @@ class TestCloneProgressReporter(TestVolumesHelper):
                 pass
             else:
                 raise
+
+
+class TestDisableCloneProgressBars(TestVolumesHelper, CloneProgressBarsUtils):
+    '''
+    Tests related to config option mgr/volumes/disable_clone_progress_bars.
+    '''
+
+    CONF_OPT = 'mgr/volumes/disable_clone_progress_bars'
+
+    def test_for_1_progress_bar(self):
+        '''
+        When number of clone jobs is less than max_concurrent_jobs, 1 progress
+        bar is printed. Test that this progress bar is not printed when
+        disable_clone_progress_bars is true.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(5)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', self.CONF_OPT, 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        # ensure clone progress bars were not printed through out the lifetime
+        # of clone jobs.
+        try:
+            with safe_while(tries=10, sleep=2) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(c, check=False)
+                    self.assertEqual(len(pevs), 0)
+        except Exception:
+            pass
+
+    def test_for_2_progress_bars(self):
+        '''
+        When number of clone jobs is more than max_concurrent_jobs, 2 progress
+        bars are printed. Test that these progress bars are not printed when
+        disable_clone_progress_bars is true.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.config_set('mgr', self.CONF_OPT, 'true')
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        # ensure clone progress bars were not printed through out the lifetime
+        # of clone jobs.
+        try:
+            with safe_while(tries=10, sleep=2) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(c, check=False)
+                    self.assertEqual(len(pevs), 0)
+        except Exception:
+            pass
 
 
 class TestMisc(TestVolumesHelper):
