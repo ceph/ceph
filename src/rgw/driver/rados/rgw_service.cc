@@ -35,6 +35,7 @@
 #include "role.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
+#include "oidc.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -392,6 +393,7 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
   meta.role = _ctl.meta.role.get();
   meta.topic = _ctl.meta.topic.get();
   meta.topic_cache = _ctl.meta.topic_cache.get();
+  meta.oidc = _ctl.meta.oidc.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
@@ -442,6 +444,12 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
   r = _ctl.meta.group->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init meta.group ctl (" << cpp_strerror(-r) << dendl;
+  }
+
+  r = meta.oidc->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init topic ctl ("
+                  << cpp_strerror(-r) << dendl;
     return r;
   }
   return 0;
