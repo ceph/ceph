@@ -156,6 +156,15 @@ inline void bluestore_blob_use_tracker_t::init_and_ref(
   }
 }
 
+inline void bluestore_blob_use_tracker_t::init_and_ref_compressed(
+  uint32_t logical_length)
+{
+  au_size = logical_length;
+  num_au = 0;
+  alloc_au = 0;
+  total_bytes = logical_length;
+}
+
 inline void bluestore_blob_t::allocated_full(
   uint32_t length,
   PExtentVector&& allocs)
@@ -524,8 +533,6 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   uint32_t blob_length = disk_data.length();
   ceph_assert(p2phase<uint32_t>(blob_length, bstore->min_alloc_size) == 0);
   BlobRef blob = onode->c->new_blob();
-
-  //uint32_t in_blob_end = disk_data.length();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t tracked_unit = min_alloc_size;
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
@@ -535,13 +542,43 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
     bblob.calc_csum(0, disk_data);
     tracked_unit = std::max(1u << csum_order, min_alloc_size);
   }
-  //std::cout << "blob_length=" << blob_length << std::endl;
   blob->dirty_blob_use_tracker().init_and_ref(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length, blob_allocs);
   _schedule_io(blob_allocs, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
   bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
+  return blob;
+}
+
+BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
+  bufferlist& disk_data,
+  uint32_t compressed_length,
+  bufferlist& object_data)
+{
+  uint32_t disk_length = disk_data.length();
+  uint32_t object_length = object_data.length();
+  ceph_assert(p2phase<uint32_t>(disk_length, bstore->min_alloc_size) == 0);
+  BlobRef blob = onode->c->new_blob();
+
+  bluestore_blob_t &bblob = blob->dirty_blob();
+  uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
+    std::min<uint32_t>(wctx->csum_order, std::countr_zero(disk_length));
+  if (wctx->csum_type != Checksummer::CSUM_NONE) {
+    bblob.init_csum(wctx->csum_type, csum_order, disk_length);
+    bblob.calc_csum(0, disk_data);
+  }
+  bblob.set_compressed(object_length, compressed_length);
+  blob->dirty_blob_use_tracker().init_and_ref_compressed(object_length);
+  PExtentVector blob_allocs;
+  _get_disk_space(disk_length, blob_allocs);
+  _schedule_io(blob_allocs, disk_data); //have to do before move()
+  //todo: we are setting blob's logical length twice
+  bblob.allocated_full(object_length, std::move(blob_allocs));
+  //no unused in compressed //bblob.mark_used(0, disk_length);
+  statfs_delta.compressed_allocated() += disk_length;
+  statfs_delta.compressed_original() += object_length;
+  statfs_delta.compressed() += compressed_length;
   return blob;
 }
 
@@ -910,6 +947,7 @@ void BlueStore::Writer::_try_put_data_on_allocated(
     // check if we have already allocated space to fill
     _try_reuse_allocated_l(after_punch_it, logical_offset, ref_end_offset, bd[0]);
   }
+  dout(25) << "0 real_length=" << std::hex << bd[0].real_length << std::dec << dendl;
   if (bd[0].real_length == 0) {
     bd.erase(bd.begin());
   }
@@ -926,6 +964,8 @@ void BlueStore::Writer::_try_put_data_on_allocated(
       // check if we have some allocated space to fill
       _try_reuse_allocated_r(after_punch_it, end_offset, ref_end_offset, bd_back);
     }
+      dout(25) << "back real_length=" << std::hex << bd_back.real_length << std::dec << dendl;
+
     if (bd_back.real_length == 0) {
       bd.erase(bd.end() - 1);
     }
@@ -956,6 +996,8 @@ void BlueStore::Writer::_do_put_new_blobs(
   blob_vec::iterator& bd_it,
   blob_vec::iterator bd_end)
 {
+  dout(20) << __func__ << std::hex <<  " logical_offset=" << logical_offset
+  << " ref_end_offset=" << ref_end_offset << dendl;
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t blob_size = wctx->target_blob_size;
   while (bd_it != bd_end) {
@@ -982,7 +1024,13 @@ void BlueStore::Writer::_do_put_new_blobs(
       logical_offset = ref_end;
     } else {
       // compressed
-      ceph_assert(false);
+      BlobRef new_blob = _blob_create_full_compressed(
+        bd_it->disk_data, bd_it->compressed_length, bd_it->object_data);
+      le = new Extent(
+        logical_offset, 0, bd_it->real_length, new_blob);
+      dout(20) << __func__ << " new compressed extent+blob " << le->print(pp_mode) << dendl;
+      emap.insert(*le);
+      logical_offset += bd_it->real_length;
     }
     bstore->logger->inc(l_bluestore_write_big);
     bstore->logger->inc(l_bluestore_write_big_bytes, le->length);
@@ -997,6 +1045,10 @@ void BlueStore::Writer::_do_put_blobs(
   blob_vec& bd,
   exmp_it after_punch_it)
 {
+  dout(10) << __func__ << std::hex
+    << " logical_offset=" << logical_offset
+    << " data_end_offset=" << data_end_offset
+    << " ref_end_offset=" << ref_end_offset << std::dec << dendl;
   Collection* coll = onode->c;
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t au_size = bstore->min_alloc_size;
@@ -1336,6 +1388,15 @@ void BlueStore::Writer::do_write(
   if (ref_end < onode->onode.size) {
     ref_end = std::min<uint32_t>(data_end, onode->onode.size);
   }
+  do_write_with_blobs(location, data_end, ref_end, bd);
+}
+
+void BlueStore::Writer::do_write_with_blobs(
+  uint32_t location,
+  uint32_t data_end,
+  uint32_t ref_end,
+  blob_vec& bd)
+{
   dout(20) << "blobs to put:" << blob_data_printer(bd, location) << dendl;
   statfs_delta.stored() += ref_end - location;
   exmp_it after_punch_it =
@@ -1346,9 +1407,15 @@ void BlueStore::Writer::do_write(
   // todo: if we align to disk block before splitting, we could do it in one go
   uint32_t pos = location;
   for (auto& b : bd) {
-    bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
-      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    pos += b.disk_data.length();
+    if (b.is_compressed()) {
+      bstore->_buffer_cache_write(this->txc, onode, pos, b.object_data,
+        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      pos += b.object_data.length();
+    } else {
+      bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
+        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      pos += b.disk_data.length();
+    }
   }
   ceph_assert(pos == data_end);
 
@@ -1362,10 +1429,13 @@ void BlueStore::Writer::do_write(
     uint32_t location_tmp = location;
     for (auto& i : bd) {
       uint32_t location_end = location_tmp + i.real_length;
-      need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      if (i.is_compressed()) {
+        need_size += p2roundup(i.disk_data.length(), au_size);
+      } else {
+        need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      }
       location_tmp = location_end;
     }
-
     _defer_or_allocate(need_size);
     _do_put_blobs(location, data_end, ref_end, bd, after_punch_it);
   } else {
@@ -1381,6 +1451,7 @@ void BlueStore::Writer::do_write(
   onode->extent_map.dirty_range(location, data_end-location);
   onode->extent_map.maybe_reshard(location, data_end);
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
+
 }
 
 /**
