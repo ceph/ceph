@@ -228,7 +228,7 @@ void WnbdHandler::send_io_response(WnbdHandler::IOContext *ctx) {
   err = WnbdSendResponseEx(
     pctx->handler->wnbd_disk,
     &wnbd_rsp,
-    pctx->data.c_str(),
+    (PVOID)pctx->data.c_str(),
     pctx->data.length(),
     overlapped);
   if (err == ERROR_IO_PENDING) {
