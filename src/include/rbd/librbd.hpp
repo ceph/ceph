@@ -23,6 +23,11 @@
 #include "../rados/librados.hpp"
 #include "librbd.h"
 
+#include <atomic>
+#include <condition_variable>
+
+#include "../librbd/AsioEngine.h"
+
 #if __GNUC__ >= 4
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -145,6 +150,33 @@ namespace librbd {
     mirror_image_info_t info;
     std::vector<mirror_image_site_status_t> site_statuses;
   } mirror_image_global_status_t;
+
+  typedef rbd_mirror_group_state_t mirror_group_state_t;
+
+  typedef struct {
+    std::string global_id;
+    mirror_image_mode_t mirror_image_mode;
+    mirror_group_state_t state;
+    bool primary;
+  } mirror_group_info_t;
+
+  typedef rbd_mirror_group_status_state_t mirror_group_status_state_t;
+
+  typedef struct {
+    std::string mirror_uuid;
+    mirror_group_status_state_t state;
+    std::string description;
+    std::map<std::pair<int64_t, std::string>,
+             mirror_image_site_status_t> mirror_images;
+    time_t last_update;
+    bool up;
+  } mirror_group_site_status_t;
+
+  typedef struct {
+    std::string name;
+    mirror_group_info_t info;
+    std::vector<mirror_group_site_status_t> site_statuses;
+  } mirror_group_global_status_t;
 
   typedef rbd_group_image_state_t group_image_state_t;
 
@@ -271,6 +303,51 @@ public:
     ssize_t get_return_value();
     void *get_arg();
     void release();
+  };
+
+  // This must be dynamically allocated with new, and
+  // must be released with release().
+  // Do not use delete.
+  struct AioGroupCompletion {
+    typedef enum {
+      AIO_STATE_PENDING = 0,
+      AIO_STATE_COMPLETE,
+    } aio_state_t;
+    std::atomic<aio_state_t> m_state{AIO_STATE_PENDING};
+
+    void *m_complete_arg = nullptr;
+    callback_t m_complete_cb = nullptr;
+    std::atomic<ssize_t> m_rval{0};
+    std::atomic<uint32_t> m_ref{1};
+    std::atomic<bool> m_released{false};
+    IoCtx m_ioctx;
+    std::shared_ptr<AsioEngine> m_asio_engine;
+
+    mutable std::mutex m_lock;
+    std::condition_variable m_cond;
+
+    AioGroupCompletion(void *cb_arg, callback_t complete_cb);
+
+    ssize_t get_return_value();
+    void notify_complete();
+    void release();
+    void complete();
+    bool is_complete();
+    void fail(int r);
+    int wait_for_complete();
+    void init(IoCtx& ioctx);
+    void put() {
+      uint32_t previous_ref = m_ref--;
+      ceph_assert(previous_ref > 0);
+
+      if (previous_ref == 1) {
+        delete this;
+      }
+    }
+    void get() {
+      ceph_assert(m_ref > 0);
+      ++m_ref;
+    }
   };
 
   void version(int *major, int *minor, int *extra);
@@ -407,6 +484,17 @@ public:
       std::map<std::string, std::pair<mirror_image_mode_t,
                                       mirror_image_info_t>> *entries);
 
+  int mirror_group_info_list(IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, mirror_group_info_t> *entries);
+  int mirror_group_global_status_list(
+      IoCtx& io_ctx, const std::string &start_id, size_t max,
+      std::map<std::string, mirror_group_global_status_t> *groups);
+  int mirror_group_status_summary(IoCtx& io_ctx,
+      std::map<mirror_group_status_state_t, int> *states);
+  int mirror_group_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, std::string> *sevice_ids);
+
   /// mirror_peer_ commands are deprecated to mirror_peer_site_ equivalents
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
@@ -445,13 +533,15 @@ public:
   int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
   int group_get_id(IoCtx& io_ctx, const char *group_name,
                    std::string *group_id);
+  int group_get_name(IoCtx& io_ctx, const char *group_id,
+                     std::string *group_name);
   int group_rename(IoCtx& io_ctx, const char *src_group_name,
                    const char *dest_group_name);
 
   int group_image_add(IoCtx& io_ctx, const char *group_name,
-		      IoCtx& image_io_ctx, const char *image_name);
+                      IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
-			 IoCtx& image_io_ctx, const char *image_name);
+                         IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
                                IoCtx& image_io_ctx, const char *image_id);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
@@ -479,6 +569,34 @@ public:
   int group_snap_rollback_with_progress(IoCtx& io_ctx, const char *group_name,
                                         const char *snap_name,
                                         ProgressContext& pctx);
+
+  // RBD group mirroring support functions
+  int mirror_group_list(IoCtx& io_ctx, std::vector<std::string> *names);
+  int mirror_group_enable(IoCtx& io_ctx, const char *group_name,
+                          mirror_image_mode_t mirror_image_mode,
+                          uint32_t flags);
+  int mirror_group_disable(IoCtx& io_ctx, const char *group_name, bool force);
+  int mirror_group_promote(IoCtx& io_ctx, const char *group_name,
+                           uint32_t flags, bool force);
+  int mirror_group_demote(IoCtx& io_ctx, const char *group_name,
+                          uint32_t flags);
+  int mirror_group_resync(IoCtx& io_ctx, const char *group_name);
+  int mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
+                                   uint32_t flags, std::string *snap_id);
+  int aio_mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
+                                       uint32_t flags, std::string *snap_id,
+                                       RBD::AioGroupCompletion *c);
+  int mirror_group_get_info(IoCtx& io_ctx, const char *group_name,
+                            mirror_group_info_t *mirror_group_info,
+                            size_t info_size);
+  int mirror_group_get_status(IoCtx& io_ctx, const char *group_name,
+                              mirror_group_global_status_t *mirror_group_status,
+                              size_t status_size);
+  int mirror_group_get_instance_id(IoCtx& io_ctx, const char *group_name,
+                                   std::string *instance_id);
+  int aio_mirror_group_get_info(IoCtx& io_ctx, const char *group_name,
+                                mirror_group_info_t *mirror_group_info,
+                                size_t info_size, RBD::AioGroupCompletion *c);
 
   int namespace_create(IoCtx& ioctx, const char *namespace_name);
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
