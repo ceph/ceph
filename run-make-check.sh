@@ -54,10 +54,23 @@ function run() {
     CTEST_RESOURCE_FILE=$(gen_ctest_resource_file)
     CHECK_MAKEOPTS+=" --resource-spec-file ${CTEST_RESOURCE_FILE}"
     if in_jenkins; then
+        mkdir -p Testing/Temporary/
+        if [ -f /tmp/CTestCostData.txt ]; then
+            sudo cp /tmp/CTestCostData.txt Testing/Temporary/
+        fi
         if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure --test-output-size-failed 1024000 -T Test; then
             # do not return failure, as the jenkins publisher will take care of this
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.* ${CTEST_RESOURCE_FILE}
         fi
+        sudo rm -f /tmp/LastTest_*
+        sudo ls Testing/Temporary/
+        sudo cp Testing/Temporary/LastTest_* /tmp/
+        sudo ls -lh /tmp/LastTest_*
+        if [ -f /tmp/CTestCostData.txt ]; then
+            sudo rm -f /tmp/CTestCostData.txt
+        fi
+        sudo cp Testing/Temporary/CTestCostData.txt /tmp/
+        sudo ls -lh /tmp/CTestCostData.txt
     else
         if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.* ${CTEST_RESOURCE_FILE}
