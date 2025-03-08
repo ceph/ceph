@@ -66,7 +66,8 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 {
 }
 
-MgrStandby::~MgrStandby() = default;
+MgrStandby::~MgrStandby()
+{ py_module_registry.cleanup_perf_counters(); }
 
 const char** MgrStandby::get_tracked_conf_keys() const
 {
@@ -208,6 +209,15 @@ int MgrStandby::init()
   return 0;
 }
 
+void MgrStandby::update_active_module_perf_counters() const
+{
+  auto modules = py_module_registry.get_modules();
+  for (const auto &module : modules) {
+    module->update_perf_counters();
+  }
+}
+
+
 void MgrStandby::send_beacon()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
@@ -283,6 +293,7 @@ void MgrStandby::tick()
 {
   dout(10) << __func__ << dendl;
   send_beacon();
+  update_active_module_perf_counters();
 
   timer.add_event_after(
       g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
