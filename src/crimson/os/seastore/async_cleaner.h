@@ -1487,7 +1487,7 @@ private:
   using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
   do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    const backref_pin_list_t &pin_list,
+    const backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs);
 
