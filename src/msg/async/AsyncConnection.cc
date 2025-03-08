@@ -29,6 +29,12 @@
 #include "messages/MOSDOpReply.h"
 #include "common/EventTrace.h"
 
+#ifdef WITH_URING
+#include "UringManager.h"
+#include "io/uring/CancellableOperation.hxx"
+#include "util/DeleteDisposer.hxx"
+#endif
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff
 
@@ -110,6 +116,65 @@ class C_tick_wakeup : public EventCallback {
   }
 };
 
+#ifdef WITH_URING
+
+class AsyncConnection::SendOperation final : public IntrusiveListHook<>, Uring::Operation {
+  AsyncConnection &connection;
+  ceph::buffer::list bl;
+
+  std::array<struct iovec, IOV_MAX> v;
+  struct msghdr hdr{
+    .msg_iov = v.data(),
+  };
+
+  bool canceled = false;
+
+public:
+  SendOperation(AsyncConnection &_connection, const ceph::buffer::list &src)
+    :connection(_connection)
+  {
+    std::size_t nv = 0;
+    uint64_t total_bytes = 0;
+    for (const auto &i : src.buffers()) {
+      std::size_t length = i.length();
+      if (length == 0)
+	continue;
+
+      v[nv++] = iovec{ .iov_base = const_cast<char *>(i.c_str()), .iov_len = length };
+      total_bytes += length;
+
+      bl.push_back(ceph::buffer::ptr{i});
+
+      if (nv == v.size())
+	break;
+    }
+
+    hdr.msg_iovlen = nv;
+  }
+
+  void Cancel() noexcept {
+    canceled = true;
+
+    // TODO: io_uring_prep_cancel()
+  }
+
+  void Start(Uring::Queue &queue, int fd) noexcept {
+    auto &s = queue.RequireSubmitEntry();
+    io_uring_prep_sendmsg(&s, fd, &hdr, 0);
+    queue.Push(s, *this);
+  }
+
+  void OnUringCompletion(int res) noexcept override {
+    if (canceled) {
+      delete this;
+      return;
+    }
+
+    connection.OnSendComplete(*this, res);
+  }
+};
+
+#endif // WITH_URING
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
@@ -315,6 +380,41 @@ ssize_t AsyncConnection::write(ceph::buffer::list &bl,
     return r;
 }
 
+#ifdef WITH_URING
+
+inline void AsyncConnection::OnSendComplete(SendOperation &operation, int res) noexcept
+{
+  send_operations.erase_and_dispose(send_operations.iterator_to(operation), DeleteDisposer{});
+
+  if (res < 0)
+    // TODO handle error
+    return;
+
+  if (res > 0) {
+    const std::size_t nbytes = res;
+
+    if (nbytes < outgoing_bl.length()) {
+      ceph::bufferlist swapped;
+      outgoing_bl.splice(nbytes, outgoing_bl.length() - nbytes, &swapped);
+      outgoing_bl.swap(swapped);
+    } else {
+      outgoing_bl.clear();
+    }
+  }
+
+  if (send_operations.empty()) {
+    if (is_queued()) {
+      _try_send();
+    } else {
+      if (writeCallback) {
+	center->dispatch_event_external(write_callback_handler);
+      }
+    }
+  }
+}
+
+#endif // WITH_URING
+
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
 ssize_t AsyncConnection::_try_send(bool more)
@@ -333,6 +433,18 @@ ssize_t AsyncConnection::_try_send(bool more)
   // like do not call cs.send() and r = 0
   ssize_t r = 0;
   if (likely(!inject_network_congestion())) {
+#ifdef WITH_URING
+    if (auto *uring = center->get_uring()) {
+      while (send_operations.empty() && !outgoing_bl.buffers().empty()) {
+	auto *operation = new SendOperation(*this, outgoing_bl);
+	send_operations.push_back(*operation);
+	operation->Start(*uring, cs.fd());
+      }
+
+      return outgoing_bl.length();
+    }
+#endif
+
     r = cs.send(outgoing_bl, more);
   }
   if (r < 0) {
@@ -639,6 +751,10 @@ bool AsyncConnection::is_queued() const {
 }
 
 void AsyncConnection::shutdown_socket() {
+#ifdef WITH_URING
+  send_operations.clear_and_dispose([](auto *o){ o->Cancel(); });
+#endif
+
   for (auto &&t : register_time_events) center->delete_time_event(t);
   register_time_events.clear();
   if (last_tick_id) {
