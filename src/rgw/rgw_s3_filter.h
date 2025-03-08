@@ -14,6 +14,8 @@ struct rgw_s3_key_filter {
   std::string suffix_rule;
   std::string regex_rule;
 
+  bool negative_filter{false};
+
   bool has_content() const;
 
   void dump(Formatter *f) const;
@@ -25,6 +27,7 @@ struct rgw_s3_key_filter {
       encode(prefix_rule, bl);
       encode(suffix_rule, bl);
       encode(regex_rule, bl);
+      encode(negative_filter, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -33,6 +36,7 @@ struct rgw_s3_key_filter {
       decode(prefix_rule, bl);
       decode(suffix_rule, bl);
       decode(regex_rule, bl);
+      decode(negative_filter, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -43,7 +47,8 @@ using KeyMultiValueMap = std::multimap<std::string, std::string>;
 
 struct rgw_s3_key_value_filter {
   KeyValueMap kv;
-
+  bool negative_filter{false};
+  
   bool has_content() const;
 
   void dump(Formatter *f) const;
@@ -53,11 +58,13 @@ struct rgw_s3_key_value_filter {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
       encode(kv, bl);
+      encode(negative_filter, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
       decode(kv, bl);
+      decode(negative_filter, bl);
     DECODE_FINISH(bl);
   }
 };
