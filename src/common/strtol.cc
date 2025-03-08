@@ -149,7 +149,9 @@ T strict_iec_cast(std::string_view str, std::string *err)
     // handling cases when prefixes entered as KB, MB, ...
     // and KiB, MiB, ....
     if (unit.length() > 1 && unit.back() == 'B') {
+      if (unit.front() != 'B')  {
       unit = unit.substr(0, unit.length() - 1);
+      }
     }
     // we accept both old si prefixes as well as the proper iec prefixes
     // i.e. K, M, ... and Ki, Mi, ...
