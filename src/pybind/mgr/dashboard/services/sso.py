@@ -7,9 +7,11 @@ import logging
 import os
 import threading
 import warnings
-from typing import Dict
+from typing import Dict, Optional
 from urllib import parse
 
+import jmespath
+from jmespath.exceptions import JMESPathError
 from mgr_module import CLIWriteCommand, HandleCommandResult
 
 from .. import mgr
@@ -88,8 +90,14 @@ def load_sso_db():
 
 
 @CLIWriteCommand("dashboard sso enable oauth2")
-def enable_sso(_):
+def enable_sso(_, roles_path: Optional[str] = None):
     mgr.SSO_DB.protocol = AuthType.OAUTH2
+    if roles_path:
+        try:
+            jmespath.compile(roles_path)
+            mgr.SSO_DB.config.roles_path = roles_path
+        except (JMESPathError, SyntaxError):
+            return HandleCommandResult(stdout='Syntax invalid for "roles_path"')
     mgr.SSO_DB.save()
     mgr.set_module_option('sso_oauth2', True)
     return HandleCommandResult(stdout='SSO is "enabled" with "OAuth2" protocol.')
