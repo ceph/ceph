@@ -62,6 +62,7 @@
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
 using namespace TOPNSPC::common;
+using namespace std::literals;
 
 using std::list;
 using std::ostream;
@@ -3182,15 +3183,12 @@ void DaemonServer::got_mgr_map()
   daemon_state.cull("mgr", have);
 }
 
-const char** DaemonServer::get_tracked_conf_keys() const
+std::vector<std::string> DaemonServer::get_tracked_keys() const noexcept
 {
-  static const char *KEYS[] = {
-    "mgr_stats_threshold",
-    "mgr_stats_period",
-    nullptr
+  return {
+    "mgr_stats_threshold"s,
+    "mgr_stats_period"s
   };
-
-  return KEYS;
 }
 
 void DaemonServer::handle_conf_change(const ConfigProxy& conf,
