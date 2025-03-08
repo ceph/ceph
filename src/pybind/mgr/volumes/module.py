@@ -49,7 +49,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs volume create '
                    f'name=name,type=CephString,goodchars={goodchars} '
-                   'name=placement,type=CephString,req=false ',
+                   'name=placement,type=CephString,req=false '
+                  f'name=meta_pool,type=CephString,goodchars={goodchars},req=false '
+                  # XXX goodchars here is not being passed deliberately since
+                  # --data-pool can receive a list of data pool names separated
+                  # by commas and that is a problem. If goodchars variable
+                  # declared in this module is passed as it is(that is without
+                  # adding comma to it), arg parser would reject comma separated
+                  # data pool names. And if comma is added to goodchars and then
+                  # passed below, arg parser misinterprets it since comma has a
+                  # special # meaning for it. So the best option is to not
+                  # restrict data pool names to goodchars and do that
+                  # restriction elsewhere.
+                  f'name=data_pool,type=CephString,req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -656,7 +668,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
         placement = cmd.get('placement', '')
-        return self.vc.create_fs_volume(vol_id, placement)
+        data_pool = cmd.get('data_pool', '')
+        meta_pool = cmd.get('meta_pool', '')
+        return self.vc.create_fs_volume(vol_id, placement, data_pool, meta_pool)
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_rm(self, inbuf, cmd):

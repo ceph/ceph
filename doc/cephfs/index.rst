@@ -47,7 +47,11 @@ For most deployments of Ceph, setting up your first CephFS file system is as sim
 The Ceph `Orchestrator`_  will automatically create and configure MDS for
 your file system if the back-end deployment technology supports it (see
 `Orchestrator deployment table`_). Otherwise, please `deploy MDS manually
-as needed`_. You can also `create other CephFS volumes`_.
+as needed`_. You can also `create other CephFS volumes`_. In case, data
+and/or metadata pools required for new FS already present, pass them as
+follows::
+
+    ceph fs volume create cephfs --meta-pool <meta-pool-name> --data-pool <data-pool-name>
 
 Finally, to mount CephFS on your client nodes, see `Mount CephFS:
 Prerequisites`_ page. Additionally, a command-line shell utility is available
