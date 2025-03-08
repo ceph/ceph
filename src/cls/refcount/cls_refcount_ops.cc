@@ -11,6 +11,7 @@ void cls_refcount_get_op::dump(ceph::Formatter *f) const
 {
   f->dump_string("tag", tag);
   f->dump_int("implicit_ref", (int)implicit_ref);
+  f->dump_int("must_exist", (int)must_exist);
 }
 
 void cls_refcount_get_op::generate_test_instances(list<cls_refcount_get_op*>& ls)
@@ -19,6 +20,7 @@ void cls_refcount_get_op::generate_test_instances(list<cls_refcount_get_op*>& ls
   ls.push_back(new cls_refcount_get_op);
   ls.back()->tag = "foo";
   ls.back()->implicit_ref = true;
+  ls.back()->must_exist = true;
 }
 
 
