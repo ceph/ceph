@@ -116,4 +116,12 @@ seastar::future<> PGShardManager::set_superblock(OSDSuperblock superblock) {
   });
 }
 
+seastar::future<> PGShardManager::set_pg_num_history(pool_pg_num_history_t pg_num_history) {
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  return shard_services.invoke_on_all(
+  [pg_num_history = std::move(pg_num_history)](auto &local_service) {
+    return local_service.local_state.update_shard_pg_num_history(pg_num_history);
+  });
+}
+
 }
