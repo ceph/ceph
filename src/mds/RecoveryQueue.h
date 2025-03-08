@@ -17,10 +17,12 @@
 #ifndef RECOVERY_QUEUE_H
 #define RECOVERY_QUEUE_H
 
-#include <set>
-
 #include "include/common_fwd.h"
+#include "include/elist.h"
 #include "osdc/Filer.h"
+
+#include <cstddef>
+#include <map>
 
 class CInode;
 class MDSRank;

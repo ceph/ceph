@@ -8,9 +8,13 @@
 #include <string.h>
 #include <netdb.h>
 
+#include <sstream>
+
 #include <fmt/format.h>
 
 #include "common/Formatter.h"
+#include "include/container_ios.h"
+#include "include/encoding_vector.h"
 
 bool entity_name_t::parse(std::string_view s)
 {
@@ -409,6 +413,16 @@ void entity_addrvec_t::generate_test_instances(std::list<entity_addrvec_t*>& ls)
   ls.back()->v.push_back(entity_addr_t());
 }
 
+std::ostream& operator<<(std::ostream& out, const entity_addrvec_t& av) {
+  if (av.v.empty()) {
+    return out;
+  } else if (av.v.size() == 1) {
+    return out << av.v[0];
+  } else {
+    return out << av.v;
+  }
+}
+
 std::string entity_addr_t::ip_only_to_str() const 
 {
   const char *host_ip = NULL;
@@ -435,4 +449,10 @@ std::string entity_addr_t::ip_n_port_to_str() const
   } else {
     return fmt::format("{}:{}", ip_only_to_str(), get_port());
   }
+}
+
+std::string entity_addr_t::get_legacy_str() const {
+  std::ostringstream ss;
+  ss << get_sockaddr() << "/" << get_nonce();
+  return ss.str();
 }

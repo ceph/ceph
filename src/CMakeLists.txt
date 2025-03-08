@@ -438,7 +438,14 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
+  include/filepath.cc
+  include/invoke_date.cc
+  include/object.cc
+  include/types.cc
+  include/utime.cc
+  include/uuid.cc
   common/error_code.cc
+  common/frag.cc
   common/tracer.cc
   log/Log.cc
   mon/MonCap.cc
@@ -447,6 +454,7 @@ set(libcommon_files
   mon/MonSub.cc
   mon/error_code.cc
   mgr/MgrClient.cc
+  mon/MgrMap.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
   osd/ECMsgTypes.cc

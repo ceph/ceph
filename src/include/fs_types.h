@@ -4,13 +4,13 @@
 #define CEPH_INCLUDE_FS_TYPES_H
 
 #include <cstdint>
-#include <iostream>
+#include <iosfwd>
 
-#include "common/Formatter.h"
 #include "include/buffer.h"
 #include "include/ceph_fs.h" // for struct ceph_file_layout
 #include "include/hash.h" // for rjhash
 
+namespace ceph { class Formatter; }
 class JSONObj;
 
 // taken from linux kernel: include/uapi/linux/fcntl.h
@@ -39,9 +39,7 @@ struct inodeno_t {
     using ceph::decode;
     decode(val, p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("val", val);
-  }
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<inodeno_t*>& ls) {
     ls.push_back(new inodeno_t(1));
     ls.push_back(new inodeno_t(123456789));
@@ -66,9 +64,7 @@ struct denc_traits<inodeno_t> {
   }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const inodeno_t& ino) {
-  return out << std::hex << "0x" << ino.val << std::dec;
-}
+std::ostream& operator<<(std::ostream& out, const inodeno_t& ino);
 
 namespace std {
 template<>
