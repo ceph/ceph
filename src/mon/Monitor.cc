@@ -2420,6 +2420,8 @@ void Monitor::finish_election()
     authmon()->_set_mon_num_rank(monmap->size(), rank);
   }
 
+  check_quorum_subs_and_send_updates();
+
   // am i named and located properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
   const auto my_infop = monmap->mon_info.find(cur_name);
@@ -4612,7 +4614,7 @@ void Monitor::_ms_dispatch(Message *m)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
-
+  dout(20) << "dispatch_op: " << op << " " << *op->get_req() << dendl;
   MonSession *s = op->get_session();
   ceph_assert(s);
   if (s->closed) {
@@ -5353,6 +5355,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
+    dout(20) << __func__ << " " << p->first << " start " << p->second.start
+             << " flags " << p->second.flags << dendl;
     if (p->first == "monmap" || p->first == "config") {
       // these require no caps
     } else if (!s->is_capable("mon", MON_CAP_R)) {
@@ -5372,6 +5376,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
 	  std::lock_guard l(session_map_lock);
+          dout(20) << __func__ << " removing conflicting sub " << it->first << dendl;
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -5520,8 +5525,30 @@ bool Monitor::ms_handle_refused(Connection *con)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
+  dout(10) << __func__ << " sending latest monmap and quorum to "
+    << con->get_peer_entity_name().get_type_name()
+    << " type:" << con->get_peer_type()
+    << " id:" << con->get_peer_id()
+    << " quorum: " << get_quorum()
+    << dendl;
+  monmap->set_quorum(get_quorum());
   monmap->encode(bl, con->get_features());
   con->send_message(new MMonMap(bl));
+}
+
+void Monitor::check_quorum_subs_and_send_updates()
+{
+  dout(10) << __func__ << dendl;
+  const string quorum_type = "monmap";
+  with_session_map([this, &quorum_type]
+    (const MonSessionMap& session_map) {
+      auto subs = session_map.subs.find(quorum_type);
+      if (subs != session_map.subs.end()) {
+        for (auto sub : *subs->second) {
+          send_latest_monmap(sub->session->con.get());
+        }
+      }
+    });
 }
 
 void Monitor::handle_mon_get_map(MonOpRequestRef op)
