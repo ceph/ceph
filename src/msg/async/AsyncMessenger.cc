@@ -16,11 +16,18 @@
 
 #include "acconfig.h"
 
+#include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <iterator>
 
 #include "AsyncMessenger.h"
+#include <utime.h>
+#include <errno.h>
 
+#include "common/Clock.h"
+#include "common/Formatter.h"
+#include "common/cmdparse.h"
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
@@ -274,6 +281,85 @@ class C_handle_reap : public EventCallback {
 };
 
 /*******************
+ * Admin Socket Hook
+ */
+
+AsyncMessengerSocketHook::AsyncMessengerSocketHook(
+    AsyncMessenger& m, const std::string& name)
+    : m_msgrs{{name, &m}} {}
+
+int AsyncMessengerSocketHook::call(
+    std::string_view command, const cmdmap_t& cmdmap, const bufferlist&,
+    Formatter* f, std::ostream& errss, ceph::buffer::list& out) {
+  if (command == "messenger dump") {
+    std::string name;
+    if (common::cmd_getval(cmdmap, "msgr", name)) {
+      if (auto it = m_msgrs.find(name); it != m_msgrs.end()) {
+        std::vector<std::string> opts;
+        const bool tcp_info =
+            common::cmd_getval_or<bool>(cmdmap, "tcp_info", false);
+        const bool has_filter =
+            common::cmd_getval(cmdmap, "dumpcontents", opts);
+        const std::set<std::string> optset(opts.begin(), opts.end());
+        const bool all = !has_filter || optset.contains("all");
+        const auto filter_fn = [&](const std::string& key) {
+          if (key == "tcp_info") {
+            return tcp_info;
+          } else if (all) {
+            return true;
+          } else {
+            return optset.contains(key);
+          }
+        };
+
+        const auto msgr = (*it).second;
+        f->open_object_section("status");
+	f->dump_string("name", name);
+        f->open_object_section("messenger");
+        msgr->dump(f, filter_fn);
+        f->close_section();  // messenger
+        f->close_section();  // status
+        return 0;
+      } else {
+        return -ENOENT;
+      }
+    } else {
+      f->open_object_section("status");
+      f->open_array_section("messengers");
+      for (const auto& [name, _] : m_msgrs) {
+        f->dump_string("name", name);
+      }
+      f->close_section();
+      f->close_section();
+      return 0;
+    }
+  }
+  return -ENOSYS;
+}
+
+bool AsyncMessengerSocketHook::add_messenger(
+    const std::string& name, AsyncMessenger& msgr) {
+  const auto result = m_msgrs.try_emplace(name, &msgr);
+  return result.second;
+}
+
+void AsyncMessengerSocketHook::remove_messenger(
+    AsyncMessenger& msgr) {
+  for (auto it = m_msgrs.begin(); it != m_msgrs.end(); ++it) {
+    if (&msgr == it->second) {
+      m_msgrs.erase(it);
+      break;
+    }
+  }
+}
+std::list<std::string> AsyncMessengerSocketHook::messengers() const {
+  std::list<std::string> result;
+  std::transform(m_msgrs.begin(), m_msgrs.end(), std::back_inserter(result),
+		 [](const auto& pair) { return pair.first; });
+  return result;
+}
+
+/*******************
  * AsyncMessenger
  */
 
@@ -304,6 +390,49 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     processor_num = stack->get_num_worker();
   for (unsigned i = 0; i < processor_num; ++i)
     processors.push_back(new Processor(this, stack->get_worker(i), cct));
+
+  cct->modify_msgr_hook(
+      [&]() {
+        auto hook = new AsyncMessengerSocketHook(*this, mname);
+        const int asok_ret = cct->get_admin_socket()->register_command(
+            AsyncMessengerSocketHook::COMMAND, hook, "dump messenger status");
+        if (asok_ret != 0) {
+          ldout(cct, 0) << __func__ << " messenger asok command \""
+                        << AsyncMessengerSocketHook::COMMAND << "\" failed with"
+                        << asok_ret << dendl;
+        }
+        return hook;
+      },
+      [&](AdminSocketHook* ptr) {
+        if (auto hook = dynamic_cast<AsyncMessengerSocketHook*>(ptr)) {
+          // Name collisions may occur. A common case is RGW running
+          // multiple librados connections - each with a "radosclient"
+          // messenger.
+          std::string msgr_key(mname);
+          if (mname == "radosclient") {  // librados
+            msgr_key.append("-");
+            msgr_key.append(std::to_string(_nonce));
+          }
+          bool added = hook->add_messenger(msgr_key, *this);
+          if (!added) {
+            msgr_key.append("-");
+            msgr_key.append(std::to_string(_nonce));
+          }
+          added = hook->add_messenger(msgr_key, *this);
+          if (!added) {
+            ldout(cct, 10)
+                << __func__ << " registering messenger " << mname
+                << " using key " << msgr_key
+                << " failed due to a name collision. "
+                   "messenger won't be available to \"messenger dump\""
+                << dendl;
+          }
+        } else {
+          ceph_abort(
+              "BUG: messenger hook obj set, but not of type "
+              "AsyncMessengerSocketHook");
+        }
+      });
 }
 
 /**
@@ -312,6 +441,17 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
  */
 AsyncMessenger::~AsyncMessenger()
 {
+  cct->modify_msgr_hook(
+      []() -> AdminSocketHook* { return nullptr; },
+      [&](AdminSocketHook* ptr) {
+	if (auto hook = dynamic_cast<AsyncMessengerSocketHook*>(ptr)) {
+	  hook->remove_messenger(*this);
+	} else {
+	  ceph_abort(
+	      "BUG: messenger hook obj set, but not of type "
+	      "AsyncMessengerSocketHook");
+	}
+      });
   delete reap_handler;
   ceph_assert(!did_bind); // either we didn't bind or we shut down the Processor
   for (auto &&p : processors)
@@ -355,6 +495,84 @@ int AsyncMessenger::shutdown()
   lock.unlock();
   stack->drain();
   return 0;
+}
+
+void AsyncMessenger::dump(
+    Formatter* f, std::function<bool(const std::string&)> filter) const {
+  const bool tcp_info = filter("tcp_info");
+  std::lock_guard l{lock};
+  f->dump_unsigned("nonce", nonce);
+  f->open_object_section("my_name");
+  my_name.dump(f);
+  f->close_section();  // my_name
+  f->open_object_section("my_addrs");
+  my_addrs->dump(f);
+  f->close_section();  // my_addrs
+
+  if (filter("listen_sockets")) {
+    f->open_array_section("listen_sockets");
+    for (const auto& proc : processors) {
+      for (const auto& sock : proc->listen_sockets) {
+        f->open_object_section("socket");
+        f->dump_int("socket_fd", sock.fd());
+
+        f->dump_int("worker_id", proc->worker ? proc->worker->id : -1);
+        f->close_section();  // socket
+      }
+    }
+    f->close_section();  // listen_sockets
+  }
+
+  f->open_object_section("dispatch_queue");
+  f->dump_int("length", get_dispatch_queue_len());
+  utime_t dispatch_queue_max_age;
+  dispatch_queue_max_age.set_from_double(
+      get_dispatch_queue_max_age(ceph_clock_now()));
+  f->dump_string("max_age_ago", utimespan_str(dispatch_queue_max_age));
+  f->close_section();  // dispatch_queue
+
+  f->dump_int("connections_count", conns.size());
+
+  if (filter("connections")) {
+    f->open_array_section("connections");
+    for (const auto& [e, c] : conns) {
+      f->open_object_section("connection");
+      e.dump(f);
+      c->dump(f, tcp_info);
+      f->close_section();  // connection
+    }
+    f->close_section();  // connections
+  }
+
+  if (filter("anon_conns")) {
+    f->open_array_section("anon_conns");
+    for (const auto& c : anon_conns) {
+      c->dump(f, tcp_info);
+    }
+    f->close_section();  // anon_conns
+  }
+
+  if (filter("accepting_conns")) {
+    f->open_array_section("accepting_conns");
+    for (const auto& c : accepting_conns) {
+      c->dump(f, tcp_info);
+    }
+    f->close_section();  // accepting_conns
+  }
+
+  if (filter("deleted_conns")) {
+    f->open_array_section("deleted_conns");
+    for (const auto& c : deleted_conns) {
+      c->dump(f, tcp_info);
+    }
+    f->close_section();  // deleted_conns
+  }
+
+  if (local_connection) {
+    f->open_array_section("local_connection");
+    local_connection->dump(f, tcp_info);
+    f->close_section();  // local_connection
+  }
 }
 
 int AsyncMessenger::bind(const entity_addr_t &bind_addr,
