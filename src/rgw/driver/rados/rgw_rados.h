@@ -1126,7 +1126,7 @@ public:
 
   int stat_remote_obj(const DoutPrefixProvider *dpp,
                RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
+               const rgw_owner* user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& src_obj,
@@ -1145,7 +1145,8 @@ public:
                std::string *petag, optional_yield y);
 
   int fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
-                       const rgw_user& user_id,
+                       const rgw_owner* user_id,
+                       const rgw_user* replication_uid,
                        req_info *info,
                        const rgw_zone_id& source_zone,
                        const rgw_obj& dest_obj,
@@ -1176,7 +1177,8 @@ public:
                        const rgw_obj& stat_dest_obj,
                        const rgw_zone_set_entry& source_trace_entry,
                        rgw_zone_set *zones_trace = nullptr,
-                       std::optional<uint64_t>* bytes_transferred = 0);
+                       std::optional<uint64_t>* bytes_transferred = 0,
+                       bool keep_tags = true);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
