@@ -1300,22 +1300,13 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
 		       const DoutPrefixProvider *dpp, optional_yield y);
 
-  /**
-   * Set an attr on an object.
-   * bucket: name of the bucket holding the object
-   * obj: name of the object to set the attr on
-   * name: the attr to set
-   * bl: the contents of the attr
-   * Returns: 0 on success, -ERR# otherwise.
-   */
-  int set_attr(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, const char *name, bufferlist& bl, optional_yield y);
-
   int set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                         std::map<std::string, bufferlist>& attrs,
                         std::map<std::string, bufferlist>* rmattrs,
                         optional_yield y,
                         bool log_op,
-                        ceph::real_time set_mtime = ceph::real_clock::zero());
+                        ceph::real_time set_mtime = ceph::real_clock::zero(),
+                        ceph::real_time unmod_since = ceph::real_clock::zero());
 
   int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
                     RGWBucketInfo& bucket_info, const rgw_obj& obj,

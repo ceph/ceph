@@ -154,7 +154,6 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   std::string path;
   param_vec_t params;
   param_vec_t headers;
-  std::map<std::string, std::string> *attrs;
   T *result;
   E *err_result;
   bufferlist input_bl;
@@ -172,7 +171,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           E *_err_result = nullptr)
    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
      method(_method), path(_path), params(make_param_list(_params)),
-     headers(make_param_list(_attrs)), attrs(_attrs),
+     headers(make_param_list(_attrs)),
      result(_result), err_result(_err_result),
      input_bl(_input), send_content_length(_send_content_length) {}
 
@@ -182,7 +181,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           rgw_http_param_pair *_params, std::map<std::string, std::string> *_attrs,
                           T *_result, E *_err_result = nullptr)
    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), result(_result),
     err_result(_err_result) {}
 
   ~RGWSendRawRESTResourceCR() override {
@@ -190,6 +189,10 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   }
 
   int send_request(const DoutPrefixProvider *dpp) override {
+    if (send_content_length) {
+      headers.push_back(param_pair_t("Content-Length", std::to_string(input_bl.length())));
+    }
+
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
         new RGWRESTSendResource(conn, method, path, params, &headers, http_manager));
 
@@ -321,6 +324,21 @@ public:
                                   "PUT", _path,
                                   _params, _attrs, _input,
                                   _result, _err_result) {}
+
+};
+
+template <class T, class E = int>
+class RGWPatchRawRESTResourceCR: public RGWSendRawRESTResourceCR <T, E> {
+ public:
+ RGWPatchRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                           RGWHTTPManager *_http_manager,
+                           const std::string& _path,
+                           rgw_http_param_pair *_params,
+                           std::map<std::string, std::string> * _attrs,
+                           bufferlist& _input,
+                           T *_result, E *_err_result = nullptr)
+    : RGWSendRawRESTResourceCR<T, E>(_cct, _conn, _http_manager, "PATCH", _path,
+                                  _params, _attrs, _input, _result, true, _err_result) {}
 
 };
 
