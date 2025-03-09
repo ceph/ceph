@@ -143,14 +143,6 @@ void NVMeofGwMon::tick()
   }
 }
 
-const char **NVMeofGwMon::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    NULL
-  };
-  return KEYS;
-}
-
 version_t NVMeofGwMon::get_trim_to() const
 {
   // we don't actually need *any* old states, but keep a few.

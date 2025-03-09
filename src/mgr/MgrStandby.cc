@@ -40,6 +40,7 @@
 using std::map;
 using std::string;
 using std::vector;
+using namespace std::literals;
 
 MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
@@ -68,23 +69,21 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 
 MgrStandby::~MgrStandby() = default;
 
-const char** MgrStandby::get_tracked_conf_keys() const
+std::vector<std::string> MgrStandby::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
+  return {
     // clog & admin clog
-    "clog_to_monitors",
-    "clog_to_syslog",
-    "clog_to_syslog_facility",
-    "clog_to_syslog_level",
-    "clog_to_graylog",
-    "clog_to_graylog_host",
-    "clog_to_graylog_port",
-    "mgr_standby_modules",
-    "host",
-    "fsid",
-    NULL
+    "clog_to_monitors"s,
+    "clog_to_syslog"s,
+    "clog_to_syslog_facility"s,
+    "clog_to_syslog_level"s,
+    "clog_to_graylog"s,
+    "clog_to_graylog_host"s,
+    "clog_to_graylog_port"s,
+    "mgr_standby_modules"s,
+    "host"s,
+    "fsid"s
   };
-  return KEYS;
 }
 
 void MgrStandby::handle_conf_change(
