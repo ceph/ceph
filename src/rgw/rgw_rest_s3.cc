@@ -2644,8 +2644,16 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
 
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
-  if (op_ret == -ERR_BUCKET_EXISTS)
-    op_ret = 0;
+  if (op_ret == -ERR_BUCKET_EXISTS) {
+    const auto eexist_override = s->cct->_conf.get_val<bool>("rgw_bucket_eexist_override");
+    if (! eexist_override) [[likely]] {
+      op_ret = 0;
+    } else {
+      /* n.b., EEXIST is mapped to HTTP error 409, BucketAlreadyExists, but ERR_BUCKET_EXISTS is not */
+      op_ret = -EEXIST;
+    }
+  }
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
