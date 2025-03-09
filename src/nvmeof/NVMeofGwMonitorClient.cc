@@ -50,14 +50,6 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
 
 NVMeofGwMonitorClient::~NVMeofGwMonitorClient() = default;
 
-const char** NVMeofGwMonitorClient::get_tracked_conf_keys() const
-{
-  static const char* KEYS[] = {
-    NULL
-  };
-  return KEYS;
-}
-
 std::string read_file(const std::string& filename) {
     std::ifstream file(filename);
     std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
