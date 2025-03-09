@@ -26,6 +26,11 @@
 #include "ExtentCache.h"
 #include "ECListener.h"
 
+/* This file is soon going to be replaced (before next release), so we are going
+ * to simply ignore all deprecated warnings.
+ * */
+IGNORE_DEPRECATED
+
 //forward declaration
 struct ECSubWrite;
 struct ECSubWriteReply;
@@ -366,9 +371,10 @@ public:
       for (std::set<pg_shard_t>::const_iterator i = _have.begin();
 	   i != _have.end();
 	   ++i) {
-	have.insert(i->shard);
+	have.insert(static_cast<int>(i->shard));
       }
       std::map<int, std::vector<std::pair<int, int>>> min;
+
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
@@ -442,3 +448,5 @@ public:
   }
 };
 ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
+
+END_IGNORE_DEPRECATED
