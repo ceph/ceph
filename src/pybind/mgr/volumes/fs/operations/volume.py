@@ -72,7 +72,7 @@ def get_pool_ids(mgr, volname):
         return None, None
     return metadata_pool_id, data_pool_ids
 
-def create_fs_pools(mgr, volname, data_pool, metadata_pool):
+def create_fs_pools(mgr, volname, data_pool, metadata_pool, force):
     '''
     Generate names of metadata pool and data pool and create these pools.
 
@@ -83,14 +83,14 @@ def create_fs_pools(mgr, volname, data_pool, metadata_pool):
 
     metadata_pool, data_pool = gen_pool_names(volname)
 
-    r, outb, outs = create_pool(mgr, metadata_pool)
+    r, outb, outs = create_pool(mgr, metadata_pool, force)
     if r != 0:
         return [False, r, outb, outs]
 
     # default to a bulk pool for data. In case autoscaling has been disabled
     # for the cluster with `ceph osd pool set noautoscale`, this will have
     # no effect.
-    r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+    r, outb, outs = create_pool(mgr, data_pool, force, bulk=True)
     # cleanup
     if r != 0:
         remove_pool(mgr, metadata_pool)
@@ -98,7 +98,7 @@ def create_fs_pools(mgr, volname, data_pool, metadata_pool):
 
     return [True, data_pool, metadata_pool]
 
-def create_volume(mgr, volname, placement, data_pool, metadata_pool):
+def create_volume(mgr, volname, placement, data_pool, metadata_pool, force):
     """
     Create volume, create pools if pool names are not passed and create MDS
     based on placement passed.
