@@ -122,6 +122,20 @@ unmap_device()
     sleep 0.5
 }
 
+function wait_for_blockdev_size() {
+    local dev=$1
+    local size=$2
+
+    for s in 0.25 0.5 0.75 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.25 3.5 3.75; do
+        if (( $(sudo blockdev --getsize64 $dev) == $size )); then
+            return 0
+        fi
+        sleep $s
+    done
+
+    return 1
+}
+
 #
 # main
 #
@@ -210,11 +224,12 @@ devname=$(basename ${DEV})
 blocks=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks}"
 rbd resize ${POOL}/${IMAGE} --size $((SIZE * 2))M
-rbd info ${POOL}/${IMAGE}
+wait_for_blockdev_size ${DEV} $(((SIZE * 2) << 20))
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq $((blocks * 2))
 rbd resize ${POOL}/${IMAGE} --allow-shrink --size ${SIZE}M
+wait_for_blockdev_size ${DEV} $((SIZE << 20))
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
