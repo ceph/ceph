@@ -641,7 +641,8 @@ namespace rgw::dedup {
 		       << ", seq_number=" << seq_number
 		       << ":: oid=" << oid << dendl;
 
-    int ret = ioctx.read_full(oid, bl);
+    // read full object
+    int ret = ioctx.read(oid, bl, 0, 0);
     // TBD: probably should check (ret > 0)
     if (ret >= 0) {
       ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;

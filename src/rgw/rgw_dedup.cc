@@ -660,7 +660,8 @@ namespace rgw::dedup {
       }
       bufferlist bl;
       librados::IoCtx ioctx = obj.ioctx;
-      ret = ioctx.read_full(raw_obj.oid, bl);
+      // read full object
+      ret = ioctx.read(raw_obj.oid, bl, 0, 0);
       if (ret > 0) {
 	for (const auto& bptr : bl.buffers()) {
 	  hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
