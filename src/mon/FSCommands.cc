@@ -205,13 +205,15 @@ class FsNewHandler : public FileSystemCommandHandler
     bool force = false;
     cmd_getval(cmdmap, "force", force);
 
-    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
-    if (stat) {
-      int64_t metadata_num_objects = stat->stats.sum.num_objects;
-      if (!force && metadata_num_objects > 0) {
-	ss << "pool '" << metadata_name
-	   << "' already contains some objects. Use an empty pool instead.";
-	return -EINVAL;
+    if (!force) {
+      const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
+      if (stat) {
+	int64_t metadata_num_objects = stat->stats.sum.num_objects;
+	if (metadata_num_objects > 0) {
+	  ss << "pool '" << metadata_name
+	     << "' already contains some objects. Use an empty pool instead.";
+	  return -EINVAL;
+	}
       }
     }
 
