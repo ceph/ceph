@@ -9,6 +9,7 @@ Copyright (C) 2013 Inktank Storage, Inc.
 
 LGPL-2.1 or LGPL-3.0.  See file COPYING.
 """
+from abc import ABC, abstractmethod
 import copy
 import enum
 import math
@@ -24,7 +25,10 @@ import uuid
 
 from collections import abc
 from typing import cast, Any, Callable, Dict, Generic, List, Optional, Sequence, Tuple, Union, \
-    Annotated
+    Annotated, Generic, TypeVar
+
+S = TypeVar('S')  # Input type
+T = TypeVar('T')  # Output type
 
 if sys.version_info >= (3, 8):
     from typing import get_args, get_origin
@@ -51,7 +55,7 @@ class Flag:
 
 KWARG_EQUALS = "--([^=]+)=(.+)"
 KWARG_SPACE = "--([^=]+)"
-    
+
 try:
     basestring
 except NameError:
@@ -112,6 +116,20 @@ class JsonFormat(Exception):
     some syntactic or semantic issue with the JSON
     """
     pass
+
+
+class Converter(ABC, Generic[S, T]):
+    @abstractmethod
+    def convert(self, value: S) -> T: pass
+  
+
+def _get_annotation(tp):
+    if get_origin(tp) is Annotated:
+        annotated_args = get_args(tp)
+        if len(annotated_args) >= 2:
+            metadata_type = annotated_args[1]
+            return metadata_type
+
 
 
 class CephArgtype(object):
@@ -187,7 +205,7 @@ class CephArgtype(object):
             return CephArgtype.to_argdesc(type_args[0], attrs, True, positional)
         else:
             raise ValueError(f"unknown type '{tp}': '{attrs}'")
-    
+
     @staticmethod
     def to_argdesc(tp, attrs, has_default=False, positional=True):
         if has_default:
@@ -195,9 +213,9 @@ class CephArgtype(object):
         if not positional:
             attrs['positional'] = 'false'
         if annotation := _get_annotation(tp):
-            if anot := _get_annotated_type_converter(annotation):
-                return anot.argdesc(attrs)
-                
+            if isinstance(annotation, CephArgtype):
+                return annotation.argdesc(attrs)
+
         CEPH_ARG_TYPES = {
             str: CephString,
             int: CephInt,
@@ -238,9 +256,9 @@ class CephArgtype(object):
     @staticmethod
     def cast_to(tp, v):
         if annotation := _get_annotation(tp):
-            if anot := _get_annotated_type_converter(annotation):
-                return anot.convert(v)
-            
+            if isinstance(annotation, Converter):
+                return annotation.convert(v)
+
         PYTHON_TYPES = (
             str,
             int,
@@ -371,50 +389,22 @@ class CephString(CephArgtype):
         if self.goodchars:
             attrs['goodchars'] = self.goodchars
         return super().argdesc(attrs)
-    
-
-class CephArgtypeConverter(CephArgtype):
-    def convert(self, value):  # noqa # pylint: disable=unused-variable
-        raise NotImplementedError()
 
 
-class CLI_ANNOTATIONS:
-    MemorySize = 'cli_memory_size'
-
-
-def _get_annotation(tp):
-    if get_origin(tp) is Annotated:
-        annotated_args = get_args(tp)
-        if len(annotated_args) >= 2:
-            metadata_type = annotated_args[1]
-            return metadata_type
-
-        
-def _get_annotated_type_converter(annotation) -> Optional[CephArgtypeConverter]:
-    if annotation == CLI_ANNOTATIONS.MemorySize:
-        return CephSizeBytes()
-    
-B = "B"
-K, KB, KIB = "K", "KB", "KiB"
-M, MB, MIB = "M", "MB", "MiB"
-G, GB, GIB = "G", "GB", "GiB"
-T, TB, TIB = "T", "TB", "TiB"
-P, PB, PIB = "P", "PB", "PiB"
-MULTIPLES = ['', K, M, G, T, P]
-UNITS = {
-    f"{prefix}{suffix}": 1024 ** mult
-    for mult, prefix in enumerate(MULTIPLES)
-    for suffix in ['', 'B', 'iB']
-    if not (prefix == '' and suffix == 'iB')
-}
-
-
-class CephSizeBytes(CephArgtypeConverter):
+class CephSizeBytes(CephArgtype, Converter[str, int]):
     """
     Size in bytes. e.g. 1024, 1KB, 100MB, etc..
     """
+    MULTIPLES = ['', "K", "M", "G", "T", "P"]
+    UNITS = {
+        f"{prefix}{suffix}": 1024 ** mult
+        for mult, prefix in enumerate(MULTIPLES)
+        for suffix in ['', 'B', 'iB']
+        if not (prefix == '' and suffix == 'iB')
+    }
+    
     def __init__(self, units_types: set = None):
-        self.units = set(UNITS.keys())
+        self.units = set(CephSizeBytes.UNITS.keys())
         if units_types :
             self.units &= units_types
         self.re_exp = re.compile(f"r'^\d+({'|'.join(self.units)})?$'")
@@ -422,7 +412,7 @@ class CephSizeBytes(CephArgtypeConverter):
         self.num_and_unit_re_exp = re.compile(r'(\d+)([A-Za-z]*)$')
 
     def valid(self, s: str, partial: bool = False) -> None:
-        if not s: 
+        if not s:
             raise ArgumentValid(f'size str not provided.')
 
         if not re.match(self.number_re_exp, s):
@@ -434,14 +424,14 @@ class CephSizeBytes(CephArgtypeConverter):
         number, unit = match.groups()
         if unit and unit not in self.units:
             raise ArgumentValid(f'{unit} is not a valid size unit. supported units: {self.units}')
-        
+
     def __str__(self) -> str:
         b = '|'.join(self.units)
         return '<sizebytes({0})>'.format(b)
 
     def argdesc(self, attrs):
         return super().argdesc(attrs)
-    
+
     @staticmethod
     def _convert_to_bytes(size: Union[int, str], default_unit=None):
         if isinstance(size, int):
@@ -456,13 +446,13 @@ class CephSizeBytes(CephArgtypeConverter):
                 raise ValueError("No size unit was provided")
             unit_str = default_unit
 
-        if unit_str in UNITS:
-            return number * UNITS[unit_str]
+        if unit_str in CephSizeBytes.UNITS:
+            return number * CephSizeBytes.UNITS[unit_str]
         raise ValueError(f"Invalid unit: {unit_str}")
 
-    def convert(self, value):
-        return CephSizeBytes._convert_to_bytes(value, default_unit=B)
-    
+    def convert(self, value: str) -> int:
+        return CephSizeBytes._convert_to_bytes(value, default_unit="B")
+
 
 class CephSocketpath(CephArgtype):
     """

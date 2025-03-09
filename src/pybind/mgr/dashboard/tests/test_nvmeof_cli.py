@@ -1,10 +1,8 @@
-from typing import Annotated
 import errno
 from unittest.mock import MagicMock
 
 import pytest
-from mgr_module import CLICommand, HandleCommandResult, CLI_ANNOTATIONS
-
+from mgr_module import CLICommand, HandleCommandResult
 from ..services.nvmeof_cli import NvmeofCLICommand
 
 

@@ -61,7 +61,7 @@ class NvmeofCLICommand(CLICommand):
         hence triggering linters alerts.
         """
         return super().__call__(func)
-        
+
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],

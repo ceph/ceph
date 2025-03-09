@@ -102,8 +102,6 @@ PG_STATES = [
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
 
-class CLI_ANNOTATIONS:
-    MemorySize = 'cli_memory_size'
 
 class CephReleases(IntEnum):
     argonaut = 1

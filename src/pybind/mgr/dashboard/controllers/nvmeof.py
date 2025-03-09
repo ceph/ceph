@@ -14,7 +14,7 @@ from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
     RESTController, UIRouter
-from mgr_module import CLI_ANNOTATIONS
+from ceph_argparse import CephSizeBytes
 
 
 logger = logging.getLogger(__name__)
