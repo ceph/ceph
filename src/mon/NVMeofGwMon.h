@@ -49,7 +49,9 @@ public:
   ~NVMeofGwMon() override {}
 
   // config observer
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {};
+  }
   void handle_conf_change(
     const ConfigProxy& conf, const std::set<std::string> &changed) override {};
 

@@ -111,6 +111,7 @@ using ceph::ErasureCodeProfile;
 using ceph::Formatter;
 using ceph::JSONFormatter;
 using ceph::make_message;
+using namespace std::literals;
 
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
@@ -481,15 +482,13 @@ OSDMonitor::OSDMonitor(
   }
 }
 
-const char **OSDMonitor::get_tracked_conf_keys() const
+std::vector<std::string> OSDMonitor::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "mon_memory_target",
-    "mon_memory_autotune",
-    "rocksdb_cache_size",
-    NULL
+  return {
+    "mon_memory_target"s,
+    "mon_memory_autotune"s,
+    "rocksdb_cache_size"s
   };
-  return KEYS;
 }
 
 void OSDMonitor::handle_conf_change(const ConfigProxy& conf,

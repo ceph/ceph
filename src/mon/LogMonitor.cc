@@ -66,6 +66,7 @@
 #define dout_subsys ceph_subsys_mon
 
 using namespace TOPNSPC::common;
+using namespace std::literals;
 
 using std::cerr;
 using std::cout;
@@ -1270,6 +1271,19 @@ void LogMonitor::update_log_channels()
   log_external_close_fds();
 }
 
+std::vector<std::string> LogMonitor::get_tracked_keys() const noexcept
+{
+  return {
+    "mon_cluster_log_to_syslog"s,
+    "mon_cluster_log_to_syslog_facility"s,
+    "mon_cluster_log_file"s,
+    "mon_cluster_log_level"s,
+    "mon_cluster_log_to_graylog"s,
+    "mon_cluster_log_to_graylog_host"s,
+    "mon_cluster_log_to_graylog_port"s,
+    "mon_cluster_log_to_journald"s,
+    "mon_cluster_log_to_file"s
+  };}
 
 void LogMonitor::handle_conf_change(const ConfigProxy& conf,
                                     const std::set<std::string> &changed)

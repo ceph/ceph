@@ -309,8 +309,8 @@ public:
   void reregister_mds_perf_queries();
   int get_mds_perf_counters(MDSPerfCollector *collector);
 
-  virtual const char** get_tracked_conf_keys() const override;
-  virtual void handle_conf_change(const ConfigProxy& conf,
+  std::vector<std::string> get_tracked_keys() const noexcept override;
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 
   void schedule_tick(double delay_sec);
