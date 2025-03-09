@@ -936,6 +936,7 @@ EOF
 
     if [ "$objectstore" == "seastore" ]; then
       if [[ ${seastore_size+x} ]]; then
+        seastore_size=$(echo "$seastore_size*1024^3/1" | bc)
         SEASTORE_OPTS="
         seastore device size = $seastore_size"
       fi
