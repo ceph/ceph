@@ -72,7 +72,7 @@ def get_pool_ids(mgr, volname):
         return None, None
     return metadata_pool_id, data_pool_ids
 
-def create_fs_pools(mgr, volname, data_pool, meta_pool):
+def create_fs_pools(mgr, volname, data_pool, meta_pool, force):
     if not data_pool and not meta_pool:
         meta_pool, data_pool = gen_pool_names(volname)
     elif not meta_pool and data_pool:
@@ -80,14 +80,14 @@ def create_fs_pools(mgr, volname, data_pool, meta_pool):
     elif not data_pool and meta_pool:
         data_pool = gen_pool_names(volname)[1]
 
-    r, outb, outs = create_pool(mgr, meta_pool)
+    r, outb, outs = create_pool(mgr, meta_pool, force)
     if r != 0:
         return r, outb, outs
 
     # default to a bulk pool for data. In case autoscaling has been disabled
     # for the cluster with `ceph osd pool set noautoscale`, this will have
     # no effect.
-    r, outb, outs = create_pool(mgr, data_pool, bulk=True)
+    r, outb, outs = create_pool(mgr, data_pool, force, bulk=True)
     # cleanup
     if r != 0:
         remove_pool(mgr, meta_pool)
@@ -95,12 +95,12 @@ def create_fs_pools(mgr, volname, data_pool, meta_pool):
 
     return data_pool, meta_pool
 
-def create_volume(mgr, volname, placement, data_pool, meta_pool):
+def create_volume(mgr, volname, placement, data_pool, meta_pool, force):
     """
     create volume  (pool, filesystem and mds)
     """
     if not data_pool or not meta_pool:
-        retval = create_fs_pools(mgr, volname, data_pool, meta_pool)
+        retval = create_fs_pools(mgr, volname, data_pool, meta_pool, force)
         if len(retval) == 3:
             if retval[0] != 0:
                 return retval
