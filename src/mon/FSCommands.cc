@@ -210,8 +210,9 @@ class FsNewHandler : public FileSystemCommandHandler
       if (stat) {
 	int64_t metadata_num_objects = stat->stats.sum.num_objects;
 	if (metadata_num_objects > 0) {
-	  ss << "pool '" << metadata_name
-	     << "' already contains some objects. Use an empty pool instead.";
+	  ss << "pool '" << metadata_name << "' already contains some objects. "
+	        "Use an empty pool instead. Pass --force if you are sure that "
+		"you wish to continue";
 	  return -EINVAL;
 	}
       }
