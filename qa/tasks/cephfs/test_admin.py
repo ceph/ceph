@@ -384,6 +384,77 @@ class TestAddDataPool(TestAdminCommands):
     Test "ceph fs add_data_pool" subcommand.
     """
 
+    def test_that_nonempty_data_pool_isnt_allowed_by_default(self):
+        '''
+        Test that "ceph fs add_data_pool" command fails when non-empty data
+        pool is passed (without passing --force).
+        '''
+        fs = 'somefs'
+        meta = f'cephfs.{fs}.meta'
+        data = f'cephfs.{fs}.data'
+
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.mon_manager.controller.run(args='echo somedata > file1')
+        self.mon_manager.do_rados(['put', 'obj1', 'file1', '--pool', data])
+        # XXX some time is required for stats to be generated so that "fs new"
+        # command, which is called by "fs volume create" command, can detect
+        # that the meta pool is not empty and therefore abort with an error.
+        sleep(5)
+
+        try:
+            # actual test...
+            self.negtest_ceph_cmd(f'fs add_data_pool {fs} {data}',
+                                  retval=errno.EINVAL,
+                                  errmsgs=('already contains some objects. use '
+                                           'an empty pool instead'))
+
+            # being extra sure that volume wasn't created
+            output = self.get_ceph_cmd_stdout('fs ls').lower()
+            self.assertNotIn(fs, output)
+        # regardless of how this test goes, ensure that these leftover pools
+        # are deleted. else, they might mess up the teardown or setup code
+        # somehow.
+        finally:
+            self.run_ceph_cmd(f'osd pool rm {meta} {meta} '
+                               '--yes-i-really-really-mean-it')
+            self.run_ceph_cmd(f'osd pool rm {data} {data} '
+                               '--yes-i-really-really-mean-it')
+
+    def test_that_nonempty_data_pool_is_allowed_with_force(self):
+        '''
+        Test that "ceph fs add_data_pool" command passes when non-empty data
+        pool is passed along with --force.
+        '''
+        fs = 'somefs'
+        meta = f'cephfs.{fs}.meta'
+        data = f'cephfs.{fs}.data'
+
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.mon_manager.controller.run(args='echo somedata > file1')
+        self.mon_manager.do_rados(['put', 'obj1', 'file1', '--pool', data])
+        # XXX some time is required for stats to be generated so that "fs new"
+        # command, which is called by "fs volume create" command, can detect
+        # that the meta pool is not empty and therefore abort with an error.
+        sleep(5)
+
+        try:
+            # actual test...
+            self.run_ceph_cmd(f'fs add_data_pool {fs} {data} --force')
+
+            # being extra sure that volume wasn't created
+            output = self.get_ceph_cmd_stdout('fs ls').lower()
+            self.assertIn(fs, output)
+        # regardless of how this test goes, ensure that these leftover pools
+        # are deleted. else, they might mess up the teardown or setup code
+        # somehow.
+        finally:
+            self.run_ceph_cmd(f'osd pool rm {meta} {meta} '
+                               '--yes-i-really-really-mean-it')
+            self.run_ceph_cmd(f'osd pool rm {data} {data} '
+                               '--yes-i-really-really-mean-it')
+
     def test_add_data_pool_root(self):
         """
         That a new data pool can be added and used for the root directory.
