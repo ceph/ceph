@@ -935,11 +935,13 @@ EOF
     fi
 
     if [ "$objectstore" == "seastore" ]; then
-      if [[ ${seastore_size+x} ]]; then
-        seastore_size=$(echo "$seastore_size*1024^3/1" | bc)
-        SEASTORE_OPTS="
-        seastore device size = $seastore_size"
+      if [ -z ${seastore_size} ]; then
+        # fallback to 10GB
+        seastore_size=10
       fi
+      seastore_size=$(echo "$seastore_size*1024^3/1" | bc)
+      SEASTORE_OPTS="
+      seastore device size = $seastore_size"
     fi
 
     wconf <<EOF
