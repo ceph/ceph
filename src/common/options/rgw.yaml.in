@@ -4349,3 +4349,12 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_bucket_eexist_override
+  type: bool
+  level: advanced
+  desc: CreateBucket on an existing bucket of the same owner returns 409/EEXIST, regardless of region.
+  long_desc: Overrides the documented RGW behavior that treats multiple CreateBucket operations by the same
+      owner as idempotent
+  default: false
+  services:
+  - rgw
