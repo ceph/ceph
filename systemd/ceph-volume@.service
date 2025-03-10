@@ -7,7 +7,7 @@ Wants=local-fs.target
 Type=oneshot
 KillMode=none
 Environment=CEPH_VOLUME_TIMEOUT=10000
-ExecStart=/bin/sh -c 'timeout $CEPH_VOLUME_TIMEOUT /usr/sbin/ceph-volume-systemd %i'
+ExecStart=/bin/sh -c 'timeout $CEPH_VOLUME_TIMEOUT @CMAKE_INSTALL_PREFIX@/sbin/ceph-volume-systemd %i'
 TimeoutSec=0
 
 [Install]

@@ -9,9 +9,9 @@ EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=RBDMAPFILE=/etc/ceph/rbdmap
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/rbdmap map
-ExecReload=/usr/bin/rbdmap map
-ExecStop=/usr/bin/rbdmap unmap-all
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/rbdmap map
+ExecReload=@CMAKE_INSTALL_PREFIX@/bin/rbdmap map
+ExecStop=@CMAKE_INSTALL_PREFIX@/bin/rbdmap unmap-all
 
 [Install]
 WantedBy=multi-user.target
