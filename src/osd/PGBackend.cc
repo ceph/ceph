@@ -282,7 +282,7 @@ void PGBackend::rollback(
 	  const uint64_t shard_size = pg->object_size_to_shard_size(object_size, pg->get_parent()->whoami_shard().shard);
 	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version
 			     << " written shard rollback_extents " << entry.written_shards
-			     << " shards " << shards[i] << " " <<
+			     << " shards " << (shards.empty()?shard_id_set():shards[i]) << " " <<
 	                        pg->get_parent()->whoami_shard().shard << " " <<
 	                        object_size << " " <<
 	                        shard_size << dendl;
@@ -335,7 +335,7 @@ struct Trimmer : public ObjectModDesc::Visitor {
     ceph_assert(shards.empty() || shards.size() == extents.size());
     for (unsigned int i=0;i<extents.size();i++) {
       if (shards.empty() || shards[i].empty() || shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
-        ldpp_dout(dpp, 20) << __func__ << " BILLT: written_shard trim " << shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
+        ldpp_dout(dpp, 30) << __func__ << " BILLT: written_shard trim " << shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
         pg->trim_rollback_object(
           soid,
           gen,
