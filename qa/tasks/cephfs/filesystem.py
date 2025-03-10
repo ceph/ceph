@@ -665,6 +665,9 @@ class FilesystemBase(MDSClusterBase):
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", yes, '--yes-i-really-mean-it')
 
+    def set_allow_referent_inodes(self, yes):
+        self.set_var("allow_referent_inodes", yes)
+
     def set_bal_rank_mask(self, bal_rank_mask):
         self.set_var("bal_rank_mask", bal_rank_mask)
 
@@ -1319,9 +1322,15 @@ class FilesystemBase(MDSClusterBase):
 
             status = self.status()
 
-    def dencoder(self, obj_type, obj_blob):
-        args = [os.path.join(self._prefix, "ceph-dencoder"), 'type', obj_type, 'import', '-', 'decode', 'dump_json']
+    def dencoder(self, obj_type, obj_blob, skip=0, stray_okay=False):
+        args = [os.path.join(self._prefix, "ceph-dencoder"), 'type', obj_type]
+        if stray_okay:
+            args.extend(["stray_okay"])
+        if skip != 0 :
+            args.extend(["skip", str(skip)])
+        args.extend(['import', '-', 'decode', 'dump_json'])
         p = self.mon_manager.controller.run(args=args, stdin=BytesIO(obj_blob), stdout=BytesIO())
+
         return p.stdout.getvalue()
 
     def rados(self, *args, **kwargs):
@@ -1538,6 +1547,43 @@ class FilesystemBase(MDSClusterBase):
         args = ["setxattr", obj_name, xattr_name, data]
         self.rados(args, pool=pool)
 
+    def read_meta_inode(self, dir_ino, file_name, pool=None):
+        """
+        Get decoded in-memory inode from the metadata pool
+        """
+        if pool is None:
+            pool = self.get_metadata_pool_name()
+
+        dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
+        args=["getomapval", dirfrag_obj_name, file_name+"_head", "-"]
+        try:
+            proc = self.rados(args, pool=pool, stdout=BytesIO())
+        except CommandFailedError as e:
+            log.error(e.__str__())
+            raise ObjectNotFound(dirfrag_obj_name)
+
+        obj_blob = proc.stdout.getvalue()
+        return json.loads(self.dencoder("inode_t<std::allocator>", obj_blob, 25, True).strip())
+
+    def read_remote_inode(self, ino_no, pool=None):
+        """
+        Read the remote_inode xattr from the data pool, return a dict in the
+        format given by inodeno_t::dump, which is something like:
+
+        ::
+
+            rados -p cephfs_data getxattr 100000001f8.00000000 remote_inode > out.bin
+            ceph-dencoder type inodeno_t import out.bin decode dump_json
+
+            {
+                 "val": 1099511627778
+            }
+
+        :param pool: name of pool to read backtrace from.  If omitted, FS must have only
+                     one data pool and that will be used.
+        """
+        return self._read_data_xattr(ino_no, "remote_inode", "inodeno_t", pool)
+
     def read_symlink(self, ino_no, pool=None):
         return self._read_data_xattr(ino_no, "symlink", "string_wrapper", pool)
 
@@ -1600,6 +1646,15 @@ class FilesystemBase(MDSClusterBase):
         exist_objects = self.rados(["ls"], pool=self.get_data_pool_name(), stdout=StringIO()).stdout.getvalue().split("\n")
 
         return want_objects, exist_objects
+
+    def list_data_objects (self):
+        """
+        Get the list of existing data objects in the data pool
+        """
+        existing_objects = self.rados(["ls"], pool=self.get_data_pool_name(), stdout=StringIO()).stdout.getvalue().split("\n")
+
+        return existing_objects
+
 
     def data_objects_present(self, ino, size):
         """
