@@ -152,6 +152,8 @@ private:
     uint32_t map_end,
     uint32_t in_blob_offset);
 
+  void _maybe_meld_with_prev_extent(exmp_it after_punch_it);
+
   inline void _blob_put_data_subau(
     Blob* blob,
     uint32_t in_blob_offset,
