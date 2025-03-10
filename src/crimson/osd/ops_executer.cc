@@ -867,19 +867,9 @@ OpsExecuter::flush_changes_and_submit(
     if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
       ceph_assert(log_rit->version == osd_op_params->at_version);
     }
-
-    /*
-     * This works around the gcc bug causing the generated code to incorrectly
-     * execute unconditionally before the predicate.
-     *
-     * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101244
-     */
-    auto clone_obc = cloning_ctx
-      ? std::move(cloning_ctx->clone_obc)
-      : nullptr;
     auto [_submitted, _all_completed] = co_await pg->submit_transaction(
       std::move(obc),
-      std::move(clone_obc),
+      cloning_ctx ? std::move(cloning_ctx->clone_obc) : nullptr,
       std::move(txn),
       std::move(*osd_op_params),
       std::move(log_entries)
