@@ -4059,6 +4059,38 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 // -------------
 // pg_temp changes
 
+bool OSDMonitor::validate_pgtemp_update(const pg_t &pg, const std::vector<int32_t> &pg_temp, int from)
+{
+  // does the pool exist?
+  if (!osdmap.have_pg_pool(pg.pool())) {
+    /*
+     * 1. If the osdmap does not have the pool, it means the pool has been
+     *    removed in-between the osd sending this message and us handling it.
+     * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
+     *    not exist in the pending either, as the osds would not send a
+     *    message about a pool they know nothing about (yet).
+     * 3. However, if the pool does exist in the pending, then it must be a
+     *    new pool, and not relevant to this message (see 1).
+     */
+    dout(10) << __func__ << " ignore " << pg << " -> " << pg_temp
+             << ": pool has been removed" << dendl;
+    return false;
+  }
+  int acting_primary = -1;
+  osdmap.pg_to_up_acting_osds(pg, nullptr, nullptr, nullptr, &acting_primary);
+  if (acting_primary != from) {
+    /* If the source isn't the primary based on the current osdmap, we know
+     * that the interval changed and that we can discard this message.
+     * Indeed, we must do so to avoid 16127 since we can't otherwise determine
+     * which of two pg temp mappings on the same pg is more recent.
+     */
+    dout(10) << __func__ << " ignore " << pg << " -> " << pg_temp
+	     << ": primary has changed" << dendl;
+    return false;
+  }
+  return true;
+}
+
 bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 {
   auto m = op->get_req<MOSDPGTemp>();
@@ -4093,35 +4125,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
              << " -> " << p->second << dendl;
-
-    // does the pool exist?
-    if (!osdmap.have_pg_pool(p->first.pool())) {
-      /*
-       * 1. If the osdmap does not have the pool, it means the pool has been
-       *    removed in-between the osd sending this message and us handling it.
-       * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
-       *    not exist in the pending either, as the osds would not send a
-       *    message about a pool they know nothing about (yet).
-       * 3. However, if the pool does exist in the pending, then it must be a
-       *    new pool, and not relevant to this message (see 1).
-       */
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-               << ": pool has been removed" << dendl;
-      ignore_cnt++;
-      continue;
-    }
-
-    int acting_primary = -1;
-    osdmap.pg_to_up_acting_osds(
-      p->first, nullptr, nullptr, nullptr, &acting_primary);
-    if (acting_primary != from) {
-      /* If the source isn't the primary based on the current osdmap, we know
-       * that the interval changed and that we can discard this message.
-       * Indeed, we must do so to avoid 16127 since we can't otherwise determine
-       * which of two pg temp mappings on the same pg is more recent.
-       */
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-	       << ": primary has changed" << dendl;
+    if (!validate_pgtemp_update(p->first, p->second, from)) {
       ignore_cnt++;
       continue;
     }
@@ -4179,9 +4183,8 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
                << ": pool pending removal" << dendl;
       continue;
     }
-    if (!osdmap.have_pg_pool(pool)) {
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-               << ": pool has been removed" << dendl;
+
+    if (!validate_pgtemp_update(p->first, p->second, from)) {
       continue;
     }
     pending_inc.new_pg_temp[p->first] =
