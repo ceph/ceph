@@ -23,7 +23,6 @@
 #include "ECUtil.h"
 #include "ECTypes.h"
 #if WITH_SEASTAR
-#include "ExtentCache.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
@@ -33,7 +32,7 @@ struct ECTransaction {
   struct WritePlan {
     bool invalidates_cache = false; // Yes, both are possible
     std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write; // superset of to_read
+    std::map<hobject_t,extent_set> will_write;
 
     std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
@@ -46,7 +45,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #endif
 
 #include "ECTransaction.h"
-#include "ExtentCache.h"
+#include "ECExtentCache.h"
 #include "ECListener.h"
 
 //forward declaration
@@ -54,9 +53,12 @@ struct ECSubWrite;
 struct PGLog;
 
 struct ECCommon {
+  friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
+
   struct ec_extent_t {
     int err;
     extent_map emap;
+    ECUtil::shard_extent_map_t shard_extent_map;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
@@ -74,18 +76,48 @@ struct ECCommon {
   virtual void objects_read_and_reconstruct(
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
+    uint64_t object_size,
     GenContextURef<ec_extents_t &&> &&func) = 0;
+
+  struct shard_read_t {
+    extent_set extents;
+    extent_set zero_pad;
+    std::optional<std::vector<std::pair<int, int>>> subchunk;
+    pg_shard_t pg_shard;
+    bool operator==(const shard_read_t &other) const;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const shard_read_t &rhs);
 
   struct read_request_t {
     const std::list<ec_align_t> to_read;
-    std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
-    bool want_attrs;
+    const uint32_t flags = 0;
+    const ECUtil::shard_extent_set_t shard_want_to_read;
+    shard_id_map<shard_read_t> shard_reads;
+    bool want_attrs = false;
+    uint64_t object_size;
     read_request_t(
       const std::list<ec_align_t> &to_read,
-      const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
-      bool want_attrs)
-      : to_read(to_read), need(need), want_attrs(want_attrs) {}
+      const ECUtil::shard_extent_set_t &shard_want_to_read,
+      bool want_attrs, uint64_t object_size) :
+        to_read(to_read),
+        flags(to_read.front().flags),
+        shard_want_to_read(shard_want_to_read),
+        shard_reads(shard_want_to_read.get_max_shards()),
+        want_attrs(want_attrs),
+        object_size(object_size) {}
+    read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
+      bool want_attrs, uint64_t object_size) :
+        shard_want_to_read(shard_want_to_read),
+        shard_reads(shard_want_to_read.get_max_shards()),
+        want_attrs(want_attrs),
+        object_size(object_size) {}
+    bool operator==(const read_request_t &other) const;
   };
+
+  virtual void objects_read_and_reconstruct_for_rmw(
+    std::map<hobject_t, read_request_t> &&to_read,
+    GenContextURef<ec_extents_t &&> &&func) = 0;
+
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
   /**
@@ -113,18 +145,17 @@ struct ECCommon {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
-    std::list<
-      boost::tuple<
-	uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > > returned;
-    read_result_t() : r(0) {}
+    ECUtil::shard_extent_map_t buffers_read;
+    ECUtil::shard_extent_set_t processed_read_requests;
+    read_result_t(const ECUtil::stripe_info_t *sinfo) :
+      r(0), buffers_read(sinfo), processed_read_requests(sinfo->get_k_plus_m()) {}
   };
 
   struct ReadCompleter {
     virtual void finish_single_request(
       const hobject_t &hoid,
-      read_result_t &res,
-      std::list<ec_align_t> to_read,
-      std::set<int> wanted_to_read) = 0;
+      read_result_t &&res,
+      ECCommon::read_request_t &req) = 0;
 
     virtual void finish(int priority) && = 0;
 
@@ -143,11 +174,13 @@ struct ECCommon {
     void complete_object(
       const hobject_t &hoid,
       int err,
-      extent_map &&buffers) {
+      extent_map &&buffers,
+      ECUtil::shard_extent_map_t &&shard_extent_map) {
       ceph_assert(objects_to_read);
       --objects_to_read;
-      ceph_assert(!results.count(hoid));
-      results.emplace(hoid, ec_extent_t{err, std::move(buffers)});
+      ceph_assert(!results.contains(hoid));
+      results.emplace(hoid, ec_extent_t{err, std::move(buffers),
+        std::move(shard_extent_map)});
     }
     bool is_complete() const {
       return objects_to_read == 0;
@@ -172,7 +205,6 @@ struct ECCommon {
 
     ZTracer::Trace trace;
 
-    std::map<hobject_t, std::set<int>> want_to_read;
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
 
@@ -183,34 +215,21 @@ struct ECCommon {
 
     std::set<pg_shard_t> in_progress;
 
+    std::list<ECUtil::log_entry_t> debug_log;
+
     ReadOp(
       int priority,
       ceph_tid_t tid,
       bool do_redundant_reads,
       bool for_recovery,
       std::unique_ptr<ReadCompleter> _on_complete,
-      OpRequestRef op,
-      std::map<hobject_t, std::set<int>> &&_want_to_read,
       std::map<hobject_t, read_request_t> &&_to_read)
       : priority(priority),
         tid(tid),
-        op(op),
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
-        want_to_read(std::move(_want_to_read)),
-	to_read(std::move(_to_read)) {
-      for (auto &&hpair: to_read) {
-	auto &returned = complete[hpair.first].returned;
-	for (auto &&extent: hpair.second.to_read) {
-	  returned.push_back(
-	    boost::make_tuple(
-	      extent.offset,
-	      extent.size,
-	      std::map<pg_shard_t, ceph::buffer::list>()));
-	}
-      }
-    }
+	to_read(std::move(_to_read)) {}
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
     ReadOp(ReadOp &&) = default;
@@ -219,7 +238,12 @@ struct ECCommon {
     void objects_read_and_reconstruct(
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
+      uint64_t object_size,
       GenContextURef<ec_extents_t &&> &&func);
+
+    void objects_read_and_reconstruct_for_rmw(
+      std::map<hobject_t, read_request_t> &&to_read,
+      GenContextURef<ECCommon::ec_extents_t &&> &&func);
 
     template <class F, class G>
     void filter_read_op(
@@ -234,13 +258,11 @@ struct ECCommon {
       F&& on_erase,
       G&& on_schedule_recovery);
 
-    void complete_read_op(ReadOp &rop);
+    void complete_read_op(ReadOp &&rop);
 
     void start_read_op(
       int priority,
-      std::map<hobject_t, std::set<int>> &want_to_read,
       std::map<hobject_t, read_request_t> &to_read,
-      OpRequestRef op,
       bool do_redundant_reads,
       bool for_recovery,
       std::unique_ptr<ReadCompleter> on_complete);
@@ -268,7 +290,7 @@ struct ECCommon {
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
     epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
-    const pg_info_t &get_info() { return get_parent()->get_info(); }
+    const pg_info_t &get_info() const { return get_parent()->get_info(); }
 
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
@@ -290,47 +312,39 @@ struct ECCommon {
      *
      */
     void get_min_want_to_read_shards(
-      uint64_t offset,				///< [in]
-      uint64_t length,    			///< [in]
-      std::set<int> *want_to_read               ///< [out]
+      const ec_align_t &to_read,                  ///< [in]
+      ECUtil::shard_extent_set_t &want_shard_reads ///< [out]
       );
-    static void get_min_want_to_read_shards(
-      const uint64_t offset,
-      const uint64_t length,
-      const ECUtil::stripe_info_t& sinfo,
-      std::set<int> *want_to_read);
 
     int get_remaining_shards(
       const hobject_t &hoid,
-      const std::set<int> &avail,
-      const std::set<int> &want,
-      const read_result_t &result,
-      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read,
-      bool for_recovery);
+      read_result_t &read_result,
+      read_request_t &read_request,
+      bool for_recovery,
+      bool fast_read);
 
     void get_all_avail_shards(
       const hobject_t &hoid,
-      const std::set<pg_shard_t> &error_shards,
-      std::set<int> &have,
-      std::map<shard_id_t, pg_shard_t> &shards,
-      bool for_recovery);
+      shard_id_set &have,
+      shard_id_map<pg_shard_t> &shards,
+      bool for_recovery,
+      const std::optional<std::set<pg_shard_t>>& error_shards = std::nullopt);
 
     friend std::ostream &operator<<(std::ostream &lhs, const ReadOp &rhs);
     friend struct FinishReadOp;
 
-    void get_want_to_read_shards(std::set<int> *want_to_read) const;
+    void get_want_to_read_shards(
+      const std::list<ec_align_t> &to_read,
+      ECUtil::shard_extent_set_t &want_shard_reads);
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
       const hobject_t &hoid,     ///< [in] object
-      const std::set<int> &want,      ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
+      read_request_t& read_request, ///< [out] shard_reads, corresponding subchunks / other sub reads to read
+      const std::optional<std::set<pg_shard_t>>& error_shards = std::nullopt //< [in] Shards where reads have failed (optional)
       ); ///< @return error code, 0 on success
-
-    void schedule_recovery_work();
-
   };
 
   /**
@@ -347,8 +361,9 @@ struct ECCommon {
    * on the writing std::list.
    */
 
-  struct RMWPipeline {
-    struct Op : boost::intrusive::list_base_hook<> {
+  struct RMWPipeline : ECExtentCache::BackendRead {
+    struct Op : boost::intrusive::list_base_hook<>
+    {
       /// From submit_transaction caller, describes operation
       hobject_t hoid;
       object_stat_sum_t delta_stats;
@@ -375,43 +390,35 @@ struct ECCommon {
       /// Ancillary also provided from submit_transaction caller
       std::map<hobject_t, ObjectContextRef> obc_map;
 
-      /// see call_write_ordered
-      std::list<std::function<void(void)> > on_write;
-
       /// Generated internally
       std::set<hobject_t> temp_added;
       std::set<hobject_t> temp_cleared;
 
       ECTransaction::WritePlan plan;
-      bool requires_rmw() const { return !plan.to_read.empty(); }
-      bool invalidates_cache() const { return plan.invalidates_cache; }
+      bool requires_rmw() const { return !plan.want_read; }
 
       // must be true if requires_rmw(), must be false if invalidates_cache()
       bool using_cache = true;
 
       /// In progress read state;
-      std::map<hobject_t,extent_set> pending_read; // subset already being read
-      std::map<hobject_t,extent_set> remote_read;  // subset we must read
-      std::map<hobject_t,extent_map> remote_read_result;
-      bool read_in_progress() const {
-        return !remote_read.empty() && remote_read_result.empty();
-      }
+      int pending_cache_ops = 0;
+      std::map<hobject_t,ECUtil::shard_extent_map_t> remote_shard_extent_map;
 
       /// In progress write state.
-      std::set<pg_shard_t> pending_commit;
-      // we need pending_apply for pre-mimic peers so that we don't issue a
-      // read on a remote shard before it has applied a previous write.  We can
-      // remove this after nautilus.
-      std::set<pg_shard_t> pending_apply;
+      int pending_commits = 0;
+
       bool write_in_progress() const {
-        return !pending_commit.empty() || !pending_apply.empty();
+        return pending_commits != 0;
       }
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
 
       /// pin for cache
-      ExtentCache::write_pin pin;
+      std::list<ECExtentCache::OpRef> cache_ops;
+      RMWPipeline *pipeline;
+
+      Op() : tid(), plan(), pipeline(nullptr) {}
 
       /// Callbacks
       Context *on_all_commit = nullptr;
@@ -420,96 +427,73 @@ struct ECCommon {
       }
 
       virtual void generate_transactions(
-        ceph::ErasureCodeInterfaceRef &ecimpl,
+        ceph::ErasureCodeInterfaceRef &ec_impl,
         pg_t pgid,
         const ECUtil::stripe_info_t &sinfo,
-        std::map<hobject_t,extent_map> *written,
-        std::map<shard_id_t, ceph::os::Transaction> *transactions,
+        std::map<hobject_t, ECUtil::shard_extent_map_t>* written,
+        shard_id_map<ceph::os::Transaction> *transactions,
         DoutPrefixProvider *dpp,
-        const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
+	const OSDMapRef& osdmap) = 0;
+
+      virtual bool skip_transaction(
+        std::set<shard_id_t>& pending_roll_forward,
+        shard_id_t shard,
+        ceph::os::Transaction& transaction) = 0;
+
+      void cache_ready(hobject_t& oid, const ECUtil::shard_extent_map_t &result)
+      {
+        if (!result.empty()) {
+          remote_shard_extent_map.insert(std::pair(oid, result));
+        }
+
+        if (!--pending_cache_ops) pipeline->cache_ready(*this);
+      }
     };
-    using OpRef = std::unique_ptr<Op>;
+
+    void backend_read(hobject_t oid, ECUtil::shard_extent_set_t const &request, uint64_t object_size) override  {
+      std::map<hobject_t, read_request_t> to_read;
+      to_read.emplace(oid, read_request_t(request, false, object_size));
+
+      objects_read_async_no_cache(
+        std::move(to_read),
+        [this](ec_extents_t &&results)
+        {
+          for (auto &&[oid, result] : results) {
+            extent_cache.read_done(oid, std::move(result.shard_extent_map));
+          }
+        });
+    }
+
+    using OpRef = std::shared_ptr<Op>;
     using op_list = boost::intrusive::list<Op>;
     friend std::ostream &operator<<(std::ostream &lhs, const Op &rhs);
 
-    ExtentCache cache;
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
-    /**
-     * We model the possible rmw states as a std::set of waitlists.
-     * All writes at this time complete in order, so a write blocked
-     * at waiting_state blocks all writes behind it as well (same for
-     * other states).
-     *
-     * Future work: We can break this up into a per-object pipeline
-     * (almost).  First, provide an ordering token to submit_transaction
-     * and require that all operations within a single transaction take
-     * place on a subset of hobject_t space partitioned by that token
-     * (the hashid seem about right to me -- even works for temp objects
-     * if you recall that a temp object created for object head foo will
-     * only ever be referenced by other transactions on foo and aren't
-     * reused).  Next, factor this part into a class and maintain one per
-     * ordering token.  Next, fixup PrimaryLogPG's repop queue to be
-     * partitioned by ordering token.  Finally, refactor the op pipeline
-     * so that the log entries passed into submit_transaction aren't
-     * versioned.  We can't assign versions to them until we actually
-     * submit the operation.  That's probably going to be the hard part.
-     */
-    class pipeline_state_t {
-      enum {
-        CACHE_VALID = 0,
-        CACHE_INVALID = 1
-      } pipeline_state = CACHE_VALID;
-    public:
-      bool caching_enabled() const {
-        return pipeline_state == CACHE_VALID;
-      }
-      bool cache_invalid() const {
-        return !caching_enabled();
-      }
-      void invalidate() {
-        pipeline_state = CACHE_INVALID;
-      }
-      void clear() {
-        pipeline_state = CACHE_VALID;
-      }
-      friend std::ostream &operator<<(std::ostream &lhs, const pipeline_state_t &rhs);
-    } pipeline_state;
+    std::map<hobject_t, eversion_t> oid_to_version;
 
-    op_list waiting_state;        /// writes waiting on pipe_state
-    op_list waiting_reads;        /// writes waiting on partial stripe reads
-    op_list waiting_commit;       /// writes waiting on initial commit
     eversion_t completed_to;
     eversion_t committed_to;
     void start_rmw(OpRef op);
-    bool try_state_to_reads();
-    bool try_reads_to_commit();
-    bool try_finish_rmw();
-    void check_ops();
+    void cache_ready(Op &op);
+    void finish_rmw(OpRef const &op);
 
     void on_change();
+    void on_change2();
     void call_write_ordered(std::function<void(void)> &&cb);
 
     CephContext* cct;
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
     epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
-    const pg_info_t &get_info() { return get_parent()->get_info(); }
+    const pg_info_t &get_info() const { return get_parent()->get_info(); }
 
     template <typename Func>
     void objects_read_async_no_cache(
-      const std::map<hobject_t,extent_set> &to_read,
+      std::map<hobject_t,read_request_t> &&to_read,
       Func &&on_complete
     ) {
-      std::map<hobject_t, std::list<ec_align_t>> _to_read;
-      for (auto &&hpair: to_read) {
-        auto &l = _to_read[hpair.first];
-        for (auto extent: hpair.second) {
-          l.emplace_back(ec_align_t{extent.first, extent.second, 0});
-        }
-      }
-      ec_backend.objects_read_and_reconstruct(
-        _to_read,
-        false,
+      ec_backend.objects_read_and_reconstruct_for_rmw(
+        std::move(to_read),
         make_gen_lambda_context<
         ECCommon::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
@@ -519,26 +503,34 @@ struct ECCommon {
       OpRequestRef msg,
       ECSubWrite &op,
       const ZTracer::Trace &trace
-    ) {
+    ) const {
       ec_backend.handle_sub_write(from, std::move(msg), op, trace, *get_parent());
     }
     // end of iface
+
+    // Set of shards that will need a dummy transaction for the final
+    // roll forward
+    std::set<shard_id_t> pending_roll_forward;
 
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t& sinfo;
     ECListener* parent;
     ECCommon& ec_backend;
+    ECExtentCache extent_cache;
 
     RMWPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
                 ECListener* parent,
-                ECCommon& ec_backend)
+                ECCommon& ec_backend,
+                ECExtentCache::LRU &ec_extent_cache_lru)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
         parent(parent),
-        ec_backend(ec_backend) {
+        ec_backend(ec_backend),
+        extent_cache(*this, ec_extent_cache_lru, sinfo, cct)
+    {
     }
   };
 
@@ -562,13 +554,11 @@ struct ECCommon {
     ECUtil::HashInfoRef get_hash_info(
       const hobject_t &hoid,
       bool create,
-      const std::map<std::string, ceph::buffer::list, std::less<>>& attr,
+      const std::map<std::string, ceph::buffer::list, std::less<>>& attrs,
       uint64_t size);
   };
 };
 
-std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::RMWPipeline::pipeline_state_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
 			 const ECCommon::read_request_t &rhs);
 std::ostream &operator<<(std::ostream &lhs,
@@ -632,7 +622,7 @@ void ECCommon::ReadPipeline::filter_read_op(
     for (std::set<hobject_t>::iterator j = i->second.begin();
 	 j != i->second.end();
 	 ) {
-      if (to_cancel.count(*j))
+      if (to_cancel.contains(*j))
 	i->second.erase(j++);
       else
 	++j;
@@ -676,7 +666,6 @@ void ECCommon::ReadPipeline::filter_read_op(
   }
 }
 
-template <> struct fmt::formatter<ECCommon::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};

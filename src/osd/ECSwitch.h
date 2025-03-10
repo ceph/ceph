@@ -44,7 +44,7 @@ public:
     ECExtentCache::LRU &lru) :
     PGBackend(cct, pg, store, coll, ch),
     legacy(pg, cct, ec_impl, stripe_width, this),
-    optimized(pg, cct, ec_impl, stripe_width, this),
+    optimized(pg, cct, ec_impl, stripe_width, this, lru),
     is_optimized_actual(get_parent()->get_pool().allows_ecoptimizations()) {}
 
   bool is_optimized() const
@@ -295,8 +295,9 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size,
                               shard_id_t shard_id) const final {
     if (is_optimized())
-    {
-      return optimized.be_get_ondisk_size(logical_size);
+
+     {
+      return optimized.be_get_ondisk_size(logical_size, shard_id);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }
