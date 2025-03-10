@@ -795,7 +795,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                           1,
                           true,
                           1,
-                          '',
+                          'rgw_servers',
                           '')
     )
     .addPanels([
