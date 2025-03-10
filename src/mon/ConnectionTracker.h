@@ -128,6 +128,12 @@ class ConnectionTracker {
   */
   bool is_clean(int mon_rank, int monmap_size);
   /**
+   * Get the set of monitor pairs that are disconnected
+   * due to network partitions.
+   * This is a set of pairs (rank1, rank2) where rank1 < rank2.
+   */
+  std::set<std::pair<unsigned, unsigned>> get_netsplit();
+  /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import
    * with receive_peer_report() above.
