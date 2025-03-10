@@ -282,7 +282,6 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
   delta->extents.clear();
 
   delta->type = type;
-  delta->wal_limit = wal_limit;
   delta->wal_size = wal_size;
   if (allocated_commited < allocated) {
     uint64_t x_off = 0;
@@ -332,10 +331,12 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
 	     << " extents " << file.extents;
-  if (file.type == WAL_V2) {
-    out << " wal_limit " << file.wal_limit << std::hex;
-    out << " wal_size " << file.wal_size << std::hex;
-    out << " type WAL_V2 " << std::dec;
+  if (file.type == WAL_V2 || file.type == WAL_V2_FIN) {
+    out << " wal_size 0x" << std::hex << file.wal_size << std::dec << std::hex;
+    if (file.type == WAL_V2)
+      out << " type WAL_V2 " << std::dec;
+    if (file.type == WAL_V2_FIN)
+      out << " type WAL_V2_FIN " << std::dec;
   }
   out << ")";
   return out;
@@ -345,12 +346,20 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 
 std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 {
-  return out << "delta(ino " << delta.ino
-	     << " size 0x" << std::hex << delta.size << std::dec
-	     << " mtime " << delta.mtime
-	     << " offset " << std::hex << delta.offset << std::dec
-	     << " extents " << delta.extents
-	     << ")";
+  out << "delta(ino " << delta.ino
+    << " size 0x" << std::hex << delta.size << std::dec
+    << " mtime " << delta.mtime
+    << " offset " << std::hex << delta.offset << std::dec
+    << " extents " << delta.extents;
+  if (delta.type == WAL_V2 || delta.type == WAL_V2_FIN) {
+    out << " wal_size 0x" << std::hex << delta.wal_size << std::dec << std::hex;
+    if (delta.type == WAL_V2)
+      out << " type WAL_V2" << std::dec;
+    if (delta.type == WAL_V2_FIN)
+      out << " type WAL_V2_FIN" << std::dec;
+  }
+  out << ")";
+  return out;
 }
 
 // bluefs_transaction_t
@@ -429,31 +438,4 @@ ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 	     << " len 0x" << std::hex << t.op_bl.length()
 	     << " crc 0x" << t.op_bl.crc32c(-1)
 	     << std::dec << ")";
-}
-
-void bluefs_wal_header_t::bound_encode(size_t &s) const {
-  s += 1; // version
-  s += 1; // compat
-  s += 4; // size
-  denc(flush_length, s);
-}
-
-void bluefs_wal_header_t::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
-  encode(flush_length, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_wal_header_t::encode(bufferlist::contiguous_filler& filler_in) const {
-  ENCODE_START_FILLER(1, 1, filler_in);
-  ceph_le64 flush_length_le(flush_length);
-  filler_in.copy_in(sizeof(flush_length_le), (char*)&flush_length_le);
-  ENCODE_FINISH_FILLER();
-}
-
-void bluefs_wal_header_t::decode(bufferlist::const_iterator& p)
-{
-  DECODE_START(1, p);
-  decode(flush_length, p);
-  DECODE_FINISH(p);
 }
