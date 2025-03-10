@@ -3372,6 +3372,7 @@ class TestIngressService:
                 ),
                 'user': 'nfs.foo.test.0.0-rgw',
             },
+            'stunnel': {},
             'userid': 'nfs.foo.test.0.0',
         }
 
