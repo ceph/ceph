@@ -21,6 +21,8 @@ set(lib_mon_srcs
   ConnectionTracker.cc
   HealthMonitor.cc
   KVMonitor.cc
+  NVMeofGwMon.cc
+  NVMeofGwMap.cc
   ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
   ../osd/OSDCap.cc

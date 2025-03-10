@@ -1,0 +1,34 @@
+roles:
+- - client.0 # initiator
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.1
+  - ceph.nvmeof.nvmeof.a
+- - host.b
+  - mon.b
+  - osd.2
+  - osd.3
+  - osd.4
+  - client.2
+  - ceph.nvmeof.nvmeof.b
+- - host.c
+  - mon.c
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.3
+  - ceph.nvmeof.nvmeof.c
+- - host.d
+  - client.4
+  - ceph.nvmeof.nvmeof.d
+
+
+overrides:
+  ceph:
+    conf:
+      mon:
+        # cephadm can take up to 5 minutes to bring up remaining mons
+        mon down mkfs grace: 300
