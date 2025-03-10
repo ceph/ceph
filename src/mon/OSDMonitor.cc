@@ -8867,13 +8867,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
     if (val == "true" || (interr.empty() && n == 1)) {
       ErasureCodeInterfaceRef erasure_code;
-      unsigned int k, m, total;
+      unsigned int k, m;
       stringstream tmp;
       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
       if (err == 0) {
         k = erasure_code->get_data_chunk_count();
         m = erasure_code->get_coding_chunk_count();
-        total = erasure_code->get_chunk_count();
       } else {
         ss << "get_erasure_code failed: " << tmp.str();
         return -EINVAL;
