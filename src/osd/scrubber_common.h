@@ -6,11 +6,17 @@
 #include "common/ceph_time.h"
 #include "common/fmt_common.h"
 #include "common/scrub_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/types.h"
 #include "messages/MOSDScrubReserve.h"
 #include "os/ObjectStore.h"
 
 #include "OpRequest.h"
+
+#include <iosfwd>
+#include <set>
+#include <string>
+#include <string_view>
 
 namespace ceph {
 class Formatter;

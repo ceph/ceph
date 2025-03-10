@@ -15,11 +15,15 @@
  * try and bench on a pool you don't have permission to access
  * it will just loop forever.
  */
+
+#include "obj_bencher.h"
 #include "include/compat.h"
-#include <pthread.h>
 #include "common/ceph_mutex.h"
 #include "common/Clock.h"
-#include "obj_bencher.h"
+
+#include <iomanip>
+
+#include <pthread.h>
 
 using std::ostream;
 using std::cerr;
