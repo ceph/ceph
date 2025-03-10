@@ -1428,7 +1428,13 @@ struct ReplicationConfiguration {
     disabled_group.id = disabled_group_id;
     disabled_group.status = rgw_sync_policy_group::Status::ALLOWED; /* not enabled, not forbidden */
 
+    std::unordered_set<int32_t> priorities; // used to check for duplicates
     for (auto& rule : rules) {
+      if (!priorities.insert(rule.priority).second) {
+        s->err.message = fmt::format("Found duplicate priority {}.", rule.priority);
+        return -EINVAL;
+      }
+
       rgw_sync_bucket_pipes pipe;
       bool enabled;
       int r = rule.to_sync_policy_pipe(s, driver, &pipe, &enabled);
