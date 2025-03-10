@@ -5,6 +5,12 @@ import threading
 import functools
 import os
 import json
+import base64
+import warnings
+from kubernetes.client.exceptions import ApiException
+from typing import Optional, Dict
+from kubernetes.client.exceptions import ApiException
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
@@ -81,6 +87,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             type='str',
             default='local',
             desc='storage class name for LSO-discovered PVs',
+        ),
+        Option(
+            'prometheus_tls_secret_name',
+            type='str',
+            default='rook-ceph-prometheus-server-tls',
+            desc='name of tls secret in k8s for prometheus',
+        ),
+        Option(
+            'dashboard_tls_secret_name',
+            type='str',
+            default='rook-ceph-dashboard-server-tls',
+            desc='name of tls secret in k8s for dashboard',
         ),
     ]
 
@@ -639,3 +657,38 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict[Any, Any]:
         return {}
+
+    # Retry decorator for handling transient Kubernetes API failures
+    @retry(
+        stop=stop_after_attempt(7),  # Retry up to 7 times
+        wait=wait_exponential(multiplier=2, min=1, max=60),  # Exponential backoff (1s, 2s, 4s, 8s... 60)
+        retry=retry_if_exception_type(ApiException),  # Retry only if an API error occurs
+        reraise=True  # Re-raise the last exception if all retries fail
+    )
+    def fetch_k8s_secret(self, secret_name: str):
+        """Fetch Kubernetes secret with retries."""
+        return self._k8s_CoreV1_api.read_namespaced_secret(secret_name, self._rook_env.namespace)
+
+    @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        api_response = None
+        cert, key = "", ""
+        supported_modules = ['dashboard', 'prometheus']
+        if module_name not in supported_modules:
+            raise orchestrator.OrchestratorError(f'Unsupported module {module_name}. Supported module are: {supported_modules}')
+
+        secret_name = self.get_module_option(f'{module_name}_tls_secret_name')
+        try:
+            api_response = self.fetch_k8s_secret(secret_name)
+        except ApiException as e:
+            raise orchestrator.OrchestratorError(f'Unable to get certificates for {module_name}, error: {e}')
+
+        if api_response is None:
+            raise orchestrator.OrchestratorError(f'Unable to get certificates for {module_name}')
+        else:
+            cert = base64.b64decode(api_response.data.get('tls.crt','')).decode('utf-8')
+            key = base64.b64decode(api_response.data.get('tls.key', '')).decode('utf-8')
+            if cert == "" or key == "":
+                raise orchestrator.OrchestratorError(f'Unable to parse certificates for {module_name} module')
+
+        return {'cert': cert, 'key': key}
