@@ -24,6 +24,7 @@
 class MMonMap final : public Message {
 public:
   ceph::buffer::list monmapbl;
+  entity_addrvec_t peer_addrs;
 
   MMonMap() : Message{CEPH_MSG_MON_MAP} { }
   explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {

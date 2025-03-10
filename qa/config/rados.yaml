@@ -9,5 +9,10 @@ overrides:
         bluestore zero block detection: true
         osd mclock override recovery settings: true
         osd mclock profile: high_recovery_ops
+        debug osd: 20
+        debug ms: 20
+        debug monc: 30
+        debug auth: 20
+        debug cephx: 30
       mon:
         mon scrub interval: 300
