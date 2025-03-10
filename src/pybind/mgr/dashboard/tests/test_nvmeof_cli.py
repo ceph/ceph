@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from mgr_module import CLICommand, HandleCommandResult
-
 from ..services.nvmeof_cli import NvmeofCLICommand
 
 

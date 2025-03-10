@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Annotated
 
 import cherrypy
 from orchestrator import OrchestratorError
@@ -14,6 +14,8 @@ from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
     RESTController, UIRouter
+from ceph_argparse import CephSizeBytes
+
 
 logger = logging.getLogger(__name__)
 
@@ -365,8 +367,8 @@ else:
             rbd_image_name: str,
             rbd_pool: str = "rbd",
             create_image: Optional[bool] = True,
-            size: Optional[int] = 1024,
-            rbd_image_size: Optional[int] = None,
+            size: Optional[int] = None,
+            rbd_image_size: Optional[Annotated[int, CephSizeBytes()]] = None,
             trash_image: Optional[bool] = False,
             block_size: int = 512,
             load_balancing_group: Optional[int] = None,
