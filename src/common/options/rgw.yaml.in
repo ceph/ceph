@@ -2864,12 +2864,56 @@ options:
   with_legacy: true
 # extra keys that may be used for aws:kms
 # defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
+- name: rgw_crypt_s3_kms_cache_enabled
+  type: bool
+  level: advanced
+  desc: Enable SSE-KMS encryption key cache.
+  default: false
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_crypt_s3_kms_cache_max_size
+  type: uint
+  level: advanced
+  desc: Maximum number of SSE-KMS secrets cached.
+    Each key needs 32 byte (AES-256) + overhead in memory
+  default: 128
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_crypt_s3_kms_cache_ttl
+  type: uint
+  level: advanced
+  desc: Time in seconds after which the KMS cache evicts entries. Set to 0 to disable.
+  services:
+  - rgw
+  with_legacy: true
+  default: 60
+- name: rgw_crypt_s3_kms_cache_secure_memory
+  type: str
+  enum_values:
+  - linux_kernel_keystore
+  - plain
+  level: advanced
+  desc: Choose the way the KMS secrets cache stores secrets in memory
+  services:
+  - rgw
+  with_legacy: true
+  default: plain
 - name: rgw_crypt_s3_kms_encryption_keys
   type: str
   level: dev
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_s3_kms_testing_delay
+  type: uint
+  level: dev
+  desc: Add additional delay in milliseconds to the 'testing' KMS key retrieval.
+  services:
+  - rgw
+  with_legacy: true
+  default: 0
 - name: rgw_crypt_vault_auth
   type: str
   level: advanced

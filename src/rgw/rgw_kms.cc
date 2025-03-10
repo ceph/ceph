@@ -5,7 +5,11 @@
  * Server-side encryption integrations with Key Management Systems (SSE-KMS)
  */
 
+#include <keyutils.h>
 #include <sys/stat.h>
+#include "common/ceph_crypto.h"
+#include "common/web_cache.h"
+#include "include/ceph_assert.h"
 #include "include/str_map.h"
 #include "common/safe_io.h"
 #include "rgw/rgw_crypt.h"
@@ -16,6 +20,13 @@
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <chrono>
+#include <optional>
+#include <random>
+#include <system_error>
+#include <thread>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
 
@@ -1087,11 +1098,123 @@ static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 }
+
 class KMSContext : public SSEContext {
-  CephContext *cct;
-public:
-  KMSContext(CephContext*_cct) : cct{_cct} {};
-  ~KMSContext() override {};
+  CephContext* cct;
+
+ public:
+  struct CachedSecret {
+    virtual ~CachedSecret() = default;
+    virtual void read(std::string& out) const = 0;
+  };
+
+  struct KernelKeyringSecret : public CachedSecret {
+    size_t len;
+    key_serial_t serial;
+    KernelKeyringSecret(const std::string& key, const std::string& secret)
+        : len(secret.size()) {
+      serial = ::add_key(
+          "user", key.c_str(), secret.c_str(), secret.size(),
+          KEY_SPEC_PROCESS_KEYRING);
+      // TODO(irq0) error handling
+      ceph_assertf(serial != -1, "add_key(3): %d errno:%d error:%s", serial, errno, strerror(errno));
+    }
+
+    void read(std::string& out) const {
+      out.clear();
+      out.resize(len);
+      const auto ret = ::keyctl_read(serial, &out[0], out.size());
+      // TODO(irq0) error handling
+      ceph_assertf(ret == len, "keyctl_read(3): %d errno:%d error:%s", ret, errno, strerror(errno));
+    }
+
+    ~KernelKeyringSecret() override {
+      const auto ret = ::keyctl_invalidate(serial);
+      // TODO(irq0) error handling
+      ceph_assertf(ret == 0, "keyctl_invalidate(3): %d errno:%d error:%s", ret, errno, strerror(errno));
+    }
+  };
+
+  struct PlainSecret : public CachedSecret {
+    std::string _secret;
+    PlainSecret(const std::string& secret) : _secret(secret) {}
+
+    void read(std::string& out) const { out = _secret; }
+
+    ~PlainSecret() override {
+      ::ceph::crypto::zeroize_for_security(_secret.data(), _secret.length());
+    }
+  };
+
+  using KMSSecretCache = webcache::WebCache<std::string, CachedSecret>;
+  KMSContext(CephContext* _cct) : cct{_cct} {};
+  ~KMSContext() override = default;
+
+  static KMSSecretCache& secrets_cache(CephContext* cct) {
+    static std::once_flag initialized;
+    static std::unique_ptr<webcache::WebCache<std::string, CachedSecret>>
+        instance;
+    static std::jthread ttl_reaper;
+    std::call_once(initialized, [&]() {
+      ldout(cct, 10)
+          << fmt::format(
+                 "Initializing SSE-KMS cache of size {} with TTL reaper {}",
+                 cct->_conf->rgw_crypt_s3_kms_cache_max_size,
+                 (cct->_conf->rgw_crypt_s3_kms_cache_ttl > 0)
+                     ? "enabled (" +
+                           std::to_string(
+                               cct->_conf->rgw_crypt_s3_kms_cache_ttl) +
+                           "s)"
+                     : "disabled")
+          << dendl;
+      if (cct->_conf->rgw_crypt_s3_kms_cache_enabled) {
+        instance =
+            std::make_unique<webcache::WebCache<std::string, CachedSecret>>(
+	    cct, "kms-cache", cct->_conf->rgw_crypt_s3_kms_cache_max_size);
+        if (cct->_conf->rgw_crypt_s3_kms_cache_ttl) {
+          ttl_reaper = webcache::make_ttl_reaper(
+              *instance,
+              std::chrono::seconds(cct->_conf->rgw_crypt_s3_kms_cache_ttl));
+        }
+      }
+    });
+    return *instance;
+  }
+
+  static std::shared_ptr<CachedSecret> wrap_secret(
+      CephContext* cct, const std::string& key, std::string&& secret) {
+    static std::once_flag initialized;
+    static std::function<CachedSecret*(
+        const std::string& key, const std::string& secret)>
+        factory;
+    std::call_once(initialized, [&]() {
+      if (cct->_conf->rgw_crypt_s3_kms_cache_secure_memory == "plain") {
+        factory = [](const std::string& key, const std::string& secret) {
+          return new PlainSecret(secret);
+        };
+      } else if (
+          cct->_conf->rgw_crypt_s3_kms_cache_secure_memory ==
+          "linux_kernel_keystore") {
+        factory = [](const std::string& key, const std::string& secret) {
+          return new KernelKeyringSecret(key, secret);
+        };
+      } else {
+        ceph_abort_msgf(
+            "unsupported secure memory option %s",
+            cct->_conf->rgw_crypt_s3_kms_cache_secure_memory.c_str());
+  }
+    });
+    auto result = std::shared_ptr<CachedSecret>(factory(key, secret));
+    ::ceph::crypto::zeroize_for_security(secret.data(), secret.length());
+    return result;
+  }
+
+  bool cache_enabled() { return cct->_conf->rgw_crypt_s3_kms_cache_enabled; }
+
+  void clear_cache() {
+    secrets_cache(cct).clear();
+  }
+
   const std::string & backend() override {
     return cct->_conf->rgw_crypt_s3_kms_backend;
   };
@@ -1180,25 +1303,80 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
-  if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
-    return get_actual_key_from_barbican(dpp, key_id, y, actual_key);
-  }
+  const auto fetch = [&](std::string& out_secret) {
+    if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
+      return get_actual_key_from_barbican(dpp, key_id, y, out_secret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
-    return reconstitute_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
+      return reconstitute_actual_key_from_vault(
+          dpp, kctx, attrs, y, out_secret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
-    return get_actual_key_from_kmip(dpp, key_id, y, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
+      return get_actual_key_from_kmip(dpp, key_id, y, out_secret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
-    std::string key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
-    return get_actual_key_from_conf(dpp, key_id, key_selector, actual_key);
-  }
+    if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
+      std::string key_selector =
+          get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+      std::this_thread::sleep_for(std::chrono::milliseconds(
+          dpp->get_cct()->_conf->rgw_crypt_s3_kms_testing_delay));
+      return get_actual_key_from_conf(dpp, key_id, key_selector, out_secret);
+    }
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: "
+                      << kms_backend << dendl;
+    return -EINVAL;
+  };
 
-  ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: " << kms_backend << dendl;
-  return -EINVAL;
+  if (kctx.cache_enabled()) {
+    auto future = kctx.secrets_cache(dpp->get_cct()).lookup_or(key_id, [&]() {
+      std::string secret;
+      const int ret = fetch(secret);
+      return KMSContext::KMSSecretCache::Result(
+          kctx.wrap_secret(dpp->get_cct(), key_id, std::move(secret)),
+          std::error_code(ret, std::system_category()));
+    });
+    if (y) {
+      auto& yield = y.get_yield_context();
+      while (true) {
+        // TODO(irq0) integrate this into webcache
+        if (future.wait_for(1ms) == std::future_status::ready) {
+    const auto& result = future.get();
+	  result.value()->read(actual_key);
+    return result.error().value();
+	} else {
+	  auto executor = boost::asio::get_associated_executor(yield);
+          // TODO(irq0) make this configurable
+          const auto wait_time_ms = [&dpp, &kctx]() {
+            if (kctx.secrets_cache(dpp->get_cct()).perf()) {
+              return std::min(
+              std::max(
+                      1UL,
+                      kctx.secrets_cache(dpp->get_cct())
+                           .perf()
+                           ->tget(static_cast<int>(webcache::Metric::fetch_lat))
+                           .to_msec()),
+              100UL);
+            } else {
+              std::random_device rd;
+              std::mt19937 gen(rd());
+              std::uniform_int_distribution<uint64_t> dist(1, 100);
+              return dist(gen);
+            }
+          }();
+          boost::asio::steady_timer timer{
+              executor, std::chrono::milliseconds(wait_time_ms)};
+	}
+      }
+    } else {
+	const auto& result = future.get();
+	result.value()->read(actual_key);
+	return result.error().value();
+    }
+  } else {
+    return fetch(actual_key);
+  }
 }
 
 int make_actual_key_from_kms(const DoutPrefixProvider *dpp,

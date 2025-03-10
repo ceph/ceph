@@ -4,9 +4,11 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "common/ceph_context.h"
+#include "rgw/rgw_perf_counters.h"
 #include "rgw_common.h"
 #define FORTEST_VIRTUAL virtual
 #include "rgw_kms.cc"
+#include "rgw_perf_counters.h"
 
 using ::testing::_;
 using ::testing::Action;
@@ -293,4 +295,122 @@ TEST_F(TestSSEKMS, test_transit_backend_empty_response)
 
   ASSERT_EQ(res, -EINVAL);
   ASSERT_EQ(actual_key, from_base64(""));
+}
+
+class TestSSEKMSWithTestingKMS : public ::testing::Test {
+ protected:
+  const std::unique_ptr<CephContext> cct;
+  const NoDoutPrefix no_dpp{cct.get(), 1};
+  std::map<std::string, bufferlist> attrs = {
+      {RGW_ATTR_CRYPT_KEYID,
+       []() {
+         bufferlist bl;
+         bl.append("foo");
+         return bl;
+       }()},
+      {RGW_ATTR_CRYPT_KEYSEL, []() {
+         // AES_ECB(32*"#").decrypt(32*"*")
+         bufferlist bl;
+         bl.append(
+             "\xc6\xb1/\x12\xdc\xf7"
+             "e"
+             "\xe3;\xea\x14\xa4x\x1f"
+             "bX"
+             "\xc6\xb1/\x12\xdc\xf7"
+             "e"
+             "\xe3;\xea\x14\xa4x\x1f"
+             "bX");
+         return bl;
+       }()}};
+  TestSSEKMSWithTestingKMS() : cct(new CephContext(CEPH_ENTITY_TYPE_ANY)) {
+    cct->_log->start();
+    cct->_conf.set_val("rgw_crypt_s3_kms_backend", RGW_SSE_KMS_BACKEND_TESTING);
+    cct->_conf.set_val(
+        "rgw_crypt_s3_kms_encryption_keys",
+        "foo=IyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyM=");
+    rgw_perf_start(cct.get());
+  }
+
+  void SetUp() override {
+    KMSContext kctx{cct.get()};
+    if (kctx.cache_enabled()) {
+    kctx.clear_cache();
+  }
+  }
+
+  PerfCounters* cache_perf() {
+    PerfCounters* result = nullptr;
+    cct->get_perfcounters_collection()->with_counters(
+        [&](const PerfCountersCollectionImpl::CounterMap& by_path) {
+          for (const auto& i : by_path) {
+            auto& perf_counters = i.second.perf_counters;
+            if (perf_counters->get_name() == "kms-cache") {
+              result = perf_counters;
+              return;
+            }
+          }
+        });
+    return result;
+  }
+
+  void TearDown() override {
+    JSONFormatter f(true);
+    if (PerfCounters* perf = cache_perf(); perf != nullptr) {
+      perf->dump_formatted(&f, false, select_labeled_t::labeled);
+      f.flush(std::cout);
+    }
+  }
+};
+
+TEST_F(
+    TestSSEKMSWithTestingKMS,
+    TestReconstituteActualKeyFromKMSBasicsWithoutCache) {
+  std::string actual_key;
+  const int ret =
+      reconstitute_actual_key_from_kms(&no_dpp, attrs, null_yield, actual_key);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(actual_key, "********************************");
+  ASSERT_EQ(
+      cache_perf(),
+      nullptr);  // no cache perf counters as it wasn't initialized
+  KMSContext kctx{cct.get()};
+  ASSERT_FALSE(kctx.cache_enabled());
+}
+
+TEST_F(
+    TestSSEKMSWithTestingKMS,
+    TestReconstituteActualKeyFromKMSBasicsWithCache) {
+  cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "true");
+  cct->_conf.set_val("rgw_crypt_s3_kms_cache_secure_memory", "linux_kernel_keystore");
+
+  auto do_reconstitue = [&]() {
+    std::string actual_key;
+    const int ret = reconstitute_actual_key_from_kms(
+        &no_dpp, attrs, null_yield, actual_key);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(actual_key, "********************************");
+  };
+
+  do_reconstitue();
+  PerfCounters* perfcounter = cache_perf();
+  EXPECT_NE(perfcounter, nullptr);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::hit)), 0);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::miss)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::fetch_get)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::fetch_error)), 0);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::size)), 1);
+
+  do_reconstitue();
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::hit)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::miss)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::fetch_get)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::fetch_error)), 0);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::size)), 1);
+
+  do_reconstitue();
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::hit)), 2);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::miss)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::fetch_get)), 1);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::fetch_error)), 0);
+  EXPECT_EQ(perfcounter->get(static_cast<int>(webcache::Metric::size)), 1);
 }
