@@ -3604,9 +3604,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (formatter) {
       formatter->open_object_section("object");
       formatter->dump_string("name", *obj_name);
+      formatter->dump_int("seq", ls.seq);
       formatter->open_array_section("clones");
     } else {
-      cout << prettify(*obj_name) << ":" << std::endl;
+      cout << prettify(*obj_name) << " (seq:" << ls.seq << "):" << std::endl;
       cout << "cloneid	snaps	size	overlap" << std::endl;
     }
 

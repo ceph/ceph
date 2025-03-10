@@ -147,6 +147,12 @@ class ceph_lock_state_t;
 // ========================================================
 // client interface
 
+struct scan_state_t {
+  int fd1;
+  int fd2;
+  uint64_t index;
+};
+
 struct dir_result_t {
   static const int SHIFT = 28;
   static const int64_t MASK = (1 << SHIFT) - 1;
@@ -368,6 +374,12 @@ public:
   struct dirent * readdir(dir_result_t *d);
   int readdir_r(dir_result_t *dirp, struct dirent *de);
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct ceph_statx *stx, unsigned want, unsigned flags, Inode **out);
+
+  int file_blockdiff_init_state(const char *path1, const char *path2,
+				const UserPerm &perms, struct scan_state_t **state);
+  int file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
+		     std::vector<std::pair<uint64_t,uint64_t>> *blocks);
+  int file_blockdiff_finish(struct scan_state_t *state);
 
   /*
    * Get the next snapshot delta entry.

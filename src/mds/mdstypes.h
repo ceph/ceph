@@ -1042,4 +1042,17 @@ struct EstimatedReplayTime {
   void print(std::ostream& out);
 };
 
+struct BlockDiff {
+  int rval;
+  uint64_t scan_idx;
+  interval_set<uint64_t> blocks;
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<BlockDiff*>& ls);
+  void print(std::ostream& out) const;
+};
+WRITE_CLASS_ENCODER(BlockDiff);
+
 #endif

@@ -1049,3 +1049,44 @@ void EstimatedReplayTime::print(std::ostream& out) {
   out << "replay: " << percent_complete << "% complete - elapsed time: "
       << elapsed_time << ", estimated time remaining: " << estimated_time;
 }
+
+/*
+ * file block diffs
+ */
+void BlockDiff::encode(bufferlist& bl) const {
+  using ceph::encode;
+  ENCODE_START(1, 1, bl);
+  encode(rval, bl);
+  encode(scan_idx, bl);
+  encode(blocks, bl);
+  ENCODE_FINISH(bl);
+}
+
+void BlockDiff::decode(bufferlist::const_iterator &p) {
+  using ceph::decode;
+  DECODE_START(1, p);
+  decode(rval, p);
+  decode(scan_idx, p);
+  decode(blocks, p);
+  DECODE_FINISH(p);
+}
+
+void BlockDiff::dump(Formatter *f) const {
+  f->dump_int("rval", rval);
+  f->dump_unsigned("scan_idx", scan_idx);
+  f->dump_stream("blocks") << blocks;
+}
+
+void BlockDiff::generate_test_instances(std::list<BlockDiff*>& ls)
+{
+  ls.push_back(new BlockDiff());
+  ls.push_back(new BlockDiff());
+  ls.back()->rval = 0;
+  ls.back()->scan_idx = 1;
+  ls.back()->blocks.union_insert(0, 200);
+}
+
+void BlockDiff::print(ostream& out) const
+{
+  out << "{rval: " << rval << ", scan_idx=" << scan_idx << ", blocks=" << blocks << "}";
+}
