@@ -15,6 +15,9 @@
 #define ptr_value(_ptr) ((uint64_t)(uintptr_t)(_ptr))
 #define value_ptr(_val) ((void *)(uintptr_t)(_val))
 
+#define MAX_CLIENTS 1000
+#define MAX_INODES  (50 * 1024 * 1024) / 4248
+
 typedef struct _proxy_random {
 	uint64_t mask;
 	uint64_t factor;
