@@ -1165,7 +1165,11 @@ void BlueFS::umount(bool avoid_compact)
   _close_writer(log.writer);
   log.writer = NULL;
   log.t.clear();
-
+  // if we umount with pending release, we can possibly mount again
+  // with pending release, and will release something that is not allocated
+  for (auto& d: dirty.pending_release) {
+    d.clear();
+  }
   vselector.reset(nullptr);
   _stop_alloc();
   nodes.file_map.clear();
