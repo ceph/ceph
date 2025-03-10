@@ -8444,6 +8444,27 @@ void MDCache::dispatch(const cref_t<Message> &m)
   }
 }
 
+int MDCache::load_referent_inodes(CInode *in, MDSContextFactory& cf, bool ignore_error)
+{
+  ceph_assert(in);
+  if (!in->get_inode()->referent_inodes.empty())
+    dout(12) << __func__ << " loading referent inodes of primary real inode of hardlink " << *in << dendl;
+  else
+    return 0;
+
+  for (const auto& ri : in->get_inode()->referent_inodes) {
+    dout(12) << __func__ << " loading referent inode " << std::hex << ri << dendl;
+    CInode *cur_ref_in = get_inode(ri);
+    if (!cur_ref_in) {
+      dout(7) << __func__ << " referent inode is not loaded, open referent inode " << std::hex << ri << dendl;
+      open_remote_referent(ri, cf.build(), false, ignore_error);
+      return 1;
+    }
+    dout(12) << __func__ << " referent inode found in memory " << std::hex << ri << dendl;
+  }
+  return 0;
+}
+
 /**
  * In 246f647566095c173e5e0e54661696cea230f96e, an updated rule for locking order
  * was established (differing from past strategies):
@@ -8739,6 +8760,10 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         }
       }
 
+      // Load referent inodes
+      if (load_referent_inodes(in, cf, true) != 0)
+	return 1;
+
       cur = in;
 
       if (rdlock_snap && !(want_dentry && !want_inode && depth == path.depth() - 1)) {
@@ -8885,6 +8910,9 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     if (want_dentry && !want_inode) {
       return -ENOENT;
     }
+    // Load referent inodes
+    if (load_referent_inodes(cur, cf, true) != 0)
+      return 1;
     target_inode = cur;
   }
 
@@ -9026,6 +9054,40 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
     open_remote_dentry(dn, projected, new C_MDS_RetryRequest(this, mdr));
     return 0;
   }
+}
+
+struct C_MDC_OpenRefInode : public MDCacheContext {
+  inodeno_t ino;
+  MDSContext *onfinish;
+  bool want_xlocked;
+  bool ignore_error;
+  C_MDC_OpenRefInode(MDCache *m, inodeno_t i, MDSContext *f, bool wx, bool ie) :
+    MDCacheContext(m), ino(i), onfinish(f), want_xlocked(wx), ignore_error(ie) {
+  }
+  void finish(int r) override {
+    mdcache->_open_remote_referent_finish(ino, onfinish, want_xlocked, ignore_error, r);
+  }
+};
+
+void MDCache::_open_remote_referent_finish(inodeno_t ino, MDSContext *fin,
+					   bool want_xlocked, bool ignore_error, int r)
+{
+  if (r < 0) {
+    dout(0) << __func__ << " referent inode coudn't be opened  " << ino << " error=" << r << dendl;
+    if (ignore_error && r == -ESTALE) {
+      dout(0) << __func__ << " referent inode coudn't be opened, probably rollback happening, ignore " << ino << dendl;
+    } else {
+      ceph_abort();
+    }
+  }
+  fin->complete(r < 0 ? r : 0);
+}
+
+void MDCache::open_remote_referent(inodeno_t ino, MDSContext *fin, bool want_xlocked, bool ignore_error)
+{
+  dout(10) << "open_remote_referent " << ino << dendl;
+  open_ino(ino, -1,
+      new C_MDC_OpenRefInode(this, ino, fin, want_xlocked, ignore_error), true, want_xlocked); // backtrace
 }
 
 struct C_MDC_OpenRemoteDentry : public MDCacheContext {
