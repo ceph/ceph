@@ -44,16 +44,25 @@ Create a volume by running the following command:
 
 .. prompt:: bash #
 
-   ceph fs volume create <vol_name> [placement]
+   ceph fs volume create <vol_name> [placement] [--data-pool <data-pool-name>] [--meta-pool <metadata-pool-name>]
 
-This creates a CephFS file system and its data and metadata pools. This command
-can also deploy MDS daemons for the filesystem using a Ceph Manager orchestrator
-module (for example Rook). See :doc:`/mgr/orchestrator`.
+This creates a CephFS file system and its data and metadata pools. Alternately,
+if data pool and/or metadata pool needed for creating a CephFS volume already
+exist, these pool names can be passed to this command so that it create the
+volume using these pools. This command can also deploy MDS daemons for the
+filesystem using a Ceph Manager orchestrator module (for example Rook). See
+:doc:`/mgr/orchestrator`.
 
 ``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
 optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
 the MDS. See also :ref:`orchestrator-cli-cephfs` for more examples on
 placement.
+
+This command can also accept a comma-separated list of data pools names::
+
+    ceph fs volume create <vol_name> --data-pool <data-pool-1>,<data-pool-2>,<data-pool-3>
+
+.. note:: If a specified pool does not exist, it will be created.
 
 .. note:: Specifying placement via a YAML file is not supported through the
           volume interface.
