@@ -10,20 +10,25 @@
 struct cls_refcount_get_op {
   std::string tag;
   bool implicit_ref;
+  bool must_exist;
 
-  cls_refcount_get_op() : implicit_ref(false) {}
+  cls_refcount_get_op() : implicit_ref(false), must_exist(true) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(tag, bl);
     encode(implicit_ref, bl);
+    encode(must_exist, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(tag, bl);
     decode(implicit_ref, bl);
+    if (struct_v >= 2) {
+      decode(must_exist, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
