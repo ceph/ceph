@@ -90,6 +90,10 @@ class Ceph(ContainerDaemonForm):
                 # but that doesn't seem to persist in the object after it's passed
                 # in further function calls
                 ctr.args = ctr.args + ['--set-crush-location', c_loc]
+        if self.identity.daemon_type == 'rgw' and config_json is not None:
+            if 'rgw_exit_timeout_secs' in config_json:
+                stop_timeout = config_json['rgw_exit_timeout_secs']
+                ctr.args = ctr.args + [f'--stop-timeout={stop_timeout}']
         return ctr
 
     _uid_gid: Optional[Tuple[int, int]] = None
