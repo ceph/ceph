@@ -15646,22 +15646,10 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
-
-
+  req->set_alternate_name(wdr.alternate_name);
+  wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
   req->set_filepath(wdr.getpath());
   req->set_inode(wdr.diri);
-#if 0
-FSCRYPT
-  filepath path;
-  Dentry *de;
-  int r = _prepare_req_path(dir, req, path, name, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  req->set_inode(dir);
-#endif
   req->head.args.mknod.rdev = rdev;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -15793,26 +15781,7 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
   req->set_filepath(wdr.getpath());
   req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
   req->set_inode(wdr.diri);
-#if 0
-FSCRYPT
-  req->set_dentry(wdr.dn);
-  filepath path;
-  Dentry *de;
-
-  int r = _prepare_req_path(dir, req, path, name, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  if (de->alternate_name.empty()) {
-    req->set_alternate_name(std::move(alternate_name));
-  } else {
-    req->set_alternate_name(de->alternate_name);
-  }
-  dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
-  req->set_inode(dir);
-#endif
+  wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
 
   req->head.args.open.stripe_unit = stripe_unit;
@@ -15902,26 +15871,7 @@ int Client::_mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& p
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
-#if 0
-FSCRYPT
-  filepath path;
-  Dentry *de;
-  int r = _prepare_req_path(dir, req, path, name, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  req->set_inode(dir);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  if (de->alternate_name.empty()) {
-    req->set_alternate_name(std::move(alternate_name));
-  } else {
-    req->set_alternate_name(de->alternate_name);
-  }
-  dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
-#endif
+  wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 
   mode |= S_IFDIR;
   bufferlist bl;
@@ -16083,47 +16033,6 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_dentry(wdr.dn);
-#if 0
-FSCRYPT
-  filepath path;
-  Dentry *de;
-  int r = _prepare_req_path(dir, req, path, name, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  req->fscrypt_file = dir->fscrypt_file;
-
-  dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
-  auto fscrypt_ctx = fscrypt->init_ctx(req->fscrypt_auth);
-
-  if (fscrypt_ctx) {
-    auto fscrypt_denc = fscrypt->get_fname_denc(fscrypt_ctx, nullptr, true);
-
-    string enc_target;
-    int r = fscrypt_denc->get_encrypted_symlink(target,&enc_target);
-    if (r < 0) {
-      delete req;
-      return r;
-    }
-    req->set_string2(enc_target.c_str());
-  } else {
-    req->set_string2(target); 
-  }
-
-  if (de->alternate_name.empty()) {
-    req->set_alternate_name(std::move(alternate_name));
-  } else {
-    req->set_alternate_name(de->alternate_name);
-  }
-
-  req->set_inode(dir);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-
-  req->set_dentry(de);
-#endif
 
   int res = make_request(req, perms, inp);
 
@@ -16221,20 +16130,6 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 
   req->set_filepath(wdr.getpath());
   req->set_dentry(wdr.dn);
-#if 0
-FSCRYPT
-  filepath path;
-  Dentry *de;
-  int r = _prepare_req_path(dir, req, path, name, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  InodeRef otherin;
-  Inode *in;
-  req->set_dentry(de);
-#endif
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -16298,39 +16193,10 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool che
     req->dentry_drop = CEPH_CAP_FILE_SHARED;
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
     req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
-#if 0
-FSCRYPT
-  filepath path;
-  Dentry *de;
-  int r = _prepare_req_path(dir, req, path, name, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  req->set_inode(dir);
-
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
-  req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
-
-  InodeRef in;
-
-  if (op == CEPH_MDS_OP_RMDIR)
-    req->set_dentry(de);
-  else
-    de->get();
-
-  int res = _lookup(dir, name, 0, &in, perms);
-  if (res < 0) {
-    put_request(req);
-    return res;
-#endif
   }
 
   req->set_inode(wdr.diri);
   req->set_filepath(wdr.getpath());
-
 
   if (op == CEPH_MDS_OP_RMSNAP) {
     /* note: wdr.dn anchors the dentry ref */
@@ -16465,31 +16331,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   req->set_filepath(wdr_to.getpath());
   req->set_filepath2(wdr_from.getpath());
   req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
-#if 0
-FSCRYPT
-  filepath to;
-  Dentry *de;
-  int r = _prepare_req_path(todir, req, to, toname, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  filepath from;
-  Dentry *oldde;
-  r = _prepare_req_path(fromdir, req, from, fromname, false, &oldde);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-  req->set_filepath2(from);
-
-  if (de->alternate_name.empty()) {
-    req->set_alternate_name(std::move(alternate_name));
-  } else {
-    req->set_alternate_name(de->alternate_name);
-  }
-#endif
+  wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
@@ -16600,26 +16442,8 @@ int Client::_link(Inode *diri_from, const char* path_from, Inode* diri_to, const
 
   req->set_filepath(wdr_to.getpath());
   req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
+  wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
   req->set_filepath2(wdr_from.getpath());
-#if 0
-FSCRYPT
-  filepath path;
-  Dentry *de;
-  int r = _prepare_req_path(dir, req, path, newname, true, &de);
-  if (r < 0) {
-    delete req;
-    return r;
-  }
-
-  if (de->alternate_name.empty()) {
-    req->set_alternate_name(std::move(alternate_name));
-  } else {
-    req->set_alternate_name(de->alternate_name);
-  }
-  filepath existing(in->ino);
-  req->set_filepath2(existing);
-#endif
-
   req->set_inode(wdr_to.diri);
   req->inode_drop = CEPH_CAP_FILE_SHARED;
   req->inode_unless = CEPH_CAP_FILE_EXCL;
