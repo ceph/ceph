@@ -383,7 +383,7 @@ class Cloner(AsyncJobs):
                         jobs = [j[0] for j in self.jobs[volname]]
                         with lock_timeout_log(self.lock):
                             if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
-                                logging.debug("Cancelling pending job {0}".format(clone_job))
+                                log.debug("Cancelling pending job {0}".format(clone_job))
                                 # clone has not started yet -- cancel right away.
                                 self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
                                 return
