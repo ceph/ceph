@@ -1442,7 +1442,7 @@ NFS_CORE_PARAM {
             assert str(e) == 'To configure bandwidth control for export, you must first enable bandwidth control at the cluster level for foo.'
         bw_obj = QOSBandwidthControl(True, clust_combined_bw_ctrl, **clust_params)
         cluster.enable_cluster_qos_bw(self.cluster_id, qos_type, bw_obj)
-
+        clust_qos_conf = {'cluster_enable_qos': True, 'cluster_enable_bw_control': True, 'cluster_enable_iops_control': False}
         # set export qos
         try:
             bw_obj = QOSBandwidthControl(True, export_combined_bw_ctrl, **export_params)
@@ -1460,10 +1460,12 @@ NFS_CORE_PARAM {
         expected_out = {"enable_bw_control": True, "enable_qos": True, "combined_rw_bw_control": export_combined_bw_ctrl}
         for key in export_params:
             expected_out[QOSParams[key].value] = bytes_to_human(with_units_to_int(export_params[key]))
+        expected_out.update(clust_qos_conf)
         assert out == expected_out
         export_mgr.disable_export_qos_bw(self.cluster_id, '/cephfs_a/')
         out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
-        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False}
+        clust_qos_conf.update({"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False})
+        assert out == clust_qos_conf
 
 
     @pytest.mark.parametrize("qos_type, clust_combined_bw_ctrl, clust_params", [
@@ -1533,7 +1535,7 @@ NFS_CORE_PARAM {
             assert str(e) == 'To configure IOPS control for export, you must first enable IOPS control at the cluster level foo.'
         ops_obj = QOSOpsControl(True, **clust_params)
         cluster.enable_cluster_qos_ops(self.cluster_id, qos_type, ops_obj)
-
+        clust_qos_conf = {'cluster_enable_qos': True, 'cluster_enable_bw_control': False, 'cluster_enable_iops_control': True}
         # set export qos
         try:
             ops_obj = QOSOpsControl(True, **export_params)
@@ -1548,10 +1550,12 @@ NFS_CORE_PARAM {
         expected_out = {"enable_iops_control": True, "enable_qos": True}
         for key in export_params:
             expected_out[QOSParams[key].value] = export_params[key]
+        expected_out.update(clust_qos_conf)
         assert out == expected_out
         export_mgr.disable_export_qos_ops(self.cluster_id, '/cephfs_a/')
         out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
-        assert out == {"enable_iops_control": False, "enable_qos": False}
+        clust_qos_conf.update({"enable_iops_control": False, "enable_qos": False})
+        assert out == clust_qos_conf
 
     @pytest.mark.parametrize("qos_type, clust_params", [
         (QOSType['PerShare'], {'max_export_iops': 10000}),
@@ -1646,6 +1650,7 @@ NFS_CORE_PARAM {
             export_mgr.enable_export_qos_bw(self.cluster_id, '/cephfs_a/', bw_obj)
             ops_obj = QOSOpsControl(True, **export_ops_params)
             export_mgr.enable_export_qos_ops(self.cluster_id, '/cephfs_a/', ops_obj)
+            clust_qos_conf = {'cluster_enable_qos': True, 'cluster_enable_bw_control': True, 'cluster_enable_iops_control': True}
         except Exception:
             req = QOS_REQ_BW_PARAMS['combined_bw_disabled'][qos_type.name]
             if sorted(export_bw_params.keys()) != sorted(req):
@@ -1665,16 +1670,19 @@ NFS_CORE_PARAM {
             ops_out[QOSParams[key].value] = export_ops_params[key]
         expected_out.update(bw_out)
         expected_out.update(ops_out)
+        expected_out.update(clust_qos_conf)
         assert out == expected_out
         # disable bandwidth control of export
         export_mgr.disable_export_qos_bw(self.cluster_id, '/cephfs_a/')
         out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
         ops_out.update({"enable_bw_control": False, "enable_qos": True, "combined_rw_bw_control": False, "enable_iops_control": True})
+        ops_out.update(clust_qos_conf)
         assert out == ops_out
         # disable ops control of export
         export_mgr.disable_export_qos_ops(self.cluster_id, '/cephfs_a/')
         out = export_mgr.get_export_qos(self.cluster_id, '/cephfs_a/')
-        assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}
+        clust_qos_conf.update({"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False})
+        assert out == clust_qos_conf
 
     @pytest.mark.parametrize("qos_type, clust_bw_params, clust_ops_params", [
         # positive TCs
