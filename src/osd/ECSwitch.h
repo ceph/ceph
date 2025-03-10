@@ -40,7 +40,8 @@ public:
     ObjectStore *store,
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width) :
+    uint64_t stripe_width,
+    ECExtentCache::LRU &lru) :
     PGBackend(cct, pg, store, coll, ch),
     legacy(pg, cct, ec_impl, stripe_width, this),
     optimized(pg, cct, ec_impl, stripe_width, this),
@@ -291,9 +292,10 @@ public:
     return legacy.auto_repair_supported();
   }
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final
-  {
-    if (is_optimized()) {
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t shard_id) const final {
+    if (is_optimized())
+    {
       return optimized.be_get_ondisk_size(logical_size);
     }
     return legacy.be_get_ondisk_size(logical_size);
@@ -347,7 +349,7 @@ public:
   }
 
   uint64_t
-  object_size_to_shard_size(const uint64_t size, int shard) const override
+  object_size_to_shard_size(const uint64_t size, shard_id_t shard) const override
   {
     if (is_optimized()) {
       return optimized.object_size_to_shard_size(size, shard);
