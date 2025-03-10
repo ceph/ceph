@@ -1367,7 +1367,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_prometheus_exporter: Optional[bool] = True,
                  prometheus_port: Optional[int] = 10008,
                  prometheus_stats_interval: Optional[int] = 10,
-                 bdevs_per_cluster: Optional[int] = 32,
+                 bdevs_per_cluster: Optional[int] = None,
+                 flat_bdevs_per_cluster: Optional[int] = None,
+                 cluster_connections: Optional[int] = None,
                  verify_nqns: Optional[bool] = True,
                  verify_keys: Optional[bool] = True,
                  verify_listener_ip: Optional[bool] = True,
@@ -1503,8 +1505,19 @@ class NvmeofServiceSpec(ServiceSpec):
         self.spdk_ping_interval_in_seconds = spdk_ping_interval_in_seconds
         #: ``ping_spdk_under_lock`` whether or not we should perform SPDK ping under the RPC lock
         self.ping_spdk_under_lock = ping_spdk_under_lock
+        #  spdk to ceph connection mapping
+        #: see https://github.com/ceph/ceph-nvmeof?tab=readme-ov-file#mapping-spdk-bdevs-into-a-ceph-rados-cluster-context
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
+        #: ``flat_bdevs_per_cluster`` number of bdevs per cluster, ignore ANA group
+        self.flat_bdevs_per_cluster = flat_bdevs_per_cluster
+        #: ``cluster_connections`` number of ceph cluster connections
+        self.cluster_connections = cluster_connections
+        # set default only if all spdk alloc stratgies are None (no parameters explicitly defined)
+        if all([self.bdevs_per_cluster is None,
+                   self.flat_bdevs_per_cluster is None,
+                   self.cluster_connections is None]):
+            self.cluster_connections = 32
         #: ``server_key`` gateway server key
         self.server_key = server_key
         #: ``server_cert`` gateway server certificate
@@ -1577,6 +1590,38 @@ class NvmeofServiceSpec(ServiceSpec):
     def get_port_start(self) -> List[int]:
         return [self.port, 4420, self.discovery_port, self.prometheus_port]
 
+    def verify_spdk_ceph_connection_allocation(self) -> None:
+        """
+        Validate that exactly one of bdevs_per_cluster, flat_bdevs_per_cluster, or
+        cluster_connections is defined (not None), and that the defined parameter
+        is a positive integer.
+        see https://github.com/ceph/ceph-nvmeof?tab=readme-ov-file#mapping-spdk-bdevs-into-a-ceph-rados-cluster-context
+
+        Raises:
+            SpecValidationError: If zero or more than one parameter is defined,
+                                or if the defined parameter is not a positive integer.
+        """
+        defined_vars = [
+            ('bdevs_per_cluster', self.bdevs_per_cluster),
+            ('flat_bdevs_per_cluster', self.flat_bdevs_per_cluster),
+            ('cluster_connections', self.cluster_connections)
+        ]
+
+        defined_count = sum(1 for _, value in defined_vars if value is not None)
+
+        if defined_count != 1:
+            raise SpecValidationError(
+                "Exactly one of 'bdevs_per_cluster', 'flat_bdevs_per_cluster', or "
+                "'cluster_connections' must be defined (not None); others must be None. "
+                f"Found {defined_count} defined parameters."
+            )
+
+        # validate the defined parameter
+        for name, value in defined_vars:
+            if value is not None:
+                verify_positive_int(value, name)
+                break  # only one should be defined, so we can stop after validating it
+
     def validate(self) -> None:
         #  TODO: what other parameters should be validated as part of this function?
         super(NvmeofServiceSpec, self).validate()
@@ -1604,9 +1649,7 @@ class NvmeofServiceSpec(ServiceSpec):
                     ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'NOTICE'])
         verify_enum(self.spdk_protocol_log_level, "SPDK protocol log level",
                     ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'NOTICE'])
-        verify_positive_int(self.bdevs_per_cluster, "Bdevs per cluster")
-        if self.bdevs_per_cluster is not None and self.bdevs_per_cluster < 1:
-            raise SpecValidationError("Bdevs per cluster should be at least 1")
+        self.verify_spdk_ceph_connection_allocation()
         verify_non_negative_int(self.qos_timeslice_in_usecs, "QOS timeslice")
 
         verify_non_negative_number(self.spdk_ping_interval_in_seconds, "SPDK ping interval")
