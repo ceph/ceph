@@ -6,7 +6,7 @@ add_executable(unittest-crimson-backfill
   ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc)
 add_ceph_unittest(unittest-crimson-backfill
   --memory 256M --smp 1)
-target_link_libraries(unittest-crimson-backfill crimson GTest::Main)
+target_link_libraries(unittest-crimson-backfill crimson GTest::gtest_main)
 
 add_executable(unittest-seastar-buffer
   test_buffer.cc)
@@ -17,7 +17,7 @@ target_link_libraries(unittest-seastar-buffer crimson)
 add_executable(unittest-seastar-denc
   test_denc.cc)
 add_ceph_unittest(unittest-seastar-denc --memory 256M --smp 1)
-target_link_libraries(unittest-seastar-denc crimson GTest::Main)
+target_link_libraries(unittest-seastar-denc crimson GTest::gtest_main)
 
 add_executable(unittest-seastar-socket test_socket.cc)
 add_ceph_unittest(unittest-seastar-socket
@@ -69,14 +69,14 @@ add_executable(unittest-seastar-lru
   test_lru.cc)
 add_ceph_unittest(unittest-seastar-lru
   --memory 256M --smp 1)
-target_link_libraries(unittest-seastar-lru crimson GTest::Main)
+target_link_libraries(unittest-seastar-lru crimson GTest::gtest_main)
 
 add_executable(unittest-seastar-calc-subsets
     ${PROJECT_SOURCE_DIR}/src/crimson/osd/object_metadata_helper.cc
   test_calc_subsets.cc)
 add_ceph_unittest(unittest-seastar-calc-subsets
   --memory 256M --smp 1)
-target_link_libraries(unittest-seastar-calc-subsets crimson GTest::Main)
+target_link_libraries(unittest-seastar-calc-subsets crimson GTest::gtest_main)
 
 add_executable(unittest-fixed-kv-node-layout
   test_fixed_kv_node_layout.cc)
@@ -100,7 +100,7 @@ add_subdirectory(seastore)
 
 add_library(crimson-gtest STATIC
   gtest_seastar.cc)
-target_link_libraries(crimson-gtest crimson-common GTest::GTest)
+target_link_libraries(crimson-gtest crimson-common GTest::gtest)
 add_library(crimson::gtest ALIAS crimson-gtest)
 
 add_executable(unittest-seastar-errorator
