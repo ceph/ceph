@@ -21,52 +21,61 @@ SET_SUBSYS(seastore_device);
 RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
   int shard_num, size_t journal_size) {
   LOG_PREFIX(RBMDevice::do_primary_mkfs);
-  return stat_device(
-  ).handle_error(
-    mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error stat_device in RBMDevice::do_primary_mkfs"}
-  ).safe_then(
-    [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) {
-    super.block_size = st.block_size;
-    super.size = st.size;
-    super.config = std::move(config);
-    super.journal_size = journal_size;
-    ceph_assert_always(super.journal_size > 0);
-    ceph_assert_always(super.size >= super.journal_size);
-    ceph_assert_always(shard_num > 0);
-
-    std::vector<rbm_shard_info_t> shard_infos(shard_num);
-    for (int i = 0; i < shard_num; i++) {
-      uint64_t aligned_size = 
-	(super.size / shard_num) -
-	((super.size / shard_num) % super.block_size);
-      shard_infos[i].size = aligned_size;
-      shard_infos[i].start_offset = i * aligned_size;
-      assert(shard_infos[i].size > super.journal_size);
-    }
-    super.shard_infos = shard_infos;
-    super.shard_num = shard_num;
-    shard_info = shard_infos[seastar::this_shard_id()];
-    DEBUG("super {} ", super);
-
-    // write super block
-    return open(get_device_path(),
-      seastar::open_flags::rw | seastar::open_flags::dsync
+  check_create_device_ret maybe_create = check_create_device_ertr::now();
+  using crimson::common::get_conf;
+  if (get_conf<bool>("seastore_block_create") && !get_device_path().empty()) {
+    auto size = get_conf<Option::size_t>("seastore_device_size");
+    maybe_create = check_create_device(get_device_path(), size);
+  }
+  return maybe_create.safe_then([this, FNAME, config=std::move(config),
+    shard_num, journal_size] {
+    return stat_device(
     ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-      "Invalid error open in RBMDevice::do_primary_mkfs"}
-    ).safe_then([this] {
-      return initialize_nvme_features(
+      "Invalid error stat_device in RBMDevice::do_primary_mkfs"}
+    ).safe_then(
+      [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) {
+      super.block_size = st.block_size;
+      super.size = st.size;
+      super.config = std::move(config);
+      super.journal_size = journal_size;
+      ceph_assert_always(super.journal_size > 0);
+      ceph_assert_always(super.size >= super.journal_size);
+      ceph_assert_always(shard_num > 0);
+
+      std::vector<rbm_shard_info_t> shard_infos(shard_num);
+      for (int i = 0; i < shard_num; i++) {
+	uint64_t aligned_size = 
+	  (super.size / shard_num) -
+	  ((super.size / shard_num) % super.block_size);
+	shard_infos[i].size = aligned_size;
+	shard_infos[i].start_offset = i * aligned_size;
+	assert(shard_infos[i].size > super.journal_size);
+      }
+      super.shard_infos = shard_infos;
+      super.shard_num = shard_num;
+      shard_info = shard_infos[seastar::this_shard_id()];
+      DEBUG("super {} ", super);
+
+      // write super block
+      return open(get_device_path(),
+	seastar::open_flags::rw | seastar::open_flags::dsync
+      ).handle_error(
+	mkfs_ertr::pass_further{},
+	crimson::ct_error::assert_all{
+	"Invalid error open in RBMDevice::do_primary_mkfs"}
       ).safe_then([this] {
-	return write_rbm_superblock(
+	return initialize_nvme_features(
 	).safe_then([this] {
-	  return close();
-	}).handle_error(
-	  mkfs_ertr::pass_further{},
-	  crimson::ct_error::assert_all{
-	  "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
+	  return write_rbm_superblock(
+	  ).safe_then([this] {
+	    return close();
+	  }).handle_error(
+	    mkfs_ertr::pass_further{},
+	    crimson::ct_error::assert_all{
+	    "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
+	  });
 	});
       });
     });
