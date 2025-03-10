@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import {ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -27,6 +27,10 @@ import { NfsService } from '~/app/shared/api/nfs.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { CephfsSubvolumegroupFormComponent } from '../../cephfs/cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { CephfsSubvolumeFormComponent } from '../../cephfs/cephfs-subvolume-form/cephfs-subvolume-form.component';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
 
 @Component({
   selector: 'cd-smb-share-form',
@@ -44,6 +48,11 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   isEdit = false;
   share_id: string;
   shareResponse: SMBShare;
+  data: any;
+  pools: any;
+  selectedvol: void;
+  message: string = '';
+  modalRef: any;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -54,13 +63,17 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     private subvolService: CephfsSubvolumeService,
     private taskWrapperService: TaskWrapperService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private modalService: ModalCdsService,
+    private cephfsService: CephfsService,
+    private cdr: ChangeDetectorRef,
   ) {
     super();
     this.resource = $localize`Share`;
     this.isEdit = this.router.url.startsWith(`${SHARE_URL}${URLVerbs.EDIT}`);
     this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
+
   ngOnInit() {
     this.route.params.subscribe((params: any) => {
       this.share_id = params.shareId;
@@ -69,6 +82,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     this.nfsService.filesystems().subscribe((data: Filesystem[]) => {
       this.allFsNames = data;
     });
+
     this.createForm();
     if (this.isEdit) {
       this.smbService.getShare(this.clusterId, this.share_id).subscribe((resp: SMBShare) => {
@@ -121,6 +135,14 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     this.allsubvols = [];
     if (fsName) {
       this.getSubVolGrp(fsName);
+      const matchingFs = this.allFsNames.find(fs => fs.name === fsName);
+      const id = matchingFs ? matchingFs.id : null;
+        this.cephfsService.getTabs(Number(id)).subscribe(
+          (data: any) => {
+            this.pools = data.pools;
+            this.cdr.detectChanges();
+          },
+        );
     }
   }
 
@@ -194,6 +216,50 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
 
   updatePath(prefixedPath: string) {
     this.smbShareForm.patchValue({ prefixedPath: prefixedPath });
+  }
+
+  goToCreateVolume() {
+    this.router.navigate(['cephfs/fs/create']);
+  }
+
+  goToCreateSubVolumeGrp() {
+    const volume = this.smbShareForm.get('volume').value;
+    if(this.pools){
+    this.smbService.passPoolData(this.pools); 
+    }
+
+
+   this.modalRef=  this.modalService.show(CephfsSubvolumegroupFormComponent, {
+      fsName: volume,
+      pools: this.pools,
+      isEdit: false,
+      data: this.smbShareForm
+    });
+  this.modalRef.dataSent.subscribe((result: any) => {
+    if (result) {
+      this.getSubVolGrp(volume);
+    }
+  });
+  
+  }
+
+  goToCreateSubVolume() {
+    const volume = this.smbShareForm.get('volume').value;
+    const subVolGrp = this.smbShareForm.get('subvolume_group').value;
+    this.modalService.show(CephfsSubvolumeFormComponent, {
+      fsName: volume,
+      subVolumeName: null,
+      subVolumeGroupName: subVolGrp,
+      pools:  this.pools,
+      isEdit: false
+    });
+ 
+  }
+
+  
+  ngOnChanges() {
+    this.goToCreateSubVolumeGrp();
+    this.goToCreateSubVolume();
   }
 
   buildRequest() {
