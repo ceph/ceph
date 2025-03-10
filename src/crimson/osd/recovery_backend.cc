@@ -230,7 +230,7 @@ RecoveryBackend::scan_for_backfill(
   DEBUGDPP("starting from {}", pg, start);
   auto version_map = seastar::make_lw_shared<std::map<hobject_t, eversion_t>>();
   auto&& [objects, next] = co_await backend->list_objects(start, max);
-  co_await interruptor::parallel_for_each(objects, [FNAME, this, version_map]
+  co_await interruptor::parallel_for_each(objects, seastar::coroutine::lambda([FNAME, this, version_map]
     (const hobject_t& object) -> interruptible_future<> {
     DEBUGDPP("querying obj:{}", pg, object);
     auto obc_manager = pg.obc_loader.get_obc_manager(object);
@@ -252,7 +252,7 @@ RecoveryBackend::scan_for_backfill(
       // for the first item in the range, which is usually last_backfill.
       co_return;
     }
-  });
+  }));
   BackfillInterval bi;
   bi.begin = std::move(start);
   bi.end = std::move(next);
