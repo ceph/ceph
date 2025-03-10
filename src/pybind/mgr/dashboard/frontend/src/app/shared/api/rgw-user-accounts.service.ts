@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { RgwDaemonService } from './rgw-daemon.service';
 
 @Injectable({
   providedIn: 'root'
@@ -8,34 +9,42 @@ import { Observable } from 'rxjs';
 export class RgwUserAccountsService {
   private url = 'api/rgw/accounts';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
 
   list(detailed?: boolean): Observable<any> {
-    let params = new HttpParams();
-    if (detailed) {
-      params = params.append('detailed', detailed);
-    }
-    return this.http.get(this.url, { params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (detailed) {
+        params = params.append('detailed', detailed);
+      }
+      return this.http.get(this.url, { params });
+    });
   }
 
   get(account_id: string): Observable<any> {
-    let params = new HttpParams();
-    if (account_id) {
-      params = params.append('account_id', account_id);
-    }
-    return this.http.get(`${this.url}/get`, { params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (account_id) {
+        params = params.append('account_id', account_id);
+      }
+      return this.http.get(`${this.url}/get`, { params });
+    });
   }
 
   create(payload: any): Observable<any> {
-    return this.http.post(this.url, payload);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.post(this.url, payload, { params: params });
+    });
   }
 
   modify(payload: any): Observable<any> {
-    return this.http.put(`${this.url}/set`, payload);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.put(`${this.url}/set`, payload, {params: params});
+    });
   }
 
   remove(accountId: string) {
-    return this.http.delete(`${this.url}/${accountId}`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.delete(`${this.url}/${accountId}`, { params: params });
+    });
   }
 
   setQuota(
