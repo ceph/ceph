@@ -1475,12 +1475,22 @@ TEST(BlueFS, truncate_drops_allocations) {
     TempBdev bdev_db{s.db_size};
     TempBdev bdev_slow{s.slow_size};
 
+    bluefs_shared_alloc_context_t shared_alloc;
+    uint64_t shared_alloc_unit = s.slow_alloc_size;
+    shared_alloc.set(
+      Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                        s.slow_size ? s.slow_size : s.db_size,
+                        shared_alloc_unit, "test shared allocator"),
+      shared_alloc_unit);
+    shared_alloc.a->init_add_free(0, s.slow_size ? s.slow_size : s.db_size);
+
     BlueFS fs(g_ceph_context);
     if (s.db_size != 0) {
-      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false, 0));
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false,
+      s.slow_size > 0 ? nullptr : &shared_alloc));
     }
     if (s.slow_size != 0) {
-      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0));
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, &shared_alloc));
     }
 
     ASSERT_EQ(0, fs.mkfs(fsid, {BlueFS::BDEV_DB, false, false}));
@@ -1501,6 +1511,7 @@ TEST(BlueFS, truncate_drops_allocations) {
     EXPECT_EQ(pre, post - s.allocated_after_truncate);
 
     fs.umount();
+    delete shared_alloc.a;
   }
 }
 

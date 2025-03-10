@@ -220,6 +220,7 @@ class BlueFS {
 public:
   CephContext* cct;
   static constexpr unsigned MAX_BDEV = 5;
+  static constexpr unsigned BDEV_REAL_CNT = 3;
   static constexpr unsigned BDEV_WAL = 0;
   static constexpr unsigned BDEV_DB = 1;
   static constexpr unsigned BDEV_SLOW = 2;
@@ -506,6 +507,9 @@ private:
   inline bool is_shared_alloc(unsigned id) const {
     return id == shared_alloc_id;
   }
+  inline bool has_shared_alloc() const {
+    return shared_alloc_id != unsigned(-1);
+  }
   std::atomic<int64_t> cooldown_deadline = 0;
 
   class SocketHook;
@@ -616,6 +620,7 @@ private:
 
   int _open_super();
   int _write_super(int dev);
+  void _super_prepare_alloc_sizes();
   int _check_allocations(const bluefs_fnode_t& fnode,
     boost::dynamic_bitset<uint64_t>* used_blocks,
     bool is_alloc, //true when allocating, false when deallocating
@@ -655,6 +660,8 @@ public:
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
+  int super_dump(std::ostream* out);
+  int set_alloc_size(uint8_t bdev_id, uint64_t alloc_size);
 
   void collect_metadata(std::map<std::string,std::string> *pm, unsigned skip_bdev_id);
   void get_devices(std::set<std::string> *ls);
