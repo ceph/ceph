@@ -9234,11 +9234,44 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
     ss << "pool " << pool_name << " is not a stretch pool";
     return -ENOENT;
   }
+  CrushWrapper& crush = _get_stable_crush();
+  string crush_rule_str;
+  cmd_getval(cmdmap, "crush_rule", crush_rule_str);
+  if (crush_rule_str.empty()) {
+    ss << "crush_rule must be provided";
+    return -EINVAL;
+  }
+
+  int crush_rule = crush.get_rule_id(crush_rule_str);
+  if (crush_rule < 0) {
+    ss << "crush rule " << crush_rule_str << " does not exist";
+    return -ENOENT;
+  }
+
+  if (!crush.rule_valid_for_pool_type(crush_rule, p.get_type())) {
+    ss << "crush rule " << crush_rule << " type does not match pool";
+    return -EINVAL;
+  }
+
+  int64_t pool_size = cmd_getval_or<int64_t>(cmdmap, "size", 0);
+  if (pool_size < 0) {
+    ss << "pool size must be non-negative";
+    return -EINVAL;
+  }
+
+  int64_t pool_min_size = cmd_getval_or<int64_t>(cmdmap, "min_size", 0);
+  if (pool_min_size < 0) {
+    ss << "pool min_size must be non-negative";
+    return -EINVAL;
+  }
 
   // unset stretch values
   p.peering_crush_bucket_count = 0;
   p.peering_crush_bucket_target = 0;
   p.peering_crush_bucket_barrier = 0;
+  p.crush_rule = static_cast<__u8>(crush_rule);
+  p.size = static_cast<__u8>(pool_size);
+  p.min_size = static_cast<__u8>(pool_min_size);
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   ss << "pool " << pool_name
