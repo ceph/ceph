@@ -560,6 +560,20 @@ public:
     return peering_state.get_primary();
   }
 
+  eversion_t get_last_complete() const {
+    return peering_state.get_info().last_complete;
+  }
+
+  void complete_write(eversion_t v, eversion_t lc) {
+    peering_state.complete_write(v, lc);
+  }
+
+  void update_peer_last_complete_ondisk(
+    pg_shard_t fromosd,
+    eversion_t lcod) {
+    peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
+  }
+
   /// initialize created PG
   seastar::future<> init(
     int role,
@@ -686,8 +700,9 @@ private:
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
 
 public:
-  interruptible_future<
-    std::tuple<interruptible_future<>, interruptible_future<>>>
+  using rep_op_fut_t = std::tuple<interruptible_future<>,
+                                  interruptible_future<>>;
+  interruptible_future<rep_op_fut_t>
   submit_transaction(
     ObjectContextRef&& obc,
     ObjectContextRef&& new_clone,

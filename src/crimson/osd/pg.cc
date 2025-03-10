@@ -890,9 +890,7 @@ void PG::enqueue_delete_for_backfill(
   backfill_state->enqueue_standalone_delete(obj, v, peers);
 }
 
-PG::interruptible_future<
-  std::tuple<PG::interruptible_future<>,
-             PG::interruptible_future<>>>
+PG::interruptible_future<PG::rep_op_fut_t>
 PG::submit_transaction(
   ObjectContextRef&& obc,
   ObjectContextRef&& new_clone,
@@ -932,16 +930,7 @@ PG::submit_transaction(
       std::move(log_entries));
   co_return std::make_tuple(
     std::move(submitted),
-    all_completed.then_interruptible(
-      [this, last_complete=peering_state.get_info().last_complete, at_version]
-      (auto acked) {
-      for (const auto& peer : acked) {
-        peering_state.update_peer_last_complete_ondisk(
-          peer.shard, peer.last_complete_ondisk);
-      }
-      peering_state.complete_write(at_version, last_complete);
-      return seastar::now();
-    })
+    std::move(all_completed)
   );
 }
 
