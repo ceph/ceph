@@ -153,9 +153,26 @@ version_t NVMeofGwMon::get_trim_to() const
   return 0;
 }
 
+void NVMeofGwMon::restore_pending_map_info(NVMeofGwMap & tmp_map) {
+  for (auto& created_map_pair: tmp_map.created_gws) {
+    auto group_key = created_map_pair.first;
+    NvmeGwMonStates& gw_created_map = created_map_pair.second;
+    for (auto& gw_created_pair: gw_created_map) {
+      auto gw_id = gw_created_pair.first;
+      if (gw_created_pair.second.failover_support != true) {
+        // restore not persistent information upon new epochs
+        dout(10) << " restore failover-support for gw  " << gw_id  << dendl;
+        pending_map.created_gws[group_key][gw_id].failover_support = false;
+      }
+    }
+  }
+}
+
 void NVMeofGwMon::create_pending()
 {
+  NVMeofGwMap tmp_map = pending_map;
   pending_map = map;// deep copy of the object
+  restore_pending_map_info(tmp_map);
   pending_map.epoch++;
   dout(10) << " pending " << pending_map  << dendl;
 }
@@ -557,7 +574,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 
 void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
    const NvmeGroupKey& group_key, bool &propose_pending,
-   gw_availability_t avail)
+   gw_availability_t avail, bool support_failover)
 {
   LastBeacon lb = {gw_id, group_key};
   auto it = last_beacon.find(lb);
@@ -566,7 +583,8 @@ void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
     if (avail == gw_availability_t::GW_UNAVAILABLE) {
       pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
     } else {
-      pending_map.process_gw_map_gw_no_subsys_no_listeners(gw_id, group_key, propose_pending);
+      pending_map.process_gw_map_gw_no_subsys_no_listeners(gw_id, group_key,
+           propose_pending, support_failover);
     }
 
   }
@@ -641,9 +659,9 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
       if (pending_map.created_gws[group_key][gw_id].availability ==
 	  gw_availability_t::GW_AVAILABLE) {
 	dout(1) << " Warning :GW marked as Available in the NVmeofGwMon "
-		<< "database, performed full startup - Apply GW!"
+		<< "database, performed full startup - Apply it but don't allow failover!"
 		<< gw_id << dendl;
-	 process_gw_down(gw_id, group_key, gw_propose, avail);
+	 process_gw_down(gw_id, group_key, gw_propose, avail, false);
 	 LastBeacon lb = {gw_id, group_key};
 	 last_beacon[lb] = now; //Update last beacon
       } else if (

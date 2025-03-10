@@ -131,15 +131,18 @@ struct NvmeGwMonState {
   //ceph entity address allocated for the GW-client that represents this GW-id
   entity_addrvec_t addr_vect;
   uint16_t beacon_index = 0;
+  bool failover_support;
   NvmeGwMonState(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {}
 
   NvmeGwMonState(NvmeAnaGrpId id)
     : ana_grp_id(id), availability(gw_availability_t::GW_CREATED),
-      last_gw_map_epoch_valid(false), performed_full_startup(false) {}
+      last_gw_map_epoch_valid(false), performed_full_startup(false),
+      failover_support(true) {}
   void set_unavailable_state() {
     if (availability != gw_availability_t::GW_DELETING) {
       //for not to override Deleting
       availability = gw_availability_t::GW_UNAVAILABLE;
+      set_failover_support(true);
     }
      // after setting this state, the next time monitor sees GW,
      // it expects it performed the full startup
@@ -151,6 +154,10 @@ struct NvmeGwMonState {
   void active_state(NvmeAnaGrpId grpid) {
     sm_state[grpid]       = gw_states_per_group_t::GW_ACTIVE_STATE;
     blocklist_data[grpid].osd_epoch = 0;
+    set_failover_support(true);
+  }
+  void set_failover_support(bool value) {
+    failover_support = value;
   }
 };
 

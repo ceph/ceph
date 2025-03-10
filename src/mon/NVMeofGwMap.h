@@ -74,7 +74,7 @@ public:
     bool &propose_pending);
   int process_gw_map_gw_no_subsys_no_listeners(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    bool &propose_pending);
+    bool &propose_pending, bool support_failover = true);
   void update_active_timers(bool &propose_pending);
   void handle_abandoned_ana_groups(bool &propose_pending);
   void handle_removed_subsystems(

@@ -286,7 +286,8 @@ void NVMeofGwMap::track_deleting_gws(const NvmeGroupKey& group_key,
 }
 
 int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
+  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending,
+  bool support_failover)
 {
   int rc = 0;
   auto& gws_states = created_gws[group_key];
@@ -295,6 +296,10 @@ int NVMeofGwMap::process_gw_map_gw_no_subsys_no_listeners(
     dout(10) << "GW- no subsystems configured " << gw_id << dendl;
     auto& st = gw_state->second;
     st.availability = gw_availability_t::GW_CREATED;
+    if (support_failover == false) {
+      st.set_failover_support(support_failover);
+      dout(4) << "set failover-support false for gw "<< gw_id << dendl;
+    }
     for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
       fsm_handle_gw_no_subsystems(
     gw_id, group_key, state_itr.second,state_itr.first, propose_pending);
@@ -526,6 +531,10 @@ void  NVMeofGwMap::find_failover_candidate(
   NvmeGwId min_loaded_gw_id = ILLEGAL_GW_ID;
   auto& gws_states = created_gws[group_key];
   auto gw_state = gws_states.find(gw_id);
+  if (gw_state->second.failover_support == false) {
+    dout(4) << "gw " << gw_id << " failover-support is false " << dendl;
+    return;
+  }
 
   // this GW may handle several ANA groups and  for each
   // of them need to found the candidate GW
