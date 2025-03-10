@@ -211,8 +211,7 @@ void PGBackend::rollback(
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
       auto dpp = pg->get_parent()->get_dpp();
-      int s = static_cast<int>(pg->get_parent()->whoami_shard().shard);
-      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, s);
+      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, pg->get_parent()->whoami_shard().shard);
       ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " rollback append object_size " << old_size << " shard_size " << shard_size << dendl;
       pg->rollback_append(hoid, shard_size, &temp);
       temp.append(t);
