@@ -161,7 +161,7 @@ inline void decode_noshare(xattr_map<Allocator>& xattrs, ceph::buffer::list::con
     decode(key, p);
     __u32 len;
     decode(len, p);
-    p.copy_deep(len, xattrs[key]);
+    xattrs[key] = p.copy_deep(len);
   }
 }
 

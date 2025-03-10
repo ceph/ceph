@@ -62,11 +62,12 @@ class SnappyCompressor : public Compressor {
 
   int compress(const ceph::bufferlist &src, ceph::bufferlist &dst, std::optional<int32_t> &compressor_message) override {
     BufferlistSource source(const_cast<ceph::bufferlist&>(src).begin(), src.length());
-    ceph::bufferptr ptr = ceph::buffer::create_small_page_aligned(
-      snappy::MaxCompressedLength(src.length()));
-    snappy::UncheckedByteArraySink sink(ptr.c_str());
+    auto ptr = ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(
+      snappy::MaxCompressedLength(src.length())));
+    snappy::UncheckedByteArraySink sink(ptr->c_str());
     snappy::Compress(&source, &sink);
-    dst.append(ptr, 0, sink.CurrentDestination() - ptr.c_str());
+    ptr->set_length(sink.CurrentDestination() - ptr->c_str());
+    dst.push_back(std::move(ptr));
     return 0;
   }
 
@@ -85,10 +86,10 @@ class SnappyCompressor : public Compressor {
       return -1;
     }
     BufferlistSource source_2(p, compressed_len);
-    ceph::bufferptr ptr(res_len);
-    if (snappy::RawUncompress(&source_2, ptr.c_str())) {
+    auto ptr = ceph::buffer::ptr_node::create(ceph::buffer::create(res_len));
+    if (snappy::RawUncompress(&source_2, ptr->c_str())) {
       p = source_2.get_pos();
-      dst.append(ptr);
+      dst.push_back(std::move(ptr));
       return 0;
     }
     return -2;

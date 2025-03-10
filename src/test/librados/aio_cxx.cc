@@ -817,7 +817,7 @@ TEST(LibRadosAio, RoundTripWriteSamePP) {
   }
   ASSERT_EQ((int)sizeof(full), my_completion3->get_return_value());
   ASSERT_EQ(sizeof(full), bl3.length());
-  for (char *cmp = bl3.c_str(); cmp < bl3.c_str() + bl3.length();
+  for (const char *cmp = bl3.c_str(); cmp < bl3.c_str() + bl3.length();
 							cmp += sizeof(buf)) {
     ASSERT_EQ(0, memcmp(cmp, buf, sizeof(buf)));
   }
@@ -850,7 +850,7 @@ TEST(LibRadosAio, RoundTripWriteSamePP2)
 
   boost::scoped_ptr<AioCompletion>
 			rd_cmpl(cluster.aio_create_completion(0, 0));
-  char *cmp;
+  const char *cmp;
   char full[sizeof(buf) * 4];
   memset(full, 0, sizeof(full));
   bufferlist fl;

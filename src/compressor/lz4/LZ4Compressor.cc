@@ -53,8 +53,8 @@ int LZ4Compressor::compress(const ceph::buffer::list &src,
   if (qat_enabled)
     return qat_accel.compress(src, dst, compressor_message);
 #endif
-  ceph::buffer::ptr outptr = ceph::buffer::create_small_page_aligned(
-    LZ4_compressBound(src.length()));
+  auto outptr = buffer::ptr_node::create(
+    ceph::buffer::create_small_page_aligned(LZ4_compressBound(src.length())));
   LZ4_stream_t lz4_stream;
   LZ4_resetStream(&lz4_stream);
 
@@ -69,8 +69,8 @@ int LZ4Compressor::compress(const ceph::buffer::list &src,
   while (left) {
     uint32_t origin_len = p.get_ptr_and_advance(left, &data);
     int compressed_len = LZ4_compress_fast_continue(
-      &lz4_stream, data, outptr.c_str()+pos, origin_len,
-      outptr.length()-pos, 1);
+      &lz4_stream, data, outptr->c_str()+pos, origin_len,
+      outptr->length()-pos, 1);
     if (compressed_len <= 0)
       return -1;
     pos += compressed_len;
@@ -79,8 +79,8 @@ int LZ4Compressor::compress(const ceph::buffer::list &src,
     encode((uint32_t)compressed_len, dst);
   }
   ceph_assert(p.end());
-
-  dst.append(outptr, 0, pos);
+  outptr->set_length(pos);
+  dst.push_back(std::move(outptr));
   return 0;
 }
 
@@ -117,7 +117,7 @@ int LZ4Compressor::decompress(ceph::buffer::list::const_iterator &p,
   }
   compressed_len -= (sizeof(uint32_t) + sizeof(uint32_t) * count * 2);
 
-  ceph::buffer::ptr dstptr(total_origin);
+  auto dstptr = buffer::ptr_node::create(buffer::create(total_origin));
   LZ4_streamDecode_t lz4_stream_decode;
   LZ4_setStreamDecode(&lz4_stream_decode, nullptr, 0);
 
@@ -127,7 +127,7 @@ int LZ4Compressor::decompress(ceph::buffer::list::const_iterator &p,
   // if the input isn't fragmented, c_str() costs almost nothing.
   // otherwise rectifying copy will be taken
   const char* c_in = indata.c_str();
-  char *c_out = dstptr.c_str();
+  char *c_out = dstptr->c_str();
   for (unsigned i = 0; i < count; ++i) {
     int r = LZ4_decompress_safe_continue(
         &lz4_stream_decode, c_in, c_out, compressed_pairs[i].second, compressed_pairs[i].first);

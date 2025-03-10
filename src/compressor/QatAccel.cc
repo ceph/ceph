@@ -164,8 +164,9 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out, std::optional<int3
     unsigned int len = i.length();
     unsigned int out_len = qzMaxCompressedLength(len, session.get()) + begin;
 
-    bufferptr ptr = buffer::create_small_page_aligned(out_len);
-    unsigned char* c_out = (unsigned char*)ptr.c_str() + begin;
+    auto ptr = buffer::ptr_node::create(
+      buffer::create_small_page_aligned(out_len));
+    unsigned char* c_out = (unsigned char*)ptr->c_str() + begin;
     QzSession_T *sess = session.get();
     int rc = qzCompress(sess, c_in, &len, c_out, &out_len, 1);
     if(sess->hw_session_stat != QZ_OK) {
@@ -179,11 +180,12 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out, std::optional<int3
       return -1;
     if (begin) {
       // put a compressor variation mark in front of compressed stream, not used at the moment
-      ptr.c_str()[0] = 0;
+      ptr->c_str()[0] = 0;
       out_len += begin;
       begin = 0;
     }
-    out.append(ptr, 0, out_len);
+    ptr->set_length(out_len);
+    out.push_back(std::move(ptr));
 
   }
 
