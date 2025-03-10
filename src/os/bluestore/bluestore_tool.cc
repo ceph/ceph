@@ -290,6 +290,7 @@ int main(int argc, char **argv)
   string resharding_ctrl;
   int log_level = 30;
   bool fsck_deep = false;
+  uint64_t disk_offset;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
@@ -310,6 +311,7 @@ int main(int argc, char **argv)
     ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
+    ("offset", po::value<uint64_t>(&disk_offset), "disk location")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -328,6 +330,7 @@ int main(int argc, char **argv)
         "bluefs-bdev-new-wal, "
         "bluefs-bdev-migrate, "
         "show-label, "
+        "show-label-at, "
         "set-label-key, "
         "rm-label-key, "
         "prime-osd-dir, "
@@ -474,6 +477,12 @@ int main(int argc, char **argv)
     }
     if (devs.empty())
       inferring_bluefs_devices(devs, path);
+  }
+  if (action == "show-label-at") {
+    if (devs.empty()) {
+      cerr << "must specify bluestore raw device" << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
   if (action == "bluefs-export" || 
       action == "bluefs-import" || 
@@ -700,13 +709,19 @@ int main(int argc, char **argv)
     for (auto& i : devs) {
       jf.open_object_section(i.c_str());
       bluestore_bdev_label_t label;
-      int r = BlueStore::read_bdev_label(cct.get(), i, &label);
+      std::vector<uint64_t> valid_positions;
+      int r = BlueStore::read_bdev_label(cct.get(), i, &label, &valid_positions);
       if (r < 0) {
         cerr << "unable to read label for " << i << ": "
              << cpp_strerror(r) << std::endl;
       } else {
         any_success = true;
         label.dump(&jf);
+        jf.open_array_section("locations");
+        for (int64_t pos : valid_positions) {
+          jf.dump_format("", "0x%llx", pos);
+        }
+        jf.close_section();
       }
       jf.close_section();
     }
@@ -715,6 +730,35 @@ int main(int argc, char **argv)
     if (!any_success) {
       exit(EXIT_FAILURE);
     }
+  }
+  else if (action == "show-label-at") {
+    JSONFormatter jf(true);
+    bluestore_bdev_label_t label;
+    bool valid_offset = false;
+    for (auto o : bdev_label_positions) {
+      if (disk_offset == o) {
+        valid_offset = true;
+        break;
+      }
+    }
+    if (!valid_offset) {
+      cerr << "Suspicious offset: " << disk_offset
+           << ", expected locations: " << bdev_label_positions
+           << std::endl;
+    }
+    int r = BlueStore::read_bdev_label_at_pos(cct.get(), devs[0], disk_offset, &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << devs[0] << ": "
+           << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    jf.open_object_section(devs[0].c_str());
+    label.dump(&jf);
+    jf.open_array_section("locations");
+    jf.dump_format("", "0x%llx", disk_offset);
+    jf.close_section();
+    jf.close_section();
+    jf.flush(cout);
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
