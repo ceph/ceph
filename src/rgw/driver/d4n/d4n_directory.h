@@ -4,6 +4,7 @@
 
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <set>
 
 namespace rgw { namespace d4n {
 
@@ -67,7 +68,33 @@ struct CacheBlock {
 
 class Directory {
   public:
-    Directory() {}
+    enum class redis_operation_type {
+	NONE,READ_OP,WRITE_OP
+    };
+    enum class TrxState {
+			NONE,
+			STARTED,
+			ENDED
+		} trxState{TrxState::NONE};
+
+    std::string m_trx_id;
+    int start_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int end_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    bool is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
+    std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
+    int get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);
+
+    int clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
+    std::string m_evalsha_clone_key;
+    std::string m_evalsha_end_trx;
+
+    std::set<std::string> m_temp_read_keys;//temporary key for use in transactions
+    std::set<std::string> m_temp_write_keys;//temporary key for use in transactions
+    std::set<std::string> m_temp_test_write_keys;//temporary key for use in transactions
+    std::string m_original_key;//original key, used to restore the key from Redis
+    std::string m_temp_key_read;//temporary key for use in transactions
+    std::string m_temp_key_write;//temporary key for use in transactions
+    std::string m_temp_key_test_write;//temporary key for use in transactions
 };
 
 class BucketDirectory: public Directory {
@@ -107,6 +134,7 @@ class ObjectDirectory: public Directory {
     std::shared_ptr<connection> conn;
 
     std::string build_index(CacheObj* object);
+    std::string create_temp_key(std::string key);//return unique key for temporary use
 };
 
 class BlockDirectory: public Directory {
@@ -134,9 +162,11 @@ class BlockDirectory: public Directory {
     int discard(const DoutPrefixProvider* dpp, optional_yield y);
     int unwatch(const DoutPrefixProvider* dpp, optional_yield y);
 
+    std::shared_ptr<connection> get_connection() {return conn;}	
   private:
     std::shared_ptr<connection> conn;
     std::string build_index(CacheBlock* block);
+    std::string create_temp_key(std::string key);//return unique key for temporary use
 };
 
 } } // namespace rgw::d4n
