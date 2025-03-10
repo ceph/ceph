@@ -1369,7 +1369,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileReader *log_reader = new FileReader(
     log_file, cct->_conf->bluefs_max_prefetch,
-    false,  // !random
     true);  // ignore eof
 
   bool seen_recs = false;
@@ -2402,7 +2401,7 @@ void BlueFS::_wal_index_file(
   File::wal_flush_t flush;
   bool envelope_good;
   uint64_t file_size = file->fnode.size;
-  FileReader *h = new FileReader(file, 4096, false, true);
+  FileReader *h = new FileReader(file, 4096, true);
   ceph_assert(h);
   while(scan_ofs < file->fnode.allocated) {
     envelope_good = _read_wal_flush(h, scan_ofs, wal_ofs, &flush);
@@ -4698,7 +4697,7 @@ int BlueFS::open_for_read(
     _wal_index_file(file);
   }
   *h = new FileReader(file, random ? 4096 : cct->_conf->bluefs_max_prefetch,
-		      random, file->is_new_wal());
+                      file->is_new_wal());
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
