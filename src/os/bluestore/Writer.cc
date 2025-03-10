@@ -588,6 +588,26 @@ inline void BlueStore::Writer::_place_extent_in_blob(
   }
 }
 
+// Iterator it can be invalidated.
+void BlueStore::Writer::_maybe_meld_with_prev_extent(exmp_it it)
+{
+  if (it == onode->extent_map.extent_map.end())   return; // can't merge with non-existent
+  if (it == onode->extent_map.extent_map.begin()) return; // can't merge when there is only 1 extent
+  if (it->logical_end() >= right_shard_bound)     return; // not allowed to escape shard range
+  auto it_p = it;
+  --it_p;
+  if (it_p->logical_offset < left_shard_bound) return; // we could jump here behind our inserted range
+  if (it_p->blob == it->blob &&
+      it_p->logical_end() == it->logical_offset &&
+      it_p->blob_offset + it_p->length == it->blob_offset) // this one is specifc, currently is always true
+  {
+    it_p->length += it->length;
+    onode->extent_map.rm(it);
+    left_affected_range = std::min(left_affected_range, it_p->logical_offset);
+    right_affected_range = std::max(right_affected_range, it_p->logical_end());
+  }
+}
+
 /**
  * Note from developer
  * This module tries to keep naming convention:
@@ -1408,8 +1428,13 @@ void BlueStore::Writer::do_write(
   _collect_released_allocated();
   // update statfs
   txc->statfs_delta += statfs_delta;
-  // note: compress extent is not needed; _try_reuse_allocated_* joins extents if possible
-  // in other cases new blobs cannot be joined with existing ones
+  // Note: compress extent is mostly not needed; _try_reuse_allocated_* joins extents if possible;
+  // same is done after _blob_put_data_subau_allocate (allocate more to existing blob).
+  // New blobs cannot be joined with existing ones.
+  // The only case that adjecent extents can be meld together is on the boundary.
+  // More specific, since we are operating left side first, right side later
+  // the only non-joined extent is between after_punch_it - 1 and after_punch_it.
+  _maybe_meld_with_prev_extent(after_punch_it);
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
 }
 
