@@ -6,29 +6,42 @@
 #include "proxy_log.h"
 #include "proxy_helpers.h"
 #include "proxy_requests.h"
+#include "proxy_async.h"
 
 /* We override the definition of the ceph_mount_info structure to contain
  * internal proxy information. This is already a black box for libcephfs users,
  * so this won't be noticed. */
 struct ceph_mount_info {
 	proxy_link_t link;
+	proxy_link_negotiate_t neg;
+	proxy_async_t async;
 	uint64_t cmount;
 };
 
 /* The global_cmount is used to stablish an initial connection to serve requests
  * not related to a real cmount, like ceph_version or ceph_userperm_new. */
-static struct ceph_mount_info global_cmount = { PROXY_LINK_DISCONNECTED, 0 };
+static struct ceph_mount_info global_cmount = {
+	.link = PROXY_LINK_DISCONNECTED,
+	.neg = {},
+	.cmount = 0
+};
 
 static bool client_stop(proxy_link_t *link)
 {
 	return false;
 }
 
+static int32_t proxy_negotiation_check(proxy_link_negotiate_t *neg)
+{
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+
+	return 0;
+}
+
 static int32_t proxy_connect(proxy_link_t *link)
 {
-	CEPH_REQ(hello, req, 0, ans, 0);
 	char *path, *env;
-	int32_t sd, err;
+	int32_t sd;
 
 	path = PROXY_SOCKET;
 	env = getenv(PROXY_SOCKET_ENV);
@@ -41,31 +54,7 @@ static int32_t proxy_connect(proxy_link_t *link)
 		return sd;
 	}
 
-	req.id = LIBCEPHFS_LIB_CLIENT;
-	err = proxy_link_send(sd, req_iov, 1);
-	if (err < 0) {
-		goto failed;
-	}
-	err = proxy_link_recv(sd, ans_iov, 1);
-	if (err < 0) {
-		goto failed;
-	}
-
-	proxy_log(LOG_INFO, 0, "Connected to libcephfsd version %d.%d",
-		  ans.major, ans.minor);
-
-	if ((ans.major != LIBCEPHFSD_MAJOR) ||
-	    (ans.minor != LIBCEPHFSD_MINOR)) {
-		err = proxy_log(LOG_ERR, ENOTSUP, "Version not supported");
-		goto failed;
-	}
-
 	return sd;
-
-failed:
-	proxy_link_close(link);
-
-	return err;
 }
 
 static void proxy_disconnect(proxy_link_t *link)
@@ -81,6 +70,19 @@ static int32_t proxy_global_connect(void)
 
 	if (!proxy_link_is_connected(&global_cmount.link)) {
 		err = proxy_connect(&global_cmount.link);
+		if (err < 0) {
+			return err;
+		}
+
+		proxy_link_negotiate_init(&global_cmount.neg, 0, PROXY_FEAT_ALL,
+					  0, 0);
+
+		err = proxy_link_handshake_client(&global_cmount.link, err,
+						  &global_cmount.neg,
+						  proxy_negotiation_check);
+		if (err < 0) {
+			proxy_disconnect(&global_cmount.link);
+		}
 	}
 
 	return err;
@@ -177,6 +179,24 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 		goto failed;
 	}
 	sd = err;
+
+	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0,
+				  PROXY_FEAT_ASYNC_IO);
+
+	err = proxy_link_handshake_client(&ceph_mount->link, sd,
+					  &ceph_mount->neg,
+					  proxy_negotiation_check);
+	if (err < 0) {
+		goto failed_link;
+	}
+
+	if ((ceph_mount->neg.v1.enabled & PROXY_FEAT_ASYNC_CBK) != 0) {
+		err = proxy_async_client(&ceph_mount->async, &ceph_mount->link,
+					 sd);
+		if (err < 0) {
+			goto failed_link;
+		}
+	}
 
 	CEPH_STR_ADD(req, id, id);
 
@@ -890,4 +910,39 @@ __public UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 	}
 
 	return value_ptr(ans.userperm);
+}
+
+__public int64_t ceph_ll_nonblocking_readv_writev(
+	struct ceph_mount_info *cmount, struct ceph_ll_io_info *io_info)
+{
+	CEPH_REQ(ceph_ll_nonblocking_readv_writev, req,
+		 io_info->write ? io_info->iovcnt : 0, ans, 0);
+	int32_t i, err;
+
+	if ((cmount->neg.v1.enabled & PROXY_FEAT_ASYNC_IO) == 0) {
+		return -EOPNOTSUPP;
+	}
+
+	req.info = ptr_checksum(&cmount->async.random, io_info);
+	req.fh = (uintptr_t)io_info->fh;
+	req.off = io_info->off;
+	req.size = 0;
+	req.write = io_info->write;
+	req.fsync = io_info->fsync;
+	req.syncdataonly = io_info->syncdataonly;
+
+	for (i = 0; i < io_info->iovcnt; i++) {
+		if (io_info->write) {
+			CEPH_BUFF_ADD(req, io_info->iov[i].iov_base,
+				      io_info->iov[i].iov_len);
+		}
+		req.size += io_info->iov[i].iov_len;
+	}
+
+	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_NONBLOCKING_RW, req, ans);
+	if (err < 0) {
+		return err;
+	}
+
+	return ans.res;
 }
