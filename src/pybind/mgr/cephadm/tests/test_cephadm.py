@@ -15,8 +15,10 @@ from cephadm.inventory import (
     PrivKey,
     CERT_STORE_CERT_PREFIX,
     CERT_STORE_KEY_PREFIX,
+    SpecDescription,
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
+from cephadm.services.nvmeof import NvmeofService
 from cephadm.utils import SpecialHostLabels
 
 try:
@@ -3052,3 +3054,60 @@ Traceback (most recent call last):
             assert osd.cpu_percentage == '6.54%'
             assert osd.memory_usage == 73410805
             assert osd.created == str_to_datetime('2023-09-22T22:41:03.615080Z')
+
+    @mock.patch("cephadm.inventory.HostCache.get_daemons_by_service")
+    @mock.patch("cephadm.inventory.SpecStore.get_specs_by_type")
+    @mock.patch("cephadm.inventory.SpecStore.__getitem__")
+    def test_nvmeof_build_blocking_daemon_hosts(
+        self,
+        _spec_store_get_item,
+        _get_specs_by_type,
+        _get_daemons_by_service,
+        cephadm_module: CephadmOrchestrator
+    ):
+        # for nvmeof, the blocking daemon host list should be all hosts with an nvmeof
+        # daemon that belongs to a service with a different "group" parameter
+        nvmeof_services = [
+            ServiceSpec(service_type='nvmeof', pool='foo', group='foo', service_id='foo.foo'),
+            ServiceSpec(service_type='nvmeof', pool='bar', group='bar', service_id='bar.bar')
+        ]
+        nvmeof_foo_daemons = [
+            DaemonDescription(daemon_type='nvmeof', daemon_id='foo.foo.host1', hostname='host1'),
+            DaemonDescription(daemon_type='nvmeof', daemon_id='foo.foo.host2', hostname='host2')
+        ]
+        nvmeof_bar_daemons = [
+            DaemonDescription(daemon_type='nvmeof', daemon_id='bar.bar.host3', hostname='host3')
+        ]
+
+        def _get_nvmeof_specs(sname) -> SpecDescription:
+            if sname == 'nvmeof.foo.foo':
+                return SpecDescription(
+                    nvmeof_services[0], {}, None, None
+                )
+            elif sname == 'nvmeof.bar.bar':
+                return SpecDescription(
+                    nvmeof_services[1], {}, None, None
+                )
+
+        def _get_nvmeof_daemons(sname) -> List[DaemonDescription]:
+            if sname == 'nvmeof.foo.foo':
+                return nvmeof_foo_daemons
+            elif sname == 'nvmeof.bar.bar':
+                return nvmeof_bar_daemons
+
+        _get_specs_by_type.return_value = {
+            'nvmeof.foo.foo': nvmeof_services[0],
+            'nvmeof.bar.bar': nvmeof_services[1],
+        }
+        _spec_store_get_item.side_effect = _get_nvmeof_specs
+        _get_daemons_by_service.side_effect = _get_nvmeof_daemons
+
+        # first test for nvmeof.foo.foo, which should get blocking host based
+        # on nvmeof.bar.bar's daemons
+        nvmeof_foo_blocking_hosts = NvmeofService(cephadm_module).get_blocking_daemon_hosts('nvmeof.foo.foo')
+        assert set([h.hostname for h in nvmeof_foo_blocking_hosts]) == set(['host3'])
+
+        # now test for nvmeof.bar.bar, which should get blocking host based
+        # on nvmeof.foo.foo's daemons
+        nvmeof_bar_blocking_hosts = NvmeofService(cephadm_module).get_blocking_daemon_hosts('nvmeof.bar.bar')
+        assert set([h.hostname for h in nvmeof_bar_blocking_hosts]) == set(['host1', 'host2'])
