@@ -665,7 +665,7 @@ protected:
           local_status));
         m_formatter->dump_string("description", local_status.description);
         if (mirror_service != nullptr) {
-          mirror_service->dump_image(m_formatter);
+          mirror_service->dump(m_formatter);
         }
         m_formatter->dump_string("last_update", utils::timestr(
           local_status.last_update));
@@ -702,7 +702,7 @@ protected:
                   << "  description: " << local_status.description << std::endl;
         if (mirror_service != nullptr) {
           std::cout << "  service:     " <<
-            mirror_service->get_image_description() << std::endl;
+            mirror_service->get_description() << std::endl;
         }
         std::cout << "  last_update: " << utils::timestr(
           local_status.last_update) << std::endl;
@@ -1569,12 +1569,36 @@ int execute_status(const po::variables_map &vm,
   librbd::RBD rbd;
 
   uint32_t total_images = 0;
+  uint32_t total_groups = 0;
   std::map<librbd::mirror_image_status_state_t, int> mirror_image_states;
   MirrorHealth mirror_image_health = MIRROR_HEALTH_UNKNOWN;
   r = get_mirror_image_status(io_ctx, &total_images, &mirror_image_states,
                               &mirror_image_health);
   if (r < 0) {
     return r;
+  }
+  std::map<std::string, librbd::mirror_group_global_status_t> mirror_groups;
+  std::map<librbd::mirror_group_status_state_t,int>mirror_groups_count;
+  r = rbd.mirror_group_global_status_list(io_ctx, "", 1024, &mirror_groups);
+  if (r < 0) {
+    std::cerr << "Failed to list mirror groups: " << r << std::endl;
+  }
+  total_groups = mirror_groups.size();
+  for (auto &[group_id, group_status] : mirror_groups) {
+    auto group_status_dup = group_status;
+    group_status_dup.site_statuses.erase(
+      std::remove_if(group_status_dup.site_statuses.begin(),
+                    group_status_dup.site_statuses.end(),
+                    [](auto& group_status_dup) {
+          return (group_status_dup.mirror_uuid ==
+                    RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+        }),
+      group_status_dup.site_statuses.end());
+    if (!group_status_dup.site_statuses.empty()) {
+          for (auto& site : group_status_dup.site_statuses) {
+            mirror_groups_count[site.state]++;
+          }
+        }
   }
 
   MirrorDaemonServiceInfo daemon_service_info(io_ctx);
@@ -1606,6 +1630,13 @@ int execute_status(const po::variables_map &vm,
     for (auto &it : mirror_image_states) {
       std::cout << "    " << it.second << " "
 		<< utils::mirror_image_status_state(it.first) << std::endl;
+    }
+    if ( total_groups > 0 ){
+    std::cout<< "Groups: " << total_groups << " total" <<std::endl;
+      for(auto &it1 : mirror_groups_count){
+        std::cout << "    " << it1.second << " " 
+      << utils::mirror_group_status_state(it1.first) <<std::endl;
+      }
     }
   }
 
@@ -1665,6 +1696,99 @@ int execute_status(const po::variables_map &vm,
     std::map<std::string, std::string> peer_mirror_uuids_to_name;
     utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,
                                                  &peer_mirror_uuids_to_name);
+    librbd::mirror_group_site_status_t local_status_group;
+    if(total_groups > 0){
+      if (formatter != nullptr) {
+        formatter->open_array_section("groups");
+        for (auto &[group_id, group_status] : mirror_groups) {
+          int local_site_group_r = utils::get_local_mirror_group_status(
+          group_status, &local_status_group);
+          group_status.site_statuses.erase(
+            std::remove_if(group_status.site_statuses.begin(),
+                          group_status.site_statuses.end(),
+                          [](auto& group_status) {
+                return (group_status.mirror_uuid ==
+                          RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+              }),
+            group_status.site_statuses.end());
+          formatter->open_object_section("group");
+          formatter->dump_string("name", group_status.name);
+          formatter->dump_string("global_id",group_status.info.global_id);
+          if (local_site_group_r >= 0) {
+            formatter->dump_string("state", utils::mirror_group_site_status_state(
+              local_status_group));
+            formatter->dump_string("description", local_status_group.description);
+            formatter->dump_string("last_update", utils::timestr(
+              local_status_group.last_update));
+          }
+          formatter->open_array_section("peer_sites");
+          for (auto& status : group_status.site_statuses) {
+            formatter->open_object_section("peer_site");
+
+            auto name_it = peer_mirror_uuids_to_name.find(status.mirror_uuid);
+            formatter->dump_string("site_name",
+              (name_it != peer_mirror_uuids_to_name.end() ? name_it->second : ""));
+            formatter->dump_string("mirror_uuids", status.mirror_uuid);
+
+            formatter->dump_string("state", utils::mirror_group_site_status_state(
+              status));
+            formatter->dump_string("description", status.description);
+            formatter->dump_string("last_update", utils::timestr(
+              status.last_update));
+            formatter->close_section(); // peer_site
+          }
+          formatter->close_section(); // peer_sites
+          formatter->close_section(); // group
+        }
+        formatter->close_section(); // groups
+      } else {
+        std::cout << "GROUPS" << std::endl;
+        for (auto &[group_id, group_status] : mirror_groups) {
+          int local_site_group_r = utils::get_local_mirror_group_status(
+            group_status, &local_status_group);
+          group_status.site_statuses.erase(
+            std::remove_if(group_status.site_statuses.begin(),
+                          group_status.site_statuses.end(),
+                          [](auto& group_status) {
+                return (group_status.mirror_uuid ==
+                          RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+              }),
+            group_status.site_statuses.end());
+          std::cout << group_status.name << ":\n"  
+              << "  global_id: " << group_status.info.global_id << "\n";
+          if(local_site_group_r >= 0){
+            std::cout << "  state:       " << utils::mirror_group_site_status_state(
+                    local_status_group) << "\n"
+                  << "  description: " << local_status_group.description << "\n";
+            std::cout << "  last_update: " << utils::timestr(
+              local_status_group.last_update) << std::endl;
+          }
+          if (!group_status.site_statuses.empty()) {
+            std::cout << "  peer_sites:" << std::endl;
+
+            bool first_site = true;
+            for (auto& site : group_status.site_statuses) {
+              if (!first_site) {
+                std::cout << std::endl;
+              }
+              first_site = false;
+
+              auto name_it = peer_mirror_uuids_to_name.find(site.mirror_uuid);
+              std::cout << "    name: "
+                        << (name_it != peer_mirror_uuids_to_name.end() ?
+                              name_it->second : site.mirror_uuid)
+                        << std::endl
+                        << "    state: " << utils::mirror_group_site_status_state(
+                          site) << std::endl
+                        << "    description: " << site.description << std::endl
+                        << "    last_update: " << utils::timestr(
+                          site.last_update) << std::endl;
+            }
+          }
+          std::cout << std::endl;
+        }
+      }
+    }
 
     if (formatter != nullptr) {
       formatter->open_array_section("images");
