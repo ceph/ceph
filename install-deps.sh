@@ -141,7 +141,7 @@ function install_pkg_on_ubuntu {
     fi
 }
 
-boost_ver=1.85
+boost_ver=1.87
 
 function clean_boost_on_ubuntu {
     ci_debug "Running clean_boost_on_ubuntu() in install-deps.sh"
@@ -193,7 +193,7 @@ function install_boost_on_ubuntu {
                               cut -d'.' -f1,2)
     local codename=$1
     local project=libboost
-    local sha1=55f34507d322314fb0294629b7c0bb406de07aec
+    local sha1=9ea1fb8bdad548a88004db87761f173aa50dcc85
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
@@ -205,7 +205,9 @@ function install_boost_on_ubuntu {
         ceph-libboost-context${boost_ver}-dev \
         ceph-libboost-coroutine${boost_ver}-dev \
         ceph-libboost-date-time${boost_ver}-dev \
+        ceph-libboost-exception${boost_ver}-dev \
         ceph-libboost-filesystem${boost_ver}-dev \
+        ceph-libboost-graph${boost_ver}-dev \
         ceph-libboost-iostreams${boost_ver}-dev \
         ceph-libboost-locale${boost_ver}-dev \
         ceph-libboost-program-options${boost_ver}-dev \

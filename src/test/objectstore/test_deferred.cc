@@ -10,6 +10,9 @@
 #include <string>
 #include <time.h>
 
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int.hpp>
+
 #include "common/pretty_binary.h"
 #include "global/global_context.h"
 #include "kv/KeyValueDB.h"
