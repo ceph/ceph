@@ -95,10 +95,8 @@ public:
 };
 
 // RootChildNode is (can be) the root of the tree.
-// It serves the responsibility to be a child of the RootBlock.
 // Logically, it is a secialized version of ChildNode.
 template <typename ParentT, typename T>
-requires std::is_same_v<RootBlock, ParentT>
 class RootChildNode {
 public:
 protected:
@@ -123,8 +121,7 @@ protected:
   }
 
   void destroy() {
-    auto &me = down_cast();
-    assert(me.is_btree_root());
+    assert(down_cast().is_btree_root());
     ceph_assert(parent_of_root);
     TreeRootLinker<ParentT, T>::unlink_root(parent_of_root);
   }
@@ -314,11 +311,11 @@ public:
     ceph_assert(iter != copy_dests_by_trans.end());
     auto &copy_dests = static_cast<copy_dests_t&>(*iter);
     auto it = copy_dests.dests_by_key.lower_bound(key);
-    if (it == copy_dests.dests_by_key.end() || (*it)->range.begin > key) {
+    if (it == copy_dests.dests_by_key.end() || (*it)->get_begin() > key) {
       ceph_assert(it != copy_dests.dests_by_key.begin());
       --it;
     }
-    ceph_assert((*it)->range.begin <= key && key < (*it)->range.end);
+    ceph_assert((*it)->get_begin() <= key && key < (*it)->get_end());
     return *it;
   }
 
@@ -357,6 +354,7 @@ public:
   void link_child(BaseChildNode<T, node_key_t>* child, btreenode_pos_t pos) {
     auto &me = down_cast();
     assert(pos < me.get_size());
+    assert(pos < children.capacity());
     assert(child);
     ceph_assert(!me.is_pending());
     assert(child->valid() && !child->pending());
@@ -375,6 +373,15 @@ public:
     if (size == 0) {
       size = me.get_size();
     }
+    if (me.get_size() == children.capacity()) {
+      // Omap/onode trees don't have fixed max number of entries
+      // in a single node, so we need to be able to adjust the
+      // pointer vector size when necessary.
+      // TODO: the factor of the resizing should be a configuration
+      // item.
+      children.resize(me.get_size() * 2);
+    }
+    assert(me.get_size() < children.capacity());
     auto raw_children = children.data();
     std::memmove(
       &raw_children[offset + 1],
@@ -393,11 +400,15 @@ public:
 
 protected:
   ParentNode(btreenode_pos_t capacity)
-    : children(capacity, nullptr),
-      capacity(capacity) {}
+    : children(capacity, nullptr) {}
   ParentNode(const ParentNode &rhs)
-    : children(rhs.capacity, nullptr),
-      capacity(rhs.capacity) {}
+    : children(rhs.children.capacity(), nullptr) {}
+  void sync_children_capacity() {
+    auto &me = down_cast();
+    if (me.get_size() > children.capacity()) {
+      children.resize(me.get_size() * 2);
+    }
+  }
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
     ceph_assert(down_cast().is_stable());
     ceph_assert(dest->is_pending());
@@ -448,6 +459,10 @@ protected:
       &raw_children[offset],
       &raw_children[offset + 1],
       (me.get_size() - offset - 1) * sizeof(BaseChildNode<T, node_key_t>*));
+    if (me.get_size() < (children.capacity() / 3 /*should be parameterized*/)) {
+      children.resize(children.capacity() / 2 /*should be parameterized*/);
+      children.shrink_to_fit();
+    }
   }
 
   void on_rewrite(Transaction &t, T &foreign_extent) {
@@ -489,7 +504,7 @@ protected:
       auto it = copy_sources.upper_bound(key);
       it--;
       auto &copy_source = *it;
-      ceph_assert(copy_source->get_node_meta().is_in_range(key));
+      ceph_assert(copy_source->is_in_range(key));
       return *copy_source;
     }
   }
@@ -772,9 +787,9 @@ protected:
   void copy_children_from_stable_sources() {
     if (!copy_sources.empty()) {
       auto &me = down_cast();
-      auto it = --copy_sources.upper_bound(me.get_node_meta().begin);
+      auto it = --copy_sources.upper_bound(me.get_begin());
       auto &cs = *it;
-      btreenode_pos_t start_pos = cs->lower_bound(me.get_node_meta().begin).get_offset();
+      btreenode_pos_t start_pos = cs->lower_bound(me.get_begin()).get_offset();
       if (start_pos == cs->get_size()) {
 	it++;
 	start_pos = 0;
@@ -783,9 +798,8 @@ protected:
       for (; it != copy_sources.end(); it++) {
 	auto& copy_source = *it;
 	auto end_pos = copy_source->get_size();
-	if (copy_source->get_node_meta().is_in_range(me.get_node_meta().end)) {
-	  end_pos = copy_source->upper_bound(
-	    me.get_node_meta().end).get_offset();
+	if (copy_source->is_in_range(me.get_end())) {
+	  end_pos = copy_source->upper_bound(me.get_end()).get_offset();
 	}
 	auto local_start_iter = me.iter_idx(local_next_pos);
 	auto foreign_start_iter = copy_source->iter_idx(start_pos);
@@ -844,7 +858,7 @@ protected:
 
     for (auto i : me) {
       auto child = this->children[i.get_offset()];
-      if (is_valid_child_ptr(child) && child->node_begin() != i.get_key()) {
+      if (is_valid_child_ptr(child) && !me.validate_child(*child, i)) {
 	SUBERROR(seastore_fixedkv_tree,
 	  "stable child not valid: child {}, key {}",
 	  *dynamic_cast<CachedExtent*>(child),
@@ -925,7 +939,6 @@ private:
 
   std::vector<BaseChildNode<T, node_key_t>*> children;
   std::set<TCachedExtentRef<T>, Comparator> copy_sources;
-  btreenode_pos_t capacity = 0;
 
   // copy dests points from a stable node back to its pending nodes
   // having copy sources at the same tree level, it serves as a two-level index:
@@ -964,39 +977,25 @@ private:
 template <typename ParentT, typename T, typename key_t>
 class ChildNode : public BaseChildNode<ParentT, key_t> {
 protected:
-  void take_prior_parent_tracker() {
-    auto &me = down_cast();
-    auto &prior = static_cast<T&>(*me.get_prior_instance());
-    this->parent_tracker = prior.parent_tracker;
-  }
-
-  void set_parent_tracker_from_prior_instance() {
-    auto &me = down_cast();
-    assert(!me.is_btree_root());
-    assert(me.is_mutation_pending());
-    take_prior_parent_tracker();
-    assert(me.is_parent_valid());
-    auto parent = this->get_parent_node();
-    //TODO: can this search be avoided?
-    auto off = parent->lower_bound(me.get_begin()).get_offset();
-    assert(parent->iter_idx(off).get_key() == me.get_begin());
-    parent->children[off] = &me;
-  }
-
   void on_invalidated() {
     this->reset_parent_tracker();
   }
+  void take_parent_from_prior() {
+    _take_parent_from_prior();
+  }
   void on_replace_prior() {
-    set_parent_tracker_from_prior_instance();
+    take_parent_from_prior();
   }
   void destroy() {
-    auto &me = down_cast();
-    assert(!me.is_btree_root());
-    ceph_assert(me.is_parent_valid());
+    assert(!down_cast().is_btree_root());
+    if (!this->has_parent_tracker()) {
+      // XXX: On startup, parent/child nodes may not be linked,
+      //      we need to tolerate this case.
+      return;
+    }
+    auto off = get_parent_pos();
     auto parent = this->get_parent_node();
-    auto off = parent->lower_bound(me.get_begin()).get_offset();
-    assert(parent->iter_idx(off).get_key() == me.get_begin());
-    assert(parent->children[off] == &me);
+    assert(parent->children[off] == &down_cast());
     parent->children[off] = nullptr;
   }
 private:
@@ -1005,6 +1004,38 @@ private:
   }
   const T& down_cast() const {
     return *static_cast<const T*>(this);
+  }
+
+  void _take_parent_from_prior() {
+    auto &me = down_cast();
+    assert(!me.is_btree_root());
+    auto &prior = static_cast<T&>(*me.get_prior_instance());
+    this->parent_tracker = prior.BaseChildNode<ParentT, key_t>::parent_tracker;
+    if (!this->has_parent_tracker()) {
+      // XXX: On startup, parent/child nodes may not be linked,
+      //      we need to tolerate this case.
+      return;
+    }
+    auto off = get_parent_pos();
+    auto parent = this->get_parent_node();
+    assert(me.get_prior_instance().get() ==
+	   dynamic_cast<CachedExtent*>(parent->children[off]));
+    parent->children[off] = &me;
+  }
+
+  btreenode_pos_t get_parent_pos() const {
+    auto &me = down_cast();
+    auto parent = this->get_parent_node();
+    assert(parent);
+    //TODO: can this search be avoided?
+    auto key = me.get_begin();
+    auto iter = parent->lower_bound(key);
+    if (iter.get_key() > key) {
+      assert(iter != parent->end());
+      iter--;
+    }
+    assert(iter.contains(key));
+    return iter.get_offset();
   }
   bool valid() const final {
     return down_cast().is_valid();
