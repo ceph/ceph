@@ -3,6 +3,7 @@
 
 #include "Types.h"
 #include "SocketCommon.h"
+#include "include/encoding_string.h"
 
 #define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix

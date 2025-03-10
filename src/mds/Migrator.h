@@ -20,7 +20,6 @@
 #include "include/types.h"
 
 #include "Capability.h"
-#include "MDSContext.h"
 #include "Mutation.h" // for MDRequestRef
 
 #include <map>
@@ -29,6 +28,7 @@
 #include <string_view>
 
 class MDCache;
+class MDSContext;
 class MDSMap;
 class MDSRank;
 class MExportCaps;
@@ -215,7 +215,7 @@ public:
 				std::map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_inode(CInode *in, mds_rank_t target,
 			   std::map<client_t,Capability::Import>& peer_imported,
-			   MDSContext::vec& finished);
+			   std::vector<MDSContext*>& finished);
   void finish_export_inode_caps(CInode *in, mds_rank_t target,
 			        std::map<client_t,Capability::Import>& peer_imported);
 
@@ -227,7 +227,7 @@ public:
                         uint64_t &num_exported);
   void finish_export_dir(CDir *dir, mds_rank_t target,
 			 std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
-			 MDSContext::vec& finished, int *num_dentries);
+			 std::vector<MDSContext*>& finished, int *num_dentries);
 
   void clear_export_proxy_pins(CDir *dir);
 
@@ -360,7 +360,7 @@ protected:
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
   void encode_export_prep_trace(bufferlist& bl, CDir *bound, CDir *dir, export_state_t &es,
                                std::set<inodeno_t> &inodes_added, std::set<dirfrag_t> &dirfrags_added);
-  void decode_export_prep_trace(bufferlist::const_iterator& blp, mds_rank_t oldauth, MDSContext::vec &finished);
+  void decode_export_prep_trace(bufferlist::const_iterator& blp, mds_rank_t oldauth, std::vector<MDSContext*> &finished);
 
   void handle_gather_caps(const cref_t<MGatherCaps> &m);
 
