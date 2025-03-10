@@ -834,6 +834,7 @@ struct error_code;
       contiguous_filler(char* const pos) : pos(pos) {}
 
     public:
+      contiguous_filler() : pos(nullptr) {}
       void advance(const unsigned len) {
 	pos += len;
       }
