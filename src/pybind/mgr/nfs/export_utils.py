@@ -1,7 +1,7 @@
-from typing import Any
+from typing import Any, Optional
 
 from .cluster import NFSCluster
-from .qos_conf import QOSType, QOSParams, QOSBandwidthControl, QOSOpsControl
+from .qos_conf import QOSType, QOSParams, QOSBandwidthControl, QOSOpsControl, QOS
 
 
 def export_dict_bw_checks(cluster_id: str,
@@ -109,3 +109,8 @@ def export_qos_ops_checks(cluster_id: str,
         if clust_qos_obj.qos_type == QOSType.PerClient:
             raise Exception(f'Export-level QoS IOPS control cannot be enabled if the QoS type at the cluster {cluster_id} level is set to PerClient.')
         ops_obj.qos_ops_checks(clust_qos_obj.qos_type)
+
+
+def get_cluster_qos_config(cluster_id: str, mgr_obj: Any) -> Optional[QOS]:
+    nfs_clust_obj = NFSCluster(mgr_obj)
+    return nfs_clust_obj.get_cluster_qos_config(cluster_id)
