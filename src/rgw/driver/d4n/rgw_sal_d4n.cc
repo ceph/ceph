@@ -1130,6 +1130,23 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
   return 0;
 }
 
+int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version, bool dirty)
+{
+// start trx 
+
+  ldpp_dout(dpp, 0) << "D4NFilterObject::set_head_obj_dir_entry calling start trx"  << dendl;
+  this->driver->get_block_dir()->start_trx(dpp,this->driver->get_block_dir()->get_connection(), y);
+  
+  ldpp_dout(dpp, 0) << "D4NFilterObject::set_head_obj_dir_entry calling set_head_obj_dir_entry_trx"  << dendl;
+  set_head_obj_dir_entry_trx(dpp, exec_responses, y, is_latest_version, dirty);
+ 
+  ldpp_dout(dpp, 0) << "D4NFilterObject::set_head_obj_dir_entry calling end-trx"  << dendl;
+  this->driver->get_block_dir()->end_trx(dpp,this->driver->get_block_dir()->get_connection(),y);
+// TODO it may failed to set head object entry, need to handle it
+return 0;
+}
+
+
 //This method maintains adds the following entries:
 //1. A hash entry that maintains the latest version for dirty objects (versioned and non-versioned) and non-versioned clean objects.
 //2. A "null" hash entry that maintains the same version as the latest hash entry - this is used when get/delete requests are received
@@ -1138,7 +1155,7 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
 //4. A versioned hash entry for every version for a version enabled bucket - this helps in get/delete requests with version-id specified
 //5. Redis ordered set to maintain the order of dirty objects added for a version enabled bucket. Even when the bucket is non-versioned, this set maintains a "null" entry
 //6. Another ordered set to maintain a lexicographically sorted order of objects for a bucket - used for bucket listing
-int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version, bool dirty)
+int D4NFilterObject::set_head_obj_dir_entry_trx(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version, bool dirty)
 {
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " bucket name: " << this->get_bucket()->get_name() << dendl;
   int ret = -1;
