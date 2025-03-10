@@ -38,6 +38,8 @@
 #include "PyModuleRegistry.h"
 #include "PyUtil.h"
 
+#include "common/perf_counters_key.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
@@ -45,6 +47,8 @@
 
 using std::pair;
 using std::string;
+using std::vector;
+using std::string_view;
 using namespace std::literals;
 
 ActivePyModules::ActivePyModules(
@@ -839,7 +843,7 @@ void ActivePyModules::_refresh_config_map()
   }
 }
 
-PyObject* ActivePyModules::with_perf_counters(
+PyObject* ActivePyModules::with_unlabled_perf_counters(
     std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
     const std::string &svc_id,
@@ -876,7 +880,77 @@ PyObject* ActivePyModules::with_perf_counters(
   return f.get();
 }
 
-PyObject* ActivePyModules::get_counter_python(
+PyObject* ActivePyModules::with_perf_counters(
+    std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels) const
+{
+  PyFormatter f;
+  /*
+    The resolved counter path, they are of the format
+    <counter_name>.<sub_counter_name> If the counter name has labels, then they
+    are segregated via NULL delimters.
+
+    Eg:
+      - labeled counter:
+        "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+      - unlabeled counter: "osd.stat_bytes"
+  */
+  std::string resolved_path;
+  // NOTE: This should ideally be the resolved_path, but since the resolved path
+  // contains NULL delimiters and we cannot have an array section whose key has
+  // NULL characters, we will just use the counter_name to extract the value at
+  // the call site
+  f.open_array_section(counter_name);
+
+  // Construct the resolved path
+  if (!labels.empty()){
+    // NOTE: The 'ceph::perf_counters::key_create()' API requires a static
+    // array. Hence we are assuming that a performance counter will never have
+    // more than 100 labels.
+    const int max_labels_per_key = 100;
+    ceph::perf_counters::label_pair labels_array[max_labels_per_key];
+    std::copy(labels.begin(), labels.end(), std::begin(labels_array));
+    std::string counter_name_with_labels = ceph::perf_counters::key_create(counter_name.data(), std::move(labels_array));
+    resolved_path = std::string(counter_name_with_labels) + "." + std::string(sub_counter_name);
+  } else {
+    resolved_path = std::string(counter_name) + "." + std::string(sub_counter_name);
+  }
+
+
+  {
+    without_gil_t no_gil;
+    std::lock_guard l(lock);
+    auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
+    if (metadata) {
+      std::lock_guard l2(metadata->lock);
+      if (metadata->perf_counters.instances.count(resolved_path)) {
+        auto counter_instance = metadata->perf_counters.instances.at(resolved_path);
+        auto counter_type = metadata->perf_counters.types.at(resolved_path);
+        with_gil(no_gil, [&] {
+          fct(counter_instance, counter_type, f);
+        });
+      } else {
+        dout(4) << "Missing counter: '" << resolved_path << "' ("
+		<< svc_name << "." << svc_id << ")" << dendl;
+        dout(20) << "Paths are:" << dendl;
+        for (const auto &i : metadata->perf_counters.instances) {
+          dout(20) << i.first << dendl;
+        }
+      }
+    } else {
+      dout(4) << "No daemon state for " << svc_name << "." << svc_id << ")"
+              << dendl;
+    }
+  }
+  f.close_section();
+  return f.get();
+}
+
+PyObject* ActivePyModules::get_unlabeled_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path)
@@ -905,10 +979,10 @@ PyObject* ActivePyModules::get_counter_python(
       }
     }
   };
-  return with_perf_counters(extract_counters, svc_name, svc_id, path);
+  return with_unlabled_perf_counters(extract_counters, svc_name, svc_id, path);
 }
 
-PyObject* ActivePyModules::get_latest_counter_python(
+PyObject* ActivePyModules::get_latest_unlabeled_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path)
@@ -929,10 +1003,36 @@ PyObject* ActivePyModules::get_latest_counter_python(
       f.dump_unsigned("v", datapoint.v);
     }
   };
-  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path);
+  return with_unlabled_perf_counters(extract_latest_counters, svc_name, svc_id, path);
 }
 
-PyObject* ActivePyModules::get_perf_schema_python(
+PyObject* ActivePyModules::get_latest_counter_python(
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string_view &counter_name,
+    const std::string_view &sub_counter_name,
+    const std::vector<std::pair<std::string_view,std::string_view>> &labels)
+{
+  auto extract_latest_counters = [](
+      PerfCounterInstance& counter_instance,
+      PerfCounterType& counter_type,
+      PyFormatter& f)
+  {
+    if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+      const auto &datapoint = counter_instance.get_latest_data_avg();
+      f.dump_float("t", datapoint.t);
+      f.dump_unsigned("s", datapoint.s);
+      f.dump_unsigned("c", datapoint.c);
+    } else {
+      const auto &datapoint = counter_instance.get_latest_data();
+      f.dump_float("t", datapoint.t);
+      f.dump_unsigned("v", datapoint.v);
+    }
+  };
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, counter_name, sub_counter_name, labels);
+}
+
+PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
     const std::string &svc_type,
     const std::string &svc_id)
 {
@@ -964,6 +1064,15 @@ PyObject* ActivePyModules::get_perf_schema_python(
         f.open_object_section(key.c_str());
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
+
+          // Ignore labeled counters. The perf schema format below can not
+          // accomodate counters with labels. A new representation format is
+          // requried to do support this.
+          auto labels = ceph::perf_counters::key_labels(counter_name);
+          if (labels.begin() != labels.end()){
+            continue;
+          }
+
           f.open_object_section(counter_name.c_str());
           auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
@@ -976,6 +1085,161 @@ PyObject* ActivePyModules::get_perf_schema_python(
           f.close_section();
         }
         f.close_section();
+      });
+    }
+  } else {
+    dout(4) << __func__ << ": No daemon state found for "
+              << svc_type << "." << svc_id << ")" << dendl;
+  }
+  return f.get();
+}
+
+PyObject* ActivePyModules::get_perf_schema_python(
+  const std::string &svc_type,
+  const std::string &svc_id)
+{
+  without_gil_t no_gil;
+  std::lock_guard l(lock);
+
+  DaemonStateCollection daemons;
+
+  if (svc_type == "") {
+    daemons = daemon_state.get_all();
+  } else if (svc_id.empty()) {
+    daemons = daemon_state.get_by_service(svc_type);
+  } else {
+    auto key = DaemonKey{svc_type, svc_id};
+    // so that the below can be a loop in all cases
+    auto got = daemon_state.get(key);
+    if (got != nullptr) {
+      daemons[key] = got;
+    }
+  }
+
+  auto f = with_gil(no_gil, [&] {
+    return PyFormatter();
+  });
+
+  auto dump_sub_counter_information = [] (PyFormatter *f, PerfCounterType type){
+    Formatter::ObjectSection counter_section(*f, type.counter_name);
+    f->create_unique("description", type.description);
+    if (!type.nick.empty()) {
+      f->dump_string("nick", type.nick);
+    }
+    f->dump_unsigned("type", type.type);
+    f->dump_unsigned("priority", type.priority);
+    f->dump_unsigned("units", type.unit);
+  };
+
+  auto dump_counter_with_labels = [&dump_sub_counter_information] (PyFormatter *f, auto key_labels, auto type){
+    f->open_object_section(""); // counter should be enclosed by array
+
+    for (Formatter::ObjectSection labels_section{*f, "labels"}; const auto &label: key_labels){
+      f->dump_string(label.first, label.second);
+    }
+
+    f->open_object_section("counters");
+    dump_sub_counter_information(f, type);
+  };
+
+
+  if (!daemons.empty()) {
+    for (auto& [key, state] : daemons) {
+      std::lock_guard l(state->lock);
+      with_gil(no_gil, [&, key=ceph::to_string(key), state=state] {
+        string_view key_name, prev_key_name;
+        vector<pair<string_view,string_view>> prev_key_labels;
+        Formatter::ObjectSection counter_section(f, key.c_str()); // Main Object Section
+        std::optional<Formatter::ArraySection> array_section;
+
+        for (auto ctr_inst_iter : state->perf_counters.instances) {
+          /*
+              The path of the counter can either be:
+                - labeled counter path: "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+                - unlabeled counter path: "osd.stat_bytes"
+              
+              For the above counters:
+                - key_names are: 'osd_scrub_sh_repl' and 'osd'
+                - counter names are: 'successful_scrubs_elapsed' and 'stat_bytes'
+
+          */
+          const auto &counter_name_with_labels = ctr_inst_iter.first;
+          auto type = state->perf_counters.types[counter_name_with_labels];
+
+          // create a vector of labels i.e [(level, shallow), (pooltype, replicated)]
+          vector<pair<string_view,string_view>> key_labels;
+          for (auto label : ceph::perf_counters::key_labels(counter_name_with_labels)) {
+            if (!label.first.empty()){
+              key_labels.push_back(label);
+            }
+          }
+
+          // Extract the key names from the counter path, these key names form
+          // the main object section for their counters
+          string key_name_without_counter;
+          if(!key_labels.empty()){
+            // key_name, osd_scrub_sh_repl
+            key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+          } else {
+            size_t pos = counter_name_with_labels.find('.');
+            key_name_without_counter = counter_name_with_labels.substr(0, pos);
+            key_name = key_name_without_counter; // key_name, osd
+          }
+
+          /*
+            Construct a schema in the following format
+            {
+              "osd": [
+                {
+                  "labels": {},
+                  "counters":{
+                    "stat_byte": {
+                      "description": "",
+                      "nick": "",
+                      ...
+                    }
+                  }
+                }
+              ],
+              "osd_scrub_sh_repl":[
+                {
+                  "labels": {                         <---- 'label' section 
+                    "level": "shallow",
+                    "pooltype": "replicated"
+                  },
+                  "counters":{                        <---- 'counters' section
+                    "successful_scrubs_elapsed":{     <---- 'sub counter' section
+                      "description": "",
+                      "nick": "",
+                      ...
+                    }
+                  }
+                }                                     <---- 'counter object' close                                
+              ]
+            }
+          */
+        
+        if (prev_key_name != key_name){
+          if(!prev_key_name.empty()){
+            f.close_section(); // close 'counters'
+            f.close_section(); // close 'counter object' section
+          }
+          prev_key_name = key_name;
+          prev_key_labels = key_labels;
+          array_section.emplace(f, key_name);
+          dump_counter_with_labels(&f, key_labels, type);
+        } else if (prev_key_name == key_name && prev_key_labels == key_labels) {
+            dump_sub_counter_information(&f, type);
+        } else if (prev_key_name == key_name && prev_key_labels != key_labels) {
+            f.close_section(); // close previous 'counters' section
+            f.close_section(); // close previous counter object section
+            dump_counter_with_labels(&f, key_labels, type);
+        } else {
+          dout(4) << __func__ << "unable to create perf schema, not a valid condition" << dendl;
+        }
+      }
+      f.close_section(); // close 'counters'
+      f.close_section(); // close 'counter object' section
       });
     }
   } else {

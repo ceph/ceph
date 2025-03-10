@@ -61,7 +61,7 @@ class TcmuService(object):
                     pool=metadata['pool_name'],
                     name=metadata['image_name'])
                 perf_key = "{}lock_acquired_time".format(perf_key_prefix)
-                perf_value = mgr.get_counter('tcmu-runner',
+                perf_value = mgr.get_unlabeled_counter('tcmu-runner',
                                              service_id,
                                              perf_key)[perf_key]
                 if perf_value:
