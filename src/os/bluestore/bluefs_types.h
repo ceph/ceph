@@ -213,14 +213,12 @@ WRITE_CLASS_ENCODER(bluefs_layout_t)
 struct bluefs_super_t {
   uuid_d uuid;      ///< unique to this bluefs instance
   uuid_d osd_uuid;  ///< matches the osd that owns us
-  uint64_t version;
+  uint64_t version; ///< In fact that's update counter
   uint32_t block_size;
 
   bluefs_fnode_t log_fnode;
 
   std::optional<bluefs_layout_t> memorized_layout;
-
-  std::vector<uint64_t> bluefs_max_alloc_size;
 
   bluefs_super_t();
 
