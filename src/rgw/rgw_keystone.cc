@@ -95,20 +95,6 @@ static inline std::string read_secret(const std::string& file_path)
   return s;
 }
 
-std::string CephCtxConfig::get_admin_token() const noexcept
-{
-  auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token_path;
-  if (!atv.empty()) {
-    return read_secret(atv);
-  } else {
-    auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token;
-    if (!atv.empty()) {
-      return atv;
-    }
-  }
-  return empty;
-}
-
 std::string CephCtxConfig::get_admin_password() const noexcept  {
   auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password_path;
   if (!apv.empty()) {
@@ -129,14 +115,6 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
                              std::string& token,
                              bool& token_cached)
 {
-  /* Let's check whether someone uses the deprecated "admin token" feature
-   * based on a shared secret from keystone.conf file. */
-  const auto& admin_token = config.get_admin_token();
-  if (! admin_token.empty()) {
-    token = std::string(admin_token.data(), admin_token.length());
-    return 0;
-  }
-
   TokenEnvelope t;
 
   /* Try cache first before calling Keystone for a new admin token. */
