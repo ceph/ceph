@@ -22,7 +22,7 @@ Usage:
 
 import os
 import logging
-from typing import Type, Dict, TYPE_CHECKING
+from typing import Type, Dict, List, TYPE_CHECKING
 import importlib
 import pkgutil
 
@@ -65,6 +65,12 @@ class CephadmServiceRegistry:
     def get_service(self, service_type: str) -> "CephadmService":
         """Retrieves an initialized service instance by type."""
         return self._services[service_type]
+
+    def get_services_requiring_monitoring(self) -> List[str]:
+        """Return a list with service types that requiere monitoring."""
+        services_to_monitor = [svc for svc in self._services if self._services[svc].needs_monitoring]
+        services_to_monitor.append('ceph')  # this is needed for mgr-prometheus targets
+        return sorted(services_to_monitor)
 
 
 def register_cephadm_service(cls: Type["CephadmService"]) -> Type["CephadmService"]:
