@@ -572,14 +572,6 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   } else if (r == -EEXIST) {
     finish_start_fail(r, "split-brain detected");
     return;
-  } else if (m_remote_group_id.empty()){
-    r = -EINVAL;
- //FIXME: The primary should not care if the remote is ready.
- // Bootstrap again when the replayer is restarted
-    finish_start_fail(r, "remote is not ready yet");
-    return;
-  } else if (r == -EINVAL) {
-    sync_group_names();
   } else if (r < 0) {
     finish_start_fail(r, "bootstrap failed");
     return;
@@ -590,6 +582,10 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
        cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED,
        "local group is primary");
     finish_start_fail(0, "local group is primary");
+    return;
+  } else if (m_remote_group_id.empty()) { // m_remote_group_id matter for
+                                          // secondary cluster case.
+    finish_start_fail(-EINVAL, "remote is not ready yet");
     return;
   }
 
