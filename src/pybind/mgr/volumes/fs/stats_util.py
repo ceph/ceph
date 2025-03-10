@@ -15,6 +15,8 @@ from .operations.template import SubvolumeOpType
 from .operations.clone_index import open_clone_index, PATH_MAX
 from .operations.resolver import resolve_group_and_subvolume_name
 from .exception import VolumeException
+from .async_cloner import get_clone_state
+from .operations.versions.subvolume_attrs import SubvolumeStates
 
 from mgr_util import RTimer, format_bytes, format_dimless
 from cephfs import ObjectNotFound
@@ -97,11 +99,6 @@ class CloneProgressReporter:
         # LibCephFS.getxattr() can be made.
         self.volclient = volclient
 
-        # need to figure out how many progress bars should be printed. print 1
-        # progress bar if number of ongoing clones is less than this value,
-        # else print 2.
-        self.max_concurrent_clones = self.volclient.mgr.max_concurrent_clones
-
         # Creating an RTimer instance in advance so that we can check if clone
         # reporting has already been initiated by calling RTimer.is_alive().
         self.update_task = RTimer(1, self._update_progress_bars)
@@ -110,6 +107,8 @@ class CloneProgressReporter:
         self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clones'
         # progress event ID for ongoing+pending clone jobs
         self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
+
+        self.ongoing_clones_count = 0
 
     def initiate_reporting(self):
         if self.update_task.is_alive():
@@ -142,6 +141,11 @@ class CloneProgressReporter:
             ci.dst_path = dst_subvol.path
             log.debug(f'destination subvolume path for clone - {ci.dst_path}')
 
+        clone_state = get_clone_state(self.volclient, self.vol_spec, ci.volname,
+                                      ci.dst_group_name, ci.dst_subvol_name)
+        if clone_state == SubvolumeStates.STATE_INPROGRESS:
+            self.ongoing_clones_count += 1
+
         log.debug('finished collecting info for cloning destination')
 
     def _get_clone_src_info(self, fs_handle, ci):
@@ -172,6 +176,10 @@ class CloneProgressReporter:
                     clone_index_entries = clone_index.list_entries_by_ctime_order()
                     log.debug('finished collecting all clone index entries, '
                               f'found {len(clones)} clone index entries')
+
+                # reset ongoing clone counter before iterating over all clone
+                # entries
+                self.ongoing_clones_count = 0
 
                 log.debug('collecting info for clones found through clone index '
                          'entries...')
@@ -205,7 +213,8 @@ class CloneProgressReporter:
                     clones.append(ci)
 
         log.debug('finished collecting info on all clones, found '
-                  f'{len(clones)} clones')
+                  f'{len(clones)} clones out of which '
+                  f'{self.ongoing_clones_count} are ongoing clones')
         return clones
 
     def _update_progress_bar_event(self, ev_id, ev_msg, ev_progress_fraction):
@@ -234,10 +243,16 @@ class CloneProgressReporter:
             self.finish()
             return
 
+        # there has to be 1 ongoing clone for this method to run, perhaps it
+        # wasn't found by it because the index entry for it hasn't been created
+        # yet.
+        if self.ongoing_clones_count == 0:
+            self.ongoing_clones_count = 1
+
         # onpen bar (that is progress bar for clone jobs in ongoing and pending
         # state) is printed when clones are in pending state. it is kept in
         # printing until all clone jobs finish.
-        show_onpen_bar = True if len(clones) > self.max_concurrent_clones \
+        show_onpen_bar = True if len(clones) > self.ongoing_clones_count \
             else False
 
         percent = 0.0
@@ -245,7 +260,7 @@ class CloneProgressReporter:
         assert self.on_pev_id is not None
         sum_percent_ongoing = 0.0
         avg_percent_ongoing = 0.0
-        total_ongoing_clones = min(len(clones), self.max_concurrent_clones)
+        total_ongoing_clones = min(len(clones), self.ongoing_clones_count)
 
         if show_onpen_bar:
             assert self.onpen_pev_id is not None
