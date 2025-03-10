@@ -1,0 +1,52 @@
+.. _doc-dev-9p-share:
+
+Setting Up a 9P Shared Folder Between Host and Guest
+-----------------------------------------------------
+
+The 9P (Plan 9 Filesystem Protocol) allows you to share directories between the
+host and guest in QEMU, making file transfers between the two environments
+easy. Follow these steps to set up a 9P shared folder.
+
+1. **Create or Identify a Shared Directory on the Host**
+
+   First, decide on a directory on the host that you want to share with the VM.
+   You can use an existing directory or create a new one. For example:
+
+   .. prompt:: bash #
+
+      mkdir ~/shared
+
+2. **Launch the VM with 9P Sharing Enabled**
+
+   To enable 9P sharing, launch the VM with the ``-virtfs`` option to specify
+   the shared folder. In this example, the host’s ``~/shared`` folder will be
+   accessible as ``/mnt/shared`` in the guest:
+
+   .. code-block:: bash
+
+           qemu-system-x86_64      -m 2048                                                                  \
+                                   -enable-kvm                                                              \
+                                   -drive file=my_vm_disk.qcow2,format=qcow2                                \
+                                   -fsdev local,id=shared_folder,path=/home/user/shared,security_model=none \
+                                   -device virtio-9p-pci,fsdev=shared_folder,mount_tag=hostshare            \
+                                   -vnc: 1
+
+   - ``path=/home/user/shared``: Path to the shared folder on the host.
+   - ``mount_tag=hostshare``: Assigns a name (or tag) for the share, which will
+     be used in the guest.
+   - ``id=shared_folder``: An identifier for the shared folder, used internally
+     by QEMU.
+
+3. **Mount the Shared Folder in the Guest**
+
+   After starting the VM, mount the shared folder inside the guest OS. In a
+   Linux guest, you can use the following command:
+
+   .. prompt:: bash #
+
+      sudo mount -t 9p -o trans=virtio hostshare /mnt/shared
+
+
+   - ``-t 9p``: Specifies the 9P protocol for the mount.
+   - ``trans=virtio``: Optimizes the transport for QEMU’s virtualized
+     environment.
