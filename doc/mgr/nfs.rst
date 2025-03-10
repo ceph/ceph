@@ -324,6 +324,10 @@ export per second.
 ``<max_client_combined_bw>`` is the maximum combined read/write bandwidth for
 client per second.
 
+For example,::
+
+    $ ceph nfs cluster qos enable bandwidth_control nfs_clust PerShare --max_export_write_bw 100MB --max_export_read_bw 100MB
+
 .. note:: If this command is used to update ``qos_type``, make sure to update
    all the exports with the required parameters.
 
@@ -341,12 +345,16 @@ This command disables the bandwidth control Quality of Service in the cluster.
 If cluster-level Quality of Service is disabled, then export-level Quality of
 Service will not be applicable even if it is enabled.
 
+For example,::
+
+    $ ceph nfs cluster qos disable bandwidth_control nfs_clust
+
 Enable QoS OPS control for NFS Ganesha cluster
 ----------------------------------------------
 
 .. code:: bash
 
-   $ ceph nfs cluster qos enable ops_control <cluster_id> <qos_type:PerShare|PerClient|PerShare_PerClient> [<export_ops_count:int>] [<client_ops_count:int>]
+   $ ceph nfs cluster qos enable ops_control <cluster_id> <qos_type:PerShare|PerClient|PerShare_PerClient> [<max_export_iops:int>] [<max_client_iops:int>]
 
 This command enables or updates OPS control for an NFS cluster.
 
@@ -357,20 +365,24 @@ PerShare_PerClient.
 
 If ``PerShare`` ``qos_type`` is selected, then the cluster-level QoS config
 will be applicable to all exports created on that NFS Ganesha cluster. It
-requires the ``export_ops_count`` parameter.
+requires the ``max_export_iops`` parameter.
 
 If ``PerClient`` ``qos_type`` is selected, then the cluster-level qos config
 will be applicable to all clients accessing exports created on that cluster. It
-requires ``client_ops_count`` parameter.
+requires ``max_client_iops`` parameter.
 
 If ``PerShare_PerClient`` ``qos_type`` is selected, then the cluster-level
 config will be applicable to all exports as well as all clients of that NFS
-Ganesha cluster. It requires both ``export_ops_count`` and ``client_ops_count``
+Ganesha cluster. It requires both ``max_export_iops`` and ``max_client_iops``
 parameters.
 
-``<export_ops_count>`` is the count of IOPS operation for an export.
+``<max_export_iops>`` is the count of IOPS operation for an export.
 
-``<client_ops_count>`` is the count of IOPS operation for a client of an export.
+``<max_client_iops>`` is the count of IOPS operation for a client of an export.
+
+For example,::
+
+    $ ceph nfs cluster qos enable ops_control nfs_clust PerShare --max_export_iops 1000
 
 .. note:: If this command is used to update ``qos_type``, make sure to update
    all the exports with the required parameters.
@@ -386,6 +398,10 @@ This command disables OPS control for an NFS Ganesha cluster. After disabling
 ops control at the cluster level, export-level OPS control will not be
 applicable even if it is enabled.
 
+For example,::
+
+    $ ceph nfs cluster qos disable ops_control nfs_clust
+
 Get QoS configuration for NFS Ganesha cluster
 ---------------------------------------------
 
@@ -395,6 +411,20 @@ Get QoS configuration for NFS Ganesha cluster
 
 This command displays all the QoS global default configuration for a given
 cluster.
+
+For example,::
+
+    $ [ceph: root@ceph-node-0 /]# ceph nfs cluster qos get nfs_clust
+     {
+       "combined_rw_bw_control": false,
+       "enable_bw_control": true,
+       "enable_iops_control": true,
+       "enable_qos": true,
+       "max_export_iops": 1000,
+       "max_export_read_bw": "100.0MB",
+       "max_export_write_bw": "100.0MB",
+       "qos_type": "PerShare"
+     }
 
 
 Export Management
@@ -579,7 +609,7 @@ Enable QoS bandwidth control for export
 
 .. code:: bash
 
-    $ nfs export qos enable bandwidth_control <cluster_id> <pseudo_path> [--combined-rw-bw-ctrl] [--max_export_write_bw <value>] [--max_export_read_bw <value>] [--max_client_write_bw <value>] [--max_client_read_bw <value>] [--max_export_combined_bw <value>] [--max_client_combined_bw <value>]
+    $ ceph nfs export qos enable bandwidth_control <cluster_id> <pseudo_path> [--combined-rw-bw-ctrl] [--max_export_write_bw <value>] [--max_export_read_bw <value>] [--max_client_write_bw <value>] [--max_client_read_bw <value>] [--max_export_combined_bw <value>] [--max_client_combined_bw <value>]
 
 This command enables or updates QoS bandwidth control for export. Enable
 cluster-level bandwidth control with ``qos_type`` ``PerShare`` or
@@ -611,6 +641,10 @@ export per second.
 ``<max_client_combined_bw>`` is the maximum combined read/write bandwidth for
 client per second.
 
+For example,::
+
+   $ ceph nfs export qos enable bandwidth_control nfs_clust /export1 --combined-rw-bw-ctrl --max_export_combined_bw 200MB
+
 .. note:: Export level bandwidth control cannot be enabled if the cluster-level
    ``qos_type`` is PerClient.
 
@@ -619,11 +653,15 @@ Disable QoS bandwidth control for export
 
 .. code:: bash
 
-   $ nfs export qos disable bandwidth_control <cluster_id> <pseudo_path>
+   $ ceph nfs export qos disable bandwidth_control <cluster_id> <pseudo_path>
 
 This disables QoS bandwidth control for exports. Exports can use unlimited I/O
 bandwidth after disabling export qos. This means that exports will not follow
 values set at the cluster level.
+
+For example,::
+
+   $ ceph nfs export qos disable bandwidth_control nfs_clust /export1
 
 .. note:: To use cluster level qos bandwidth control values for export again,
    we can use ``nfs export apply <cluster_id>`` command, with export block not
@@ -634,7 +672,7 @@ Enable QoS OPS control for export
 
 .. code:: bash
 
-   $ nfs export qos enable ops_control <cluster_id> <pseudo_path> [<export_ops_count:int>] [<client_ops_count:int>]
+   $ ceph nfs export qos enable ops_control <cluster_id> <pseudo_path> [<max_export_iops:int>] [<max_client_iops:int>]
 
 This enables IOPS control for a specified export. The same command can be used
 to update the OPS count. Enable cluster-level OPS control with ``qos_type``
@@ -642,12 +680,16 @@ to update the OPS count. Enable cluster-level OPS control with ``qos_type``
 
 ``<cluster_id>`` is the NFS Ganesha cluster ID.
 
-``<pseudo_path>`` is the pseudo--oot path. (This must be an absolute path.)
+``<pseudo_path>`` is the pseudo-root path. (This must be an absolute path.)
 
-``<export_ops_count>`` is the count of IOPS operations for export.
+``<max_export_iops>`` is the count of IOPS operations for export.
 
-``<client_ops_count>`` is the count of IOPS operations for a client of the
+``<max_client_iops>`` is the count of IOPS operations for a client of the
 export.
+
+For example,::
+
+   $ ceph nfs export qos enable ops_control nfs_clust /export1 --max_export_iops 2000
 
 .. note:: Export-level OPS control cannot be enabled if the cluster-level
    ``qos_type`` is ``PerClient``.
@@ -657,23 +699,41 @@ Disable QoS OPS control for export
 
 .. code:: bash
 
-   $ nfs export qos disable ops_control <cluster_id> <pseudo_path>
+   $ ceph nfs export qos disable ops_control <cluster_id> <pseudo_path>
 
 This command disables QoS OPS control for exports. Exports will not have any
 limit on OPS control in this case. This means that they will not have any
 cluster-level OPS restriction.
+
+For example,::
+
+   $ ceph nfs export qos disable ops_control nfs_clust /export1
 
 GET QoS configuration for export
 --------------------------------
 
 .. code:: bash
 
-    $ nfs export qos get <cluster_id> <pseudo_path> [--format <value>]
+    $ ceph nfs export qos get <cluster_id> <pseudo_path> [--format <value>]
 
 This command displays the QoS configuration of a given export. The export will
 not have any bandwidth restriction in this case. This means that it will not
 have any cluster-level bandwidth restriction.
 
+For example,::
+
+   $ ceph nfs export qos get nfs_clust /export1
+     {
+       "cluster_enable_bw_control": true,
+       "cluster_enable_iops_control": true,
+       "cluster_enable_qos": true,
+       "combined_rw_bw_control": true,
+       "enable_bw_control": true,
+       "enable_iops_control": true,
+       "enable_qos": true,
+       "max_export_combined_bw": "200.0MB",
+       "max_export_iops": 2000
+     }
 
 Create or update export via JSON specification
 ----------------------------------------------
