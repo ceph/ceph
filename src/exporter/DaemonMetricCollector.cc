@@ -369,6 +369,16 @@ labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
     }
     if (elems.size() >= 4) {
       labels["instance_id"] = quote(elems[3]);
+
+      // fetch rgw_instance for e.g. "ceph-node-00.hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
+      std::string rgw_instance;
+      for (size_t i = 2; i < elems.size() - 2; ++i) {
+        if (!rgw_instance.empty()) {
+          rgw_instance += ".";
+        }
+        rgw_instance += elems[i];
+      }
+      labels["rgw_instance"] = quote(rgw_instance);
     } else {
       return labels_t();
     }
