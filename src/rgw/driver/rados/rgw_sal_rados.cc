@@ -2917,6 +2917,8 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
   int ret = 0;
   string src_storage_class = o.meta.storage_class; // or take src_placement also as input
+  // update tier_config in case tier params are updated
+  tier_config.tier_placement = rtier->get_rt();
 
   // fetch mtime of the object
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
@@ -2944,6 +2946,8 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   tier_ctx.multipart_min_part_size = rtier->get_rt().t.s3.multipart_min_part_size;
   tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
   tier_ctx.storage_class = tier->get_storage_class();
+  tier_ctx.restore_storage_class = rtier->get_rt().restore_storage_class;
+  tier_ctx.tier_type = rtier->get_rt().tier_type;
 
   ldpp_dout(dpp, 20) << "Restoring object(" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
@@ -3230,7 +3234,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   tier_config.tier_placement = rtier->get_rt();
   tier_config.is_multipart_upload = is_multipart_upload;
 
-  pmanifest->set_tier_type("cloud-s3");
+  pmanifest->set_tier_type(rtier->get_rt().tier_type);
   pmanifest->set_tier_config(tier_config);
 
   /* check if its necessary */
