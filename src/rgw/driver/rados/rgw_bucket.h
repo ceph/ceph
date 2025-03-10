@@ -180,7 +180,8 @@ auto create_bucket_metadata_handler(librados::Rados& rados,
 auto create_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                              RGWSI_Zone* svc_zone,
                                              RGWSI_Bucket* svc_bucket,
-                                             RGWSI_BucketIndex* svc_bi)
+                                             RGWSI_BucketIndex* svc_bi,
+                                             RGWDataChangesLog *svc_datalog)
     -> std::unique_ptr<RGWMetadataHandler>;
 
 // archive bucket entrypoint metadata handler factory
@@ -193,7 +194,8 @@ auto create_archive_bucket_metadata_handler(librados::Rados& rados,
 auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                                      RGWSI_Zone* svc_zone,
                                                      RGWSI_Bucket* svc_bucket,
-                                                     RGWSI_BucketIndex* svc_bi)
+                                                     RGWSI_BucketIndex* svc_bi,
+                                                     RGWDataChangesLog *svc_datalog)
     -> std::unique_ptr<RGWMetadataHandler>;
 
 
@@ -426,6 +428,7 @@ class RGWBucketCtl {
     RGWSI_Bucket_Sync *bucket_sync{nullptr};
     RGWSI_BucketIndex *bi{nullptr};
     RGWSI_User* user = nullptr;
+    RGWDataChangesLog *datalog_rados{nullptr};
   } svc;
 
   struct Ctl {
@@ -437,7 +440,8 @@ public:
                RGWSI_Bucket *bucket_svc,
                RGWSI_Bucket_Sync *bucket_sync_svc,
                RGWSI_BucketIndex *bi_svc,
-               RGWSI_User* user_svc);
+               RGWSI_User* user_svc,
+               RGWDataChangesLog *datalog_svc);
 
   void init(RGWUserCtl *user_ctl,
             RGWDataChangesLog *datalog,
