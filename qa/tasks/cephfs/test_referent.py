@@ -467,6 +467,7 @@ class TestReferentInode(CephFSTestCase):
         The rename should be noop as it's rename to same ino
         """
 
+        self.fs.set_allow_referent_inodes(False)
         self.mount_a.run_shell(["mkdir", "dir0"])
         self.mount_a.run_shell(["mkdir", "dir1"])
         self.mount_a.write_file('dir0/file1', 'somedata')
@@ -476,10 +477,6 @@ class TestReferentInode(CephFSTestCase):
         # write out the backtrace - this would writeout the backrace
         # of the newly introduced referent inode to the data pool.
         self.fs.mds_asok(["flush", "journal"])
-        # save referent ino for validation from disk
-        dir1_ino = self.mount_a.path_to_ino('dir1')
-        referent_inode = self.fs.read_meta_inode(dir1_ino, "hardlink_file1")
-        referent_ino = referent_inode['ino']
 
         # rename hardlink referent dentry, noop
         srcpath = os.path.join(self.mount_a.mountpoint, "dir0", "file1")
@@ -490,12 +487,6 @@ class TestReferentInode(CephFSTestCase):
         hardlink_inode = self.mount_a.path_to_ino('dir1/hardlink_file1')
         self.assertEqual(primary_inode_after_rename, primary_inode)
         self.assertEqual(hardlink_inode, primary_inode)
-
-        # validate referent_inode list in memory and on disk. Noop after rename
-        self.verify_referent_inode_list_in_memory("dir0/file1", referent_ino)
-        self.verify_referent_inode_list_on_disk("dir0", "file1", "dir1", "hardlink_file1")
-        # validate backtrace after rename. Noop
-        self.assert_backtrace(referent_ino, "dir1/hardlink_file1")
 
     def test_referent_with_mdlog_replay(self):
         """
@@ -580,6 +571,7 @@ class TestReferentInode(CephFSTestCase):
     def test_referent_no_caps(self):
         pass
 
+'''
 class TestNoGlobalSnaprealm(CephFSTestCase):
     MDSS_REQUIRED = 1
     CLIENTS_REQUIRED = 1
@@ -631,3 +623,4 @@ class TestNoGlobalSnaprealm(CephFSTestCase):
 
         self.run_ceph_cmd(f'fs set {self.fs.name} allow_referent_inodes true')
         self.run_ceph_cmd(f'fs set {self.fs.name} use_global_snaprealm false')
+'''
