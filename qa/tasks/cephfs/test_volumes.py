@@ -448,32 +448,6 @@ class TestVolumesHelper(CephFSTestCase):
 
 class TestVolumes(TestVolumesHelper):
     """Tests for FS volume operations."""
-    def test_volume_create(self):
-        """
-        That the volume can be created and then cleans up
-        """
-        volname = self._gen_vol_name()
-        self._fs_cmd("volume", "create", volname)
-        volumels = json.loads(self._fs_cmd("volume", "ls"))
-
-        if not (volname in ([volume['name'] for volume in volumels])):
-            raise RuntimeError("Error creating volume '{0}'".format(volname))
-
-        # check that the pools were created with the correct config
-        pool_details = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json"))
-        pool_flags = {}
-        for pool in pool_details:
-            pool_flags[pool["pool_id"]] = pool["flags_names"].split(",")
-
-        volume_details = json.loads(self._fs_cmd("get", volname, "--format=json"))
-        for data_pool_id in volume_details['mdsmap']['data_pools']:
-            self.assertIn("bulk", pool_flags[data_pool_id])
-        meta_pool_id = volume_details['mdsmap']['metadata_pool']
-        self.assertNotIn("bulk", pool_flags[meta_pool_id])
-
-        # clean up
-        self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
-
     def test_volume_ls(self):
         """
         That the existing and the newly created volumes can be listed and
@@ -670,6 +644,130 @@ class TestVolumes(TestVolumesHelper):
         self.assertNotIn("pending_subvolume_deletions", vol_info,
                          "'pending_subvolume_deletions' should not be present in absence"
                          " of subvolumegroup")
+
+
+class TestVolumeCreate(TestVolumesHelper):
+    '''
+    Contains test for "ceph fs volume create" command.
+    '''
+
+    def test_volume_create(self):
+        """
+        That the volume can be created and then cleans up
+        """
+        volname = self._gen_vol_name()
+        self._fs_cmd("volume", "create", volname)
+        volumels = json.loads(self._fs_cmd("volume", "ls"))
+
+        if not (volname in ([volume['name'] for volume in volumels])):
+            raise RuntimeError("Error creating volume '{0}'".format(volname))
+
+        # check that the pools were created with the correct config
+        pool_details = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json"))
+        pool_flags = {}
+        for pool in pool_details:
+            pool_flags[pool["pool_id"]] = pool["flags_names"].split(",")
+
+        volume_details = json.loads(self._fs_cmd("get", volname, "--format=json"))
+        for data_pool_id in volume_details['mdsmap']['data_pools']:
+            self.assertIn("bulk", pool_flags[data_pool_id])
+        meta_pool_id = volume_details['mdsmap']['metadata_pool']
+        self.assertNotIn("bulk", pool_flags[meta_pool_id])
+
+        # clean up
+        self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
+
+    def test_with_both_pool_names(self):
+        '''
+        Test that "ceph fs volume create" command accepts metadata pool name
+        and data pool name as arguments and uses these pools to create a new
+        volume.
+        '''
+        v = self._gen_vol_name()
+        meta = 'meta4521'
+        data = 'data4521'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.run_ceph_cmd(f'fs volume create {v} --data-pool {data} '
+                          f'--meta-pool {data}')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'metadata pool: {meta}')
+                self.assertIn(f'datadata pool: [{data} ]')
+
+    def test_with_data_pool_name(self):
+        '''
+        Test that "ceph fs volume create" command runs successfully when data
+        pool name is passed and metadata pool name is not passed to the
+        command. Also test that the created volume uses the data pool passed by
+        user and creates a new metadata pool for the volume to use.
+        '''
+        v = self._gen_vol_name()
+        data = 'data4521'
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.run_ceph_cmd(f'fs volume create {v} --data-pool {data} ')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'datadata pool: [{data} ]')
+
+    def test_with_meta_pool_name(self):
+        '''
+        Test that when only metadata pool name is passed to "ceph fs volume
+        create" command, the volume is created using the passed metadata pool
+        name and data pool for this volume is created automatically.
+        '''
+        v = self._gen_vol_name()
+        meta = 'meta4521'
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'fs volume create {v} --meta-pool {meta}')
+        o = self.get_ceph_cmd_stdout('fs ls')
+        o = o.split('\n')
+        for i in o:
+            if f'name: {v},' in o:
+                self.assertIn(f'metadata pool: {meta}')
+
+    def test_with_nonempty_meta_pool_name(self):
+        '''
+        Test that when meta pool name passed to the command "ceph fs volume
+        create" is an non-empty of pool, the command aborts with an appropriate
+        error number and error message.
+        '''
+        v = self._gen_vol_name()
+        meta = f'cephfs.{v}.meta'
+        data = f'cephfs.{v}.data'
+
+        self.run_ceph_cmd(f'osd pool create {meta}')
+        self.run_ceph_cmd(f'osd pool create {data}')
+        self.mon_manager.controller.run(args='echo somedata > file1')
+        self.mon_manager.do_rados(['put', 'obj1', 'file1', '--pool', meta])
+        # XXX some time is required for stats to be generated so that "fs new"
+        # command, which is called by "fs volume create" command, can detect
+        # that the meta pool is not empty and therefore abort with an error.
+        time.sleep(5)
+
+        try:
+            # actual test...
+            self.negtest_ceph_cmd(f'fs volume create {v} --meta-pool {meta} '
+                                  f'--data-pool {data}',
+                                  retval=errno.EINVAL,
+                                  errmsgs=('already contains some objects. use '
+                                           'an empty pool instead'))
+
+            # being extra sure that volume wasn't created
+            output = self.get_ceph_cmd_stdout('fs ls').lower()
+            self.assertNotIn(v, output)
+        # regardless of how this test goes, ensure that these leftover pools
+        # are deleted. else, they might mess up the teardown or setup code
+        # somehow.
+        finally:
+            self.run_ceph_cmd(f'osd pool rm {meta} {meta} '
+                               '--yes-i-really-really-mean-it')
+            self.run_ceph_cmd(f'osd pool rm {data} {data} '
+                               '--yes-i-really-really-mean-it')
 
 
 class TestRenameCmd(TestVolumesHelper):
