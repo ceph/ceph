@@ -19,6 +19,9 @@
 #include <iterator>
 #include <map>
 #include <ostream>
+#include <fmt/ranges.h>
+#include "common/fmt_common.h"
+#include "common/dout.h"
 
 #include "encoding.h"
 
@@ -244,6 +247,35 @@ class interval_set {
 
   const_iterator end() const {
     return const_iterator(m.end());
+  }
+
+  void print(std::ostream& os) const {
+    os << "[";
+    bool first = true;
+    for (const auto& [start, len] : *this) {
+      if (!first) {
+        os << ",";
+      }
+      os << start << "~" << len;
+      first = false;
+    }
+    os << "]";
+  }
+
+  std::string fmt_print() const
+  requires has_formatter<T> {
+    std::string s = "[";
+    bool first = true;
+    for (const auto& [start, len] : *this) {
+      if (!first) {
+        s += ",";
+      } else {
+        first = false;
+      }
+      s += fmt::format("{}~{}", start, len);
+    }
+    s += "]";
+    return s;
   }
 
   // helpers
@@ -963,19 +995,8 @@ public:
   }
 };
 
-
-template<typename T, template<typename, typename, typename ...> class C>
-inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C> &s) {
-  out << "[";
-  bool first = true;
-  for (const auto& [start, len] : s) {
-    if (!first) out << ",";
-    out << start << "~" << len;
-    first = false;
-  }
-  out << "]";
-  return out;
-}
-
+// make sure fmt::range would not try (and fail) to treat interval_set as a range
+template<typename T, template<typename, typename, typename ...> class C, bool strict>
+struct fmt::is_range<interval_set<T, C, strict>, char> : std::false_type {};
 
 #endif
