@@ -28,8 +28,12 @@ from .ganesha_conf import (
     GaneshaConfParser,
     RGWFSAL,
     format_block)
-from .qos_conf import QOS, QOSBandwidthControl, QOSOpsControl
-from .export_utils import export_qos_bw_checks, export_dict_qos_bw_ops_checks, export_qos_ops_checks
+from .qos_conf import QOS, QOSBandwidthControl, QOSOpsControl, QOSParams
+from .export_utils import (
+    export_qos_bw_checks,
+    export_dict_qos_bw_ops_checks,
+    export_qos_ops_checks,
+    get_cluster_qos_config)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
     EXPORT_PREFIX,
@@ -917,8 +921,21 @@ class ExportMgr:
 
     def get_export_qos(self, cluster_id: str, pseudo_path: str, ret_bw_in_bytes: bool = False) -> Dict[str, int]:
         try:
+            clust_qos_obj = get_cluster_qos_config(cluster_id, self.mgr)
+            clust_qos_conf = {}
+            if clust_qos_obj:
+                clust_qos_conf[f'cluster_{QOSParams.enable_qos.value}'] = clust_qos_obj.enable_qos
+                if clust_qos_obj.bw_obj:
+                    clust_qos_conf[f'cluster_{QOSParams.enable_bw_ctrl.value}'] = clust_qos_obj.bw_obj.enable_bw_ctrl
+                if clust_qos_obj.ops_obj:
+                    clust_qos_conf[f'cluster_{QOSParams.enable_iops_ctrl.value}'] = clust_qos_obj.ops_obj.enable_iops_ctrl
+
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
-            return export_obj.qos_block.to_dict(ret_bw_in_bytes) if export_obj.qos_block else {}
+            if export_obj.qos_block:
+                qos_block = export_obj.qos_block.to_dict(ret_bw_in_bytes)
+                qos_block.update(clust_qos_conf)
+                return qos_block
+            return {}
         except Exception as e:
             log.exception(f"Failed to get QOS configuration for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
