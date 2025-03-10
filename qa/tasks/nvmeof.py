@@ -61,6 +61,7 @@ class Nvmeof(Task):
 
         gateway_config = self.config.get('gateway_config', {})
         self.cli_image = gateway_config.get('cli_image', 'quay.io/ceph/nvmeof-cli:latest')
+        self.enable_groups = bool(gateway_config.get('enable_groups', True))
         self.groups_count = gateway_config.get('groups_count', 1)
         self.groups_prefix = gateway_config.get('groups_prefix', 'mygroup') 
         self.nqn_prefix = gateway_config.get('subsystem_nqn_prefix', 'nqn.2016-06.io.spdk:cnode')
@@ -114,16 +115,22 @@ class Nvmeof(Task):
                 'rbd', 'pool', 'init', poolname
             ])
 
-            group_to_nodes = defaultdict(list)
-            for index, node in enumerate(nodes):
-                group_name = self.groups_prefix + str(index % int(self.groups_count))
-                group_to_nodes[group_name] += [node]
-            for group_name in group_to_nodes:
-                gp_nodes = group_to_nodes[group_name]
-                log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
+            if self.enable_groups:
+                group_to_nodes = defaultdict(list)
+                for index, node in enumerate(nodes):
+                    group_name = self.groups_prefix + str(index % int(self.groups_count))
+                    group_to_nodes[group_name] += [node]
+                for group_name in group_to_nodes:
+                    gp_nodes = group_to_nodes[group_name]
+                    log.info(f'[nvmeof]: ceph orch apply nvmeof {poolname} {group_name}')
+                    _shell(self.ctx, self.cluster_name, self.remote, [
+                        'ceph', 'orch', 'apply', 'nvmeof', poolname, group_name,
+                        '--placement', ';'.join(gp_nodes)
+                    ])
+            else:
                 _shell(self.ctx, self.cluster_name, self.remote, [
-                    'ceph', 'orch', 'apply', 'nvmeof', poolname, group_name,
-                    '--placement', ';'.join(gp_nodes)
+                        'ceph', 'orch', 'apply', 'nvmeof', poolname,
+                        '--placement', ';'.join(nodes)
                 ])
 
             total_images = int(self.namespaces_count) * int(self.subsystems_count)
@@ -287,7 +294,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
     - workunit:
         clients:
             client.3:
-            - rbd/nvmeof_fio_test.sh --rbd_iostat
+            - nvmeof/fio_test.sh --rbd_iostat
         env:
             RBD_POOL: mypool
             IOSTAT_INTERVAL: '10'
