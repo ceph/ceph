@@ -2234,7 +2234,7 @@ test_force_promote_delete_group()
   test_fields_in_group_info ${secondary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
 
   wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
-  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+error' 0
+  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' 0
 
   # TODO - test normally fails on next line with missing images
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
