@@ -6490,7 +6490,7 @@ struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
     MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
   }
   void finish(int r) override {
-    ceph_assert(r == 0 || r == -CEPHFS_ENOENT);
+    ceph_assert(r == 0 || r == -ENOENT);
     mdcache->truncate_inode_write_finish(in, ls, block_size);
   }
   void print(ostream& out) const override {
@@ -6505,7 +6505,7 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
     MDCacheIOContext(c, false), in(i), ls(l) {
   }
   void finish(int r) override {
-    ceph_assert(r == 0 || r == -CEPHFS_ENOENT);
+    ceph_assert(r == 0 || r == -ENOENT);
     mdcache->truncate_inode_finish(in, ls);
   }
   void print(ostream& out) const override {
@@ -6518,7 +6518,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   const auto& pi = in->get_inode();
   dout(10) << "_truncate_inode "
            << pi->truncate_from << " -> " << pi->truncate_size
-           << " fscrypt last block length is " << pi->fscrypt_last_block.length()
+           << " fscrypt last block length is " << pi->fscrypt_last_block.size()
            << " on " << *in << dendl;
 
   ceph_assert(pi->is_truncating());
@@ -6526,7 +6526,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   ceph_assert(pi->truncate_from < (1ULL << 63));
   ceph_assert(pi->truncate_size < pi->truncate_from ||
               (pi->truncate_size == pi->truncate_from &&
-	       pi->fscrypt_last_block.length()));
+	       pi->fscrypt_last_block.size()));
 
 
   SnapRealm *realm = in->find_snaprealm();
@@ -6541,18 +6541,20 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     ceph_assert(in->last == CEPH_NOSNAP);
   }
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in
-           << " fscrypt_last_block length is " << pi->fscrypt_last_block.length()
+           << " fscrypt_last_block length is " << pi->fscrypt_last_block.size()
            << dendl;
   auto layout = pi->layout;
   struct ceph_fscrypt_last_block_header header;
   memset(&header, 0, sizeof(header));
   bufferlist data;
-  if (pi->fscrypt_last_block.length()) {
-    auto bl = pi->fscrypt_last_block.cbegin();
-    DECODE_START(1, bl);
-    decode(header.change_attr, bl);
-    decode(header.file_offset, bl);
-    decode(header.block_size, bl);
+  if (pi->fscrypt_last_block.size()) {
+    auto _bl = bufferlist();
+    _bl.append(pi->fscrypt_last_block);
+    auto blp = _bl.cbegin();
+    DECODE_START(1, blp);
+    decode(header.change_attr, blp);
+    decode(header.file_offset, blp);
+    decode(header.block_size, blp);
 
     /*
      * The block_size will be in unit of KB, so if the last block is not
@@ -6560,9 +6562,9 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
      * header.block_size.
      */
     if (struct_len > header.block_size) {
-      bl.copy(header.block_size, data);
+      blp.copy(header.block_size, data);
     }
-    DECODE_FINISH(bl);
+    DECODE_FINISH(blp);
   }
 
   if (data.length()) {
@@ -6583,7 +6585,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
      * this case we will always request a larger length to make sure the
      * OSD won't miss truncating the last object.
      */
-    if (pi->fscrypt_last_block.length()) {
+    if (pi->fscrypt_last_block.size()) {
       dout(10) << "_truncate_inode truncate on inode " << *in << " hits a hole!" << dendl;
       length += header.block_size;
     }
@@ -6621,7 +6623,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
   ceph_assert(pi->truncate_from < (1ULL << 63));
   ceph_assert(pi->truncate_size < pi->truncate_from ||
               (pi->truncate_size == pi->truncate_from &&
-	       pi->fscrypt_last_block.length()));
+	       pi->fscrypt_last_block.size()));
 
 
   SnapRealm *realm = in->find_snaprealm();
@@ -6636,7 +6638,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
     ceph_assert(in->last == CEPH_NOSNAP);
   }
   dout(10) << "_truncate_inode_write  snapc " << snapc << " on " << *in
-           << " fscrypt_last_block length is " << pi->fscrypt_last_block.length()
+           << " fscrypt_last_block length is " << pi->fscrypt_last_block.size()
            << dendl;
   auto layout = pi->layout;
   /*
@@ -6668,7 +6670,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi.inode->version = in->pre_dirty();
   pi.inode->truncate_from = 0;
   pi.inode->truncate_pending--;
-  pi.inode->fscrypt_last_block = bufferlist();
+  pi.inode->fscrypt_last_block.clear();
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
 
@@ -8344,10 +8346,10 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       MDRequestRef null_ref;
       return path_traverse(null_ref, cf, path, MDS_TRAVERSE_DISCOVER, nullptr);
     }
-    return -CEPHFS_ESTALE;
+    return -ESTALE;
   }
   if (cur->state_test(CInode::STATE_PURGING))
-    return -CEPHFS_ESTALE;
+    return -ESTALE;
 
   if (flags & MDS_TRAVERSE_CHECK_LOCKCACHE)
     mds->locker->find_and_attach_lock_cache(mdr, cur);
@@ -8383,14 +8385,14 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     
     if (!cur->is_dir()) {
       dout(7) << "traverse: " << *cur << " not a dir " << dendl;
-      return -CEPHFS_ENOTDIR;
+      return -ENOTDIR;
     }
 
     // walk into snapdir?
     if (path[depth].length() == 0) {
       dout(10) << "traverse: snapdir" << dendl;
       if (!mdr || depth > 0) // snapdir must be the first component
-	return -CEPHFS_EINVAL;
+	return -EINVAL;
       snapid = CEPH_SNAPDIR;
       mdr->snapid = snapid;
       depth++;
@@ -8399,14 +8401,14 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     // walk thru snapdir?
     if (snapid == CEPH_SNAPDIR) {
       if (!mdr)
-	return -CEPHFS_EINVAL;
+	return -EINVAL;
       SnapRealm *realm = cur->find_snaprealm();
       snapid = realm->resolve_snapname(path[depth], cur->ino());
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
       if (!snapid) {
 	if (pdnvec)
 	  pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
-	return -CEPHFS_ENOENT;
+	return -ENOENT;
       }
       if (depth == path.depth() - 1)
 	target_inode = cur;
@@ -8435,7 +8437,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         if (forimport && cur->is_quiesced()) {
           /* block discover for import */
           dout(5) << __func__ << ": blocking discover due to quiesced parent: " << *cur << dendl;
-          return -CEPHFS_EAGAIN;
+          return -EAGAIN;
         } else {
 	  dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	  discover_path(cur, snapid, path.postfixpath(depth), cf.build(),
@@ -8478,14 +8480,14 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     if (mds->damage_table.is_dentry_damaged(curdir, path[depth], snapid)) {
       dout(4) << "traverse: stopped lookup at damaged dentry "
               << *curdir << "/" << path[depth] << " snap=" << snapid << dendl;
-      return -CEPHFS_EIO;
+      return -EIO;
     }
 
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
     if (dn) {
       if (dn->state_test(CDentry::STATE_PURGING))
-	return -CEPHFS_ENOENT;
+	return -ENOENT;
 
       CDentry::linkage_t *dnl = dn->get_projected_linkage();
       // If an auth check was deferred before and the target inode is found
@@ -8532,7 +8534,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       if (pdnvec)
 	pdnvec->push_back(dn);
 
-      // can we conclude CEPHFS_ENOENT?
+      // can we conclude ENOENT?
       if (dnl->is_null()) {
 	dout(10) << "traverse: null+readable dentry at " << *dn << dendl;
 	if (depth == path.depth() - 1) {
@@ -8542,7 +8544,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	  if (pdnvec)
 	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	}
-	return -CEPHFS_ENOENT;
+	return -ENOENT;
       }
 
       // do we have inode?
@@ -8560,7 +8562,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
           if (mds->damage_table.is_remote_damaged(dnl->get_remote_ino())) {
             dout(4) << "traverse: remote dentry points to damaged ino "
                     << *dn << dendl;
-            return -CEPHFS_EIO;
+            return -EIO;
           }
           open_remote_dentry(dn, true, cf.build(),
 			     (path_locked && depth == path.depth() - 1));
@@ -8648,7 +8650,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	  }
 	}
-        return -CEPHFS_ENOENT;
+        return -ENOENT;
       } else {
 
         // Check DamageTable for missing fragments before trying to fetch
@@ -8656,7 +8658,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         if (mds->damage_table.is_dirfrag_damaged(curdir)) {
           dout(4) << "traverse: damaged dirfrag " << *curdir
                   << ", blocking fetch" << dendl;
-          return -CEPHFS_EIO;
+          return -EIO;
         }
 
 	// directory isn't complete; reload
@@ -8682,7 +8684,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         if (forimport && cur->is_quiesced()) {
           /* block discover for import */
           dout(5) << __func__ << ": blocking discover due to quiesced parent: " << *cur << dendl;
-          return -CEPHFS_EAGAIN;
+          return -EAGAIN;
         } else {
 	  dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	  discover_path(curdir, snapid, path.postfixpath(depth), cf.build(),
@@ -8711,7 +8713,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   if (path.depth() == 0) {
     dout(7) << "no tail dentry, base " << *cur << dendl;
     if (want_dentry && !want_inode) {
-      return -CEPHFS_ENOENT;
+      return -ENOENT;
     }
     target_inode = cur;
   }
@@ -8945,7 +8947,7 @@ struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
     MDCacheContext(c), ino(i), msg(m), parent(p) {}
   void finish(int r) override {
     if (r < 0 && !parent)
-      r = -CEPHFS_EAGAIN;
+      r = -EAGAIN;
     if (msg) {
       mdcache->handle_open_ino(msg, r);
       return;
@@ -8984,7 +8986,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
     } catch (const buffer::error &decode_exc) {
       derr << "corrupt backtrace on ino x0" << std::hex << ino
            << std::dec << ": " << decode_exc.what() << dendl;
-      open_ino_finish(ino, info, -CEPHFS_EIO);
+      open_ino_finish(ino, info, -EIO);
       return;
     }
     if (backtrace.pool != info.pool && backtrace.pool != -1) {
@@ -8997,7 +8999,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
 		      new C_OnFinisher(fin, mds->finisher));
       return;
     }
-  } else if (err == -CEPHFS_ENOENT) {
+  } else if (err == -ENOENT) {
     int64_t meta_pool = mds->get_metadata_pool();
     if (info.pool != meta_pool) {
       dout(10) << " no object in pool " << info.pool
@@ -9015,11 +9017,11 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
   if (err == 0) {
     if (backtrace.ancestors.empty()) {
       dout(10) << " got empty backtrace " << dendl;
-      err = -CEPHFS_ESTALE;
+      err = -ESTALE;
     } else if (!info.ancestors.empty()) {
       if (info.ancestors[0] == backtrace.ancestors[0]) {
 	dout(10) << " got same parents " << info.ancestors[0] << " 2 times" << dendl;
-	err = -CEPHFS_EINVAL;
+	err = -EINVAL;
       } else {
 	info.last_err = 0;
       }
@@ -9143,7 +9145,7 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
     if (!diri->is_dir()) {
       dout(10) << " " << *diri << " is not dir" << dendl;
       if (i == 0)
-	err = -CEPHFS_ENOTDIR;
+	err = -ENOTDIR;
       break;
     }
 
@@ -9184,7 +9186,7 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 
 	dout(10) << " no ino " << next_ino << " in " << *dir << dendl;
 	if (i == 0)
-	  err = -CEPHFS_ENOENT;
+	  err = -ENOENT;
       } else if (discover) {
 	if (!dnl) {
 	  filepath path(name, 0);
@@ -9199,7 +9201,7 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 	}
 	dout(10) << " no ino " << next_ino << " in " << *dir << dendl;
 	if (i == 0)
-	  err = -CEPHFS_ENOENT;
+	  err = -ENOENT;
       }
     }
     if (hint && i == 0)
@@ -9221,7 +9223,7 @@ void MDCache::open_ino_finish(inodeno_t ino, open_ino_info_t& info, int ret)
 
 void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
 {
-  if (err < 0 && err != -CEPHFS_EAGAIN) {
+  if (err < 0 && err != -EAGAIN) {
     info.checked.clear();
     info.checking = MDS_RANK_NONE;
     info.check_peers = true;
@@ -9230,7 +9232,7 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
       info.discover = false;
       info.ancestors.clear();
     }
-    if (err != -CEPHFS_ENOENT && err != -CEPHFS_ENOTDIR)
+    if (err != -ENOENT && err != -ENOTDIR)
       info.last_err = err;
   }
 
@@ -9504,7 +9506,7 @@ void MDCache::find_ino_peers(inodeno_t ino, MDSContext *c,
   dout(5) << "find_ino_peers " << ino << " hint " << hint << dendl;
   CInode *in = get_inode(ino);
   if (in && in->state_test(CInode::STATE_PURGING)) {
-    c->complete(-CEPHFS_ESTALE);
+    c->complete(-ESTALE);
     return;
   }
   ceph_assert(!in);
@@ -9548,7 +9550,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
       dout(10) << "_do_find_ino_peer waiting for more peers to be active" << dendl;
     } else {
       dout(10) << "_do_find_ino_peer failed on " << fip.ino << dendl;
-      fip.fin->complete(-CEPHFS_ESTALE);
+      fip.fin->complete(-ESTALE);
       find_ino_peer.erase(fip.tid);
     }
   } else {
@@ -9830,7 +9832,7 @@ void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
     if (mds->logger) mds->logger->inc(l_mds_forward);
   } else if (mdr->internal_op >= 0) {
     dout(10) << "request_forward on internal op; cancelling" << dendl;
-    mdr->internal_op_finish->complete(-CEPHFS_EXDEV);
+    mdr->internal_op_finish->complete(-EXDEV);
   } else {
     dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
             << " was from mds" << dendl;
@@ -10029,7 +10031,7 @@ void MDCache::request_kill(const MDRequestRef& mdr)
   } else {
     dout(10) << "request_kill " << *mdr << dendl;
     if (mdr->internal_op_finish) {
-      mdr->internal_op_finish->complete(-CEPHFS_ECANCELED);
+      mdr->internal_op_finish->complete(-ECANCELED);
       mdr->internal_op_finish = nullptr;
     }
     request_cleanup(mdr);
@@ -10876,7 +10878,7 @@ void MDCache::handle_discover_reply(const cref_t<MDiscoverReply> &m)
   }
 
   // waiters
-  finish_contexts(g_ceph_context, error, -CEPHFS_ENOENT);  // finish errors directly
+  finish_contexts(g_ceph_context, error, -ENOENT);  // finish errors directly
   mds->queue_waiters(finished);
 }
 
@@ -12034,7 +12036,7 @@ public:
 			    const MDRequestRef& r) :
     MDCacheIOContext(m), basedirfrag(f), bits(b), mdr(r) {}
   void finish(int r) override {
-    ceph_assert(r == 0 || r == -CEPHFS_ENOENT);
+    ceph_assert(r == 0 || r == -ENOENT);
     mdcache->_fragment_old_purged(basedirfrag, bits, mdr);
   }
   void print(ostream& out) const override {
@@ -12920,7 +12922,7 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f, double timeout)
       f->close_section();
     } else {
       derr << "cache usage exceeds dump threshold" << dendl;
-      r = -CEPHFS_EINVAL;
+      r = -EINVAL;
     }
     return r;
   }
@@ -13133,7 +13135,7 @@ void MDCache::enqueue_scrub_work(const MDRequestRef& mdr)
 
   // Cannot scrub same dentry twice at same time
   if (in->scrub_is_in_progress()) {
-    mds->server->respond_to_request(mdr, -CEPHFS_EBUSY);
+    mds->server->respond_to_request(mdr, -EBUSY);
     return;
   } else {
     in->scrub_info();
@@ -13187,7 +13189,7 @@ void MDCache::repair_dirfrag_stats_work(const MDRequestRef& mdr)
   dout(10) << __func__ << " " << *dir << dendl;
 
   if (!dir->is_auth()) {
-    mds->server->respond_to_request(mdr, -CEPHFS_ESTALE);
+    mds->server->respond_to_request(mdr, -ESTALE);
     return;
   }
 
@@ -13294,11 +13296,11 @@ void MDCache::repair_inode_stats_work(const MDRequestRef& mdr)
   dout(10) << __func__ << " " << *diri << dendl;
 
   if (!diri->is_auth()) {
-    mds->server->respond_to_request(mdr, -CEPHFS_ESTALE);
+    mds->server->respond_to_request(mdr, -ESTALE);
     return;
   }
   if (!diri->is_dir()) {
-    mds->server->respond_to_request(mdr, -CEPHFS_ENOTDIR);
+    mds->server->respond_to_request(mdr, -ENOTDIR);
     return;
   }
 
@@ -13393,11 +13395,11 @@ void MDCache::rdlock_dirfrags_stats_work(const MDRequestRef& mdr)
   CInode *diri = static_cast<CInode*>(mdr->internal_op_private);
   dout(10) << __func__ << " " << *diri << dendl;
   if (!diri->is_auth()) {
-    mds->server->respond_to_request(mdr, -CEPHFS_ESTALE);
+    mds->server->respond_to_request(mdr, -ESTALE);
     return;
   }
   if (!diri->is_dir()) {
-    mds->server->respond_to_request(mdr, -CEPHFS_ENOTDIR);
+    mds->server->respond_to_request(mdr, -ENOTDIR);
     return;
   }
 
@@ -13417,7 +13419,7 @@ void MDCache::flush_dentry(std::string_view path, Context *fin)
 {
   if (is_readonly()) {
     dout(10) << __func__ << ": read-only FS" << dendl;
-    fin->complete(-CEPHFS_EROFS);
+    fin->complete(-EROFS);
     return;
   }
   dout(10) << "flush_dentry " << path << dendl;
@@ -13673,8 +13675,8 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     auto qimdr = get_quiesce_inode_op(in);
     if (qimdr != mdr) {
       dout(5) << __func__ << ": already quiesced by " << *qimdr << dendl;
-      qs.add_failed(mdr, -CEPHFS_EINPROGRESS);
-      mds->server->respond_to_request(mdr, -CEPHFS_EINPROGRESS);
+      qs.add_failed(mdr, -EINPROGRESS);
+      mds->server->respond_to_request(mdr, -EINPROGRESS);
       return;
     }
   }
@@ -13760,8 +13762,8 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     for (auto& dir : in->get_dirfrags()) {
       if (!dir->is_auth() && !splitauth) {
         dout(5) << "auth is split and splitauth is false: " << *dir << dendl;
-        qs.add_failed(mdr, -CEPHFS_EPERM);
-        mds->server->respond_to_request(mdr, -CEPHFS_EPERM);
+        qs.add_failed(mdr, -EPERM);
+        mds->server->respond_to_request(mdr, -EPERM);
         return;
       }
     }
@@ -13866,7 +13868,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
 {
   if (!mds->is_active()) {
     dout(20) << __func__ << " is not active!" << dendl;
-    mds->server->respond_to_request(mdr, -CEPHFS_EAGAIN);
+    mds->server->respond_to_request(mdr, -EAGAIN);
     return;
   }
 
@@ -14001,7 +14003,7 @@ void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
   for (const auto &lock : lps.config.locks) {
     auto colonps = lock.find(':');
     if (colonps == std::string::npos) {
-      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      mds->server->respond_to_request(mdr, -EINVAL);
       return;
     }
     auto lock_type = lock.substr(0, colonps);
@@ -14030,12 +14032,12 @@ void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
     } else if (lock_type == "flock") {
       l = &in->flocklock;
     } else {
-      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      mds->server->respond_to_request(mdr, -EINVAL);
       return;
     }
 
     if (lock_kind.size() != 1) {
-      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      mds->server->respond_to_request(mdr, -EINVAL);
       return;
     }
 
@@ -14050,14 +14052,14 @@ void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
         lov.add_xlock(l);
         break;
       default:
-        mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+        mds->server->respond_to_request(mdr, -EINVAL);
         return;
     }
   }
 
   if (!mds->locker->acquire_locks(mdr, lov, lps.config.ap_freeze ? in : nullptr, lps.config.ap_dont_block, true)) {
     if (lps.config.ap_dont_block && mdr->aborted) {
-      mds->server->respond_to_request(mdr, -CEPHFS_EWOULDBLOCK);
+      mds->server->respond_to_request(mdr, -EAGAIN);
     }
     return;
   }
@@ -14089,7 +14091,7 @@ MDRequestRef MDCache::lock_path(LockPathConfig config, std::function<void(MDRequ
   if (config.lifetime) {
     mds->timer.add_event_after(*config.lifetime, new LambdaContext([this, mdr]() {
       if (!mdr->result && !mdr->aborted && !mdr->killed && !mdr->dead) {
-        mdr->result = -CEPHFS_ECANCELED;
+        mdr->result = -ECANCELED;
         request_kill(mdr);
       }
     }));

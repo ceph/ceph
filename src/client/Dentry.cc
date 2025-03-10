@@ -9,6 +9,7 @@
 #include "Inode.h"
 
 #include "common/Formatter.h"
+#include "common/strescape.h"
 
 void Dentry::dump(Formatter *f) const
 {
@@ -27,7 +28,33 @@ void Dentry::dump(Formatter *f) const
   f->dump_int("cap_shared_gen", cap_shared_gen);
 }
 
-std::ostream &operator<<(std::ostream &oss, const Dentry &dn)
+void Dentry::print(std::ostream& os) const
 {
-  return oss << dn.dir->parent_inode->vino() << "[\"" << dn.name << "\"]";
+  os << dir->parent_inode->vino();
+  os << "[";
+  os << "\"" << binstrprint(name) << "\"";
+  if (!alternate_name.empty()) {
+    os << " altn=\"" << binstrprint(alternate_name, 16) << "\"";
+  }
+  os << " ref=" << ref;
+  if (inode) {
+    os << " ino=" << inode->vino();
+  } else {
+    os << " ino=nil";
+  }
+  os << " csg=" << cap_shared_gen;
+  if (is_renaming) {
+    os << " is_renaming=true";
+  }
+  os << "]";
+}
+
+void intrusive_ptr_add_ref(Dentry* dn)
+{
+  dn->get();
+}
+
+void intrusive_ptr_release(Dentry* dn)
+{
+  dn->put();
 }

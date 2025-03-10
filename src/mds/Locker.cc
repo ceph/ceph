@@ -3980,7 +3980,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       pi->time_warp_seq = m->get_time_warp_seq();
     }
     if (m->fscrypt_file.size())
-      pi->fscrypt_file = m->fscrypt_file;
+      pi->fscrypt_file.assign(m->fscrypt_file.begin(), m->fscrypt_file.end());
   }
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL) {
@@ -4009,7 +4009,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       pi->btime = m->get_btime();
     }
     if (m->fscrypt_auth.size())
-      pi->fscrypt_auth = m->fscrypt_auth;
+      pi->fscrypt_auth.assign(m->fscrypt_auth.begin(), m->fscrypt_auth.end());
   }
 }
 
@@ -4563,6 +4563,7 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
 			  const LeaseStat& ls)
 {
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    dout(25) << "encode lease reply encoding: " << ls << dendl;
     ENCODE_START(2, 1, bl);
     encode(ls.mask, bl);
     encode(ls.duration_ms, bl);
@@ -4571,6 +4572,7 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
     ENCODE_FINISH(bl);
   }
   else {
+    dout(25) << "encode lease NO reply encoding: " << ls << dendl;
     encode(ls.mask, bl);
     encode(ls.duration_ms, bl);
     encode(ls.seq, bl);
