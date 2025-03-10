@@ -21,6 +21,7 @@ typedef struct _proxy_server {
 
 typedef struct _proxy_client {
 	proxy_worker_t worker;
+	proxy_link_negotiate_t neg;
 	proxy_link_t *link;
 	proxy_random_t random;
 	void *buffer;
@@ -1605,7 +1606,6 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 static void serve_binary(proxy_client_t *client)
 {
 	proxy_req_t req;
-	CEPH_DATA(hello, ans, 0);
 	struct iovec req_iov[2];
 	void *buffer;
 	uint32_t size;
@@ -1617,14 +1617,6 @@ static void serve_binary(proxy_client_t *client)
 	size = 65536;
 	buffer = proxy_malloc(size);
 	if (buffer == NULL) {
-		return;
-	}
-
-	ans.major = LIBCEPHFSD_MAJOR;
-	ans.minor = LIBCEPHFSD_MINOR;
-	err = proxy_link_send(client->sd, ans_iov, ans_count);
-	if (err < 0) {
-		proxy_free(buffer);
 		return;
 	}
 
@@ -1660,22 +1652,27 @@ static void serve_binary(proxy_client_t *client)
 	proxy_free(buffer);
 }
 
+static int32_t server_negotiation_check(proxy_link_negotiate_t *neg)
+{
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+
+	return 0;
+}
+
 static void serve_connection(proxy_worker_t *worker)
 {
-	CEPH_DATA(hello, req, 0);
 	proxy_client_t *client;
 	int32_t err;
 
 	client = container_of(worker, proxy_client_t, worker);
 
-	err = proxy_link_recv(client->sd, req_iov, req_count);
+	proxy_link_negotiate_init(&client->neg, 0, PROXY_FEAT_ALL, 0, 0);
+
+	err = proxy_link_handshake_server(client->link, client->sd,
+					  &client->neg,
+					  server_negotiation_check);
 	if (err >= 0) {
-		if (req.id == LIBCEPHFS_LIB_CLIENT) {
-			serve_binary(client);
-		} else {
-			proxy_log(LOG_ERR, EINVAL,
-				  "Invalid client initial message");
-		}
+		serve_binary(client);
 	}
 
 	close(client->sd);
