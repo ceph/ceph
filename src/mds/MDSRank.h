@@ -736,7 +736,7 @@ public:
   void handle_osd_map();
   void update_log_config();
 
-  const char** get_tracked_conf_keys() const override final;
+  std::vector<std::string> get_tracked_keys() const noexcept final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
   void dump_sessions(const SessionFilter &filter, Formatter *f, bool cap_dump=false) const;
