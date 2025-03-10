@@ -1642,6 +1642,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
       num_entries += s.second.num_objects;
     }
 
+    const bool is_versioned = bucket_info.versioned();
     const uint32_t current_shard_count =
       rgw::current_num_shards(bucket_info.layout);
     const uint32_t min_layout_shards =
@@ -1653,7 +1654,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     // needed to perform the calculation before calling
     // calculating_preferred_shards() in this class
     store->getRados()->calculate_preferred_shards(
-      dpp, num_entries, current_shard_count, min_layout_shards,
+      dpp, is_versioned, num_entries, current_shard_count, min_layout_shards,
       needs_resharding, &suggested_shard_count);
 
     // if we no longer need resharding or currently need to expand
