@@ -159,6 +159,40 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+# retry every N seconds
+- name: mgr_module_load_interval
+  type: uint
+  level: advanced
+  default: 1
+  desc: The mgr will retry loading a module every ``N`` seconds.
+  services:
+  - mgr
+  with_legacy: true
+# fail if the module fails to load in time
+- name: mgr_module_load_timeout
+  type: uint
+  level: advanced
+  default: 5
+  desc: Max length of time that the mgr should retry loading a module before issuing an error code.
+  services:
+  - mgr
+  with_legacy: true
+- name: mgr_module_load_delay
+  type: uint
+  level: dev
+  default: 0
+  desc: Amount of seconds a mgr module delays loading. For testing purposes only.
+  services:
+  - mgr
+- name: mgr_module_load_delay_name
+  type: str
+  level: dev
+  desc: Choose which mgr module to inject a load delay. For testing purposes only.
+  flags:
+  - runtime
+  with_legacy: true
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
