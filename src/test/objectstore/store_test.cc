@@ -1253,12 +1253,15 @@ void StoreTest::doCompressionTest()
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
   {
+    C_SaferCond c;
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
+    t.register_on_commit(&c);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
+      c.wait();
   }
 }
 
