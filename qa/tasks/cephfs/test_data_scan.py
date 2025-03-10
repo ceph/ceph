@@ -458,7 +458,7 @@ class NonDefaultLayout(Workload):
 class TestDataScan(CephFSTestCase):
     MDSS_REQUIRED = 2
 
-    def _rebuild_metadata(self, workload, workers=1, unmount=True):
+    def _rebuild_metadata(self, workload, workers=1, unmount=True, parallelize_cleanup=True):
         """
         That when all objects in metadata pool are removed, we can rebuild a metadata pool
         based on the contents of a data pool, and a client can see and read our files.
@@ -504,6 +504,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["scan_extents"], worker_count=workers)
         self.fs.data_scan(["scan_inodes"], worker_count=workers)
         self.fs.data_scan(["scan_links"])
+        self.fs.data_scan(["cleanup"], worker_count=workers if parallelize_cleanup else 1)
 
         workload.mangle()
 
