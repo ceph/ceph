@@ -32,7 +32,7 @@ class Config:
     def __init__(self, **kwargs):
         # by default, wait up to 5 minutes before giving up on a sync checkpoint
         self.checkpoint_retries = kwargs.get('checkpoint_retries', 60)
-        self.checkpoint_delay = kwargs.get('checkpoint_delay', 5)
+        self.checkpoint_delay = kwargs.get('checkpoint_delay', 15)
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
         self.tenant = kwargs.get('tenant', '')
@@ -3703,3 +3703,1067 @@ def test_bucket_create_location_constraint():
                                     Bucket=bucket_name,
                                     CreateBucketConfiguration={'LocationConstraint': zg.name})
                 assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
+
+def allow_bucket_replication(function):
+    def wrapper(*args, **kwargs):
+        zonegroup = realm.master_zonegroup()
+        if len(zonegroup.zones) < 2:
+            raise SkipTest("More than one zone needed in any one or multiple zone(s).")
+
+        zones = ",".join([z.name for z in zonegroup.zones])
+        z = zonegroup.zones[0]
+        c = z.cluster
+
+        create_sync_policy_group(c, "sync-group")
+        create_sync_group_flow_symmetrical(c, "sync-group", "sync-flow", zones)
+        create_sync_group_pipe(c, "sync-group", "sync-pipe", zones, zones)
+
+        zonegroup.period.update(z, commit=True)
+        realm_meta_checkpoint(realm)
+
+        try:
+            function(*args, **kwargs)
+        finally:
+            remove_sync_group_pipe(c, "sync-group", "sync-pipe")
+            remove_sync_group_flow_symmetrical(c, "sync-group", "sync-flow")
+            remove_sync_policy_group(c, "sync-group")
+
+            zonegroup.period.update(z, commit=True)
+            realm_meta_checkpoint(realm)
+
+    return wrapper
+
+@allow_bucket_replication
+def test_bucket_replication_normal():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    source.s3_client.put_object(Bucket=source_bucket.name, Key=objname, Body='foo', Tagging='key1=value1')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['TagCount'], 1)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+
+@allow_bucket_replication
+def test_bucket_replication_normal_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+    # delete object on source
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+@allow_bucket_replication
+def test_bucket_replication_normal_deletemarker():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    # enable versioning
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    # enable versioning
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+    # delete object on source
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user_forbidden():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    'AccessControlTranslation': {
+                        'Owner': alt_user.id,
+                    },
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    # give access to user to write to alt user's bucket
+    dest.s3_client.put_bucket_policy(
+        Bucket=dest_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:ReplicateObject',
+                'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    source.s3_client.put_object(Bucket=source_bucket.name, Key=objname, Body='foo', Tagging='key1=value1')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['TagCount'], 1)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user_delete_forbidden():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    'AccessControlTranslation': {
+                        'Owner': alt_user.id,
+                    },
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    # give access to user to write to alt user's bucket
+    dest.s3_client.put_bucket_policy(
+        Bucket=dest_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:ReplicateObject',
+                'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+    # delete object on source
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does exist in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    'AccessControlTranslation': {
+                        'Owner': alt_user.id,
+                    },
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    # give access to user to write to alt user's bucket
+    dest.s3_client.put_bucket_policy(
+        Bucket=dest_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': ['s3:ReplicateObject', 's3:ReplicateDelete'],
+                'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+    # delete object on source
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user_deletemarker_forbidden():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    # enable versioning
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    # enable versioning
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    'AccessControlTranslation': {
+                        'Owner': alt_user.id,
+                    },
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    # give access to user to write to alt user's bucket
+    dest.s3_client.put_bucket_policy(
+        Bucket=dest_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:ReplicateObject',
+                'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+    # delete object on source
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does exist in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user_deletemarker():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    # enable versioning
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    # enable versioning
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    'AccessControlTranslation': {
+                        'Owner': alt_user.id,
+                    },
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    # give access to user to write to alt user's bucket
+    dest.s3_client.put_bucket_policy(
+        Bucket=dest_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Allow',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': ['s3:ReplicateObject', 's3:ReplicateDelete'],
+                'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'foo')
+
+    # delete object on source
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+@allow_bucket_replication
+def test_bucket_replication_alt_user_deny_tagreplication():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.alt_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    'AccessControlTranslation': {
+                        'Owner': alt_user.id,
+                    },
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    # give access to user to write to alt user's bucket
+    dest.s3_client.put_bucket_policy(
+        Bucket=dest_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [
+                {
+                    'Effect': 'Allow',
+                    'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                    'Action': 's3:ReplicateObject',
+                    'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+                },
+                {
+                    'Effect': 'Deny',
+                    'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                    'Action': 's3:ReplicateTags',
+                    'Resource': f'arn:aws:s3:::{dest_bucket.name}/*',
+                }
+            ]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    source.s3_client.put_object(Bucket=source_bucket.name, Key=objname, Body='foo', Tagging='key1=value1')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket without tags
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+    assert 'TagCount' not in res
+
+@allow_bucket_replication
+def test_bucket_replication_source_forbidden():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # Deny myself from fetching the source object for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': ['s3:GetObjectVersionForReplication', 's3:GetObject'],
+                'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # remove bucket policy so I can check for replication status
+    source.s3_client.delete_bucket_policy(Bucket=source_bucket.name)
+
+    # check the source object has replication status set to FAILED
+    # uncomment me in https://github.com/ceph/ceph/pull/62147
+    # res = source.s3_client.head_object(Bucket=source_bucket.name, Key=objname)
+    # assert_equal(res['ReplicationStatus'], 'FAILED')
+
+@allow_bucket_replication
+def test_bucket_replication_source_forbidden_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    # enable versioning
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # Deny myself from fetching the source object for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': ['s3:GetObjectVersionForReplication', 's3:GetObjectVersion'],
+                'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # remove bucket policy so I can check for replication status
+    source.s3_client.delete_bucket_policy(Bucket=source_bucket.name)
+
+    # check the source object has replication status set to FAILED
+    # uncomment me in https://github.com/ceph/ceph/pull/62147
+    # res = source.s3_client.head_object(Bucket=source_bucket.name, Key=objname)
+    # assert_equal(res['ReplicationStatus'], 'FAILED')
+
+@allow_bucket_replication
+def test_bucket_replication_source_allow_either_getobject_or_getobjectversionforreplication():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # Deny myself from fetching the source object for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:GetObject',
+                'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+
+@allow_bucket_replication
+def test_bucket_replication_source_allow_either_getobjectversion_or_getobjectversionforreplication():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    # enable versioning
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # Deny myself from fetching the source object for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:GetObjectVersionForReplication',
+                'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+
+@allow_bucket_replication
+def test_bucket_replication_source_forbidden_objretention():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+    
+    source_bucket_name = gen_bucket_name()
+    source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket_name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    
+    # Deny myself from fetching the source object's retention for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket_name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:GetObjectRetention',
+                'Resource': f'arn:aws:s3:::{source_bucket_name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket_name, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # check the source object has replication status set to FAILED
+    # uncomment me in https://github.com/ceph/ceph/pull/62147
+    # res = source.s3_client.head_object(Bucket=source_bucket_name, Key=objname)
+    # assert_equal(res['ReplicationStatus'], 'FAILED')
+
+@allow_bucket_replication
+def test_bucket_replication_source_forbidden_legalhold():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+    
+    source_bucket_name = gen_bucket_name()
+    source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket_name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    
+    # Deny myself from fetching the source object's retention for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket_name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:GetObjectLegalHold',
+                'Resource': f'arn:aws:s3:::{source_bucket_name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket_name, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object does not exist in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # check the source object has replication status set to FAILED
+
+@allow_bucket_replication
+def test_bucket_replication_source_forbidden_getobjecttagging():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # Deny myself from fetching the source object for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:GetObjectTagging',
+                'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    source.s3_client.put_object(Bucket=source_bucket.name, Key=objname, Body='foo', Tagging='key1=value1')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket without tags
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+    assert 'TagCount' not in res
+
+@allow_bucket_replication
+def test_bucket_replication_source_forbidden_getobjectversiontagging():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.rw_zones[0]
+    dest = zonegroup_conns.rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    # enable versioning
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+
+    # Deny myself from fetching the source object for replication
+    source.s3_client.put_bucket_policy(
+        Bucket=source_bucket.name,
+        Policy=json.dumps({
+            'Version': '2012-10-17',
+            'Statement': [{
+                'Effect': 'Deny',
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Action': 's3:GetObjectVersionTagging',
+                'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
+            }]
+        })
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    source.s3_client.put_object(Bucket=source_bucket.name, Key=objname, Body='foo', Tagging='key1=value1')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket without tags
+    res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(res['Body'].read().decode('utf-8'), 'foo')
+    assert 'TagCount' not in res
