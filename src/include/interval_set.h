@@ -964,8 +964,8 @@ public:
 };
 
 
-template<typename T, template<typename, typename, typename ...> class C>
-inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C> &s) {
+template<typename T, template<typename, typename, typename ...> class C, bool strict = true>
+inline std::ostream& operator<<(std::ostream& out, const interval_set<T,C,strict> &s) {
   out << "[";
   bool first = true;
   for (const auto& [start, len] : s) {

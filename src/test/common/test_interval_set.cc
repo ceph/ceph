@@ -1859,4 +1859,14 @@ TYPED_TEST(IntervalSetTest, subtract) {
 
     ASSERT_STRICT_DEATH(iset1.subtract(iset2), ASSERT_EQ(iset1, iset3));
   }
+
+  // Subtract identical
+  {
+    ISet iset1, iset2;
+    iset1.union_insert(0, 5);
+    iset2.union_insert(0, 5);
+
+    iset1.subtract(iset2);
+    ASSERT_TRUE(iset1.empty());
+  }
 }
