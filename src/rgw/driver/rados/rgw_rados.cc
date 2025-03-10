@@ -6800,27 +6800,13 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-/**
- * Set an attr on an object.
- * bucket: name of the bucket holding the object
- * obj: name of the object to set the attr on
- * name: the attr to set
- * bl: the contents of the attr
- * Returns: 0 on success, -ERR# otherwise.
- */
-int RGWRados::set_attr(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBucketInfo& bucket_info, const rgw_obj& obj, const char *name, bufferlist& bl, optional_yield y)
-{
-  map<string, bufferlist> attrs;
-  attrs[name] = bl;
-  return set_attrs(dpp, octx, bucket_info, obj, attrs, NULL, y, true);
-}
-
 int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBucketInfo& bucket_info, const rgw_obj& src_obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs,
                         optional_yield y,
                         bool log_op,
-                        ceph::real_time set_mtime /* = zero() */)
+                        ceph::real_time set_mtime /* = zero() */,
+                        ceph::real_time unmod_since /* = zero() */)
 {
   rgw_obj obj = src_obj;
   if (obj.key.instance == "null") {
@@ -6844,6 +6830,19 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   // ensure null version object exist
   if (src_obj.key.instance == "null" && !manifest) {
     return -ENOENT;
+  }
+
+  if (!real_clock::is_zero(unmod_since)) {
+    timespec ctime = ceph::real_clock::to_timespec(state->mtime);
+    timespec unmod = ceph::real_clock::to_timespec(unmod_since);
+
+    ldpp_dout(dpp, 10) << "unmod_since=" << unmod << " ctime=" << ctime << dendl;
+    if (ctime > unmod) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+
+    // only set attrs if mtime is less than or equal to unmod_since
+    cls_obj_check_mtime(op, unmod_since, true, CLS_RGW_CHECK_TIME_MTIME_LE);
   }
 
   map<string, bufferlist>::iterator iter;

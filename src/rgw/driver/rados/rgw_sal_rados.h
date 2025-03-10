@@ -605,7 +605,7 @@ class RadosObject : public StoreObject {
 			   bool* truncated, list_parts_each_t each_func,
 			   optional_yield y) override;
 
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags, ceph::real_time unmod_since = ceph::real_clock::zero()) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) override;

@@ -526,6 +526,7 @@ enum http_op {
   OP_POST,
   OP_COPY,
   OP_OPTIONS,
+  OP_PATCH,
   OP_UNKNOWN,
 };
 
