@@ -527,7 +527,7 @@ namespace rgw::sal {
     return read_op.prepare(dpp);
   }
 
-  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
+  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),
@@ -552,7 +552,7 @@ namespace rgw::sal {
     }
     set_atomic();
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, 0);
   }
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -562,7 +562,7 @@ namespace rgw::sal {
 
     set_atomic();
     rmattr[attr_name] = bl;
-    return set_obj_attrs(dpp, nullptr, &rmattr, y);
+    return set_obj_attrs(dpp, nullptr, &rmattr, y, 0);
   }
 
   bool DBObject::is_expired() {

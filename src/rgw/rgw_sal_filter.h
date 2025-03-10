@@ -754,6 +754,8 @@ public:
   virtual bool is_prefetch_data() override { return next->is_prefetch_data(); }
   virtual void set_compressed() override { return next->set_compressed(); }
   virtual bool is_compressed() override { return next->is_compressed(); }
+  virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
+    const ceph::real_time& obj_mtime) override { return next->is_sync_completed(dpp, obj_mtime); }
   virtual void invalidate() override { return next->invalidate(); }
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string &get_name() const override { return next->get_name(); }
@@ -762,7 +764,7 @@ public:
 			    optional_yield y, bool follow_olh = true) override;
   virtual void set_obj_state(RGWObjState& _state) override { return next->set_obj_state(_state); }
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-			    Attrs* delattrs, optional_yield y) override;
+			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
 			    rgw_obj* target_obj = NULL) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
