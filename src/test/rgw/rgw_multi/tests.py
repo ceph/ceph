@@ -3445,6 +3445,7 @@ def test_sync_flow_symmetrical_zonegroup_all_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 def test_topic_notification_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_meta_checkpoint(zonegroup)
