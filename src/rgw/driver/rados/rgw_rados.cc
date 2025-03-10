@@ -10815,6 +10815,7 @@ int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBuck
 
 // uses information that the store has easy access to transition to the shard calculatoin logic
 void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
+					  bool is_versioned,
 					  const uint64_t num_objs,
 					  const uint32_t num_source_shards,
 					  const uint32_t min_layout_shards,
@@ -10823,8 +10824,16 @@ void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
 {
   const uint32_t max_dynamic_shards =
     uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
-  const uint64_t max_objs_per_shard =
+  uint64_t max_objs_per_shard =
     cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+
+  if (is_versioned) {
+    // Since each versioned bucket requires 4 entries for the first object
+    // and 2 additional entries for each additional object, we want to
+    // trigger resharding sooner.
+    max_objs_per_shard /= 3;
+  }
+
   const bool is_multisite = svc.zone->need_to_log_data();
 
   RGWBucketReshard::calculate_preferred_shards(dpp,
@@ -10861,12 +10870,13 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 
   bool need_resharding = false;
   uint32_t suggested_num_shards = 0;
+  const bool is_versioned = bucket_info.versioned();
   const uint32_t num_source_shards =
     rgw::current_num_shards(bucket_info.layout);
   const uint32_t min_layout_shards =
     rgw::current_min_layout_shards(bucket_info.layout);
 
-  calculate_preferred_shards(dpp, num_objs,
+  calculate_preferred_shards(dpp, is_versioned, num_objs,
 			     num_source_shards, min_layout_shards,
 			     need_resharding, &suggested_num_shards);
   if (! need_resharding) {
