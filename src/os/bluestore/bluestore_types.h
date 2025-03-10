@@ -1004,10 +1004,14 @@ public:
   void add_tail(uint32_t new_len) {
     ceph_assert(!has_unused());
     ceph_assert(new_len > logical_length);
-    extents.emplace_back(
-      bluestore_pextent_t(
-        bluestore_pextent_t::INVALID_OFFSET,
-        new_len - logical_length));
+    if (extents.size() == 0 || extents.back().is_valid()) {
+      extents.emplace_back(
+        bluestore_pextent_t(
+          bluestore_pextent_t::INVALID_OFFSET,
+          new_len - logical_length));
+    } else {
+      extents.back().length += new_len - logical_length;
+    }
     logical_length = new_len;
     if (has_csum()) {
       ceph::buffer::ptr t;
