@@ -97,6 +97,9 @@ export class RgwBucketLifecycleListComponent implements OnInit {
       .getLifecycle(this.bucket.bucket, this.bucket.owner)
       .pipe(
         tap((lifecycle) => {
+          if (!Array.isArray(lifecycle.LifecycleConfiguration.Rule)) {
+            lifecycle.LifecycleConfiguration.Rule = [lifecycle.LifecycleConfiguration.Rule];
+          }
           this.lifecycleRuleList = lifecycle;
         }),
         catchError(() => {
@@ -108,7 +111,7 @@ export class RgwBucketLifecycleListComponent implements OnInit {
     this.filteredLifecycleRules$ = allLifecycleRules$.pipe(
       map(
         (lifecycle: any) =>
-          lifecycle?.LifecycleConfiguration?.Rules?.filter((rule: object) =>
+          lifecycle?.LifecycleConfiguration?.Rule?.filter((rule: object) =>
             rule.hasOwnProperty('Transition')
           ) || []
       )
@@ -130,10 +133,10 @@ export class RgwBucketLifecycleListComponent implements OnInit {
 
   deleteAction() {
     const ruleNames = this.selection.selected.map((rule) => rule.ID);
-    const filteredRules = this.lifecycleRuleList.LifecycleConfiguration.Rules.filter(
+    const filteredRules = this.lifecycleRuleList.LifecycleConfiguration.Rule.filter(
       (rule: any) => !ruleNames.includes(rule.ID)
     );
-    const rules = filteredRules.length > 0 ? { Rules: filteredRules } : {};
+    const rules = filteredRules.length > 0 ? { Rule: filteredRules } : {};
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Rule`,
       itemNames: ruleNames,
