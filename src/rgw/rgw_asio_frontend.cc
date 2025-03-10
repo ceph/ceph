@@ -722,7 +722,15 @@ int AsioFrontend::init()
       }
     }
 
-    l.acceptor.set_option(tcp::acceptor::reuse_address(true));
+    // setting option |SO_REUSEPORT| allows running of multiple rgw processes on
+    // the same port. Can read more about the implementation here.
+    // https://web.git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git/commit/?id=c617f398edd4db2b8567a28e899a88f8f574798d
+    int one = 1;
+    if (setsockopt(l.acceptor.native_handle(), SOL_SOCKET,
+                   SO_REUSEADDR | SO_REUSEPORT, &one, sizeof(one)) == -1) {
+      lderr(ctx()) << "setsockopt SO_REUSEADDR | SO_REUSEPORT failed:" << dendl;
+      return -1;
+    }
     l.acceptor.bind(l.endpoint, ec);
     if (ec) {
       lderr(ctx()) << "failed to bind address " << l.endpoint
