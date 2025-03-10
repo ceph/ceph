@@ -2,25 +2,6 @@
 #include "common/ceph_crypto.h"
 
 namespace rgw::dedup {
-#if 0
-  //void encode(const dedup_req_type_t& dedup_type, ceph::bufferlist& bl);
-  //void decode(dedup_req_type_t& d, ceph::bufferlist::const_iterator& bl);
-  //---------------------------------------------------------------------------
-  void encode(const dedup_req_type_t& dedup_type, ceph::bufferlist& bl)
-  {
-    ENCODE_START(1, 1, bl);
-    encode(dedup_type, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  //---------------------------------------------------------------------------
-  void decode(dedup_req_type_t& dedup_type, ceph::bufferlist::const_iterator& bl)
-  {
-    DECODE_START(1, bl);
-    decode(dedup_type, bl);
-    DECODE_FINISH(bl);
-  }
-#endif
   //---------------------------------------------------------------------------
   std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type)
   {
@@ -176,11 +157,11 @@ namespace rgw::dedup {
 
   static const char* s_urgent_msg_names[] = {
     "URGENT_MSG_NONE",
-      "URGENT_MSG_ABORT",
-      "URGENT_MSG_PASUE",
-      "URGENT_MSG_RESUME",
-      "URGENT_MSG_RESTART",
-      "URGENT_MSG_INVALID"
+    "URGENT_MSG_ABORT",
+    "URGENT_MSG_PASUE",
+    "URGENT_MSG_RESUME",
+    "URGENT_MSG_RESTART",
+    "URGENT_MSG_INVALID"
   };
 
   //---------------------------------------------------------------------------
@@ -244,32 +225,26 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void worker_stats_t::dump(Formatter *f) const
   {
-    Formatter::ObjectSection outer(*f, "worker_stats");
-    f->open_array_section("worker_stats");
-    {
-      Formatter::ObjectSection common(*f, "common:");
-      encode_json("Ingress Objs count", this->ingress_obj, f);
-      encode_json("Accum byte size Ingress Objs", this->ingress_obj_bytes, f);
-      encode_json("Egress Records count", this->egress_records, f);
-      encode_json("Egress Blocks count", this->egress_blocks, f);
-      encode_json("Egress Slabs count", this->egress_slabs, f);
-
-      encode_json("Single part obj count", this->single_part_objs, f);
-      encode_json("Multipart obj count", this->multipart_objs, f);
-
-      if (this->small_multipart_obj) {
-	encode_json("Small Multipart obj count", this->small_multipart_obj, f);
-      }
+    // main section
+    f->dump_unsigned("Ingress Objs count", this->ingress_obj);
+    f->dump_unsigned("Accum byte size Ingress Objs", this->ingress_obj_bytes);
+    f->dump_unsigned("Egress Records count", this->egress_records);
+    f->dump_unsigned("Egress Blocks count", this->egress_blocks);
+    f->dump_unsigned("Egress Slabs count", this->egress_slabs);
+    f->dump_unsigned("Single part obj count", this->single_part_objs);
+    f->dump_unsigned("Multipart obj count", this->multipart_objs);
+    if (this->small_multipart_obj) {
+      f->dump_unsigned("Small Multipart obj count", this->small_multipart_obj);
     }
 
     {
-      Formatter::ObjectSection notify(*f, "notify:");
+      Formatter::ObjectSection notify(*f, "notify");
 
       if(this->non_default_storage_class_objs) {
-	encode_json("non default storage class objs",
-		    this->non_default_storage_class_objs, f);
-	encode_json("non default storage class objs bytes",
-		    this->non_default_storage_class_objs_bytes, f);
+	f->dump_unsigned("non default storage class objs",
+			 this->non_default_storage_class_objs);
+	f->dump_unsigned("non default storage class objs bytes",
+			 this->non_default_storage_class_objs_bytes);
       }
       else {
 	ceph_assert(this->default_storage_class_objs == this->ingress_obj);
@@ -278,34 +253,33 @@ namespace rgw::dedup {
     }
 
     {
-      Formatter::ObjectSection skipped(*f, "skipped:");
+      Formatter::ObjectSection skipped(*f, "skipped");
       if(this->ingress_skip_too_small) {
-	encode_json("Ingress skip: too small objs",
-		    this->ingress_skip_too_small, f);
-	encode_json("Ingress skip: too small bytes",
-		    this->ingress_skip_too_small_bytes, f);
+	f->dump_unsigned("Ingress skip: too small objs",
+			 this->ingress_skip_too_small);
+	f->dump_unsigned("Ingress skip: too small bytes",
+			 this->ingress_skip_too_small_bytes);
 
 	if(this->ingress_skip_too_small_64KB) {
-	  encode_json("Ingress skip: 64KB<=size<=4MB Obj",
-		      this->ingress_skip_too_small_64KB, f);
-	  encode_json("Ingress skip: 64KB<=size<=4MB Bytes",
-		      this->ingress_skip_too_small_64KB_bytes, f);
+	  f->dump_unsigned("Ingress skip: 64KB<=size<=4MB Obj",
+			   this->ingress_skip_too_small_64KB);
+	  f->dump_unsigned("Ingress skip: 64KB<=size<=4MB Bytes",
+			   this->ingress_skip_too_small_64KB_bytes);
 	}
       }
     }
 
     {
-      Formatter::ObjectSection failed(*f, "failed:");
+      Formatter::ObjectSection failed(*f, "failed");
       if(this->ingress_failed_get_object) {
-	encode_json("Ingress failed get_object()",
-		    this->ingress_failed_get_object, f);
+	f->dump_unsigned("Ingress failed get_object()",
+			 this->ingress_failed_get_object);
       }
       if(this->ingress_failed_get_obj_attrs) {
-	encode_json("Ingress failed get_obj_attrs()",
-		    this->ingress_failed_get_obj_attrs, f);
+	f->dump_unsigned("Ingress failed get_obj_attrs()",
+			 this->ingress_failed_get_obj_attrs);
       }
     }
-    f->close_section();
   }
 
   //---------------------------------------------------------------------------
@@ -377,81 +351,72 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void md5_stats_t::dump(Formatter *f) const
   {
-    Formatter::ObjectSection outer(*f, "md5_stats");
-    f->open_array_section("md5_stats");
+    // main section
+    f->dump_unsigned("Total processed objects", this->processed_objects);
+    f->dump_unsigned("Loaded objects", this->loaded_objects);
+    f->dump_unsigned("Set Shared-Manifest", this->set_shared_manifest);
+    f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
+    f->dump_unsigned("Deduped Bytes(this cycle)", this->deduped_objects_bytes);
+    f->dump_unsigned("Singleton Obj", this->singleton_count);
+    f->dump_unsigned("Unique Obj", this->unique_count);
+    f->dump_unsigned("Duplicate Obj", this->duplicate_count);
+    f->dump_unsigned("Duplicate Blocks Bytes", this->duplicated_blocks_bytes);
+
     {
-      Formatter::ObjectSection common(*f, "common:");
-      encode_json("Total processed objects", this->processed_objects, f);
-      encode_json("Loaded objects", this->loaded_objects, f);
-
-
-      encode_json("Set Shared-Manifest", this->set_shared_manifest, f);
-      encode_json("Deduped Obj (this cycle)", this->deduped_objects, f);
-      encode_json("Deduped Bytes(this cycle)", this->deduped_objects_bytes, f);
-
-      encode_json("Singleton Obj", this->singleton_count, f);
-      encode_json("Unique Obj", this->unique_count, f);
-      encode_json("Duplicate Obj", this->duplicate_count, f);
-      encode_json("Duplicate Blocks Bytes", this->duplicated_blocks_bytes, f);
-      //formatter->close_section();
+      Formatter::ObjectSection notify(*f, "notify");
+      f->dump_unsigned("Valid SHA256 attrs", this->valid_sha256_attrs);
+      f->dump_unsigned("inValid SHA256 attrs", this->invalid_sha256_attrs);
     }
 
     {
-      Formatter::ObjectSection notify(*f, "notify:");
-      encode_json("Valid SHA256 attrs", this->valid_sha256_attrs, f);
-      encode_json("inValid SHA256 attrs", this->invalid_sha256_attrs, f);
-    }
-
-    {
-      Formatter::ObjectSection skipped(*f, "skipped:");
-      encode_json("Skipped shared_manifest", this->skipped_shared_manifest, f);
-      encode_json("Skipped singleton objs", this->skipped_singleton, f);
+      Formatter::ObjectSection skipped(*f, "skipped");
+      f->dump_unsigned("Skipped shared_manifest", this->skipped_shared_manifest);
+      f->dump_unsigned("Skipped singleton objs", this->skipped_singleton);
       if (this->skipped_singleton) {
-	encode_json("Skipped singleton Bytes", this->skipped_singleton_bytes, f);
+	f->dump_unsigned("Skipped singleton Bytes", this->skipped_singleton_bytes);
       }
-      encode_json("Skipped source record", this->skipped_source_record, f);
+      f->dump_unsigned("Skipped source record", this->skipped_source_record);
 
       if (this->ingress_skip_encrypted) {
-	encode_json("Skipped Encrypted objs", this->ingress_skip_encrypted, f);
-	encode_json("Skipped Encrypted Bytes",this->ingress_skip_encrypted_bytes, f);
+	f->dump_unsigned("Skipped Encrypted objs", this->ingress_skip_encrypted);
+	f->dump_unsigned("Skipped Encrypted Bytes",this->ingress_skip_encrypted_bytes);
       }
       if (this->ingress_skip_compressed) {
-	encode_json("Skipped Compressed objs", this->ingress_skip_compressed, f);
-	encode_json("Skipped Compressed Bytes", this->ingress_skip_compressed_bytes, f);
+	f->dump_unsigned("Skipped Compressed objs", this->ingress_skip_compressed);
+	f->dump_unsigned("Skipped Compressed Bytes", this->ingress_skip_compressed_bytes);
       }
       if (this->ingress_skip_changed_objs) {
-	encode_json("Skipped Changed Object", this->ingress_skip_changed_objs, f);
+	f->dump_unsigned("Skipped Changed Object", this->ingress_skip_changed_objs);
       }
       if (this->skip_sha256_cmp) {
-	encode_json("Can't run SHA256 compare", this->skip_sha256_cmp, f);
+	f->dump_unsigned("Can't run SHA256 compare", this->skip_sha256_cmp);
       }
     }
 
     {
       Formatter::ObjectSection sys_failures(*f, "system failures:");
       if(this->ingress_failed_get_object) {
-	encode_json("Failed get_object()", this->ingress_failed_get_object, f);
+	f->dump_unsigned("Failed get_object()", this->ingress_failed_get_object);
       }
       if(this->ingress_failed_get_obj_attrs) {
-	encode_json("Failed get_obj_attrs",this->ingress_failed_get_obj_attrs, f);
+	f->dump_unsigned("Failed get_obj_attrs",this->ingress_failed_get_obj_attrs);
       }
       if (this->failed_src_load) {
-	encode_json("Failed SRC-Load ", this->failed_src_load, f);
+	f->dump_unsigned("Failed SRC-Load ", this->failed_src_load);
       }
       if (this->failed_dedup) {
-	encode_json("Failed Dedup", this->failed_dedup, f);
+	f->dump_unsigned("Failed Dedup", this->failed_dedup);
       }
     }
 
     {
       Formatter::ObjectSection logical_failures(*f, "logical failures:");
       if (this->sha256_mismatch) {
-	encode_json("SHA256 mismatch", this->sha256_mismatch, f);
+	f->dump_unsigned("SHA256 mismatch", this->sha256_mismatch);
       }
       if (this->duplicate_records) {
-	encode_json("duplicate SRC/TGT", this->duplicate_records, f);
+	f->dump_unsigned("duplicate SRC/TGT", this->duplicate_records);
       }
     }
-    f->close_section();
   }
 } //namespace rgw::dedup

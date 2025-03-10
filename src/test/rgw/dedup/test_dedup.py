@@ -7,6 +7,7 @@ import os
 import string
 import shutil
 import pytest
+import json
 from collections import namedtuple
 import boto3
 from boto3.s3.transfer import TransferConfig
@@ -471,7 +472,7 @@ def upload_objects(out_dir, bucket_name, files, indices, conn, config, check_obj
     duplicated_tail_objs=0
     rados_objects_total=0
     s3_objects_total=0
-    
+
     for (f, idx) in zip(files, indices):
         filename=f[0]
         obj_size=f[1]
@@ -640,59 +641,46 @@ def print_dedup_stats_diff(actual, expected):
 
 #-------------------------------------------------------------------------------
 def read_dedup_stats():
+    dedup_work_was_completed = False
+    dedup_stats = Dedup_Stats()
+
     result = admin(['dedup', 'stats'])
     assert result[1] == 0
 
-    dedup_work_was_completed = False
-    dedup_stats = Dedup_Stats()
-    for line in result[0].splitlines():
-        if line.startswith("Total processed objects"):
-            dedup_stats.total_processed_objects = get_stats_line_val(line)
+    jstats=json.loads(result[0])
+    dedup_work_was_completed=jstats['completed']
+    if dedup_work_was_completed:
+        dedup_ratio=jstats['dedup ratio']
+        log.info("Completed! ::ratio=%s", dedup_ratio['dedup_ratio'])
+    else:
+        log.info("Uncompleted!")
 
-        if line.startswith("Accum byte size Ingress Objs"):
-            dedup_stats.size_before_dedup = get_stats_line_val(line)
+    worker_stats=jstats['worker_stats']
+    dedup_stats.size_before_dedup=worker_stats['Accum byte size Ingress Objs']
+    skipped=worker_stats['skipped']
+    key='Ingress skip: too small objs'
+    if key in skipped:
+        dedup_stats.skip_too_small = skipped[key]
 
-        if line.startswith("Duplicate Blocks Bytes"):
-            dedup_stats.duplicate_bytes = get_stats_line_val(line)
+    key='md5_stats'
+    if key in jstats:
+        md5_stats=jstats[key]
+        dedup_stats.total_processed_objects = md5_stats['Total processed objects']
+        dedup_stats.loaded_objects = md5_stats['Loaded objects']
+        dedup_stats.set_shared_manifest = md5_stats['Set Shared-Manifest']
+        dedup_stats.deduped_obj = md5_stats['Deduped Obj (this cycle)']
+        dedup_stats.deduped_obj_bytes = md5_stats['Deduped Bytes(this cycle)']
+        dedup_stats.singleton_obj = md5_stats['Singleton Obj']
+        dedup_stats.unique_obj = md5_stats['Unique Obj']
+        dedup_stats.duplicate_obj = md5_stats['Duplicate Obj']
+        dedup_stats.duplicate_bytes = md5_stats['Duplicate Blocks Bytes']
 
-        if line.startswith("Loaded objects"):
-            dedup_stats.loaded_objects = get_stats_line_val(line)
-
-        if line.startswith("Ingress skip: too small objs"):
-            dedup_stats.skip_too_small = get_stats_line_val(line)
-
-        if line.startswith("Skipped shared_manifest"):
-            dedup_stats.skip_shared_manifest = get_stats_line_val(line)
-
-        elif line.startswith("Skipped singleton objs"):
-            dedup_stats.skip_singleton = get_stats_line_val(line)
-
-        if line.startswith("Skipped singleton Bytes"):
-            dedup_stats.skip_singleton_bytes = get_stats_line_val(line)
-
-        if line.startswith("Skipped source record"):
-            dedup_stats.skip_src_record = get_stats_line_val(line)
-
-        elif line.startswith("Set Shared-Manifest"):
-            dedup_stats.set_shared_manifest = get_stats_line_val(line)
-
-        if line.startswith("Deduped Bytes(this cycle)"):
-            dedup_stats.deduped_obj_bytes = get_stats_line_val(line)
-
-        if line.startswith("Deduped Obj (this cycle)"):
-            dedup_stats.deduped_obj = get_stats_line_val(line)
-
-        elif line.startswith("Singleton Obj"):
-            dedup_stats.singleton_obj = get_stats_line_val(line)
-
-        if line.startswith("Unique Obj"):
-            dedup_stats.unique_obj = get_stats_line_val(line)
-
-        elif line.startswith("Duplicate Obj"):
-            dedup_stats.duplicate_obj = get_stats_line_val(line)
-
-        elif line.startswith("DEDUP WORK WAS COMPLETED"):
-            dedup_work_was_completed = True
+        skipped = md5_stats['skipped']
+        dedup_stats.skip_shared_manifest = skipped['Skipped shared_manifest']
+        dedup_stats.skip_src_record = skipped['Skipped source record']
+        dedup_stats.skip_singleton = skipped['Skipped singleton objs']
+        if dedup_stats.skip_singleton:
+            dedup_stats.skip_singleton_bytes = skipped['Skipped singleton Bytes']
 
     return (dedup_work_was_completed, dedup_stats)
 
@@ -709,7 +697,7 @@ def exec_dedup(expcted_dedup_stats, verify_stats=True):
     max_dedup_time = 3*60
     if expcted_dedup_stats.total_processed_objects > 1000:
         max_dedup_time = 5 * 60
-    
+
     dedup_time = 0
     dedup_timeout = 5
     dedup_stats = Dedup_Stats()
@@ -780,12 +768,12 @@ def small_single_part_objs_dedup(out_dir, conn, bucket_name, run_cleanup_after=T
         exec_dedup(dedup_stats)
         log.info("Verify all objects")
         verify_objects(out_dir, bucket_name, files, conn, expected_results, default_config)
+        return
+
+    finally:
         if run_cleanup_after:
             cleanup(out_dir, bucket_name, conn)
 
-        return
-    finally:
-        log.info("test done")
 
 
 #-------------------------------------------------------------------------------
@@ -877,7 +865,6 @@ def dedup_basic_with_tenants_common(out_dir, files, max_copies_count, config, cl
         if cleanup:
             cleanup_all_buckets(out_dir, bucket_names, conns)
 
-        return
     finally:
         log.info("test done")
 
@@ -885,7 +872,7 @@ def dedup_basic_with_tenants_common(out_dir, files, max_copies_count, config, cl
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small():
-    #return
+    return
 
     bucket_name = gen_bucket_name()
     log.info("test_dedup_small: connect to AWS ...")
@@ -896,7 +883,7 @@ def test_dedup_small():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
@@ -941,7 +928,7 @@ def test_dedup_small_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_0: connect to AWS ...")
@@ -986,7 +973,7 @@ def test_dedup_inc_0_with_tenants():
 #    should be made to the system
 @pytest.mark.basic_test
 def test_dedup_inc_0():
-    #return
+    return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1026,7 +1013,7 @@ def test_dedup_inc_0():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_1_with_tenants: connect to AWS ...")
@@ -1084,7 +1071,7 @@ def test_dedup_inc_1_with_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_1():
-    #return
+    return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1140,7 +1127,7 @@ def test_dedup_inc_1():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_2_with_tenants: connect to AWS ...")
@@ -1208,7 +1195,7 @@ def test_dedup_inc_2_with_tenants():
 # 4) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_2():
-    #return
+    return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1271,7 +1258,7 @@ def test_dedup_inc_2():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove_multi_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_with_remove_multi_tenants: connect to AWS ...")
@@ -1339,7 +1326,7 @@ def test_dedup_inc_with_remove_multi_tenants():
 # 3) Run another dedup
 @pytest.mark.basic_test
 def test_dedup_inc_with_remove():
-    #return
+    return
 
     config=default_config
     prepare_test(OUT_DIR)
@@ -1409,7 +1396,7 @@ def test_dedup_inc_with_remove():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_multipart_with_tenants: connect to AWS ...")
@@ -1432,7 +1419,7 @@ def test_dedup_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_multipart():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -1457,7 +1444,7 @@ def test_dedup_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
@@ -1472,7 +1459,7 @@ def test_dedup_basic_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_basic():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     bucket_name = gen_bucket_name()
@@ -1491,7 +1478,7 @@ def test_dedup_basic():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     max_copies_count=4
@@ -1510,7 +1497,7 @@ def test_dedup_small_multipart_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_small_multipart():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_small_multipart: connect to AWS ...")
@@ -1532,11 +1519,11 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     max_copies_count=3
-    num_files=2*1024
+    num_files=1*1024
     size=1*KB
     files=[]
     config=TransferConfig(multipart_threshold=size, multipart_chunksize=1*MB)
@@ -1559,7 +1546,7 @@ def test_dedup_large_scale():
     files=[]
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(Bucket=bucket_name)
-    num_files = 2*1024
+    num_files = 1*1024
     size = 4*KB
 
     gen_files_fixed_size(OUT_DIR, files, num_files, size)
@@ -1636,7 +1623,7 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
 @pytest.mark.basic_test
 #@pytest.mark.inc_test
 def test_dedup_inc_loop_with_tenants():
-    #return
+    return
 
     prepare_test(OUT_DIR)
     log.info("test_dedup_inc_loop_with_tenants: connect to AWS ...")

@@ -147,8 +147,7 @@ void usage()
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  dedup stats                      Collcet & display dedup statistics\n";
   cout << "  dedup abort                      Abort dedup\n";
-  cout << "  dedup restart dry                Restart dedup (dry run)\n";
-  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup restart                    Restart dedup (--dry-run for a dry-run)\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
   cout << "  subuser create                   create a new subuser\n" ;
@@ -400,6 +399,7 @@ void usage()
   cout << "   --url=<url>                       url for pushing/pulling period/realm\n";
   cout << "   --epoch=<number>                  period epoch\n";
   cout << "   --commit                          commit the period during 'period update'\n";
+  cout << "   --dry-run                         dry run only, no changes will be made\n";
   cout << "   --staging                         get staging period info\n";
   cout << "   --master                          set as master\n";
   cout << "   --master-zone=<id>                master zone id\n";
@@ -741,7 +741,6 @@ enum class OPT {
   DEDUP_STATS,
   DEDUP_ABORT,
   DEDUP_RESTART,
-  DEDUP_RESTART_DRY,
   DEDUP_PAUSE,
   DEDUP_RESUME,
   GC_LIST,
@@ -991,7 +990,6 @@ static SimpleCmd::Commands all_cmds = {
   { "ratelimit disable", OPT::RATELIMIT_DISABLE },
   { "dedup stats", OPT::DEDUP_STATS },
   { "dedup abort", OPT::DEDUP_ABORT },
-  { "dedup restart dry", OPT::DEDUP_RESTART_DRY },
   { "dedup restart", OPT::DEDUP_RESTART },
   { "dedup pause", OPT::DEDUP_PAUSE },
   { "dedup resume", OPT::DEDUP_RESUME },
@@ -3721,6 +3719,7 @@ int main(int argc, const char **argv)
   std::optional<std::string> str_script_ctx;
   std::optional<std::string> script_package;
   int allow_compilation = false;
+  int dedup_dry_run = false;
 
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
@@ -4333,6 +4332,8 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       enable_features.insert(val);
+    } else if (ceph_argparse_binary_flag(args, i, &dedup_dry_run, NULL, "--dry-run", (char*)NULL)) {
+      dedup_dry_run = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--disable-feature", (char*)NULL)) {
       disable_features.insert(val);
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -4463,7 +4464,6 @@ int main(int argc, const char **argv)
 			 OPT::OLH_READLOG,
 			 OPT::DEDUP_STATS,
 			 OPT::DEDUP_ABORT,     // TBD - not READ-ONLY
-			 OPT::DEDUP_RESTART_DRY,
 			 OPT::DEDUP_RESTART,   // TBD - not READ-ONLY
 			 OPT::DEDUP_PAUSE,
 			 OPT::DEDUP_RESUME,
@@ -9126,6 +9126,7 @@ next:
 	   << "backing store." << std::endl;
       return EPERM;
     }
+
     int ret = cluster::collect_all_shard_stats(store, formatter.get(), dpp());
     if (ret == 0) {
       formatter->flush(cout);
@@ -9155,7 +9156,7 @@ next:
     return cluster::dedup_control(store, dpp(), urgent_msg);
   }
 
-  if (opt_cmd == OPT::DEDUP_RESTART_DRY || opt_cmd == OPT::DEDUP_RESTART) {
+  if (opt_cmd == OPT::DEDUP_RESTART) {
     using namespace rgw::dedup;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!store) {
@@ -9164,16 +9165,18 @@ next:
       return EPERM;
     }
     dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
-    if (opt_cmd == OPT::DEDUP_RESTART_DRY) {
+    if (dedup_dry_run) {
       dedup_type = dedup_req_type_t::DEDUP_TYPE_DRY_RUN;
     }
-    else if (opt_cmd == OPT::DEDUP_RESTART) {
-      dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
-    }
     else {
-      std::cerr << "unexpected opt_cmd: " << std::endl;
-      return -EINVAL;
+      dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
+#if 0
+      // TBD: disable full dedup
+      std::cerr << "Only dry run of dedup is supported!" << std::endl;
+      return EPERM;
+#endif
     }
+
     int ret = cluster::dedup_restart_scan(store, dedup_type, dpp());
     if (ret == 0) {
       std::cout << "Dedup was restarted successfully" << std::endl;

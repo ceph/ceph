@@ -59,6 +59,10 @@ namespace rgw::dedup {
       return 0;
     }
     else {
+      // zero length read means no data
+      if (ret == 0) {
+	ret = -ENODATA;
+      }
       ldpp_dout(dpp, 10) << __func__ << "::" << (caller ? caller : "")
 			 << "::failed ioctx.getxattr() with: "
 			 << cpp_strerror(ret) << ", ret=" << ret << dendl;
@@ -87,7 +91,7 @@ namespace rgw::dedup {
     }
     else{
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to create " << oid
-      <<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
+			<<" with: "<< cpp_strerror(ret) << ", ret=" << ret << dendl;
       return ret;
     }
 
@@ -197,6 +201,16 @@ namespace rgw::dedup {
       }
     }
 
+    bool is_completed() const {
+      if (this->progress_b == SP_ALL_OBJECTS) {
+	ceph_assert(this->completed);
+	return true;
+      }
+      else {
+	ceph_assert(!this->completed);
+	return false;
+      }
+    }
     uint64_t    progress_a;
     uint64_t    progress_b;
     bool        completed;
@@ -652,6 +666,7 @@ namespace rgw::dedup {
       }
 
       if (sp.progress_b == SP_ALL_OBJECTS) {
+	ceph_assert(sp.completed);
 	utime_t duration = sp.completion_time - sp.creation_time;
 	// mark token completed;
 	(*p_num_completed)++;
@@ -757,78 +772,6 @@ namespace rgw::dedup {
   };
 
   //---------------------------------------------------------------------------
-  static utime_t show_time_func(const utime_t &start_time, bool show_time,
-				const std::map<std::string, member_time_t> &owner_map)
-  {
-    member_time_t all_members_time;
-    all_members_time.start_time = start_time;
-    all_members_time.end_time   = start_time;
-    all_members_time.aggregated_time = utime_t();
-
-    for (const auto& [owner, value] : owner_map) {
-      uint32_t sec = value.end_time.tv.tv_sec - value.start_time.tv.tv_sec;
-      std::cout << owner << "::start time = [" << value.start_time.tv.tv_sec % 1000
-		<< ":" << value.start_time.tv.tv_nsec / (1000*1000) << "] "
-		<< "::aggregated time = " << value.aggregated_time.tv.tv_sec
-		<< "(" << sec << ") seconds " << std::endl;
-
-      all_members_time.aggregated_time += value.aggregated_time;
-      if (all_members_time.end_time < value.end_time) {
-	all_members_time.end_time = value.end_time;
-      }
-    }
-    if (show_time) {
-      uint32_t sec = all_members_time.end_time.tv.tv_sec - all_members_time.start_time.tv.tv_sec;
-      std::cout << "All work-shard start      time = " << all_members_time.start_time << std::endl;
-      std::cout << "All work-shard end        time = " << all_members_time.end_time
-		<< " (" << sec << " seconds)" << std::endl;
-      std::cout << "All work-shard aggregated time = "
-		<< all_members_time.aggregated_time.tv.tv_sec << std::endl;
-    }
-
-    return all_members_time.end_time;
-  }
-
-  //---------------------------------------------------------------------------
-  [[maybe_unused]]static utime_t
-  show_time_func_fmt(const utime_t &start_time,
-		     bool show_time,
-		     const std::map<std::string, member_time_t> &owner_map,
-		     Formatter *fmt)
-  {
-    member_time_t all_members_time;
-    all_members_time.start_time = start_time;
-    all_members_time.end_time   = start_time;
-    all_members_time.aggregated_time = utime_t();
-    fmt->open_array_section("per-shard time");
-    for (const auto& [owner, value] : owner_map) {
-      uint32_t sec = value.end_time.tv.tv_sec - value.start_time.tv.tv_sec;
-      fmt->dump_stream("member time")
-	<< owner << "::start time = [" << value.start_time.tv.tv_sec % 1000
-	<< ":" << value.start_time.tv.tv_nsec / (1000*1000) << "] "
-	<< "::aggregated time = " << value.aggregated_time.tv.tv_sec
-	<< "(" << sec << ") seconds";
-      all_members_time.aggregated_time += value.aggregated_time;
-      if (all_members_time.end_time < value.end_time) {
-	all_members_time.end_time = value.end_time;
-      }
-    }
-    fmt->close_section();
-    if (show_time) {
-      uint32_t sec = all_members_time.end_time.tv.tv_sec - all_members_time.start_time.tv.tv_sec;
-      fmt->open_object_section("All shards time");
-      fmt->dump_stream("start time") << all_members_time.start_time;
-      fmt->dump_stream("end time")
-	<< all_members_time.end_time << " (" << sec << " seconds total)";
-      encode_json("aggregated time (sec)",
-		  all_members_time.aggregated_time.tv.tv_sec, fmt);
-      fmt->close_section();
-    }
-
-    return all_members_time.end_time;
-  }
-
-  //---------------------------------------------------------------------------
   static void collect_single_shard_stats(const DoutPrefixProvider *dpp,
 					 std::map<std::string, member_time_t> &owner_map,
 					 const shard_progress_t sp_arr[],
@@ -859,76 +802,96 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void show_dedup_ratio(const worker_stats_t &wrk_stats_sum,
-			       const md5_stats_t    &md5_stats_sum)
-  {
-    uint64_t rados_bytes_before = md5_stats_sum.rados_bytes_before_dedup;
-    uint64_t s3_bytes_before    = wrk_stats_sum.ingress_obj_bytes;
-    uint64_t s3_dedup_bytes     = md5_stats_sum.duplicated_blocks_bytes;
-    uint64_t s3_bytes_after     = s3_bytes_before - s3_dedup_bytes;
-    // skipped objects should be accounted for
-    // TBD: double check the logic!
-    uint64_t skipped_bytes = (wrk_stats_sum.ingress_skip_too_small_bytes +
-			      wrk_stats_sum.non_default_storage_class_objs_bytes);
-    s3_bytes_after -= skipped_bytes;
-    if (rados_bytes_before > s3_bytes_after && s3_bytes_after) {
-      double dedup_ratio = (double)rados_bytes_before/s3_bytes_after;
-      std::cout << "rados_bytes_before = " << rados_bytes_before << "\n";
-      std::cout << "s3_bytes_before    = " << s3_bytes_before << "\n";
-      std::cout << "s3_bytes_after     = " << s3_bytes_after << "\n";
-      std::cout << "dedup_ratio        = " << dedup_ratio << "\n";
-    }
-  }
+  static void show_incomplete_shards_fmt(bool has_incomplete_shards,
+					 unsigned num_shards,
+					 const shard_progress_t sp_arr[],
+					 Formatter *fmt)
 
-  //---------------------------------------------------------------------------
-  [[maybe_unused]]static void
-  show_dedup_ratio_fmt(const worker_stats_t &wrk_stats_sum,
-		       const md5_stats_t    &md5_stats_sum,
-		       Formatter *fmt)
   {
-    uint64_t rados_bytes_before = md5_stats_sum.rados_bytes_before_dedup;
-    uint64_t s3_bytes_before    = wrk_stats_sum.ingress_obj_bytes;
-    uint64_t s3_dedup_bytes     = md5_stats_sum.duplicated_blocks_bytes;
-    uint64_t s3_bytes_after     = s3_bytes_before - s3_dedup_bytes;
-    // skipped objects should be accounted for
-    // TBD: double check the logic!
-    uint64_t skipped_bytes = (wrk_stats_sum.ingress_skip_too_small_bytes +
-			      wrk_stats_sum.non_default_storage_class_objs_bytes);
-    s3_bytes_after -= skipped_bytes;
-    if (rados_bytes_before > s3_bytes_after && s3_bytes_after) {
-      double dedup_ratio = (double)rados_bytes_before/s3_bytes_after;
-      fmt->open_object_section("dedup ratio");
-
-      encode_json("rados_bytes_before", rados_bytes_before, fmt);
-      encode_json("s3_bytes_before", s3_bytes_before, fmt);
-      encode_json("s3_bytes_after", s3_bytes_after, fmt);
-      fmt->dump_float("dedup_ratio", (float)dedup_ratio);
-      fmt->close_section();
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  static void display_progress(uint64_t progress_a,
-			       uint64_t progress_b,
-			       unsigned shard)
-  {
-    if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
+    if (!has_incomplete_shards) {
       return;
     }
+    Formatter::ArraySection array_section{*fmt, "incomplete_shards"};
+    for (unsigned shard = 0; shard < num_shards; shard++) {
+      if (sp_arr[shard].is_completed() ) {
+	continue;
+      }
+      Formatter::ObjectSection object_section{*fmt, "shard_progress"};
+      fmt->dump_unsigned("shard_id", shard);
+      fmt->dump_string("owner", sp_arr[shard].owner);
+      fmt->dump_unsigned("progress_a", sp_arr[shard].progress_a);
+      fmt->dump_unsigned("progress_b", sp_arr[shard].progress_b);
+      fmt->dump_stream("last updated") << sp_arr[shard].update_time;
+    }
+  }
 
-    std::cout << std::hex << "0x" << std::setw(2) << std::setfill('0') << shard << std::dec << "] ";
-    if (progress_b == SP_ALL_OBJECTS) {
-      std::cout << "Token is marked completed! obj_count=" << progress_a << std::endl;
+  //---------------------------------------------------------------------------
+  static utime_t show_time_func_fmt(const utime_t &start_time,
+				    bool show_time,
+				    const std::map<std::string, member_time_t> &owner_map,
+				    Formatter *fmt)
+  {
+    member_time_t all_members_time;
+    all_members_time.start_time = start_time;
+    all_members_time.end_time   = start_time;
+    all_members_time.aggregated_time = utime_t();
+
+    Formatter::ObjectSection section{*fmt, "time"};
+    {
+      Formatter::ArraySection array_section{*fmt, "per-shard time"};
+      for (const auto& [owner, value] : owner_map) {
+	uint32_t sec = value.end_time.tv.tv_sec - value.start_time.tv.tv_sec;
+	fmt->dump_stream("member time")
+	  << owner << "::start time = [" << value.start_time.tv.tv_sec % 1000
+	  << ":" << value.start_time.tv.tv_nsec / (1000*1000) << "] "
+	  << "::aggregated time = " << value.aggregated_time.tv.tv_sec
+	  << "(" << sec << ") seconds";
+	all_members_time.aggregated_time += value.aggregated_time;
+	if (all_members_time.end_time < value.end_time) {
+	  all_members_time.end_time = value.end_time;
+	}
+      }
     }
-    else if (progress_a == SP_NO_OBJECTS && progress_b == SP_NO_OBJECTS) {
-      std::cout << "Token was not started yet!" << std::endl;
+
+    if (show_time) {
+      uint32_t sec = all_members_time.end_time.tv.tv_sec - all_members_time.start_time.tv.tv_sec;
+
+      Formatter::ObjectSection section{*fmt, "All shards time"};
+      fmt->dump_stream("start time") << all_members_time.start_time;
+      fmt->dump_stream("end time")
+	<< all_members_time.end_time << " (" << sec << " seconds total)";
+      fmt->dump_unsigned("aggregated time (sec)", all_members_time.aggregated_time.tv.tv_sec);
     }
-    else if (progress_b == SP_NO_OBJECTS) {
-      std::cout << "Token is incomplete: progress=" << progress_a << std::endl;
+
+    return all_members_time.end_time;
+  }
+
+  //---------------------------------------------------------------------------
+  static void show_dedup_ratio_fmt(const worker_stats_t &wrk_stats_sum,
+				   const md5_stats_t    &md5_stats_sum,
+				   Formatter *fmt)
+  {
+    uint64_t rados_bytes_before = md5_stats_sum.rados_bytes_before_dedup;
+    uint64_t s3_bytes_before    = wrk_stats_sum.ingress_obj_bytes;
+    uint64_t s3_dedup_bytes     = md5_stats_sum.duplicated_blocks_bytes;
+    uint64_t s3_bytes_after     = s3_bytes_before - s3_dedup_bytes;
+    // skipped objects should be accounted for
+    // TBD: double check the logic!
+    uint64_t skipped_bytes = (wrk_stats_sum.ingress_skip_too_small_bytes +
+			      wrk_stats_sum.non_default_storage_class_objs_bytes);
+    s3_bytes_after -= skipped_bytes;
+
+    Formatter::ObjectSection section{*fmt, "dedup ratio"};
+    fmt->dump_unsigned("rados_bytes_before", rados_bytes_before);
+    fmt->dump_unsigned("s3_bytes_before", s3_bytes_before);
+    fmt->dump_unsigned("s3_bytes_after", s3_bytes_after);
+
+    if (rados_bytes_before > s3_bytes_after && s3_bytes_after) {
+      double dedup_ratio = (double)rados_bytes_before/s3_bytes_after;
+      fmt->dump_float("dedup_ratio", dedup_ratio);
     }
     else {
-      std::cout << "Token is incomplete: progress = [" << progress_a
-		<< ", " << progress_b << "]" <<  std::endl;
+      fmt->dump_float("dedup_ratio", 0);
     }
   }
 
@@ -949,6 +912,8 @@ namespace rgw::dedup {
     if (ret != 0) {
       return ret;
     }
+
+    Formatter::ObjectSection section{*fmt, "DEDUP STAT COUNTERS"};
     work_shard_t num_work_shards = epoch.num_work_shards;
     md5_shard_t  num_md5_shards  = epoch.num_md5_shards;
 
@@ -963,14 +928,14 @@ namespace rgw::dedup {
       shard_progress_t sp_arr[num_work_shards];
       int cnt = collect_shard_stats(ioctx, dpp, epoch.time, num_work_shards,
 				    WORKER_SHARD_PREFIX, bl_arr, sp_arr);
-      if (cnt != num_work_shards) {
+      if (cnt != num_work_shards && 0) {
 	std::cerr << ">>>Partial work shard stats recived " << cnt << " / "
 		  << num_work_shards << "\n" << std::endl;
       }
-
+      bool has_incomplete_shards = false;
       for (unsigned shard = 0; shard < num_work_shards; shard++) {
 	if (bl_arr[shard].length() == 0) {
-	  display_progress(sp_arr[shard].progress_a, sp_arr[shard].progress_b, shard);
+	  has_incomplete_shards = true;
 	  continue;
 	}
 	completed_work_shards_count++;
@@ -980,15 +945,16 @@ namespace rgw::dedup {
 	  decode(stats, p);
 	  wrk_stats_sum += stats;
 	}catch (const buffer::error&) {
+	  // TBD: can we use std::cerr or should we use formatter ??
 	  std::cerr << __func__ << "::(2)failed worker_stats_t decode #" << shard << std::endl;
 	  continue;
 	}
 	collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "WORKER");
       }
-      std::cout << "Aggreagted work-shard stats counters:\n" << wrk_stats_sum << std::endl;
-      md5_start_time = show_time_func(epoch.time, show_time, owner_map);
-      //wrk_stats_sum.dump(fmt);
-      //md5_start_time = show_time_func(epoch.time, show_time, owner_map, fmt);
+      Formatter::ObjectSection worker_stats(*fmt, "worker_stats");
+      wrk_stats_sum.dump(fmt);
+      show_incomplete_shards_fmt(has_incomplete_shards, num_work_shards, sp_arr, fmt);
+      md5_start_time = show_time_func_fmt(epoch.time, show_time, owner_map, fmt);
     }
 
     if (completed_work_shards_count == num_work_shards) {
@@ -999,14 +965,14 @@ namespace rgw::dedup {
       shard_progress_t sp_arr[num_md5_shards];
       int cnt = collect_shard_stats(ioctx, dpp, epoch.time, num_md5_shards,
 				    MD5_SHARD_PREFIX, bl_arr, sp_arr);
-      if (cnt != num_md5_shards) {
+      if (cnt != num_md5_shards && 0) {
 	std::cerr << ">>>Partial MD5_SHARD stats recived " << cnt << " / "
 		  << num_md5_shards << "\n" << std::endl;
       }
-
+      bool has_incomplete_shards = false;
       for (unsigned shard = 0; shard < num_md5_shards; shard++) {
 	if (bl_arr[shard].length() == 0) {
-	  display_progress(sp_arr[shard].progress_a, sp_arr[shard].progress_b, shard);
+	  has_incomplete_shards = true;
 	  continue;
 	}
 	completed_md5_shards_count++;
@@ -1016,22 +982,22 @@ namespace rgw::dedup {
 	  decode(stats, p);
 	  md5_stats_sum += stats;
 	}catch (const buffer::error&) {
+	  // TBD: can we use std::cerr or should we use formatter ??
 	  std::cerr << __func__ << "::failed md5_stats_t decode #" << shard << std::endl;
 	  continue;
 	}
 	collect_single_shard_stats(dpp, owner_map, sp_arr, shard, &show_time, "MD5");
       }
-      std::cout << "Aggreagted md5-shard stats counters:\n" << md5_stats_sum << std::endl;
-      show_dedup_ratio(wrk_stats_sum, md5_stats_sum);
-      show_time_func(md5_start_time, show_time, owner_map);
-      //md5_stats_sum.dump(fmt);
-      //show_dedup_ratio(wrk_stats_sum, md5_stats_sum, fmt);
-      //show_time_func(md5_start_time, show_time, owner_map, fmt);
+      {
+	Formatter::ObjectSection outer(*fmt, "md5_stats");
+	md5_stats_sum.dump(fmt);
+	show_incomplete_shards_fmt(has_incomplete_shards, num_md5_shards, sp_arr, fmt);
+	show_time_func_fmt(md5_start_time, show_time, owner_map, fmt);
+      }
+      show_dedup_ratio_fmt(wrk_stats_sum, md5_stats_sum, fmt);
     }
 
-    if (completed_md5_shards_count == num_md5_shards) {
-      std::cout << "DEDUP WORK WAS COMPLETED" << std::endl;
-    }
+    fmt->dump_bool("completed", (completed_md5_shards_count == num_md5_shards));
     return 0;
   }
 
