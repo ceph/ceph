@@ -18,10 +18,17 @@ import {
   IconService,
   InputModule,
   RadioModule,
-  SelectModule
+  SelectModule,
+  TabsModule,
+  TagModule
 } from 'carbon-components-angular';
 
 import Close from '@carbon/icons/es/close/32';
+import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
+import { ClusterModule } from '../cluster/cluster.module';
+import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-details.component';
+import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
+import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component';
 
 @NgModule({
   imports: [
@@ -33,15 +40,34 @@ import Close from '@carbon/icons/es/close/32';
     NgbTypeaheadModule,
     NgbTooltipModule,
     GridModule,
+    TagModule,
     SelectModule,
     InputModule,
     RadioModule,
     CheckboxModule,
     ButtonModule,
-    IconModule
+    IconModule,
+    TabsModule,
+    ClusterModule
   ],
-  exports: [NfsListComponent, NfsFormComponent, NfsDetailsComponent],
-  declarations: [NfsListComponent, NfsDetailsComponent, NfsFormComponent, NfsFormClientComponent]
+  exports: [
+    NfsListComponent,
+    NfsFormComponent,
+    NfsDetailsComponent,
+    NfsClusterComponent,
+    NfsFormClientComponent,
+    NfsClusterDetailsComponent
+  ],
+  declarations: [
+    NfsListComponent,
+    NfsDetailsComponent,
+    NfsFormComponent,
+    NfsFormClientComponent,
+    NfsClusterComponent,
+    NfsClusterDetailsComponent,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent
+  ]
 })
 export class NfsModule {
   constructor(private iconService: IconService) {
