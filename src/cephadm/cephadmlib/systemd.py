@@ -86,3 +86,10 @@ def terminate_service(ctx: CephadmContext, service_name: str) -> None:
         ['systemctl', 'disable', service_name],
         verbosity=CallVerbosity.DEBUG,
     )
+
+def enable_service(ctx: CephadmContext, service_name: str) -> None:
+    call(
+        ctx,
+        ['systemctl', 'enable', '--now', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )

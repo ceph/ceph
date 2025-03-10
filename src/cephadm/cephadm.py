@@ -140,7 +140,7 @@ from cephadmlib.logging import (
     Highlight,
     LogDestination,
 )
-from cephadmlib.systemd import check_unit, check_units, terminate_service
+from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
 from cephadmlib import systemd_unit
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
@@ -2946,6 +2946,13 @@ def command_bootstrap(ctx):
     if getattr(ctx, 'custom_prometheus_alerts', None):
         cli(['orch', 'prometheus', 'set-custom-alerts', '-i', '/etc/ceph/custom_alerts.yml'])
 
+    # Enable logrotate.timer
+    _, _, installed = check_unit(ctx, 'logrotate')
+    if not installed:
+        logger.warning('Log rotation will not occur because the logrotate service is not installed. Please install it to enable log rotation.')
+    else:
+        logger.info('enable logrotate.timer service')
+        enable_service(ctx, 'logrotate.timer')
     return ctx.error_code
 
 ##################################
