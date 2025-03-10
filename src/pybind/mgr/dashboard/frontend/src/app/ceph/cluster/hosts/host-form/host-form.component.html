@@ -80,8 +80,10 @@
                        i18n-placeholder
                        [appendInline]="true"
                        [items]="labelsOption"
-                       itemValueKey="value"
+                       itemValueKey="content"
                        id="labels"
+                       cdDynamicInputCombobox
+                       (updatedItems)="labelsOption = $event"
                        i18n>
           <cds-dropdown-list></cds-dropdown-list>
         </cds-combo-box>
