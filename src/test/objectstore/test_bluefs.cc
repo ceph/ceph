@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <chrono>
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
@@ -44,10 +45,17 @@ public:
   TempBdev(uint64_t size)
     : path{get_temp_bdev(size)}
   {}
-  ~TempBdev() {
-    rm_temp_bdev(path);
+  TempBdev()
+  {}
+  void Init(uint64_t size) {
+    path = get_temp_bdev(size);
   }
-  const std::string path;
+  ~TempBdev() {
+    if (!path.empty()) {
+      rm_temp_bdev(path);
+    }
+  }
+  std::string path;
 private:
   static string get_temp_bdev(uint64_t size)
   {
@@ -961,6 +969,7 @@ TEST(BlueFS, test_wal_write) {
   gen_debugable(70000, bl1);
   fs.append_try_flush(writer, bl1.c_str(), bl1.length());
   fs.fsync(writer);
+  fs.close_writer(writer);
 
   // WAL files don't update internal extents while writing to save memory, only on _replay
   fs.umount();
@@ -976,510 +985,314 @@ TEST(BlueFS, test_wal_write) {
 
 }
 
-TEST(BlueFS, test_wal_write_multiple) {
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
 
-  ConfSaver conf(g_ceph_context->_conf);
-  conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.ApplyChanges();
-
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
-  uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
-  ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
-
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-  string wal_file = "wal1.log";
-  BlueFS::FileWriter *writer;
-  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_NE(nullptr, writer);
-
-  auto gen_debugable = [](size_t amount, bufferlist& bl, char c) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append(c);
+class BlueFS_wal : virtual public ::testing::Test {
+public:
+  BlueFS fs;
+  explicit BlueFS_wal() :
+    fs(g_ceph_context)
+  {}
+  void SetUp() override {};
+  void TearDown() override {};
+  void Create(uint64_t slow, uint64_t db, uint64_t wal) {
+    if (slow > 0) {
+      bdev_slow.Init(slow);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
     }
-  };
-  size_t buffer_size = 70000;
-  for (int i = 0; i < 10; i++) {
-    bufferlist bl1;
-    gen_debugable(buffer_size, bl1, 'a' + i);
-    fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-    fs.fsync(writer);
-
-    // WAL files don't update internal extents while writing to save memory
-    fs.umount();
-    fs.mount();
-
-    BlueFS::FileReader *reader;
-    ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-    bufferlist read_bl;
-    fs.read(reader, i * buffer_size, buffer_size, &read_bl, NULL);
-    ASSERT_TRUE(bl_eq(bl1, read_bl));
-    delete reader;
-  }
-  fs.umount();
-}
-
-TEST(BlueFS, test_wal_write_multiple_recover) {
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
-
-  ConfSaver conf(g_ceph_context->_conf);
-  conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.ApplyChanges();
-
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
-  uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
-  ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
-
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-  string wal_file = "wal1.log";
-  BlueFS::FileWriter *writer;
-  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_NE(nullptr, writer);
-
-  auto gen_debugable = [](size_t amount, bufferlist& bl, char c) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append(c);
+    if (db > 0) {
+      bdev_db.Init(db);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false));
     }
-  };
-  size_t buffer_size = 70000;
-  uint64_t flush_count = 10;
-  for (int i = 0; i < 10; i++) {
-    bufferlist bl1;
-    gen_debugable(buffer_size, bl1, 'a' + i);
-    fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-    fs.fsync(writer);
-  }
-  fs.close_writer(writer);
-
-  fs.umount();
-  fs.mount();
-
-  uint64_t size = 0;
-
-  BlueFS::FileReader *reader;
-  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-  fs.stat(dir_db, wal_file, &size, nullptr);
-  ASSERT_EQ(reader->file->wal_flushes.size(), flush_count);
-  ASSERT_EQ(size, 70000  * flush_count);
-  delete reader;
-}
-
-TEST(BlueFS, test_wal_write_multiple_recover_fsync_end) {
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
-
-  ConfSaver conf(g_ceph_context->_conf);
-  conf.SetVal("bluefs_min_flush_size", "524288");
-  conf.ApplyChanges();
-
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
-  uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
-  ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
-
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-  string wal_file = "wal1.log";
-  BlueFS::FileWriter *writer;
-  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_NE(nullptr, writer);
-
-  auto gen_debugable = [](size_t amount, bufferlist& bl, char c) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append(c);
+    if (wal > 0) {
+      bdev_wal.Init(wal);
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL, bdev_wal.path,  false));
     }
-  };
-  size_t buffer_size = 8;
-  uint64_t flush_count = 1;
-  for (int i = 0; i < 10; i++) {
-    bufferlist bl1;
-    gen_debugable(buffer_size, bl1, 'a' + i);
-    fs.append_try_flush(writer, bl1.c_str(), bl1.length());
+    ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
   }
-  fs.fsync(writer);
-  fs.close_writer(writer);
-
-  fs.umount();
-  fs.mount();
-
-  uint64_t size = 0;
-
-  { // test size
-    BlueFS::FileReader *reader;
-    ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-    fs.stat(dir_db, wal_file, &size, nullptr);
-    ASSERT_EQ(reader->file->wal_flushes.size(), flush_count);
-    ASSERT_EQ(size, buffer_size * 10);
-    delete reader;
-  }
-
-  // test contents
-  for (int i = 0; i < 10; i++) {
-    bufferlist bl1;
-    gen_debugable(buffer_size, bl1, 'a' + i);
-
-    BlueFS::FileReader *reader;
-    ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-    bufferlist read_bl;
-    fs.read(reader, i * buffer_size, buffer_size, &read_bl, NULL);
-    ASSERT_TRUE(bl_eq(bl1, read_bl));
-    delete reader;
-  }
-}
-
-TEST(BlueFS, test_wal_read_2_partial) {
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
-
-  ConfSaver conf(g_ceph_context->_conf);
-  conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.ApplyChanges();
-
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
+  TempBdev bdev_wal;
+  TempBdev bdev_db;
+  TempBdev bdev_slow;
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
-  ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
-
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-
-  auto gen_debugable_alternating = [](size_t amount, bufferlist& bl, char c) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append(c + (rand() % 10));
-    }
-  };
-  uint64_t flush_count = 2;
-  uint64_t flush_size = 65536;
-  uint64_t total_size = flush_count * flush_size;
-
-  vector<uint64_t> chunk_sizes = {total_size / 32, total_size / 64};
-
-  uint64_t chunk_size = flush_size;
-  bufferlist contents;
-  ASSERT_TRUE((total_size)%chunk_size == 0);
-
-  string wal_file("wal1.log");
-
-  BlueFS::FileWriter *writer;
-  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_NE(nullptr, writer);
-  //
-  uint64_t remaining = total_size;
-  while(remaining > 0) {
-    bufferlist bl1;
-    gen_debugable_alternating(chunk_size, bl1, 'a'+ (remaining % 10));
-    fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-    contents.append(bl1);
-    remaining -= chunk_size;
-  }
-  fs.fsync(writer);
-  fs.close_writer(writer);
-
-  fs.umount();
-  fs.mount();
-
-  uint64_t size = 0;
-
-
-  { // test size
-    BlueFS::FileReader *reader;
-    ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-    fs.stat(dir_db, wal_file, &size, nullptr);
-    ASSERT_EQ(reader->file->wal_flushes.size(), flush_count);
-    ASSERT_EQ(size, total_size);
-    delete reader;
-  }
-
-  BlueFS::FileReader *reader;
-  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-  bufferlist read_bl;
-  uint64_t offset = chunk_size / 2;
-  uint64_t length = chunk_size;
-  fs.read(reader, offset, length, &read_bl, NULL);
-  bufferlist chunk_contents;
-  chunk_contents.substr_of(contents, offset, length);
-  ASSERT_TRUE(bl_eq(chunk_contents, read_bl));
-  delete reader;
-}
-
-TEST(BlueFS, test_wal_read_2_partial_compact) {
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
-
-  ConfSaver conf(g_ceph_context->_conf);
-  conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.ApplyChanges();
-
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
-  uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
-  ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
-
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-
-  auto gen_debugable_alternating = [](size_t amount, bufferlist& bl, char c) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append(c + (rand() % 10));
-    }
-  };
-  uint64_t flush_count = 2;
-  uint64_t flush_size = 65536;
-  uint64_t total_size = flush_count * flush_size;
-
-  vector<uint64_t> chunk_sizes = {total_size / 32, total_size / 64};
-
-  uint64_t chunk_size = flush_size;
-  bufferlist contents;
-  ASSERT_TRUE((total_size)%chunk_size == 0);
-
-  string wal_file("wal1.log");
-
-  BlueFS::FileWriter *writer;
-  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_NE(nullptr, writer);
-  //
-  uint64_t remaining = total_size;
-  while(remaining > 0) {
-    bufferlist bl1;
-    gen_debugable_alternating(chunk_size, bl1, 'a'+ (remaining % 10));
-    fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-    contents.append(bl1);
-    remaining -= chunk_size;
-  }
-  fs.fsync(writer);
-  fs.close_writer(writer);
-
-  fs.compact_log();
-  fs.umount();
-  fs.mount();
-
-  uint64_t size = 0;
-
-
-  { // test size
-    BlueFS::FileReader *reader;
-    ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-    fs.stat(dir_db, wal_file, &size, nullptr);
-    ASSERT_EQ(reader->file->wal_flushes.size(), flush_count);
-    ASSERT_EQ(size, total_size);
-    delete reader;
-  }
-
-  BlueFS::FileReader *reader;
-  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-  bufferlist read_bl;
-  uint64_t offset = chunk_size / 2;
-  uint64_t length = chunk_size;
-  fs.read(reader, offset, length, &read_bl, NULL);
-  bufferlist chunk_contents;
-  chunk_contents.substr_of(contents, offset, length);
-  ASSERT_TRUE(bl_eq(chunk_contents, read_bl));
-  delete reader;
-}
-
-TEST(BlueFS, test_wal_write_multiple_recover_partial_reads) {
-  // read from the middle of one flush and end somewhere in between other flush
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
-
-  ConfSaver conf(g_ceph_context->_conf);
-  conf.SetVal("bluefs_min_flush_size", "524288");
-  conf.ApplyChanges();
-
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
-  uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
-  ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
-
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-
-  auto gen_debugable_alternating = [](size_t amount, bufferlist& bl, char c) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append(c + (i % 10));
-    }
-  };
-  uint64_t flush_count = 2;
-  uint64_t flush_size = 524288;
-  uint64_t total_size = flush_count * flush_size;
-
-  vector<uint64_t> chunk_sizes = {total_size / 32, total_size / 64};
-
-  uint64_t fileid = 0;
-  for (auto chunk_size : chunk_sizes) {
-    bufferlist contents;
-    fileid++;
-    ASSERT_TRUE((total_size)%chunk_size == 0);
-
-    string wal_file("wal");
-    wal_file += to_string(fileid);
-    wal_file += ".log";
-
+  void many_small_writes(
+    const std::string& dir,
+    const std::string& file,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    int r = fs.mkdir(dir);
+    ASSERT_TRUE(r == 0 || r == -EEXIST);
     BlueFS::FileWriter *writer;
-    ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
+    ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
     ASSERT_NE(nullptr, writer);
-    //
-    uint64_t remaining = total_size;
-    while(remaining > 0) {
-      bufferlist bl1;
-      gen_debugable_alternating(chunk_size, bl1, 'a'+ (remaining % 10));
-      fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-      contents.append(bl1);
-      remaining -= chunk_size;
-    }
-    fs.fsync(writer);
+    many_small_writes(writer, content, min_size,
+      chunk_from, chunk_to, chunk_step);
     fs.close_writer(writer);
-
-    fs.umount();
-    fs.mount();
-
-    uint64_t size = 0;
-
-
-    { // test size
-      BlueFS::FileReader *reader;
-      ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-      fs.stat(dir_db, wal_file, &size, nullptr);
-      ASSERT_EQ(reader->file->wal_flushes.size(), flush_count);
-      ASSERT_EQ(size, total_size);
-      delete reader;
-    }
-
-    uint64_t read_chunks =  size / chunk_size; // WAL default chunk size is 32k
-    for (uint64_t chunk = 0; chunk < read_chunks; chunk++) {
-      BlueFS::FileReader *reader;
-      ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-      bufferlist read_bl;
-      uint64_t offset = chunk * chunk_size;
-      uint64_t length = chunk_size;
-      fs.read(reader, offset, length, &read_bl, NULL);
-      bufferlist chunk_contents;
-      chunk_contents.substr_of(contents, offset, length);
-      ASSERT_TRUE(bl_eq(chunk_contents, read_bl));
-      delete reader;
-    }
-
+    //delete writer;
   }
-}
+
+  void many_small_writes(
+    BlueFS::FileWriter *writer,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    uint32_t c = chunk_from;
+    uint8_t v = 0;
+    ASSERT_NE(nullptr, writer);
+    do {
+      std::string data(c, v);
+      fs.append_try_flush(writer, data.c_str(), data.length());
+      fs.fsync(writer);
+      content.append(data);
+      v++;
+      c += chunk_step;
+      if (c > chunk_to) {
+        c = chunk_from;
+      }
+    } while (content.length() < min_size);
+    //delete writer;
+  }
+
+  void many_small_reads(
+    const std::string& dir,
+    const std::string& file,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    content.clear();
+    BlueFS::FileReader *reader;
+    ASSERT_EQ(0, fs.open_for_read(dir, file, &reader));
+    many_small_reads(reader, content, min_size,
+      chunk_from, chunk_to, chunk_step);
+    delete reader;
+  }
+
+  void many_small_reads(
+    BlueFS::FileReader *reader,
+    bufferlist& content,
+    uint32_t min_size = 10000,
+    uint32_t chunk_from = 1,
+    uint32_t chunk_to = 10,
+    uint32_t chunk_step = 1)
+  {
+    uint32_t c = chunk_from;
+    uint32_t pos = 0;
+    do {
+      bufferlist read_bl;
+      int r = fs.read(reader, pos, c, &read_bl, nullptr);
+      if (r <= 0) break;
+      content.append(read_bl);
+      pos = pos + c;
+      c += chunk_step;
+      if (c > chunk_to) {
+        c = chunk_from;
+      }
+    } while (content.length() < min_size);
+  }
+};
 
 
-TEST(BlueFS, test_wal_write_truncate) {
-  uint64_t size_wal = 1048576 * 64;
-  TempBdev bdev_wal{size_wal};
-  uint64_t size_db = 1048576 * 128;
-  TempBdev bdev_db{size_db};
-  uint64_t size_slow = 1048576 * 256;
-  TempBdev bdev_slow{size_slow};
 
+TEST_F(BlueFS_wal, wal_v2_check)
+{
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_v2", "true");
   conf.ApplyChanges();
 
-  BlueFS fs(g_ceph_context);
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_WAL,  bdev_wal.path,  false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB,   bdev_db.path,   false));
-  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false));
-  uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, true, true }));
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
   ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, true, true }));
 
-  string dir_db = "db.wal";
-  ASSERT_EQ(0, fs.mkdir(dir_db));
-
-  string wal_file = "wal1.log";
-  BlueFS::FileWriter *writer;
-  ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_NE(nullptr, writer);
-
-  bufferlist bl1;
-  auto gen_debugable = [](size_t amount, bufferlist& bl) {
-    for (size_t i = 0; i < amount; i++) {
-      bl.append('a');
-    }
-  };
-  gen_debugable(70000, bl1);
-  fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-  fs.fsync(writer);
-  fs.append_try_flush(writer, bl1.c_str(), bl1.length());
-  fs.fsync(writer);
-  fs.truncate(writer, 70000+BlueFS::File::WALFlush::extra_envelope_size_on_front_and_tail());
-  fs.fsync(writer);
-
+  bufferlist content;
+  many_small_writes("db.wal", "wal1.log", content, 10);
   fs.umount();
   fs.mount();
+  bufferlist read_content;
+  many_small_reads("db.wal", "wal1.log", read_content, 10);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
 
-  BlueFS::FileReader *reader;
-  ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-  ASSERT_EQ(reader->file->fnode.wal_limit, 70000+BlueFS::File::WALFlush::extra_envelope_size_on_front_and_tail());
-  ASSERT_EQ(reader->file->wal_flushes.size(), 1);
-  bufferlist read_bl;
-  fs.read(reader, 0, 70000, &read_bl, NULL);
-  ASSERT_TRUE(bl_eq(bl1, read_bl));
-  delete reader;
+TEST_F(BlueFS_wal, wal_v2_check_feature)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_v2", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  mono_clock::time_point t0, t1;
+  bufferlist content;
+  uint32_t cnt = 125;
+  t1 = mono_clock::now();
+  double d_w1, d_w2;
+  // calibrate cnt to run more than 1s
+  do
+  {
+    content.clear();
+    cnt = cnt * 2;
+    fs.unlink("db.wal", "wal.log");
+    t0 = mono_clock::now();
+    many_small_writes("db.wal", "wal.log", content, cnt, 1, 1, 1);
+    t1 = mono_clock::now();
+    d_w2 = std::chrono::duration<double>(t1 - t0).count();
+  } while (d_w2 < 1.0);
+  cout << "time wal_v2=" << d_w2 << std::endl;
+
+  t0 = mono_clock::now();
+  content.clear();
+  many_small_writes("db.wal", "not-wal.xxx", content, cnt, 1, 1, 1);
+  t1 = mono_clock::now();
+  d_w1 = std::chrono::duration<double>(t1 - t0).count();
+  cout << "time wal_v1=" << d_w1 << std::endl;
+  fs.umount();
+  //if not 20% faster, its not working
+  EXPECT_LT(d_w2 * 1.2, d_w1);
+}
+
+TEST_F(BlueFS_wal, wal_v2_truncate)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_v2", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+  many_small_writes(writer, content, 10);
+  uint64_t size;
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  fs.truncate(writer, content.length());
+  fs.close_writer(writer);
+  fs.umount();
+  fs.mount();
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 10);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_simulate_crash)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_v2", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+  many_small_writes(writer, content, 100);
+  delete writer; //close without orderly shutdown, simulate failure
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 100);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, support_wal_v2_and_v1)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_v2", "true");
+  conf.ApplyChanges();
+
+  std::string dir = "dir";
+  std::string file_v2 = "wal-v2.log";
+  std::string file_v1 = "wal-v1.log";
+  bufferlist content_v2;
+  bufferlist content_v1;
+  int r;
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  many_small_writes(dir, file_v2, content_v2, 100);
+  fs.umount();
+  // switch to v1
+  g_ceph_context->_conf.set_val("bluefs_wal_v2", "false");
+  ASSERT_EQ(0, fs.mount());
+  r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  many_small_writes(dir, file_v1, content_v1, 100);
   fs.umount();
 
+  fs.mount();
+  bufferlist read_content;
+  BlueFS::FileReader *reader;
+  many_small_reads(dir, file_v2, read_content, 100);
+  EXPECT_EQ(content_v2, read_content);
+  ASSERT_EQ(0, fs.open_for_read(dir, file_v2, &reader));
+  EXPECT_EQ(reader->file->is_new_wal(), true);
+  delete reader;
+  reader = nullptr;
+
+  many_small_reads(dir, file_v1, read_content, 100);
+  EXPECT_EQ(content_v1, read_content);
+  ASSERT_EQ(0, fs.open_for_read(dir, file_v1, &reader));
+  EXPECT_EQ(reader->file->is_new_wal(), false);
+  delete reader;
+
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_read_after_write)
+{
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_v2", "true");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+  std::string dir = "dir";
+  std::string file = "wal.log";
+  int r = fs.mkdir(dir);
+  ASSERT_TRUE(r == 0 || r == -EEXIST);
+  BlueFS::FileWriter *writer;
+  ASSERT_EQ(0, fs.open_for_write(dir, file, &writer, false));
+  ASSERT_NE(nullptr, writer);
+  bufferlist content;
+  many_small_writes(writer, content, 10);
+  uint64_t size;
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  fs.close_writer(writer);
+  fs.stat(dir, file, &size, nullptr);
+  EXPECT_EQ(size, content.length());
+  bufferlist read_content;
+  many_small_reads(dir, file, read_content, 10);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
 }
 
 TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
@@ -1545,6 +1358,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
   }
   fs.umount();
 }
+
 
 TEST(BlueFS, test_truncate_stable_53129) {
 
@@ -2130,12 +1944,21 @@ TEST(BlueFS, truncate_drops_allocations) {
     TempBdev bdev_db{s.db_size};
     TempBdev bdev_slow{s.slow_size};
 
+    bluefs_shared_alloc_context_t shared_alloc;
+    uint64_t shared_alloc_unit = s.slow_alloc_size;
+    shared_alloc.set(
+      Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                        s.slow_size, shared_alloc_unit, "test shared allocator"),
+      shared_alloc_unit);
+    shared_alloc.a->init_add_free(0, s.slow_size);
+
     BlueFS fs(g_ceph_context);
     if (s.db_size != 0) {
-      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false, 0));
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false,
+      s.slow_size > 0 ? nullptr : &shared_alloc));
     }
     if (s.slow_size != 0) {
-      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, 0));
+      ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_SLOW, bdev_slow.path, false, &shared_alloc));
     }
 
     ASSERT_EQ(0, fs.mkfs(fsid, {BlueFS::BDEV_DB, false, false}));
