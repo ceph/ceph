@@ -99,6 +99,8 @@ void PyModuleRegistry::init()
 
   std::list<std::string> failed_modules;
 
+  auto shared_process_obj_ptr = initialize_perf_counters();
+  
   const std::string module_path = g_conf().get_val<std::string>("mgr_module_path");
   auto module_names = probe_modules(module_path);
   // Load python code
@@ -118,6 +120,7 @@ void PyModuleRegistry::init()
       // Don't drop out here, load the other modules
     }
 
+    mod->set_process_obj(shared_process_obj_ptr);
     // Record the module even if the load failed, so that we can
     // report its loading error
     modules[module_name] = std::move(mod);
@@ -507,3 +510,46 @@ void PyModuleRegistry::handle_config_notify()
     active_modules->config_notify();
   }
 }
+
+std::shared_ptr<PyObject*> PyModuleRegistry::initialize_perf_counters()
+{
+  PyGILState_STATE gstate = PyGILState_Ensure();
+  PyObject* psutil = PyImport_ImportModule("psutil");
+  if (!psutil) {
+    PyGILState_Release(gstate);
+    throw std::runtime_error("Failed to import psutil");
+  }
+
+  PyObject* process_cls = PyObject_GetAttrString(psutil, "Process");
+  if (!process_cls) {
+    Py_DECREF(psutil);
+    PyGILState_Release(gstate);
+    throw std::runtime_error("Failed to find psutil.Process");
+  }
+  
+  process_obj = PyObject_CallObject(process_cls, nullptr);
+  if (!process_obj) {
+    Py_DECREF(process_cls);
+    Py_DECREF(psutil);
+    PyGILState_Release(gstate);
+    throw std::runtime_error("Failed to create psutil.Process instance");
+  }
+
+  Py_DECREF(process_cls);
+  Py_DECREF(psutil);
+  PyGILState_Release(gstate);
+
+  return std::make_shared<PyObject*>(process_obj);
+}
+
+void PyModuleRegistry::cleanup_perf_counters() {
+  PyGILState_STATE gstate = PyGILState_Ensure();
+
+  if (process_obj) {
+    Py_DECREF(process_obj);
+    process_obj = nullptr;
+  }
+
+  PyGILState_Release(gstate);
+}
+
