@@ -506,9 +506,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     ret = driver->load_bucket(dpp, rgw_bucket(s->src_tenant_name,
                                               s->src_bucket_name),
                               &src_bucket, y);
-    if (ret == 0) {
+    // TODO: move zonegroup from rados
+    /*if (ret == 0) {
       s->local_source = zonegroup.equals(src_bucket->get_info().zonegroup);
-    }
+    }*/
   }
 
   // ACLOwner for swift's s->user_acl. may be retargeted to s->bucket_owner
@@ -549,23 +550,24 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(zonegroup);
     s->zonegroup_name = zonegroup.get_name();
 
-    if (!zonegroup.equals(s->bucket->get_info().zonegroup)) {
+    // TODO: move RGWZoneGroup from rados
+    /*if (!zonegroup.equals(s->bucket->get_info().zonegroup)) {
       ldpp_dout(dpp, 0) << "NOTICE: request for data in a different zonegroup ("
           << s->bucket->get_info().zonegroup << " != "
           << zonegroup.get_id() << ")" << dendl;
-      /* we now need to make sure that the operation actually requires copy source, that is
+      *//* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
-       */
+       *//*
       if (driver->get_zone()->get_zonegroup().is_master_zonegroup() && s->system_request) {
-        /*If this is the master, don't redirect*/
+        *//*If this is the master, don't redirect*//*
       } else if (s->op_type == RGW_OP_GET_BUCKET_LOCATION ) {
-        /* If op is get bucket location, don't redirect */
+        *//* If op is get bucket location, don't redirect *//*
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           rgw::sal::Object::empty(s->object.get())) {
         return -ERR_PERMANENT_REDIRECT;
       }
-    }
+    }*/
 
     /* init dest placement */
     s->dest_placement.storage_class = s->info.storage_class;
@@ -3616,7 +3618,8 @@ void RGWCreateBucket::execute(optional_yield y)
     !period ||               // No period: no multisite, so no need to enforce location match.
     !s->system_request ||    // All user requests are enforced to match zonegroup's location.
     !my_zonegroup.is_master; // but if it's a system request (forwarded) only allow remote creation on master zonegroup.
-  if (enforce_location_match && !my_zonegroup.equals(bucket_zonegroup->get_id())) {
+    //TODO: move RGWZoneGroup to rgw directory
+  /*if (enforce_location_match && !my_zonegroup.equals(bucket_zonegroup->get_id())) {
     ldpp_dout(this, 0) << "location constraint (" << bucket_zonegroup->api_name
         << ") doesn't match zonegroup (" << my_zonegroup.api_name << ")" << dendl;
     op_ret = -ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION;
@@ -3624,7 +3627,7 @@ void RGWCreateBucket::execute(optional_yield y)
                                  "for the region specific endpoint this request was sent to.",
                                  bucket_zonegroup->api_name);
     return;
-  }
+  }*/
 
   // Set the final zonegroup ID
   createparams.zonegroup_id = bucket_zonegroup->id;
@@ -3636,7 +3639,8 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
   }
 
-  if (my_zonegroup.equals(bucket_zonegroup->get_id())) {
+  // TODO: move RGWZoneGroup to rgw directory
+  /*if (my_zonegroup.equals(bucket_zonegroup->get_id())) {
     // look up the zone placement pool
     createparams.zone_placement = rgw::find_zone_placement(
         this, site.get_zone_params(), createparams.placement_rule);
@@ -3644,7 +3648,7 @@ void RGWCreateBucket::execute(optional_yield y)
       op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
       return;
     }
-  }
+  }*/
 
   // read the bucket info if it exists
   op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
@@ -4619,11 +4623,12 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
     return;
   }
-  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
+  //TODO: move RGWBucketSyncPolicyHandler to rgw directory
+  /*if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
     bufferlist repl_bl;
     repl_bl.append("PENDING");
     emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
-  }
+  }*/
 
   if (slo_info) {
     bufferlist manifest_bl;
@@ -7837,8 +7842,9 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   createparams.placement_rule.storage_class = s->info.storage_class;
   op_ret = select_bucket_placement(this, zonegroup, s->user->get_info(),
                                    createparams.placement_rule);
-  createparams.zone_placement = rgw::find_zone_placement(
-      this, s->penv.site->get_zone_params(), createparams.placement_rule);
+  // TODO: move find_zone_placement to rgw directory
+//  createparams.zone_placement = rgw::find_zone_placement(
+//      this, s->penv.site->get_zone_params(), createparams.placement_rule);
 
   {
     // create a default acl
