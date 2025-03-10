@@ -1859,4 +1859,34 @@ TYPED_TEST(IntervalSetTest, subtract) {
 
     ASSERT_STRICT_DEATH(iset1.subtract(iset2), ASSERT_EQ(iset1, iset3));
   }
+
+  // Subtract identical
+  {
+    ISet iset1, iset2;
+    iset1.union_insert(0, 5);
+    iset2.union_insert(0, 5);
+
+    iset1.subtract(iset2);
+    ASSERT_TRUE(iset1.empty());
+  }
+}
+
+TYPED_TEST(IntervalSetTest, print) {
+  typedef typename TestFixture::ISet ISet;
+
+  ISet iset;
+  {
+    std::ostringstream out;
+    iset.insert(0, 5);
+    out << iset;
+    ASSERT_EQ("[0~5]", fmt::format("{}", iset));
+    EXPECT_EQ("[0~5]", out.str() );
+  }
+  {
+    std::ostringstream out;
+    iset.insert(10, 5);
+    out << iset;
+    ASSERT_EQ("[0~5,10~5]", fmt::format("{}", iset));
+    EXPECT_EQ("[0~5,10~5]", out.str() );
+  }
 }
