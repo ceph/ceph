@@ -323,7 +323,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     }
     // this is primary, IDLE the group replayer
     m_state = STATE_IDLE;
-    notify_group_listener_stop();
+//    notify_group_listener_stop();
     return;
   }
 
