@@ -360,12 +360,6 @@ class FSTop(FSTopBase):
             # requested it will raise an exception
             pass
 
-        # Check the window size before creating the pad. For large windows,
-        # PAD_WIDTH = window width.
-        h, w = self.stdscr.getmaxyx()
-        if (w > DEFAULT_PAD_WIDTH):
-            self.PAD_WIDTH = w
-        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
         self.run_all_display()
 
     def display_fs_menu(self, stdscr, selected_row_idx):
@@ -964,8 +958,13 @@ class FSTop(FSTopBase):
         top, left = 0, 0  # where to place pad
         vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
 
-        # calculate the initial viewport height and width
+        # Check the window size before creating the pad. For large windows, PAD_WIDTH=window width.
         windowsize = self.stdscr.getmaxyx()
+        if (windowsize[1] > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = windowsize[1]
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
+        # calculate the initial viewport height and width
         self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
         # create header subpad
@@ -1098,8 +1097,13 @@ class FSTop(FSTopBase):
         top, left = 0, 0  # where to place pad
         vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
 
-        # calculate the initial viewport height and width
+        # Check the window size before creating the pad. For large windows, PAD_WIDTH=window width.
         windowsize = self.stdscr.getmaxyx()
+        if (windowsize[1] > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = windowsize[1]
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
+        # calculate the initial viewport height and width
         self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
         # create header subpad
