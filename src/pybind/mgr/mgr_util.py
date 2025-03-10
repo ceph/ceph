@@ -10,7 +10,8 @@ from ceph.fs.earmarking import (
 if 'UNITTEST' in os.environ:
     import tests  # noqa
 
-import bcrypt
+#import bcrypt
+import hashlib
 import cephfs
 import contextlib
 import datetime
@@ -979,7 +980,30 @@ def password_hash(password: Optional[str], salt_password: Optional[str] = None) 
     if not password:
         return None
     if not salt_password:
-        salt = bcrypt.gensalt()
+        #salt = bcrypt.gensalt()
+        salt = os.urandom(16)
     else:
         salt = salt_password.encode('utf8')
-    return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')
+    #return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')
+        # Use PBKDF2 with SHA-256, a recommended 100,000 iterations
+    hashed_password = hashlib.pbkdf2_hmac('sha256', password.encode('utf8'), salt, 100000)
+
+    salt_hex = salt.hex()
+    hashed_password_hex = hashed_password.hex()
+    return f'{salt_hex}${hashed_password_hex}'
+
+
+def is_valid_hash_format(stored_hash: str) -> bool:
+    try:
+        salt_hex, hashed_password_hex = stored_hash.split('$')
+        bytes.fromhex(salt_hex)
+        bytes.fromhex(hashed_password_hex)
+
+        if len(salt_hex) != 32:
+            return False
+        if len(hashed_password_hex) != 64:
+            return False
+
+        return True
+    except (ValueError, AttributeError):
+        return False
