@@ -70,7 +70,7 @@ class Thread {
 void kill(std::thread& t, int signal);
 
 template<typename Fun, typename... Args>
-std::thread make_named_thread(std::string_view n,
+std::thread make_named_thread(std::string n,
 			      Fun&& fun,
 			      Args&& ...args) {
 

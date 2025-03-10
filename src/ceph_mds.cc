@@ -197,7 +197,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGHUP, sighup_handler);
   
   // get monmap
-  ceph::async::io_context_pool ctxpool(2);
+  ceph::async::io_context_pool ctxpool("ceph_mds", 2);
   MonClient mc(g_ceph_context, ctxpool);
   if (mc.build_initial_monmap() < 0)
     forker.exit(1);

@@ -52,7 +52,7 @@ int main(int argc, const char **argv, char *envp[])
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
   // get monmap
-  ceph::async::io_context_pool  poolctx(1);
+  ceph::async::io_context_pool poolctx("ceph_syn", 1);
   MonClient mc(g_ceph_context, poolctx);
   if (mc.build_initial_monmap() < 0)
     return -1;

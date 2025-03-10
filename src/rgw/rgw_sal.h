@@ -678,6 +678,9 @@ class Driver {
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
+    /** Shut down background tasks, to be called while Asio is running. */
+    virtual void shutdown(void) { };
+
     /** Clean up a driver for termination */
     virtual void finalize(void) = 0;
 

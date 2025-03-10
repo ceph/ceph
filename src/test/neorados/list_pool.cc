@@ -135,7 +135,7 @@ int main(int argc, char** argv)
   common_init_finish(cct.get());
 
   try {
-    ca::io_context_pool p(1);
+    ca::io_context_pool p("list_pool", 1);
     auto r = R::RADOS::make_with_cct(cct.get(), p, ca::use_blocked);
 
     auto pool_name = get_temp_pool_name("ceph_test_RADOS_list_pool"sv);

@@ -202,6 +202,7 @@ void rgw::AppMain::init_numa()
 void rgw::AppMain::need_context_pool() {
   if (!context_pool) {
     context_pool.emplace(
+      "RGWAppMain",
       dpp->get_cct()->_conf->rgw_thread_pool_size,
       [] {
 	// request warnings on synchronous librados calls in this thread
@@ -600,6 +601,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     lua_background->shutdown();
   }
 
+  env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
   // closed storage.
   context_pool->finish();

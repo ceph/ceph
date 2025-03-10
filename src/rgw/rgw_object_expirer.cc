@@ -85,7 +85,8 @@ int main(const int argc, const char **argv)
   }
 
   common_init_finish(g_ceph_context);
-  ceph::async::io_context_pool context_pool{cct->_conf->rgw_thread_pool_size};
+  ceph::async::io_context_pool context_pool{"object_expirer",
+					    cct->_conf->rgw_thread_pool_size};
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
   DriverManager::Config cfg;

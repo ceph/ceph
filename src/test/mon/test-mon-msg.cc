@@ -67,7 +67,7 @@ public:
   explicit MonClientHelper(CephContext *cct_)
     : Dispatcher(cct_),
       cct(cct_),
-      poolctx(1),
+      poolctx("MonClientHelper", 1),
       msg(NULL),
       monc(cct_, poolctx)
   { }

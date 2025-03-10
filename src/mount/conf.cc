@@ -49,7 +49,7 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
   auto fsid = conf.get_val<uuid_d>("fsid");
   fsid.print(cci->cci_fsid);
 
-  ceph::async::io_context_pool ioc(1);
+  ceph::async::io_context_pool ioc("MonClient", 1);
   MonClient monc = MonClient(cct.get(), ioc);
   err = monc.build_initial_monmap();
   if (err)

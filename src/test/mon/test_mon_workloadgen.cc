@@ -82,7 +82,7 @@ class TestStub : public Dispatcher
 {
  protected:
   MessengerRef messenger;
-  ceph::async::io_context_pool poolctx;
+  ceph::async::io_context_pool poolctx{"test_mon_workloadgen"};
   MonClient monc;
 
   ceph::mutex lock;
