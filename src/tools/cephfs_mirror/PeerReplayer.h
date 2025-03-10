@@ -310,6 +310,7 @@ private:
   int pre_sync_check_and_open_handles(const std::string &dir_root, const Snapshot &current,
                                       boost::optional<Snapshot> prev, FHandles *fh);
 
+  int validate_source(const std::string &dir_root, boost::optional<Snapshot> prev, FHandles *fh);
   int do_synchronize(const std::string &dir_root, const Snapshot &current,
                      boost::optional<Snapshot> prev);
 
