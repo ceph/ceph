@@ -669,20 +669,25 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
 
 def verify_cacrt_content(crt):
-    # type: (str) -> None
+    # type: (str) -> int
     from OpenSSL import crypto
     try:
         crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
         x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
+        no_after = x509.get_notAfter()
+        if not no_after:
+            raise ServerConfigException("Certificate does not have an expiration date.")
+
+        end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
         if x509.has_expired():
             org, cn = get_cert_issuer_info(crt)
-            no_after = x509.get_notAfter()
-            end_date = None
-            if no_after is not None:
-                end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
             msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
             logger.warning(msg)
             raise ServerConfigException(msg)
+
+        # Certificate still valid, calculate and return days until expiration
+        return (end_date - datetime.datetime.utcnow()).days
+
     except (ValueError, crypto.Error) as e:
         raise ServerConfigException(f'Invalid certificate: {e}')
 
@@ -724,8 +729,8 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
 
 
 def verify_tls(crt, key):
-    # type: (str, str) -> None
-    verify_cacrt_content(crt)
+    # type: (str, str) -> int
+    days_to_expiration = verify_cacrt_content(crt)
 
     from OpenSSL import crypto, SSL
     try:
@@ -751,6 +756,8 @@ def verify_tls(crt, key):
         logger.warning('Private key and certificate do not match up: {}'.format(str(e)))
     except SSL.Error as e:
         raise ServerConfigException(f'Invalid cert/key pair: {e}')
+
+    return days_to_expiration
 
 
 def verify_tls_files(cert_fname, pkey_fname):
@@ -983,3 +990,22 @@ def password_hash(password: Optional[str], salt_password: Optional[str] = None) 
     else:
         salt = salt_password.encode('utf8')
     return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')
+
+
+def parse_combined_pem_file(pem_data: str) -> Tuple[Optional[str], Optional[str]]:
+
+    # Extract the certificate
+    cert_start = "-----BEGIN CERTIFICATE-----"
+    cert_end = "-----END CERTIFICATE-----"
+    cert = None
+    if cert_start in pem_data and cert_end in pem_data:
+        cert = pem_data[pem_data.index(cert_start):pem_data.index(cert_end) + len(cert_end)]
+
+    # Extract the private key
+    key_start = "-----BEGIN PRIVATE KEY-----"
+    key_end = "-----END PRIVATE KEY-----"
+    private_key = None
+    if key_start in pem_data and key_end in pem_data:
+        private_key = pem_data[pem_data.index(key_start):pem_data.index(key_end) + len(key_end)]
+
+    return cert, private_key

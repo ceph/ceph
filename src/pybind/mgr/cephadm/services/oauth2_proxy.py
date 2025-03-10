@@ -7,6 +7,7 @@ from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import OAuth2ProxySpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_store import TLSObjectScope
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,12 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class OAuth2ProxyService(CephadmService):
     TYPE = 'oauth2-proxy'
+    SCOPE = TLSObjectScope.GLOBAL
     SVC_TEMPLATE_PATH = 'services/oauth2-proxy/oauth2-proxy.conf.j2'
+
+    @property
+    def needs_certificates(self) -> bool:
+        return True
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -39,27 +45,6 @@ class OAuth2ProxyService(CephadmService):
             return daemon_descrs[0]
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
-
-    def get_certificates(self, svc_spec: OAuth2ProxySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert = self.mgr.cert_key_store.get_cert('oauth2_proxy_cert')
-        key = self.mgr.cert_key_store.get_key('oauth2_proxy_key')
-        if not (cert and key):
-            # not available on store, check if provided on the spec
-            if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
-                cert = svc_spec.ssl_certificate
-                key = svc_spec.ssl_certificate_key
-            else:
-                # not provided on the spec, let's generate self-sigend certificates
-                addr = self.mgr.inventory.get_addr(daemon_spec.host)
-                host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, addr)
-            # save certificates
-            if cert and key:
-                self.mgr.cert_key_store.save_cert('oauth2_proxy_cert', cert)
-                self.mgr.cert_key_store.save_key('oauth2_proxy_key', key)
-            else:
-                logger.error("Failed to obtain certificate and key from mgmt-gateway.")
-        return cert, key
 
     def generate_random_secret(self) -> str:
         random_bytes = os.urandom(32)
