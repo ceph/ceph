@@ -14,3 +14,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SQLITE_COMPILE_FLAGS}")
 
 add_library(sqlite_db STATIC ${sqlite_db_srcs})
 target_link_libraries(sqlite_db sqlite3 dbstore_lib rgw_common)
+if(COMPILER_SUPPORTS_VLA)
+  target_compile_options(sqlite_db PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
