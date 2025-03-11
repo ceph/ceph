@@ -1899,6 +1899,7 @@ Usage:
                             port: Optional[int] = None,
                             disable_https: Optional[bool] = False,
                             enable_auth: Optional[bool] = False,
+                            virtual_ip: Optional[str] = None,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -1913,6 +1914,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             port=port,
+            virtual_ip=virtual_ip,
             disable_https=disable_https,
             enable_auth=enable_auth,
             preview_only=dry_run
