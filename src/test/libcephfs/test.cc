@@ -13,6 +13,7 @@
  */
 
 #include "include/compat.h"
+#include "include/filepath.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include "mds/mdstypes.h"
@@ -521,40 +522,42 @@ TEST(LibCephFS, ManyNestedDirs) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  const char *many_path = "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a";
+  static const char many_path[] = "/ManyNestedDirs/A/a/a/a/a/b/B/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/Aa";
+  const filepath mfp = filepath(many_path);
   ASSERT_EQ(ceph_mkdirs(cmount, many_path, 0755), 0);
 
-  int i = 0;
-
-  for(; i < 39; ++i) {
-    ASSERT_EQ(ceph_chdir(cmount, "a"), 0);
-
+  for (auto& component : mfp) {
     struct ceph_dir_result *dirp;
-    ASSERT_EQ(ceph_opendir(cmount, "a", &dirp), 0);
+    ASSERT_EQ(ceph_opendir(cmount, ".", &dirp), 0);
     struct dirent *dent = ceph_readdir(cmount, dirp);
     ASSERT_TRUE(dent != NULL);
     ASSERT_STREQ(dent->d_name, ".");
     dent = ceph_readdir(cmount, dirp);
     ASSERT_TRUE(dent != NULL);
     ASSERT_STREQ(dent->d_name, "..");
+    if (component == "ManyNestedDirs"sv) {
+      ASSERT_EQ(0, ceph_chdir(cmount, component.c_str()));
+      continue;
+    }
     dent = ceph_readdir(cmount, dirp);
     ASSERT_TRUE(dent != NULL);
-    ASSERT_STREQ(dent->d_name, "a");
+    ASSERT_STREQ(component.c_str(), dent->d_name);
+    ASSERT_EQ(ceph_chdir(cmount, dent->d_name), 0);
     ASSERT_EQ(ceph_closedir(cmount, dirp), 0);
   }
 
-  ASSERT_STREQ(ceph_getcwd(cmount), "/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a");
-
-  ASSERT_EQ(ceph_chdir(cmount, "a/a/a"), 0);
-
-  for(i = 0; i < 39; ++i) {
-    ASSERT_EQ(ceph_chdir(cmount, ".."), 0);
-    ASSERT_EQ(ceph_rmdir(cmount, "a"), 0);
+  {
+    auto* cwd = ceph_getcwd(cmount);
+    ASSERT_STREQ(cwd, many_path);
   }
 
-  ASSERT_EQ(ceph_chdir(cmount, "/"), 0);
+  for (auto it = mfp.rbegin(); it != mfp.rend(); ++it) {
+    auto& component = *it;
+    ASSERT_EQ(ceph_chdir(cmount, ".."), 0);
+    ASSERT_EQ(ceph_rmdir(cmount, component.c_str()), 0);
+  }
 
-  ASSERT_EQ(ceph_rmdir(cmount, "a/a/a"), 0);
+  ASSERT_STREQ(ceph_getcwd(cmount), "/");
 
   ceph_shutdown(cmount);
 }
