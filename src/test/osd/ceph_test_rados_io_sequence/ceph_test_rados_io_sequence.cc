@@ -2,7 +2,6 @@
 
 #include <boost/asio/io_context.hpp>
 #include <iostream>
-#include <map>
 #include <vector>
 
 #include "common/Formatter.h"
@@ -11,6 +10,11 @@
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/dout.h"
+#include "common/split.h"
+#include "common/strtol.h" // for strict_iecstrtoll()
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
+
 #include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/EcIoSequence.h"
 #include "common/io_exerciser/IoOp.h"
@@ -21,9 +25,6 @@
 #include "common/json/BalancerStructures.h"
 #include "common/json/ConfigStructures.h"
 #include "common/json/OSDStructures.h"
-#include "common/split.h"
-#include "common/strtol.h"  // for strict_iecstrtoll()
-#include "erasure-code/ErasureCodePlugin.h"
 #include "fmt/format.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -763,7 +764,8 @@ ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
     bool allow_pool_balancer,
     bool allow_pool_deep_scrubbing,
     bool allow_pool_scrubbing,
-    bool test_recovery)
+    bool test_recovery,
+    bool disable_pool_ec_optimizations)
     : ProgramOptionReader<std::string>(vm, "pool"),
       rados(rados),
       dry_run(dry_run),
@@ -772,6 +774,7 @@ ceph::io_sequence::tester::SelectErasurePool::SelectErasurePool(
       allow_pool_deep_scrubbing(allow_pool_deep_scrubbing),
       allow_pool_scrubbing(allow_pool_scrubbing),
       test_recovery(test_recovery),
+      disable_pool_ec_optimizations(disable_pool_ec_optimizations),
       first_use(true),
       sep{cct, rng, vm, rados, dry_run, first_use} {
   if (isForced()) {
@@ -834,7 +837,8 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
 
   std::string pool_name;
   profile = sep.select();
-  pool_name = fmt::format("testpool-pr{}", profile->name);
+  pool_name = fmt::format("testpool-pr{}{}", profile->name,
+    disable_pool_ec_optimizations?"_no_ec_opt":"");
 
   ceph::messaging::osd::OSDECPoolCreateRequest pool_create_request{
       pool_name, "erasure", 8, 8, profile->name};
@@ -962,7 +966,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, oid, cached_shard_order, sbs.select(), rng(),
-        threads, lock, cond);
+        threads, lock, cond, spo.get_allow_pool_ec_optimizations());
     dout(0) << "= " << oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1054,7 +1058,8 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
           vm.contains("allow_pool_balancer"),
           vm.contains("allow_pool_deep_scrubbing"),
           vm.contains("allow_pool_scrubbing"),
-          vm.contains("test_recovery")},
+          vm.contains("test_recovery"),
+          vm.contains("disable_pool_ec_optimizations")},
       snt{rng, vm, "threads", true},
       ssr{vm} {
   dout(0) << "Test using seed " << seed << dendl;
@@ -1075,6 +1080,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_balancer = vm.contains("allow_pool_balancer");
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
+  disable_pool_ec_optimizations = vm.contains("disable_pool_ec_optimizations");
 
   if (!dryrun) {
     guard.emplace(boost::asio::make_work_guard(asio));
@@ -1229,7 +1235,8 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), rng(),
         1,  // 1 thread
-        lock, cond);
+        lock, cond,
+        spo.get_allow_pool_ec_optimizations());
   }
 
   while (!done) {

@@ -41,7 +41,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& oid,
                  const std::optional<std::vector<int>>& cached_shard_order,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
-                 ceph::condition_variable& cond)
+                 ceph::condition_variable& cond, bool ec_optimizations)
     : Model(oid, block_size),
       rados(rados),
       asio(asio),
@@ -58,6 +58,9 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
   allow_ec_overwrites(true);
+  if (ec_optimizations) {
+    allow_ec_optimizations();
+  }
 }
 
 RadosIo::~RadosIo() {}
@@ -88,6 +91,17 @@ void RadosIo::allow_ec_overwrites(bool allow) {
                        "\", \
       \"var\": \"allow_ec_overwrites\", \"val\": \"" +
                        (allow ? "true" : "false") + "\"}";
+  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
+  ceph_assert(rc == 0);
+}
+
+void RadosIo::allow_ec_optimizations()
+{
+  int rc;
+  bufferlist inbl, outbl;
+  std::string cmdstr =
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool + "\", \
+      \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}";
   rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
   ceph_assert(rc == 0);
 }
