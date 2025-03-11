@@ -733,6 +733,7 @@ int ObjectDirectory::incr(const DoutPrefixProvider* dpp, CacheObj* object, optio
 int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y)
 {
   std::string key = build_index(object);
+  is_trx_started(dpp,conn,key, redis_operation_type::READ_OP,y);
   try {
     boost::system::error_code ec;
     request req;
@@ -815,14 +816,13 @@ std::string BlockDirectory::build_index(CacheBlock* block)
 
   if(trxState == TrxState::STARTED) {
     m_original_key = key;
-    //TODO in case m_original_key is changed, it means that it need clone the updated key.
     std::string temp_key = create_temp_key(m_original_key);
 
+    //the following keys are used for implementing the transaction.
     m_temp_key_read = temp_key + "_read";
     m_temp_key_write = temp_key + "_write"; 
     m_temp_key_test_write = temp_key + "_test_write";
 
-    //TODO push the temp keys into the set container.
   };
 
   return key;
@@ -862,6 +862,7 @@ int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, 
 
 int save_trx_info(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, std::string key, std::string value, optional_yield y)
 {
+  // the key contains debug information about the transaction, and the loaded script sha.
 	try {
 		ldpp_dout(dpp, 0) << "save_trx_info" << "saving " << key << ":" << value << dendl;
 		boost::system::error_code ec;
@@ -887,6 +888,8 @@ int Directory::start_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connectio
 {
 
   trxState = TrxState::STARTED;
+  // the trx_id is a 5 digit number, it should be unique for each transaction.
+  // the cloned keys structure contains the trx-id and the suffix.
   get_trx_id(dpp,conn,y);
 
   ldpp_dout(dpp, 0) << "Directory::start_trx evalsha " << m_evalsha_clone_key  << dendl;
@@ -1061,56 +1064,56 @@ end
 int Directory::get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y)
 {
   try {
-		boost::system::error_code ec;
-		response<std::string> resp;
-		request req;
-		req.push("INCR", "trx_id");
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
+    req.push("INCR", "trx_id");
 
-		redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-		if (ec) {
-			ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << ec.what() << dendl;
-			return -ec.value();
-		}
+    if (ec) {
+      ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
 
-		m_trx_id = std::get<0>(resp).value();
+    m_trx_id = std::get<0>(resp).value();
 
-	} catch (std::exception &e) {
-		ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << e.what() << dendl;
-		return -EINVAL;
-	}
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
+    }
 
-	return 0;
+return 0;
 }
 
 std::string Directory::get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
 {
-	try {
-		boost::system::error_code ec;
-		response<std::string> resp;
-		request req;
-		req.push("HGET", "trx_debug", "m_evalsha_end_trx");
+  try {
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
+    req.push("HGET", "trx_debug", "m_evalsha_end_trx");
+  
+    redis_exec(conn, ec, req, resp, y);
 
-		redis_exec(conn, ec, req, resp, y);
-
-		if (ec) {
-			ldpp_dout(dpp, 0) << "get_end_trx_script::" << __func__ << "() ERROR: " << ec.what() << dendl;
-			return "";
-		}
+    if (ec) {
+      ldpp_dout(dpp, 0) << "get_end_trx_script::" << __func__ << "() ERROR: " << ec.what() << dendl;
+    return "";
+    }
       
-		if (std::get<0>(resp).value().empty()) {
-		    ldpp_dout(dpp, 0) << "get_end_trx_script:: m_evalsha_end_trx is empty " << dendl;
-		    return std::string("");
-		}
+    if (std::get<0>(resp).value().empty()) {
+      ldpp_dout(dpp, 0) << "get_end_trx_script:: m_evalsha_end_trx is empty " << dendl;
+      return std::string("");
+    }
 
-		m_evalsha_end_trx = std::get<0>(resp).value();
+    m_evalsha_end_trx = std::get<0>(resp).value();
 
-	} catch (std::exception &e) {
-		ldpp_dout(dpp, 0) << "get_end_trx_script::" << __func__ << "() ERROR: " << e.what() << dendl;
-		return "";
-	}
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "get_end_trx_script::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return "";
+    }
 
-	return m_evalsha_end_trx;
+  return m_evalsha_end_trx;
 }
 
 int Directory::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
@@ -1133,7 +1136,6 @@ int Directory::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<connection
 	    return -ec.value();
 	  }
 	  m_evalsha_end_trx = std::get<0>(resp).value().value()[0];
-	  ldpp_dout(dpp,0) << "m_evalsha_end_trx std::get<0>(resp).value()" << std::get<0>(resp).value() << dendl;
 	  ldpp_dout(dpp, 0) << "Directory::end_trx loading evalsha script = " << "evalsha " << m_evalsha_end_trx << dendl;
    
 	  save_trx_info(dpp,conn, "m_evalsha_end_trx", m_evalsha_end_trx, y);	
@@ -1145,43 +1147,43 @@ int Directory::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<connection
 
   //running the loaded script 
   try {
-		boost::system::error_code ec;
-		response<std::string> resp;
-		request req;
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
 
-		unsigned int num_keys = m_temp_read_keys.size() + m_temp_write_keys.size() + m_temp_test_write_keys.size();
+    unsigned int num_keys = m_temp_read_keys.size() + m_temp_write_keys.size() + m_temp_test_write_keys.size();
 		
-		std::string debug_all_keys;
-		std::list<std::string> trx_keys;
-		trx_keys.push_back(std::to_string(num_keys));
-		for (auto const& key : m_temp_read_keys) {
-			debug_all_keys += key + " ";
-			trx_keys.push_back(key);
-		}
-		for (auto const& key : m_temp_write_keys) {
-			debug_all_keys += key + " ";
-			trx_keys.push_back(key);
-		}
-		for (auto const& key : m_temp_test_write_keys) {
-			debug_all_keys += key + " ";
-			trx_keys.push_back(key);
-		}
+    std::string debug_all_keys;
+    std::list<std::string> trx_keys;
+    trx_keys.push_back(std::to_string(num_keys));
+    for(auto const& key : m_temp_read_keys) {
+      debug_all_keys += key + " ";
+      trx_keys.push_back(key);
+    }
+    for (auto const& key : m_temp_write_keys) {
+      debug_all_keys += key + " ";
+      trx_keys.push_back(key);
+    }
+    for (auto const& key : m_temp_test_write_keys) {
+      debug_all_keys += key + " ";
+      trx_keys.push_back(key);
+    }		
 
-		ldpp_dout(dpp, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << "with the following keys " << debug_all_keys << dendl;
-		req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
+    ldpp_dout(dpp, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << "with the following keys " << debug_all_keys << dendl;
+    req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
 
-		redis_exec(conn, ec, req, resp, y);
-	
+    redis_exec(conn, ec, req, resp, y);
 
-		if (ec) {
-			ldpp_dout(dpp, 0) << "Directory::end_trx the end-trx script had failed " << "with ec =" << ec  << dendl;
-			return -ec.value();
-		}
-	} catch (std::exception &e) {
-		return -EINVAL;
-	}
 
-  return 0;
+      if (ec) {
+	ldpp_dout(dpp, 0) << "Directory::end_trx the end-trx script had failed " << "with ec =" << ec  << dendl;
+	return -ec.value();
+      }
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+
+return 0;
 }
 
 int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y)
