@@ -73,6 +73,8 @@ bool strict_strtob(std::string_view str, std::string *err);
 
 long long strict_strtoll(std::string_view str, int base, std::string *err);
 
+unsigned long long strict_strtoull(std::string_view str, int base, std::string *err);
+
 int strict_strtol(std::string_view str, int base, std::string *err);
 
 double strict_strtod(std::string_view str, std::string *err);

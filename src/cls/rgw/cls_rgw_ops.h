@@ -232,9 +232,16 @@ WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 struct rgw_cls_unlink_instance_op {
   cls_rgw_obj_key key;
   std::string op_tag;
+  // this represents a remote epoch during multisite sync
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  // cls ops include olh_tag so the OLH class code can guard sensitive updates—only proceed if op.olh_tag equals
+  // the OLH’s stored tag. If it doesn’t, the op fails and the caller refreshes state/retries.
+  // for context: in real clusters, out‑of‑order replication or topology changes can recreate/move an OLH
+  // (eg, resharding or certain multisite flows). The tag changes with that new OLH “generation,” so stale
+  // writers carrying the old tag get refused instead of overwriting the new state. A concrete example of failures
+  // tied to OLH attributes shows how wrong attributes/tags cause bad GET behavior, which is why the guard exists.
   std::string olh_tag;
   rgw_zone_set zones_trace;
 

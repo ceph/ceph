@@ -58,6 +58,25 @@ long long strict_strtoll(std::string_view str, int base, std::string *err)
   return ret;
 }
 
+unsigned long long strict_strtoull(std::string_view str, int base, std::string *err)
+{
+  char *endptr;
+  errno = 0; /* To distinguish success/failure after call (see man page) */
+  auto ret = strtoull(str.data(), &endptr, base);
+  if (endptr == str.data() || endptr != str.data() + str.size()) {
+    *err = (std::string{"Expected option value to be integer, got '"} +
+        std::string{str} + "'");
+    return 0;
+  }
+  if (errno) {
+    *err = (std::string{"The option value '"} + std::string{str} +
+        "' seems to be invalid");
+    return 0;
+  }
+  *err = "";
+  return ret;
+}
+
 int strict_strtol(std::string_view str, int base, std::string *err)
 {
   long long ret = strict_strtoll(str, base, err);

@@ -4,7 +4,6 @@ import logging
 import boto
 import boto.s3.connection
 
-import datetime
 import dateutil
 
 from itertools import zip_longest  # type: ignore
