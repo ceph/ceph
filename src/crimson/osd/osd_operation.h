@@ -342,16 +342,17 @@ public:
       with_throttle_while(std::forward<Args>(args)...), *this);
   }
 
-  // Returns std::nullopt if the throttle is acquired immediately,
-  // returns the future for the acquiring otherwise
+  // Returns std::nullopt if the throttle is not enabled
   std::optional<seastar::future<>>
   try_acquire_throttle_now(crimson::osd::scheduler::params_t params) {
-    if (!max_in_progress || in_progress < max_in_progress) {
-      ++in_progress;
-      --pending;
+    if (!max_in_progress) {
       return std::nullopt;
     }
     return acquire_throttle(params);
+  }
+
+  void try_release_throttle() {
+    return release_throttle();
   }
 
 private:

@@ -625,6 +625,14 @@ void PGRecovery::on_pg_clean()
   backfill_state.reset();
 }
 
+void PGRecovery::release_throttle()
+{
+  if (this->throttle_acquired) {
+    auto &ss = pg->get_shard_services();
+    ss.try_release_throttle();
+  }
+}
+
 void PGRecovery::backfilled()
 {
   using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
@@ -635,6 +643,7 @@ void PGRecovery::backfilled()
     pg->get_osdmap_epoch(),
     pg->get_osdmap_epoch(),
     PeeringState::Backfilled{});
+    release_throttle();
 }
 
 void PGRecovery::backfill_suspended()
@@ -679,9 +688,23 @@ void PGRecovery::on_backfill_reserved()
       std::make_unique<crimson::osd::PGFacade>(
         *static_cast<crimson::osd::PG*>(pg)));
   }
-  // it may be we either start a completely new backfill (first
-  // event since last on_activate_complete()) or to resume already
-  // (but stopped one).
-  backfill_state->process_event(
-    BackfillState::Triggered{}.intrusive_from_this());
+  auto &ss = pg->get_shard_services();
+  crimson::osd::scheduler::params_t params =
+    {1, 0, crimson::osd::scheduler::scheduler_class_t::background_best_effort};
+  auto futopt = ss.try_acquire_throttle_now(std::move(params));
+  if (!futopt) {
+    logger().info(" throttling is disabled for pg {} ", *static_cast<crimson::osd::PG*>(pg));
+    backfill_state->process_event(BackfillState::Triggered{}.intrusive_from_this());
+    return;
+  }
+  std::ignore = interruptor::make_interruptible(std::move(*futopt)
+  ).then_interruptible([this] {
+    this->throttle_acquired = true;
+    logger().debug(" throttling is acquired for pg {} ", *static_cast<crimson::osd::PG*>(pg));
+    // it may be we either start a completely new backfill (first
+    // event since last on_activate_complete()) or to resume already
+    // (but stopped one).
+    backfill_state->process_event(
+      BackfillState::Triggered{}.intrusive_from_this());
+  });
 }
