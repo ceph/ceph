@@ -130,6 +130,24 @@ class filepath {
     return bits[i];
   }
 
+  auto begin() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).begin();
+  }
+  auto rbegin() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).rbegin();
+  }
+
+  auto end() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).end();
+  }
+  auto rend() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).rend();
+  }
+
   const std::string& last_dentry() const {
     if (bits.empty() && path.length() > 0) parse_bits();
     ceph_assert(!bits.empty());
