@@ -6,6 +6,8 @@ import time
 import logging
 import errno
 import dateutil.parser
+from datetime import datetime
+import threading
 
 from itertools import combinations
 from itertools import zip_longest
@@ -1826,7 +1828,7 @@ def test_bucket_log_trim_after_delete_bucket_primary_reshard():
 
     # run bilog trim twice on primary zone where the bucket was resharded
     bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
-    
+
     for zonegroup in realm.current_period.zonegroups:
         zonegroup_conns = ZonegroupConns(zonegroup)
         for zone in zonegroup_conns.zones:
@@ -2315,7 +2317,7 @@ def test_assume_role_after_sync():
         log.info(f'checking if zone: {zone.name} has role: {role_name}')
         assert(zone.has_role(role_name))
         log.info(f'success, zone: {zone.name} has role: {role_name}')
-    
+
     for zone in zonegroup_conns.zones:
         if zone == zonegroup_conns.master_zone:
             log.info(f'creating bucket in primary zone')
@@ -3971,6 +3973,126 @@ def test_bucket_create_location_constraint():
                                     CreateBucketConfiguration={'LocationConstraint': zg.name})
                 assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
+def test_timestamp_based_epochs():
+    """
+    the test generates objects/instance in both zones: for each of NUM_OBJECTS NUM_VERSIONS are generated;
+    then it waits for the replication to finish and then lists objects/instances in both zones and checks that the instances
+    there are listed are in chronological order, with the expectation that without time-based epochs the listed order of object
+    versions won't be chronological; with the time-based epochs the order should be strictly chronological
+    (although there is still a very slim chance of epoch collisions);
+    :return:
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    NUM_OBJECTS = 10
+    NUM_VERSIONS = 100
+
+    source_bucket = primary.create_bucket(gen_bucket_name())
+    log.info('created bucket=%s', source_bucket.name)
+
+    def create_bucket_objects (client):
+        log.info(f"Creating objects for {client.meta.endpoint_url} in bucket {source_bucket.name}")
+        attempts=0
+        MAX_ATTEMPTS=3
+        while attempts<MAX_ATTEMPTS:
+            try:
+                for i in range(0, NUM_OBJECTS):
+                    for vid in range(0, NUM_VERSIONS):
+                        key=f"obj-{i}.txt"
+                        response=client.put_object(Key=key, Body=f"This is version {vid}", Bucket=source_bucket.name)
+                        log.info(f"Instance {key} ({response['ResponseMetadata']['HTTPHeaders']['x-amz-version-id']}) created @ {client.meta.endpoint_url}")
+                    log.info(f"{NUM_VERSIONS} versions created for object {key} on {client.meta.endpoint_url}")
+                return
+            except client.exceptions.NoSuchBucket as e:
+                attempts+=1
+                log.info(f"Attempt #{attempts}. Got NoSuchBucket exception. {'Will attempt again in 5 sec' if attempts<MAX_ATTEMPTS else 'Giving up'}")
+                time.sleep(5)
+
+        log.info(f"Failed to create objects for bucket {source_bucket.name} @ {client.meta.endpoint_url}")
+
+
+    # list all objects/versions in the zone and check that their versions are listed in the
+    # chronological order - from the newest to the oldest;
+    def check_modification_history(client, res: dict):
+        for oid in range(0, NUM_OBJECTS):
+            obj_name = f"obj-{oid}.txt"
+            # list all versions of the object from the newest to the oldest
+            response = client.list_object_versions(Bucket=source_bucket.name, Prefix=obj_name)
+            # run the check
+            log.info(f"---------------------------")
+            log.info(f"Checking versions for {obj_name}")
+            log.info(f"---------------------------")
+            prev_date: datetime = None
+            prev_version = ""
+            version_count=0
+            for version in response['Versions']:
+                version_count+=1
+                if prev_date == None:
+                    prev_date = version['LastModified']
+                    prev_version = version['VersionId']
+                    # print(f"remembering {prev_version}")
+                    continue
+
+                cur_date = version['LastModified']
+                # print(f"checking {version['VersionId']}")
+                if cur_date > prev_date:
+                    # TEST FAILED for {obj_name} and {version['VersionId']}
+                    res[client.meta.endpoint_url][obj_name] = version['VersionId']
+                    break
+                else:
+                    prev_date = cur_date
+                    prev_version = version['VersionId']
+
+            log.info(f"Zone {client.meta.endpoint_url}: object {obj_name}: history OK for {version_count} versions")
+
+    def set_bucket_versioning(state: bool):
+        primary.s3_client.put_bucket_versioning(Bucket=source_bucket.name, VersioningConfiguration=
+        {'Status': 'Enabled' if state else 'Disabled'})
+
+
+    set_bucket_versioning(True)
+
+    # let's wait for those changes to propagate to the secondary zone;
+    time.sleep(10)
+
+    tm = threading.Thread(target=create_bucket_objects, args=[primary.s3_client])
+    ts = threading.Thread(target=create_bucket_objects, args=[secondary.s3_client])
+    tm.start()
+    ts.start()
+    tm.join()
+    ts.join()
+
+    # now wait for data sync to replicate the instances between zones
+    # TO DO: improve this by checking sync status of each zone instead
+    time.sleep(15)
+
+    # now check modification history in each zone
+    zone_results={}
+    tm = threading.Thread(target=check_modification_history, args=[primary.s3_client, zone_results])
+    ts = threading.Thread(target=check_modification_history, args=[secondary.s3_client, zone_results])
+    tm.start()
+    ts.start()
+    tm.join()
+    ts.join()
+
+    # print the results
+    log.info(f"---------------------------")
+    log.info(f"---------------------------")
+    log.info(f"---------------------------")
+    for client in [primary.s3_client, secondary.s3_client]:
+        if not client.meta.endpoint_url in zone_results:
+            log.info(f"Test SUCCEEDED for {client.meta.endpoint_url}")
+        else:
+            log.info(f"Test FAILED for {client.meta.endpoint_url}")
+            failed_objs = zone_results[client.meta.endpoint_url]
+            for obj in failed_objs:
+                log.info(f"{obj} version {failed_objs[obj]} is newer than the previous one")
+
+    assert len(zone_results)==0
+
 def run_per_zonegroup(func):
     def wrapper(*args, **kwargs):
         for zonegroup in realm.current_period.zonegroups:
@@ -4712,7 +4834,7 @@ def test_bucket_delete_with_bucket_sync_policy_directional():
 
     assert check_all_buckets_dont_exist(zcA, buckets)
     assert check_all_buckets_dont_exist(zcB, buckets)
-    
+
     remove_sync_policy_group(c1, "sync-group")
 
     return
@@ -4791,7 +4913,7 @@ def test_bucket_delete_with_bucket_sync_policy_symmetric():
 
     assert check_all_buckets_dont_exist(zcA, buckets)
     assert check_all_buckets_dont_exist(zcB, buckets)
-    
+
     remove_sync_policy_group(c1, "sync-group")
     return
 
@@ -4924,7 +5046,7 @@ def test_delete_bucket_with_zone_opt_out():
 
     bucket = get_bucket(zcC, bucketA.name)
     check_objects_not_exist(bucket, objnameA)
-    
+
     # verify that objnameB is not synced to either zoneA or zoneB
     bucket = get_bucket(zcA, bucketA.name)
     check_objects_not_exist(bucket, objnameB)
@@ -4960,7 +5082,7 @@ def test_delete_bucket_with_zone_opt_out():
     assert check_all_buckets_dont_exist(zcC, buckets)
 
     remove_sync_policy_group(c1, "sync-group")
-    
+
     return
 
 @attr('sync_policy')
@@ -5019,7 +5141,7 @@ def test_bucket_delete_with_sync_policy_object_prefix():
 
     zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
     zone_data_checkpoint(zoneB, zoneA)
-    
+
     # verify that objnameA is synced to zoneB
     bucket = get_bucket(zcB, bucketA.name)
     check_object_exists(bucket, objnameA)
@@ -5654,15 +5776,15 @@ def test_bucket_replication_source_allow_either_getobjectversion_or_getobjectver
 def test_bucket_replication_source_forbidden_objretention():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    
+
     source = zonegroup_conns.rw_zones[0]
     dest = zonegroup_conns.rw_zones[1]
-    
+
     source_bucket_name = gen_bucket_name()
     source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
     dest_bucket = dest.create_bucket(gen_bucket_name())
     zonegroup_meta_checkpoint(zonegroup)
-    
+
     # create replication configuration
     source.s3_client.put_bucket_replication(
         Bucket=source_bucket_name,
@@ -5677,7 +5799,7 @@ def test_bucket_replication_source_forbidden_objretention():
             }]
         }
     )
-    
+
     # Deny myself from fetching the source object's retention for replication
     source.s3_client.put_bucket_policy(
         Bucket=source_bucket_name,
@@ -5692,7 +5814,7 @@ def test_bucket_replication_source_forbidden_objretention():
         })
     )
     zonegroup_meta_checkpoint(zonegroup)
-    
+
     # upload an object and wait for sync.
     objname = 'dummy'
     k = new_key(source, source_bucket_name, objname)
@@ -5712,15 +5834,15 @@ def test_bucket_replication_source_forbidden_objretention():
 def test_bucket_replication_source_forbidden_legalhold():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    
+
     source = zonegroup_conns.rw_zones[0]
     dest = zonegroup_conns.rw_zones[1]
-    
+
     source_bucket_name = gen_bucket_name()
     source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
     dest_bucket = dest.create_bucket(gen_bucket_name())
     zonegroup_meta_checkpoint(zonegroup)
-    
+
     # create replication configuration
     source.s3_client.put_bucket_replication(
         Bucket=source_bucket_name,
@@ -5735,7 +5857,7 @@ def test_bucket_replication_source_forbidden_legalhold():
             }]
         }
     )
-    
+
     # Deny myself from fetching the source object's retention for replication
     source.s3_client.put_bucket_policy(
         Bucket=source_bucket_name,
@@ -5750,7 +5872,7 @@ def test_bucket_replication_source_forbidden_legalhold():
         })
     )
     zonegroup_meta_checkpoint(zonegroup)
-    
+
     # upload an object and wait for sync.
     objname = 'dummy'
     k = new_key(source, source_bucket_name, objname)
