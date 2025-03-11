@@ -259,8 +259,8 @@ mirror_group_demote ${CLUSTER2} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group1} 'snapshot' 'enabled' 'false'
 wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1}
 
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 0
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+unknown' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+unknown' 0
 mirror_group_promote ${CLUSTER2} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group1} 'snapshot' 'enabled' 'true'
 
@@ -274,8 +274,8 @@ testlog " - failover (unmodified)"
 mirror_group_demote ${CLUSTER2} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'false'
 wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group}
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 0
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+unknown' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+unknown' 0
 mirror_group_promote ${CLUSTER1} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 wait_for_group_replay_started ${CLUSTER2} ${POOL}/${group} 1
@@ -284,8 +284,8 @@ testlog " - failback (unmodified)"
 mirror_group_demote ${CLUSTER1} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'false'
 wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group}
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 0
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+unknown' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+unknown' 0
 mirror_group_promote ${CLUSTER2} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 1
@@ -298,8 +298,8 @@ testlog " - failover"
 mirror_group_demote ${CLUSTER2} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group1} 'snapshot' 'enabled' 'false'
 wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1}
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 0
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+unknown' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+unknown' 0
 mirror_group_promote ${CLUSTER1} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group1} 'snapshot' 'enabled' 'true'
 wait_for_group_replay_started ${CLUSTER2} ${POOL}/${group1} 1
@@ -313,8 +313,8 @@ testlog " - failback to cluster2"
 mirror_group_demote ${CLUSTER1} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group1} 'snapshot' 'enabled' 'false'
 wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group1}
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 0
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+unknown' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+unknown' 0
 mirror_group_promote ${CLUSTER2} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group1} 'snapshot' 'enabled' 'true'
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group1} 1
