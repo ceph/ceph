@@ -7698,8 +7698,9 @@ int BlueStore::expand_devices(ostream& out)
       << " : expanding " << " from 0x" << std::hex
       << size0 << " to 0x" << size << std::dec << std::endl;
     _write_out_fm_meta(size);
+    string p = get_device_path(bluefs_layout.shared_bdev);
     if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
+      if (_set_bdev_label_size(p, size) >= 0) {
         out << bluefs_layout.shared_bdev
           << " : size label updated to " << size
           << std::endl;
