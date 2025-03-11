@@ -511,14 +511,20 @@ WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
 enum OLHLogOp {
   CLS_RGW_OLH_OP_UNKNOWN         = 0,
+  // link OLH entry to a specific object version
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
+  // deletes OLH object from the data pool and removes OLH entry from the bucket index
   CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
+  // remove a specific instance of an object, such as <obj_name>.<obj_version>
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
 };
 
 struct rgw_bucket_olh_log_entry {
   uint64_t epoch;
   OLHLogOp op;
+  // Once the OLH Log Entries are processed for a given epoch (by apply_olh_log()) the corresponding olh.pending.*
+  // xattrs are removed from the corresponding OLH object (in the data pool). The pending xattrs to be removed
+  // are those that match op_tag.
   std::string op_tag;
   cls_rgw_obj_key key;
   bool delete_marker;
@@ -555,8 +561,17 @@ WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 struct rgw_bucket_olh_entry {
   cls_rgw_obj_key key;
   bool delete_marker;
+  // the epoch represents the latest modification timestamp for the S3 object identified by the key;
   uint64_t epoch;
+  // epoch -> op list mapping: stores pending modifications to the S3 object identified by the key;
+  // this is basically a per-S3-object WAL whose main purpose is crash safety and idempotency; operations
+  // PUT/DELETE that modify S3 object history write to this log first; it is being
+  // replayed by the apply_olh_log() on the same zone;
+  // usually there's only 1 op per epoch key but more than 1 op would be associated with an epoch in case
+  // of versioned DELETE for the current instance: [remove instance, link]
   std::map<uint64_t, std::vector<struct rgw_bucket_olh_log_entry> > pending_log;
+  // unique tag for this entry; it remains the same until the entry is deleted (like when versioning
+  // is suspended) and then re-created (by re-enabling versioning);
   std::string tag;
   bool exists;
   bool pending_removal;
