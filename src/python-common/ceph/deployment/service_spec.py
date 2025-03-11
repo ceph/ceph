@@ -2028,7 +2028,7 @@ class OAuth2ProxySpec(ServiceSpec):
         self.redirect_url = redirect_url
         #: The secret key used for signing cookies. Its length must be 16,
         # 24, or 32 bytes to create an AES cipher.
-        self.cookie_secret = cookie_secret
+        self.cookie_secret = cookie_secret or self.generate_random_secret()
         #: The multi-line SSL certificate for encrypting communications.
         self.ssl_certificate = ssl_certificate
         #: The multi-line SSL certificate private key for decrypting communications.
@@ -2037,6 +2037,12 @@ class OAuth2ProxySpec(ServiceSpec):
         # preventing unauthorized redirects.
         self.allowlist_domains = allowlist_domains
         self.unmanaged = unmanaged
+
+    def generate_random_secret(self) -> str:
+        import base64
+        random_bytes = os.urandom(32)
+        base64_secret = base64.urlsafe_b64encode(random_bytes).decode('utf-8')
+        return base64_secret
 
     def get_port_start(self) -> List[int]:
         ports = [4180]
