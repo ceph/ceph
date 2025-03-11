@@ -528,8 +528,6 @@ static int read_bucket_header(cls_method_context_t hctx,
 
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(10, "entered %s", __func__);
-
   // maximum number of calls to get_obj_vals we'll try; compromise
   // between wanting to return the requested # of entries, but not
   // wanting to slow down this op with too many omap reads
@@ -544,6 +542,10 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
     return -EINVAL;
   }
+
+  CLS_LOG(10, "entered %s start=%s count=%u prefix=%s delim=%s versioned=%d",
+          __func__, op.start_obj.to_string().c_str(), op.num_entries,
+          op.filter_prefix.c_str(), op.delimiter.c_str(), (int)op.list_versions);
 
   rgw_cls_list_ret ret;
   rgw_bucket_dir& new_dir = ret.dir;
