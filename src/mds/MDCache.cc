@@ -8447,7 +8447,8 @@ void MDCache::dispatch(const cref_t<Message> &m)
 int MDCache::load_referent_inodes(CInode *in, MDSContextFactory& cf, bool ignore_error)
 {
   ceph_assert(in);
-  if (!in->get_inode()->referent_inodes.empty())
+  // Only required when global snaprealm is not being used
+  if (!mds->mdsmap->use_global_snaprealm() && !in->get_inode()->referent_inodes.empty())
     dout(12) << __func__ << " loading referent inodes of primary real inode of hardlink " << *in << dendl;
   else
     return 0;
