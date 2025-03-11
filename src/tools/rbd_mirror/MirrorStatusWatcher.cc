@@ -21,11 +21,14 @@ using librbd::util::create_rados_callback;
 template <typename I>
 MirrorStatusWatcher<I>::MirrorStatusWatcher(librados::IoCtx &io_ctx,
                                             librbd::asio::ContextWQ *work_queue)
-  : Watcher(io_ctx, work_queue, RBD_MIRRORING) {
+  : Watcher(io_ctx, work_queue, RBD_MIRRORING),
+    m_lock(ceph::make_mutex("rbd::mirror::MirrorStatusWatcher " +
+                              stringify(io_ctx.get_id()))) {
 }
 
 template <typename I>
 MirrorStatusWatcher<I>::~MirrorStatusWatcher() {
+  ceph_assert(m_on_start_finish == nullptr);
 }
 
 template <typename I>
@@ -42,18 +45,24 @@ void MirrorStatusWatcher<I>::init(Context *on_finish) {
       register_watch(on_finish);
     });
 
-  remove_down_image_status(on_finish);
+  {
+    std::lock_guard locker{m_lock};
+    ceph_assert(m_on_start_finish == nullptr);
+    std::swap(m_on_start_finish, on_finish);
+  }
+
+  remove_down_image_status();
 }
 
 template <typename I>
-void MirrorStatusWatcher<I>::remove_down_image_status(Context *on_finish) {
+void MirrorStatusWatcher<I>::remove_down_image_status() {
   dout(20) << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_remove_down(&op);
   auto comp = create_rados_callback(
-    new LambdaContext([this, on_finish](int r) {
-      handle_remove_down_image_status(r, on_finish);
+    new LambdaContext([this](int r) {
+      handle_remove_down_image_status(r);
     }));
 
   int r = m_ioctx.aio_operate(RBD_MIRRORING, comp, &op);
@@ -62,22 +71,21 @@ void MirrorStatusWatcher<I>::remove_down_image_status(Context *on_finish) {
 }
 
 template <typename I>
-void MirrorStatusWatcher<I>::handle_remove_down_image_status(int r,
-                                                             Context *on_finish) {
+void MirrorStatusWatcher<I>::handle_remove_down_image_status(int r) {
   dout(20) << "r=" << r << dendl;
 
-  remove_down_group_status(on_finish);
+  remove_down_group_status();
 }
 
 template <typename I>
-void MirrorStatusWatcher<I>::remove_down_group_status(Context *on_finish) {
+void MirrorStatusWatcher<I>::remove_down_group_status() {
   dout(20) << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_group_status_remove_down(&op);
   auto comp = create_rados_callback(
-    new LambdaContext([this, on_finish](int r) {
-      handle_remove_down_group_status(r, on_finish);
+    new LambdaContext([this](int r) {
+      handle_remove_down_group_status(r);
     }));
 
   int r = m_ioctx.aio_operate(RBD_MIRRORING, comp, &op);
@@ -86,11 +94,18 @@ void MirrorStatusWatcher<I>::remove_down_group_status(Context *on_finish) {
 }
 
 template <typename I>
-void MirrorStatusWatcher<I>::handle_remove_down_group_status(int r,
-                                                             Context *on_finish) {
+void MirrorStatusWatcher<I>::handle_remove_down_group_status(int r) {
   dout(20) << "r=" << r << dendl;
 
-  on_finish->complete(r);
+  Context *on_finish = nullptr;
+  {
+    std::lock_guard locker{m_lock};
+    std::swap(m_on_start_finish, on_finish);
+  }
+
+  if (on_finish) {
+    on_finish->complete(0);
+  }
 }
 
 template <typename I>
