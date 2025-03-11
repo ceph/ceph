@@ -85,6 +85,9 @@ class TestReferentInode(CephFSTestCase):
         # of the newly introduced referent inode to the data pool.
         self.fs.mds_asok(["flush", "journal"])
 
+        secondary_inode = self.mount_a.path_to_ino('dir1/hardlink_file1')
+        time.sleep(10)
+
         # rename hardlink referent dentry, noop
         srcpath = os.path.join(self.mount_a.mountpoint, "dir0", "file1")
         dstpath = os.path.join(self.mount_a.mountpoint, "dir1", "hardlink_file1")
