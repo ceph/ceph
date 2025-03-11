@@ -726,7 +726,8 @@ void MonClient::handle_auth(MAuthReply *m)
     ceph_assert(mc.have_session());
     active_con.reset(new MonConnection(std::move(mc)));
     pending_cons.erase(found);
-    aux_list.splice(pending_cons);
+    auto keep = cct->_conf.get_val<uint64_t>("mon_aux_list_connections");
+    aux_list.splice(keep, pending_cons);
     pending_cons.clear();
     ldout(cct, 10) << __func__ << " hunting success, active mon."
        << monmap.get_name(active_con->get_con()->get_peer_addr())
@@ -887,7 +888,7 @@ void MonClient::_add_conns()
     }
   }
   ldout(cct, 10) << __func__ << " ranks=" << ranks << dendl;
-  unsigned n = 0; //cct->_conf->mon_client_hunt_parallel;         ???? TODO: what is the plan for this?
+  unsigned n = cct->_conf->mon_client_hunt_parallel;
   if (n == 0 || n > ranks.size()) {
     n = ranks.size();
   }
@@ -1600,7 +1601,8 @@ int MonClient::handle_auth_done(
 	} else {
           active_con.reset(new MonConnection(std::move(i.second)));
           pending_cons.erase(i.first);
-          aux_list.splice(pending_cons);
+          auto keep = cct->_conf.get_val<uint64_t>("mon_aux_list_connections");
+          aux_list.splice(keep, pending_cons);
           pending_cons.clear();
 	  ceph_assert(active_con->have_session());
           ldout(cct, 10) << __func__ << " hunting success, active mon."
