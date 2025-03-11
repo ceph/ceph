@@ -2627,6 +2627,8 @@ public:
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *fail_object_replication_status(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
+                                               rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& timestamp) override;
 };
 
 class RGWDefaultSyncModuleInstance : public RGWSyncModuleInstance {
@@ -3102,6 +3104,45 @@ public:
     return 0;
   }
 };
+
+RGWCoroutine *RGWDefaultDataSyncModule::fail_object_replication_status(const DoutPrefixProvider *dpp,
+                                                                       RGWDataSyncCtx *sc, rgw_bucket_sync_pipe &sync_pipe,
+                                                                       rgw_obj_key &key, real_time &timestamp)
+{
+  rgw::sal::Attrs attrs;
+  bufferlist bl;
+  bl.append("FAILED");
+  attrs[RGW_ATTR_OBJ_REPLICATION_STATUS] = std::move(bl);
+
+  // encode attrs
+  JSONFormatter jf;
+  jf.open_object_section("attrs");
+  encode_json("attrs", attrs, &jf);
+  jf.close_section();
+  stringstream ss;
+  jf.flush(ss);
+  bufferlist bl_attrs;
+  bl_attrs.append(ss.str());
+
+  string path = fmt::format("{}/{}", sync_pipe.source_bucket_info.bucket.get_key(':', 0), key.name);
+
+  map<string, string> headers;
+  set_date_header(&timestamp, headers, true, "HTTP_IF_UNMODIFIED_SINCE");
+
+  rgw_http_param_pair params[] = {
+    { "attributes", nullptr },                                // attributes always present
+    { "log_op", "false" },                                    // don't log this op on the source zone, otherwise we'll end up in a loop
+    { RGW_SYS_PARAM_PREFIX "no-precondition-error", "true" }, // don't fail if object has changed
+    { nullptr, nullptr },                                     // versionId only added if key.instance is not empty
+    { nullptr, nullptr }                                      // end of params
+  };
+  if (!key.instance.empty()) {
+    params[3].key = "versionId";
+    params[3].val = key.instance.c_str();
+  }
+
+  return new RGWPatchRawRESTResourceCR<bufferlist>(sc->cct, sc->conn, sc->env->http_manager, path, params, &headers, bl_attrs, nullptr);
+}
 
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                                                     rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
@@ -4520,6 +4561,34 @@ public:
             tn->log(0, "entry with empty obj name, skipping");
             goto done;
           }
+          // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
+          if (key.instance.empty() == sync_pipe.dest_bucket_info.versioned()) {
+            set_status("skipping entry due to versioning mismatch");
+            tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
+
+            // update src object with failed status
+            call(data_sync_module->fail_object_replication_status(dpp, sc, sync_pipe, key, timestamp));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update object replication status: " << cpp_strerror(-retcode)));
+              retcode = 0;
+            }
+
+            goto done;
+          }
+          // if object lock is enabled on either, the other should follow as well
+          if (sync_pipe.source_bucket_info.obj_lock_enabled() != sync_pipe.dest_bucket_info.obj_lock_enabled()) {
+            set_status("skipping entry due to object lock mismatch");
+            tn->log(0, SSTR("skipping entry due to object lock mismatch: " << key));
+
+            // update src object with failed status
+            call(data_sync_module->fail_object_replication_status(dpp, sc, sync_pipe, key, timestamp));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update object replication status: " << cpp_strerror(-retcode)));
+              retcode = 0;
+            }
+
+            goto done;
+          }
           if (error_injection &&
               rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
@@ -4567,6 +4636,15 @@ public:
 		       bs.bucket.name, key, zone_name);
           set_status("Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
           tn->log(0, "Skipping object sync: precondition failed (object contains newer change or policy doesn't allow sync)");
+
+          if (retcode == -EPERM || retcode == -EACCES) {
+            // update src object with failed status
+            call(data_sync_module->fail_object_replication_status(dpp, sc, sync_pipe, key, timestamp));
+            if (retcode < 0) {
+              tn->log(0, SSTR("ERROR: failed to update object replication status: " << cpp_strerror(-retcode)));
+            }
+          }
+
           retcode = 0;
         }
       } while (marker_tracker->need_retry(key));

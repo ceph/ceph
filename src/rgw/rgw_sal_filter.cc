@@ -1068,9 +1068,10 @@ int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-				Attrs* delattrs, optional_yield y, uint32_t flags)
+				Attrs* delattrs, optional_yield y, uint32_t flags,
+                                ceph::real_time unmod_since)
 {
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags, unmod_since);
 }
 
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,

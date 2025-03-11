@@ -2366,6 +2366,9 @@ public:
 class RGWSetAttrs : public RGWOp {
 protected:
   std::map<std::string, buffer::list> attrs;
+  uint32_t set_attrs_flags{rgw::sal::FLAG_LOG_OP};
+  ceph::real_time unmod_since; /* if unmodified since */
+  bool no_precondition_error{false};
 
 public:
   RGWSetAttrs() {}

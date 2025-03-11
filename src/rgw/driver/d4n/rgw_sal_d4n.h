@@ -179,7 +179,8 @@ class D4NFilterObject : public FilterObject {
 
     virtual const std::string &get_name() const override { return next->get_name(); }
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags) override;
+                            Attrs* delattrs, optional_yield y, uint32_t flags,
+                            ceph::real_time unmod_since = ceph::real_clock::zero()) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                             rgw_obj* target_obj = NULL) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,

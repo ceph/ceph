@@ -1339,6 +1339,28 @@ struct ReplicationConfiguration {
       }
       pipe->dest.bucket.emplace(dest_bk);
 
+      std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+      if (r = driver->load_bucket(s, *pipe->dest.bucket, &dest_bucket, s->yield); r < 0) {
+        if (r == -ENOENT) {
+          s->err.message = "Destination bucket must exist.";
+          return -EINVAL;
+        }
+
+        ldpp_dout(s, 0) << "ERROR: failed to load bucket info for bucket=" << *pipe.dest.bucket << " r=" << r << dendl;
+        return r;
+      }
+
+      // check versioning identicality
+      if (dest_bucket->get_info().versioned() != s->bucket->get_info().versioned()) {
+        s->err.message = "Versioning must be identical in source and destination buckets.";
+        return -EINVAL;
+      }
+      // check object lock identicality
+      if (dest_bucket->get_info().obj_lock_enabled() != s->bucket->get_info().obj_lock_enabled()) {
+        s->err.message = "Object lock must be identical in source and destination buckets.";
+        return -EINVAL;
+      }
+
       if (filter) {
         int r = filter->to_sync_pipe_filter(s->cct, &pipe->params.source.filter);
         if (r < 0) {
@@ -3880,6 +3902,71 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+void RGWSetObjAttrs_ObjStore_S3::send_response()
+{
+  int r = op_ret;
+  if (!r || (r == -ERR_PRECONDITION_FAILED && no_precondition_error)) {
+    r = STATUS_NO_CONTENT;
+  }
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+int RGWSetObjAttrs_ObjStore_S3::verify_permission(optional_yield y)
+{
+  // only for system user
+  if (!s->system_request) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+int RGWSetObjAttrs_ObjStore_S3::get_params(optional_yield y)
+{
+  const char *if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if (if_unmod) {
+    std::string if_unmod_decoded = url_decode(if_unmod);
+    uint64_t epoch;
+    uint64_t nsec;
+    if (utime_t::parse_date(if_unmod_decoded, &epoch, &nsec) < 0) {
+      ldpp_dout(this, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
+      return -EINVAL;
+    }
+    unmod_since = utime_t(epoch, nsec).to_real_time();
+  }
+
+  s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = 0;
+  bufferlist data;
+
+  std::tie(r, data) = read_all_input(s, max_size, false);
+  if (r < 0)
+    return r;
+
+  JSONParser jp;
+  if (!jp.parse(data.c_str(), data.length())) {
+    ldpp_dout(this, 0) << "failed to parse attrs. len=" << data.length() << " data=" << data.c_str() << dendl;
+    return -EINVAL;
+  }
+
+  JSONDecoder::decode_json("attrs", attrs, &jp);
+
+  bool log_op = true;
+  s->info.args.get_bool("log_op", &log_op, true);
+  if (!log_op) {
+    set_attrs_flags &= ~rgw::sal::FLAG_LOG_OP;
+  }
+
+  ldpp_dout(this, 20) << "attrs=" << attrs << " set_attrs_flags=" << set_attrs_flags << dendl;
+
+  return 0;
+}
+
 int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
 {
   string err;
@@ -5241,6 +5328,15 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
+RGWOp *RGWHandler_REST_Obj_S3::op_patch()
+{
+  if (is_attributes_op()) {
+    return new RGWSetObjAttrs_ObjStore_S3;
+  }
+
+  return NULL;
+}
+
 RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 {
   RGWGetObj_ObjStore_S3 *get_obj_op = new RGWGetObj_ObjStore_S3;
@@ -6388,6 +6484,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_LOGGING:
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
+        case RGW_OP_SET_ATTRS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;
