@@ -836,7 +836,7 @@ class ServiceSpec(object):
         'grafana': {'user_cert_allowed': True, 'scope': 'host'},
         'oauth2-proxy': {'user_cert_allowed': True, 'scope': 'host'},
         'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global'},
-        # 'nvmeof': {'user_cert_allowed': True , 'scope': 'service'},
+        'nvmeof': {'user_cert_allowed': True, 'scope': 'service'},
 
         # Services that only support cephadm-signed certificates
         'agent': {'user_cert_allowed': False, 'scope': 'host'},
@@ -1500,6 +1500,11 @@ class NvmeofServiceSpec(ServiceSpec):
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
+                 ssl: Optional[bool] = False,
+                 certificate_source: Optional[str] = CertificateSource.INLINE.value,
+                 custom_sans: Optional[List[str]] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  state_update_notify: Optional[bool] = True,
                  state_update_interval_sec: Optional[int] = 5,
                  break_update_interval_sec: Optional[int] = 25,
@@ -1589,6 +1594,11 @@ class NvmeofServiceSpec(ServiceSpec):
                  ):
         assert service_type == 'nvmeof'
         super(NvmeofServiceSpec, self).__init__('nvmeof', service_id=service_id,
+                                                ssl=ssl,
+                                                certificate_source=certificate_source,
+                                                ssl_cert=ssl_cert,
+                                                ssl_key=ssl_key,
+                                                custom_sans=custom_sans,
                                                 placement=placement, unmanaged=unmanaged,
                                                 preview_only=preview_only,
                                                 config=config, networks=networks,
@@ -1610,6 +1620,7 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
+        self.ssl = enable_auth  # to force enabling ssl field when auth is enabled
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
         self.state_update_notify = state_update_notify
         #: ``state_update_interval_sec`` number of seconds to check for updates in OMAP
@@ -1701,6 +1712,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.server_key = server_key
         #: ``server_cert`` gateway server certificate
         self.server_cert = server_cert
+        #: ``ssl_cert`` gateway TLS server certificate
+        self.ssl_cert = ssl_cert or server_cert
+        #: ``ssl_key`` gateway TLS server key
+        self.ssl_key = ssl_key or server_key
         #: ``client_key`` client key
         self.client_key = client_key
         #: ``client_cert`` client certificate
@@ -1774,6 +1789,10 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``monitor_client_log_file_dir`` the monitor client log output file file directory
         self.monitor_client_log_file_dir = monitor_client_log_file_dir
 
+        # This boolean tracks the usage of old/legacy fields
+        self._legacy_tls_fields_used = any([server_cert, server_key, client_cert,
+                                            client_key, root_ca_cert])
+
     def get_port_start(self) -> List[int]:
         return [self.port, 4420, self.discovery_port, self.prometheus_port]
 
@@ -1808,6 +1827,17 @@ class NvmeofServiceSpec(ServiceSpec):
                 verify_positive_int(value, name)
                 break  # only one should be defined, so we can stop after validating it
 
+    def to_json(self) -> OrderedDict[str, Any]:
+        data = super().to_json()
+        spec = data.setdefault('spec', {})
+        if self._legacy_tls_fields_used:
+            spec['server_cert'] = self.ssl_cert
+            spec['server_key'] = self.ssl_key
+            spec['client_cert'] = self.client_cert
+            spec['client_key'] = self.client_key
+            spec['root_ca_cert'] = self.root_ca_cert
+        return data
+
     def validate(self) -> None:
         #  TODO: what other parameters should be validated as part of this function?
         super(NvmeofServiceSpec, self).validate()
@@ -1816,16 +1846,18 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         verify_boolean(self.enable_auth, "Enable authentication")
-        if self.enable_auth:
-            if not all([self.server_key, self.server_cert, self.client_key,
-                        self.client_cert, self.root_ca_cert]):
-                err_msg = 'enable_auth is true but '
-                for cert_key_attr in ['server_key', 'server_cert', 'client_key',
-                                      'client_cert', 'root_ca_cert']:
-                    if not hasattr(self, cert_key_attr):
-                        err_msg += f'{cert_key_attr}, '
-                err_msg += 'attribute(s) not set in the spec'
-                raise SpecValidationError(err_msg)
+        if self.enable_auth or self.ssl:
+            if self.certificate_source == CertificateSource.INLINE.value:
+                if not all([self.server_key, self.server_cert, self.client_key,
+                            self.client_cert, self.root_ca_cert]):
+                    err_msg = 'enable_auth is true but '
+                    for cert_key_attr in ['ssl_key', 'ssl_cert', 'client_key',
+                                          'client_cert', 'root_ca_cert']:
+                        val = getattr(self, cert_key_attr, None)
+                        if val is None or val == "":
+                            err_msg += f'{cert_key_attr}, '
+                    err_msg += 'attribute(s) not set in the spec'
+                    raise SpecValidationError(err_msg)
 
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
