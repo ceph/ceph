@@ -4193,6 +4193,8 @@ bool PastIntervals::is_new_interval(
   uint32_t new_crush_barrier,
   int32_t old_crush_member,
   int32_t new_crush_member,
+  bool old_allow_ec_optimizations,
+  bool new_allow_ec_optimizations,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -4216,7 +4218,8 @@ bool PastIntervals::is_new_interval(
     old_crush_count != new_crush_count ||
     old_crush_target != new_crush_target ||
     old_crush_barrier != new_crush_barrier ||
-    old_crush_member != new_crush_member;
+    old_crush_member != new_crush_member ||
+    old_allow_ec_optimizations != new_allow_ec_optimizations;
 }
 
 bool PastIntervals::is_new_interval(
@@ -4265,6 +4268,7 @@ bool PastIntervals::is_new_interval(
 		    plast->peering_crush_bucket_target, pi->peering_crush_bucket_target,
 		    plast->peering_crush_bucket_barrier, pi->peering_crush_bucket_barrier,
 		    plast->peering_crush_mandatory_member, pi->peering_crush_mandatory_member,
+		    plast->allows_ecoptimizations(), pi->allows_ecoptimizations(),
 		    pgid);
 }
 
