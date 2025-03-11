@@ -8877,6 +8877,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "get_erasure_code failed: " << tmp.str();
         return -EINVAL;
       }
+      if ((erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS)) {
+        ss << "ec optimizations not currently supported on clay plugin.";
+        return -EINVAL;
+      }
       // Restrict the set of shards that can be a primary to the 1st data
       // raw_shard (raw_shard 0) and the coding parity raw_shards because
       // the other shards (including local parity for LRC) may not have
