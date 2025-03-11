@@ -465,6 +465,9 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("key", key, f);
   encode_json("delete_marker", delete_marker, f);
   encode_json("epoch", epoch, f);
+  ceph::real_time tp {std::chrono::nanoseconds (epoch)};
+  utime_t ut(tp);
+  encode_json("epoch_timestamp", ut, f);
   encode_json("pending_log", pending_log, f);
   encode_json("tag", tag, f);
   encode_json("exists", exists, f);
