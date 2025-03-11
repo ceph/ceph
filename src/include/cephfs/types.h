@@ -490,7 +490,7 @@ public:
     os << "unknown_md_t(len=" << payload.size() << ")";
   }
   void dump(ceph::Formatter* f) const {
-    f->dump_bool("length", payload.length());
+    f->dump_bool("length", payload.size());
   }
 
 private:
@@ -568,7 +568,9 @@ struct optmetadata_singleton {
   }
   void dump(ceph::Formatter* f) const {
     f->dump_int("kind", u64kind);
-    f->dump_object("metadata", optmetadata);
+    f->open_object_section("metadata");
+    std::visit([f](auto& o) { o.dump(f); }, optmetadata);
+    f->close_section();
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
@@ -621,7 +623,7 @@ struct optmetadata_multiton {
       for (auto& opt : opts) {
         f->dump_object("opt", opt);
       }
-    f->dump_object("opts", opts);
+    f->close_section();
   }
 
   bool has_opt(optkind_t kind) const {
@@ -1210,6 +1212,8 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->open_object_section("quota");
   quota.dump(f);
   f->close_section();
+
+  f->dump_object("optmetadata", optmetadata);
 
   f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
   f->dump_unsigned("last_scrub_version", last_scrub_version);
