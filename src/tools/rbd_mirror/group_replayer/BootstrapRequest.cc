@@ -1374,6 +1374,12 @@ template <typename I>
 int BootstrapRequest<I>::create_replayers() {
   dout(10) << dendl;
 
+  //TODO: check that the images have not changed
+  if (!m_image_replayers->empty()) {
+    dout(10) << "image replayers already exist."<< dendl;
+    return 0;
+  }
+
   std::string remote_fsid;
   librados::Rados remote_rados(m_remote_io_ctx);
   int r = remote_rados.cluster_fsid(&remote_fsid);

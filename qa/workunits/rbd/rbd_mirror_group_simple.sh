@@ -2198,7 +2198,7 @@ test_force_promote_delete_group()
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
 
   if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' 0
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}" 
   fi
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}"
@@ -2208,8 +2208,8 @@ test_force_promote_delete_group()
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
   wait_for_group_replay_stopped ${secondary_cluster} ${pool}/${group0}
   wait_for_group_replay_stopped ${primary_cluster} ${pool}/${group0}
-  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' 0
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
+  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
 
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
@@ -2220,21 +2220,21 @@ test_force_promote_delete_group()
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
 
   # group still exists on original primary
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
 
   group_image_remove ${secondary_cluster} ${pool}/${group0} ${pool}/${image_prefix}0
 
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
   test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
 
   mirror_group_enable "${secondary_cluster}" "${pool}/${group0}"
   test_fields_in_group_info ${primary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
   test_fields_in_group_info ${secondary_cluster} ${pool}/${group0} 'snapshot' 'enabled' 'true'
 
-  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' 0
-  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' 0
+  wait_for_group_status_in_pool_dir ${primary_cluster} ${pool}/${group0} 'up+stopped' "${image_count}"
+  wait_for_group_status_in_pool_dir ${secondary_cluster} ${pool}/${group0} 'up+stopped' $(("${image_count}"-1))
 
   # TODO - test normally fails on next line with missing images
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
