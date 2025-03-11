@@ -7361,7 +7361,7 @@ int BlueStore::_init_alloc()
           << ", free 0x" << alloc->get_free()
           << ", fragmentation " << alloc->get_fragmentation()
           << std::dec << dendl;
-  if (tracepoint_debug_init_alloc_done) tracepoint_debug_init_alloc_done();
+
   return 0;
 }
 
@@ -7769,19 +7769,9 @@ int BlueStore::_is_bluefs(bool create, bool* ret)
 * opens both DB and dependant super_meta, FreelistManager and allocator
 * in the proper order
 */
-int BlueStore::_open_db_and_around(
-  bool read_only,
-  bool to_repair,
-  bool apply_deferred,
-  bool remove_deferred)
+int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 {
-  dout(5) << __func__ << "read_only=" << read_only
-          << ", to_repair=" << to_repair
-          << ", deferred=" << (apply_deferred?"apply;":"noapply;")
-          << (remove_deferred?"remove":"noremove") << dendl;
-  ceph_assert(remove_deferred == false || apply_deferred == true);
-  ceph_assert(read_only == false || remove_deferred == false);
-  std::vector<std::string> keys_to_remove;
+  dout(5) << __func__ << "::NCB::read_only=" << read_only << ", to_repair=" << to_repair << dendl;
   {
     string type;
     int r = read_meta("type", &type);
@@ -7841,11 +7831,6 @@ int BlueStore::_open_db_and_around(
   if (bdev_label_multi) {
     _main_bdev_label_try_reserve();
   }
-  // This is the place where we can apply deferred writes
-  // without risk of some interaction with RocksDB allocating.
-  if (apply_deferred) {
-    _deferred_replay(remove_deferred ? &keys_to_remove : nullptr);
-  }
 
   // Re-open in the proper mode(s).
 
@@ -7861,14 +7846,6 @@ int BlueStore::_open_db_and_around(
 
   if (!read_only) {
     _post_init_alloc();
-  }
-
-  if (remove_deferred && !keys_to_remove.empty()) {
-    KeyValueDB::Transaction deferred_keys_remove_txn = db->get_transaction();
-    for (auto& s : keys_to_remove) {
-      deferred_keys_remove_txn->rmkey(PREFIX_DEFERRED, s);
-    }
-    db->submit_transaction_sync(deferred_keys_remove_txn);
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
@@ -9252,7 +9229,7 @@ int BlueStore::mount_readonly()
     }
   });
 
-  r = _deferred_replay(nullptr);
+  r = _deferred_replay();
   if (r < 0) {
     return r;
   }
@@ -9388,7 +9365,8 @@ int BlueStore::_mount()
     return -EINVAL;
   }
 
-  int r = _open_db_and_around(false, false, true, true);
+  dout(5) << __func__ << "::NCB::calling open_db_and_around(read/write)" << dendl;
+  int r = _open_db_and_around(false);
   if (r < 0) {
     return r;
   }
@@ -9425,6 +9403,11 @@ int BlueStore::_mount()
       _kv_stop();
     }
   });
+
+  r = _deferred_replay();
+  if (r < 0) {
+    return r;
+  }
 
   mempool_thread.init();
 
@@ -10781,7 +10764,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
 
   // in deep mode we need R/W write access to be able to replay deferred ops
   const bool read_only = !(repair || depth == FSCK_DEEP);
-  int r = _open_db_and_around(read_only, false, !read_only, !read_only);
+  int r = _open_db_and_around(read_only);
   if (r < 0) {
     return r;
   }
@@ -10807,6 +10790,17 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     mempool_thread.shutdown();
     _shutdown_cache();
   });
+  // we need finisher and kv_{sync,finalize}_thread *just* for replay
+  // enable in repair or deep mode modes only
+  if (!read_only) {
+    _kv_start();
+    r = _deferred_replay();
+    _kv_stop();
+  }
+
+  if (r < 0) {
+    return r;
+  }
   return _fsck_on_open(depth, repair);
 }
 
@@ -14959,7 +14953,6 @@ void BlueStore::_kv_sync_thread()
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
   std::unique_lock l{kv_lock};
   ceph_assert(!kv_sync_started);
-  ceph_assert(!db_was_opened_read_only);
   kv_sync_started = true;
   kv_cond.notify_all();
 
@@ -15126,7 +15119,7 @@ void BlueStore::_kv_sync_thread()
       auto sync_start = mono_clock::now();
 #endif
       // submit synct synchronously (block and wait for it to commit)
-      int r = cct->_conf->bluestore_debug_omit_kv_commit ?
+      int r = db_was_opened_read_only || cct->_conf->bluestore_debug_omit_kv_commit ?
 	0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
@@ -15511,7 +15504,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   }
 }
 
-int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
+int BlueStore::_deferred_replay()
 {
   dout(10) << __func__ << " start" << dendl;
   int count = 0;
@@ -15525,49 +15518,48 @@ int BlueStore::_deferred_replay(std::vector<std::string>* keys_to_remove)
       }
     );
   }
-  if (tracepoint_debug_deferred_replay_start) tracepoint_debug_deferred_replay_start();
-  IOContext ioctx(cct, nullptr);
+  CollectionRef ch = _get_collection(coll_t::meta());
+  bool fake_ch = false;
+  if (!ch) {
+    // hmm, replaying initial mkfs?
+    ch = static_cast<Collection*>(create_new_collection(coll_t::meta()).get());
+    fake_ch = true;
+  }
+  OpSequencer *osr = static_cast<OpSequencer*>(ch->osr.get());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
-  for (it->lower_bound(string()); it->valid(); /*iterator update outside*/) {
+  for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
 	     << dendl;
-    if (keys_to_remove) {
-      keys_to_remove->push_back(it->key());
-    }
-    bluestore_deferred_transaction_t deferred_txn;
+    bluestore_deferred_transaction_t *deferred_txn =
+      new bluestore_deferred_transaction_t;
     bufferlist bl = it->value();
     auto p = bl.cbegin();
     try {
-      decode(deferred_txn, p);
-
-      bool has_some = _eliminate_outdated_deferred(&deferred_txn, bluefs_extents);
-      if (has_some) {
-        if (tracepoint_debug_deferred_replay_track) tracepoint_debug_deferred_replay_track(deferred_txn);
-        for (auto& op: deferred_txn.ops) {
-          for (auto& e : op.extents) {
-            bufferlist t;
-            op.data.splice(0, e.length, &t);
-            bdev->aio_write(e.offset, t, &ioctx, false);
-          }
-        }
-      }
+      decode(*deferred_txn, p);
     } catch (ceph::buffer::error& e) {
       derr << __func__ << " failed to decode deferred txn "
 	   << pretty_binary_string(it->key()) << dendl;
+      delete deferred_txn;
       r = -EIO;
+      goto out;
     }
-    // update loop iteration here, so we can inject action
-    ++count;
-    it->next();
-    if (ioctx.num_pending.load() > 100 || !it->valid()) {
-      dout(20) << __func__ << "submitting IO batch" << dendl;
-      bdev->aio_submit(&ioctx);
-      ioctx.aio_wait();
-      dout(20) << __func__ << "wait done" << dendl;
-      ioctx.release_running_aios();
+    bool has_some = _eliminate_outdated_deferred(deferred_txn, bluefs_extents);
+    if (has_some) {
+      TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
+      txc->deferred_txn = deferred_txn;
+      txc->set_state(TransContext::STATE_KV_DONE);
+      _txc_state_proc(txc);
+    } else {
+      delete deferred_txn;
     }
   }
-  if (tracepoint_debug_deferred_replay_end) tracepoint_debug_deferred_replay_end();
+ out:
+  dout(20) << __func__ << " draining osr" << dendl;
+  _osr_register_zombie(osr);
+  _osr_drain_all();
+  if (fake_ch) {
+    new_coll_map.clear();
+  }
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
 }
