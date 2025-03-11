@@ -130,8 +130,6 @@ void create_deferred_and_terminate() {
 
   // small deferred writes over object
   // and complete overwrite of previous one
-  lgeneric_dout(g_ceph_context, 0) << "starting object IO" << dendl;
-  cout << "starting object IO" << std::endl;
   bufferlist bl_8_bytes;
   bl_8_bytes.append("abcdefgh");
   std::atomic<size_t> deferred_counter{0};
@@ -149,9 +147,7 @@ void create_deferred_and_terminate() {
     ghobject_t hoid_m(hobject_t(oid_m, "", CEPH_NOSNAP, 1, poolid, ""));
     t.write(cid, hoid_m, 4096 * o, bl_64K.length(), bl_64K);
 
-    t.register_on_commit(new C_do_action([=, &deferred_counter] {
-      lgeneric_dout(g_ceph_context, 0) << "completed id=" << o << dendl;
-      cout << "completed id=" << o << std::endl;
+    t.register_on_commit(new C_do_action([&] {
       if (++deferred_counter == object_count) {
         exit(0);
       }
