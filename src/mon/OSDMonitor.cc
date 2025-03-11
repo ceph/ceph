@@ -2198,6 +2198,9 @@ void OSDMonitor::print_nodes(Formatter *f)
       // not likely though
       continue;
     }
+    if (osdmap.is_destroyed(osd)) {
+      continue;
+    }
     osds[hostname->second].push_back(osd);
   }
 
