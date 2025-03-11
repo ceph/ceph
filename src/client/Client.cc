@@ -1320,6 +1320,11 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
   ceph_assert(dname.size() > 0);
   alternate_name = "";
 
+  if (dname == cct->_conf->client_snapdir) {
+    ldout(cct, 25) << __func__ << ": is special name" << dendl;
+    return true;
+  }
+
   if (diri.has_charmap()) {
     auto& cs = diri.get_charmap();
     ldout(cct, 25) << __func__ << ":  " << cs << dendl;
