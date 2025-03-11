@@ -183,8 +183,8 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   testlog "TEST: stop/start/restart group via admin socket"
 
   admin_daemons ${CLUSTER1} rbd mirror group stop ${POOL}/${group1}
-  wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1}
-  wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 0
+  wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1} 1
+  wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 1
 
   admin_daemons ${CLUSTER1} rbd mirror group start ${POOL}/${group1}
   wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group1} 1
@@ -257,7 +257,7 @@ start_mirrors ${CLUSTER2}
 testlog " - demote and promote same cluster"
 mirror_group_demote ${CLUSTER2} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group1} 'snapshot' 'enabled' 'false'
-wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1}
+wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1} 0
 
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+unknown' 0
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+unknown' 0
@@ -273,7 +273,7 @@ compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image1}
 testlog " - failover (unmodified)"
 mirror_group_demote ${CLUSTER2} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'false'
-wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group}
+wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group} 0
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+unknown' 0
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+unknown' 0
 mirror_group_promote ${CLUSTER1} ${POOL}/${group}
@@ -283,7 +283,7 @@ wait_for_group_replay_started ${CLUSTER2} ${POOL}/${group} 1
 testlog " - failback (unmodified)"
 mirror_group_demote ${CLUSTER1} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'false'
-wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group}
+wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group} 0
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+unknown' 0
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+unknown' 0
 mirror_group_promote ${CLUSTER2} ${POOL}/${group}
@@ -291,13 +291,13 @@ test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'tru
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 1
 mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${group}
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+stopped' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 testlog " - failover"
 mirror_group_demote ${CLUSTER2} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group1} 'snapshot' 'enabled' 'false'
-wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1}
+wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group1} 0
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+unknown' 0
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+unknown' 0
 mirror_group_promote ${CLUSTER1} ${POOL}/${group1}
@@ -305,14 +305,14 @@ test_fields_in_group_info ${CLUSTER1} ${POOL}/${group1} 'snapshot' 'enabled' 'tr
 wait_for_group_replay_started ${CLUSTER2} ${POOL}/${group1} 1
 write_image ${CLUSTER1} ${POOL} ${image1} 100
 mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER2} ${CLUSTER1} ${POOL}/${group1}
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+stopped' 1
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+replaying' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image1}
 
 testlog " - failback to cluster2"
 mirror_group_demote ${CLUSTER1} ${POOL}/${group1}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group1} 'snapshot' 'enabled' 'false'
-wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group1}
+wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group1} 0
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+unknown' 0
 wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+unknown' 0
 mirror_group_promote ${CLUSTER2} ${POOL}/${group1}
@@ -321,7 +321,7 @@ wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group1} 1
 write_image ${CLUSTER2} ${POOL} ${image1} 100
 mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${group1}
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group1} 'up+replaying' 1
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group1} 'up+stopped' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image1}
 
 testlog " - force promote cluster1"
@@ -332,10 +332,10 @@ mirror_group_promote ${CLUSTER1} ${POOL}/${group} '--force'
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 
-wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group}
-wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group}
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 0
-wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+stopped' 0
+wait_for_group_replay_stopped ${CLUSTER1} ${POOL}/${group} 1
+wait_for_group_replay_stopped ${CLUSTER2} ${POOL}/${group} 1
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 1
+wait_for_group_status_in_pool_dir ${CLUSTER2} ${POOL}/${group} 'up+stopped' 1
 write_image ${CLUSTER1} ${POOL} ${image} 100
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_group_present ${CLUSTER1} ${POOL} ${group} 1
@@ -477,7 +477,7 @@ testlog "TEST: split-brain"
 mirror_group_promote ${CLUSTER1} ${POOL}/${group} --force
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'true'
 test_fields_in_group_info ${CLUSTER2} ${POOL}/${group} 'snapshot' 'enabled' 'true'
-wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 0
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+stopped' 1
 write_image ${CLUSTER1} ${POOL} ${image} 10
 mirror_group_demote ${CLUSTER1} ${POOL}/${group}
 test_fields_in_group_info ${CLUSTER1} ${POOL}/${group} 'snapshot' 'enabled' 'false'

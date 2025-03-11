@@ -1364,6 +1364,12 @@ template <typename I>
 int BootstrapRequest<I>::create_replayers() {
   dout(10) << dendl;
 
+  //TODO: check that the images have not changed
+  if (!m_image_replayers->empty()) {
+    dout(10) << "image replayers already exist."<< dendl;
+    return 0;
+  }
+
   int r = 0;
   if (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED &&
       m_remote_mirror_group_primary) {
