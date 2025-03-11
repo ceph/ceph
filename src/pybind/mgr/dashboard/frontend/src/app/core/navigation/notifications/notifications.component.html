@@ -1,13 +1,18 @@
-<a i18n-title
-   title="Tasks and Notifications"
-   [ngClass]="{ 'running': hasRunningTasks }"
-   (click)="toggleSidebar()">
-  <svg cdsIcon="notification"
-       size="20"
-       title="notification"></svg>
-  <span class="dot"
-        *ngIf="hasNotifications">
-  </span>
-  <span class="d-md-none"
-        i18n>Tasks and Notifications</span>
+<a
+  i18n-title
+  title="Tasks and Notifications"
+  [ngClass]="{ running: hasRunningTasks }"
+  (click)="toggleSidebar()"
+  [style]="{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+    padding: '10px'
+  }"
+>
+  <svg cdsIcon="notification" size="20" title="notification" [style.pointer-events]="'none'"></svg>
+  <span class="dot" *ngIf="hasNotifications"> </span>
+  <span class="d-md-none" i18n>Tasks and Notifications</span>
 </a>
