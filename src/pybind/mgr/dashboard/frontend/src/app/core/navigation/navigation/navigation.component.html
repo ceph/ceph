@@ -33,8 +33,8 @@
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
-      <div class="cds--btn cds--btn--icon-only cds--header__action">
-        <cd-notifications (click)="toggleRightSidebar()"></cd-notifications>
+      <div class="cds--btn cds--btn--icon-only cds--header__action" (click)="toggleSidebar()">
+        <cd-notifications></cd-notifications>  
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>

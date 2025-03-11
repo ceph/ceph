@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
@@ -30,7 +31,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
   clusterTokenStatus: object = {};
   summaryData: any;
 
-  rightSidebarOpen = false; // rightSidebar only opens when width is less than 768px
   showMenuSidebar = true;
 
   simplebar = {
@@ -47,7 +47,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     cluster_connection_status?: number;
   };
   currentClusterName: string;
-
   constructor(
     private authStorageService: AuthStorageService,
     private multiClusterService: MultiClusterService,
@@ -55,6 +54,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService,
     public prometheusAlertService: PrometheusAlertService,
+    public notificationService:NotificationService,
     private cookieService: CookiesService,
     private settingsService: SettingsService
   ) {
@@ -140,10 +140,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
 
-  toggleRightSidebar() {
-    this.rightSidebarOpen = !this.rightSidebarOpen;
-  }
-
   onClusterSelection(value: object) {
     this.multiClusterService.setCluster(value).subscribe(
       (resp: any) => {
@@ -189,7 +185,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
       }
     );
   }
-
+  toggleSidebar() {
+    this.notificationService.toggleSidebar();
+  }
   trackByFn(item: any) {
     return item;
   }
