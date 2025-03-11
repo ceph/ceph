@@ -30,11 +30,16 @@ public:
   ~MirrorStatusWatcher() override;
 
   void init(Context *on_finish);
-  void remove_down_image_status(Context *on_finish);
-  void handle_remove_down_image_status(int r, Context *on_finish);
-  void remove_down_group_status(Context *on_finish);
-  void handle_remove_down_group_status(int r, Context *on_finish);
   void shut_down(Context *on_finish);
+
+private:
+  mutable ceph::mutex m_lock;
+  Context* m_on_start_finish = nullptr;
+
+  void remove_down_image_status();
+  void handle_remove_down_image_status(int r);
+  void remove_down_group_status();
+  void handle_remove_down_group_status(int r);
 
 protected:
   void handle_notify(uint64_t notify_id, uint64_t handle,
