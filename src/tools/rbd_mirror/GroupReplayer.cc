@@ -717,6 +717,7 @@ void GroupReplayer<I>::finish_start_fail(int r, const std::string &desc) {
 	  dout(10) << "mirroring group removed" << dendl;
 	} else if (r == -EREMOTEIO) {
 	  dout(10) << "mirroring group demoted" << dendl;
+	  m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN;
 	} else {
 	  derr << "start failed: " << cpp_strerror(r) << dendl;
 	  m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR;
