@@ -2,12 +2,13 @@
 # pylint: disable=too-many-return-statements,too-many-branches
 
 import errno
+import importlib
 import json
 import logging
 import os
 import threading
 import warnings
-from typing import Dict
+from typing import Dict, Optional
 from urllib import parse
 
 from mgr_module import CLIWriteCommand, HandleCommandResult
@@ -19,6 +20,12 @@ from ..services.auth import AuthType, BaseAuth, OAuth2, Saml2  # noqa
 from ..tools import prepare_url_prefix
 
 logger = logging.getLogger('sso')
+
+try:
+    jmespath = importlib.import_module('jmespath')
+    JMESPathError = getattr(jmespath.exceptions, "JMESPathError")
+except ModuleNotFoundError:
+    logger.error("Module 'jmespath' is not installed.")
 
 try:
     from onelogin.saml2.errors import OneLogin_Saml2_Error as Saml2Error
@@ -88,8 +95,14 @@ def load_sso_db():
 
 
 @CLIWriteCommand("dashboard sso enable oauth2")
-def enable_sso(_):
+def enable_sso(_, roles_path: Optional[str] = None):
     mgr.SSO_DB.protocol = AuthType.OAUTH2
+    if jmespath and roles_path:
+        try:
+            jmespath.compile(roles_path)
+            mgr.SSO_DB.config.roles_path = roles_path
+        except (JMESPathError, SyntaxError):
+            return HandleCommandResult(stdout='Syntax invalid for "roles_path"')
     mgr.SSO_DB.save()
     mgr.set_module_option('sso_oauth2', True)
     return HandleCommandResult(stdout='SSO is "enabled" with "OAuth2" protocol.')
