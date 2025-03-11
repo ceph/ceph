@@ -800,7 +800,7 @@ test_remote_namespace()
   mirror_group_demote "${primary_cluster}" "${primary_pool_spec}/${group}"
   test_fields_in_group_info "${primary_cluster}" "${primary_pool_spec}/${group}" 'snapshot' 'enabled' 'false'
   wait_for_group_replay_stopped "${secondary_cluster}" "${secondary_pool_spec}/${group}"
-  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${secondary_pool_spec}/${group}" 'up+stopped' 0
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${secondary_pool_spec}/${group}" 'up+unknown' 0
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${primary_pool_spec}/${group}" 'down+unknown' 0
   mirror_group_promote "${secondary_cluster}" "${secondary_pool_spec}/${group}"
   test_fields_in_group_info "${secondary_cluster}" "${secondary_pool_spec}/${group}" 'snapshot' 'enabled' 'true'
