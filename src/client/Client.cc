@@ -12257,8 +12257,8 @@ int Client::_getcwd(string& dir, const UserPerm& perms)
   filepath path;
   ldout(cct, 10) << __func__ << " " << *cwd << dendl;
 
-  Inode *in = cwd.get();
-  while (in != root.get()) {
+  auto in = cwd;
+  while (in != root) {
     ceph_assert(in->dentries.size() < 2); // dirs can't be hard-linked
 
     // A cwd or ancester is unlinked
@@ -12282,11 +12282,14 @@ int Client::_getcwd(string& dir, const UserPerm& perms)
 
       // start over
       path = filepath();
-      in = cwd.get();
+      in = cwd;
       continue;
     }
-    path.push_front_dentry(dn->name);
-    in = dn->dir->parent_inode;
+    auto* diri = dn->dir->parent_inode;
+    ceph_assert(diri);
+    auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
+    path.push_front_dentry(dname);
+    in = InodeRef(diri);
   }
   dir = "/";
   dir += path.get_path();
