@@ -12137,19 +12137,30 @@ bool Server::build_snap_diff(
 	continue;
       } else {
 	if (before.dn && dn->get_name() == name_before) {
-	  if (mtime == before.mtime) {
-	    dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-	      << dn->first << "/" << dn->last
-	      << " " << mtime
-	      << dendl;
+	  if (before.in->ino() != in->ino()) {
+	    dout(30) << __func__ << " inode changed " << dn->get_name() << " "
+		     << dn->first << "/" << dn->last
+		     << " " << before.mtime << " vs. " << mtime
+		     << dendl;
+	    if (!insert_deleted(before)) {
+	      break;
+	    }
 	    before.reset();
-	    continue;
 	  } else {
-	    dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
-	      << dn->first << "/" << dn->last
-	      << " " << before.mtime << " vs. " << mtime
-	      << dendl;
-	    before.reset();
+	    if (mtime == before.mtime) {
+	      dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
+		       << dn->first << "/" << dn->last
+		       << " " << mtime
+		       << dendl;
+	      before.reset();
+	      continue;
+	    } else {
+	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
+		       << dn->first << "/" << dn->last
+		       << " " << before.mtime << " vs. " << mtime
+		       << dendl;
+	      before.reset();
+	    }
 	  }
 	}
 	dout(20) << __func__ << " new file " << dn->get_name() << " "
