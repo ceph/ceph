@@ -716,10 +716,12 @@ void ImageReplayer<I>::handle_update_mirror_image_replay_status(int r) {
   auto ctx = new LambdaContext([this](int) {
       update_mirror_image_status(false, boost::none);
 
-      std::unique_lock locker{m_lock};
-      std::unique_lock timer_locker{m_threads->timer_lock};
+      {
+	std::unique_lock locker{m_lock};
+	std::unique_lock timer_locker{m_threads->timer_lock};
 
-      schedule_update_mirror_image_replay_status();
+	schedule_update_mirror_image_replay_status();
+      }
       m_in_flight_op_tracker.finish_op();
     });
 
