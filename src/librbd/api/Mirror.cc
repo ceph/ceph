@@ -572,9 +572,8 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     }
   };
 
-  std::unique_lock image_locker{ictx->image_lock};
-  std::map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
-  for (auto &info : snap_info) {
+  std::shared_lock image_locker{ictx->image_lock};
+  for (const auto& info : ictx->snap_info) {
     cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
                                           ictx->md_ctx.get_namespace(),
                                           ictx->id, info.first};
