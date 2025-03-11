@@ -22,6 +22,8 @@
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "driver/dbstore/common/dbstore.h"
+#include "rgw_sal_dbstore.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -1867,6 +1869,20 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
 
+  int ret = -1;
+  const static std::string tenant = "default_ns";
+  const auto& db_path = g_conf().get_val<std::string>("dbstore_db_dir");
+  const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
+  auto db_full_path = std::filesystem::path(db_path) / db_name;
+
+  userDB = new POSIXUserDB(db_full_path.string(), cct); 
+
+  if ((ret = userDB->Initialize("", -1)) < 0) {
+    ldout(cct, 0) << "User DB initialization failed for tenant("<<tenant<<")" << dendl;
+    delete userDB;
+    return ret;
+  }
+
   base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
 
   ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
@@ -1882,7 +1898,7 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count")));
 
   root_dir = std::make_unique<Directory>(base_path, nullptr, ctx());
-  int ret = root_dir->open(dpp);
+  ret = root_dir->open(dpp);
   if (ret < 0) {
     if (ret == -ENOTDIR) {
       ldpp_dout(dpp, 0) << " ERROR: base path (" << base_path
@@ -1905,51 +1921,60 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
 std::unique_ptr<User> POSIXDriver::get_user(const rgw_user &u)
 {
-  std::unique_ptr<User> user = next->get_user(u);
-
-  return std::make_unique<POSIXUser>(std::move(user), this);
+  return std::make_unique<POSIXUser>(this, u);
 }
 
 int POSIXDriver::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
 {
-  std::unique_ptr<User> nu;
-  int ret;
+  RGWUserInfo uinfo;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv_tracker;
 
-  ret = next->get_user_by_access_key(dpp, key, y, &nu);
-  if (ret != 0)
+  int ret = userDB->get_user(dpp, std::string("access_key"), key, uinfo, &attrs,
+      &objv_tracker);
+
+  if (ret < 0)
     return ret;
 
-  User* u = new POSIXUser(std::move(nu), this);
+  User* u = new POSIXUser(this, uinfo);
+
+  if (!u)
+    return -ENOMEM;
+
+  u->get_attrs() = std::move(attrs);
+  u->get_version_tracker() = objv_tracker;
   user->reset(u);
   return 0;
 }
 
 int POSIXDriver::get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
 {
-  std::unique_ptr<User> nu;
-  int ret;
 
-  ret = next->get_user_by_email(dpp, email, y, &nu);
-  if (ret != 0)
+  RGWUserInfo uinfo;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv_tracker;
+
+  int ret = userDB->get_user(dpp, std::string("email"), email, uinfo, &attrs,
+      &objv_tracker);
+
+  if (ret < 0)
     return ret;
 
-  User* u = new POSIXUser(std::move(nu), this);
+  User* u = new POSIXUser(this, uinfo);
+
+  if (!u)
+    return -ENOMEM;
+
+  u->get_attrs() = std::move(attrs);
+  u->get_version_tracker() = objv_tracker;
   user->reset(u);
   return 0;
 }
 
 int POSIXDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
 {
-  std::unique_ptr<User> nu;
-  int ret;
-
-  ret = next->get_user_by_swift(dpp, user_str, y, &nu);
-  if (ret != 0)
-    return ret;
-
-  User* u = new POSIXUser(std::move(nu), this);
-  user->reset(u);
-  return 0;
+  /* Swift keys and subusers are not supported by DBStore for now */
+  return -ENOTSUP;
 }
 
 std::unique_ptr<Object> POSIXDriver::get_object(const rgw_obj_key& k)
@@ -2172,28 +2197,41 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 
 int POSIXUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->read_attrs(dpp, y);
+  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+        &(this->get_version_tracker()));
 }
 
 int POSIXUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				      Attrs& new_attrs, optional_yield y)
 {
-  return next->merge_and_store_attrs(dpp, new_attrs, y);
+  auto attrs = this->get_attrs();
+  for(auto& it : new_attrs) {
+	attrs[it.first] = it.second;
+  }
+
+  return store_user(dpp, y, false);
 }
 
 int POSIXUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->load_user(dpp, y);
+  return driver->get_user_db()->get_user(dpp, std::string("user_id"), this->get_id().id, this->get_info(), &(this->get_attrs()),
+           &(this->get_version_tracker()));
 }
 
 int POSIXUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
-  return next->store_user(dpp, y, exclusive, old_info);
+  return driver->get_user_db()->store_user(dpp, this->get_info(), exclusive, &(this->get_attrs()), &(this->get_version_tracker()), old_info);
 }
 
 int POSIXUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->remove_user(dpp, y);
+  return driver->get_user_db()->remove_user(dpp, this->get_info(), &(this->get_version_tracker()));
+}
+
+int POSIXUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider *dpp, optional_yield y)
+{
+  *verified = false;
+  return 0;
 }
 
 std::unique_ptr<Object> POSIXBucket::get_object(const rgw_obj_key& k)
