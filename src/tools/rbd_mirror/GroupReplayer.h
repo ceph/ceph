@@ -50,9 +50,7 @@ public:
                              threads, instance_watcher, local_status_updater,
                              cache_manager_handler, pool_meta_cache);
   }
-  void destroy() {
-    delete this;
-  }
+  void destroy();
 
   GroupReplayer(librados::IoCtx &local_io_ctx,
                 const std::string &local_mirror_uuid,
@@ -201,8 +199,9 @@ private:
   std::string m_local_group_id;
   std::string m_remote_group_id;
 
+  bool m_destroy_replayers = false;
+
   mutable ceph::mutex m_lock;
-  AsyncOpTracker m_async_op_tracker;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
   cls::rbd::MirrorGroupStatusState m_status_state;
@@ -221,6 +220,9 @@ private:
   bool m_status_removed = false;
 
   AdminSocketHook *m_asok_hook = nullptr;
+
+  AsyncOpTracker m_in_flight_op_tracker;
+  Context* m_replayer_check_task = nullptr;
 
   group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
   group_replayer::Replayer<ImageCtxT> *m_replayer = nullptr;
@@ -266,6 +268,11 @@ private:
 
   void start_image_replayers();
   void handle_start_image_replayers(int r);
+
+  void check_image_replayers_running();
+  void schedule_image_replayers_check();
+  void handle_image_replayers_check(int r);
+  void cancel_image_replayers_check();
 
   bool finish_start_if_interrupted();
   bool finish_start_if_interrupted(ceph::mutex &lock);
