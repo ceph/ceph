@@ -220,7 +220,7 @@ class bitset_set {
     // This is not an off-by-one error. Conventionally this would have length
     // - 1, but the logic below is simpler with it as follows.
     unsigned end_word = (int(start) + length) / bits_per_uint64_t;
-    ceph_assert(0 <= end_word && end_word < word_count + 1);
+    ceph_assert(end_word < word_count + 1);
 
     if (start_word == end_word) {
       words[start_word] &=
