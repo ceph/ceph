@@ -3,6 +3,7 @@
 #include <boost/asio/io_context.hpp>
 #include <iostream>
 #include <vector>
+#include <boost/heap/policies.hpp>
 
 #include "common/Formatter.h"
 #include "common/Thread.h"
@@ -185,9 +186,12 @@ po::options_description get_options_description() {
       "allow_pool_balancer", "Enables pool balancing. Disabled by default.")(
       "allow_pool_deep_scrubbing",
       "Enables pool deep scrub. Disabled by default.")(
-      "allow_pool_scrubbing", "Enables pool scrubbing. Disabled by default.")
-      ("disable_pool_ec_optimizations",
-        "Disables EC optimizations. Enabled by default.");
+      "allow_pool_scrubbing", "Enables pool scrubbing. Disabled by default.")(
+      "disable_pool_ec_optimizations",
+      "Disables EC optimizations. Enabled by default.")(
+      "allow_unstable_pool_configs",
+      "Permits pool configs that are known to be unstable. This option "
+      " may be removed. at a later date. Disabled by default if ec optimized");
 
   return desc;
 }
@@ -275,22 +279,28 @@ ceph::io_sequence::tester::SelectErasureTechnique::SelectErasureTechnique(
     : ProgramOptionGeneratedSelector<std::string>(rng, vm, "technique",
                                                   first_use),
       rng(rng),
-      plugin(plugin) {}
+      plugin(plugin),
+      stable(!vm.contains("allow_unstable_pool_configs") ||
+        vm.contains("disable_pool_ec_optimizations")) {}
 
 const std::vector<std::string>
 ceph::io_sequence::tester::SelectErasureTechnique::generate_selections() {
   std::vector<std::string> techniques = {};
   if (plugin == "jerasure") {
     techniques.push_back("reed_sol_van");
-    techniques.push_back("reed_sol_r6_op");
-    techniques.push_back("cauchy_orig");
-    techniques.push_back("cauchy_good");
-    techniques.push_back("liberation");
-    techniques.push_back("blaum_roth");
-    techniques.push_back("liber8tion");
+    if (!stable) {
+      techniques.push_back("reed_sol_r6_op");
+      techniques.push_back("cauchy_orig");
+      techniques.push_back("cauchy_good");
+      techniques.push_back("liberation");
+      techniques.push_back("blaum_roth");
+      techniques.push_back("liber8tion");
+    }
   } else if (plugin == "isa") {
     techniques.push_back("reed_sol_van");
-    techniques.push_back("cauchy");
+    if (!stable) {
+      techniques.push_back("cauchy");
+    }
   } else if (plugin == "shec") {
     techniques.push_back("single");
     techniques.push_back("multiple");
