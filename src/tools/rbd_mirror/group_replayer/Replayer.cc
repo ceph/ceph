@@ -321,8 +321,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
       break;
     }
-    // this is primary, IDLE the group replayer
-    m_state = STATE_IDLE;
+    m_state = STATE_COMPLETE;
     notify_group_listener_stop();
     return;
   }
