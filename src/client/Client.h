@@ -343,10 +343,9 @@ public:
   // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
-  // crap
-  int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
-  void _getcwd(std::string& cwd, const UserPerm& perms);
-  void getcwd(std::string& cwd, const UserPerm& perms);
+  int chdir(const char *path, const UserPerm& perms);
+  int _getcwd(std::string& cwd, const UserPerm& perms);
+  int getcwd(std::string& cwd, const UserPerm& perms);
 
   // namespace ops
   int opendir(const char *name, dir_result_t **dirpp, const UserPerm& perms);

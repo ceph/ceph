@@ -322,7 +322,7 @@ public:
 
   int chdir(const char *to, const UserPerm& perms)
   {
-    return client->chdir(to, cwd, perms);
+    return client->chdir(to, perms);
   }
 
   CephContext *get_ceph_context() const {
