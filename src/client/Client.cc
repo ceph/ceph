@@ -12226,10 +12226,7 @@ int Client::statxat(int dirfd, const char *relpath,
   return r;
 }
 
-// not written yet, but i want to link!
-
-int Client::chdir(const char *relpath, std::string &new_cwd,
-		  const UserPerm& perms)
+int Client::chdir(const char *relpath, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -12245,18 +12242,17 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
     return rc;
   }
 
-  if (!(in.get()->is_dir()))
+  if (!in->is_dir())
     return -ENOTDIR;
 
-  if (cwd != in)
-    cwd.swap(in);
+  cwd = std::move(in);
+
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
 
-  _getcwd(new_cwd, perms);
   return 0;
 }
 
-void Client::_getcwd(string& dir, const UserPerm& perms)
+int Client::_getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
   ldout(cct, 10) << __func__ << " " << *cwd << dendl;
@@ -12267,7 +12263,7 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 
     // A cwd or ancester is unlinked
     if (in->dentries.empty()) {
-      return;
+      return -ENOENT;
     }
 
     Dentry *dn = in->get_first_parent();
@@ -12294,17 +12290,17 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
   }
   dir = "/";
   dir += path.get_path();
+  return 0;
 }
 
-void Client::getcwd(string& dir, const UserPerm& perms)
+int Client::getcwd(string& dir, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
-    return;
+    return -ENOTCONN;
 
   std::scoped_lock l(client_lock);
-
-  _getcwd(dir, perms);
+  return _getcwd(dir, perms);
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf,
