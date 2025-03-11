@@ -295,12 +295,11 @@ class CephFSMount(object):
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
         
         # Setup the NAT
-        p = self.client_remote.run(args=['route'], stderr=StringIO(),
-                                   stdout=StringIO(), timeout=(5*60))
-        p = re.findall(r'default .*', p.stdout.getvalue())
-        if p == False:
+        routes = self.client_remote.sh('ip r', timeout=(5*60))
+        defaults = re.findall(r'^default .*', routes)
+        if defaults == False:
             raise RuntimeError("No default gw found")
-        gw = p[0].split()[7]
+        gw = defaults[0].split()[4]
 
         self.run_shell_payload(f"""
             set -e
@@ -440,12 +439,12 @@ class CephFSMount(object):
         ip = IP(self.ceph_brx_net)[-2]
         mask = self.ceph_brx_net.split('/')[1]
 
-        p = self.client_remote.run(args=['route'], stderr=StringIO(),
-                                   stdout=StringIO(), timeout=(5*60))
-        p = re.findall(r'default .*', p.stdout.getvalue())
-        if p == False:
+        routes = self.client_remote.sh('ip r', timeout=(5*60))
+        defaults = re.findall(r'^default .*', routes)
+        if defaults == False:
             raise RuntimeError("No default gw found")
-        gw = p[0].split()[7]
+        gw = defaults[0].split()[4]
+
         self.run_shell_payload(f"""
             set -e
             sudo iptables -D FORWARD -o {gw} -i ceph-brx -j ACCEPT
