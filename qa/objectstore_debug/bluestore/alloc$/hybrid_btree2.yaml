@@ -1,6 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        bluestore allocator: hybrid_btree2
-
