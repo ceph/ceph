@@ -194,12 +194,12 @@ class Role(object):
                     r_dict['scopes_permissions'])
 
     @classmethod
-    def map_to_system_roles(cls, roles) -> List['Role']:
+    def map_to_system_roles(cls, roles: List[str]) -> List['Role']:
         matches = []
-        for rn in SYSTEM_ROLES_NAMES:
+        for sys_role in ROLE_MAPPER:
             for role in roles:
-                if role in SYSTEM_ROLES_NAMES[rn]:
-                    matches.append(rn)
+                if role in ROLE_MAPPER[sys_role]:
+                    matches.append(sys_role)
         return matches
 
 
@@ -304,9 +304,16 @@ SYSTEM_ROLES = {
 }
 
 # static name-like roles list for role mapping
-SYSTEM_ROLES_NAMES = {
+ROLE_MAPPER = {
     ADMIN_ROLE: [ADMIN_ROLE.name, 'admin'],
-    READ_ONLY_ROLE: [READ_ONLY_ROLE.name, 'read', 'guest', 'monitor']
+    READ_ONLY_ROLE: [READ_ONLY_ROLE.name, 'read', 'guest', 'monitor'],
+    BLOCK_MGR_ROLE: [BLOCK_MGR_ROLE.name, 'block', 'rbd'],
+    RGW_MGR_ROLE: [RGW_MGR_ROLE.name, 'object', 'rgw'],
+    CLUSTER_MGR_ROLE: [CLUSTER_MGR_ROLE.name, 'cluster'],
+    POOL_MGR_ROLE: [POOL_MGR_ROLE.name, 'pool'],
+    CEPHFS_MGR_ROLE: [CEPHFS_MGR_ROLE.name, 'cephfs'],
+    GANESHA_MGR_ROLE: [GANESHA_MGR_ROLE.name, 'ganesha', 'nfs'],
+    SMB_MGR_ROLE: [SMB_MGR_ROLE.name, 'smb']
 }
 
 
