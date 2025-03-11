@@ -562,6 +562,55 @@ TEST(LibCephFS, ManyNestedDirs) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, ManyNestedDirsCaseInsensitive) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  static const char many_path[] = "/ManyNestedDirsCaseInsensitive/A/a/a/a/a/b/B/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/Aa";
+  const filepath mfp = filepath(many_path);
+  ASSERT_EQ(0, ceph_mkdir(cmount, mfp[0].c_str(), 0755));
+  ASSERT_EQ(0, ceph_setxattr(cmount, mfp[0].c_str(), "ceph.dir.casesensitive", (void *) "0", 1, XATTR_CREATE));
+  ASSERT_EQ(ceph_mkdirs(cmount, many_path, 0755), 0);
+
+  for (auto& component : mfp) {
+    struct ceph_dir_result *dirp;
+    ASSERT_EQ(ceph_opendir(cmount, ".", &dirp), 0);
+    struct dirent *dent = ceph_readdir(cmount, dirp);
+    ASSERT_TRUE(dent != NULL);
+    ASSERT_STREQ(dent->d_name, ".");
+    dent = ceph_readdir(cmount, dirp);
+    ASSERT_TRUE(dent != NULL);
+    ASSERT_STREQ(dent->d_name, "..");
+    if (component == "ManyNestedDirsCaseInsensitive"sv) {
+      ASSERT_EQ(0, ceph_chdir(cmount, component.c_str()));
+      continue;
+    }
+    dent = ceph_readdir(cmount, dirp);
+    ASSERT_TRUE(dent != NULL);
+    ASSERT_STREQ(component.c_str(), dent->d_name);
+    ASSERT_EQ(ceph_chdir(cmount, dent->d_name), 0);
+    ASSERT_EQ(ceph_closedir(cmount, dirp), 0);
+  }
+
+  {
+    auto* cwd = ceph_getcwd(cmount);
+    ASSERT_STREQ(cwd, many_path);
+  }
+
+  for (auto it = mfp.rbegin(); it != mfp.rend(); ++it) {
+    auto& component = *it;
+    ASSERT_EQ(ceph_chdir(cmount, ".."), 0);
+    ASSERT_EQ(ceph_rmdir(cmount, component.c_str()), 0);
+  }
+
+  ASSERT_STREQ(ceph_getcwd(cmount), "/");
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Xattrs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
