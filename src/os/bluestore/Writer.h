@@ -107,7 +107,7 @@ private:
   inline void _schedule_io_masked(
     uint64_t disk_offset,
     bufferlist data,
-    bluestore_blob_t::unused_t mask,
+    uint64_t mask,
     uint32_t chunk_size);
 
   inline void _schedule_io(
