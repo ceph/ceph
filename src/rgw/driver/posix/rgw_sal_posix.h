@@ -20,6 +20,7 @@
 #include <memory>
 #include "common/dout.h"
 #include "bucket_cache.h"
+#include "posixDB.h"
 
 namespace rgw { namespace sal {
 
@@ -350,7 +351,7 @@ std::string get_key_fname(rgw_obj_key& key, bool use_version);
 
 class POSIXDriver : public FilterDriver {
 protected:
-
+  rgw::store::POSIXUserDB* userDB;
   std::unique_ptr<BucketCache> bucket_cache;
   std::string base_path;
   std::unique_ptr<Directory> root_dir;
@@ -421,6 +422,7 @@ public:
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
+  rgw::store::POSIXUserDB* get_user_db() { return userDB; }
   Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   BucketCache* get_bucket_cache() { return bucket_cache.get(); }
@@ -432,25 +434,40 @@ public:
 
 };
 
-class POSIXUser : public FilterUser {
+class POSIXUser : public StoreUser {
 private:
   POSIXDriver* driver;
 
 public:
-  POSIXUser(std::unique_ptr<User> _next, POSIXDriver* _driver) :
-    FilterUser(std::move(_next)),
-    driver(_driver) {}
+  POSIXUser(POSIXDriver* _driver) :
+    StoreUser(), driver(_driver) {}
+  POSIXUser(POSIXDriver* _driver, const rgw_user& _u) :
+    StoreUser(_u), driver(_driver) {}
+  POSIXUser(POSIXDriver* _driver, const RGWUserInfo& _info) :
+    StoreUser(_info), driver(_driver) {}
   virtual ~POSIXUser() = default;
 
-  virtual Attrs& get_attrs() override { return next->get_attrs(); }
-  virtual void set_attrs(Attrs& _attrs) override { next->set_attrs(_attrs); }
+  virtual std::unique_ptr<User> clone() override {
+    return std::unique_ptr<User>(new POSIXUser(*this));
+  }
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs&
 				    new_attrs, optional_yield y) override;
+  virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
+                         uint64_t end_epoch, uint32_t max_entries,
+                         bool* is_truncated, RGWUsageIter& usage_iter,
+                         std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override { return 0; }
+  virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
+                         uint64_t end_epoch, optional_yield y) override { return 0; }
   virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool
 			 exclusive, RGWUserInfo* old_info = nullptr) override;
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int verify_mfa(const std::string& mfa_str, bool* verified,
+                         const DoutPrefixProvider* dpp, optional_yield y) override;
+  int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                  std::string_view marker, uint32_t max_items,
+                  GroupList& listing) override { return -ENOTSUP; }
 };
 
 class POSIXBucket : public StoreBucket {
