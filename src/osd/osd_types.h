@@ -3462,6 +3462,8 @@ public:
     uint32_t new_crush_barrier,
     int32_t old_crush_member,
     int32_t new_crush_member,
+    bool old_allow_ec_optimizations,
+    bool new_allow_ec_optimizations,
     pg_t pgid
     );
 
