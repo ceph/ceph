@@ -219,10 +219,24 @@ GroupReplayer<I>::~GroupReplayer() {
   unregister_admin_socket_hook();
   ceph_assert(m_on_start_finish == nullptr);
   ceph_assert(m_bootstrap_request == nullptr);
-  ceph_assert(m_bootstrap_request == nullptr);
   ceph_assert(m_replayer == nullptr);
   ceph_assert(m_image_replayers.empty());
   ceph_assert(m_on_stop_contexts.empty());
+  ceph_assert(m_replayer_check_task == nullptr);
+}
+
+template <typename I>
+void GroupReplayer<I>::destroy() {
+  {
+    std::lock_guard locker{m_lock};
+
+    for (auto &it : m_image_replayers) {
+      ceph_assert(it.second->is_stopped());
+      it.second->destroy();
+    }
+    m_image_replayers.clear();
+  }
+  delete this;
 }
 
 template <typename I>
@@ -321,9 +335,13 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
       m_last_r = 0;
       m_state_desc.clear();
       m_local_group_snaps.clear();
+      ceph_assert(m_replayer_check_task == nullptr);
       ceph_assert(m_replayer == nullptr);
-      ceph_assert(m_image_replayers.empty());
-      m_image_replayers.clear();
+      if (m_destroy_replayers) {
+        ceph_assert(m_image_replayers.empty());
+      }
+      m_destroy_replayers = false;
+  //  FIXME: replayer index is not used
       m_image_replayer_index.clear();
       m_manual_stop = false;
       m_finished = false;
@@ -463,12 +481,13 @@ void GroupReplayer<I>::print_status(Formatter *f) {
     state = STATE_STOPPED;
   }
   f->dump_string("state", state_to_string(state));
-// TODO: remove the image_replayers section
+/*
   f->open_array_section("image_replayers");
   for (auto &[_, image_replayer] : m_image_replayers) {
     image_replayer->print_status(f);
   }
   f->close_section(); // image_replayers
+*/
   f->close_section(); // group_replayer
 }
 
@@ -489,6 +508,7 @@ void GroupReplayer<I>::on_stop_replay(int r, const std::string &desc)
     m_state_desc = "";
   }
 
+  cancel_image_replayers_check();
   shut_down(r);
 }
 
@@ -514,7 +534,6 @@ void GroupReplayer<I>::bootstrap_group() {
   }
 
   ceph_assert(m_replayer == nullptr);
-  ceph_assert(m_image_replayers.empty());
 
   auto ctx = create_context_callback<
       GroupReplayer,
@@ -561,12 +580,17 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     reregister_admin_socket_hook();
   }
 
+//FIXME : Relook at this once the Bootstrap no longer reuses values.
+// Since a rerun may end up with variables populated by a previous run,
+// it is safer to destroy the image_replayers now.
+  m_destroy_replayers = true;
   if (finish_start_if_interrupted()) {
     return;
   } else if (r == -ENOENT) {
     finish_start_fail(r, "group removed");
     return;
   } else if (r == -EREMOTEIO) {
+    m_destroy_replayers = true;
     finish_start_fail(r, "remote group is non-primary");
     return;
   } else if (r == -EEXIST) {
@@ -577,21 +601,23 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     return;
   }
 
+  // Start the image replayers in case the group is primary
+  // in order to have the mirror pool health status set to ok.
+  m_destroy_replayers = false;
+
+/*
   if (m_local_group_ctx.primary) { // XXXMG
     set_mirror_group_status_update(
        cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED,
        "local group is primary");
     finish_start_fail(0, "local group is primary");
     return;
-  } else if (m_remote_group_id.empty()) { // m_remote_group_id matter for
-                                          // secondary cluster case.
-    finish_start_fail(-EINVAL, "remote is not ready yet");
-    return;
   }
-
+*/
   m_local_group_ctx.listener = &m_listener;
 
-  create_group_replayer();
+  // Start the image replayers first
+  start_image_replayers();
 }
 
 template <typename I>
@@ -623,7 +649,23 @@ void GroupReplayer<I>::handle_create_group_replayer(int r) {
     return;
   }
 
-  start_image_replayers();
+  Context *on_finish = nullptr;
+  {
+    std::unique_lock locker{m_lock};
+    ceph_assert(m_state == STATE_STARTING);
+    m_state = STATE_REPLAYING;
+    std::swap(m_on_start_finish, on_finish);
+
+    std::unique_lock timer_locker{m_threads->timer_lock};
+    schedule_image_replayers_check();
+  }
+
+  set_mirror_group_status_update(
+     cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING, "replaying");
+
+  if (on_finish) {
+    on_finish->complete(0);
+  }
 }
 
 // TODO: Move this to group_replayer::Replayer?
@@ -664,19 +706,90 @@ void GroupReplayer<I>::handle_start_image_replayers(int r) {
     return;
   }
 
-  Context *on_finish = nullptr;
+  create_group_replayer();
+}
+
+template <typename I>
+void GroupReplayer<I>::check_image_replayers_running() {
+  dout(10) << dendl;
+  bool stopped = false;
   {
-    std::unique_lock locker{m_lock};
-    ceph_assert(m_state == STATE_STARTING);
-    m_state = STATE_REPLAYING;
-    std::swap(m_on_start_finish, on_finish);
+    std::lock_guard locker{m_lock};
+    if (m_state == STATE_STOPPING || m_state == STATE_STOPPED) {
+      dout(10) << "stopping" <<dendl;
+      return;
+    }
+
+    for (auto &it : m_image_replayers) {
+      if (it.second->is_stopped()) {
+	dout(10) << "image replayer stopped for global_id : "
+                 << it.second->get_global_image_id() <<  dendl;
+        stopped = true;
+        break;
+      }
+    }
   }
 
-  set_mirror_group_status_update(
-     cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING, "replaying");
+  if (stopped) {
+    // shut down
+    dout(10) << " stopping group replayer" << dendl;
+    //TODO: determine the error
+    on_stop_replay();
+    return;
+  }
+}
 
-  if(on_finish) {
-    on_finish->complete(0);
+template <typename I>
+void GroupReplayer<I>::schedule_image_replayers_check() {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+
+  if (m_state != STATE_REPLAYING) {
+    return;
+  }
+
+  dout(10) << dendl;
+
+  ceph_assert(m_replayer_check_task == nullptr);
+  m_replayer_check_task = create_context_callback<
+    GroupReplayer<I>,
+    &GroupReplayer<I>::handle_image_replayers_check>(this);
+  m_threads->timer->add_event_after(10, m_replayer_check_task);
+}
+
+template <typename I>
+void GroupReplayer<I>::handle_image_replayers_check(int r) {
+  dout(10) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+
+  ceph_assert(m_replayer_check_task != nullptr);
+  m_replayer_check_task = nullptr;
+
+  auto ctx = new LambdaContext([this](int) {
+    check_image_replayers_running();
+    {
+      std::unique_lock locker{m_lock};
+      std::unique_lock timer_locker{m_threads->timer_lock};
+
+      schedule_image_replayers_check();
+    }
+    m_in_flight_op_tracker.finish_op();
+  });
+
+  m_in_flight_op_tracker.start_op();
+  m_threads->work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+void GroupReplayer<I>::cancel_image_replayers_check() {
+  std::unique_lock timer_locker{m_threads->timer_lock};
+  if (m_replayer_check_task != nullptr) {
+    dout(10) << dendl;
+
+    if (m_threads->timer->cancel_event(m_replayer_check_task)) {
+      m_replayer_check_task = nullptr;
+    }
   }
 }
 
@@ -739,6 +852,14 @@ void GroupReplayer<I>::shut_down(int r) {
     ceph_assert(m_state == STATE_STOPPING);
   }
 
+  if (!m_in_flight_op_tracker.empty()) {
+    dout(15) << "waiting for in-flight operations to complete" << dendl;
+    m_in_flight_op_tracker.wait_for_ops(new LambdaContext([this, r](int) {
+        shut_down(r);
+      }));
+    return;
+  }
+
   // chain the shut down sequence (reverse order)
   Context *ctx = new LambdaContext(
     [this, r](int _r) {
@@ -747,19 +868,20 @@ void GroupReplayer<I>::shut_down(int r) {
     });
 
   // stop and destroy the replayers
-  ctx = new LambdaContext([this, ctx](int r) {
-    {
-      std::lock_guard locker{m_lock};
+  if (m_destroy_replayers) {
+    ctx = new LambdaContext([this, ctx](int r) {
+      {
+	std::lock_guard locker{m_lock};
 
-      for (auto &it : m_image_replayers) {
-	ceph_assert(it.second->is_stopped());
-	it.second->destroy();
+	for (auto &it : m_image_replayers) {
+	  ceph_assert(it.second->is_stopped());
+	  it.second->destroy();
+	}
+	m_image_replayers.clear();
       }
-      m_image_replayers.clear();
-    }
-    ctx->complete(0);
-  });
-
+      ctx->complete(0);
+    });
+  }
   ctx = new LambdaContext([this, ctx](int r) {
     C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
     {

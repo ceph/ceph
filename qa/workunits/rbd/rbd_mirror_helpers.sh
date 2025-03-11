@@ -2619,7 +2619,7 @@ wait_for_group_replay_state()
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
         sleep ${s}
         if [ 'true' = "${asok_query}" ]; then
-            test_group_replay_state "${cluster}" "${group_spec}" "${state}" "${image_count}" && return 0
+            test_group_replay_state "${cluster}" "${group_spec}" "${state}" && return 0
         else
             test_group_replay_state_cli "${cluster}" "${group_spec}" "${state}" "${image_count}" && return 0
         fi
@@ -2643,11 +2643,13 @@ wait_for_group_replay_stopped()
 {
     local cluster=$1
     local group_spec=$2
+    local image_count=$3
 
-    # Image_count will be 0 if the group is stopped
-    # Query the state via daemon socket and also via the cli to confirm that they agree
+    # Image_count will be 0 if the group is stopped except when the group is primary
+    # Query the state via daemon socket and also via the cli.
+    # The admin socket status does not include image information
     wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0 'true'
-    wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' 0 'false'
+    wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' "${image_count}" 'false'
 }
 
 get_newest_group_snapshot_id()
