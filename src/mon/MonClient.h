@@ -385,7 +385,8 @@ public:
 
   void add_connection(const entity_addrvec_t addr, std::unique_ptr<MonConnection> mc) {
     if (aux_list.find(addr) == aux_list.end()) {
-      aux_list.emplace(addr, AuxConnection(mc->get_mon_name(), std::move(mc)));
+      auto name = mc->get_mon_name();
+      aux_list.emplace(addr, AuxConnection(name, std::move(mc)));
     }
   }
 
