@@ -188,6 +188,12 @@ public:
     auto file_path = make_file_path(relpath);
     return ceph_unlink(cmount, file_path.c_str());
   }
+  int symlink(const char* relpath, const char* target)
+  {
+    auto src_path = make_file_path(relpath);
+    auto target_path = make_file_path(target);
+    return ceph_symlink(cmount, target_path.c_str(), src_path.c_str());
+  }
 
   int test_open(const char* relpath)
   {
@@ -431,20 +437,24 @@ void TestMount::print_snap_diff(const char* relpath,
   - xN denotes file 'x' version N.
   - X denotes folder name
   - * denotes no/removed file/folder
+  - x(i) denotes file 'x' inode number 'i'
+  - x(t) denotes file 'x' type 't' (symlink, reg)
 
-#    snap1         snap2
-# fileA1      | fileA2      |
-# *           | fileB2      |
-# fileC1      | *           |
-# fileD1      | fileD1      |
-# dirA        | dirA        |
-# dirA/fileA1 | dirA/fileA2 |
-# *           | dirB        |
-# *           | dirB/fileb2 |
-# dirC        | *           |
-# dirC/filec1 | *           |
-# dirD        | dirD        |
-# dirD/fileD1 | dirD/fileD1 |
+#    snap1            snap2
+# fileA1         | fileA2          |
+# *              | fileB2          |
+# fileC1         | *               |
+# fileD1         | fileD1          |
+# fileE1(i)      | fileE1(i')      |
+# dirA           | dirA            |
+# dirA/fileA1    | dirA/fileA2     |
+# dirA/fileB1(t) | dirA/FileB1(t') |
+# *              | dirB            |
+# *              | dirB/fileb2     |
+# dirC           | *               |
+# dirC/filec1    | *               |
+# dirD           | dirD            |
+# dirD/fileD1    | dirD/fileD1     |
 */
 void TestMount::prepareSnapDiffLib1Cases()
 {
@@ -452,8 +462,10 @@ void TestMount::prepareSnapDiffLib1Cases()
   ASSERT_LE(0, write_full("fileA", "hello world"));
   ASSERT_LE(0, write_full("fileC", "hello world to be removed"));
   ASSERT_LE(0, write_full("fileD", "hello world unmodified"));
+  ASSERT_LE(0, write_full("fileE", "hello world inode i"));
   ASSERT_EQ(0, mkdir("dirA"));
   ASSERT_LE(0, write_full("dirA/fileA", "file 'A/a' v1"));
+  ASSERT_EQ(0, symlink("dirA/fileB", "dirA/fileA"));
   ASSERT_EQ(0, mkdir("dirC"));
   ASSERT_LE(0, write_full("dirC/filec", "file 'C/c' v1"));
   ASSERT_EQ(0, mkdir("dirD"));
@@ -465,8 +477,12 @@ void TestMount::prepareSnapDiffLib1Cases()
   ASSERT_LE(0, write_full("fileA", "hello world again in A"));
   ASSERT_LE(0, write_full("fileB", "hello world in B"));
   ASSERT_EQ(0, unlink("fileC"));
+  ASSERT_EQ(0, unlink("fileE"));
+  ASSERT_LE(0, write_full("fileE", "hello world inode i'"));
 
   ASSERT_LE(0, write_full("dirA/fileA", "file 'A/a' v2"));
+  ASSERT_EQ(0, unlink("dirA/fileB"));
+  ASSERT_LE(0, write_full("dirA/fileB", "file 'A/b' v1"));
   ASSERT_EQ(0, purge_dir("dirC"));
   ASSERT_EQ(0, mkdir("dirB"));
   ASSERT_LE(0, write_full("dirB/fileb", "file 'B/b' v2"));
@@ -506,6 +522,7 @@ TEST(LibCephFS, SnapDiffLib)
     expected.push_back("fileA");
     expected.push_back("fileC");
     expected.push_back("fileD");
+    expected.push_back("fileE");
     expected.push_back("dirA");
     expected.push_back("dirC");
     expected.push_back("dirD");
@@ -523,6 +540,7 @@ TEST(LibCephFS, SnapDiffLib)
     expected.push_back("fileA");
     expected.push_back("fileB");
     expected.push_back("fileD");
+    expected.push_back("fileE");
     expected.push_back("dirA");
     expected.push_back("dirB");
     expected.push_back("dirD");
@@ -543,6 +561,8 @@ TEST(LibCephFS, SnapDiffLib)
     expected.emplace_back("fileA", snapid2);
     expected.emplace_back("fileB", snapid2);
     expected.emplace_back("fileC", snapid1);
+    expected.emplace_back("fileE", snapid1);
+    expected.emplace_back("fileE", snapid2);
     expected.emplace_back("dirA", snapid2);
     expected.emplace_back("dirB", snapid2);
     expected.emplace_back("dirC", snapid1);
@@ -579,6 +599,8 @@ TEST(LibCephFS, SnapDiffLib)
     {
       vector<pair<string, uint64_t>> expected;
       expected.emplace_back("fileA", snapid2);
+      expected.emplace_back("fileB", snapid1);
+      expected.emplace_back("fileB", snapid2);
       test_mount.verify_snap_diff(expected, "dirA", "snap1", "snap2");
     }
 
@@ -893,6 +915,7 @@ TEST(LibCephFS, SnapDiffLib2)
   vector<pair<string, uint64_t>> snap1_3_diff_expected;
   snap1_3_diff_expected.emplace_back("fileA", snapid3);
   snap1_3_diff_expected.emplace_back("fileB", snapid3);
+  snap1_3_diff_expected.emplace_back("fileC", snapid1);
   snap1_3_diff_expected.emplace_back("fileC", snapid3);
   snap1_3_diff_expected.emplace_back("fileD", snapid3);
   snap1_3_diff_expected.emplace_back("fileE", snapid3);
@@ -1534,6 +1557,7 @@ TEST(LibCephFS, SnapDiffCases1_3)
     expected.emplace_back("e", snapid1);  // file 'e' is removed in snap3
     expected.emplace_back("f", snapid1);  // file 'f' is removed in snap3
     expected.emplace_back("ff", snapid1); // file 'ff' is removed in snap3
+    expected.emplace_back("g", snapid1);  // file 'g' removed in snap2
     expected.emplace_back("g", snapid3);  // file 'g' removed in snap2 and
                                           // re-appeared in snap3
     expected.emplace_back("S", snapid3);  // folder 'S' is present in snap3 hence reported
