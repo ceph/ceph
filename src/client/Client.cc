@@ -8712,7 +8712,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   in->make_nosnap_relative_path(path);
-  req->set_filepath(path);
+  req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
   req->set_inode(in);
 
   if(setting_smaller) {
@@ -10673,15 +10673,14 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 
   std::scoped_lock lock(client_lock);
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPHASH);
-  filepath path(ino);
-  req->set_filepath(path);
+  req->set_filepath(filepath(ino));
 
   uint32_t h = ceph_str_hash(CEPH_STR_HASH_RJENKINS, name, strlen(name));
   char f[30];
   sprintf(f, "%u", h);
-  filepath path2(dirino);
-  path2.push_dentry(string(f));
-  req->set_filepath2(path2);
+  filepath path(dirino);
+  path.push_dentry(string(f));
+  req->set_filepath2(path);
 
   int r = make_request(req, perms, NULL, NULL,
 		       rand() % mdsmap->get_num_in_mds());
@@ -10709,8 +10708,7 @@ int Client::_lookup_vino(vinodeno_t vino, const UserPerm& perms, Inode **inode)
     return -ESTALE;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPINO);
-  filepath path(vino.ino);
-  req->set_filepath(path);
+  req->set_filepath(filepath(vino.ino));
 
   /*
    * The MDS expects either a "real" snapid here or 0. The special value
@@ -10748,8 +10746,7 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   ldout(cct, 8) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
-  filepath path(ino->ino);
-  req->set_filepath(path);
+  req->set_filepath(filepath(ino->ino));
 
   InodeRef target;
   int r = make_request(req, perms, &target, NULL, rand() % mdsmap->get_num_in_mds());
@@ -11015,7 +11012,7 @@ int Client::_renew_caps(Inode *in)
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
   filepath path;
   in->make_nosnap_relative_path(path);
-  req->set_filepath(path);
+  req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
   req->head.args.open.flags = flags;
   req->head.args.open.pool = -1;
   if (cct->_conf->client_debug_getattr_caps)
@@ -13263,13 +13260,11 @@ int Client::_getcwd(string& dir, const UserPerm& perms)
 
     Dentry *dn = in->get_first_parent();
 
-
     if (!dn) {
       // look it up
       ldout(cct, 10) << __func__ << " looking up parent for " << *in << dendl;
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
-      filepath path(in->ino);
-      req->set_filepath(path);
+      req->set_filepath(filepath(in->ino));
       req->set_inode(in);
       int res = make_request(req, perms);
       if (res < 0)
@@ -13438,7 +13433,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 
   MetaRequest *req = new MetaRequest(op);
   filepath path;
-  in->make_nosnap_relative_path(path);
+  in->make_nosnap_relative_path(path); //FIXME why not filepath(ino=in->ino) ??
   req->set_filepath(path);
   req->set_inode(in);
 
@@ -13542,7 +13537,7 @@ int Client::_interrupt_filelock(MetaRequest *req)
   MetaRequest *intr_req = new MetaRequest(CEPH_MDS_OP_SETFILELOCK);
   filepath path;
   in->make_nosnap_relative_path(path);
-  intr_req->set_filepath(path);
+  intr_req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
   intr_req->set_inode(in);
   intr_req->head.args.filelock_change = req->head.args.filelock_change;
   intr_req->head.args.filelock_change.rule = lock_type;
@@ -14930,7 +14925,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
-  req->set_filepath(path);
+  req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
   req->set_string2(name);
   req->set_inode(in);
   req->head.args.setxattr.flags = xattr_flags;
@@ -15154,7 +15149,7 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
-  req->set_filepath(path);
+  req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
   req->set_filepath2(name);
   req->set_inode(in);
  
