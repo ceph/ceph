@@ -13538,7 +13538,7 @@ int BlueStore::omap_iterate(
     if (ret == omap_iter_ret_t::STOP) {
       break;
     } else if (ret == omap_iter_ret_t::NEXT) {
-      ceph::time_guard<ceph::mono_clock>{next_lat_acc};
+      ceph::time_guard<ceph::mono_clock> measure_next{next_lat_acc};
       it->next();
     } else {
       ceph_abort();
