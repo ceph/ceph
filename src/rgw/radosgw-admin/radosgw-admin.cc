@@ -228,6 +228,12 @@ void usage()
   cout << "  realm default                    set realm as default\n";
   cout << "  realm default rm                 clear the current default realm\n";
   cout << "  realm pull                       pull a realm and its current period\n";
+  cout << "  realm cross-zonegroup enable     enable cross-zonegroup replication policy\n";
+  cout << "  realm cross-zonegroup allow      allow cross-zonegroup replication policy\n";
+  cout << "  realm cross-zonegroup forbid     forbid cross-zonegroup replication policy\n";
+  cout << "  realm same-zonegroup enable      enable same-zonegroup replication policy\n";
+  cout << "  realm same-zonegroup allow       allow same-zonegroup replication policy\n";
+  cout << "  realm same-zonegroup forbid      forbid same-zonegroup replication policy\n";
   cout << "  zonegroup add                    add a zone to a zonegroup\n";
   cout << "  zonegroup create                 create a new zone group info\n";
   cout << "  zonegroup default                set default zone group\n";
@@ -244,6 +250,17 @@ void usage()
   cout << "  zonegroup placement modify       modify a placement target of a specific zonegroup\n";
   cout << "  zonegroup placement rm           remove a placement target from a zonegroup\n";
   cout << "  zonegroup placement default      set a zonegroup's default placement target\n";
+  cout << "  zonegroup export enable [rm]     add/remove the --peer-zonegroup-id from the set of enabled\n";
+  cout << "                                   destinations for cross-zonegroup replication policy\n";
+  cout << "  zonegroup export forbid [rm]     add/remove the --peer-zonegroup-id from the set of forbidden\n";
+  cout << "                                   destinations for cross-zonegroup replication policy\n";
+  cout << "  zonegroup import enable [rm]     add/remove the --peer-zonegroup-id from the set of enabled\n";
+  cout << "                                   sources for cross-zonegroup replication policy\n";
+  cout << "  zonegroup import forbid [rm]     add/remove the --peer-zonegroup-id from the set of forbidden\n";
+  cout << "                                   sources for cross-zonegroup replication policy\n";
+  cout << "  zonegroup same-zonegroup enable  enable same-zonegroup replication policy\n";
+  cout << "  zonegroup same-zonegroup allow   allow same-zonegroup replication policy\n";
+  cout << "  zonegroup same-zonegroup forbid  forbid same-zonegroup replication policy\n";
   cout << "  zone create                      create a new zone\n";
   cout << "  zone rm                          remove a zone\n";
   cout << "  zone get                         show zone cluster params\n";
@@ -439,6 +456,7 @@ void usage()
   cout << "   --sync-from-all[=false]           set/reset whether zone syncs from all zonegroup peers\n";
   cout << "   --sync-from=[zone-name][,...]     set list of zones to sync from\n";
   cout << "   --sync-from-rm=[zone-name][,...]  remove zones from list of zones to sync from\n";
+  cout << "   --peer-zonegroup-id               zonegroup id or wildcard '*' for zonegroup import/export\n";
   cout << "   --bucket-index-max-shards         override a zone/zonegroup's default bucket index shard count\n";
   cout << "   --fix                             besides checking bucket index, will also fix it\n";
   cout << "   --check-objects                   bucket check: rebuilds bucket index according to actual objects state\n";
@@ -771,6 +789,17 @@ enum class OPT {
   ZONEGROUP_PLACEMENT_LIST,
   ZONEGROUP_PLACEMENT_GET,
   ZONEGROUP_PLACEMENT_DEFAULT,
+  ZONEGROUP_EXPORT_ENABLE,
+  ZONEGROUP_EXPORT_ENABLE_RM,
+  ZONEGROUP_EXPORT_FORBID,
+  ZONEGROUP_EXPORT_FORBID_RM,
+  ZONEGROUP_IMPORT_ENABLE,
+  ZONEGROUP_IMPORT_ENABLE_RM,
+  ZONEGROUP_IMPORT_FORBID,
+  ZONEGROUP_IMPORT_FORBID_RM,
+  ZONEGROUP_SAME_ZONEGROUP_ENABLE,
+  ZONEGROUP_SAME_ZONEGROUP_ALLOW,
+  ZONEGROUP_SAME_ZONEGROUP_FORBID,
   ZONE_CREATE,
   ZONE_DELETE,
   ZONE_GET,
@@ -836,6 +865,12 @@ enum class OPT {
   REALM_DEFAULT,
   REALM_DEFAULT_RM,
   REALM_PULL,
+  REALM_CROSS_ZONEGROUP_ENABLE,
+  REALM_CROSS_ZONEGROUP_ALLOW,
+  REALM_CROSS_ZONEGROUP_FORBID,
+  REALM_SAME_ZONEGROUP_ENABLE,
+  REALM_SAME_ZONEGROUP_ALLOW,
+  REALM_SAME_ZONEGROUP_FORBID,
   PERIOD_DELETE,
   PERIOD_GET,
   PERIOD_GET_CURRENT,
@@ -1017,6 +1052,17 @@ static SimpleCmd::Commands all_cmds = {
   { "zonegroup placement list", OPT::ZONEGROUP_PLACEMENT_LIST },
   { "zonegroup placement get", OPT::ZONEGROUP_PLACEMENT_GET },
   { "zonegroup placement default", OPT::ZONEGROUP_PLACEMENT_DEFAULT },
+  { "zonegroup export enable", OPT::ZONEGROUP_EXPORT_ENABLE },
+  { "zonegroup export enable rm", OPT::ZONEGROUP_EXPORT_ENABLE_RM },
+  { "zonegroup export forbid", OPT::ZONEGROUP_EXPORT_FORBID },
+  { "zonegroup export forbid rm", OPT::ZONEGROUP_EXPORT_FORBID_RM },
+  { "zonegroup import enable", OPT::ZONEGROUP_IMPORT_ENABLE },
+  { "zonegroup import enable rm", OPT::ZONEGROUP_IMPORT_ENABLE_RM },
+  { "zonegroup import forbid", OPT::ZONEGROUP_IMPORT_FORBID },
+  { "zonegroup import forbid rm", OPT::ZONEGROUP_IMPORT_FORBID_RM },
+  { "zonegroup same-zonegroup enable", OPT::ZONEGROUP_SAME_ZONEGROUP_ENABLE },
+  { "zonegroup same-zonegroup allow", OPT::ZONEGROUP_SAME_ZONEGROUP_ALLOW },
+  { "zonegroup same-zonegroup forbid", OPT::ZONEGROUP_SAME_ZONEGROUP_FORBID },
   { "zone create", OPT::ZONE_CREATE },
   { "zone delete", OPT::ZONE_DELETE },
   { "zone get", OPT::ZONE_GET },
@@ -1085,6 +1131,12 @@ static SimpleCmd::Commands all_cmds = {
   { "realm default", OPT::REALM_DEFAULT },
   { "realm default rm", OPT::REALM_DEFAULT_RM },
   { "realm pull", OPT::REALM_PULL },
+  { "realm cross-zonegroup enable", OPT::REALM_CROSS_ZONEGROUP_ENABLE },
+  { "realm cross-zonegroup allow", OPT::REALM_CROSS_ZONEGROUP_ALLOW },
+  { "realm cross-zonegroup forbid", OPT::REALM_CROSS_ZONEGROUP_FORBID },
+  { "realm same-zonegroup enable", OPT::REALM_SAME_ZONEGROUP_ENABLE },
+  { "realm same-zonegroup allow", OPT::REALM_SAME_ZONEGROUP_ALLOW },
+  { "realm same-zonegroup forbid", OPT::REALM_SAME_ZONEGROUP_FORBID },
   { "period delete", OPT::PERIOD_DELETE },
   { "period get", OPT::PERIOD_GET },
   { "period get-current", OPT::PERIOD_GET_CURRENT },
@@ -3584,6 +3636,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_zone_name, opt_zone_id;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
+  std::optional<std::string> peer_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
   std::string description;
@@ -4190,6 +4243,8 @@ int main(int argc, const char **argv)
       zonegroup_id = val;
       opt_zonegroup_id = val;
       g_conf().set_val("rgw_zonegroup_id", val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--peer-zonegroup-id", (char*)NULL)) {
+      peer_zonegroup_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
@@ -4463,6 +4518,17 @@ int main(int argc, const char **argv)
 			 OPT::ZONEGROUP_PLACEMENT_MODIFY, OPT::ZONEGROUP_PLACEMENT_LIST,
 			 OPT::ZONEGROUP_PLACEMENT_GET,
 			 OPT::ZONEGROUP_PLACEMENT_DEFAULT,
+                         OPT::ZONEGROUP_EXPORT_ENABLE,
+                         OPT::ZONEGROUP_EXPORT_ENABLE_RM,
+                         OPT::ZONEGROUP_EXPORT_FORBID,
+                         OPT::ZONEGROUP_EXPORT_FORBID_RM,
+                         OPT::ZONEGROUP_IMPORT_ENABLE,
+                         OPT::ZONEGROUP_IMPORT_ENABLE_RM,
+                         OPT::ZONEGROUP_IMPORT_FORBID,
+                         OPT::ZONEGROUP_IMPORT_FORBID_RM,
+                         OPT::ZONEGROUP_SAME_ZONEGROUP_ENABLE,
+                         OPT::ZONEGROUP_SAME_ZONEGROUP_ALLOW,
+                         OPT::ZONEGROUP_SAME_ZONEGROUP_FORBID,
 			 OPT::ZONE_CREATE, OPT::ZONE_DELETE,
 			 OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
 			 OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
@@ -4480,7 +4546,14 @@ int main(int argc, const char **argv)
 			 OPT::REALM_LIST_PERIODS,
 			 OPT::REALM_GET_DEFAULT,
 			 OPT::REALM_RENAME, OPT::REALM_SET,
-			 OPT::REALM_DEFAULT, OPT::REALM_DEFAULT_RM, OPT::REALM_PULL};
+			 OPT::REALM_DEFAULT, OPT::REALM_DEFAULT_RM, OPT::REALM_PULL,
+                         OPT::REALM_CROSS_ZONEGROUP_ENABLE,
+                         OPT::REALM_CROSS_ZONEGROUP_ALLOW,
+                         OPT::REALM_CROSS_ZONEGROUP_FORBID,
+                         OPT::REALM_SAME_ZONEGROUP_ENABLE,
+                         OPT::REALM_SAME_ZONEGROUP_ALLOW,
+                         OPT::REALM_SAME_ZONEGROUP_FORBID,
+    };
 
     std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
@@ -5421,6 +5494,56 @@ int main(int argc, const char **argv)
         formatter->flush(cout);
       }
       break;
+    case OPT::REALM_CROSS_ZONEGROUP_ENABLE:
+    case OPT::REALM_CROSS_ZONEGROUP_ALLOW:
+    case OPT::REALM_CROSS_ZONEGROUP_FORBID:
+    case OPT::REALM_SAME_ZONEGROUP_ENABLE:
+    case OPT::REALM_SAME_ZONEGROUP_ALLOW:
+    case OPT::REALM_SAME_ZONEGROUP_FORBID:
+      {
+        RGWRealm realm;
+        std::unique_ptr<rgw::sal::RealmWriter> writer;
+        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
+                                  realm_id, realm_name, realm, &writer);
+        if (ret < 0) {
+          cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        switch (opt_cmd) {
+          case OPT::REALM_CROSS_ZONEGROUP_ENABLE:
+            realm.cross_zonegroup = rgw::CanSync::Enabled;
+            break;
+          case OPT::REALM_CROSS_ZONEGROUP_ALLOW:
+            realm.cross_zonegroup = rgw::CanSync::Allowed;
+            break;
+          case OPT::REALM_CROSS_ZONEGROUP_FORBID:
+            realm.cross_zonegroup = rgw::CanSync::Forbidden;
+            break;
+          case OPT::REALM_SAME_ZONEGROUP_ENABLE:
+            realm.same_zonegroup = rgw::CanSync::Enabled;
+            break;
+          case OPT::REALM_SAME_ZONEGROUP_ALLOW:
+            realm.same_zonegroup = rgw::CanSync::Allowed;
+            break;
+          case OPT::REALM_SAME_ZONEGROUP_FORBID:
+            realm.same_zonegroup = rgw::CanSync::Forbidden;
+            break;
+          default:
+            cerr << "unrecognized command" << std::endl;
+            return EINVAL;
+        }
+
+        ret = writer->write(dpp(), null_yield, realm);
+        if (ret < 0) {
+          cerr << "ERROR: couldn't driver realm info: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        encode_json("realm", realm, formatter.get());
+        formatter->flush(cout);
+      }
+      break;
 
     case OPT::ZONEGROUP_ADD:
       {
@@ -6090,6 +6213,129 @@ int main(int argc, const char **argv)
     encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
     formatter->flush(cout);
       }
+      break;
+    case OPT::ZONEGROUP_EXPORT_ENABLE:
+    case OPT::ZONEGROUP_EXPORT_ENABLE_RM:
+    case OPT::ZONEGROUP_EXPORT_FORBID:
+    case OPT::ZONEGROUP_EXPORT_FORBID_RM:
+    case OPT::ZONEGROUP_IMPORT_ENABLE:
+    case OPT::ZONEGROUP_IMPORT_ENABLE_RM:
+    case OPT::ZONEGROUP_IMPORT_FORBID:
+    case OPT::ZONEGROUP_IMPORT_FORBID_RM:
+      {
+        if (!peer_zonegroup_id) {
+          cerr << "Missing required argument --peer-zonegroup-id" << std::endl;
+          return EINVAL;
+        }
+
+        RGWZoneGroup zonegroup;
+        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
+        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
+                                      zonegroup_id, zonegroup_name,
+                                      zonegroup, &writer);
+        if (ret < 0) {
+          cerr << "failed to load zonegroup: " << cpp_strerror(ret) << std::endl;
+          return -ret;
+        }
+
+        // export vs import
+        constexpr auto is_export = [] (OPT o) {
+          switch (o) {
+            case OPT::ZONEGROUP_EXPORT_ENABLE:
+            case OPT::ZONEGROUP_EXPORT_ENABLE_RM:
+            case OPT::ZONEGROUP_EXPORT_FORBID:
+            case OPT::ZONEGROUP_EXPORT_FORBID_RM:
+              return true;
+            default: // IMPORT
+              return false;
+          }
+        };
+        RGWCrossZoneGroup& cross_zonegroup = is_export(opt_cmd)
+            ? zonegroup.cross_zonegroup_export
+            : zonegroup.cross_zonegroup_import;
+
+        // enable vs forbid
+        constexpr auto is_enable = [] (OPT o) {
+          switch (o) {
+            case OPT::ZONEGROUP_EXPORT_ENABLE:
+            case OPT::ZONEGROUP_EXPORT_ENABLE_RM:
+            case OPT::ZONEGROUP_IMPORT_ENABLE:
+            case OPT::ZONEGROUP_IMPORT_ENABLE_RM:
+              return true;
+            default: // FORBID
+              return false;
+          }
+        };
+        rgw::SyncPeerSet& zonegroups = is_enable(opt_cmd)
+            ? cross_zonegroup.enable
+            : cross_zonegroup.forbid;
+
+        // add vs rm
+        switch (opt_cmd) {
+          case OPT::ZONEGROUP_EXPORT_ENABLE:
+          case OPT::ZONEGROUP_EXPORT_FORBID:
+          case OPT::ZONEGROUP_IMPORT_ENABLE:
+          case OPT::ZONEGROUP_IMPORT_FORBID:
+            if (!zonegroups.insert(*peer_zonegroup_id).second) {
+              cerr << "peer " << *peer_zonegroup_id
+                  << " already in set [" << zonegroups << ']' << std::endl;
+              return EEXIST;
+            }
+            break;
+          default: // *_RM
+            if (!zonegroups.erase(*peer_zonegroup_id)) {
+              cerr << "peer " << *peer_zonegroup_id
+                  << " not in set [" << zonegroups << ']' << std::endl;
+              return ENOENT;
+            }
+            break;
+        }
+
+        ret = writer->write(dpp(), null_yield, zonegroup);
+        if (ret < 0) {
+          cerr << "failed to update zonegroup: " << cpp_strerror(ret) << std::endl;
+          return -ret;
+        }
+
+        encode_json("zonegroup", zonegroup, formatter.get());
+        formatter->flush(cout);
+      }
+      break;
+    case OPT::ZONEGROUP_SAME_ZONEGROUP_ENABLE:
+    case OPT::ZONEGROUP_SAME_ZONEGROUP_ALLOW:
+    case OPT::ZONEGROUP_SAME_ZONEGROUP_FORBID:
+      {
+        RGWZoneGroup zonegroup;
+        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
+        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
+                                      zonegroup_id, zonegroup_name,
+                                      zonegroup, &writer);
+        if (ret < 0) {
+          cerr << "failed to load zonegroup: " << cpp_strerror(ret) << std::endl;
+          return -ret;
+        }
+
+        if (opt_cmd == OPT::ZONEGROUP_SAME_ZONEGROUP_ENABLE) {
+          zonegroup.same_zonegroup = rgw::CanSync::Enabled;
+        } else if (opt_cmd == OPT::ZONEGROUP_SAME_ZONEGROUP_ALLOW) {
+          zonegroup.same_zonegroup = rgw::CanSync::Allowed;
+        } else if (opt_cmd == OPT::ZONEGROUP_SAME_ZONEGROUP_FORBID) {
+          zonegroup.same_zonegroup = rgw::CanSync::Forbidden;
+        } else {
+          cerr << "unrecognized command" << std::endl;
+          return EINVAL;
+        }
+
+        ret = writer->write(dpp(), null_yield, zonegroup);
+        if (ret < 0) {
+          cerr << "failed to update zonegroup: " << cpp_strerror(ret) << std::endl;
+          return -ret;
+        }
+
+        encode_json("zonegroup", zonegroup, formatter.get());
+        formatter->flush(cout);
+      }
+
       break;
     case OPT::ZONE_CREATE:
       {
