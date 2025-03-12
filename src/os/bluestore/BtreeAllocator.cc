@@ -25,7 +25,12 @@ uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
 {
   auto rs_start = range_tree.lower_bound(*cursor);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
-    uint64_t offset = rs->first;
+    uint64_t offset;
+    #ifdef HAVE_POWER8
+      offset = p2roundup(rs->first, align);
+    #else
+      offset = rs->first;
+    #endif
     if (offset + size <= rs->second) {
       *cursor = offset + size;
       return offset;
@@ -37,7 +42,12 @@ uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
   }
   // If we reached end, start from beginning till cursor.
   for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
-    uint64_t offset = rs->first;
+    uint64_t offset;
+    #ifdef HAVE_POWER8
+      offset = p2roundup(rs->first, align);
+    #else
+      offset = rs->first;
+    #endif
     if (offset + size <= rs->second) {
       *cursor = offset + size;
       return offset;
@@ -53,7 +63,12 @@ uint64_t BtreeAllocator::_pick_block_fits(uint64_t size,
   // the needs
   auto rs_start = range_size_tree.lower_bound(range_value_t{0,size});
   for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
-    uint64_t offset = rs->start;
+    uint64_t offset;
+    #ifdef HAVE_POWER8
+      offset = p2roundup(rs->start, align);
+    #else
+      offset = rs->start;
+    #endif
     if (offset + size <= rs->start + rs->size) {
       return offset;
     }

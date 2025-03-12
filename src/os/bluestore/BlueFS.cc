@@ -309,6 +309,11 @@ void BlueFS::_init_logger()
 		    "audb",
 		    PerfCountersBuilder::PRIO_CRITICAL,
 		    unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_main_alloc_unit, "alloc_unit_main",
+          "Allocation unit size (in bytes) for primary/shared device",
+          "aumb",
+          PerfCountersBuilder::PRIO_CRITICAL,
+          unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_wal_alloc_unit, "alloc_unit_wal",
 		    "Allocation unit size (in bytes) for standalone WAL device",
 		    "auwb",
@@ -762,30 +767,46 @@ void BlueFS::_init_alloc()
   }
   logger->set(l_bluefs_wal_alloc_unit, wal_alloc_size);
 
+  #ifndef HAVE_POWER8
+    uint64_t shared_alloc_size = cct->_conf->bluefs_shared_alloc_size;
+    if (shared_alloc && shared_alloc->a) {
+      uint64_t unit = shared_alloc->a->get_block_size();
+      shared_alloc_size = std::max(
+        unit,
+        shared_alloc_size);
+      ceph_assert(0 == p2phase(shared_alloc_size, unit));
+    }
+  #endif
 
-  uint64_t shared_alloc_size = cct->_conf->bluefs_shared_alloc_size;
-  if (shared_alloc && shared_alloc->a) {
-    uint64_t unit = shared_alloc->a->get_block_size();
-    shared_alloc_size = std::max(
-      unit,
-      shared_alloc_size);
-    ceph_assert(0 == p2phase(shared_alloc_size, unit));
-  }
   if (bdev[BDEV_SLOW]) {
     alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
-    alloc_size[BDEV_SLOW] = shared_alloc_size;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
+    #ifdef HAVE_POWER8
+      alloc_size[BDEV_SLOW] = cct->_conf->bluefs_shared_alloc_size;
+      logger->set(l_bluefs_db_alloc_unit, cct->_conf->bluefs_alloc_size);
+      logger->set(l_bluefs_main_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
+    #else
+      alloc_size[BDEV_SLOW] = shared_alloc_size;
+      change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
                       cct->_conf->bluefs_alloc_size, alloc_size_changed);
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_SLOW],
+      change_alloc_size(super.bluefs_max_alloc_size[BDEV_SLOW],
                       shared_alloc_size, alloc_size_changed);
+    #endif
   } else {
-    alloc_size[BDEV_DB] = shared_alloc_size;
-    alloc_size[BDEV_SLOW] = 0;
-    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
+    #ifdef HAVE_POWER8
+      alloc_size[BDEV_DB] = cct->_conf->bluefs_shared_alloc_size;
+      logger->set(l_bluefs_main_alloc_unit, 0);
+      logger->set(l_bluefs_db_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
+    #else
+      alloc_size[BDEV_DB] = shared_alloc_size;
+      alloc_size[BDEV_SLOW] = 0;
+      change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
                       shared_alloc_size, alloc_size_changed);
+    #endif
   }
-  logger->set(l_bluefs_db_alloc_unit, alloc_size[BDEV_DB]);
-  logger->set(l_bluefs_slow_alloc_unit, alloc_size[BDEV_SLOW]);
+  #ifndef HAVE_POWER8
+    logger->set(l_bluefs_db_alloc_unit, alloc_size[BDEV_DB]);
+    logger->set(l_bluefs_slow_alloc_unit, alloc_size[BDEV_SLOW]);
+  #endif
   // new wal and db devices are never shared
   if (bdev[BDEV_NEWWAL]) {
     alloc_size[BDEV_NEWWAL] = cct->_conf->bluefs_alloc_size;
@@ -812,6 +833,9 @@ void BlueFS::_init_alloc()
     if (!bdev[id]) {
       continue;
     }
+    #ifdef HAVE_POWER8
+      ceph_assert(alloc_size[id]);
+    #endif
     ceph_assert(bdev[id]->get_size());
     ceph_assert(super.bluefs_max_alloc_size[id]);
     if (is_shared_alloc(id)) {
@@ -820,7 +844,9 @@ void BlueFS::_init_alloc()
               << ", block size 0x" << alloc_size[id]
               << std::dec << dendl;
     } else {
-      ceph_assert(alloc_size[id]);
+      #ifndef HAVE_POWER8
+        ceph_assert(alloc_size[id]);
+      #endif
       std::string name = "bluefs-";
       const char* devnames[] = { "wal","db","slow" };
       if (id <= BDEV_SLOW)

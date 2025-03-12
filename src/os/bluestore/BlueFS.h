@@ -46,6 +46,7 @@ enum {
   l_bluefs_slow_alloc_unit,
   l_bluefs_db_alloc_unit,
   l_bluefs_wal_alloc_unit,
+  l_bluefs_main_alloc_unit,
   l_bluefs_read_random_lat,
   l_bluefs_read_random_count,
   l_bluefs_read_random_bytes,
