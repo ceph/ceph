@@ -16,7 +16,7 @@
 #include <boost/lockfree/queue.hpp>
 #include "common/dout.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_notification
 
 // this is the inverse of rd_kafka_errno2err
 // see: https://github.com/confluentinc/librdkafka/blob/master/src/rdkafka.c
