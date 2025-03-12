@@ -43,6 +43,7 @@ support older versions of Ceph.
     adoption
     host-management
     Service Management <services/index>
+    certmgr
     upgrade
     Cephadm operations <operations>
     Client Setup <client-setup>
