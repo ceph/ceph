@@ -15,7 +15,6 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import CommandFailedError
-from teuthology import contextutil
 
 log = logging.getLogger(__name__)
 
@@ -9218,7 +9217,7 @@ class TestMisc(TestVolumesHelper):
         clone_path = f'./volumes/_nogroup/{clone}'
         self.mount_a.run_shell(['sudo', 'rm', '-rf', clone_path], omit_sudo=False)
 
-        with contextutil.safe_while(sleep=5, tries=6) as proceed:
+        with safe_while(sleep=5, tries=6) as proceed:
             while proceed():
                 try:
                     result = json.loads(self._fs_cmd("subvolume", "snapshot", "info", self.volname, subvolume, snapshot))
