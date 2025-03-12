@@ -9368,6 +9368,8 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 	open_foreign_mdsdir(ancestor.dirino, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0));
 	return 1;
       }
+      dout(20) << __func__ << ": parent dir inode not found in cache " << ino << " current ancestor="
+               << ancestor << " i=" << i << "continue with next ancestor" <<  dendl;
       continue;
     }
 
@@ -9427,6 +9429,8 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 
 	dout(10) << " no ino " << next_ino << " in " << *dir << dendl;
 	if (i == 0)
+	  // Should not reach here. The lookup above is to fetch the incomplete dir. If the dir is
+	  // complete, it's already in memory and it wouldn't have called the open_ino in first place.
 	  err = -ENOENT;
       } else if (discover) {
 	if (!dnl) {
@@ -9442,6 +9446,9 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 	}
 	dout(10) << " no ino " << next_ino << " in " << *dir << dendl;
 	if (i == 0)
+	  // Same as above, it should not reach here. The lookup above is to fetch the incomplete dir.
+	  // If the dir is complete, it's already in memory and it wouldn't have called the open_ino
+	  // in first place.
 	  err = -ENOENT;
       }
     }
