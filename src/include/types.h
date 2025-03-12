@@ -568,6 +568,17 @@ struct shard_id_t {
 };
 WRITE_CLASS_ENCODER(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
+template<>
+struct fmt::formatter<shard_id_t>
+{
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const shard_id_t &k, FormatContext& ctx) const
+  {
+    return fmt::format_to(ctx.out(), "{}", k.id);
+  }
+};
 
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
     defined(__FreeBSD__) || defined(_WIN32)
