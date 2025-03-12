@@ -538,6 +538,11 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
 
   uint64_t oldcount = discard_threads.size();
   uint64_t newcount = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  if (newcount == 0) {
+    //backward compatibility mode to make sure legacy "bdev_async_discard" is
+    // taken into account if set.
+    newcount = cct->_conf.get_val<bool>("bdev_async_discard") ? 1 : 0;
+  }
   if (!cct->_conf.get_val<bool>("bdev_enable_discard") || !support_discard || discard_stop) {
     newcount = 0;
   }
@@ -1527,6 +1532,7 @@ const char** KernelDevice::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "bdev_async_discard_threads",
+    "bdev_async_discard",
     "bdev_enable_discard",
     NULL
   };
@@ -1536,7 +1542,8 @@ const char** KernelDevice::get_tracked_conf_keys() const
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
-  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
+  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_async_discard") ||
+      changed.count("bdev_enable_discard")) {
     _discard_update_threads();
   }
 }
