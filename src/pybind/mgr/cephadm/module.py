@@ -665,6 +665,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         return self.inventory.get_fqdn(hostname) or self.inventory.get_addr(hostname)
 
+    def _get_mgr_ips(self) -> List[str]:
+        return [self.inventory.get_addr(d.hostname)
+                for d in self.cache.get_daemons_by_service('mgr')
+                if d.hostname is not None]
+
     def _get_security_config(self) -> Tuple[bool, bool, bool]:
         oauth2_proxy_enabled = len(self.cache.get_daemons_by_service('oauth2-proxy')) > 0
         mgmt_gw_enabled = len(self.cache.get_daemons_by_service('mgmt-gateway')) > 0
