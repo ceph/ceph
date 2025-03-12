@@ -1099,6 +1099,23 @@ public:
 
     void update(KeyValueDB::Transaction t, bool force);
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
+
+    struct ReshardPlan {
+      std::vector<bluestore_onode_t::shard_info> new_shard_info;
+      unsigned shard_index_begin;
+      unsigned shard_index_end;
+      uint32_t spanning_scan_begin;
+      uint32_t spanning_scan_end;
+    };
+
+    ReshardPlan reshard_decision();
+
+    void reshard_action(
+      ReshardPlan& plan,
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
+
+
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t);
