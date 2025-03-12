@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, Tuple, Union, cast
 
+import base64
 import errno
 import json
 
@@ -20,11 +21,14 @@ from .enums import (
     JoinSourceType,
     LoginAccess,
     LoginCategory,
+    PasswordFilter,
     SMBClustering,
     UserGroupSourceType,
 )
 from .proto import Self, Simplified
 from .utils import checked
+
+ConversionOp = Tuple[PasswordFilter, PasswordFilter]
 
 
 def _get_intent(data: Simplified) -> Intent:
@@ -93,6 +97,9 @@ class _RBase:
     def to_simplified(self) -> Simplified:
         rc = getattr(self, '_resource_config')
         return rc.object_to_simplified(self)
+
+    def convert(self, operation: ConversionOp) -> Self:
+        return self
 
 
 @resourcelib.component()
@@ -239,6 +246,12 @@ class JoinAuthValues(_RBase):
 
     username: str
     password: str
+
+    def convert(self, operation: ConversionOp) -> Self:
+        return self.__class__(
+            username=self.username,
+            password=_password_convert(self.password, operation),
+        )
 
 
 @resourcelib.component()
@@ -471,6 +484,14 @@ class JoinAuth(_RBase):
         rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
+    def convert(self, operation: ConversionOp) -> Self:
+        return self.__class__(
+            auth_id=self.auth_id,
+            intent=self.intent,
+            auth=None if not self.auth else self.auth.convert(operation),
+            linked_to_cluster=self.linked_to_cluster,
+        )
+
 
 @resourcelib.resource('ceph.smb.usersgroups')
 class UsersAndGroups(_RBase):
@@ -537,3 +558,18 @@ def load(data: Simplified) -> List[SMBResource]:
     structured types.
     """
     return resourcelib.load(data)
+
+
+def _password_convert(pvalue: str, operation: ConversionOp) -> str:
+    if operation == (PasswordFilter.NONE, PasswordFilter.BASE64):
+        pvalue = base64.b64encode(pvalue.encode("utf8")).decode("utf8")
+    elif operation == (PasswordFilter.NONE, PasswordFilter.HIDDEN):
+        pvalue = "*" * 16
+    elif operation == (PasswordFilter.BASE64, PasswordFilter.NONE):
+        pvalue = base64.b64decode(pvalue.encode("utf8")).decode("utf8")
+    else:
+        osrc, odst = operation
+        raise ValueError(
+            f"can not convert password value encoding from {osrc} to {odst}"
+        )
+    return pvalue
