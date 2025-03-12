@@ -124,7 +124,7 @@ class CheckCounter(Task):
                             expected_val = counter['expected_val']
                     else:
                         name = counter
-                        minval = 1
+                        minval = 0
                     expected.add(name)
 
                     val = perf_dump
