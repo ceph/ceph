@@ -20,6 +20,7 @@ from . import (
 )
 from .enums import (
     AuthMode,
+    InputPasswordFilter,
     JoinSourceType,
     PasswordFilter,
     ShowResults,
@@ -141,13 +142,46 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.get_module_option('internal_store_backend', ''),
         )
 
+    def _apply_res(
+        self,
+        resource_input: List[resources.SMBResource],
+        password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
+        password_filter_out: Optional[PasswordFilter] = None,
+    ) -> results.ResultGroup:
+        in_pf = password_filter.to_password_filter()  # update enum type
+        # use the same filtering as the input unless expliclitly set
+        out_pf = password_filter_out if password_filter_out else in_pf
+        if in_pf is not PasswordFilter.NONE:
+            in_op = (in_pf, PasswordFilter.NONE)
+            log.debug('Password filtering for resource apply: %r', in_op)
+            resource_input = [r.convert(in_op) for r in resource_input]
+        all_results = self._handler.apply(resource_input)
+        if out_pf is not PasswordFilter.NONE:
+            # we need to apply the conversion filter to the output
+            # resources in the results - otherwise we would show raw
+            # passwords - this will be the inverse of the filter applied to
+            # the input
+            out_op = (PasswordFilter.NONE, out_pf)
+            log.debug('Password filtering for smb apply output: %r', in_op)
+            all_results = all_results.convert_results(out_op)
+        return all_results
+
     @cli.SMBCommand('apply', perm='rw')
-    def apply_resources(self, inbuf: str) -> results.ResultGroup:
+    def apply_resources(
+        self,
+        inbuf: str,
+        password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
+        password_filter_out: Optional[PasswordFilter] = None,
+    ) -> results.ResultGroup:
         """Create, update, or remove smb configuration resources based on YAML
         or JSON specs
         """
         try:
-            return self._handler.apply(resources.load_text(inbuf))
+            return self._apply_res(
+                resources.load_text(inbuf),
+                password_filter=password_filter,
+                password_filter_out=password_filter_out,
+            )
         except resources.InvalidResourceError as err:
             # convert the exception into a result and return it as the only
             # item in the result group
