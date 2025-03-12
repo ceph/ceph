@@ -3,11 +3,14 @@
 
 #pragma once
 
-#include <common/bitset_set.h>
-#include <include/ceph_assert.h>
 #include <cstddef>
+#include <fmt/ranges.h>
 #include <memory>
 #include <vector>
+
+#include "common/bitset_set.h"
+#include "common/fmt_common.h"
+#include "include/ceph_assert.h"
 
 
 /* This class struct provides an API similar to std::map, but with the
@@ -490,4 +493,23 @@ class mini_flat_map {
     lhs << "}";
     return lhs;
   }
+
+  std::string fmt_print() const
+  requires has_formatter<KeyT> && has_formatter<ValueT> {
+    int c = (int)_size;
+    std::string s = "{";
+    for (auto&& [k, v] : *this) {
+      s += fmt::format("{}:{}", k, v);
+      if (--c > 0) {
+	s += ",";
+      }
+    }
+    s += "}";
+    return s;
+  }
 };
+
+// make sure fmt::range does not apply to mini_flat_map
+template<typename KeyT, typename ValueT>
+struct fmt::is_range<mini_flat_map<KeyT, ValueT>, char> : std::false_type {};
+

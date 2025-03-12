@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <gtest/gtest.h>
-#include <common/mini_flat_map.h>
+#include "common/mini_flat_map.h"
 
 struct Value {
   int value;
@@ -20,6 +20,17 @@ struct Value {
     return value == other.value;
   }
 };
+
+namespace fmt {
+template <>
+struct formatter<Value> : private formatter<int> {
+  using formatter<int>::parse;
+  template <typename FormatContext>
+  auto format(const Value& v, FormatContext& ctx) const {
+    return formatter<int>::format(v.value, ctx);
+  }
+};
+} // namespace fmt
 
 struct Key {
   int8_t k;
@@ -43,6 +54,18 @@ struct Key {
   }
 };
 
+namespace fmt {
+template <>
+struct formatter<Key> : private formatter<int> {
+  using formatter<int>::parse;
+  template <typename FormatContext>
+  auto format(const Key& k, FormatContext& ctx) const {
+    return formatter<int>::format(k.k, ctx);
+  }
+};
+} // namespace fmt
+
+
 TEST(mini_flat_map, copy_operator_and_element_access) {
   mini_flat_map<Key, Value> m(4);
   m[0] = Value(1);
@@ -55,6 +78,55 @@ TEST(mini_flat_map, copy_operator_and_element_access) {
   mini_flat_map<Key, Value> m3(m);
   ASSERT_TRUE(m3.contains(0));
   ASSERT_TRUE(m.contains(0));
+}
+
+TEST(mini_flat_map, fmt_formatting) {
+  mini_flat_map<Key, Value> m(4);
+  m[0] = Value(100);
+  m[2] = Value(200);
+  EXPECT_EQ("{0:100,2:200}", m.fmt_print());
+  // compare to operator<<
+  std::ostringstream oss;
+  oss << m;
+  EXPECT_EQ(m.fmt_print(), oss.str());
+  // use indirectly in fmt::format
+  EXPECT_EQ("{0:100,2:200}", fmt::format("{}", m));
+}
+
+TEST(mini_flat_map, fmt_formatting_empty) {
+  mini_flat_map<Key, Value> m(10);
+  EXPECT_EQ("{}", m.fmt_print());
+  // compare to operator<<
+  const auto as_fmt = fmt::format("{}", m);
+  EXPECT_EQ("{}", as_fmt);
+  std::ostringstream oss;
+  oss << m;
+  EXPECT_EQ(as_fmt, oss.str());
+}
+
+TEST(mini_flat_map, fmt_formatting_one) {
+  mini_flat_map<Key, Value> m(4);
+  m[2] = Value(100);
+  const auto using_fmt = fmt::format("{}", m);
+  EXPECT_EQ("{2:100}", using_fmt);
+  // compare to operator<<
+  std::ostringstream oss;
+  oss << m;
+  EXPECT_EQ(using_fmt, oss.str());
+}
+
+TEST(mini_flat_map, fmt_formatting_full) {
+  mini_flat_map<Key, Value> m(4);
+  m[3] = Value(300);
+  m[2] = Value(200);
+  m[1] = Value(100);
+  m[0] = Value(1);
+  const auto using_fmt = fmt::format("{}", m);
+  EXPECT_EQ("{0:1,1:100,2:200,3:300}", using_fmt);
+  // compare to operator<<
+  std::ostringstream oss;
+  oss << m;
+  EXPECT_EQ(using_fmt, oss.str());
 }
 
 TEST(mini_flat_map, iterators) {
