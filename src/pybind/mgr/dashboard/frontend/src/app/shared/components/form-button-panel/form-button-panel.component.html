@@ -1,0 +1,34 @@
+<ng-container *ngIf="!modalForm; else modalFooter">
+  <div [ngClass]="wrappingClass">
+    <cd-back-button *ngIf="showCancel"
+                    (backAction)="backAction()"
+                    [name]="cancelText"></cd-back-button>
+    <cd-submit-button *ngIf="showSubmit"
+                      (submitAction)="submitAction()"
+                      [disabled]="disabled"
+                      [form]="form"
+                      [ariaLabel]="submitText"
+                      data-cy="submitBtn"
+                      [buttonType]="submitBtnType">{{ submitText }}</cd-submit-button>
+  </div>
+</ng-container>
+
+<ng-template #modalFooter>
+  <cds-modal-footer>
+    <cd-back-button *ngIf="showCancel"
+                    (backAction)="backAction()"
+                    [name]="cancelText"
+                    [modalForm]="modalForm"
+                    [showSubmit]="showSubmit"
+                    class="w-100"></cd-back-button>
+    <cd-submit-button *ngIf="showSubmit"
+                      (submitAction)="submitAction()"
+                      [disabled]="disabled"
+                      [form]="form"
+                      [ariaLabel]="submitText"
+                      data-cy="submitBtn"
+                      [modalForm]="modalForm"
+                      [buttonType]="submitBtnType"
+                      class="w-100">{{ submitText }}</cd-submit-button>
+  </cds-modal-footer>
+</ng-template>

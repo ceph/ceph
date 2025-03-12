@@ -1,0 +1,14 @@
+tasks:
+- install:
+    extra_packages:
+    - rbd-mirror
+- ceph:
+    cluster: cluster1
+- ceph:
+    cluster: cluster2
+- rbd-mirror:
+    client: cluster1.client.mirror.0
+    thrash: False
+- rbd-mirror:
+    client: cluster2.client.mirror.0
+    thrash: False
