@@ -47,20 +47,22 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "ECTransaction.h"
 #include "ECExtentCache.h"
 #include "ECListener.h"
+#include "common/dout.h"
 
 //forward declaration
 struct ECSubWrite;
 struct PGLog;
 
 struct ECCommon {
-  friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
-
   struct ec_extent_t {
     int err;
     extent_map emap;
     ECUtil::shard_extent_map_t shard_extent_map;
+
+    void print(std::ostream &os) const {
+      os << err << "," << emap;
+    }
   };
-  friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
   using ec_extents_t = std::map<hobject_t, ec_extent_t>;
 
   virtual ~ECCommon() = default;
@@ -85,8 +87,15 @@ struct ECCommon {
     std::optional<std::vector<std::pair<int, int>>> subchunk;
     pg_shard_t pg_shard;
     bool operator==(const shard_read_t &other) const;
+
+    void print(std::ostream &os) const {
+      os << "shard_read_t(extents=[" << extents << "]"
+           << ", zero_pad=" << zero_pad
+           << ", subchunk=" << subchunk
+           << ", pg_shard=" << pg_shard
+           << ")";
+    }
   };
-  friend std::ostream &operator<<(std::ostream &lhs, const shard_read_t &rhs);
 
   struct read_request_t {
     const std::list<ec_align_t> to_read;
@@ -112,13 +121,21 @@ struct ECCommon {
         want_attrs(want_attrs),
         object_size(object_size) {}
     bool operator==(const read_request_t &other) const;
+
+    void print(std::ostream &os) const {
+      os << "read_request_t(to_read=[" << to_read << "]"
+           << ", flags=" << flags
+           << ", shard_want_to_read=" << shard_want_to_read
+           << ", shard_reads=" << shard_reads
+           << ", want_attrs=" << want_attrs
+           << ")";
+    }
   };
 
   virtual void objects_read_and_reconstruct_for_rmw(
     std::map<hobject_t, read_request_t> &&to_read,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
-  friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
   /**
    * Low level async read mechanism
@@ -149,6 +166,16 @@ struct ECCommon {
     ECUtil::shard_extent_set_t processed_read_requests;
     read_result_t(const ECUtil::stripe_info_t *sinfo) :
       r(0), buffers_read(sinfo), processed_read_requests(sinfo->get_k_plus_m()) {}
+
+    void print(std::ostream &os) const {
+      os << "read_result_t(r=" << r << ", errors=" << errors;
+      if (attrs) {
+        os << ", attrs=" << *(attrs);
+      } else {
+        os << ", noattrs";
+      }
+      os << ", buffers_read=" << buffers_read << ")";
+    }
   };
 
   struct ReadCompleter {
@@ -233,6 +260,20 @@ struct ECCommon {
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
     ReadOp(ReadOp &&) = default;
+
+    void print(std::ostream &os) const {
+      os << "ReadOp(tid=" << tid;
+#ifndef WITH_SEASTAR
+      if (op && op->get_req()) {
+        os << ", op=";
+        op->get_req()->print(os);
+      }
+#endif
+      os << ", to_read=" << to_read << ", complete=" << complete
+         << ", priority=" << priority << ", obj_to_source=" << obj_to_source
+         << ", source_to_obj=" << source_to_obj << ", in_progress=" << in_progress
+         << ", debug_log=" << debug_log << ")";
+    }
   };
   struct ReadPipeline {
     void objects_read_and_reconstruct(
@@ -330,7 +371,6 @@ struct ECCommon {
       bool for_recovery,
       const std::optional<std::set<pg_shard_t>>& error_shards = std::nullopt);
 
-    friend std::ostream &operator<<(std::ostream &lhs, const ReadOp &rhs);
     friend struct FinishReadOp;
 
     void get_want_to_read_shards(
@@ -448,6 +488,24 @@ struct ECCommon {
 
         if (!--pending_cache_ops) pipeline->cache_ready(*this);
       }
+
+      void print(std::ostream &os) const {
+        os << "Op(" << hoid << " v=" << version << " tt=" << trim_to
+           << " tid=" << tid << " reqid=" << reqid;
+#ifndef WITH_SEASTAR
+        if (client_op && client_op->get_req()) {
+          os << " client_op=";
+          client_op->get_req()->print(os);
+        }
+#endif
+        os << " pg_committed_to=" << pg_committed_to
+            << " temp_added=" << temp_added
+            << " temp_cleared=" << temp_cleared
+            << " remote_read_result=" << remote_shard_extent_map
+            << " pending_commits=" << pending_commits
+            << " plan.to_read=" << plan
+            << ")";
+      }
     };
 
     void backend_read(hobject_t oid, ECUtil::shard_extent_set_t const &request, uint64_t object_size) override  {
@@ -466,7 +524,6 @@ struct ECCommon {
 
     using OpRef = std::shared_ptr<Op>;
     using op_list = boost::intrusive::list<Op>;
-    friend std::ostream &operator<<(std::ostream &lhs, const Op &rhs);
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
     std::map<hobject_t, eversion_t> oid_to_version;
@@ -558,15 +615,6 @@ struct ECCommon {
       uint64_t size);
   };
 };
-
-std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::read_request_t &rhs);
-std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::read_result_t &rhs);
-std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::ReadOp &rhs);
-std::ostream &operator<<(std::ostream &lhs,
-			 const ECCommon::RMWPipeline::Op &rhs);
 
 template <class F, class G>
 void ECCommon::ReadPipeline::check_recovery_sources(

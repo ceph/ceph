@@ -65,61 +65,6 @@ static ostream& _prefix(std::ostream *_dout,
 static ostream& _prefix(std::ostream *_dout,
                         struct ClientReadCompleter const *read_completer);
 
-ostream &operator<<(ostream &lhs, const ECCommon::ec_extent_t &rhs)
-{
-  return lhs << rhs.err << "," << rhs.emap;
-}
-
-ostream &operator<<(ostream &lhs, const ECCommon::shard_read_t &rhs)
-{
-  return lhs << "shard_read_t(extents=[" << rhs.extents << "]"
-             << ", zero_pad=" << rhs.zero_pad
-	     << ", subchunk=" << rhs.subchunk
-             << ", pg_shard=" << rhs.pg_shard
-	     << ")";
-}
-
-ostream &operator<<(ostream &lhs, const ECCommon::read_request_t &rhs)
-{
-  return lhs << "read_request_t(to_read=[" << rhs.to_read << "]"
-             << ", flags=" << rhs.flags
-             << ", shard_want_to_read=" << rhs.shard_want_to_read
-	     << ", shard_reads=" << rhs.shard_reads
-	     << ", want_attrs=" << rhs.want_attrs
-	     << ")";
-}
-
-ostream &operator<<(ostream &lhs, const ECCommon::read_result_t &rhs)
-{
-  lhs << "read_result_t(r=" << rhs.r
-      << ", errors=" << rhs.errors;
-  if (rhs.attrs) {
-    lhs << ", attrs=" << *(rhs.attrs);
-  } else {
-    lhs << ", noattrs";
-  }
-  return lhs << ", buffers_read=" << rhs.buffers_read << ")";
-}
-
-ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
-{
-  lhs << "ReadOp(tid=" << rhs.tid;
-#ifndef WITH_SEASTAR
-  if (rhs.op && rhs.op->get_req()) {
-    lhs << ", op=";
-    rhs.op->get_req()->print(lhs);
-  }
-#endif
-  return lhs << ", to_read=" << rhs.to_read
-	     << ", complete=" << rhs.complete
-	     << ", priority=" << rhs.priority
-	     << ", obj_to_source=" << rhs.obj_to_source
-	     << ", source_to_obj=" << rhs.source_to_obj
-	     << ", in_progress=" << rhs.in_progress
-             << ", debug_log=" << rhs.debug_log
-             << ")";
-}
-
 void ECCommon::ReadOp::dump(Formatter *f) const
 {
   f->dump_unsigned("tid", tid);
@@ -134,29 +79,6 @@ void ECCommon::ReadOp::dump(Formatter *f) const
   f->dump_stream("obj_to_source") << obj_to_source;
   f->dump_stream("source_to_obj") << source_to_obj;
   f->dump_stream("in_progress") << in_progress;
-}
-
-ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
-{
-  lhs << "Op(" << rhs.hoid
-      << " v=" << rhs.version
-      << " tt=" << rhs.trim_to
-      << " tid=" << rhs.tid
-      << " reqid=" << rhs.reqid;
-#ifndef WITH_SEASTAR
-  if (rhs.client_op && rhs.client_op->get_req()) {
-    lhs << " client_op=";
-    rhs.client_op->get_req()->print(lhs);
-  }
-#endif
-  lhs << " pg_committed_to=" << rhs.pg_committed_to
-      << " temp_added=" << rhs.temp_added
-      << " temp_cleared=" << rhs.temp_cleared
-      << " remote_read_result=" << rhs.remote_shard_extent_map
-      << " pending_commits=" << rhs.pending_commits
-      << " plan.to_read=" << rhs.plan
-      << ")";
-  return lhs;
 }
 
 void ECCommon::ReadPipeline::complete_read_op(ReadOp &&rop)

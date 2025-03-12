@@ -273,8 +273,21 @@ public:
     void dump(ceph::Formatter *f) const;
 
     RecoveryOp() : state(IDLE) {}
+
+    void print(std::ostream &os) const {
+      os << "RecoveryOp("
+           << "hoid=" << hoid
+           << " v=" << v
+           << " missing_on=" << missing_on
+           << " missing_on_shards=" << missing_on_shards
+           << " recovery_info=" << recovery_info
+           << " recovery_progress=" << recovery_progress
+           << " obc refcount=" << obc.use_count()
+           << " state=" << ECBackend::RecoveryBackend::RecoveryOp::tostr(state)
+           << " waiting_on_pushes=" << waiting_on_pushes
+           << ")";
+    }
   };
-  friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
   std::map<hobject_t, RecoveryOp> recovery_ops;
 
   uint64_t get_recovery_chunk_size() const {

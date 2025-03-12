@@ -66,21 +66,6 @@ struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
   list<ECBackend::RecoveryBackend::RecoveryOp> ops;
 };
 
-ostream &operator<<(ostream &lhs, const ECBackend::RecoveryBackend::RecoveryOp &rhs)
-{
-  return lhs << "RecoveryOp("
-	     << "hoid=" << rhs.hoid
-	     << " v=" << rhs.v
-	     << " missing_on=" << rhs.missing_on
-	     << " missing_on_shards=" << rhs.missing_on_shards
-	     << " recovery_info=" << rhs.recovery_info
-	     << " recovery_progress=" << rhs.recovery_progress
-	     << " obc refcount=" << rhs.obc.use_count()
-	     << " state=" << ECBackend::RecoveryBackend::RecoveryOp::tostr(rhs.state)
-	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
-	     << ")";
-}
-
 void ECBackend::RecoveryBackend::RecoveryOp::dump(Formatter *f) const
 {
   f->dump_stream("hoid") << hoid;
