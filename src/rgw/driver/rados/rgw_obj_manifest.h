@@ -472,22 +472,25 @@ public:
   }
 
   bool is_tier_type_s3() {
-      return (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier");
+      return (tier_type == RGWTierType::CLOUD_S3 ||
+              tier_type == RGWTierType::CLOUD_S3_GLACIER);
   }
 
   bool is_tier_type_s3_glacier() {
-      return (tier_type == "cloud-s3-glacier");
+      return (tier_type == RGWTierType::CLOUD_S3_GLACIER);
   }
 
   inline void set_tier_type(std::string value) {
-      /* Only "cloud-s3" & "cloud-s3-glacier" tier-type is supported for now */
-      if (value == "cloud-s3" || value == "cloud-s3-glacier") {
+      /* Only RGWTierType::CLOUD_S3 & RGWTierType::CLOUD_S3_GLACIER
+       * tier-type are supported for now */
+      if (RGWTierType::is_tier_type_supported(value)) {
         tier_type = value;
       }
   }
 
   inline void set_tier_config(RGWObjTier t) {
-      /* Set only if tier_type set to "cloud-s3" or "cloud-s3-glacier" */
+      /* Set only if tier_type set to RGWTierType::CLOUD_S3 or
+       * RGWTierType::CLOUD_S3_GLACIER */
       if (!is_tier_type_s3())
         return;
 
