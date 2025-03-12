@@ -294,7 +294,9 @@ namespace ECUtil {
   const unsigned int m;
   const std::vector<shard_id_t> chunk_mapping;
   const std::vector<raw_shard_id_t> chunk_mapping_reverse;
-private:
+  const shard_id_set data_shards;
+  const shard_id_set parity_shards;
+ private:
   void ro_range_to_shards(
     uint64_t ro_offset,
     uint64_t ro_size,
@@ -332,6 +334,19 @@ private:
     }
     return reverse;
   }
+  static shard_id_set calc_shards(raw_shard_id_t start,
+    int count,
+    std::vector<shard_id_t> chunk_mapping)
+  {
+    shard_id_set data_shards;
+    for (raw_shard_id_t raw_shard = start;
+         raw_shard < int(start) + count;
+         ++raw_shard) {
+      shard_id_t shard = chunk_mapping[int(raw_shard)];
+      data_shards.insert(shard);
+    }
+    return data_shards;
+  }
 public:
   stripe_info_t(ErasureCodeInterfaceRef ec_impl, const pg_pool_t *pool,
 		uint64_t stripe_width)
@@ -342,7 +357,9 @@ public:
       k(ec_impl->get_data_chunk_count()),
       m(ec_impl->get_coding_chunk_count()),
       chunk_mapping(complete_chunk_mapping(ec_impl->get_chunk_mapping(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
     ceph_assert(stripe_width % k == 0);
   }
     // Simpler constructors for unit tests
@@ -354,7 +371,9 @@ public:
       k(k),
       m(m),
       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
     ceph_assert(stripe_width % k == 0);
   }
   stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
@@ -366,7 +385,9 @@ public:
       k(k),
       m(m),
       chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
     ceph_assert(stripe_width % k == 0);
   }
   stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
@@ -416,8 +437,12 @@ public:
     uint64_t full_stripes = (ro_offset / stripe_width) * chunk_size;
     int offset_shard = (ro_offset / chunk_size) % k;
 
-    if (int(raw_shard) == offset_shard) return full_stripes + ro_offset % chunk_size;
-    if (raw_shard < offset_shard) return full_stripes + chunk_size;
+    if (int(raw_shard) == offset_shard) {
+      return full_stripes + ro_offset % chunk_size;
+    }
+    if (raw_shard < offset_shard) {
+      return full_stripes + chunk_size;
+    }
     return full_stripes;
   }
 
@@ -466,14 +491,10 @@ public:
   }
   /* Return a "span" - which can be iterated over */
   auto get_data_shards() const {
-    return std::span(chunk_mapping).subspan(0, k);
+    return data_shards;
   }
   auto get_parity_shards() const {
-    return std::span(chunk_mapping).subspan(k, m);
-  }
-  // FIXME: get_k() preferred... but changing would create a big change.
-  int get_data_chunk_count() const {
-    return k;
+    return parity_shards;
   }
   uint64_t ro_offset_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;

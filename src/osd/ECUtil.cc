@@ -63,7 +63,7 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
   // Some of the maths below assumes size not zero.
   if (ro_size == 0) return;
 
-  uint64_t k  = get_data_chunk_count();
+  uint64_t k  = get_k();
 
   // Aim is to minimise non-^2 divs (chunk_size is assumed to be a power of 2).
   // These should be the only non ^2 divs.
@@ -86,7 +86,7 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
   uint64_t buffer_shard_start_offset = 0;
 
   for (auto i = start_shard; i < end_shard; i++) {
-    auto raw_shard = i >= k  ? i - k  : i;
+    raw_shard_id_t raw_shard(i >= k  ? i - k  : i);
 
     // Adjust the start and end blocks if needed.
     uint64_t start_adj = 0;
@@ -95,7 +95,7 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
     if (raw_shard < start_shard) {
       // Shards before the start, must start on the next chunk.
       start_adj = chunk_size;
-    } else if (raw_shard == start_shard) {
+    } else if (int(raw_shard) == start_shard) {
       // The start shard itself needs to be moved a partial-chunk forward.
       start_adj = ro_offset % chunk_size;
     }
@@ -103,12 +103,11 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
     // The end is similar to the start, but the end must be rounded up.
     if (raw_shard < last_shard) {
       end_adj = chunk_size;
-    } else if (raw_shard == last_shard) {
+    } else if (int(raw_shard) == last_shard) {
       end_adj = (ro_offset + ro_size - 1) % chunk_size + 1;
     }
 
-    auto shard = chunk_mapping.size() > raw_shard ?
-             chunk_mapping[raw_shard] : shard_id_t(raw_shard);
+    shard_id_t shard = get_shard(raw_shard);
 
     uint64_t off = start + start_adj;
     uint64_t len =  end + end_adj - start - start_adj;
@@ -462,8 +461,7 @@ namespace ECUtil {
                                  uint64_t before_ro_size) 
   {
     bool rebuild_req = false;
-    shard_id_set out_set;
-    out_set.insert_range(shard_id_t(sinfo->get_k()), sinfo->get_m());
+    shard_id_set out_set = sinfo->get_data_shards();
 
     for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
       if (!iter.is_page_aligned()) {
@@ -717,7 +715,7 @@ namespace ECUtil {
     bufferlist bl;
     uint64_t chunk_size = sinfo->get_chunk_size();
     uint64_t stripe_size = sinfo->get_stripe_width();
-    int data_chunk_count = sinfo->get_data_chunk_count();
+    int data_chunk_count = sinfo->get_k();
 
     pair read_pair(ro_offset, ro_length);
     auto chunk_aligned_read = sinfo->ro_range_to_chunk_ro_range(read_pair);

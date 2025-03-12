@@ -516,6 +516,43 @@ TEST(ECUtil, shard_extent_map_t_insert_ro_buffer_3)
   ASSERT_TRUE(out.contents_equal(ref)) << semap.debug_string(2048, 0);
 }
 
+TEST(ECUtil, sinfo_ro_size_to_read_mask_lrc) {
+  std::vector<shard_id_t> chunk_mapping = {shard_id_t(1), shard_id_t(2), shard_id_t(0)};
+  stripe_info_t sinfo(2, 1, 2 * 4096, chunk_mapping);
+
+  {
+    shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+    shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
+    sinfo.ro_size_to_read_mask(1, read_mask);
+    sinfo.ro_size_to_zero_mask(1, zero_mask);
+
+    shard_extent_set_t ref_read(sinfo.get_k_plus_m());
+    shard_extent_set_t ref_zero(sinfo.get_k_plus_m());
+    ref_read[shard_id_t(1)].insert(0, 4096);
+    ref_zero[shard_id_t(2)].insert(0, 4096);
+    ref_read[shard_id_t(0)].insert(0, 4096);
+
+    ASSERT_EQ(ref_read, read_mask);
+    ASSERT_EQ(ref_zero, zero_mask);
+  }
+
+  {
+    shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+    shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
+    sinfo.ro_size_to_read_mask(38912, read_mask);
+    sinfo.ro_size_to_zero_mask(38912, zero_mask);
+
+    shard_extent_set_t ref_read(sinfo.get_k_plus_m());
+    shard_extent_set_t ref_zero(sinfo.get_k_plus_m());
+    ref_read[shard_id_t(1)].insert(0, 20480);
+    ref_read[shard_id_t(2)].insert(0, 20480);
+    ref_read[shard_id_t(0)].insert(0, 20480);
+
+    ASSERT_EQ(ref_read, read_mask);
+    ASSERT_EQ(ref_zero, zero_mask);
+  }
+}
+
 TEST(ECUtil, sinfo_ro_size_to_read_mask) {
   stripe_info_t sinfo(2, 1, 16*4096);
 
