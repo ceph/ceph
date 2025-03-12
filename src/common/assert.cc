@@ -17,6 +17,7 @@
 #include <sstream>
 
 #include "include/compat.h"
+#include "include/str_list.h"
 #include "common/BackTrace.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
@@ -70,6 +71,7 @@ namespace ceph {
     oss << ClibBackTrace(1);
     dout_emergency(oss.str());
 
+    bool should_abort = true;
     if (g_assert_context) {
       lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
@@ -78,9 +80,22 @@ namespace ceph {
       if (!g_assert_context->_conf->fatal_signal_handlers) {
 	g_assert_context->_log->dump_recent();
       }
-    }
 
-    abort();
+      // bypass the abort?
+      const auto supressions = get_str_list(
+	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+      should_abort = std::none_of(
+	std::begin(supressions), std::end(supressions),
+	[file, line](const auto& supression) {
+	  return supression == fmt::format("{}:{}", file, line);
+        });
+    }
+    if (should_abort) {
+      abort();
+    } else {
+      dout_emergency("WARNING: ceph_assert() does NOT abort() due "
+		     "to ceph_assert_supresssions");
+    }
   }
 
   [[gnu::cold]] void __ceph_assert_fail(const assert_data &ctx)
@@ -151,6 +166,7 @@ namespace ceph {
     oss << *bt;
     dout_emergency(oss.str());
 
+    bool should_abort = true;
     if (g_assert_context) {
       lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
@@ -159,9 +175,22 @@ namespace ceph {
       if (!g_assert_context->_conf->fatal_signal_handlers) {
 	g_assert_context->_log->dump_recent();
       }
-    }
 
-    abort();
+      // bypass the abort?
+      const auto supressions = get_str_list(
+	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+      should_abort = std::none_of(
+	std::begin(supressions), std::end(supressions),
+	[file, line](const auto& supression) {
+	  return supression == fmt::format("{}:{}", file, line);
+        });
+    }
+    if (should_abort) {
+      abort();
+    } else {
+      dout_emergency("WARNING: ceph_assertf() does NOT abort() due to"
+		     "to ceph_assert_supresssions");
+    }
   }
 
   [[gnu::cold]] void __ceph_abort(const char *file, int line,
