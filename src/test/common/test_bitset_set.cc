@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <gtest/gtest.h>
-#include <common/bitset_set.h>
+#include "common/bitset_set.h"
 
 struct Key {
   int8_t k;
@@ -22,6 +22,18 @@ struct Key {
   }
   friend bool operator==(const Key &lhs, const Key &rhs) = default;
 };
+
+namespace fmt {
+template <>
+struct formatter<Key> : private formatter<int> {
+  using formatter<int>::parse;
+  template <typename FormatContext>
+  auto format(const Key& k, FormatContext& ctx) const {
+    return formatter<int>::format(k.k, ctx);
+  }
+};
+} // namespace fmt
+
 
 TEST(bitset_set, constructors) {
   bitset_set<128, Key> bs;
@@ -181,4 +193,21 @@ TEST(bitset_set, equality) {
   ASSERT_NE(bitset, bitset2);
   bitset2.insert(64);
   ASSERT_EQ(bitset, bitset2);
+}
+
+TEST(bitset_set, fmt_formatting) {
+  bitset_set<128, Key> bitset;
+  // when empty:
+  auto using_fmt = fmt::format("{}", bitset);
+  ASSERT_EQ("{}", using_fmt);
+
+  bitset.insert(30);
+  bitset.insert(20);
+  bitset.insert(10);
+  using_fmt = fmt::format("{}", bitset);
+  ASSERT_EQ("{10,20,30}", using_fmt);
+  // compare to operator<<
+  std::ostringstream oss;
+  oss << bitset;
+  EXPECT_EQ(using_fmt, oss.str());
 }
