@@ -7612,6 +7612,11 @@ void Server::handle_client_link(const MDRequestRef& mdr)
       return;
     }
     mdr->pin(targeti);
+    // Load referent inodes since path traverse not happening on targeti
+    CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
+    dout(15) << __func__ << " only targeti received - no path, loading referent inodes of " << *targeti << dendl;
+    if (mdcache->load_referent_inodes(targeti, cf, true) != 0)
+      return;
 
     if (!(mdr->locking_state & MutationImpl::SNAP2_LOCKED)) {
       CDentry *pdn = targeti->get_projected_parent_dn();
