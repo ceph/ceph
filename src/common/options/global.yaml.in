@@ -6718,3 +6718,10 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: ceph_assert_supresssions
+  type: str
+  desc: Suppress specific ceph_assert instances to let the execution continue with unknown, potentially DESTRUCTIVE consequences.
+  fmt_desc: Comma-separated list of locations of ceph_assert in the source code.
+    The format is ``{file}:{line} [, {file}:{line}]``
+  level: dev
+  with_legacy: false
