@@ -5937,7 +5937,7 @@ int main(int argc, const char **argv)
         pt = &ptiter->second;
         tier_class = true;
       } else if (tier_type_specified) {
-        if (tier_type == "cloud-s3" || tier_type == "cloud-s3-glacier") {
+        if (RGWTierType::is_tier_type_supported(tier_type)) {
           /* we support only cloud-s3 & cloud-s3-glacier tier-type for now.
            * Once set cant be reset. */
           tier_class = true;
