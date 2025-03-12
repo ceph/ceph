@@ -1111,6 +1111,23 @@ public:
       bool just_after_reshard //true to indicate that update should now respect shard boundaries
     );                        //as no further resharding will be done
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
+
+    struct ReshardPlan {
+      std::vector<bluestore_onode_t::shard_info> new_shard_info;
+      unsigned shard_index_begin;
+      unsigned shard_index_end;
+      uint32_t spanning_scan_begin;
+      uint32_t spanning_scan_end;
+    };
+
+    ReshardPlan reshard_decision(uint32_t segment_size);
+
+    void reshard_action(
+      ReshardPlan& plan,
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
+
+
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t,
