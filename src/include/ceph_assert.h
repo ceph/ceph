@@ -50,13 +50,10 @@ struct assert_data {
   const char *function;
 };
 
-extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
-  __attribute__ ((__noreturn__));
-extern void __ceph_assert_fail(const assert_data &ctx)
-  __attribute__ ((__noreturn__));
+extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function);
+extern void __ceph_assert_fail(const assert_data &ctx);
 
-extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...)
-  __attribute__ ((__noreturn__));
+extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...);
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
 [[noreturn]] void __ceph_abort(const char *file, int line, const char *func,
