@@ -17,6 +17,8 @@ import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum'
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -60,7 +62,6 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   loading = true;
   multisiteSyncStatus$: Observable<any>;
   subject = new ReplaySubject<any>();
-  syncCardLoading = true;
   fetchDataSub: Subscription;
 
   constructor(
@@ -72,7 +73,8 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     private rgwZoneService: RgwZoneService,
     private rgwBucketService: RgwBucketService,
     private prometheusService: PrometheusService,
-    private rgwMultisiteService: RgwMultisiteService
+    private rgwMultisiteService: RgwMultisiteService,
+    private notificationService: NotificationService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -93,8 +95,8 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
         this.averageObjectSize = averageSize;
         this.rgwBucketCount = bucketData.buckets_count;
         this.UserCount = bucketData.users_count;
-        this.getSyncStatus();
       });
+      this.getSyncStatus();
     });
     this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
       this.rgwRealmCount = data['realms'].length;
@@ -115,16 +117,20 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
             this.metadataSyncInfo = data['metadataSyncInfo'];
             if (this.replicaZonesInfo.length === 0) {
               this.showMultisiteCard = false;
-              this.syncCardLoading = false;
               this.loading = false;
             }
             [this.realm, this.zonegroup, this.zone] = data['primaryZoneData'];
           }),
           catchError((err) => {
-            this.showMultisiteCard = false;
-            this.syncCardLoading = false;
-            this.loading = false;
             err.preventDefault();
+            this.loading = false;
+            this.showMultisiteCard = false;
+            const errorMessage = $localize`Unable to fetch sync status`;
+            this.notificationService.show(
+              NotificationType.error,
+              errorMessage,
+              err.error.detail || err.error.message
+            );
             return of(true);
           })
         )
