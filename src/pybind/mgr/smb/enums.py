@@ -107,3 +107,11 @@ class SMBClustering(_StrEnum):
 class ShowResults(_StrEnum):
     FULL = 'full'
     COLLAPSED = 'collapsed'
+
+
+class PasswordFilter(_StrEnum):
+    """Filter type for password values."""
+
+    NONE = 'none'
+    BASE64 = 'base64'
+    HIDDEN = 'hidden'
