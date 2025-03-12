@@ -733,7 +733,7 @@ void ECTransaction::generate_transactions(
 	    ECUtil::align_page_next(plan.orig_size),
 	    rollback_shards);
 	}
-	if (entry->written_shards.size() == sinfo.get_k()) {
+	if (entry->written_shards.size() == sinfo.get_k_plus_m()) {
           // More efficient to encode an empty set for all shards
           entry->written_shards.clear();
         }
