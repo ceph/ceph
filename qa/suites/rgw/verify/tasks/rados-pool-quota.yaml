@@ -9,3 +9,4 @@ overrides:
     log-ignorelist:
       - reached quota
       - POOL_FULL
+      - pool(s) full
