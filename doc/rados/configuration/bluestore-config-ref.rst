@@ -396,7 +396,7 @@ SSD by running the following command:
 
 .. prompt:: bash $
 
-   lspci -mm -n -d -d 8086:0953
+   lspci -mm -n -D -d 8086:0953
 
 The form of the device selector is either ``DDDD:BB:DD.FF`` or
 ``DDDD.BB.DD.FF``.
@@ -405,12 +405,12 @@ Next, supposing that ``0000:01:00.0`` is the device selector found in the
 output of the ``lspci`` command, you can specify the device selector by running
 the following command::
 
-  bluestore_block_path = "spdk:trtype:pcie traddr:0000:01:00.0"
+  bluestore_block_path = "spdk:trtype:PCIe traddr:0000:01:00.0"
 
 You may also specify a remote NVMeoF target over the TCP transport, as in the
 following example::
 
-  bluestore_block_path = "spdk:trtype:tcp traddr:10.67.110.197 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode1"
+  bluestore_block_path = "spdk:trtype:TCP traddr:10.67.110.197 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode1"
 
 To run multiple SPDK instances per node, you must make sure each instance uses
 its own DPDK memory by specifying for each instance the amount of DPDK memory
@@ -538,7 +538,7 @@ read/write operations on persistent memory (PMEM) in BlueStore, you need to
 install `DML`_ and the `idxd-config`_ library. This will work only on machines
 that have a SPR (Sapphire Rapids) CPU.
 
-.. _dml: https://github.com/intel/dml
+.. _DML: https://github.com/intel/DML
 .. _idxd-config: https://github.com/intel/idxd-config
 
 After installing the DML software, configure the shared work queues (WQs) with
@@ -546,7 +546,7 @@ reference to the following WQ configuration example:
 
 .. prompt:: bash $
 
-   accel-config config-wq --group-id=1 --mode=shared --wq-size=16 --threshold=15 --type=user --name="myapp1" --priority=10 --block-on-fault=1 dsa0/wq0.1
+   accel-config config-wq --group-id=1 --mode=shared --wq-size=16 --threshold=15 --type=user --name="MyApp1" --priority=10 --block-on-fault=1 dsa0/wq0.1
    accel-config config-engine dsa0/engine0.1 --group-id=1
    accel-config enable-device dsa0
    accel-config enable-wq dsa0/wq0.1
