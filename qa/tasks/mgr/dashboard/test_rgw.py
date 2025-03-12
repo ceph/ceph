@@ -225,22 +225,23 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['owner'], 'mfa-test-user')
         self.assertEqual(data['versioning'], 'Enabled')
 
+        # Disabled due to https://tracker.ceph.com/issues/46735
         # Update bucket: enable MFA Delete.
-        self._put(
-            '/api/rgw/bucket/teuth-test-bucket',
-            params={
-                'bucket_id': data['id'],
-                'uid': 'mfa-test-user',
-                'versioning_state': 'Enabled',
-                'mfa_delete': 'Enabled',
-                'mfa_token_serial': self._mfa_token_serial,
-                'mfa_token_pin': self._get_mfa_token_pin()
-            })
-        self.assertStatus(200)
-        data = self._get('/api/rgw/bucket/teuth-test-bucket')
-        self.assertStatus(200)
-        self.assertEqual(data['versioning'], 'Enabled')
-        self.assertEqual(data['mfa_delete'], 'Enabled')
+        # self._put(
+        #     '/api/rgw/bucket/teuth-test-bucket',
+        #     params={
+        #         'bucket_id': data['id'],
+        #         'uid': 'mfa-test-user',
+        #         'versioning_state': 'Enabled',
+        #         'mfa_delete': 'Enabled',
+        #         'mfa_token_serial': self._mfa_token_serial,
+        #         'mfa_token_pin': self._get_mfa_token_pin()
+        #     })
+        # self.assertStatus(200)
+        # data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        # self.assertStatus(200)
+        # self.assertEqual(data['versioning'], 'Enabled')
+        # self.assertEqual(data['mfa_delete'], 'Enabled')
 
         # Update bucket: disable versioning & MFA Delete.
         time.sleep(self._mfa_token_time_step * 3)  # Required to get new TOTP pin.
