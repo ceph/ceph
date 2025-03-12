@@ -21,6 +21,7 @@ from . import (
 from .enums import (
     AuthMode,
     JoinSourceType,
+    ShowResults,
     SMBClustering,
     UserGroupSourceType,
 )
@@ -334,8 +335,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
         return self._handler.apply([share]).one()
 
-    @cli.SMBCommand('show', perm='r')
-    def show(self, resource_names: Optional[List[str]] = None) -> Simplified:
+    @cli.SMBCommand("show", perm="r")
+    def show(
+        self,
+        resource_names: Optional[List[str]] = None,
+        results: ShowResults = ShowResults.COLLAPSED,
+    ) -> Simplified:
         """Show resources fetched from the local config store based on resource
         type or resource type and id(s).
         """
@@ -346,9 +351,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 resources = self._handler.matching_resources(resource_names)
             except handler.InvalidResourceMatch as err:
                 raise cli.InvalidInputValue(str(err)) from err
-        if len(resources) == 1:
+        if len(resources) == 1 and results is ShowResults.COLLAPSED:
             return resources[0].to_simplified()
-        return {'resources': [r.to_simplified() for r in resources]}
+        return {"resources": [r.to_simplified() for r in resources]}
 
     def submit_smb_spec(self, spec: SMBSpec) -> None:
         """Submit a new or updated smb spec object to ceph orchestration."""

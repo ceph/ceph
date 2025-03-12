@@ -102,3 +102,8 @@ class SMBClustering(_StrEnum):
     DEFAULT = 'default'
     ALWAYS = 'always'
     NEVER = 'never'
+
+
+class ShowResults(_StrEnum):
+    FULL = 'full'
+    COLLAPSED = 'collapsed'
