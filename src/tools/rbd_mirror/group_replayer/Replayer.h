@@ -107,12 +107,6 @@ private:
 
   bool m_stop_requested = false;
 
-  // map of <group_snap_id, pair<GroupSnapshot, on_finish>>
-  std::map<std::string, std::pair<cls::rbd::GroupSnapshot, Context *>> m_create_snap_requests;
-
-  // map of <group_snap_id, vec<pair<cls::rbd::ImageSnapshotSpec, bool>>>
-  std::map<std::string, std::vector<std::pair<cls::rbd::ImageSnapshotSpec, bool>>> m_pending_group_snaps;
-
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
   int local_group_image_list_by_id(
@@ -156,7 +150,7 @@ private:
   void handle_mirror_snapshot_complete(
     int r, const std::string &remote_group_snap_id, Context *on_finish);
 
-  void remove_mirror_peer_uuid(cls::rbd::GroupSnapshot *remote_snap);
+  void remove_mirror_peer_uuid(const std::string &snap_id);
   bool prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap);
   void unlink_group_snapshots(const std::string &remote_group_snap_id);
 
