@@ -3988,7 +3988,7 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
     if ((need & CEPH_CAP_FILE_WR) &&
         ((in->auth_cap && in->auth_cap->session->readonly) ||
         // (is locked)
-        (in->is_fscrypt_enabled() && is_inode_locked(in))))
+        (in->is_fscrypt_enabled() && is_inode_locked(in) && cct->_conf.get_val<bool>("client_fscrypt_as"))))
       return -EROFS;
 
     if (in->flags & I_CAP_DROPPED) {
@@ -6371,7 +6371,7 @@ int Client::may_open(const InodeRef& in, int flags, const UserPerm& perms)
   ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   unsigned want = 0;
 
-  if (!in->is_dir() && is_inode_locked(in))
+  if (!in->is_dir() && is_inode_locked(in) && cct->_conf.get_val<bool>("client_fscrypt_as"))
     return -ENOKEY;
 
   if ((flags & O_ACCMODE) == O_WRONLY)
@@ -6427,7 +6427,7 @@ out:
 int Client::may_create(const InodeRef& dir, const UserPerm& perms)
 {
   ldout(cct, 20) << __func__ << " " << *dir << "; " << perms << dendl;
-  if (dir->is_dir() && is_inode_locked(dir))
+  if (dir->is_dir() && is_inode_locked(dir) && cct->_conf.get_val<bool>("client_fscrypt_as"))
     return -ENOKEY;
 
   int r = _getattr_for_perm(dir, perms);
