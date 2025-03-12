@@ -266,13 +266,14 @@ Object metrics
 These metrics have the following labels:
 ``instance``: the ip address of the ceph exporter daemon providing the metric
 ``instance_id``: identifier of the rgw daemon
+``rgw_instance``: full identifier of the rgw daemon
 ``job``: prometheus scrape job
 
 Example:
 
 .. code-block:: bash
 
-  ceph_rgw_req{instance="192.168.122.7:9283", instance_id="154247", job="ceph"} = 12345
+  ceph_rgw_req{instance="192.168.122.7:9283", instance_id="154247", rgw_instance="154247.a", job="ceph"} = 12345
 
 
 Generic metrics
