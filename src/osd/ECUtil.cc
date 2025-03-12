@@ -326,6 +326,12 @@ namespace ECUtil {
       return;
 
     extent_maps[shard].insert(off, bl.length(), bl);
+    raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
+
+    if (raw_shard > sinfo->get_k()) {
+      return;
+    }
+
     uint64_t new_start = calc_ro_offset(sinfo->get_raw_shard(shard), off);
     uint64_t new_end = calc_ro_end(sinfo->get_raw_shard(shard), off + bl.length());
     if (empty()) {
