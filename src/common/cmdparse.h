@@ -4,14 +4,15 @@
 #define CEPH_COMMON_CMDPARSE_H
 
 #include <vector>
-#include <stdexcept>
+#include <exception>
+#include <map>
+#include <string>
 #include <optional>
-#include <ostream>
+#include <iosfwd>
 #include <boost/variant.hpp>
-#include "include/ceph_assert.h"	// boost clobbers this
 #include "include/common_fwd.h"
-#include "common/Formatter.h"
-#include "common/BackTrace.h"
+
+namespace ceph { class Formatter; }
 
 typedef boost::variant<std::string,
 		       bool,
