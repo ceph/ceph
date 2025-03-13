@@ -2167,11 +2167,13 @@ SeaStore::Shard::_setattrs(
     if (likely(val.length() <= onode_layout_t::MAX_SS_LENGTH)) {
 
       if (!layout.ss_size) {
-	fut = omaptree_rm_key(
-          *ctx.transaction,
-          get_omap_root(omap_type_t::XATTR, onode),
-          onode,
-          SS_ATTR);
+        fut = std::move(fut).si_then([this, &ctx, &onode] {
+          return omaptree_rm_key(
+            *ctx.transaction,
+            get_omap_root(omap_type_t::XATTR, onode),
+            onode,
+            SS_ATTR);
+        });
       }
       onode.update_snapset(*ctx.transaction, val);
       aset.erase(it);
