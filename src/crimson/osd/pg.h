@@ -123,7 +123,36 @@ public:
   const PGBackend& get_backend() const {
     return *backend;
   }
-  // EpochSource
+
+  // PeeringState Utility
+  bool is_active() const {
+    return peering_state.is_active();
+  }
+  bool is_active_clean() const {
+    return peering_state.is_active() && peering_state.is_clean();
+  }
+  bool is_primary() const final {
+    return peering_state.is_primary();
+  }
+  bool is_nonprimary() const {
+    return peering_state.is_nonprimary();
+  }
+  bool is_peered() const final {
+    return peering_state.is_peered();
+  }
+  bool is_recovering() const final {
+    return peering_state.is_recovering();
+  }
+  bool is_backfilling() const final {
+    return peering_state.is_backfilling();
+  }
+  uint64_t get_last_user_version() const {
+    return get_info().last_user_version;
+  }
+  bool get_need_up_thru() const {
+    return peering_state.get_need_up_thru();
+  }
+
   epoch_t get_osdmap_epoch() const final {
     return peering_state.get_osdmap_epoch();
   }
@@ -138,6 +167,94 @@ public:
 
   const pg_info_t& get_info() const final {
     return peering_state.get_info();
+  }
+
+  const auto& get_pgpool() const {
+    return peering_state.get_pgpool();
+  }
+  pg_shard_t get_primary() const {
+    return peering_state.get_primary();
+  }
+
+  eversion_t get_last_complete() const {
+    return peering_state.get_info().last_complete;
+  }
+
+  void complete_write(eversion_t v, eversion_t lc) {
+    peering_state.complete_write(v, lc);
+  }
+
+  void update_peer_last_complete_ondisk(
+    pg_shard_t fromosd,
+    eversion_t lcod) {
+    peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
+  }
+
+  bool has_reset_since(epoch_t epoch) const final {
+    return peering_state.pg_has_reset_since(epoch);
+  }
+
+  const pg_missing_tracker_t& get_local_missing() const {
+    return peering_state.get_pg_log().get_missing();
+  }
+
+  epoch_t get_last_peering_reset() const final {
+    return peering_state.get_last_peering_reset();
+  }
+
+  const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
+    return peering_state.get_acting_recovery_backfill();
+  }
+
+  bool is_backfill_target(pg_shard_t osd) const {
+    return peering_state.is_backfill_target(osd);
+  }
+
+  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) {
+    peering_state.begin_peer_recover(peer, oid);
+  }
+
+  uint64_t min_peer_features() const {
+    return peering_state.get_min_peer_features();
+  }
+
+  const std::map<hobject_t, std::set<pg_shard_t>>&
+  get_missing_loc_shards() const {
+    return peering_state.get_missing_loc().get_missing_locs();
+  }
+
+  const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
+    return peering_state.get_peer_missing();
+  }
+
+  std::vector<pg_shard_t> get_replica_recovery_order() const final {
+    return peering_state.get_replica_recovery_order();
+  }
+
+  cached_map_t get_osdmap() {
+    return peering_state.get_osdmap();
+  }
+
+  bool have_unfound() const {
+    return peering_state.have_unfound();
+  }
+
+  bool is_unreadable_object(const hobject_t &oid,
+			    eversion_t* v = 0) const final {
+    return is_missing_object(oid) ||
+      !peering_state.get_missing_loc().readable_with_acting(
+	oid, get_actingset(), v);
+  }
+
+  bool is_missing_on_peer(
+    const pg_shard_t &peer,
+    const hobject_t &soid) const {
+    return peering_state.get_peer_missing(peer).is_missing(soid);
+  }
+
+  bool is_degraded_or_backfilling_object(const hobject_t& soid) const;
+  const std::set<pg_shard_t> &get_actingset() const {
+    return peering_state.get_actingset();
   }
 
   // DoutPrefixProvider
@@ -258,9 +375,7 @@ public:
     float delay) final {
     start_peering_event_operation(std::move(*event), delay);
   }
-  std::vector<pg_shard_t> get_replica_recovery_order() const final {
-    return peering_state.get_replica_recovery_order();
-  }
+
   void request_local_background_io_reservation(
     unsigned priority,
     PGPeeringEventURef on_grant,
@@ -519,59 +634,9 @@ public:
   HeartbeatStampsRef get_hb_stamps(int peer) final;
   void schedule_renew_lease(epoch_t plr, ceph::timespan delay) final;
 
-
-  // Utility
-  bool is_active() const {
-    return peering_state.is_active();
-  }
-  bool is_active_clean() const {
-    return peering_state.is_active() && peering_state.is_clean();
-  }
-  bool is_primary() const final {
-    return peering_state.is_primary();
-  }
-  bool is_nonprimary() const {
-    return peering_state.is_nonprimary();
-  }
-  bool is_peered() const final {
-    return peering_state.is_peered();
-  }
-  bool is_recovering() const final {
-    return peering_state.is_recovering();
-  }
-  bool is_backfilling() const final {
-    return peering_state.is_backfilling();
-  }
-  uint64_t get_last_user_version() const {
-    return get_info().last_user_version;
-  }
-  bool get_need_up_thru() const {
-    return peering_state.get_need_up_thru();
-  }
   bool should_send_op(pg_shard_t peer, const hobject_t &hoid) const;
   epoch_t get_same_interval_since() const {
     return get_info().history.same_interval_since;
-  }
-
-  const auto& get_pgpool() const {
-    return peering_state.get_pgpool();
-  }
-  pg_shard_t get_primary() const {
-    return peering_state.get_primary();
-  }
-
-  eversion_t get_last_complete() const {
-    return peering_state.get_info().last_complete;
-  }
-
-  void complete_write(eversion_t v, eversion_t lc) {
-    peering_state.complete_write(v, lc);
-  }
-
-  void update_peer_last_complete_ondisk(
-    pg_shard_t fromosd,
-    eversion_t lcod) {
-    peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
   }
 
   /// initialize created PG
@@ -725,7 +790,6 @@ private:
 
 
 public:
-  cached_map_t get_osdmap() { return peering_state.get_osdmap(); }
   eversion_t get_next_version() {
     return eversion_t(get_osdmap_epoch(),
 		      projected_last_update.version + 1);
@@ -823,35 +887,7 @@ public:
   hobject_t get_last_backfill_started() const {
     return get_backfill_state().get_last_backfill_started();
   }
-  bool has_reset_since(epoch_t epoch) const final {
-    return peering_state.pg_has_reset_since(epoch);
-  }
 
-  const pg_missing_tracker_t& get_local_missing() const {
-    return peering_state.get_pg_log().get_missing();
-  }
-  epoch_t get_last_peering_reset() const final {
-    return peering_state.get_last_peering_reset();
-  }
-  const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
-    return peering_state.get_acting_recovery_backfill();
-  }
-  bool is_backfill_target(pg_shard_t osd) const {
-    return peering_state.is_backfill_target(osd);
-  }
-  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) {
-    peering_state.begin_peer_recover(peer, oid);
-  }
-  uint64_t min_peer_features() const {
-    return peering_state.get_min_peer_features();
-  }
-  const std::map<hobject_t, std::set<pg_shard_t>>&
-  get_missing_loc_shards() const {
-    return peering_state.get_missing_loc().get_missing_locs();
-  }
-  const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
-    return peering_state.get_peer_missing();
-  }
   epoch_t get_interval_start_epoch() const {
     return get_info().history.same_interval_since;
   }
@@ -891,9 +927,6 @@ public:
     return seastar::now();
   }
   interruptible_future<> find_unfound(epoch_t epoch_started);
-  bool have_unfound() const {
-    return peering_state.have_unfound();
-  }
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch) const;
 
@@ -945,21 +978,6 @@ private:
   void context_registry_on_change();
   bool is_missing_object(const hobject_t& soid) const {
     return get_local_missing().is_missing(soid);
-  }
-  bool is_unreadable_object(const hobject_t &oid,
-			    eversion_t* v = 0) const final {
-    return is_missing_object(oid) ||
-      !peering_state.get_missing_loc().readable_with_acting(
-	oid, get_actingset(), v);
-  }
-  bool is_missing_on_peer(
-    const pg_shard_t &peer,
-    const hobject_t &soid) const {
-    return peering_state.get_peer_missing(peer).is_missing(soid);
-  }
-  bool is_degraded_or_backfilling_object(const hobject_t& soid) const;
-  const std::set<pg_shard_t> &get_actingset() const {
-    return peering_state.get_actingset();
   }
 
 private:
