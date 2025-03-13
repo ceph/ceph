@@ -174,11 +174,7 @@ private:
     }
 
     void stop() {
-      Context *ctx = new LambdaContext(
-        [this](int r) {
-          return;
-        });
-      group_replayer->stop(ctx, false);
+      group_replayer->stop(nullptr, false);
     }
   };
 
