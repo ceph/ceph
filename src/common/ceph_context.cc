@@ -713,6 +713,7 @@ CephContext::CephContext(uint32_t module_type_,
 #ifdef CEPH_DEBUG_MUTEX
     _lockdep_obs(NULL),
 #endif
+    _msgr_hook(nullptr),
     crush_location(this)
 {
   if (options.create_log) {
@@ -775,6 +776,17 @@ CephContext::CephContext(uint32_t module_type_,
   lookup_or_create_singleton_object<MempoolObs>("mempool_obs", false, this);
 }
 
+void CephContext::modify_msgr_hook(
+    std::function<AdminSocketHook*(void)> create,
+    std::function<void(AdminSocketHook*)> add) {
+  std::lock_guard l{_msgr_hook_lock};
+  if (_msgr_hook) {
+    add(_msgr_hook.get());
+  } else {
+    _msgr_hook.reset(create());
+  }
+}
+
 CephContext::~CephContext()
 {
   associated_objs.clear();
@@ -788,6 +800,9 @@ CephContext::~CephContext()
 
   delete _plugin_registry;
 
+  if (_msgr_hook) {
+    _admin_socket->unregister_commands(_msgr_hook.get());
+  }
   _admin_socket->unregister_commands(_admin_hook);
   delete _admin_hook;
   delete _admin_socket;

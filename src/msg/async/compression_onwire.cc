@@ -83,4 +83,12 @@ void TxHandler::done()
   ldout(m_cct, 25) << __func__ << " compression ratio=" << get_ratio() << dendl;
 }
 
+std::string_view RxHandler::compressor_name() const {
+  return m_compressor->get_type_name();
+}
+
+std::string_view TxHandler::compressor_name() const {
+  return m_compressor->get_type_name();
+}
+
 } // namespace ceph::compression::onwire
