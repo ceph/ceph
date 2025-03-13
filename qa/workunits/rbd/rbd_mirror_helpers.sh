@@ -956,16 +956,83 @@ mirror_image_snapshot()
     rbd --cluster "${cluster}" mirror image snapshot "${pool}/${image}"
 }
 
-get_newest_mirror_snapshot()
+# get the primary_snap_id for the most recent complete snap on the secondary cluster
+get_primary_snap_id_for_newest_mirror_snapshot_on_secondary()
 {
-    local cluster=$1
-    local pool=$2
-    local image=$3
-    local log=$4
+    local secondary_cluster=$1
+    local image_spec=$2
+    local -n _snap_id=$3
 
-    rbd --cluster "${cluster}" snap list --all "${pool}/${image}" --format xml | \
-        $XMLSTARLET sel -t -c "(//snapshots/snapshot[namespace/complete='true'])[last()]" > \
-        ${log} || true
+    run_cmd "rbd --cluster ${secondary_cluster} snap list --all ${image_spec} --format xml --pretty-format" 
+    _snap_id=$(xmlstarlet sel -t -v "(//snapshots/snapshot/namespace[complete='true']/primary_snap_id)[last()]" "$CMD_STDOUT" )
+}
+
+# get the snap_id for the most recent complete snap on the primary cluster
+get_newest_mirror_snapshot_id_on_primary()
+{
+    local primary_cluster=$1
+    local image_spec=$2
+    local -n _snap_id=$3
+
+    run_cmd "rbd --cluster ${primary_cluster} snap list --all ${image_spec} --format xml --pretty-format" 
+    _snap_id=$(xmlstarlet sel -t -v "(//snapshots/snapshot[namespace/complete='true']/id)[last()]" "$CMD_STDOUT" )
+}
+
+test_snap_present()
+{
+    local secondary_cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+    local expected_snap_count=$4
+
+    run_cmd "rbd --cluster ${secondary_cluster} snap list -a ${image_spec} --format xml --pretty-format" 
+    test "${expected_snap_count}" = "$($XMLSTARLET sel -t -v "count(//snapshots/snapshot/namespace[primary_snap_id='${snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+}
+
+test_snap_complete()
+{
+    local secondary_cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+    local expected_complete=$4
+
+    run_cmd "rbd --cluster ${secondary_cluster} snap list -a ${image_spec} --format xml --pretty-format" 
+    test "${expected_complete}" = "$($XMLSTARLET sel -t -v "//snapshots/snapshot/namespace[primary_snap_id='${snap_id}']/complete" < "$CMD_STDOUT")" || { fail; return 1; }
+}
+
+wait_for_test_snap_present()
+{
+    local secondary_cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+    local test_snap_count=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_snap_present "${secondary_cluster}" "${image_spec}" "${snap_id}" "${test_snap_count}" && return 0
+    done
+
+    fail "wait for count of snaps with id ${snap_id} to be ${test_snap_count} failed on ${secondary_cluster}"
+    return 1
+}
+
+wait_for_snap_id_present()
+{
+    local secondary_cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+
+    wait_for_test_snap_present "${secondary_cluster}" "${image_spec}" "${snap_id}" 1
+}
+
+wait_for_snap_id_not_present()
+{
+    local secondary_cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+
+    wait_for_test_snap_present "${secondary_cluster}" "${image_spec}" "${snap_id}" 0
 }
 
 get_newest_complete_mirror_snapshot_id()
@@ -998,28 +1065,21 @@ wait_for_non_primary_snap_present()
 
 wait_for_snapshot_sync_complete()
 {
-    local local_cluster=$1
+    local local_cluster=$1 
     local cluster=$2
     local local_pool=$3
     local remote_pool=$4
     local image=$5
 
-    local status_log=${TEMPDIR}/$(mkfname ${cluster}-${remote_pool}-${image}.status)
-    local local_status_log=${TEMPDIR}/$(mkfname ${local_cluster}-${local_pool}-${image}.status)
-
-    get_newest_mirror_snapshot "${cluster}" "${remote_pool}" "${image}" "${status_log}"
-    local snapshot_id=$(xmlstarlet sel -t -v "//snapshot/id" < ${status_log})
+    local primary_snapshot_id snapshot_id
+    get_newest_mirror_snapshot_id_on_primary "${cluster}" "${remote_pool}/${image}" primary_snapshot_id
 
     while true; do
         for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
             sleep ${s}
-
-            get_newest_mirror_snapshot "${local_cluster}" "${local_pool}" "${image}" "${local_status_log}"
-            local primary_snapshot_id=$(xmlstarlet sel -t -v "//snapshot/namespace/primary_snap_id" < ${local_status_log})
-
+            get_primary_snap_id_for_newest_mirror_snapshot_on_secondary "${local_cluster}" "${local_pool}/${image}" snapshot_id
             test "${snapshot_id}" = "${primary_snapshot_id}" && return 0
         done
-
         return 1
     done
     return 1
@@ -1027,8 +1087,8 @@ wait_for_snapshot_sync_complete()
 
 wait_for_replay_complete()
 {
-    local local_cluster=$1
-    local cluster=$2
+    local local_cluster=$1 #sec
+    local cluster=$2 #pri
     local local_pool=$3
     local remote_pool=$4
     local image=$5
