@@ -47,6 +47,7 @@ using rgw::IAM::Effect;
 using rgw::IAM::Environment;
 using rgw::Partition;
 using rgw::IAM::Policy;
+using rgw::IAM::Condition;
 using rgw::IAM::s3All;
 using rgw::IAM::s3Count;
 using rgw::IAM::s3GetAccelerateConfiguration;
@@ -1299,4 +1300,28 @@ TEST(set_cont_bits, iamconsts)
   EXPECT_EQ(iamAllValue, set_range_bits(s3All+1, iamAll));
   EXPECT_EQ(stsAllValue, set_range_bits(iamAll+1, stsAll));
   EXPECT_EQ(allValue , set_range_bits(0, allCount));
+}
+
+TEST(Condition, ArnLike)
+{
+  const std::string key = "aws:SourceArn";
+  {
+    Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
+    ArnLike.vals.push_back("arn:aws:s3:::bucket");
+
+    EXPECT_FALSE(ArnLike.eval({}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+  }
+  {
+    Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
+    ArnLike.vals.push_back("arn:aws:s3:::b*");
+
+    EXPECT_FALSE(ArnLike.eval({}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::b"}}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+  }
 }
