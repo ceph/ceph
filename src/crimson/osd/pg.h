@@ -181,12 +181,18 @@ public:
   }
 
   void complete_write(eversion_t v, eversion_t lc) {
+    LOG_PREFIX(PG::complete_write);
+    SUBDEBUGDPP(osd, "updating pct to: {} updating lcod to: {}",
+                *this, v, lc);
     peering_state.complete_write(v, lc);
   }
 
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) {
+    LOG_PREFIX(PG::update_peer_last_complete_ondisk);
+    SUBDEBUGDPP(osd, "updating my peer {} lcod to: {}",
+               *this, fromosd, lcod);
     peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
   }
 
