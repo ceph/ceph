@@ -170,7 +170,8 @@ class TestServiceDiscovery:
 
         # check content
         assert cfg[0]['targets'] == ['1.2.3.4:9049']
-        assert cfg[0]['labels'] == {'instance': 'ingress'}
+        assert cfg[0]['labels'] == {'instance': 'node0', 'ingress': 'ingress'}
+        assert cfg[1]['labels'] == {'instance': 'node1', 'ingress': 'ingress'}
 
     def test_get_sd_config_ceph_exporter(self):
         mgr = FakeMgr()
