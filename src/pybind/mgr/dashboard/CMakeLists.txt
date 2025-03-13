@@ -23,3 +23,5 @@ else()
       DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
   endif()
 endif()
+
+add_subdirectory(services/proto)
