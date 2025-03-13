@@ -464,8 +464,8 @@ void PoolWatcher<I>::notify_listener() {
       auto it = m_entities.find(entity);
       if (it != m_entities.end()) {
         m_entities.erase(entity);
+        m_entities.insert({entity, id});
       }
-      m_entities.insert({entity, id});
     }
     m_pending_removed_entities.clear();
 
