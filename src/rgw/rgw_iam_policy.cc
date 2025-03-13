@@ -584,6 +584,8 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
 	  "for an assumed role, "
 	  "`arn:aws:iam::tenant:user/user-name` for a user, "
 	  "`arn:aws:iam::tenant:oidc-provider/idp-url` for OIDC.", s);
+  } else if (w->id == TokenID::Service) {
+      return Principal::service(std::move(s));
   }
 
   if (errmsg)
