@@ -968,14 +968,14 @@ PG::interruptible_future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
                                          const eversion_t& version)
 {
   auto result = interruptor::now();
-  auto last_complete = peering_state.get_info().last_complete;
+  auto last_complete = get_last_complete();
   ceph_assert(log_entry_update_waiting_on.contains(rep_tid));
   auto& log_update = log_entry_update_waiting_on[rep_tid];
   ceph_assert(log_update.waiting_on.contains(pg_whoami));
   log_update.waiting_on.erase(pg_whoami);
   if (log_update.waiting_on.empty()) {
     log_entry_update_waiting_on.erase(rep_tid);
-    peering_state.complete_write(version, last_complete);
+    complete_write(version, last_complete);
     logger().debug("complete_error_log: write complete,"
                    " erasing rep_tid {}", rep_tid);
   } else {
@@ -985,7 +985,7 @@ PG::interruptible_future<> PG::complete_error_log(const ceph_tid_t& rep_tid,
       log_update.all_committed.get_shared_future()
     ).then_interruptible([this, last_complete, rep_tid, version] {
       logger().debug("complete_error_log: rep_tid {} awaited ", rep_tid);
-      peering_state.complete_write(version, last_complete);
+      complete_write(version, last_complete);
       ceph_assert(!log_entry_update_waiting_on.contains(rep_tid));
       return seastar::now();
     });
