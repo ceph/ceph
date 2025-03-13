@@ -2101,7 +2101,13 @@ SeaStore::Shard::_omap_clear(
     return omaptree_clear(
       *ctx.transaction,
       get_omap_root(omap_type_t::OMAP, onode),
-      onode);
+      onode
+    ).si_then([this, &ctx, &onode] {
+      return omaptree_clear(
+	*ctx.transaction,
+	get_omap_root(omap_type_t::LOG, onode),
+	onode);
+    });
   });
 }
 
