@@ -46,7 +46,7 @@ setup_teuthology() {
 
     ${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} -m venv venv
     source venv/bin/activate
-    pip install -U pip 'setuptools>=12,<60'
+    pip install -r requirements-tests-api.txt
     pip install "git+https://github.com/ceph/teuthology@2ef0dcd#egg=teuthology[test]"
     pushd $CURR_DIR
     pip install -r requirements.txt -c constraints.txt
