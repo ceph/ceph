@@ -210,7 +210,11 @@ add_object_to_context(rgw_obj &obj, rapidjson::Document &d)
 }
 
 int
-make_canonical_context(req_state *s,
+make_canonical_context(const DoutPrefixProvider *dpp,
+    CephContext *cct,
+    rgw::sal::Bucket* bucket,
+    const rgw_obj_key& object,
+    std::string* err_msg,
     std::string_view &context,
     std::string &cooked_context)
 {
@@ -221,11 +225,11 @@ mec_option options {
 mec_option::empty };
     rgw_obj obj;
     std::ostringstream oss;
-    canonical_char_sorter<MyMember> ccs{s, s->cct};
+    canonical_char_sorter<MyMember> ccs{dpp, cct};
 
-    obj.bucket.tenant = s->bucket->get_tenant();
-    obj.bucket.name = s->bucket->get_name();
-    obj.key.name = s->object->get_name();
+    obj.bucket.tenant = bucket->get_tenant();
+    obj.bucket.name = bucket->get_name();
+    obj.key.name = object.name;
     std::string iline;
     rapidjson::Document::AllocatorType &allocator { d.GetAllocator() };
 
@@ -233,7 +237,7 @@ mec_option::empty };
 	iline = rgw::from_base64(context);
     } catch (const std::exception& e) {
 	oss << "bad context: " << e.what();
-	s->err.message = oss.str();
+        if (err_msg) *err_msg = oss.str();
         return -ERR_INVALID_REQUEST;
     }
     rapidjson::StringStream isw(iline.c_str());
@@ -246,34 +250,34 @@ mec_option::empty };
     if (isw.Tell() != iline.length()) {
         oss << "bad context: did not consume all of input: @ "
 	    << isw.Tell();
-	s->err.message = oss.str();
+        if (err_msg) *err_msg = oss.str();
         return -ERR_INVALID_REQUEST;
     }
     if (d.HasParseError()) {
         oss << "bad context: parse error: @ " << d.GetErrorOffset()
 	    << " " << rapidjson::GetParseError_En(d.GetParseError());
-	s->err.message = oss.str();
+	if (err_msg) *err_msg = oss.str();
         return -ERR_INVALID_REQUEST;
     }
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
     if (!add_object_to_context(obj, d)) {
-	ldpp_dout(s, -1) << "ERROR: can't add default value to context" << dendl;
-	s->err.message = "context: internal error adding defaults";
+	ldpp_dout(dpp, -1) << "ERROR: can't add default value to context" << dendl;
+        if (err_msg) *err_msg = "context: internal error adding defaults";
         return -ERR_INVALID_REQUEST;
     }
     b = make_everything_canonical(d, allocator, ccs, options) == mec_error::success;
     if (!b) {
-	ldpp_dout(s, -1) << "ERROR: can't make canonical json <"
+	ldpp_dout(dpp, -1) << "ERROR: can't make canonical json <"
 	    << context << ">" << dendl;
-	s->err.message = "context: can't make canonical";
+        if (err_msg) *err_msg = "context: can't make canonical";
         return -ERR_INVALID_REQUEST;
     }
     b = sort_and_write(d, writer, ccs);
     if (!b) {
-	    ldpp_dout(s, 5) << "format error <" << context
+	ldpp_dout(dpp, 5) << "format error <" << context
 	    << ">: partial.results=" << buf.GetString() << dendl;
-	s->err.message = "unable to reformat json";
+        if (err_msg) *err_msg = "unable to reformat json";
         return -ERR_INVALID_REQUEST;
     }
     cooked_context = rgw::to_base64(buf.GetString());
@@ -1161,7 +1165,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         std::string_view context =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT);
         std::string cooked_context;
-        if ((res = make_canonical_context(s, context, cooked_context)))
+        if ((res = make_canonical_context(s, s->cct, s->bucket.get(), s->object->get_key(), &s->err.message, context, cooked_context)))
           return res;
         std::string_view key_id =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
@@ -1222,7 +1226,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
               <<  req_sse << dendl;
       std::string_view context = "";
       std::string cooked_context;
-      if ((res = make_canonical_context(s, context, cooked_context)))
+      if ((res = make_canonical_context(s, s->cct, s->bucket.get(), s->object->get_key(), &s->err.message, context, cooked_context)))
         return res;
 
       std::string key_id;
