@@ -775,7 +775,8 @@ public:
     librbd::RBD rbd;
     int r = rbd.list2(m_io_ctx, &m_images);
     if (r < 0 && r != -ENOENT) {
-      std::cerr << "rbd: failed to list images within pool" << std::endl;
+      std::cerr << "rbd: failed to list images within pool: "
+                << cpp_strerror(r) << std::endl;
       return r;
     }
 
@@ -929,7 +930,8 @@ int execute_peer_bootstrap_import(
     fd = open(token_path.c_str(), O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
-      std::cerr << "rbd: error opening " << token_path << std::endl;
+      std::cerr << "rbd: error opening " << token_path << ": "
+                << cpp_strerror(r) << std::endl;
       return r;
     }
   }
@@ -967,7 +969,8 @@ int execute_peer_bootstrap_import(
     std::cerr << "rbd: mirroring is not enabled on remote peer" << std::endl;
     return r;
   } else if (r < 0) {
-    std::cerr << "rbd: failed to import peer bootstrap token" << std::endl;
+    std::cerr << "rbd: failed to import peer bootstrap token: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -1027,7 +1030,8 @@ int execute_peer_add(const po::variables_map &vm,
   std::vector<librbd::mirror_peer_site_t> mirror_peers;
   r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
   if (r < 0) {
-    std::cerr << "rbd: failed to list mirror peers" << std::endl;
+    std::cerr << "rbd: failed to list mirror peers: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -1059,7 +1063,8 @@ int execute_peer_add(const po::variables_map &vm,
     std::cerr << "rbd: mirror peer already exists" << std::endl;
     return r;
   } else if (r < 0) {
-    std::cerr << "rbd: error adding mirror peer" << std::endl;
+    std::cerr << "rbd: error adding mirror peer: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -1111,7 +1116,8 @@ int execute_peer_remove(const po::variables_map &vm,
   librbd::RBD rbd;
   r = rbd.mirror_peer_site_remove(io_ctx, uuid);
   if (r < 0) {
-    std::cerr << "rbd: error removing mirror peer" << std::endl;
+    std::cerr << "rbd: error removing mirror peer: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
@@ -1208,7 +1214,8 @@ int execute_peer_set(const po::variables_map &vm,
       std::vector<librbd::mirror_peer_site_t> mirror_peers;
       r = rbd.mirror_peer_site_list(io_ctx, &mirror_peers);
       if (r < 0) {
-        std::cerr << "rbd: failed to list mirror peers" << std::endl;
+        std::cerr << "rbd: failed to list mirror peers: "
+                  << cpp_strerror(r) << std::endl;
         return r;
       }
 
@@ -1375,16 +1382,16 @@ int execute_enable(const po::variables_map &vm,
     std::string original_remote_namespace;
     r = rbd.mirror_remote_namespace_get(io_ctx, &original_remote_namespace);
     if (r < 0) {
-      std::cerr << "rbd: failed to get the current remote namespace."
-	        << std::endl;
+      std::cerr << "rbd: failed to get the current remote namespace: "
+	        << cpp_strerror(r) << std::endl;
       return r;
     }
 
     if (original_remote_namespace != remote_namespace) {
       r = rbd.mirror_remote_namespace_set(io_ctx, remote_namespace);
       if (r < 0) {
-        std::cerr << "rbd: failed to set the remote namespace."
-                  << std::endl;
+        std::cerr << "rbd: failed to set the remote namespace: "
+                  << cpp_strerror(r) << std::endl;
 	return r;
       }
     }
