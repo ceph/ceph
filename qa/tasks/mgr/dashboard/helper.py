@@ -9,7 +9,8 @@ import re
 import string
 import time
 from collections import namedtuple
-from typing import List
+from functools import wraps
+from typing import List, Optional, Tuple, Type, Union
 
 import requests
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -219,13 +220,11 @@ class DashboardTestCase(MgrTestCase):
 
             # To avoid any issues with e.g. unlink bugs, we destroy and recreate
             # the filesystem rather than just doing a rm -rf of files
-            cls.mds_cluster.mds_stop()
-            cls.mds_cluster.mds_fail()
             cls.mds_cluster.delete_all_filesystems()
+            cls.mds_cluster.mds_restart()  # to reset any run-time configs, etc.
             cls.fs = None  # is now invalid!
 
             cls.fs = cls.mds_cluster.newfs(create=True)
-            cls.fs.mds_restart()
 
             # In case some test messed with auth caps, reset them
             # pylint: disable=not-an-iterable
@@ -337,22 +336,33 @@ class DashboardTestCase(MgrTestCase):
             raise ex
 
     @classmethod
-    def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False, headers=None):
-        return cls._request(url, 'GET', params=params, version=version,
-                            set_cookies=set_cookies, headers=headers)
+    def _get(cls, url, params=None, version=DEFAULT_API_VERSION, set_cookies=False, headers=None,
+             retries=0, wait_func=None):
+        while retries >= 0:
+            try:
+                return cls._request(url, 'GET', params=params, version=version,
+                                    set_cookies=set_cookies, headers=headers)
+            except requests.RequestException as e:
+                if retries == 0:
+                    raise e from None
+
+                log.info("Retrying the GET req. Total retries left is... %s", retries)
+                if wait_func:
+                    wait_func()
+                retries -= 1
 
     @classmethod
     def _view_cache_get(cls, url, retries=5):
-        retry = True
-        while retry and retries > 0:
-            retry = False
+        _retry = True
+        while _retry and retries > 0:
+            _retry = False
             res = cls._get(url, version=DEFAULT_API_VERSION)
             if isinstance(res, dict):
                 res = [res]
             for view in res:
                 assert 'value' in view
                 if not view['value']:
-                    retry = True
+                    _retry = True
             retries -= 1
         if retries == 0:
             raise Exception("{} view cache exceeded number of retries={}"
@@ -511,9 +521,11 @@ class DashboardTestCase(MgrTestCase):
             self.assertEqual(body['detail'], detail)
 
     @classmethod
-    def _ceph_cmd(cls, cmd):
+    def _ceph_cmd(cls, cmd, wait=0):
         res = cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
         log.debug("command result: %s", res)
+        if wait:
+            time.sleep(wait)
         return res
 
     @classmethod
@@ -722,3 +734,25 @@ def _validate_json(val, schema, path=[]):
         return _validate_json(val, JLeaf(schema), path)
 
     assert False, str(path)
+
+
+def retry(
+        on_exception: Union[Type[Exception], Tuple[Type[Exception], ...]],
+        tries=3,
+        delay=0,
+        logger: Optional[logging.Logger] = None,
+):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for i in range(tries):
+                try:
+                    return func(*args, **kwargs)
+                except on_exception as e:
+                    err = e
+                    if logger:
+                        logger.warn(f"Retried #{i+1}/{tries}: '{func.__name__}' raised '{e}'")
+                    time.sleep(delay)
+            raise err
+        return wrapper
+    return decorator
