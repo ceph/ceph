@@ -9,6 +9,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_time.h"
 #include "common/ceph_json.h"
+#include "rgw_xml.h"
 
 
 
@@ -88,6 +89,11 @@ static inline void encode_json(const char *name, const rgw_bucket_snap_id& val, 
   encode_json(name, val.snap_id, f);
 }
 
+static inline void encode_xml(const char *name, const rgw_bucket_snap_id& val, ceph::Formatter *f)
+{
+  encode_xml(name, val.snap_id, f);
+}
+
 static inline void decode_json_obj(rgw_bucket_snap_id& val, JSONObj *obj)
 {
   decode_json_obj(val.snap_id, obj);
@@ -122,7 +128,7 @@ struct rgw_bucket_snap_range {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_bucket_snap_range);
 
@@ -161,6 +167,7 @@ struct rgw_bucket_snap_info {
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_bucket_snap_info)
 
@@ -183,6 +190,7 @@ struct rgw_bucket_snap {
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_bucket_snap)
 
