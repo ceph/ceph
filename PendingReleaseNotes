@@ -1,5 +1,7 @@
 >=20.0.0
 
+* RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
+  Related Tracker: https://tracker.ceph.com/issues/70406
 * RGW: The User Account feature introduced in Squid provides first-class support for
   IAM APIs and policy. Our preliminary STS support was instead based on tenants, and
   exposed some IAM APIs to admins only. This tenant-level IAM functionality is now
