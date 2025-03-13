@@ -11,3 +11,4 @@ pyyaml
 natsort
 setuptools
 jsonpatch
+lxml==4.8.0  # to fix https://github.com/xmlsec/python-xmlsec/issues/320
