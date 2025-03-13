@@ -23,7 +23,7 @@ class LevelSpec:
                  pool_id: Optional[str],
                  namespace: Optional[str],
                  image_id: Optional[str] = None,
-                 group_id: Optional [str] = None) -> None:
+                 group_id: Optional[str] = None) -> None:
         if image_id is not None and group_id is not None:
             raise ValueError("LevelSpec cannot have both image_id and group_id")
         self.name = name
@@ -169,12 +169,12 @@ class LevelSpec:
                                 except rbd.InvalidArgument:
                                     raise ValueError(
                                         "group {} is not in snapshot mirror mode".format(
-                                        group_id))
+                                            group_id))
                             else:
                                 image_name = match.group(3)
                                 try:
                                     with rbd.Image(ioctx, image_name,
-                                                read_only=True) as image:
+                                                   read_only=True) as image:
                                         image_id = image.id()
                                         id += "/" + image_id
                                         if image_validator:
@@ -259,7 +259,7 @@ class LevelSpec:
                                 image_id = match.group(3)
                                 try:
                                     with rbd.Image(ioctx, image_id=image_id,
-                                               read_only=True) as image:
+                                                   read_only=True) as image:
                                         image_name = image.get_name()
                                         name += image_name
                                         if image_validator:
@@ -267,7 +267,7 @@ class LevelSpec:
                                 except rbd.ImageNotFound:
                                     raise ValueError(
                                         "image {} does not exist".format(
-                                         image_id))
+                                            image_id))
                                 except rbd.InvalidArgument:
                                     raise ValueError(
                                         "image {} is not in snapshot mirror mode".format(
