@@ -14,5 +14,4 @@ jsonpatch
 grpcio==1.46.5
 grpcio-tools==1.46.5
 jmespath
-lxml==4.8.0  # to fix https://github.com/xmlsec/python-xmlsec/issues/320
 xmltodict
