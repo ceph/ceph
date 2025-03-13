@@ -42,7 +42,7 @@ struct ConfigWatcher<I>::Observer : public md_config_obs_t {
     }
   }
 
-  std::vector<std::string> get_tracked_keys() const noexcept {
+  std::vector<std::string> get_tracked_keys() const noexcept override {
     return m_config_key_strs;
   }
 
