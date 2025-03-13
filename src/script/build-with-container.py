@@ -569,7 +569,7 @@ def bc_run_tests(ctx):
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && source ./run-make-check.sh && build && run",
+            f"cd {ctx.cli.homedir} && source ./run-make-check.sh && build tests && run",
         ],
     )
     with ctx.user_command():
