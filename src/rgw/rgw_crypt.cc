@@ -1030,6 +1030,57 @@ static int get_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
 
   return 0;
 }
+
+int handle_sse_s3_encryption(const DoutPrefixProvider *dpp,
+  CephContext *cct,
+  optional_yield y,
+  rgw::sal::Bucket* bucket,
+  const rgw_obj_key& object,
+  std::string* err_msg,
+  std::map<std::string, ceph::bufferlist>& attrs,
+  std::unique_ptr<BlockCrypt>* block_crypt,
+  std::map<std::string, std::string>* crypt_http_responses)
+{
+  int res;
+  ldpp_dout(dpp, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: AES256" << dendl;
+  std::string_view context = "";
+  std::string cooked_context;
+  if (res = make_canonical_context(dpp, cct, bucket, object, err_msg, context, cooked_context); res < 0) {
+    return res;
+  }
+
+  std::string key_id;
+  if (res = get_sse_s3_bucket_key(dpp, cct, y, err_msg, bucket, key_id); res < 0) {
+    return res;
+  }
+
+  set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
+  set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
+  set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
+  std::string actual_key;
+  res = make_actual_key_from_sse_s3(dpp, attrs, y, actual_key);
+  if (res != 0) {
+    ldpp_dout(dpp, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+    if (err_msg) *err_msg = "Failed to retrieve the actual key";
+    return res;
+  }
+  if (actual_key.size() != AES_256_KEYSIZE) {
+    ldpp_dout(dpp, 5) << "ERROR: key obtained from key_id:" << key_id << " is not 256 bit size" << dendl;
+    if (err_msg) *err_msg = "SSE-S3 provided an invalid key for the given keyid.";
+    return -EINVAL;
+  }
+
+  if (block_crypt) {
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(dpp, cct));
+    aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
+    *block_crypt = std::move(aes);
+  }
+  ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+
+  if (crypt_http_responses) {
+    crypt_http_responses->insert({"x-amz-server-side-encryption", "AES256"});
+  }
+
   return 0;
 }
 
@@ -1222,46 +1273,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         return -EINVAL;
       }
 
-      ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
-              <<  req_sse << dendl;
-      std::string_view context = "";
-      std::string cooked_context;
-      if ((res = make_canonical_context(s, s->cct, s->bucket.get(), s->object->get_key(), &s->err.message, context, cooked_context)))
-        return res;
-
-      std::string key_id;
-      res = get_sse_s3_bucket_key(s, s->cct, y, &s->err.message, s->bucket.get(), key_id);
-      if (res != 0) {
-        return res;
-      }
-
-      set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
-      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
-      std::string actual_key;
-      res = make_actual_key_from_sse_s3(s, attrs, y, actual_key);
-      if (res != 0) {
-        ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-        s->err.message = "Failed to retrieve the actual key";
-        return res;
-      }
-      if (actual_key.size() != AES_256_KEYSIZE) {
-        ldpp_dout(s, 5) << "ERROR: key obtained from key_id:" <<
-                       key_id << " is not 256 bit size" << dendl;
-        s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
-        return -EINVAL;
-      }
-
-      if (block_crypt) {
-        auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
-        aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-        *block_crypt = std::move(aes);
-      }
-      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
-
-      crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
-
-      return 0;
+      return handle_sse_s3_encryption(s, s->cct, y, s->bucket.get(), s->object->get_key(), &s->err.message,
+                                      attrs, block_crypt, &crypt_http_responses);
     } else if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
       std::string master_encryption_key;
       try {
