@@ -2156,7 +2156,7 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
 bool match_policy(const std::string& pattern, const std::string& input,
                   uint32_t flag)
 {
-  const uint32_t flag2 = flag & (MATCH_POLICY_ACTION|MATCH_POLICY_ARN) ?
+  const uint32_t flag2 = (flag & MATCH_POLICY_ACTION) ?
       MATCH_CASE_INSENSITIVE : 0;
 
   std::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
