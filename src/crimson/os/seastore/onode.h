@@ -105,9 +105,8 @@ public:
   laddr_t get_data_hint() const {
     return get_hint();
   }
-  omap_root_t get_root(omap_type_t type, extent_len_t block_size) const {
-    return get_layout().get_root(type).get(
-      get_metadata_hint(block_size));
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    return get_layout().get_root(type);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

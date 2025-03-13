@@ -1914,9 +1914,9 @@ SeaStore::Shard::_rename(
 {
   auto olayout = onode->get_layout();
   uint32_t size = olayout.size;
-  auto omap_root = get_omap_root(omap_type_t::OMAP, *onode);
-  auto xattr_root = get_omap_root(omap_type_t::XATTR, *onode);
-  auto log_root = get_omap_root(omap_type_t::LOG, *onode);
+  auto omap_root = rename_omap_root(omap_type_t::OMAP, *onode, *d_onode);
+  auto xattr_root = rename_omap_root(omap_type_t::XATTR, *onode, *d_onode);
+  auto log_root = rename_omap_root(omap_type_t::LOG, *onode, *d_onode);
   auto object_data = olayout.object_data.get();
   auto oi_bl = ceph::bufferlist::static_from_mem(
     &olayout.oi[0],
