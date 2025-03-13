@@ -780,7 +780,18 @@ send_data:
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
   if (skip_decrypt) { // bypass decryption for multisite sync requests
-    return 0;
+    auto crypt_mode = attrs.find(RGW_ATTR_CRYPT_MODE);
+    if (crypt_mode != attrs.end()) {
+      if (crypt_mode->second.to_str() != "AES256") {
+        // AES256 needs to be decrypted so that the target zone can re-encrypt with destination bucket's key
+        return 0;
+      } else {
+        skip_decrypt = false; // so the data can also be decompressed
+      }
+    } else {
+      // no encryption, nothing to decrypt
+      return 0;
+    }
   }
 
   static constexpr bool copy_source = false;
