@@ -55,7 +55,7 @@ class ListPaginator:
             for item in self.input_list:
                 for searchable_param in self.searchable_params:
                     value = self.find_value(item, searchable_param)
-                    if isinstance(value, str):
+                    if isinstance(value, (int, str)):
                         if self.search in str(value):
                             trimmed_list.append(item)
 

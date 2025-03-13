@@ -13,17 +13,19 @@ export abstract class PageHelper {
    */
   static restrictTo(page: string): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
-      const fn: Function = descriptor.value;
-      descriptor.value = function (...args: any) {
-        cy.location('hash').should((url) => {
-          expect(url).to.eq(
-            page,
-            `Method ${target.constructor.name}::${propertyKey} is supposed to be ` +
-              `run on path "${page}", but was run on URL "${url}"`
-          );
-        });
-        fn.apply(this, args);
-      };
+      if (descriptor) {
+        const fn: Function = descriptor.value;
+        descriptor.value = function (...args: any) {
+          cy.location('hash').should((url) => {
+            expect(url).to.eq(
+              page,
+              `Method ${target.constructor.name}::${propertyKey} is supposed to be ` +
+                `run on path "${page}", but was run on URL "${url}"`
+            );
+          });
+          fn.apply(this, args);
+        };
+      }
     };
   }
 
@@ -332,7 +334,8 @@ export abstract class PageHelper {
     section?: string,
     cdsModal = false,
     isMultiselect = false,
-    shouldReload = false
+    shouldReload = false,
+    confirmInput = false
   ) {
     const action: string = section === 'hosts' ? 'remove' : 'delete';
 
@@ -345,10 +348,14 @@ export abstract class PageHelper {
 
     // Convert action to SentenceCase and Confirms deletion
     const actionUpperCase = action.charAt(0).toUpperCase() + action.slice(1);
-    cy.get('input[name="confirmation"]').click({ force: true });
+    if (confirmInput) {
+      cy.get('cds-modal input#resource_name').type(name, { force: true });
+    } else {
+      cy.get('[aria-label="confirmation"]').click({ force: true });
+    }
 
     if (cdsModal) {
-      cy.get('cds-modal button').contains(actionUpperCase).click();
+      cy.get('cds-modal button').contains(actionUpperCase).click({ force: true });
       // Wait for modal to close
       cy.get('cds-modal').should('not.exist');
     } else {

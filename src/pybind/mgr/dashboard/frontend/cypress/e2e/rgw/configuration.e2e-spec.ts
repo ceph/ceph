@@ -25,7 +25,7 @@ describe('RGW configuration page', () => {
   describe('create and edit encryption configuration', () => {
     it('should create configuration', () => {
       configurations.create('vault', 'agent', 'transit', 'https://localhost:8080');
-      configurations.getFirstTableCell('SSE_KMS').should('exist');
+      configurations.getFirstTableCell('kms').should('exist');
     });
 
     it('should edit configuration', () => {

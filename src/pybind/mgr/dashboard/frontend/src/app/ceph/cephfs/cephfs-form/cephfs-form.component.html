@@ -87,6 +87,8 @@
                            [invalid]="form.controls.label.invalid && (form.controls.label.dirty)"
                            [invalidText]="labelError"
                            cdRequiredField="Label"
+                           cdDynamicInputCombobox
+                           (updatedItems)="data.labels = $event"
                            i18n>
               <cds-dropdown-list></cds-dropdown-list>
             </cds-combo-box>

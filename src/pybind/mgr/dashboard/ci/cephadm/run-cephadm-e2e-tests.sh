@@ -38,4 +38,5 @@ cypress_run () {
 
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 
-cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts","cypress/e2e/orchestrator/grafana/*.feature"]
+cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts"]
+cypress_run ["cypress/e2e/orchestrator/grafana/*.feature"]
