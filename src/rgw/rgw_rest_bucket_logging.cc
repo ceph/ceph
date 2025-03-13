@@ -102,6 +102,60 @@ public:
 // PUT /<bucket name>/?logging
 // actual configuration is XML encoded in the body of the message
 class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
+  // following data members are set in verify_permission()
+  // and usd in execute()
+  rgw::bucketlogging::configuration configuration;
+  std::unique_ptr<rgw::sal::Bucket> target_bucket;
+
+  int init_processing(optional_yield y) override {
+    if (const auto ret = verify_bucket_logging_params(this, s); ret < 0) {
+      return ret;
+    }
+
+    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+    bufferlist data;
+    int ret = 0;
+    if (std::tie(ret, data) = read_all_input(s, max_size, false); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to read XML logging payload, ret = " << ret << dendl;
+      return ret;
+    }
+    if (data.length() == 0) {
+      ldpp_dout(this, 1) << "ERROR: XML logging payload missing" << dendl;
+      return -EINVAL;
+    }
+
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()){
+      ldpp_dout(this, 1) << "ERROR: failed to initialize XML parser" << dendl;
+      return -EINVAL;
+    }
+    if (!parser.parse(data.c_str(), data.length(), 1)) {
+      ldpp_dout(this, 1) << "ERROR: failed to parse XML logging payload" << dendl;
+      return -ERR_MALFORMED_XML;
+    }
+    configuration.default_obj_roll_time = get_cct()->_conf->rgw_bucket_logging_obj_roll_time;
+    try {
+      RGWXMLDecoder::decode_xml("BucketLoggingStatus", configuration, &parser, true);
+    } catch (RGWXMLDecoder::err& err) {
+      ldpp_dout(this, 1) << "ERROR: failed to parse XML logging payload. error: " << err << dendl;
+      return -ERR_MALFORMED_XML;
+    }
+
+    rgw_bucket target_bucket_id;
+    if (const auto ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
+      return ret;
+    }
+
+    if (const auto ret = driver->load_bucket(this, target_bucket_id,
+                                 &target_bucket, y); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << ret << dendl;
+      return ret;
+    }
+
+    return 0;
+  }
+
   int verify_permission(optional_yield y) override {
     auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
     if (has_s3_resource_tag)
@@ -111,54 +165,22 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return -EACCES;
     }
 
-    return 0;
+    if (!s->auth.identity->is_owner_of(s->bucket->get_info().owner)) {
+      ldpp_dout(this, 1) << "ERROR: user '" << s->auth.identity << "' is not the owner of bucket '" << s->bucket_name << "'" << dendl;
+      return -EACCES;
+    }
+
+    const auto target_resource_arn = rgw::ARN(target_bucket->get_key(), configuration.target_prefix);
+    return rgw::bucketlogging::verify_target_bucket_policy(this, target_bucket.get(), target_resource_arn, s);
   }
 
   const char* name() const override { return "put_bucket_logging"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
-  void execute(optional_yield y) override { 
-    op_ret = verify_bucket_logging_params(this, s);
-    if (op_ret < 0) {
-      return;
-    }
+  void execute(optional_yield y) override {
 
-    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-    bufferlist data;
-    std::tie(op_ret, data) = read_all_input(s, max_size, false);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to read XML logging payload, ret = " << op_ret << dendl;
-      return;
-    }
-    if (data.length() == 0) {
-      ldpp_dout(this, 1) << "ERROR: XML logging payload missing" << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
-
-    RGWXMLDecoder::XMLParser parser;
-    if (!parser.init()){
-      ldpp_dout(this, 1) << "ERROR: failed to initialize XML parser" << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
-    if (!parser.parse(data.c_str(), data.length(), 1)) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse XML logging payload" << dendl;
-      op_ret = -ERR_MALFORMED_XML;
-      return;
-    }
-    rgw::bucketlogging::configuration configuration;
-    configuration.default_obj_roll_time = get_cct()->_conf->rgw_bucket_logging_obj_roll_time;
-    try {
-      RGWXMLDecoder::decode_xml("BucketLoggingStatus", configuration, &parser, true);
-    } catch (RGWXMLDecoder::err& err) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse XML logging payload. error: " << err << dendl;
-      op_ret = -ERR_MALFORMED_XML;
-      return;
-    }
-
-    const rgw_bucket src_bucket_id(s->bucket_tenant, s->bucket_name);
+    const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
     op_ret = driver->load_bucket(this, src_bucket_id,
                                  &src_bucket, y);
@@ -172,26 +194,14 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
 
-    // set logging configuration
-    rgw_bucket target_bucket_id;
-    if (op_ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
-      return;
-    }
-
+    const auto& target_bucket_id = target_bucket->get_key();
     if (target_bucket_id == src_bucket_id) {
       ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
       op_ret = -EINVAL;
       return;
     }
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    op_ret = driver->load_bucket(this, target_bucket_id,
-                                 &target_bucket, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << op_ret << dendl;
-      return;
-    }
-    auto& target_attrs = target_bucket->get_attrs();
+
+    const auto& target_attrs = target_bucket->get_attrs();
     if (target_attrs.find(RGW_ATTR_BUCKET_LOGGING) != target_attrs.end()) {
       // target bucket must not have logging set on it
       ldpp_dout(this, 1) << "ERROR: logging target bucket '" << target_bucket_id << "', is configured with bucket logging" << dendl;
@@ -207,7 +217,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     std::optional<rgw::bucketlogging::configuration> old_conf;
     bufferlist conf_bl;
     encode(configuration, conf_bl);
-    op_ret = retry_raced_bucket_write(this, src_bucket.get(), [this, &conf_bl, &src_bucket, &old_conf, &configuration, y] {
+    op_ret = retry_raced_bucket_write(this, src_bucket.get(), [this, &conf_bl, &src_bucket, &old_conf, y] {
       auto& attrs = src_bucket->get_attrs();
       auto it = attrs.find(RGW_ATTR_BUCKET_LOGGING);
       if (it != attrs.end()) {
@@ -278,6 +288,52 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
 
 // Post /<bucket name>/?logging
 class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
+  // following data members are set in verify_permission()
+  // and usd in execute()
+  rgw::bucketlogging::configuration configuration;
+  std::unique_ptr<rgw::sal::Bucket> target_bucket;
+
+  int init_processing(optional_yield y) override {
+    if (const auto ret = verify_bucket_logging_params(this, s); ret < 0) {
+      return ret;
+    }
+
+    const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
+    std::unique_ptr<rgw::sal::Bucket> src_bucket;
+    if (const auto ret = driver->load_bucket(this, src_bucket_id,
+                                 &src_bucket, y); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << src_bucket_id << "', ret = " << ret << dendl;
+      return ret;
+    }
+    const auto& bucket_attrs = src_bucket->get_attrs();
+    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
+    if (iter == bucket_attrs.end()) {
+      ldpp_dout(this, 1) << "WARNING: no logging configured on bucket '" << src_bucket_id << "'" << dendl;
+      return 0;
+    }
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+        << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
+      return -EINVAL;
+    }
+
+    rgw_bucket target_bucket_id;
+    if (const auto ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
+      return ret;
+    }
+
+    if (const auto ret = driver->load_bucket(this, target_bucket_id,
+                                 &target_bucket, y); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+
   int verify_permission(optional_yield y) override {
     auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
     if (has_s3_resource_tag)
@@ -287,7 +343,8 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       return -EACCES;
     }
 
-    return 0;
+    const auto target_resource_arn = rgw::ARN(target_bucket->get_key(), configuration.target_prefix);
+    return rgw::bucketlogging::verify_target_bucket_policy(this, target_bucket.get(), target_resource_arn, s);
   }
 
   const char* name() const override { return "post_bucket_logging"; }
@@ -295,48 +352,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
   void execute(optional_yield y) override {
-    op_ret = verify_bucket_logging_params(this, s);
-    if (op_ret < 0) {
-      return;
-    }
-
-    const rgw_bucket src_bucket_id(s->bucket_tenant, s->bucket_name);
-    std::unique_ptr<rgw::sal::Bucket> src_bucket;
-    op_ret = driver->load_bucket(this, src_bucket_id,
-                                 &src_bucket, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << src_bucket_id << "', ret = " << op_ret << dendl;
-      return;
-    }
-    const auto& bucket_attrs = src_bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter == bucket_attrs.end()) {
-      ldpp_dout(this, 1) << "WARNING: no logging configured on bucket '" << src_bucket_id << "'" << dendl;
-      return;
-    }
-    rgw::bucketlogging::configuration configuration;
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-        << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
-
-    rgw_bucket target_bucket_id;
-    if (op_ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
-      return;
-    }
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    op_ret = driver->load_bucket(this, target_bucket_id,
-                                 &target_bucket, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << op_ret << dendl;
-      return;
-    }
+    const auto& target_bucket_id = target_bucket->get_key();
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, this, &objv_tracker);

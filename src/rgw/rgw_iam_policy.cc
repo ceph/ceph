@@ -1253,7 +1253,8 @@ Effect Statement::eval_principal(const Environment& e,
     if (ida->get_identity_type() != TYPE_ROLE && !princ.empty() && !is_identity(*ida, princ)) {
       return Effect::Deny;
     }
-    if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
+    if ((ida->get_identity_type() == TYPE_ROLE || ida->get_identity_type() == TYPE_RGW) &&
+        !princ.empty()) {
       bool princ_matched = false;
       for (auto p : princ) { // Check each principal to determine the type of the one that has matched
         if (ida->is_identity(p)) {
@@ -1270,18 +1271,6 @@ Effect Statement::eval_principal(const Environment& e,
       }
     } else if (!noprinc.empty() && is_identity(*ida, noprinc)) {
       return Effect::Deny;
-    }
-    if (ida->get_identity_type() == TYPE_RGW && !princ.empty()) {
-      bool princ_matched = false;
-      for (auto p : princ) {
-        if (ida->is_identity(p)) {
-          princ_matched = true;
-          break;
-        }
-      }
-      if (!princ_matched) {
-        return Effect::Deny;
-      }
     }
   }
   return Effect::Allow;
