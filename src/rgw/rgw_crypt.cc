@@ -209,14 +209,6 @@ add_object_to_context(rgw_obj &obj, rapidjson::Document &d)
     return true;
 }
 
-static inline const std::string &
-get_tenant_or_id(req_state *s)
-{
-    const std::string &tenant{ s->user->get_tenant() };
-    if (!tenant.empty()) return tenant;
-    return s->user->get_id().id;
-}
-
 int
 make_canonical_context(req_state *s,
     std::string_view &context,
@@ -231,7 +223,7 @@ mec_option::empty };
     std::ostringstream oss;
     canonical_char_sorter<MyMember> ccs{s, s->cct};
 
-    obj.bucket.tenant = get_tenant_or_id(s);
+    obj.bucket.tenant = s->bucket->get_tenant();
     obj.bucket.name = s->bucket->get_name();
     obj.key.name = s->object->get_name();
     std::string iline;
