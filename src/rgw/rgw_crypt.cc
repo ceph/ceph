@@ -927,10 +927,10 @@ struct CryptAttributes {
   }
 };
 
-std::string fetch_bucket_key_id(req_state *s)
+std::string fetch_bucket_key_id(const rgw::sal::Attrs& bucket_attrs)
 {
-  auto kek_iter = s->bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
-  if (kek_iter == s->bucket_attrs.end())
+  auto kek_iter = bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
+  if (kek_iter == bucket_attrs.end())
     return std::string();
   std::string a_key { kek_iter->second.to_str() };
   // early code appends a nul; pretend that didn't happen
@@ -998,7 +998,7 @@ static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
     return -EINVAL;
   }
 
-  saved_key = fetch_bucket_key_id(s);
+  saved_key = fetch_bucket_key_id(s->bucket->get_attrs());
   if (saved_key != "") {
     ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
   }
@@ -1518,7 +1518,7 @@ int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 {
   int res;
   auto key_id { expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template) };
-  auto saved_key { fetch_bucket_key_id(s) };
+  auto saved_key { fetch_bucket_key_id(s->bucket_attrs) };
   size_t i;
 
   if (key_id == cant_expand_key) {
