@@ -1753,9 +1753,7 @@ extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash)
 extern int rgw_parse_op_type_list(const std::string& str, uint32_t *perm);
 
 static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
-static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
-static constexpr uint32_t MATCH_POLICY_ARN = 0x04;
-static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
+static constexpr uint32_t MATCH_POLICY_ARN = 0x02;
 
 extern bool match_policy(const std::string& pattern, const std::string& input,
                          uint32_t flag);

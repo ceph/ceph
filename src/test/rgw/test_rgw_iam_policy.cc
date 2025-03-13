@@ -1271,15 +1271,6 @@ TEST(MatchPolicy, Action)
   EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
 }
 
-TEST(MatchPolicy, Resource)
-{
-  constexpr auto flag = MATCH_POLICY_RESOURCE;
-  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
-  EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
-  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
-}
-
 TEST(MatchPolicy, ARN)
 {
   constexpr auto flag = MATCH_POLICY_ARN;
@@ -1287,15 +1278,6 @@ TEST(MatchPolicy, ARN)
   EXPECT_TRUE(match_policy("a:b:c", "A:B:C", flag)); // case insensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
   EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
-}
-
-TEST(MatchPolicy, String)
-{
-  constexpr auto flag = MATCH_POLICY_STRING;
-  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
-  EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
-  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
 
 Action_t set_range_bits(std::uint64_t start, std::uint64_t end)
