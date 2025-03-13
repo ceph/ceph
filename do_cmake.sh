@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# useless change for build trigger
 set -ex
 
 if [ -d .git ]; then
