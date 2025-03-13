@@ -1375,15 +1375,14 @@ SeaStore::Shard::omap_get_header(
   return get_attr(ch, oid, OMAP_HEADER_XATTR_KEY, op_flags);
 }
 
-const omap_root_le_t& SeaStore::Shard::select_log_omap_root(Onode& onode)
+omap_root_t SeaStore::Shard::select_log_omap_root(Onode& onode) const
 {
-  const auto &log_root_le = onode.get_layout().log_root;
-  laddr_t hint = onode.get_metadata_hint(device->get_block_size());
-  if (log_root_le.get(hint).is_null()) {
-    return onode.get_layout().omap_root;
+  auto log_root = get_omap_root(omap_type_t::LOG, onode);
+  if (log_root.is_null()) {
+    return get_omap_root(omap_type_t::OMAP, onode);
   } else {
-    ceph_assert(onode.get_layout().omap_root.get(hint).is_null());
-    return log_root_le;
+    ceph_assert(get_omap_root(omap_type_t::OMAP, onode).is_null());
+    return log_root;
   }
 }
 
@@ -1406,8 +1405,7 @@ SeaStore::Shard::omap_get_values(
     op_flags,
     [this, keys](auto &t, auto &onode)
   {
-    auto r = select_log_omap_root(onode);
-    omap_root_t root = r.get(onode.get_metadata_hint(device->get_block_size()));
+    auto root = select_log_omap_root(onode);
     return omaptree_get_values(
       t, std::move(root), keys);
   }).finally([this] {
@@ -1435,8 +1433,7 @@ SeaStore::Shard::omap_get_values(
     op_flags,
     [this, start](auto &t, auto &onode)
   {
-    auto root = select_log_omap_root(onode).get(
-      onode.get_metadata_hint(device->get_block_size()));
+    auto root = select_log_omap_root(onode);
     return omaptree_get_values(
       t, std::move(root), start);
   }).finally([this] {
@@ -1772,8 +1769,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         std::map<std::string, ceph::bufferlist> aset;
         i.decode_attrset(aset);
-	auto root = select_log_omap_root(*onode).get(
-	  onode->get_metadata_hint(device->get_block_size()));
+	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_SETKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, aset.size(), root.get_type());
         return omaptree_set_keys(
@@ -1794,8 +1790,7 @@ SeaStore::Shard::_do_transaction_step(
       {
         omap_keys_t keys;
         i.decode_keyset(keys);
-	auto root = select_log_omap_root(*onode).get(
-	  onode->get_metadata_hint(device->get_block_size()));
+	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_RMKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, keys.size(), root.get_type());
         return omaptree_rm_keys(
@@ -1809,8 +1804,7 @@ SeaStore::Shard::_do_transaction_step(
         std::string first, last;
         first = i.decode_string();
         last = i.decode_string();
-	auto root = select_log_omap_root(*onode).get(
-	  onode->get_metadata_hint(device->get_block_size()));
+	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_RMKEYRANGE, oid={}, first={}, last={}, type={}...",
                *ctx.transaction, oid, first, last, root.get_type());
         return omaptree_rm_keyrange(
@@ -1838,15 +1832,11 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid);
         // TODO
 	if (op->hint & CEPH_OSD_ALLOC_HINT_FLAG_LOG) {
-	  OnodeRef &onode = onodes[op->oid];
-	  const auto &log_root = onode->get_layout().log_root.get(
-	    onode->get_metadata_hint(device->get_block_size()));
-	  const auto &omap_root = onode->get_layout().omap_root.get(
-	    onode->get_metadata_hint(device->get_block_size()));
-	  ceph_assert(log_root.is_null() && omap_root.is_null());
+	  ceph_assert(get_omap_root(omap_type_t::LOG, *onode).is_null());
+	  ceph_assert(get_omap_root(omap_type_t::OMAP, *onode).is_null());
 	  return BtreeOMapManager(*transaction_manager).initialize_omap(
 	    *ctx.transaction, onode->get_metadata_hint(device->get_block_size()),
-	    log_root.get_type()
+	    omap_type_t::LOG
 	  ).si_then([&onode, &ctx](auto new_root) {
 	    if (new_root.must_update()) {
 	      onode->update_log_root(*ctx.transaction, new_root);
