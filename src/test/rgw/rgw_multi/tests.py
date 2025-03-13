@@ -6145,5 +6145,46 @@ def test_object_lock_sync():
     response = secondary.s3_client.get_object_lock_configuration(Bucket=bucket.name)
     assert(response['ObjectLockConfiguration'] == lock_config)
 
+@allow_bucket_replication
+def test_bucket_replication_sse_s3():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
 
-    
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [{
+                'ID': 'rule1',
+                'Status': 'Enabled',
+                'Destination': {
+                    'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                }
+            }]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object with SSE-S3 and wait for sync.
+    objname = 'dummy'
+    source.s3_client.put_object(
+        Bucket=source_bucket.name,
+        Key=objname,
+        Body=b'foo',
+        ServerSideEncryption='AES256'
+    )
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket with SSE-S3
+    k = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert_equal(k['ServerSideEncryption'], 'AES256')
+    assert_equal(k['Body'].read().decode('utf-8'), 'foo')
