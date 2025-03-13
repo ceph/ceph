@@ -1,0 +1,7 @@
+# This file tells Red Hat InfoSec's gitleaks scanner to ignore these paths
+[allowlist]
+  description = "Allowlist"
+  paths = [
+    '''src/cephadm/tests/''',
+    '''src/pybind/mgr/cephadm/tests/''',
+  ]
