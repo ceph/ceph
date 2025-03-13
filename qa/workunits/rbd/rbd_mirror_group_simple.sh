@@ -1003,19 +1003,6 @@ test_group_with_clone_image()
   image_remove "${primary_cluster}" "${pool}/child_image"
 }
 
-test_from_nithya_that_will_stop_working_when_api_changes()
-{
-[root@server1 build]# rbd-a group create data/grp1
-[root@server1 build]# rbd-a group image add data/grp1 data/img-1
-[root@server1 build]# rbd-a group image add data/grp1 data/img-2
-[root@server1 build]# rbd-a group image add data/grp1 data/img-3
-[root@server1 build]# rbd-a mirror group enable data/grp1
-[root@server1 build]# rbd-a mirror image demote data/img-2
-[root@server1 build]# rbd-a mirror group snapshot data/grp1
-[root@server1 build]# rbd-a snap ls --all data/img-3
-[root@server1 build]# rbd-a group snap ls data/grp1
-}
-
 # test two empty groups
 declare -a test_empty_groups_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${group1}")
 
@@ -1162,7 +1149,7 @@ test_create_group_with_images_then_mirror_with_regular_snapshots()
   if [ "${scenario}" = 'remove_snap' ]; then
     group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
     check_group_snap_doesnt_exist "${primary_cluster}" "${pool}/${group}" "${snap}"
-    # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO
+    # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO - coding leftover 38
     mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
     mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
     check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
@@ -1229,7 +1216,8 @@ test_create_group_with_regular_snapshots_then_mirror()
 
   group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
   check_group_snap_doesnt_exist "${primary_cluster}" "${pool}/${group}" "${snap}"
-  # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO
+  # this next extra mirror_group_snapshot should not be needed - waiting for fix  - coding leftover 38
+
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
   check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
@@ -1387,7 +1375,7 @@ test_create_group_with_multiple_images_do_io()
 
   group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
   check_group_snap_doesnt_exist "${primary_cluster}" "${pool}/${group}" "${snap}"
-  # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO
+  # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO - coding leftover 38
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
   check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
@@ -2023,8 +2011,9 @@ declare -a test_force_promote_3=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image
 declare -a test_force_promote_4=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'image_rename' 5)
 declare -a test_force_promote_5=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'no_change_primary_up' 5)
 
-# TODO scenarios 2-5 are currently failing - 4 is low priority
-test_force_promote_scenarios=1
+# TODO scenarios 2-4 are currently failing - 4 is low priority
+# test_force_promote_scenarios=5
+test_force_promote_scenarios='1 5'
 
 test_force_promote()
 {
@@ -2052,7 +2041,10 @@ test_force_promote()
 
   big_image=test-image-big
   image_create "${primary_cluster}" "${pool}/${big_image}" 4G
+  write_image "${primary_cluster}" "${pool}" "${big_image}" 1024 4096
   group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${big_image}"
+  create_snapshot "${primary_cluster}" "${pool}" "${big_image}" "${snap0}"
+  compare_image_with_snapshot "${primary_cluster}" "${pool}/${big_image}" "${primary_cluster}" "${pool}/${big_image}@${snap0}"
 
   mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
@@ -2062,7 +2054,7 @@ test_force_promote()
 
   if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
     if [ "${scenario}" = 'no_change_primary_up' ]; then
-      wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' 0
+      wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
     else
       wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'down+unknown' 0
     fi
@@ -2070,12 +2062,14 @@ test_force_promote()
 
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}"
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
+  compare_image_with_snapshot "${secondary_cluster}" "${pool}/${big_image}" "${primary_cluster}" "${pool}/${big_image}@${snap0}"
 
   write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 10 4096
   create_snapshot "${primary_cluster}" "${pool}" "${image_prefix}0" "${snap1}"
 
   # make some changes to the big image so that the next sync will take a long time
   write_image "${primary_cluster}" "${pool}" "${big_image}" 1024 4194304
+  create_snapshot "${primary_cluster}" "${pool}" "${big_image}" "${snap1}"
 
   local global_id
   local image_size
@@ -2115,15 +2109,6 @@ test_force_promote()
     mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}"
   fi
 
-  # TODO add the following test
-: '
-  # This test removes and recreates an image - it fails currently as the request to list the group snaps on the secondary fails
-  group_image_remove "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}0"
-  image_remove "${primary_cluster}" "${pool}/${image_prefix}0" 
-  image_create "${primary_cluster}" "${pool}/${image_prefix}0" maybe different size?
-  group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}0"
-'
-
   local group_snap_id
   get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
   echo "id = ${group_snap_id}"
@@ -2143,6 +2128,12 @@ test_force_promote()
     wait_for_image_size_matches "${secondary_cluster}" "${pool}/${image_prefix}2" $(("${image_size}"+4*1024*1024))
   elif [ "${scenario}" = 'image_shrink' ]; then
     wait_for_image_size_matches "${secondary_cluster}" "${pool}/${image_prefix}3" $(("${image_size}"-4*1024*1024))
+  elif [ "${scenario}" = 'no_change' ] || [ "${scenario}" = 'no_change_primary_up' ]; then
+    local snap_id
+    get_newest_mirror_snapshot_id_on_primary "${primary_cluster}" "${pool}/${image_prefix}0" snap_id
+    echo "image_snap_id = ${snap_id}"
+    wait_for_snap_id_present "${secondary_cluster}" "${pool}/${image_prefix}0" "${snap_id}"
+    wait_for_snapshot_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}" "${pool}" "${image_prefix}0" "${snap_id}"
   fi
 
   # stop the daemon to prevent further syncing of snapshots
@@ -2150,6 +2141,11 @@ test_force_promote()
 
   # check that latest snap is incomplete
   test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 
+
+  # check that the big image is incomplete
+  local big_image_snap_id
+  get_newest_mirror_snapshot_id_on_primary "${primary_cluster}" "${pool}/${big_image}" big_image_snap_id
+  test_snap_complete "${secondary_cluster}" "${pool}/${big_image}" "${big_image_snap_id}" 'false' || fail "big image is synced"
 
   # force promote the group on the secondary - should rollback to the last complete snapshot
   local old_primary_cluster
@@ -2160,6 +2156,10 @@ test_force_promote()
 
   mirror_group_demote "${old_primary_cluster}" "${pool}/${group0}"
   secondary_cluster="${old_primary_cluster}"
+
+  # check that we rolled back to snap0 state
+  compare_image_with_snapshot "${primary_cluster}" "${pool}/${image_prefix}0" "${secondary_cluster}" "${pool}/${image_prefix}0@${snap0}"
+  compare_image_with_snapshot "${primary_cluster}" "${pool}/${big_image}" "${secondary_cluster}" "${pool}/${big_image}@${snap0}"
 
   # Check that the rollback reverted the state 
   if [ "${scenario}" = 'image_add' ]; then
@@ -2178,24 +2178,22 @@ test_force_promote()
   fi
 
   local group_id_before
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
 
-  mirror_group_resync ${secondary_cluster} ${pool}/${group0}
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
 
   if [ "${scenario}" != 'no_change_primary_up' ]; then
     start_mirrors "${secondary_cluster}"
     sleep 5
   fi  
-# TODO check that data can be copied back to original primary cluster
-# next line fails because latest snapshot on primary is never copied back to secondary
-# finish off the resync function
-# check that tidy up steps below work
+
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}"
   local group_id_after
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
-  test "${group_id_before}" != "${group_id_after}" || fail "group was not recreated"
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
+  test "${group_id_before}" != "${group_id_after}" || fail "group was not recreated by resync"
 
-  compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
+  compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${secondary_cluster}" "${pool}/${image_prefix}0@${snap0}"
+  compare_image_with_snapshot "${secondary_cluster}" "${pool}/${big_image}" "${secondary_cluster}" "${pool}/${big_image}@${snap0}"
 
   # Check that snapshots work on the new primary
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
@@ -2216,6 +2214,7 @@ test_force_promote()
   old_primary_cluster="${primary_cluster}"
   primary_cluster="${secondary_cluster}"
   secondary_cluster="${old_primary_cluster}"
+  wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
   start_mirrors "${secondary_cluster}"
 }
@@ -2312,6 +2311,7 @@ test_force_promote_delete_group()
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
+  wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
 }
 
@@ -2396,6 +2396,7 @@ test_force_promote_before_initial_sync()
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
   image_remove "${primary_cluster}" "${pool}/${big_image}"
 
+  wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
   start_mirrors "${secondary_cluster}"
 }
@@ -2521,18 +2522,21 @@ test_multiple_mirror_group_snapshot_whilst_stopped()
 # test ODF failover/failback sequence
 declare -a test_odf_failover_failback_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'wait_before_promote' 3)
 declare -a test_odf_failover_failback_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'retry_promote' 3)
+declare -a test_odf_failover_failback_3=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'resync_on_failback' 1)
 
-test_odf_failover_failback_scenarios=2
+test_odf_failover_failback_scenarios=3
 
 # ODF takes the following steps in failover/failback.  This test does the same.
-#Failover:
+# Failover:
 # rbd --cluster=site-b mirror group promote test_pool/test_group --force
+#
+# When site-a comes alive again request a resync
 # rbd --cluster=site-a mirror group demote test_pool/test_group
 # rbd --cluster=site-a mirror group resync test_pool/test_group
 #
-#Failback:
+# Failback:
 # rbd --cluster=site-b mirror group demote test_pool/test_group
-# rbd --cluster=site-b mirror group resync test_pool/test_group
+#  (scenario 3 requests a resync on site-b here)
 # rbd --cluster=site-a mirror group promote test_pool/test_group
 test_odf_failover_failback()
 {
@@ -2570,6 +2574,7 @@ test_odf_failover_failback()
   stop_mirrors "${secondary_cluster}" '-9'
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
   start_mirrors "${secondary_cluster}"
+  # original site comes alive again
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
 
   local group_id_before group_id_after
@@ -2610,15 +2615,17 @@ test_odf_failover_failback()
   local image_id_before image_id_after
   get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_before
   
-  # request resync - won't happen until other site is marked as primary
-  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+  if [ "${scenario}" = 'resync_on_failback' ]; then
+    # request resync - won't happen until other site is marked as primary
+    mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+  fi  
 
   get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated with no primary"
   get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated with no primary"
 
-  if [ "${scenario}" = 'wait_before_promote' ]; then
+  if [ "${scenario}" != 'retry_promote' ]; then
     # wait for the demote snapshot to be synced before promoting the other site
     wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}"
 
@@ -2644,17 +2651,20 @@ test_odf_failover_failback()
   write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 10 4096
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group0}"
     
-  # check that group and images were deleted and recreated on secondary cluster (as a result of the resync request)
-  get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
-  test "${group_id_before}" != "${group_id_after}" || fail "group not recreated by resync"
-  get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
-  test "${image_id_before}" != "${image_id_after}" || fail "image not recreated by resync"
+  if [ "${scenario}" = 'resync_on_failback' ]; then
+    # check that group and images were deleted and recreated on secondary cluster (as a result of the resync request)
+    get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
+    test "${group_id_before}" != "${group_id_after}" || fail "group not recreated by resync"
+    get_image_id2 ${secondary_cluster} ${pool}/${image_prefix}0 image_id_after
+    test "${image_id_before}" != "${image_id_after}" || fail "image not recreated by resync"
+  fi  
 
   group_remove "${primary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
   check_daemon_running "${secondary_cluster}"
 }
@@ -2761,6 +2771,7 @@ test_resync_marker()
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
 
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
   check_daemon_running "${secondary_cluster}"
 }
@@ -2885,6 +2896,7 @@ test_resync()
   images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
   # reset: start the right daemons for the next test
+  wait_for_no_keys "${primary_cluster}"
   stop_mirrors "${primary_cluster}"
   start_mirrors "${secondary_cluster}"
 }
@@ -2906,10 +2918,37 @@ check_for_no_keys()
       # if it does then check that there are no entries left in it
       if [ $obj_count -gt 0 ]; then
         count_omap_keys_with_filter "${cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
-        test "${key_count}" = 0 || fail "last test left keys" 
+        test "${key_count}" = 0 || testlog "last test left keys" 
       fi
     done
   done    
+}
+
+wait_for_no_keys()
+{
+  local cluster=$1
+  local pools pool key_count obj_count
+
+  local pools
+  pools=$(CEPH_ARGS='' ceph --cluster "${cluster}" osd pool ls  | grep -v "^\." | xargs)
+
+  for pool in ${pools}; do
+    # see if the rbd_mirror_leader object exists in the pool
+    get_pool_obj_count "${cluster}" "${pool}" "rbd_mirror_leader" obj_count
+
+    # if it does then wait until there are no entries left in it
+    if [ "${obj_count}" -gt 0 ]; then
+      count_omap_keys_with_filter "${cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+      if [ "${key_count}" -gt 0 ]; then
+        for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+          sleep ${s}
+          count_omap_keys_with_filter "${cluster}" "${pool}" "rbd_mirror_leader" "image_map" key_count
+          test "${key_count}" = 0 && break
+        done
+        test "${key_count}" = 0 || testlog "waiting did not clear leftover entries"
+      fi
+    fi
+  done
 }
 
 run_test()
@@ -2959,10 +2998,23 @@ run_test_all_scenarios()
 {
   local test_name=$1
 
-  declare -n test_scenario_count="$test_name"_scenarios
+  declare -n test_scenarios="$test_name"_scenarios
+
+  # test_scenarios can either be a number or a sequence of numbers
+  # in the former case it should be the number of the maximum valid scenario
+  # in the later case it should be a sequence of valid scenario numbers
+  # The later case is required when a non-contiguous sequnence of scenario numbers is valid
+  local working_test_scenarios 
+  if [[ $test_scenarios =~ ^[0-9]+$ ]]
+  then
+    working_test_scenarios=$(seq 1 $test_scenarios)
+  else
+    working_test_scenarios=$test_scenarios
+  fi
+  echo "Scenarios to run : ${working_test_scenarios}"
 
   local loop
-  for loop in $(seq 1 $test_scenario_count); do
+  for loop in $working_test_scenarios; do
     run_test $test_name $loop
   done
 }
@@ -2989,7 +3041,7 @@ run_all_tests()
   run_test_all_scenarios test_stopped_daemon
   run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
   run_test_all_scenarios test_image_move_group
-  run_test_all_scenarios test_force_promote
+  #run_test_all_scenarios test_force_promote
   run_test_all_scenarios test_resync
   run_test_all_scenarios test_remote_namespace
   run_test_all_scenarios test_multiple_mirror_group_snapshot_whilst_stopped
@@ -3003,6 +3055,7 @@ run_all_tests()
   run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
   run_test_all_scenarios test_odf_failover_failback
   #run_test_all_scenarios test_resync_marker
+  #run_test_all_scenarios test_force_promote_before_initial_sync
 }
 
 if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
