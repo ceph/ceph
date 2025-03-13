@@ -77,6 +77,20 @@ SET_SUBSYS(seastore);
 
 namespace crimson::os::seastore {
 
+using crimson::os::seastore::omap_manager::BtreeOMapManager;
+
+static OMapManager::initialize_omap_ret
+omaptree_initialize(
+  Transaction& t,
+  BtreeOMapManager& mgr,
+  omap_type_t type,
+  Onode& onode,
+  Device& device)
+{
+  return mgr.initialize_omap(
+    t, onode.get_metadata_hint(device.get_block_size()), type);
+}
+
 class FileMDStore final : public SeaStore::MDStore {
   std::string root;
 public:
@@ -1213,8 +1227,6 @@ SeaStore::Shard::readv(
   });
 }
 
-using crimson::os::seastore::omap_manager::BtreeOMapManager;
-
 SeaStore::Shard::omaptree_get_value_ret
 SeaStore::Shard::_get_attr(
   Transaction& t,
@@ -1828,19 +1840,18 @@ SeaStore::Shard::_do_transaction_step(
       }
       case Transaction::OP_SETALLOCHINT:
       {
+        // TODO
         DEBUGT("op SETALLOCHINT, oid={}, not implemented",
                *ctx.transaction, oid);
-        // TODO
 	if (op->hint & CEPH_OSD_ALLOC_HINT_FLAG_LOG) {
 	  ceph_assert(get_omap_root(omap_type_t::LOG, *onode).is_null());
 	  ceph_assert(get_omap_root(omap_type_t::OMAP, *onode).is_null());
-	  return BtreeOMapManager(*transaction_manager).initialize_omap(
-	    *ctx.transaction, onode->get_metadata_hint(device->get_block_size()),
-	    omap_type_t::LOG
+	  // BtreeOMapManager doesn't need a do_with yet.
+	  auto mgr = BtreeOMapManager(*transaction_manager);
+	  return omaptree_initialize(
+	    *ctx.transaction, mgr, omap_type_t::LOG, *onode, *device
 	  ).si_then([&onode, &ctx](auto new_root) {
-	    if (new_root.must_update()) {
-	      onode->update_log_root(*ctx.transaction, new_root);
-	    }
+	    onode->update_log_root(*ctx.transaction, new_root);
 	  });
 	}
         return tm_iertr::now();
@@ -2756,11 +2767,9 @@ SeaStore::Shard::omaptree_set_keys(
     assert(root.get_type() < omap_type_t::NONE);
     base_iertr::future<> maybe_create_root = base_iertr::now();
     if (root.is_null()) {
-      maybe_create_root = omap_manager.initialize_omap(t,
-        onode.get_metadata_hint(device->get_block_size()),
-        root.get_type()
+      maybe_create_root = omaptree_initialize(
+        t, omap_manager, root.get_type(), onode, *device
       ).si_then([&root](auto new_root) {
-        assert(new_root.get_type() == root.get_type());
         root = new_root;
       });
     }
