@@ -34,6 +34,18 @@
             "output": {"shape": "GetUsageStatsOutput"},
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/serviceops#get-usage-stats",
             "documentation":"<p>Get usage stats for the user</p>"
+        },
+        "ListBucketSnapshots":{
+            "name":"ListBucketSnapshots",
+            "http":{
+                "method":"GET",
+                "requestUri":"/{Bucket}?snap",
+                "responseCode":200
+            },
+            "input":{"shape":"ListBucketSnapshotsRequest"},
+            "output": {"shape": "ListBucketSnapshotsOutput"},
+            "documentationUrl":"https://docs.ceph.com",
+            "documentation":"<p>Get the list of snapshots for a bucket</p>"
         }
     },
     "shapes": {
@@ -444,7 +456,97 @@
                 "Indexless"
             ]
         },
-        "BucketIndexNumShards":{"type":"integer"}
+        "BucketIndexNumShards":{"type":"integer"},
+        "ListBucketSnapshotsRequest":{
+            "type":"structure",
+            "required":[ "Bucket" ],
+            "members":{
+                "Bucket":{
+                    "shape":"BucketName",
+                    "contextParam":{"name":"Bucket"},
+                    "location":"uri",
+                    "locationName":"Bucket"
+                }
+            }
+        },
+        "ListBucketSnapshotsOutput": {
+            "type": "structure",
+            "members": {
+                "Enabled": {
+                    "shape": "SnapEnabled",
+                    "documentation": "<p/>",
+                    "locationName": "Enabled"
+                },
+                "CurrentSnapshot": {
+                    "shape": "SnapId",
+                    "documentation": "<p/>",
+                    "locationName": "CurrentSnapshot"
+                },
+                "Snapshots": {
+                    "shape": "SnapshotList",
+                    "documentation": "<p/>",
+                    "locationName": "Snapshots"
+                },
+                "RemovedSnapshots": {
+                    "shape": "SnapshotList",
+                    "documentation": "<p/>",
+                    "locationName": "RemovedSnapshots"
+                }
+            }
+        },
+        "Snapshot": {
+            "type": "structure",
+            "members": {
+                "ID": {
+                    "shape": "SnapId",
+                    "documentation": "<p/>",
+                    "locationName": "ID"
+                },
+                "Info": {
+                    "shape": "SnapshotInfo",
+                    "documentation": "<p/>",
+                    "locationName": "Info"
+                }
+            }
+        },
+        "SnapshotInfo": {
+            "type": "structure",
+            "members": {
+                "Name": {
+                    "shape": "SnapName",
+                    "documentation": "<p/>",
+                    "locationName": "Name"
+                },
+                "Description": {
+                    "shape": "SnapDescription",
+                    "documentation": "<p/>",
+                    "locationName": "Description"
+                },
+                "CreationTime": {
+                    "shape": "SnapCreationTime",
+                    "documentation": "<p/>",
+                    "locationName": "CreationTime"
+                }
+            }
+        },
+	"SnapshotList": {
+	    "type":"list",
+	    "member":{
+                "shape":"Snapshot",
+                "locationName": "Snapshot"
+            },
+	    "flattened":false
+	},
+	"RemovedSnapshotsList": {
+	    "type":"list",
+	    "member":{ "shape":"Snapshot" },
+	    "flattened":false
+	},
+        "SnapEnabled": {"type":"boolean"},
+        "SnapId": {"type":"integer"},
+        "SnapName": {"type":"string"},
+        "SnapDescription": {"type":"string"},
+        "SnapCreationTime": {"type":"timestamp"}
     },
     "documentation":"<p/>"
 }

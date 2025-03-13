@@ -114,6 +114,9 @@ enum {
   s3DeleteBucketPublicAccessBlock,
   s3GetBucketEncryption,
   s3PutBucketEncryption,
+  s3ListBucketSnapshots,
+  s3PutBucketSnapshot,
+  s3DeleteBucketSnapshot,
   s3DescribeJob,
   s3GetObjectAttributes,
   s3GetObjectVersionAttributes,
@@ -295,6 +298,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketRequestPayment:
   case s3GetBucketTagging:
   case s3GetBucketVersioning:
+  case s3ListBucketSnapshots:
   case s3GetBucketWebsite:
   case s3GetLifecycleConfiguration:
   case s3GetObjectAcl:

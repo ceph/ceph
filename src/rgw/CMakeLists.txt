@@ -124,6 +124,7 @@ set(librgw_common_srcs
   rgw_rest_s3.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
+  rgw_rest_snap.cc
   rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc

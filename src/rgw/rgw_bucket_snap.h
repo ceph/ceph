@@ -46,6 +46,7 @@ public:
   }
 
   void dump(Formatter *f) const;
+  void dump_xml(Formatter *f) const;
 
   rgw_bucket_snap_id get_cur_snap_id() const {
     return cur_snap;

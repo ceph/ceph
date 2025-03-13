@@ -1,4 +1,6 @@
 #include "rgw_bucket_snap.h"
+#include "rgw_xml.h"
+#include "rgw_rest.h"
 #include "common/ceph_json.h"
 
 
@@ -9,9 +11,21 @@ void rgw_bucket_snap_info::dump(Formatter *f) const {
   encode_json("flags", flags, f);
 }
 
+void rgw_bucket_snap_info::dump_xml(Formatter *f) const {
+  encode_xml("Name", name, f);
+  encode_xml("Description", description, f);
+  encode_xml("CreationTime", dump_time_to_str(creation_time), f);
+  encode_xml("Flags", flags, f);
+}
+
 void rgw_bucket_snap::dump(Formatter *f) const {
   encode_json("id", id, f);
   encode_json("info", info, f);
+}
+
+void rgw_bucket_snap::dump_xml(Formatter *f) const {
+  encode_xml("ID", id, f);
+  encode_xml("Info", info, f);
 }
 
 
@@ -20,10 +34,26 @@ RGWBucketSnapMgr::RGWBucketSnapMgr() {}
 void RGWBucketSnapMgr::dump(Formatter *f) const {
   encode_json("enabled", enabled, f);
   encode_json("cur_snap", cur_snap, f);
-  encode_json("cur_snap", cur_snap, f);
   encode_json("snaps", snaps, f);
   encode_json("rm_snaps", rm_snaps, f);
   encode_json("names_to_ids", names_to_ids, f);
+}
+
+void RGWBucketSnapMgr::dump_xml(Formatter *f) const {
+  encode_xml("Enabled", enabled, f);
+  encode_xml("CurrentSnapshot", cur_snap, f);
+  {
+    Formatter::ArraySection as(*f, "Snapshots");
+    for (auto& i : snaps) {
+      encode_xml("Snapshot", i.second, f);
+    }
+  }
+  {
+    Formatter::ArraySection as(*f, "RemovedSnapshots");
+    for (auto& i : rm_snaps) {
+      encode_xml("Snapshot", i.second, f);
+    }
+  }
 }
 
 int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info)

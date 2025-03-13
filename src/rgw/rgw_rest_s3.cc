@@ -39,6 +39,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#include "rgw_rest_snap.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -5224,6 +5225,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     }
     return new RGWGetBucketWebsite_ObjStore_S3;
   }
+
+  if (s->info.args.sub_resource_exists("snap"))
+    return new RGWListBucketSnapshots_ObjStore_S3;
 
   if (s->info.args.exists("mdsearch")) {
     if (!s->cct->_conf->rgw_enable_mdsearch) {

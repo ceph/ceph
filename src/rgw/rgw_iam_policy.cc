@@ -88,6 +88,7 @@ static const actpair actpairs[] =
  { "s3:GetBucketRequestPayment", s3GetBucketRequestPayment },
  { "s3:GetBucketTagging", s3GetBucketTagging },
  { "s3:GetBucketVersioning", s3GetBucketVersioning },
+ { "s3:ListBucketSnapshots", s3ListBucketSnapshots },
  { "s3:GetBucketWebsite", s3GetBucketWebsite },
  { "s3:GetLifecycleConfiguration", s3GetLifecycleConfiguration },
  { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration },
@@ -1394,6 +1395,15 @@ const char* action_bit_string(uint64_t action) {
 
   case s3PutBucketEncryption:
     return "s3:PutBucketEncryption";
+
+  case s3ListBucketSnapshots:
+    return "s3:ListBucketSnapshot";
+
+  case s3PutBucketSnapshot:
+    return "s3:PutBucketSnapshot";
+
+  case s3DeleteBucketSnapshot:
+    return "s3:DeleteBucketSnapshot";
 
   case s3GetBucketVersioning:
     return "s3:GetBucketVersioning";

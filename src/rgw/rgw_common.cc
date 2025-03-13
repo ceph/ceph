@@ -953,6 +953,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("versioning") == 0) ||
       (name.compare("website") == 0) ||
       (name.compare("requestPayment") == 0) ||
+      (name.compare("snap") == 0) ||
       (name.compare("torrent") == 0) ||
       (name.compare("tagging") == 0) ||
       (name.compare("append") == 0) ||
