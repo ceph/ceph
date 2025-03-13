@@ -185,7 +185,7 @@ public:
       return 256;
     }
 
-    const omap_root_le_t& select_log_omap_root(Onode& onode);
+    omap_root_t select_log_omap_root(Onode& onode) const;
 
   // only exposed to SeaStore
   public:
