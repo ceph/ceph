@@ -983,50 +983,49 @@ std::string expand_key_name(rgw::sal::Bucket *bucket, const std::string_view&t)
   return r;
 }
 
-static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
+static int get_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
+                                 CephContext *cct, optional_yield y,
+                                 std::string *err_msg,
+                                 rgw::sal::Bucket *bucket,
                                  std::string &key_id)
 {
   int res;
   std::string saved_key;
 
-  key_id = expand_key_name(s->bucket.get(), s->cct->_conf->rgw_crypt_sse_s3_key_template);
+  key_id = expand_key_name(bucket, cct->_conf->rgw_crypt_sse_s3_key_template);
 
   if (key_id == cant_expand_key) {
-    ldpp_dout(s, 5) << "ERROR: unable to expand key_id " <<
-      s->cct->_conf->rgw_crypt_sse_s3_key_template << " on bucket" << dendl;
-    s->err.message = "Server side error - unable to expand key_id";
+    ldpp_dout(dpp, 5) << "ERROR: unable to expand key_id " <<
+      cct->_conf->rgw_crypt_sse_s3_key_template << " on bucket" << dendl;
+    if (err_msg) *err_msg = "Server side error - unable to expand key_id";
     return -EINVAL;
   }
 
-  saved_key = fetch_bucket_key_id(s->bucket->get_attrs());
+  saved_key = fetch_bucket_key_id(bucket->get_attrs());
   if (saved_key != "") {
-    ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
+    ldpp_dout(dpp, 5) << "Found KEK ID: " << key_id << dendl;
   }
   if (saved_key != key_id) {
-    res = create_sse_s3_bucket_key(s, key_id, y);
+    res = create_sse_s3_bucket_key(dpp, key_id, y);
     if (res != 0) {
       return res;
     }
     bufferlist key_id_bl;
     key_id_bl.append(key_id.c_str(), key_id.length());
-    for (int count = 0; count < 15; ++count) {
-      rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    res = retry_raced_bucket_write(dpp, bucket, [bucket, key_id_bl, dpp, y] {
+      rgw::sal::Attrs attrs = bucket->get_attrs();
       attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
-      res = s->bucket->merge_and_store_attrs(s, attrs, s->yield);
-      if (res != -ECANCELED) {
-        break;
-      }
-      res = s->bucket->try_refresh_info(s, nullptr, s->yield);
-      if (res != 0) {
-        break;
-      }
-    }
+      return bucket->merge_and_store_attrs(dpp, attrs, y);
+    }, y);
     if (res != 0) {
-      ldpp_dout(s, 5) << "ERROR: unable to save new key_id on bucket" << dendl;
-      s->err.message = "Server side error - unable to save key_id";
+      ldpp_dout(dpp, 5) << "ERROR: unable to save new key_id on bucket" << dendl;
+      if (err_msg) *err_msg = "Server side error - unable to save key_id";
       return res;
     }
   }
+
+  return 0;
+}
   return 0;
 }
 
@@ -1227,7 +1226,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         return res;
 
       std::string key_id;
-      res = get_sse_s3_bucket_key(s, y, key_id);
+      res = get_sse_s3_bucket_key(s, s->cct, y, &s->err.message, s->bucket.get(), key_id);
       if (res != 0) {
         return res;
       }
