@@ -14,7 +14,6 @@ from io import BytesIO
 from typing import Dict, List, Any
 from tasks import ceph_manager
 from teuthology import misc as teuthology
-from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 DATA_SHARD_FILENAME = 'ec-obj'
@@ -34,10 +33,10 @@ class ErasureCodeObject:
         self.ec_profile = ec_profile
         self.k = int(ec_profile["k"])
         self.m = int(ec_profile["m"])
-        self.shards = [None] * (self.k + self.m)
-        self.jsons = [None] * (self.k + self.m)
-        self.osd_map = [None] * (self.k + self.m)
-        self.object_size = None
+        self.shards: List[bytearray] = [bytearray()] * (self.k + self.m)
+        self.jsons: List[str] = [""] * (self.k + self.m)
+        self.osd_ids: List[int] = [-1] * (self.k + self.m)
+        self.object_size = 0
 
     def get_ec_tool_profile(self) -> str:
         """
@@ -78,7 +77,7 @@ class ErasureCodeObject:
         """
         return self.shards[self.k:self.k + self.m]
 
-    def write_data_shards_to_file(self, filepath: str, remote: any = None):
+    def write_data_shards_to_file(self, filepath: str, remote: Any = None):
         """
         Write the data shards to files for
         consumption by Erasure Code tool.
@@ -104,7 +103,7 @@ class ErasureCodeObject:
         self.shards = [None] * (self.k + self.m)
 
     def does_shard_match_file(self, index: int, filepath: str,
-                              remote: any = None) -> bool:
+                              remote: Any = None) -> bool:
         """
         Compare shard at specified index with contents of the supplied file
         If remote is specified fetch the file and make a local copy
@@ -120,7 +119,7 @@ class ErasureCodeObject:
         return shard_data == file_content
 
     def compare_parity_shards_to_files(self, filepath: str,
-                                       remote: any = None) -> bool:
+                                       remote: Any = None) -> bool:
         """
         Check the object's parity shards match the files generated
         by the erasure code tool. Return True if they match, False otherwise.
@@ -149,24 +148,33 @@ class ErasureCodeObjects:
     if specified, any objects not on the list will not be checked
     """
     def __init__(self, manager: ceph_manager.CephManager,
-                 config: Dict[str, Any] = None):
+                 config: Dict[str, Any]):
         self.manager = manager
         self.os_tool = ObjectStoreTool(manager)
         self.pools_json = self.manager.get_osd_dump_json()["pools"]
         self.objects_to_include = config.get('object_list', None)
         self.pools_to_check = config.get('pools_to_check', None)
-        self.ec_profiles = {}
-        self.objects = []
+        self.ec_profiles: Dict[int, Any] = {}
+        self.objects: List[ErasureCodeObject] = []
+
+    def has_object_with_uid(self, object_id: str) -> bool:
+        """
+        Return true if an object with the supplied object ID is found.
+        """
+        for obj in self.objects:
+            if obj.uid == object_id:
+                return True
+        return False
 
     def get_object_by_uid(self, object_id: str) -> ErasureCodeObject:
         """
         Return the ErasureCodeObject corresponding to the supplied
-        UID if it exists
+        UID if it exists. Assert if no object is found.
         """
         for obj in self.objects:
             if obj.uid == object_id:
                 return obj
-        return None
+        assert False, "Error: Object with UID not found"
 
     def create_ec_object(self, oid: str, snapid: int,
                          ec_profile: Dict[str, Any]):
@@ -191,28 +199,28 @@ class ErasureCodeObjects:
         """
         return info_dump["oid"] + "_" + str(info_dump["snapid"])
 
-    def is_object_in_pool_to_be_checked(self, object_json: Dict[str, Any]):
+    def is_object_in_pool_to_be_checked(self, object_json: List[Dict[str, Any]]):
         """
         Check if an object is a member of pool
         that is to be checked for consistency.
         """
         if not self.pools_to_check:
             return True  # All pools to be checked
-        object_json = object_json[1]
-        shard_pool_id = object_json["pool"]
+        json_section = object_json[1]
+        shard_pool_id = json_section["pool"]
         for pool_json in self.pools_json:
             if shard_pool_id == pool_json["pool"]:
                 if pool_json["pool_name"] in self.pools_to_check:
                     return True
         return False
 
-    def is_object_in_ec_pool(self, object_json: Dict[str, Any]):
+    def is_object_in_ec_pool(self, object_json: List[Dict[str, Any]]):
         """
         Check if an object is a member of an EC pool or not.
         """
         is_object_in_ec_pool = False
-        object_json = object_json[1]
-        shard_pool_id = object_json["pool"]
+        json_section = object_json[1]
+        shard_pool_id = json_section["pool"]
         for pool_json in self.pools_json:
             if shard_pool_id == pool_json["pool"]:
                 pool_type = pool_json['type']  # 1 for rep, 3 for ec
@@ -227,6 +235,7 @@ class ErasureCodeObjects:
         Find and return the EC profile for a given pool.
         Cache it locally if not already stored.
         """
+        ec_profile_json = ""
         if pool_id in self.ec_profiles:
             return self.ec_profiles[pool_id]
         for pool_json in self.pools_json:
@@ -253,7 +262,7 @@ class ErasureCodeObjects:
         Use the Object Store tool to get object info and the bytes data
         for all shards in an object, returns true if successful
         """
-        for (json_str, osd_id) in zip(ec_object.jsons, ec_object.osd_map):
+        for (json_str, osd_id) in zip(ec_object.jsons, ec_object.osd_ids):
             shard_info = self.os_tool.get_shard_info_dump(osd_id, json_str)
             shard_data = self.os_tool.get_shard_bytes(osd_id, json_str)
             shard_index = shard_info["id"]["shard_id"]
@@ -272,21 +281,22 @@ class ErasureCodeObjects:
         slow calls to the ObjectStore tool
         """
         json_str = json.dumps(object_json)
-        object_json = object_json[1]
-        object_oid = object_json["oid"]
-        object_snapid = object_json["snapid"]
+        json_section = object_json[1]
+        object_oid = json_section["oid"]
+        object_snapid = json_section["snapid"]
         object_uid = object_oid + '_' + str(object_snapid)
-        ec_object = self.get_object_by_uid(object_uid)
-        if (self.objects_to_include and
-           object_oid not in self.objects_to_include):
-            return
-        if not ec_object:
-            shard_pool_id = object_json["pool"]
+        if (self.has_object_with_uid(object_uid)):
+            ec_object = self.get_object_by_uid(object_uid)
+            if (self.objects_to_include and
+                object_oid not in self.objects_to_include):
+                return
+        else:
+            shard_pool_id = json_section["pool"]
             ec_profile = self.get_ec_profile_for_pool(shard_pool_id)
             ec_object = self.create_ec_object(object_oid,
                                               object_snapid, ec_profile)
-        shard_id = object_json["shard_id"]
-        ec_object.osd_map[shard_id] = osd_id
+        shard_id = json_section["shard_id"]
+        ec_object.osd_ids[shard_id] = osd_id
         ec_object.jsons[shard_id] = json_str
 
 
@@ -392,7 +402,7 @@ class ObjectStoreTool:
         """
         Return the contents of the shard living on the specified OSD as bytes.
         """
-        shard_bytes = None
+        shard_bytes = bytearray()
         proc = self.run_objectstore_tool(osd_id,
                                          [object_id, "get-bytes"], False)
         stdout = proc.stdout.getvalue()
@@ -426,7 +436,7 @@ class ErasureCodeTool:
     """
     Interface for running the Ceph Erasure Code Tool
     """
-    def __init__(self, manager: ceph_manager.CephManager, remote: any):
+    def __init__(self, manager: ceph_manager.CephManager, remote: Any):
         self.manager = manager
         self.remote = remote
 
@@ -441,7 +451,7 @@ class ErasureCodeTool:
                 self.manager.cluster,
                 self.remote,
                 args=args,
-                name=None,
+                name="",
                 wait=True,
                 check_status=False,
                 stdout=StringIO(),
@@ -492,8 +502,8 @@ class ErasureCodeTool:
             log.error("Erasure Code tool failed to decode: %s", proc.stderr)
 
 
-def shell(ctx: any, cluster_name: str, remote: any,
-          args: List[str], name: str = None, **kwargs: any):
+def shell(ctx: Any, cluster_name: str, remote: Any,
+          args: List[str], name: str = "", **kwargs: Any):
     """
     Interface for running commands on cephadm clusters
     """
@@ -539,7 +549,7 @@ def load_objects_to_check(objects_to_check: str) -> List[str]:
     Attempt to parse the object_list config option
     takes a stringified JSON list as an argument
     """
-    object_list = None
+    object_list = []
     if objects_to_check is None:
         return object_list
     try:
@@ -563,7 +573,7 @@ def revive_osds(manager: ceph_manager.CephManager, osds: List[Dict[str, Any]]):
         manager.wait_till_osd_is_up(osd_id)
 
 
-def clean_up_test_files(remote: any = None):
+def clean_up_test_files(remote: Any = None):
     """
     Clean any test files that were created
     both locally and on a remote if specified
@@ -642,7 +652,9 @@ def task(ctx, config: Dict[str, Any]):
     ec_tool = ErasureCodeTool(manager, ec_remote)
     ec_objects = ErasureCodeObjects(manager, config)
     start_time = time.time()
-    consistent, inconsistent, skipped = [], [], []
+    consistent: List[str] = []
+    inconsistent: List[str] = []
+    skipped: List[str] = []
 
     atexit.register(revive_osds, manager, osds)
     atexit.register(print_summary, consistent, inconsistent, skipped)
