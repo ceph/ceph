@@ -209,7 +209,7 @@ public:
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDentry *prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
-			    const file_layout_t *layout=nullptr);
+			    const file_layout_t *layout=nullptr, bool referent_inode=false);
   void journal_allocated_inos(const MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(const MDRequestRef& mdr, Session *session);
 
@@ -279,12 +279,12 @@ public:
   // link
   void handle_client_link(const MDRequestRef& mdr);
   void _link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
-  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, CInode *referenti,
 			  version_t, version_t, bool);
 
-  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
+  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti, CDentry *straydn);
   void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
-			   version_t);
+                           CInode *referenti, CDentry *sd, version_t);
 
   void handle_peer_link_prep(const MDRequestRef& mdr);
   void _logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
