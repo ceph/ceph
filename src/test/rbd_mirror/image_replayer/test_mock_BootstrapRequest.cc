@@ -54,7 +54,6 @@ struct ImageSync<librbd::MockTestImageCtx> {
 
   static ImageSync* create(
       Threads<librbd::MockTestImageCtx>* threads,
-      GroupCtx *local_group_ctx,
       librbd::MockTestImageCtx *local_image_ctx,
       librbd::MockTestImageCtx *remote_image_ctx,
       const std::string &local_mirror_uuid,
