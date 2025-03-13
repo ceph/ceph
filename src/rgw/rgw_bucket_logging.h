@@ -139,6 +139,8 @@ struct configuration {
 };
 WRITE_CLASS_ENCODER(configuration)
 
+static const std::string service_principal = "logging.s3.amazonaws.com";
+
 using source_buckets = std::set<rgw_bucket>;
 
 constexpr unsigned MAX_BUCKET_LOGGING_BUFFER = 1000;
