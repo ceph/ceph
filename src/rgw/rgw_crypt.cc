@@ -942,7 +942,7 @@ std::string fetch_bucket_key_id(const rgw::sal::Attrs& bucket_attrs)
 }
 
 const std::string cant_expand_key{ "\uFFFD" };
-std::string expand_key_name(req_state *s, const std::string_view&t)
+std::string expand_key_name(rgw::sal::Bucket *bucket, const std::string_view&t)
 {
   std::string r;
   size_t i, j;
@@ -963,7 +963,7 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
       continue;
     }
     if (t.compare(i+1, 9, "bucket_id") == 0) {
-      r.append(s->bucket->get_marker());
+      r.append(bucket->get_marker());
       i += 10;
       continue;
     }
@@ -974,7 +974,7 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
           },
           [] (const rgw_account_id& account_id) -> const std::string& {
             return account_id;
-          }), s->bucket->get_info().owner));
+          }), bucket->get_info().owner));
       i += 9;
       continue;
     }
@@ -989,7 +989,7 @@ static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
   int res;
   std::string saved_key;
 
-  key_id = expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template);
+  key_id = expand_key_name(s->bucket.get(), s->cct->_conf->rgw_crypt_sse_s3_key_template);
 
   if (key_id == cant_expand_key) {
     ldpp_dout(s, 5) << "ERROR: unable to expand key_id " <<
@@ -1517,7 +1517,7 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
 int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 {
   int res;
-  auto key_id { expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template) };
+  auto key_id { expand_key_name(s->bucket.get(), s->cct->_conf->rgw_crypt_sse_s3_key_template) };
   auto saved_key { fetch_bucket_key_id(s->bucket_attrs) };
   size_t i;
 
