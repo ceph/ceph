@@ -18,6 +18,7 @@ def namespace_validator(ioctx: rados.Ioctx) -> None:
         raise ValueError("namespace {} is not in mirror image mode".format(
             ioctx.get_namespace()))
 
+
 def group_validator(group: rbd.Group) -> None:
     try:
         info = group.mirror_group_get_info()
@@ -25,6 +26,7 @@ def group_validator(group: rbd.Group) -> None:
         raise rbd.InvalidArgument("Error getting mirror group info")
     if info['image_mode'] != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
         raise rbd.InvalidArgument("Invalid mirror group mode")
+
 
 class GroupSpec(NamedTuple):
     pool_id: str
@@ -63,8 +65,10 @@ class GroupCreateSnapshotRequests:
             self.handler.MODULE_OPTION_NAME_MAX_CONCURRENT_GROUP_SNAP_CREATE)
 
         self.log.debug("GroupCreateSnapshotRequests.add: {}/{}/{} "
-                       "max concurrent snap create {}".format(
-                            pool_id, namespace, group_id, max_concurrent))
+                       "max concurrent snap create {}".format(pool_id,
+                                                              namespace,
+                                                              group_id,
+                                                              max_concurrent))
 
         with self.lock:
             if group_spec in self.pending:
@@ -159,7 +163,7 @@ class GroupCreateSnapshotRequests:
             self.finish(group_spec)
             return
 
-        if not info['primary'] :
+        if not info['primary']:
             self.log.debug(
                 "GroupCreateSnapshotRequests.handle_get_mirror_info: "
                 "{}/{}/{}: {}".format(
