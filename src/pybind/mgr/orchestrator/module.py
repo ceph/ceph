@@ -1763,9 +1763,9 @@ Usage:
         return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch')
-    def _service_action(self, action: ServiceAction, service_name: str) -> HandleCommandResult:
+    def _service_action(self, action: ServiceAction, service_name: str, force: bool = False) -> HandleCommandResult:
         """Start, stop, restart, redeploy, or reconfig an entire service (i.e. all daemons)"""
-        completion = self.service_action(action.value, service_name)
+        completion = self.service_action(action.value, service_name, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -2603,3 +2603,83 @@ Usage:
         completion = self.update_service(service_type.value, service_type.name, image)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_read_command('orch action ls')
+    def _list_actions(self, format: Format = Format.plain) -> HandleCommandResult:
+        """
+        List scheduled daemon actions
+        """
+        completion = self.list_daemon_actions()
+        actions = raise_if_exception(completion)
+        if not actions:
+            return HandleCommandResult(stdout="No scheduled actions")
+
+        table = PrettyTable(
+            ['HOST', 'DAEMON', 'ACTION', 'FORCED'],
+            border=False)
+        table.align = 'l'
+        table.left_padding_width = 0
+        table.right_padding_width = 2
+
+        for host, daemon_name, action, is_forced in actions:
+            forced = 'Yes' if is_forced else 'No'
+            table.add_row([host, daemon_name, action, forced])
+
+        if format == Format.plain:
+            return HandleCommandResult(stdout=table.get_string())
+        else:
+            return HandleCommandResult(
+                stdout=to_format(
+                    [{
+                        'host': host,
+                        'daemon': daemon_name,
+                        'action': action,
+                        'forced': is_forced
+                    } for host, daemon_name, action, is_forced in actions],
+                    format,
+                    many=True,
+                    cls=None
+                )
+            )
+
+    @_cli_write_command('orch daemon cancel action')
+    def _cancel_action(self, daemon_name: str) -> HandleCommandResult:
+        """
+        Cancel a scheduled daemon action
+        """
+        completion = self.cancel_daemon_action(daemon_name)
+        result = raise_if_exception(completion)
+        if not result:
+            return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
+        return HandleCommandResult(stdout=f"Canceled scheduled action for daemon {daemon_name}")
+
+    @_cli_write_command('orch service cancel action')
+    def _cancel_service_actions(self, service_name: str) -> HandleCommandResult:
+        """
+        Cancel all scheduled actions for a service
+        """
+        completion = self.cancel_service_actions(service_name)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=result)
+
+    @_cli_write_command('orch daemon action set-forced')
+    def _set_force_action(self, daemon_name: str) -> HandleCommandResult:
+        """
+        Set the force flag for a scheduled daemon action
+        """
+        completion = self.force_daemon_action(daemon_name, True)
+        result = raise_if_exception(completion)
+        if not result:
+            return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
+        return HandleCommandResult(stdout=f"Action for daemon {daemon_name} is now forced")
+
+    @_cli_write_command('orch daemon action unset-forced')
+    def _unset_force_action(self, daemon_name: str) -> HandleCommandResult:
+        """
+        Unset the force flag for a scheduled daemon action
+        """
+        completion = self.force_daemon_action(daemon_name, False)
+        result = raise_if_exception(completion)
+        if not result:
+            return HandleCommandResult(stderr=f"No scheduled action found for daemon {daemon_name}")
+        return HandleCommandResult(stdout=f"Action for daemon {daemon_name} is now not forced")
