@@ -221,6 +221,26 @@ function install_boost_on_ubuntu {
 
 }
 
+function install_llvm_repo_on_ubuntu {
+    ci_debug "Running install_llvm_repo_on_ubuntu() in install-deps.sh"
+    # partially adapted from llvm.sh install helper script
+    local llvm_version="$1"
+    local codename="$2"
+
+    # fetch needed files
+    local key_url=https://apt.llvm.org/llvm-snapshot.gpg.key
+    local tmp_key="$(mktemp /tmp/llvm_keyXXXXXXXX)"
+    curl --silent --fail --write-out "%{http_code}" --location -o "${tmp_key}" "${key_url}"
+    $SUDO apt-key add "${tmp_key}"
+    rm -f "${tmp_key}"
+
+    # set up repos
+    $SUDO tee /etc/apt/sources.list.d/ubuntu-llvm-${llvm_version}.list <<EOF
+deb http://apt.llvm.org/${codename} llvm-toolchain-${codename}-${llvm_version} main
+EOF
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -381,6 +401,11 @@ else
 	# Put this before any other invocation of apt so it can clean
 	# up in a broken case.
         clean_boost_on_ubuntu
+        if [ "$LLVM_APT_REPO" ]; then
+            case "$VERSION" in
+                *Jammy*) install_llvm_repo_on_ubuntu "${LLVM_APT_REPO}" jammy ;;
+            esac
+        fi
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
