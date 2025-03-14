@@ -7278,12 +7278,7 @@ paths:
       - Multi-cluster
   /api/multi-cluster/check_token_status:
     get:
-      parameters:
-      - allowEmptyValue: true
-        in: query
-        name: clustersTokenMap
-        schema:
-          type: string
+      parameters: []
       responses:
         '200':
           content:
