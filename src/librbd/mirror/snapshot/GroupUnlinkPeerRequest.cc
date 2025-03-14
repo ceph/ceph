@@ -325,6 +325,7 @@ void GroupUnlinkPeerRequest<I>::finish(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
+  delete this;
 }
 
 } // namespace snapshot
