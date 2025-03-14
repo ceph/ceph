@@ -34,6 +34,19 @@ typedef struct _proxy {
 	const char *socket_path;
 } proxy_t;
 
+typedef struct {
+    uint64_t inode;
+    int64_t offset;
+    int64_t length;
+    uint32_t client_id;
+} proxy_invalidation_msg_t;
+
+typedef struct {
+    vinodeno_t ino;  // Inode identifier
+    proxy_client_t *clients[MAX_CLIENTS];  // List of clients caching this inode
+    int client_count;
+} inode_client_map_entry_t;
+
 typedef int32_t (*proxy_handler_t)(proxy_client_t *, proxy_req_t *,
 				   const void *data, int32_t data_size);
 
@@ -1820,4 +1833,83 @@ int32_t main(int32_t argc, char *argv[])
 	proxy_log_deregister(&proxy.log_handler);
 
 	return err < 0 ? 1 : 0;
+}
+
+
+// Invalidation workflow
+void libcephfsd_invalidate_inode(void *handle, struct Inode *inode, int64_t offset, int64_t length) {
+    proxy_mount_t *mount = (proxy_mount_t *)handle;
+
+    // Schedule invalidation for proxy clients
+    schedule_invalidation(mount, inode, NULL, offset, length);
+}
+
+void register_invalidation_callbacks(proxy_mount_t *mount) {
+    struct ceph_client_callback_args cb_args = {0};
+    cb_args.handle = mount;
+    cb_args.ino_cb = libcephfsd_invalidate_inode;
+
+    ceph_ll_register_callbacks2(mount->ceph_mount, &cb_args);
+}
+
+inode_client_map_entry_t *find_inode_client_map_entry(struct Inode *inode) {
+    for (int i = 0; i < MAX_INODES; i++) {
+        if (inode_client_map[i].ino == inode->ino) {
+            return &inode_client_map[i];
+        }
+    }
+    return NULL;
+}
+
+void add_client_to_inode_map(proxy_client_t *client, Inode *inode) {
+    inode_client_map_entry_t *entry = find_inode_client_map_entry(inode);
+    if (!entry) {
+        entry = create_inode_client_map_entry(inode); // Creates a new entry if not found
+    }
+
+    // Add the client to the clients array if not already present
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (entry->clients[i] == NULL) {
+            entry->clients[i] = client;
+            entry->client_count++;
+            break;
+        } else if (entry->clients[i] == client) {
+            // Client is already in the map; no action needed
+            return;
+        }
+    }
+}
+
+void schedule_invalidation(proxy_mount_t *mount, struct Inode *inode, const char *name, int64_t offset, int64_t length) {
+    // Find the entry for the given inode
+    inode_client_map_entry_t *entry = find_inode_client_map_entry(inode);
+    if (!entry || entry->client_count == 0) {
+        proxy_log(LOG_INFO, 0, "No clients to notify for inode %lu", inode->ino);
+        return;
+    }
+
+    proxy_invalidation_msg_t msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.inode = ptr_checksum(&global_random, inode);
+    msg.offset = offset;
+    msg.length = length;
+
+    if (name) {
+        strncpy(msg.name, name, PATH_MAX - 1);
+    }
+
+    // Notify each client caching this inode
+    for (int i = 0; i < entry->client_count; i++) {
+        proxy_client_t *client = entry->clients[i];
+        if (client) {
+            msg.client_id = client->id;
+            int err = proxy_link_send(client->sd, &msg, sizeof(msg));
+            if (err < 0) {
+                proxy_log(LOG_ERR, errno, "Failed to send invalidation message to client %d", client->id);
+            } else {
+                proxy_log(LOG_INFO, 0, "Sent invalidation message to client %d for inode %lu", client->id, inode->ino);
+            }
+        }
+    }
 }
