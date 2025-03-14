@@ -411,25 +411,29 @@ class MultiCluster(RESTController):
             return 1
         return 0
 
-    def check_token_status_array(self, clusters_token_array):
+    def check_token_status_array(self):
         token_status_map = {}
+        multi_cluster_config = self.load_multi_cluster_config()
 
-        for item in clusters_token_array:
-            cluster_name = item['name']
-            token = item['token']
-            user = item['user']
-            status = self.check_token_status_expiration(token)
-            time_left = self.get_time_left(token)
-            token_status_map[cluster_name] = {'status': status, 'user': user,
-                                              'time_left': time_left}
+        if 'config' in multi_cluster_config:
+            for _, config in multi_cluster_config['config'].items():
+                cluster_name = config[0]['name']
+                token = config[0]['token']
+                user = config[0]['user']
+                status = self.check_token_status_expiration(token)
+                time_left = self.get_time_left(token)
+                token_status_map[cluster_name] = {
+                    'status': status,
+                    'user': user,
+                    'time_left': time_left
+                }
 
         return token_status_map
 
     @Endpoint()
     @ReadPermission
-    def check_token_status(self, clustersTokenMap=None):
-        clusters_token_map = json.loads(clustersTokenMap)
-        return self.check_token_status_array(clusters_token_map)
+    def check_token_status(self):
+        return self.check_token_status_array()
 
     @Endpoint()
     @ReadPermission
