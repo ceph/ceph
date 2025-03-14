@@ -138,7 +138,7 @@ class Root(Server):
 
     @cherrypy.expose
     def index(self) -> str:
-        return '''<!DOCTYPE html>
+        return self.mgr.get_store('service_discovery/index') or '''<!DOCTYPE html>
 <html>
 <head><title>Cephadm HTTP Endpoint</title></head>
 <body>
@@ -175,6 +175,8 @@ class Root(Server):
             return self.nfs_sd_config()
         elif service == 'smb':
             return self.smb_sd_config()
+        elif service.startswith("container"):
+            return self.container_sd_config(service)
         else:
             return []
 
@@ -276,6 +278,21 @@ class Root(Server):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
             port = SMBService.DEFAULT_EXPORTER_PORT
+            srv_entries.append({
+                'targets': [build_url(host=addr, port=port).lstrip('/')],
+                'labels': {'instance': dd.hostname}
+            })
+        return srv_entries
+
+    def container_sd_config(self, service: str) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for a container service."""
+        srv_entries = []
+        for dd in self.mgr.cache.get_daemons_by_service(service):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            if not dd.ports:
+                continue
+            port = dd.ports[0]
             srv_entries.append({
                 'targets': [build_url(host=addr, port=port).lstrip('/')],
                 'labels': {'instance': dd.hostname}
