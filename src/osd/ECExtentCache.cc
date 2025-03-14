@@ -1,6 +1,5 @@
-//
-// Created by root on 10/17/24.
-//
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "ECExtentCache.h"
 

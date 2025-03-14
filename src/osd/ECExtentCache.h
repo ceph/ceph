@@ -1,9 +1,65 @@
-//
-// Created by root on 10/17/24.
-//
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
-#ifndef ECEXTENTCACHE_H
-#define ECEXTENTCACHE_H
+/* EC "extent" cache.  This extent cache attempts to improve performance,
+ * particularly for small sequential writes, by caching the results of recent
+ * reads and writes.
+ *
+ * The cache has two parts: The main cache which is active while an IO is
+ * outstanding to an object and an "LRU" which stashes recent IO according to
+ * a least-recently-used scehemd.
+ *
+ * The cache keeps all caches indexed by shard, shard_offset. That is it
+ * independently tracks caches for each shard of an EC. It will keep a cache
+ * even for shards which are currently offline or missing, since the cache
+ * is formed from the result of reads and writes, which are required to always
+ * calculate missing shards.
+ *
+ * The cache allows for a single read to be outstanding per PG at a time. If
+ * multiple writes are received while a read is active, the next read will
+ * contain all necessary reads, so as to catch up. Early on in development, a
+ * more parallel read mechanism was explored but was found to have no benefit.
+ *
+ * This cache will never re-order IO.
+ *
+ * The LRU
+ *
+ * The LRU is a per-OSD-shard (not to be confused with an EC shard). Since the
+ * OSD-shard can have multiple threads, the LRU must have a mutex. This should
+ * not be required for crimson-based pools, since each osd shard has a single
+ * reactor. Some effort has been made to limit the frequency that this mutex is
+ * taken.
+ *
+ * The LRU has a maximum size (defined in the constructor) and will keep its
+ * usage below this amount.
+ *
+ * Client API
+ *
+ * The client has a number of required interactions:
+ * 1. prepare(...). This creates a cache op. All cache ops required for a single
+ *                  parent op must be prepared before any are executed.
+ * 2. execute(...). Execute an IO. This gives the cache permission to perform
+ *                  the IO. This function can (and frequently does) call back
+ *                  re-entrantly, so the caller must be aware that this can
+ *                  happen.
+ *
+ * The client must provide a mechanism for the extent cache to read. It does
+ * this by extending the ECExtentCache::BackendRead class.
+ *
+ * Once a read is complete, the client must call cache.read_done().
+ *
+ * When the cache is ready, it will call back the lambda passes with execute.
+ * The client is expected to populate the write data, including any parity
+ * data, by calling the cache.write_done() interface.
+ *
+ * Finally, there is an on_change() and on_change2() notification. The first
+ * of these will terminate any unstarted IO and clear the LRU.  The second of
+ * these is an assertion that the cache is idle. The second must be called after
+ * the client has performed all clean up.
+ *
+ */
+
+#pragma once
 
 #include "ECUtil.h"
 
@@ -302,6 +358,3 @@ public:
   }
 
 }; // ECExtentCaches
-
-
-#endif //ECEXTENTCACHE_H
