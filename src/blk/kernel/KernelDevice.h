@@ -52,7 +52,6 @@ private:
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
-  bool discard_stop;
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
   ceph::condition_variable discard_cond;
@@ -93,7 +92,7 @@ private:
   int _aio_start();
   void _aio_stop();
 
-  void _discard_update_threads();
+  void _discard_update_threads(bool discard_stop = false);
   void _discard_stop();
   bool _discard_started();
 
