@@ -28,18 +28,20 @@ class GroupCreatePrimaryRequest {
 public:
   static GroupCreatePrimaryRequest *create(librados::IoCtx& group_ioctx,
                                            const std::string& group_name,
-                                           uint64_t flags, std::string *snap_id,
+                                           uint64_t snap_create_flags,
+                                           std::string *snap_id,
                                            Context *on_finish) {
-    return new GroupCreatePrimaryRequest(group_ioctx, group_name, flags,
-                                         snap_id, on_finish);
+    return new GroupCreatePrimaryRequest(group_ioctx, group_name,
+                                         snap_create_flags, snap_id, on_finish);
   }
 // TODO: Allow demoted flag?
   GroupCreatePrimaryRequest(librados::IoCtx& group_ioctx,
                      const std::string& group_name,
-                     uint32_t flags, std::string *snap_id,
+                     uint64_t snap_create_flags, std::string *snap_id,
                      Context *on_finish)
-    : m_group_ioctx(group_ioctx), m_group_name(group_name), m_flags(flags),
-      m_snap_id(snap_id), m_on_finish(on_finish) {
+    : m_group_ioctx(group_ioctx), m_group_name(group_name),
+      m_snap_create_flags(snap_create_flags), m_snap_id(snap_id),
+      m_on_finish(on_finish) {
     m_cct = (CephContext *)group_ioctx.cct();
   }
 
@@ -99,7 +101,7 @@ private:
 
   librados::IoCtx m_group_ioctx;
   const std::string m_group_name;
-  const uint64_t m_flags;
+  const uint64_t m_snap_create_flags;
   std::string *m_snap_id;
   Context *m_on_finish;
 
@@ -115,7 +117,6 @@ private:
   std::vector<uint64_t> m_image_snap_ids;
   std::set<std::string> m_mirror_peer_uuids;
   librados::IoCtx m_default_ns_ioctx;
-  uint64_t m_internal_flags;
   int m_ret_code=0;
   cls::rbd::GroupImageSpec m_start_after;
   std::vector<cls::rbd::GroupImageStatus> m_images;

@@ -500,12 +500,13 @@ void GroupCreatePrimaryRequest<I>::handle_set_snap_metadata(int r) {
 
 template <typename I>
 void GroupCreatePrimaryRequest<I>::notify_quiesce() {
-  ldout(m_cct, 10) << dendl;
-
-  if ((m_internal_flags & SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE) != 0) {
+  if ((m_snap_create_flags & SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE) != 0) {
     acquire_image_exclusive_locks();
     return;
   }
+
+  ldout(m_cct, 10) << dendl;
+
   auto ctx = librbd::util::create_context_callback<
     GroupCreatePrimaryRequest<I>,
     &GroupCreatePrimaryRequest<I>::handle_notify_quiesce>(this);
@@ -528,7 +529,7 @@ void GroupCreatePrimaryRequest<I>::handle_notify_quiesce(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0 &&
-      (m_internal_flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR) == 0) {
+      (m_snap_create_flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR) == 0) {
     m_ret_code = r;
     notify_unquiesce();
     return;
@@ -654,7 +655,6 @@ template <typename I>
 void GroupCreatePrimaryRequest<I>::remove_incomplete_group_snap() {
   ldout(m_cct, 10) << dendl;
 
-
   auto ctx = librbd::util::create_context_callback<
     GroupCreatePrimaryRequest<I>,
     &GroupCreatePrimaryRequest<I>::handle_remove_incomplete_group_snap>(this);
@@ -706,12 +706,12 @@ void GroupCreatePrimaryRequest<I>::handle_remove_incomplete_group_snap(int r) {
 
 template <typename I>
 void GroupCreatePrimaryRequest<I>::notify_unquiesce() {
-  ldout(m_cct, 10) << dendl;
-
   if (m_quiesce_requests.empty()) {
     unlink_peer_group();
     return;
   }
+
+  ldout(m_cct, 10) << dendl;
 
   ceph_assert(m_quiesce_requests.size() == m_image_ctxs.size());
 
