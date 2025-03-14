@@ -8,6 +8,10 @@ overrides:
     - \(OSD_
     - \(OBJECT_
     - \(POOL_APP_NOT_ENABLED\)
+    - do not have an application enabled
+    - POOL_APP_NOT_ENABLED
+    - application not enabled
+    - or freeform for custom applications
   install:
     ceph:
       extra_system_packages:
