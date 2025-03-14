@@ -29,6 +29,8 @@ struct rgw_bucket_snap_id {
     snap_id = _snap_id;
   }
 
+  bool init_from_str(const std::string& s);
+
   void reset() {
     snap_id = SNAP_UNDEFINED;
   }

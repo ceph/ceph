@@ -62,6 +62,22 @@
                 "requestAlgorithmMember":"ChecksumAlgorithm",
                 "requestChecksumRequired":true
             }
+        },
+        "DeleteBucketSnapshot":{
+            "name":"DeleteBucketSnapshot",
+            "http":{
+                "method":"DELETE",
+                "requestUri":"/{Bucket}?snap",
+                "responseCode":200
+            },
+            "input":{"shape":"DeleteBucketSnapshotRequest"},
+            "documentationUrl":"https://docs.ceph.com",
+            "documentation":"<p>Delete a bucket snapshot</p>",
+            "output": {"shape": "DeleteBucketSnapshotOutput"},
+            "httpChecksum":{
+                "requestAlgorithmMember":"ChecksumAlgorithm",
+                "requestChecksumRequired":true
+            }
         }
     },
     "shapes": {
@@ -610,6 +626,39 @@
                 "Snapshot":{
                     "shape":"Snapshot",
                     "locationName":"Snapshot"
+                }
+            }
+        },
+        "DeleteBucketSnapshotRequest":{
+            "type":"structure",
+            "required":[ "Bucket", "SnapId" ],
+            "members":{
+                "Bucket":{
+                    "shape":"BucketName",
+                    "contextParam":{"name":"Bucket"},
+                    "location":"uri",
+                    "locationName":"Bucket"
+                },
+                "SnapId": {
+                    "shape":"SnapId",
+                    "contextParam":{"name":"SnapId"},
+                    "location":"querystring",
+                    "locationName":"snapId"
+                },
+                "ChecksumSHA256":{
+                        "shape":"ChecksumSHA256",
+                        "documentation":"<p>The Base64 encoded, 256-bit <code>SHA256</code> digest of the object. This will only be present if the object was uploaded with the object. When you use an API operation on an object that was uploaded using  multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>"
+                }
+
+            }
+        },
+        "DeleteBucketSnapshotOutput":{
+            "type":"structure",
+            "members":{
+                "Errors":{
+                    "shape":"Errors",
+                    "documentation":"<p>Container for a failed delete action that describes the object that Amazon S3 attempted to delete and the error it encountered.</p>",
+                    "locationName":"Error"
                 }
             }
         }

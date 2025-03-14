@@ -4,6 +4,15 @@
 #include "common/ceph_json.h"
 
 
+bool rgw_bucket_snap_id::init_from_str(const std::string& s) {
+  std::string err;
+  snap_id = (uint64_t)strict_strtoll(s.c_str(), 10, &err);
+  if (!err.empty()) {
+    return false;
+  }
+  return true;
+}
+
 void rgw_bucket_snap_info::dump(Formatter *f) const {
   encode_json("name", name, f);
   encode_json("description", description, f);
