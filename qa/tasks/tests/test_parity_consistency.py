@@ -41,9 +41,9 @@ class TestParityConsistency:
             shards.append(bytearray(os.urandom(chunk_size)))
         return shards
 
-    def test_ec_profile(self):
+    def test_ec_profile_jerasure(self):
         """
-        Test the EC profile dict is processed and parsed properly
+        Test the EC profile dict is processed and parsed properly for Jerasure pools
         """
         profile_dict = {
             'crush-device-class': '',
@@ -55,18 +55,49 @@ class TestParityConsistency:
             'k': 4,
             'm': 2,
             'plugin': 'jerasure',
-            'technique': 'reed_sol_van',
+            'technique': '',
             'w': 8
         }
-        ec_obj = ErasureCodeObject('', 0, profile_dict)
-        profile_str = ec_obj.get_ec_tool_profile()
-        expected_str = ('crush-device-class=,crush-failure-domain=osd,'
-                        'crush-num-failure-domains=3,'
-                        'crush-osds-per-failure-domain=3,'
-                        'crush-root=default,'
-                        'jerasure-per-chunk-alignment=false,k=4,m=2,'
-                        'plugin=jerasure,technique=reed_sol_van,w=8')
-        assert profile_str == expected_str
+        supported_techniques = [ 'reed_sol_van', 'reed_sol_r6_op', 'cauchy_orig',
+                                  'cauchy_good', 'liberation', 'blaum_roth', 'liber8tion' ]
+        for technique in supported_techniques:
+            profile_dict['technique'] = technique
+            ec_obj = ErasureCodeObject('', 0, profile_dict)
+            profile_str = ec_obj.get_ec_tool_profile()
+            expected_str = ('crush-device-class=,crush-failure-domain=osd,'
+                            'crush-num-failure-domains=3,'
+                            'crush-osds-per-failure-domain=3,'
+                            'crush-root=default,'
+                            'jerasure-per-chunk-alignment=false,k=4,m=2,'
+                            'plugin=jerasure,technique=' + technique + ',w=8')
+            assert profile_str == expected_str
+
+    def test_ec_profile_isa(self):
+        """
+        Test the EC profile dict is processed and parsed properly for ISA-L pools
+        """
+        profile_dict = {
+            'crush-device-class': '',
+            'crush-failure-domain': 'host',
+            'crush-num-failure-domains': 2,
+            'crush-osds-per-failure-domain': 1,
+            'crush-root': 'default',
+            'k': 8,
+            'm': 3,
+            'plugin': 'isa',
+            'technique': ''
+        }
+        supported_techniques = [ 'reed_sol_van', 'cauchy' ]
+        for technique in supported_techniques:
+            profile_dict['technique'] = technique
+            ec_obj = ErasureCodeObject('', 0, profile_dict)
+            profile_str = ec_obj.get_ec_tool_profile()
+            expected_str = ('crush-device-class=,crush-failure-domain=host,'
+                            'crush-num-failure-domains=2,'
+                            'crush-osds-per-failure-domain=1,'
+                            'crush-root=default,k=8,m=3,'
+                            'plugin=isa,technique=' + technique)
+            assert profile_str == expected_str
 
     def test_want_to_encode_str(self):
         """
@@ -174,7 +205,7 @@ class TestParityConsistency:
 
     def test_get_object_by_uid(self):
         """
-        Test an object can be retreived from ErasureCodeObjects
+        Test an object can be retrieved from ErasureCodeObjects
         by it's UID
         """
         manager = Mock()
@@ -184,3 +215,22 @@ class TestParityConsistency:
         ec_objs.create_ec_object('test', -2, {'k': 2, 'm': 2, 'test_key': 20})
         ec_obj = ec_objs.get_object_by_uid('test_-2')
         assert ec_obj.ec_profile['test_key'] == 20
+
+    def test_only_isa_and_jerasure_pools_are_supported(self):
+        """
+        Test only Jerasure and ISA are supported by the consistency checker
+        """
+        manager = Mock()
+        manager.get_filepath = MagicMock(return_value='/tmp/')
+        manager.get_osd_dump_json = MagicMock(return_value={'pools': ''})
+        ec_objs = ErasureCodeObjects(manager, {})
+        supported_plugins = ['jerasure', 'isa']
+        for plugin in supported_plugins:
+            ec_objs.get_ec_profile_for_pool = MagicMock(return_value={'plugin': plugin})
+            is_supported = ec_objs.is_ec_plugin_supported({'pool': 3})
+            assert is_supported == True
+        unsupported_plugins = ['lrc', 'shec', 'clay']
+        for plugin in unsupported_plugins:
+            ec_objs.get_ec_profile_for_pool = MagicMock(return_value={'plugin': plugin})
+            is_supported = ec_objs.is_ec_plugin_supported({'pool': 3})
+            assert is_supported == False

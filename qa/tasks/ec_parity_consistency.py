@@ -199,28 +199,26 @@ class ErasureCodeObjects:
         """
         return info_dump["oid"] + "_" + str(info_dump["snapid"])
 
-    def is_object_in_pool_to_be_checked(self, object_json: List[Dict[str, Any]]):
+    def is_object_in_pool_to_be_checked(self, object_json: Dict[str, Any]):
         """
         Check if an object is a member of pool
         that is to be checked for consistency.
         """
         if not self.pools_to_check:
             return True  # All pools to be checked
-        json_section = object_json[1]
-        shard_pool_id = json_section["pool"]
+        shard_pool_id = object_json["pool"]
         for pool_json in self.pools_json:
             if shard_pool_id == pool_json["pool"]:
                 if pool_json["pool_name"] in self.pools_to_check:
                     return True
         return False
 
-    def is_object_in_ec_pool(self, object_json: List[Dict[str, Any]]):
+    def is_object_in_ec_pool(self, object_json: Dict[str, Any]):
         """
         Check if an object is a member of an EC pool or not.
         """
         is_object_in_ec_pool = False
-        json_section = object_json[1]
-        shard_pool_id = json_section["pool"]
+        shard_pool_id = object_json["pool"]
         for pool_json in self.pools_json:
             if shard_pool_id == pool_json["pool"]:
                 pool_type = pool_json['type']  # 1 for rep, 3 for ec
@@ -228,6 +226,18 @@ class ErasureCodeObjects:
                     is_object_in_ec_pool = True
                     break
         return is_object_in_ec_pool
+
+    def is_ec_plugin_supported(self, object_json: Dict[str, Any]) -> bool:
+        """
+        Return true if the plugin in the EC profile for the object's pool is
+        supported by consistency checker, otherwise false.
+        """
+        shard_pool_id = object_json["pool"]
+        ec_profile = self.get_ec_profile_for_pool(shard_pool_id)
+        supported_plugins = [ 'jerasure', 'isa']
+        if ec_profile['plugin'] in supported_plugins:
+            return True
+        return False
 
     def get_ec_profile_for_pool(self,
                                 pool_id: int) -> Dict[str, Any]:
@@ -256,6 +266,7 @@ class ErasureCodeObjects:
         except ValueError as e:
             log.error("Failed to parse object dump to JSON: %s", e)
         return self.ec_profiles[pool_id]
+
 
     def process_object_shard_data(self, ec_object: ErasureCodeObject) -> bool:
         """
@@ -366,7 +377,7 @@ class ObjectStoreTool:
         stdout = proc.stdout.getvalue()
         if not stdout:
             log.error("Objectstore tool failed with error "
-                      "when retreiving list of data objects")
+                      "when retrieving list of data objects")
         else:
             for line in stdout.split('\n'):
                 if line:
@@ -615,6 +626,10 @@ def task(ctx, config: Dict[str, Any]):
     Runs the data shards through the EC tool and verifies the encoded
     output matches the parity shards on the OSDs.
 
+    Only Jerasure and ISA are supported at this stage.
+    Other plugins may work with some small tweaks but have not been tested.
+
+
     Accepts the following optional config options:
 
     ec_parity_consistency:
@@ -670,11 +685,13 @@ def task(ctx, config: Dict[str, Any]):
         manager.mark_out_osd(osd_id)
         data_objects = os_tool.get_ec_data_objects(osd_id)
         if data_objects:
-            for obj in data_objects:
-                is_in_ec_pool = ec_objects.is_object_in_ec_pool(obj)
-                check_pool = ec_objects.is_object_in_pool_to_be_checked(obj)
-                if is_in_ec_pool and check_pool:
-                    ec_objects.process_object_json(osd_id, obj)
+            for full_obj_json in data_objects:
+                obj_json = full_obj_json[1]
+                is_in_ec_pool = ec_objects.is_object_in_ec_pool(obj_json)
+                check_pool = ec_objects.is_object_in_pool_to_be_checked(obj_json)
+                plugin_supported = ec_objects.is_ec_plugin_supported(obj_json)
+                if is_in_ec_pool and check_pool and plugin_supported:
+                    ec_objects.process_object_json(osd_id, full_obj_json)
                 else:
                     log.debug("Object not in pool to be checked, skipping.")
 
