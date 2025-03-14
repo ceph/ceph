@@ -38,3 +38,21 @@ public:
   const char* name() const override { return "create_bucket_snapshot"; }
 };
 
+class RGWRemoveBucketSnapshot_ObjStore_S3 : public RGWRESTOp {
+  rgw_bucket_snap_id snap_id;
+  std::string err;
+public:
+  RGWRemoveBucketSnapshot_ObjStore_S3() {}
+
+  RGWOpType get_type() override { return RGW_OP_DEL_BUCKET_SNAPSHOT; }
+
+  int verify_permission(optional_yield y) override;
+  void pre_exec() override;
+
+  int get_params(optional_yield y);
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "remove_bucket_snapshot"; }
+};
+
