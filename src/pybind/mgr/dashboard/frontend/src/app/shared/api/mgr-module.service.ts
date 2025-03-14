@@ -6,6 +6,7 @@ import { Observable, timer as observableTimer } from 'rxjs';
 import { NotificationService } from '../services/notification.service';
 import { TableComponent } from '../datatable/table/table.component';
 import { Router } from '@angular/router';
+import { MgrModuleInfo } from '../models/mgr-modules.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -28,8 +29,8 @@ export class MgrModuleService {
    * Get the list of Ceph Mgr modules and their state (enabled/disabled).
    * @return {Observable<Object[]>}
    */
-  list(): Observable<Object[]> {
-    return this.http.get<Object[]>(`${this.url}`);
+  list(): Observable<MgrModuleInfo[]> {
+    return this.http.get<MgrModuleInfo[]>(`${this.url}`);
   }
 
   /**
