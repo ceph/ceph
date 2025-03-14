@@ -71,6 +71,7 @@ static const actpair actpairs[] =
  { "s3:DeleteObjectVersion", s3DeleteObjectVersion },
  { "s3:DeleteObjectTagging", s3DeleteObjectTagging },
  { "s3:DeleteObjectVersionTagging", s3DeleteObjectVersionTagging },
+ { "s3:DeleteBucketSnapshot", s3DeleteBucketSnapshot },
  { "s3:DeleteBucketPublicAccessBlock", s3DeleteBucketPublicAccessBlock},
  { "s3:DeletePublicAccessBlock", s3DeletePublicAccessBlock},
  { "s3:DeleteReplicationConfiguration", s3DeleteReplicationConfiguration },
@@ -88,7 +89,6 @@ static const actpair actpairs[] =
  { "s3:GetBucketRequestPayment", s3GetBucketRequestPayment },
  { "s3:GetBucketTagging", s3GetBucketTagging },
  { "s3:GetBucketVersioning", s3GetBucketVersioning },
- { "s3:ListBucketSnapshots", s3ListBucketSnapshots },
  { "s3:GetBucketWebsite", s3GetBucketWebsite },
  { "s3:GetLifecycleConfiguration", s3GetLifecycleConfiguration },
  { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration },
@@ -110,6 +110,7 @@ static const actpair actpairs[] =
  { "s3:ListBucketMultipartUploads", s3ListBucketMultipartUploads },
  { "s3:ListBucket", s3ListBucket },
  { "s3:ListBucketVersions", s3ListBucketVersions },
+ { "s3:ListBucketSnapshots", s3ListBucketSnapshots },
  { "s3:ListMultipartUploadParts", s3ListMultipartUploadParts },
  { "s3:PutAccelerateConfiguration", s3PutAccelerateConfiguration },
  { "s3:PutBucketAcl", s3PutBucketAcl },
@@ -124,6 +125,7 @@ static const actpair actpairs[] =
  { "s3:PutBucketTagging", s3PutBucketTagging },
  { "s3:PutBucketVersioning", s3PutBucketVersioning },
  { "s3:PutBucketWebsite", s3PutBucketWebsite },
+ { "s3:CreateBucketSnapshot", s3CreateBucketSnapshot },
  { "s3:PutLifecycleConfiguration", s3PutLifecycleConfiguration },
  { "s3:PutBucketObjectLockConfiguration", s3PutBucketObjectLockConfiguration },
  { "s3:PutObjectAcl",  s3PutObjectAcl },
@@ -1399,8 +1401,8 @@ const char* action_bit_string(uint64_t action) {
   case s3ListBucketSnapshots:
     return "s3:ListBucketSnapshot";
 
-  case s3PutBucketSnapshot:
-    return "s3:PutBucketSnapshot";
+  case s3CreateBucketSnapshot:
+    return "s3:CreateBucketSnapshot";
 
   case s3DeleteBucketSnapshot:
     return "s3:DeleteBucketSnapshot";

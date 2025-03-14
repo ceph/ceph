@@ -56,7 +56,8 @@ void RGWBucketSnapMgr::dump_xml(Formatter *f) const {
   }
 }
 
-int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info)
+int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info,
+                                  rgw_bucket_snap_id *psnap_id)
 {
   auto iter = names_to_ids.find(info.name);
   if (iter != names_to_ids.end()) {
@@ -69,6 +70,10 @@ int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info)
 
   snaps[snap.id] = snap;
   names_to_ids[info.name] = snap.id;
+
+  if (psnap_id) {
+    *psnap_id = snap.id;
+  }
 
   return 0;
 }

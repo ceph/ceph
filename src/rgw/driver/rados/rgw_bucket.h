@@ -367,7 +367,8 @@ public:
   int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
   int snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info,
-                  optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+                  optional_yield y, const DoutPrefixProvider *dpp,
+                  rgw_bucket_snap_id *psnap_id, std::string *err_msg = NULL);
   int snap_remove(RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id,
                   optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
@@ -420,7 +421,8 @@ public:
 
   static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
-  static int snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
+  static int snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y,
+                         rgw_bucket_snap_id *psnap_id, std::string *err_msg = NULL);
   static int snap_remove(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 };
 

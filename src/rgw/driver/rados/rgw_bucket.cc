@@ -289,11 +289,12 @@ int RGWBucket::remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpStat
 }
 
 int RGWBucket::snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info,
-                           optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
+                           optional_yield y, const DoutPrefixProvider *dpp, rgw_bucket_snap_id *psnap_id,
+                           std::string *err_msg)
 {
   bucket = op_state.get_bucket()->clone();
 
-  int r = bucket->get_info().local.snap_mgr.create_snap(snap_info);
+  int r = bucket->get_info().local.snap_mgr.create_snap(snap_info, psnap_id);
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed creating new snapshot: " + cpp_strerror(-r));
     return r;
@@ -1384,7 +1385,8 @@ int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_
 
 }
 
-int RGWBucketAdminOp::snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y, string *err)
+int RGWBucketAdminOp::snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const rgw_bucket_snap_info& snap_info, const DoutPrefixProvider *dpp, optional_yield y,
+                                  rgw_bucket_snap_id *psnap_id, string *err)
 {
   RGWBucket bucket;
 
@@ -1392,7 +1394,7 @@ int RGWBucketAdminOp::snap_create(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   if (ret < 0)
     return ret;
 
-  return bucket.snap_create(op_state, snap_info, y, dpp, err);
+  return bucket.snap_create(op_state, snap_info, y, dpp, psnap_id, err);
 }
 
 int RGWBucketAdminOp::snap_remove(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, rgw_bucket_snap_id snap_id, const DoutPrefixProvider *dpp, optional_yield y, string *err)

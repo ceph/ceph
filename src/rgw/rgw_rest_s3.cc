@@ -5374,6 +5374,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
     return RGWHandler_REST_BucketLogging_S3::create_post_op();
   }
 
+  if (s->info.args.exists("snap")) {
+    return new RGWCreateBucketSnapshot_ObjStore_S3;
+  }
+
   if (s->info.args.exists("mdsearch")) {
     if (!s->cct->_conf->rgw_enable_mdsearch) {
       return NULL;
@@ -6529,6 +6533,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
         case RGW_STS_GET_SESSION_TOKEN:
         case RGW_STS_ASSUME_ROLE:
+        case RGW_OP_CREATE_BUCKET_SNAPSHOT:
+        case RGW_OP_DEL_BUCKET_SNAPSHOT:
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:

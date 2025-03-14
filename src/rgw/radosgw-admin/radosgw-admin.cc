@@ -7839,16 +7839,20 @@ int main(int argc, const char **argv)
     bucket_op.set_bucket_name(bucket_name);
     string err;
 
-    rgw_bucket_snap_info snap_info;
-    snap_info.name = *opt_snap_name;
-    snap_info.description = description;
-    snap_info.creation_time = real_clock::now();
+    rgw_bucket_snap snap;
+    snap.info.name = *opt_snap_name;
+    snap.info.description = description;
+    snap.info.creation_time = real_clock::now();
 
-    int r = RGWBucketAdminOp::snap_create(driver, bucket_op, snap_info, dpp(), null_yield, &err);
+
+    int r = RGWBucketAdminOp::snap_create(driver, bucket_op, snap.info, dpp(), null_yield, &snap.id, &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
+
+    encode_json("snap", snap, formatter.get());
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SNAP_REMOVE) {
