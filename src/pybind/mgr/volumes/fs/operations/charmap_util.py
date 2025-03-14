@@ -17,7 +17,7 @@ def charmap_set(fs, path, setting, value):
     """
 
     if setting not in _charmap_type:
-        raise VolumeException(-errno.EINVAL, f"charmap setting invalid")
+        raise VolumeException(-errno.EINVAL, "charmap setting invalid")
 
     try:
         value = _charmap_type[setting](value)
@@ -30,7 +30,7 @@ def charmap_set(fs, path, setting, value):
         raise VolumeException(-e.args[0], e.args[1])
 
     try:
-        return fs.getxattr(path, f"ceph.dir.charmap").decode('utf-8')
+        return fs.getxattr(path, "ceph.dir.charmap").decode('utf-8')
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
@@ -50,7 +50,7 @@ def charmap_get(fs, path, setting):
     """
 
     if setting not in _charmap_type and setting != 'charmap':
-        raise VolumeException(-errno.EINVAL, f"charmap setting invalid")
+        raise VolumeException(-errno.EINVAL, "charmap setting invalid")
 
     try:
         return fs.getxattr(path, f"ceph.dir.{setting}").decode('utf-8')
