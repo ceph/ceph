@@ -123,12 +123,12 @@ item_t mClockScheduler::dequeue()
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
     if (result.is_future()) {
-      ceph_assert(
-	0 == "Not implemented, user would have to be able to be woken up");
+      ceph_abort_msg(
+	"Not implemented, user would have to be able to be woken up");
       return std::move(*(item_t*)nullptr);
     } else if (result.is_none()) {
-      ceph_assert(
-	0 == "Impossible, must have checked empty() first");
+      ceph_abort_msg(
+	"Impossible, must have checked empty() first");
       return std::move(*(item_t*)nullptr);
     } else {
       ceph_assert(result.is_retn());

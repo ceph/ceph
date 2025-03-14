@@ -57,7 +57,7 @@ private:
         case CIPHER_MODE_DEC:
           return m_decrypt_contexts;
         default:
-          ceph_assert(false);
+          ceph_abort();
       }
     }
 };

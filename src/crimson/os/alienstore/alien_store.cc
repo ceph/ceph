@@ -638,7 +638,7 @@ auto AlienStore::omap_get_header(CollectionRef ch,
         return crimson::ct_error::enoent::make();
       } else if (r < 0) {
         logger().error("omap_get_header: {}", r);
-        ceph_assert(0 == "impossible");
+        ceph_abort_msg("impossible");
       } else {
         return get_attr_errorator::make_ready_future<ceph::bufferlist>(
 	  std::move(bl));
