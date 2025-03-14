@@ -159,7 +159,6 @@ TEST(ECExtentCache, simple_write)
   }
 
   // Repeating the same read should complete without a backend read..
-  // NOTE: This test is broken because the LRU is currently disabled.
   {
     auto to_read = iset_from_vector( {{{0, 2}}, {{0, 2}}}, cl.get_stripe_info());
     auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}}, cl.get_stripe_info());
