@@ -93,7 +93,7 @@ class OAuth2(SSOAuth):
         except AttributeError:
             raise cherrypy.HTTPError(401)
 
-        if jmespath and hasattr(mgr.SSO_DB.config, 'roles_path'):
+        if jmespath and getattr(mgr.SSO_DB.config, 'roles_path', None):
             logger.debug("Using 'roles_path' to fetch roles")
             roles = jmespath.search(mgr.SSO_DB.config.roles_path, jwt_payload)
         # e.g Keycloak
