@@ -517,6 +517,17 @@ if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()
 
+if(WIN32)
+    set(WITH_BREAKPAD_DEFAULT OFF)
+else()
+    set(WITH_BREAKPAD_DEFAULT ON)
+endif()
+
+option(WITH_BREAKPAD "Build with Google Breakpad crash reporter"  ${WITH_BREAKPAD_DEFAULT})
+if(WITH_BREAKPAD)
+  set(HAVE_BREAKPAD TRUE)
+endif()
+
 #option for RGW
 option(WITH_RADOSGW "RADOS Gateway is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "RADOS Gateway's Beast frontend uses OpenSSL" ON)
