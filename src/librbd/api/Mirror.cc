@@ -2545,8 +2545,8 @@ int prepare_group_images(IoCtx& group_ioctx,
     ImageCtx *ictx = (*image_ctxs)[i];
     std::shared_lock owner_lock{ictx->owner_lock};
 
-    on_finish = new C_SaferCond;
     if (ictx->exclusive_lock != nullptr) {
+      on_finish = new C_SaferCond;
       ictx->exclusive_lock->acquire_lock(on_finish);
       on_finishes[i] = on_finish;
     }
