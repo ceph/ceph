@@ -8,6 +8,8 @@ overrides:
     log-ignorelist:
     - POOL_APP_NOT_ENABLED
     - do not have an application enabled
+    - application not enabled
+    - or freeform for custom applications
 tasks:
 - exec:
    client.0:
