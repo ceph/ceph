@@ -1,0 +1,385 @@
+
+<cds-modal size="lg"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        data-testid="rgw-multisite-wizard-header"
+        i18n>Set up Multi-site Replication</h3>
+  </cds-modal-header>
+
+  <div cdsModalContent>
+    <div cdsRow>
+      <div cdsCol
+           [columnNumbers]="{'lg': 2, 'md': 2, 'sm': 2}"
+           class="indicator-wrapper">
+        <cd-wizard [stepsTitle]="stepTitles"></cd-wizard>
+      </div>
+
+      <div cdsCol
+           [columnNumbers]="{'lg': 14, 'md': 14, 'sm': 14}">
+        <form [formGroup]="multisiteSetupForm"
+              #formDir="ngForm"
+              novalidate>
+          <ng-container [ngSwitch]="currentStep?.stepIndex">
+            <div *ngSwitchCase="0"
+                 class="ms-5">
+              <cd-alert-panel type="info"
+                              spacingClass="mb-3">
+                  This wizard enables you to set up multi-site replication within your
+                  Ceph environment.If you have already added another cluster to your
+                  multi-cluster setup, you can select that cluster in the wizard to
+                  automate the replication process.If no additional cluster is currently
+                  added, the wizard will guide you through creating the necessary realm,
+                  zonegroup, and zone, and provide a realm token.This token can be used
+                  later to manually import into a desired cluster to establish replication
+                  between the clusters.
+              </cd-alert-panel>
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="realmName"
+                       i18n>Realm Name</label>
+                <div class="cd-col-form-input">
+                  <input class="form-control"
+                         type="text"
+                         placeholder="Realm name..."
+                         id="realmName"
+                         name="realmName"
+                         formControlName="realmName">
+                  <cd-help-text>
+                    <span i18n>Enter a unique name for the Realm. The Realm is a logical grouping of all your Zonegroups.</span>
+                  </cd-help-text>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('realmName', formDir, 'required')"
+                        i18n>This field is required.</span>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('realmName', formDir, 'uniqueName')"
+                        i18n>The chosen realm name is already in use.</span>
+                </div>
+              </div>
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="zonegroupName"
+                       i18n>Zone Group Name</label>
+                <div class="cd-col-form-input">
+                  <input class="form-control"
+                         type="text"
+                         placeholder="Zone group name..."
+                         id="zonegroupName"
+                         name="zonegroupName"
+                         formControlName="zonegroupName">
+                  <cd-help-text>
+                    <span i18n>Enter a name for the Zonegroup. Zonegroup will help you identify and manage the group of zones.</span>
+                  </cd-help-text>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('zonegroupName', formDir, 'required')"
+                        i18n>This field is required.</span>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('zonegroupName', formDir, 'uniqueName')"
+                        i18n>The chosen zone group name is already in use.</span>
+                </div>
+              </div>
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="zonegroup_endpoints"
+                       i18n>Zonegroup Endpoints</label>
+                <div class="cd-col-form-input">
+                  <cd-select-badges id="zonegroup_endpoints"
+                                    [data]="rgwEndpoints.value"
+                                    [options]="rgwEndpoints.options"
+                                    [customBadges]="true">
+                  </cd-select-badges>
+                  <cd-help-text>
+                    <span i18n>Select the endpoints for the Zonegroup. Endpoints are the URLs or IP addresses from which the rgw gateways in that zonegroup can be accessed. You can select multiple endpoints in case you have multiple rgw gateways in a zonegroup</span>
+                  </cd-help-text>
+                </div>
+              </div>
+            </div>
+            <div *ngSwitchCase="1"
+                 class="ms-5">
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="zonegroupName"
+                       i18n>Zone Name</label>
+                <div class="cd-col-form-input">
+                  <input class="form-control"
+                         type="text"
+                         placeholder="Zone name..."
+                         id="zoneName"
+                         name="zoneName"
+                         formControlName="zoneName">
+                  <cd-help-text>
+                    <span i18n>Enter a unique name for the Zone. A Zone represents a distinct data center or geographical location within a Zonegroup.</span>
+                  </cd-help-text>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('zoneName', formDir, 'required')"
+                        i18n>This field is required.</span>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('zoneName', formDir, 'uniqueName')"
+                        i18n>The chosen zone name is already in use.</span>
+                </div>
+              </div>
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="zone_endpoints"
+                       i18n>Zone Endpoints</label>
+                <div class="cd-col-form-input">
+                  <cd-select-badges id="zone_endpoints"
+                                    [data]="rgwEndpoints.value"
+                                    [options]="rgwEndpoints.options"
+                                    [customBadges]="true">
+                  </cd-select-badges>
+                  <cd-help-text>
+                    <span i18n>Select the endpoints for the Zone. Endpoints are the URLs or IP addresses from which the rgw gateways in that zone can be accessed. You can select multiple endpoints in case you have multiple rgw gateways in a zone</span>
+                  </cd-help-text>
+                </div>
+              </div>
+              <div class="form-group row">
+                <label class="cd-col-form-label required"
+                       for="username"
+                       i18n>Username</label>
+                <div class="cd-col-form-input">
+                  <input class="form-control"
+                         type="text"
+                         placeholder="Username..."
+                         id="username"
+                         name="username"
+                         formControlName="username"
+                         ngbTooltip="White spaces at the beginning and end will be trimmed"
+                         i18n-ngbTooltip
+                         cdTrim>
+                  <cd-help-text>
+                    <span i18n>Specify the username for the system user.</span>
+                  </cd-help-text>
+                  <cd-alert-panel type="info"
+                                  [showTitle]="false">
+                    <span i18n>This user will be created automatically as part of the process, and it will have the necessary permissions to manage and synchronize resources across zones.</span>
+                  </cd-alert-panel>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('username', formDir, 'required')"
+                        i18n>This field is required.</span>
+                  <span class="invalid-feedback"
+                        *ngIf="multisiteSetupForm.showError('username', formDir, 'notUnique')"
+                        i18n>The username already exists.</span>
+                </div>
+              </div>
+            </div>
+            <div cass="ms-5"
+                 *ngSwitchCase="2">
+              <div *ngIf="isMultiClusterConfigured; else nonMultiClusterTemplate">
+                <div class="form-group row">
+                  <label class="cd-col-form-label required"
+                         for="cluster"
+                         i18n>Replication Cluster</label>
+                  <div class="cd-col-form-input">
+                    <select class="form-select"
+                            id="cluster"
+                            [(ngModel)]="selectedCluster"
+                            formControlName="cluster"
+                            name="cluster">
+                      <option *ngFor="let cluster_detail of clusterDetailsArray"
+                              [value]="cluster_detail.name">
+                        {{ cluster_detail.cluster_alias }} - {{ cluster_detail.name }}
+                      </option>
+                    </select>
+                    <cd-help-text>
+                      <span i18n>Choose the cluster where you want to apply this multisite configuration. The selected cluster will integrate the defined Realm, Zonegroup, and Zones, enabling data synchronization and management across the multisite setup.</span>
+                    </cd-help-text>
+                    <cd-alert-panel type="info"
+                                    [showTitle]="false">
+                      <span i18n>Before submitting this form, please verify that the selected cluster has an active RGW (Rados Gateway) service running.</span>
+                    </cd-alert-panel>
+                  </div>
+                </div>
+                <div class="form-group row">
+                  <label class="cd-col-form-label required"
+                         for="zonegroupName"
+                         i18n>Replication Zone Name</label>
+                  <div class="cd-col-form-input">
+                    <input class="form-control"
+                           type="text"
+                           placeholder="Zone name..."
+                           id="replicationZoneName"
+                           name="replicationZoneName"
+                           formControlName="replicationZoneName">
+                    <cd-help-text>
+                      <span i18n>Replication zone represents the zone to be created in the replication cluster where your data will be replicated.</span>
+                    </cd-help-text>
+                    <span class="invalid-feedback"
+                          *ngIf="multisiteSetupForm.showError('replicationZoneName', formDir, 'required')"
+                          i18n>This field is required.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngSwitchCase="3"
+                 class="ms-5">
+              <div *ngIf="isMultiClusterConfigured">
+                <ng-container *ngIf="!loading; else loadingTemplate">
+                  <ng-container *ngIf="!setupCompleted; else progressCompleteTemplate">
+                    <ng-container *ngTemplateOutlet="reviewTemplate"></ng-container>
+                  </ng-container>
+                </ng-container>
+              </div>
+            </div>
+          </ng-container>
+        </form>
+      </div>
+    </div>
+  </div>
+  <cds-modal-footer>
+    <button cdsButton="secondary"
+            name="skip-cluster-selection"
+            aria-label="Skip"
+            (click)="onSkip()"
+            *ngIf="stepTitles[currentStep.stepIndex]['label'] === 'Select Cluster'"
+            i18n>Skip</button>
+    <button cdsButton="secondary"
+            (click)="onPreviousStep()"
+            [attr.aria-label]="showCancelButtonLabel()"
+            [disabled]="loading"
+            i18n>{{ showCancelButtonLabel() }}</button>
+    <button cdsButton="primary"
+            (click)="onNextStep()"
+            aria-label="Next"
+            [disabled]="loading"
+            i18n>{{ showSubmitButtonLabel() }}
+      <cds-loading [isActive]="loading"
+                   [overlay]="false"
+                   size="sm"
+                   *ngIf="loading"></cds-loading>
+    </button>
+  </cds-modal-footer>
+</cds-modal>
+
+<ng-template #nonMultiClusterTemplate>
+  <ng-container *ngIf="!loading; else loadingTemplate">
+    <ng-container *ngIf="!setupCompleted else exportTokenTemplate">
+      <ng-container *ngTemplateOutlet="reviewTemplate"></ng-container>
+    </ng-container>
+  </ng-container>
+</ng-template>
+
+<ng-template #loadingTemplate>
+  <ng-container *ngTemplateOutlet="progressTemplate"></ng-container>
+</ng-template>
+
+<ng-template #progressCompleteTemplate>
+  <div *ngIf="isMultiClusterConfigured && !stepsToSkip['Select Cluster']; else exportTokenTemplate">
+    <div class="text-center text-success"
+         i18n>
+      Multi-site replication setup is complete.
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #progressTemplate>
+  <cd-progress [value]="executingTask?.progress"
+               [description]="executingTask?.name?.replace('progress/Multisite-Setup:', '')">
+  </cd-progress>
+</ng-template>
+
+<ng-template #exportTokenTemplate>
+  <div *ngFor="let realminfo of realms">
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             for="realmName"
+             i18n>Realm Name</label>
+      <div class="cd-col-form-input">
+        <input id="realmName"
+               name="realmName"
+               type="text"
+               [value]="realminfo.realm"
+               readonly>
+        <cd-help-text>
+          <span i18n>Name of the realm that will be involved in replication.</span>
+        </cd-help-text>
+      </div>
+    </div>
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             for="token"
+             i18n>Token</label>
+      <div class="cd-col-form-input">
+        <input id="realmToken"
+               name="realmToken"
+               type="text"
+               [value]="realminfo.token"
+               class="me-2 mb-4"
+               readonly>
+        <cd-copy-2-clipboard-button [source]="realminfo.token"
+                                    [byId]="false">
+        </cd-copy-2-clipboard-button>
+        <cd-help-text>
+          <span i18n>This field displays the token needed to import the multisite configuration into a secondary cluster. Copy this token securely and use it on the secondary cluster to replicate the current multisite setup. Ensure that the token is handled securely to prevent unauthorized access.</span>
+        </cd-help-text>
+      </div>
+    </div>
+    <hr *ngIf="realms.length > 1">
+  </div>
+</ng-template>
+
+<ng-template #reviewTemplate>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Realm Name:</label>
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="realmName">
+      <b>{{ multisiteSetupForm.get('realmName').value }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zonegroup Name:</label>
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="zonegroupName">
+      <b>{{ multisiteSetupForm.get('zonegroupName').value }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zonegroup Endpoints:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ rgwEndpoints.value.join(', ') }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zone Name:</label>
+    <div class="cd-col-form-input mt-2 text-muted"
+         id="zoneName">
+      <b>{{ multisiteSetupForm.get('zoneName').value }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zone Endpoints:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ rgwEndpoints.value.join(', ') }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Username:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ multisiteSetupForm.get('username').value }}</b>
+    </div>
+  </div>
+  <div *ngIf="isMultiClusterConfigured && !stepsToSkip['Select Cluster']">
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             i18n>Selected Replication Cluster:</label>
+      <div class="cd-col-form-input mt-2 text-muted">
+        <b>{{ selectedCluster }}</b>
+      </div>
+    </div>
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             i18n>Replication Zone Name:</label>
+      <div class="cd-col-form-input mt-2 text-muted">
+        <b>{{ multisiteSetupForm.get('replicationZoneName').value }}</b>
+      </div>
+    </div>
+  </div>
+</ng-template>
