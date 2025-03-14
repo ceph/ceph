@@ -322,7 +322,15 @@ public:
 
   int chdir(const char *to, const UserPerm& perms)
   {
-    return client->chdir(to, cwd, perms);
+    int rc = client->chdir(to, perms);
+    if (rc == 0) {
+      /* Current API requires "cwd" to be refreshed after every chdir so that
+       * getcwd on an unlinked cwd will still return the old path. Note:
+       * Client::getcwd now returns an error but leaves the "cwd" string
+       * unmodified for this purpose. */
+      client->getcwd(cwd, perms);
+    }
+    return rc;
   }
 
   CephContext *get_ceph_context() const {
