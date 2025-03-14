@@ -50,23 +50,25 @@ function detect_ceph_dev_pkgs() {
 
 function prepare() {
     local which_pkg="which"
+    local clang_pkg="clang"
     if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
 
         if in_jenkins; then
             if ! type clang-19 > /dev/null 2>&1 ; then
+                # This will need updating if/when something after
+                # clang 19 is needed and/or not all build envs run
+                # ubuntu jammy.
                 ci_debug "Getting clang-19"
-                wget https://download.ceph.com/qa/llvm.sh
-                chmod +x llvm.sh
-                $DRY_RUN sudo ./llvm.sh 19
-                rm llvm.sh
+                LLVM_APT_REPO=19
+                clang_pkg="clang-19"
             fi
         fi
     fi
 
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg $clang_pkg lvm2"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
