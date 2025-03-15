@@ -227,44 +227,45 @@ and easier to troubleshoot problems when OSDs malfunction (or other hardware
 malfunctions) and the administrator needs access to physical hardware.
 
 
-In the following example, the bucket hierarchy has a leaf bucket named ``osd``
-and two node buckets named ``host`` and ``rack``:
+In the following example, the CRUSH hierarchy has ``osd`` leaf buckets
+and two node-level buckets at the ``host`` level that are in turn children
+of a ``rack`` bucket :
 
 .. ditaa::
                            +-----------+
-                           | {o}rack   |
-                           |   Bucket  |
+                           | {o}rack11 |
                            +-----+-----+
                                  |
                  +---------------+---------------+
                  |                               |
            +-----+-----+                   +-----+-----+
-           | {o}host   |                   | {o}host   |
-           |   Bucket  |                   |   Bucket  |
+           | {o}host1  |                   | {o}host2  |
            +-----+-----+                   +-----+-----+
                  |                               |
          +-------+-------+               +-------+-------+
          |               |               |               |
    +-----+-----+   +-----+-----+   +-----+-----+   +-----+-----+
-   |    osd    |   |    osd    |   |    osd    |   |    osd    |
-   |   Bucket  |   |   Bucket  |   |   Bucket  |   |   Bucket  |
+   |    osd0   |   |    osd1   |   |    osd2   |   |    osd3   |
    +-----------+   +-----------+   +-----------+   +-----------+
 
-.. note:: The higher-numbered ``rack`` bucket type aggregates the
-   lower-numbered ``host`` bucket type.
+.. note:: The higher type-number ``rack`` bucket aggregates the
+   lower type-number ``host`` buckets, which in turn aggregate the basal
+   type 0 ``osd`` buckets.
 
 Because leaf nodes reflect storage devices that have already been declared
 under the ``#devices`` list at the beginning of the CRUSH map, there is no need
 to declare them as bucket instances. The second-lowest bucket type in your
-hierarchy is typically used to aggregate the devices (that is, the
-second-lowest bucket type is usually the computer that contains the storage
-media and, such as ``node``, ``computer``, ``server``, ``host``, or
-``machine``). In high-density environments, it is common to have multiple hosts
-or nodes in a single chassis (for example, in the cases of blades or twins). It
-is important to anticipate the potential consequences of chassis failure -- for
-example, during the replacement of a chassis in case of a node failure, the
-chassis's hosts or nodes (and their associated OSDs) will be in a ``down``
-state.
+hierarchy is typically used to aggregate the devices: usually
+the server that houses the storage drives.
+In high-density environments, it is common to have multiple hosts
+or nodes in a single chassis: blades or twins. It
+is important to anticipate the potential consequences of chassis failure. For
+example, during the replacement of a chassis in case of a node failure,
+all of the
+chassis's hosts and their associated OSDs will be in the ``down``
+state and thus unavailable.  It is important to avoid placing multiple replicas
+or shards of data within a single such chassis, which in this case is
+a _failure domain_.
 
 To declare a bucket instance, do the following: specify its type, give it a
 unique name (an alphanumeric string), assign it a unique ID expressed as a
