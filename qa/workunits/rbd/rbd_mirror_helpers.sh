@@ -1312,8 +1312,7 @@ create_image()
         shift
     fi
 
-    run_cmd "rbd --cluster ${cluster} create --size ${size} \
-        --image-feature ${RBD_IMAGE_FEATURES} $@ ${pool}/${image}"
+    run_cmd "rbd --cluster ${cluster} create --size ${size} --image-feature ${RBD_IMAGE_FEATURES} $* ${pool}/${image}"
 }
 
 image_create()
@@ -1327,7 +1326,7 @@ image_create()
         shift
     fi
 
-    run_cmd "rbd --cluster ${cluster} create --size ${size} --image-feature ${RBD_IMAGE_FEATURES} $@ ${image_spec}"
+    run_cmd "rbd --cluster ${cluster} create --size ${size} --image-feature ${RBD_IMAGE_FEATURES} $* ${image_spec}"
 }
 
 images_create()
