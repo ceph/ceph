@@ -58,7 +58,8 @@ function prepare() {
                 ci_debug "Getting clang-19"
                 wget https://download.ceph.com/qa/llvm.sh
                 chmod +x llvm.sh
-                $DRY_RUN sudo ./llvm.sh 19
+                wrap_sudo
+                $DRY_RUN $SUDO ./llvm.sh 19
                 rm llvm.sh
             fi
         fi
