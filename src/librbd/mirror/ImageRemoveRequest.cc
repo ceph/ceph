@@ -55,7 +55,7 @@ void ImageRemoveRequest<I>::handle_get_group(int r) {
     r = cls_client::image_group_get_finish(&iter, &m_group_spec);
   }
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "failed to retrieve image group: " << cpp_strerror(r)
                  << dendl;
     finish(r);
