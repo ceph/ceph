@@ -39,7 +39,7 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     ;;
     *~*ubuntu*)
         apt-get update
-        apt-get install -y wget reprepro curl
+        apt-get install -y wget reprepro curl software-properties-common
         install_container_deps
     ;;
     *)
