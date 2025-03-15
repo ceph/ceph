@@ -228,7 +228,7 @@ run_cmd() {
     run_cmd_internal "$cmd" 'true' 'false'
 }
 
-# run the command but ignore any failure and return success
+# run the command but ignore any failure and return the exit status
 try_cmd() {
     local cmd=$1
 
@@ -241,7 +241,7 @@ run_admin_cmd() {
     run_cmd_internal "$cmd" 'true' 'true'
 }
 
-# run the command but ignore any failure and return success
+# run the command but ignore any failure and return the exit status
 try_admin_cmd() {
     local cmd=$1
 
@@ -2132,14 +2132,6 @@ get_clone_format()
              }'
 }
 
-list_omap_keys()
-{
-    local cluster=$1
-    local pool=$2
-    local obj_name=$3
-    run_cmd "rados --cluster ${cluster} -p ${pool} listomapkeys ${obj_name}"
-}
-
 count_omap_keys_with_filter()
 {
     local cluster=$1
@@ -2148,7 +2140,8 @@ count_omap_keys_with_filter()
     local filter=$4
     local -n _count=$5
 
-    list_omap_keys "${cluster}" "${pool}" "${obj_name}"
+    # listomapkeys fails if the object doesn't exist, assume 0 keys
+    try_cmd "rados --cluster ${cluster} -p ${pool} listomapkeys ${obj_name}" || :
     _count=$(grep -c "${filter}" "$CMD_STDOUT") || return 0
 }
 
