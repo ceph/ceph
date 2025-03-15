@@ -23,9 +23,7 @@ fi
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
-if test $(id -u) != 0 ; then
-    SUDO=sudo
-fi
+wrap_sudo
 # enable UTF-8 encoding for programs like pip that expect to
 # print more than just ascii chars
 export LC_ALL=C.UTF-8
