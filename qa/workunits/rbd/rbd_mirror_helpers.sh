@@ -1049,7 +1049,7 @@ wait_for_snapshot_sync_complete()
     while true; do
         for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
             sleep ${s}
-            get_primary_snap_id_for_newest_mirror_snapshot_on_secondary "${local_cluster}" "${local_pool}/${image}" snapshot_id
+            get_primary_snap_id_for_newest_mirror_snapshot_on_secondary "${local_cluster}" "${local_pool}/${image}" snapshot_id || continue
             test "${snapshot_id}" = "${primary_snapshot_id}" && return 0
         done
         return 1
