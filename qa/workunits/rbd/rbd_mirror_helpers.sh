@@ -1466,9 +1466,10 @@ remove_image()
     local cluster=$1
     local pool=$2
     local image=$3
+    local runner=${4:-"run_cmd"}
 
-    run_cmd "rbd --cluster=${cluster} snap purge ${pool}/${image}"
-    run_cmd "rbd --cluster=${cluster} rm ${pool}/${image}"
+    "$runner" "rbd --cluster=${cluster} snap purge ${pool}/${image}"
+    "$runner" "rbd --cluster=${cluster} rm ${pool}/${image}"
 }
 
 image_remove()
@@ -1480,7 +1481,6 @@ image_remove()
     run_cmd "rbd --cluster=${cluster} rm ${image_spec}"
 }
 
-#TODO why does this need to retry - maybe waiting for purge to complete?
 remove_image_retry()
 {
     local cluster=$1
@@ -1489,7 +1489,7 @@ remove_image_retry()
 
     for s in 0 1 2 4 8 16 32; do
         sleep ${s}
-        remove_image ${cluster} ${pool} ${image} && return 0
+        remove_image ${cluster} ${pool} ${image} "try_cmd" && return 0
     done
     return 1
 }
