@@ -8,6 +8,9 @@ namespace crimson::os::seastore {
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
 {
+  if (rhs.is_end()) {
+    return out << "LBAMapping(END)";
+  }
   out << "LBAMapping(" << rhs.get_key()
       << "~0x" << std::hex << rhs.get_length();
   if (rhs.is_complete()) {
