@@ -21,6 +21,11 @@ class LBAMapping {
   {
     assert(!is_linked_direct() || !direct_cursor->is_indirect());
     assert(!indirect_cursor || indirect_cursor->is_indirect());
+    // if the mapping is indirect, it mustn't be at the end
+    if (is_indirect() && is_linked_direct()) {
+      assert((bool)direct_cursor->val
+	    && direct_cursor->key != L_ADDR_NULL);
+    }
   }
 
 public:
@@ -45,6 +50,16 @@ public:
     return (bool)direct_cursor;
   }
 
+  bool is_end() const {
+    bool end = !is_indirect() && !direct_cursor->val;
+    // if the mapping is at the end, it can't be indirect and
+    // the physical cursor must be L_ADDR_NULL
+    assert(end
+      ? (!indirect_cursor && direct_cursor->key == L_ADDR_NULL)
+      : true);
+    return end;
+  }
+
   bool is_indirect() const {
     assert(!is_null());
     return (bool)indirect_cursor;
@@ -63,6 +78,7 @@ public:
   bool is_data_stable() const;
   bool is_clone() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_refcount() > 1;
   }
   bool is_zero_reserved() const {
@@ -73,32 +89,39 @@ public:
   extent_len_t get_length() const {
     assert(!is_null());
     if (is_indirect()) {
+      assert(!indirect_cursor->is_end());
       return indirect_cursor->get_length();
     }
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_length();
   }
 
   paddr_t get_val() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_paddr();
   }
 
   checksum_t get_checksum() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_checksum();
   }
 
   laddr_t get_key() const {
     assert(!is_null());
     if (is_indirect()) {
+      assert(!indirect_cursor->is_end());
       return indirect_cursor->get_laddr();
     }
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_laddr();
   }
 
    // An lba pin may be indirect, see comments in lba/btree_lba_manager.h
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
+    assert(!indirect_cursor->is_end());
     return indirect_cursor->get_intermediate_key();
   }
   laddr_t get_intermediate_base() const {
@@ -107,6 +130,7 @@ public:
   }
   extent_len_t get_intermediate_length() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_length();
   }
   // The start offset of the indirect cursor related to direct cursor
