@@ -47,6 +47,7 @@ target_link_libraries(os
   blk
   ${FMT_LIB})
 
+target_compile_definitions(os PRIVATE -DWITH_KSTORE)
 target_link_libraries(os heap_profiler kv)
 
 if(WITH_BLUEFS)

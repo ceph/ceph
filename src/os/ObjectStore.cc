@@ -21,7 +21,7 @@
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
 #endif
-#ifndef WITH_SEASTAR
+#ifdef WITH_KSTORE
 #include "kstore/KStore.h"
 #endif
 
@@ -43,7 +43,6 @@ std::unique_ptr<ObjectStore> ObjectStore::create(
   return nullptr;
 }
 
-#ifndef WITH_SEASTAR
 std::unique_ptr<ObjectStore> ObjectStore::create(
   CephContext *cct,
   const string& type,
@@ -55,13 +54,15 @@ std::unique_ptr<ObjectStore> ObjectStore::create(
     lgeneric_derr(cct) << __func__ << ": FileStore has been deprecated and is no longer supported" << dendl;
     return nullptr;
   }
+  #ifdef WITH_KSTORE
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
     return std::make_unique<KStore>(cct, data);
   }
+  #endif
   return create(cct, type, data);
 }
-#endif
+
 
 int ObjectStore::probe_block_device_fsid(
   CephContext *cct,
