@@ -427,6 +427,7 @@ private:
 	  auto &alloc_info = *ait;
 	  assert(mapping.indirect_cursor);
 	  assert(!mapping.direct_cursor);
+	  assert(!mapping.indirect_cursor->is_end());
 	  assert(mapping.indirect_cursor->get_laddr() == alloc_info.key);
 	  assert(mapping.indirect_cursor->get_intermediate_key() ==
 	    alloc_info.val.get_laddr());

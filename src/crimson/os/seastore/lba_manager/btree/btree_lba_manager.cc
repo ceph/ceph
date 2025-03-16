@@ -119,6 +119,7 @@ BtreeLBAManager::get_mappings(
   ).si_then([this, c](std::vector<LBACursorRef> cursors) {
     bool all_direct = std::all_of(
       cursors.begin(), cursors.end(), [](const LBACursorRef &cursor) {
+	assert(!cursor->is_end());
 	return !cursor->is_indirect();
       });
 
@@ -136,6 +137,7 @@ BtreeLBAManager::get_mappings(
       lba_mapping_list_t(),
       [this, c](auto &cursors, auto &ret) {
 	return trans_intr::do_for_each(cursors, [this, c, &ret](auto &cursor) {
+	  assert(!cursor->is_end());
 	  if (!cursor->is_indirect()) {
 	    ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
 	    return get_mappings_iertr::make_ready_future();
@@ -169,6 +171,7 @@ BtreeLBAManager::get_mapping(
     fut = get_cursor(c, offset);
   }
   return fut.si_then([c, this](LBACursorRef cursor) {
+    assert(!cursor->is_end());
     if (!cursor->is_indirect()) {
       return get_mapping_iertr::make_ready_future<
 	LBAMapping>(LBAMapping::create_direct(std::move(cursor)));
@@ -882,18 +885,14 @@ BtreeLBAManager::_update_mapping(
 	c,
 	iter
       ).si_then([ret, c](auto iter) {
-	if (iter.is_end()) {
-	  return update_mapping_ret_bare_t{std::move(ret), {}};
-	} else {
-	  auto cursor = iter.get_cursor(c);
-	  auto indirect = cursor.val.pladdr.is_laddr();
-	  return update_mapping_ret_bare_t{
-	    std::move(ret),
-	    indirect
-	      ? LBAMapping::create_indirect(std::move(cursor))
-	      : LBAMapping::create_physical(std::move(cursor))
-	  };
-	}
+	auto cursor = iter.get_cursor(c);
+	auto indirect = cursor->val && cursor->val->pladdr.is_laddr();
+	return update_mapping_ret_bare_t{
+	  std::move(ret),
+	  indirect
+	    ? LBAMapping::create_indirect(std::move(cursor))
+	    : LBAMapping::create_direct(std::move(cursor))
+	};
       });
     } else {
       return btree.update(
@@ -912,7 +911,8 @@ BtreeLBAManager::_update_mapping(
 	    && nextent->get_parent_node().get() == iter.get_leaf_node().get()));
 	LBACursorRef cursor = iter.get_cursor(c);
 	auto create_mapping = &LBAMapping::create_direct;
-	if (cursor->val.pladdr.is_laddr()) {
+	assert(cursor->val);
+	if (cursor->val->pladdr.is_laddr()) {
 	  create_mapping = &LBAMapping::create_indirect;
 	}
 
@@ -978,6 +978,7 @@ BtreeLBAManager::_update_mapping(
 		&& nextent->get_parent_node().get() == iter.get_leaf_node().get()));
 	    LBACursorRef cursor = iter.get_cursor(c);
 	    auto create_mapping = &LBAMapping::create_direct;
+	    assert(!cursor->is_end());
 	    if (cursor->is_indirect()) {
 	      create_mapping = &LBAMapping::create_indirect;
 	    }
@@ -1053,6 +1054,7 @@ BtreeLBAManager::get_direct_cursor(
 {
   LOG_PREFIX(BtreeLBAManager::get_cursor);
   TRACET("{}", c.trans, *indirect_cursor);
+  assert(!indirect_cursor->is_end());
   assert(indirect_cursor->is_indirect());
   auto orig_key = indirect_cursor->get_laddr();
   auto intermediate_key = indirect_cursor->get_intermediate_key();
@@ -1064,9 +1066,10 @@ BtreeLBAManager::get_direct_cursor(
     LBACursorRef &direct = cursors.front();
     TRACET("got direct cursor {} for indirect cursor {}~{} {}",
 	   c.trans, *direct, orig_key, length, intermediate_key);
-    assert(direct->val.pladdr.is_paddr());
+    assert(direct->val);
+    assert(direct->val->pladdr.is_paddr());
     assert(direct->key <= intermediate_key);
-    assert(direct->key + direct->val.len >=
+    assert(direct->key + direct->val->len >=
 	   intermediate_key + length);
     return get_cursors_iertr::make_ready_future<
       LBACursorRef>(std::move(direct));
@@ -1258,7 +1261,9 @@ BtreeLBAManager::make_btree_partial_iter(
     TRACET("find pending extent {} for {}",
 	   c.trans, (void*)leaf.get(), cursor);
     auto it = leaf->lower_bound(cursor.key);
-    assert(it != leaf->end() && it.get_key() == cursor.key);
+    assert(cursor.is_end()
+      ? it == leaf->end()
+      : it != leaf->end() && it.get_key() == cursor.key);
     return make_btree_partial_iter_iertr::make_ready_future<
       LBABtree::iterator>(btree.make_partial_iter(
 	c, leaf, cursor.key, it.get_offset()));
