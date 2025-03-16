@@ -18,12 +18,8 @@ class ConfigObs : public ceph::md_config_obs_impl<Config> {
   uint64_t last_change = INVALID_VALUE;
   uint64_t num_changes = 0;
 
-  const char** get_tracked_conf_keys() const override {
-    static const char* keys[] = {
-      test_uint_option.c_str(),
-      nullptr,
-    };
-    return keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return { test_uint_option };
   }
   void handle_conf_change(const Config& conf,
                           const std::set <std::string> &changes) override{
