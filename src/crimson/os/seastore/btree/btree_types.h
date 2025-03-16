@@ -199,13 +199,13 @@ struct BtreeCursor {
     CachedExtentRef parent,
     uint64_t modifications,
     key_t key,
-    val_t val,
+    std::optional<val_t> val,
     btreenode_pos_t pos)
       : ctx(ctx),
 	parent(std::move(parent)),
 	modifications(modifications),
 	key(key),
-	val(val),
+	val(std::move(val)),
 	pos(pos)
   {
     if constexpr (std::is_same_v<key_t, laddr_t>) {
@@ -223,13 +223,19 @@ struct BtreeCursor {
   CachedExtentRef parent;
   uint64_t modifications;
   key_t key;
-  val_t val;
+  std::optional<val_t> val;
   btreenode_pos_t pos;
+
+  bool is_end() const {
+    assert((key != min_max_t<key_t>::null) == (bool)val);
+    return key == min_max_t<key_t>::null;
+  }
 
   bool is_valid() const;
 
   extent_len_t get_length() const {
-    return val.len;
+    assert(val);
+    return val->len;
   }
 };
 
@@ -237,24 +243,28 @@ struct LBACursor : BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t> {
   using Base = BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
   using Base::BtreeCursor;
   bool is_indirect() const {
-    return val.pladdr.is_laddr();
+    return (bool)val && val->pladdr.is_laddr();
   }
   laddr_t get_laddr() const {
     return key;
   }
   paddr_t get_paddr() const {
     assert(!is_indirect());
-    return val.pladdr.get_paddr();
+    assert(val);
+    return val->pladdr.get_paddr();
   }
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
-    return val.pladdr.get_laddr();
+    assert(val);
+    return val->pladdr.get_laddr();
   }
   uint32_t get_checksum() const {
-    return val.checksum;
+    assert(val);
+    return val->checksum;
   }
   uint32_t get_refcount() const {
-    return val.refcount;
+    assert(val);
+    return val->refcount;
   }
   std::unique_ptr<LBACursor> duplicate() const {
     return std::make_unique<LBACursor>(*this);
@@ -266,13 +276,16 @@ struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
   using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
   using Base::BtreeCursor;
   paddr_t get_paddr() const {
+    assert(key != P_ADDR_NULL);
     return key;
   }
   laddr_t get_laddr() const {
-    return val.laddr;
+    assert(val);
+    return val->laddr;
   }
   extent_types_t get_type() const {
-    return val.type;
+    assert(val);
+    return val->type;
   }
 };
 using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
