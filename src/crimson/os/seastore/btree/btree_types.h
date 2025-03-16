@@ -253,8 +253,7 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   using Base = BtreeCursor<laddr_t, lba::lba_map_val_t>;
   using Base::BtreeCursor;
   bool is_indirect() const {
-    assert(!is_end());
-    return val->pladdr.is_laddr();
+    return !is_end() && val->pladdr.is_laddr();
   }
   laddr_t get_laddr() const {
     return key;
@@ -298,6 +297,7 @@ struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
   using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
   using Base::BtreeCursor;
   paddr_t get_paddr() const {
+    assert(key.is_absolute());
     return key;
   }
   laddr_t get_laddr() const {
