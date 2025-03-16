@@ -146,6 +146,7 @@ BtreeLBAManager::get_mappings(
           cursors,
           [FNAME, this, c, laddr, length, &btree, &ret](auto& cursor)
         {
+	  assert(!cursor->is_end());
           if (!cursor->is_indirect()) {
             ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
             TRACET("{}~0x{:x} got {}",
@@ -251,6 +252,7 @@ BtreeLBAManager::get_mapping(
     }
     return fut.si_then([FNAME, laddr, &btree, c, this,
 			search_containing](LBACursorRef cursor) {
+      assert(!cursor->is_end());
       if (!cursor->is_indirect()) {
         TRACET("{} got direct cursor {}",
                c.trans, laddr, *cursor);
@@ -1070,13 +1072,8 @@ BtreeLBAManager::_update_mapping(
 	c,
 	iter
       ).si_then([ret, c, laddr=cursor.key](auto iter) {
-	if (iter.is_end()) {
-	  return update_mapping_ret_bare_t{
-	    L_ADDR_NULL, std::move(ret), nullptr};
-	} else {
-	  return update_mapping_ret_bare_t{
-	    laddr, std::move(ret), iter.get_cursor(c)};
-	}
+	return update_mapping_ret_bare_t{
+	  laddr, std::move(ret), iter.get_cursor(c)};
       });
     } else {
       return btree.update(
