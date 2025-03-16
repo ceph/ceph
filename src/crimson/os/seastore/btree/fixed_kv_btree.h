@@ -281,17 +281,21 @@ public:
         ctx,
 	leaf.node,
         leaf.node->modifications,
-        get_key(),
-        std::make_optional(get_val()),
+        is_end() ? min_max_t<node_key_t>::max : get_key(),
+        is_end() ? std::nullopt : std::make_optional(get_val()),
         leaf.pos);
     }
 
     void update_cursor(cursor_t &cursor) const {
-      assert(!is_end());
       cursor.parent = leaf.node;
       cursor.modifications = leaf.node->modifications;
-      cursor.key = get_key();
-      cursor.val = get_val();
+      if (is_end()) {
+        cursor.key = min_max_t<node_key_t>::max;
+        cursor.val = std::nullopt;
+      } else {
+        cursor.key = get_key();
+        cursor.val = get_val();
+      }
       cursor.pos = leaf.pos;
     }
 
