@@ -2,6 +2,7 @@ set(sphinx_input)
 set(sphinx_output)
 set(sphinx_output_dir ${CMAKE_BINARY_DIR}/doc/man)
 
+add_subdirectory(5)
 add_subdirectory(8)
 
 add_custom_command(
