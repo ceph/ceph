@@ -7892,7 +7892,13 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   if (r < 0) {
     return r;
   }
-  return _mkdir(dirinode.get(), relpath, mode, perm, 0, {}, std::move(alternate_name));
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(dirinode, filepath(relpath), &wdr, perm, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+
+  return _mkdir(wdr, mode, perm, 0, {}, std::move(alternate_name));
 }
 
 int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
@@ -7914,7 +7920,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
     if (int rc = path_walk(cwd, path, &wdr, perms, {.followsym = false}); rc < 0) {
       if (rc == -ENOENT) {
         InodeRef in;
-        rc = _mkdir(wdr.diri.get(), wdr.dname.c_str(), mode, perms, &in);
+        rc = _mkdir(wdr, mode, perms, &in);
         switch (rc) {
           case 0:
           case EEXIST:
@@ -12292,10 +12298,7 @@ int Client::statxat(int dirfd, const char *relpath,
   return r;
 }
 
-// not written yet, but i want to link!
-
-int Client::chdir(const char *relpath, std::string &new_cwd,
-		  const UserPerm& perms)
+int Client::chdir(const char *relpath, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -12311,29 +12314,28 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
     return rc;
   }
 
-  if (!(in.get()->is_dir()))
+  if (!in->is_dir())
     return -ENOTDIR;
 
-  if (cwd != in)
-    cwd.swap(in);
+  cwd = std::move(in);
+
   ldout(cct, 3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
 
-  _getcwd(new_cwd, perms);
   return 0;
 }
 
-void Client::_getcwd(string& dir, const UserPerm& perms)
+int Client::_getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
   ldout(cct, 10) << __func__ << " " << *cwd << dendl;
 
-  Inode *in = cwd.get();
-  while (in != root.get()) {
+  auto in = cwd;
+  while (in != root) {
     ceph_assert(in->dentries.size() < 2); // dirs can't be hard-linked
 
     // A cwd or ancester is unlinked
     if (in->dentries.empty()) {
-      return;
+      return -ENOENT;
     }
 
     Dentry *dn = in->get_first_parent();
@@ -12352,25 +12354,28 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 
       // start over
       path = filepath();
-      in = cwd.get();
+      in = cwd;
       continue;
     }
-    path.push_front_dentry(dn->name);
-    in = dn->dir->parent_inode;
+    auto* diri = dn->dir->parent_inode;
+    ceph_assert(diri);
+    auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
+    path.push_front_dentry(dname);
+    in = InodeRef(diri);
   }
   dir = "/";
   dir += path.get_path();
+  return 0;
 }
 
-void Client::getcwd(string& dir, const UserPerm& perms)
+int Client::getcwd(string& dir, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
-    return;
+    return -ENOTCONN;
 
   std::scoped_lock l(client_lock);
-
-  _getcwd(dir, perms);
+  return _getcwd(dir, perms);
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf,
@@ -13055,12 +13060,15 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
     return -ENOTCONN;
 
   std::scoped_lock l(client_lock);
-  InodeRef in;
-  if (int rc = path_walk(cwd, filepath(relpath), &in, perm, {}); rc < 0) {
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(relpath), &wdr, perm, {}); rc < 0) {
     return rc;
   }
-  auto snapdir = open_snapdir(in.get());
-  return _mkdir(snapdir.get(), name, mode, perm, nullptr, metadata);
+  auto snapdir = open_snapdir(wdr.target);
+  if (int rc = path_walk(std::move(snapdir), filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+  return _mkdir(wdr, mode, perm, nullptr, metadata);
 }
 
 int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms, bool check_perms)
@@ -14873,18 +14881,15 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
   return res;
 }
 
-int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
+int Client::_mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 		   InodeRef *inp, const std::map<std::string, std::string> &metadata,
                    std::string alternate_name)
 {
-  ldout(cct, 8) << "_mkdir(" << dir->ino << " " << name << ", 0" << oct
-		<< mode << dec << ", uid " << perm.uid()
+  ldout(cct, 8) << "_mkdir(" << wdr << ", 0o" << std::oct << mode << std::dec
+		<< ", uid " << perm.uid()
 		<< ", gid " << perm.gid() << ")" << dendl;
 
-  walk_dentry_result wdr;
-  if (int rc = path_walk(dir, filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
-    return rc;
-  } else if (rc == 0 && wdr.target) {
+  if (wdr.target) {
     return -EEXIST;
   }
 
@@ -14963,8 +14968,13 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
 
   std::scoped_lock lock(client_lock);
 
+  walk_dentry_result wdr;
+  if (int rc = path_walk(parent, filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+
   InodeRef in;
-  int r = _mkdir(parent, name, mode, perm, &in);
+  int r = _mkdir(wdr, mode, perm, &in);
   if (r == 0) {
     fill_stat(in, attr);
     _ll_get(in.get());
@@ -14994,8 +15004,13 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
 
   std::scoped_lock lock(client_lock);
 
+  walk_dentry_result wdr;
+  if (int rc = path_walk(parent, filepath(name), &wdr, perms, {.require_target = false}); rc < 0) {
+    return rc;
+  }
+
   InodeRef in;
-  int r = _mkdir(parent, name, mode, perms, &in);
+  int r = _mkdir(wdr, mode, perms, &in);
   if (r == 0) {
     fill_statx(in, statx_to_mask(flags, want), stx);
     _ll_get(in.get());

@@ -269,6 +269,51 @@ class TestCharMapVxattr(CephFSTestCase, CharMapMixin):
             else:
                 self.fail("should fail")
 
+
+class TestCharMapRecovery(CephFSTestCase, CharMapMixin):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def test_primary_altname_recovery(self):
+        """
+        That the MDS can recovery the alternate_name from the primary link
+        encoded in the fullbit.
+        """
+
+        dname = "Grüßen"
+        self.mount_a.run_shell_payload("mkdir foo/")
+        self.mount_a.setfattr("foo/", "ceph.dir.casesensitive", "0")
+        self.mount_a.run_shell_payload(f"dd if=/dev/urandom of=foo/{dname} conv=fsync bs=1 count=1")
+        self.mount_a.umount_wait()
+
+        self.fs.fail()
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+        self.mount_a.run_shell_payload("ls -l foo")
+
+    def test_remote_altname_recovery(self):
+        """
+        That the MDS can recovery the alternate_name from the remote link
+        encoded in the fullbit.
+        """
+
+        dname = "Grüßen"
+        self.mount_a.run_shell_payload("mkdir foo/")
+        self.mount_a.setfattr("foo/", "ceph.dir.casesensitive", "0")
+        self.mount_a.run_shell_payload("dd if=/dev/urandom of=foo/file conv=fsync bs=1 count=1")
+        self.mount_a.run_shell_payload(f"ln -T foo/file foo/{dname}")
+        self.mount_a.umount_wait()
+
+        self.fs.fail()
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount()
+        self.mount_a.run_shell_payload("ls -l foo")
+
+
 class TestNormalization(CephFSTestCase, CharMapMixin):
     """
     Test charmap normalization.

@@ -16,11 +16,15 @@
 
 #include <atomic>
 #include "common/StackStringStream.h"
+#include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/debug.h"
+#include "common/Formatter.h"
 #include "common/histogram.h"
 #include "common/perf_counters.h" // for class PerfCountersBuilder
 #include "common/Thread.h"
 #include "common/Clock.h"
+#include "common/zipkin_trace.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
 
@@ -29,6 +33,14 @@
 #else
 #include "common/perf_counters_collection.h"
 #endif
+
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive_ptr.hpp>
+
+#include <atomic>
+#include <list>
+#include <set>
+#include <vector>
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 

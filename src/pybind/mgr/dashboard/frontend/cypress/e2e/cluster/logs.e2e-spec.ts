@@ -54,7 +54,7 @@ describe('Logs page', () => {
 
     it('should delete pool and check audit logs reacted', () => {
       pools.navigateTo();
-      pools.delete(poolname, null, null, true);
+      pools.delete(poolname, null, null, true, false, false, true);
       logs.checkAuditForPoolFunction(poolname, 'delete', hour, minute);
     });
   });

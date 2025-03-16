@@ -343,10 +343,9 @@ public:
   // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
-  // crap
-  int chdir(const char *s, std::string &new_cwd, const UserPerm& perms);
-  void _getcwd(std::string& cwd, const UserPerm& perms);
-  void getcwd(std::string& cwd, const UserPerm& perms);
+  int chdir(const char *path, const UserPerm& perms);
+  int _getcwd(std::string& cwd, const UserPerm& perms);
+  int getcwd(std::string& cwd, const UserPerm& perms);
 
   // namespace ops
   int opendir(const char *name, dir_result_t **dirpp, const UserPerm& perms);
@@ -1701,7 +1700,7 @@ private:
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
-  int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
+  int _mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
              std::string alternate_name="");
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms=true);

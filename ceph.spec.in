@@ -695,6 +695,7 @@ Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-grpcio
 Requires:       python%{python3_pkgversion}-grpcio-tools
 Requires:       python%{python3_pkgversion}-jmespath
+Requires:       python%{python3_pkgversion}-xmltodict
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy

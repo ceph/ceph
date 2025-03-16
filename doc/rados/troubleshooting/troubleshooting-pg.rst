@@ -422,7 +422,7 @@ command:
 
 .. prompt:: bash
 
-    $ ceph health detail
+    ceph health detail
 
 ::
 
@@ -435,7 +435,7 @@ programmatic way:
 
 .. prompt:: bash
 
-   $ rados list-inconsistent-pg rbd
+   rados list-inconsistent-pg rbd
 
 ::
 

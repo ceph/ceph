@@ -34,7 +34,7 @@ export class UsersPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_fullname: string, new_email: string, new_maxbuckets: string) {
-    this.navigateEdit(name, false, true, null, true);
+    this.navigateEdit(name, false, true, null);
 
     // Change the full name field
     cy.get('input#display_name').click().clear({ force: true }).type(new_fullname, { force: true });
@@ -111,7 +111,7 @@ export class UsersPageHelper extends PageHelper {
       .should('have.text', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(tenant + '$' + uname, null, null, true, true);
+    this.delete(tenant + '$' + uname, null, null, true, false, false, true);
   }
 
   invalidEdit() {
@@ -121,7 +121,7 @@ export class UsersPageHelper extends PageHelper {
     this.navigateTo('create');
     this.create(tenant, uname, 'xxx', 'xxx@xxx', '50');
     const name = tenant + '$' + uname;
-    this.navigateEdit(name, false, true, null, true);
+    this.navigateEdit(name, false, true, null);
 
     // put invalid email to make field invalid
     cy.get('#email')
@@ -153,6 +153,6 @@ export class UsersPageHelper extends PageHelper {
       .should('have.text', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(tenant + '$' + uname, null, null, true, true);
+    this.delete(tenant + '$' + uname, null, null, true, false, false, true);
   }
 }

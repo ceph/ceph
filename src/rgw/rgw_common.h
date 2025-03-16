@@ -126,6 +126,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_RESTORE_TIME   RGW_ATTR_PREFIX "restored-at"
 #define RGW_ATTR_RESTORE_EXPIRY_DATE   RGW_ATTR_PREFIX "restore-expiry-date"
 #define RGW_ATTR_TRANSITION_TIME RGW_ATTR_PREFIX "transition-at"
+#define RGW_ATTR_RESTORE_VERSIONED_EPOCH RGW_ATTR_PREFIX "restore-versioned-epoch"
 
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
