@@ -52,6 +52,7 @@ using std::list;
 using std::map;
 using std::string;
 using std::vector;
+using namespace std::literals;
 
 using ceph::bufferlist;
 using ceph::bufferptr;
@@ -1562,14 +1563,13 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
-const char** KernelDevice::get_tracked_conf_keys() const
+std::vector<std::string> KernelDevice::get_tracked_keys()
+    const noexcept
 {
-  static const char* KEYS[] = {
-    "bdev_async_discard_threads",
-    "bdev_enable_discard",
-    NULL
+  return {
+    "bdev_async_discard_threads"s,
+    "bdev_enable_discard"s
   };
-  return KEYS;
 }
 
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
