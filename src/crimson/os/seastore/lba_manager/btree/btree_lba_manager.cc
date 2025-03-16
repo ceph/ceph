@@ -146,6 +146,7 @@ BtreeLBAManager::get_mappings(
           cursors,
           [FNAME, this, c, laddr, length, &btree, &ret](auto& cursor)
         {
+	  assert(!cursor->is_end());
           if (!cursor->is_indirect()) {
             ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
             TRACET("{}~0x{:x} got {}",
@@ -248,6 +249,7 @@ BtreeLBAManager::get_mapping(
     }
     return fut.si_then([FNAME, laddr, &btree, c, this,
 			find_containment](LBACursorRef cursor) {
+      assert(!cursor->is_end());
       if (!cursor->is_indirect()) {
         TRACET("{} got direct cursor {}",
                c.trans, laddr, *cursor);
@@ -1090,12 +1092,8 @@ BtreeLBAManager::_update_mapping(
 	c,
 	iter
       ).si_then([ret, c, laddr=cursor.key](auto iter) {
-	if (iter.is_end()) {
-	  return update_mapping_ret_bare_t{std::move(ret), {}};
-	} else {
-	  return update_mapping_ret_bare_t{
-	    laddr, std::move(ret), iter.get_cursor(c)};
-	}
+	return update_mapping_ret_bare_t{
+	  laddr, std::move(ret), iter.get_cursor(c)};
       });
     } else {
       return btree.update(
@@ -1364,7 +1362,9 @@ BtreeLBAManager::make_btree_partial_iter(
     TRACET("find pending extent {} for {}",
 	   c.trans, (void*)leaf.get(), cursor);
     auto it = leaf->lower_bound(cursor.key);
-    assert(it != leaf->end() && it.get_key() == cursor.key);
+    assert(cursor.is_end()
+      ? it == leaf->end()
+      : it != leaf->end() && it.get_key() == cursor.key);
     return make_btree_partial_iter_iertr::make_ready_future<
       LBABtree::iterator>(btree.make_partial_iter(
 	c, leaf, cursor.key, it.get_offset()));

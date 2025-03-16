@@ -283,11 +283,15 @@ public:
     }
 
     void update_cursor(cursor_t &cursor) const {
-      assert(!is_end());
       cursor.parent = leaf.node;
       cursor.modifications = leaf.node->modifications;
-      cursor.key = get_key();
-      cursor.val = get_val();
+      if (is_end()) {
+        cursor.key = L_ADDR_NULL;
+        cursor.val = std::nullopt;
+      } else {
+        cursor.key = get_key();
+        cursor.val = get_val();
+      }
       cursor.pos = leaf.pos;
     }
 
