@@ -187,6 +187,17 @@ public:
     peering_state.complete_write(v, lc);
   }
 
+  void try_complete_write(eversion_t v, eversion_t lc) {
+    LOG_PREFIX(PG::try_complete_write);
+    SUBWARNDPP(osd, "pct is: {} version got {} (lc: {})",
+                *this, get_pg_committed_to(), v, lc);
+    // when completing a write both pct and lcod are updated.
+    // For this reason, checking only one of them (pct) is enough.
+    if (v < get_pg_committed_to()) {
+      complete_write(v, lc);
+    }
+  }
+
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) {
