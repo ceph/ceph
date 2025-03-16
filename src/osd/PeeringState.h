@@ -79,7 +79,7 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-#if defined(WITH_SEASTAR)
+#ifdef WITH_SEASTAR
   std::map<int, std::vector<MessageURef>> message_map;
 #else
   std::map<int, std::vector<MessageRef>> message_map;
@@ -287,7 +287,7 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
-    #if defined(WITH_SEASTAR)
+    #ifdef WITH_SEASTAR
     virtual void send_cluster_message(
       int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
     #else

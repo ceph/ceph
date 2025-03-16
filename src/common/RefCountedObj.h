@@ -89,7 +89,7 @@ template<typename... Args>
   virtual ~RefCountedObjectSafe() override {}
 };
 
-#if !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
+#ifndef WITH_SEASTAR
 
 /**
  * RefCountedCond
@@ -186,7 +186,7 @@ static inline void intrusive_ptr_add_ref(RefCountedWaitObject *p) {
 static inline void intrusive_ptr_release(RefCountedWaitObject *p) {
   p->put();
 }
-#endif // !defined(WITH_SEASTAR)|| defined(WITH_ALIEN)
+#endif // ifndef WITH_SEASTAR
 
 static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
   p->get();

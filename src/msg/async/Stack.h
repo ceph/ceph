@@ -23,7 +23,7 @@
 #include "msg/async/Event.h"
 #include "msg/msg_types.h"
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_SEASTAR
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/perf_counters_collection.h"
