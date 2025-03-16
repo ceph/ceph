@@ -65,13 +65,6 @@ void ObserverMgr<ConfigObs>::add_observer(ConfigObs* observer)
   for (auto&& k : observer->get_tracked_keys()) {
     observers.emplace(std::move(k), ptr);
   }
-
-  // legacy observer interface:
-  if (const char** keys = observer->get_tracked_conf_keys(); keys) {
-    for (const char** k = keys; *k; ++k) {
-      observers.emplace(*k, ptr);
-    }
-  }
 }
 
 template<class ConfigObs>
