@@ -121,9 +121,8 @@ public:
     pladdr_t addr;
     extent_len_t length = 0;
     LBAMapping mapping; // the mapping pointing to the updated lba entry if
-			// refcount is non-zero; the next lba entry otherwise;
-			// null mapping if the mapping is the last one and
-			// is removed
+			// refcount is non-zero; the next lba entry or the
+			// end mapping otherwise.
   };
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
