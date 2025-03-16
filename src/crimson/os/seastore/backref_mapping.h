@@ -23,19 +23,23 @@ public:
   ~BackrefMapping() = default;
 
   extent_len_t get_length() const {
-    return cursor->val.len;
+    assert(cursor->val);
+    return cursor->val->len;
   }
 
   laddr_t get_val() const {
-    return cursor->val.laddr;
+    assert(cursor->val);
+    return cursor->val->laddr;
   }
 
   paddr_t get_key() const {
+    assert(cursor->key != P_ADDR_NULL);
     return cursor->key;
   }
 
   extent_types_t get_type() const {
-    return cursor->val.type;
+    assert(cursor->val);
+    return cursor->val->type;
   }
 };
 

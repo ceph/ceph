@@ -431,10 +431,11 @@ private:
 	  auto &alloc_info = *ait;
 	  assert(mapping.indirect_cursor);
 	  assert(!mapping.physical_cursor);
+	  assert(mapping.indirect_cursor->val);
 	  assert(mapping.indirect_cursor->key == alloc_info.key);
-	  assert(mapping.indirect_cursor->val.pladdr.get_laddr() ==
+	  assert(mapping.indirect_cursor->val->pladdr.get_laddr() ==
 	    alloc_info.val.get_laddr());
-	  assert(mapping.indirect_cursor->val.len == alloc_info.len);
+	  assert(mapping.indirect_cursor->val->len == alloc_info.len);
 	}
 	return std::move(mappings);
       });

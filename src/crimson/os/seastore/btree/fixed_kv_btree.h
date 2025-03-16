@@ -273,22 +273,25 @@ public:
     }
 
     std::unique_ptr<cursor_t> get_cursor(op_context_t ctx) const {
-      assert(!is_end());
       return std::make_unique<cursor_t>(
         ctx,
 	leaf.node,
         leaf.node->modifications,
-        get_key(),
-        get_val(),
+        is_end() ? min_max_t<node_key_t>::null : get_key(),
+        is_end() ? std::nullopt : std::make_optional(get_val()),
         leaf.pos);
     }
 
     void update_cursor(cursor_t &cursor) const {
-      assert(!is_end());
       cursor.parent = leaf.node;
       cursor.modifications = leaf.node->modifications;
-      cursor.key = get_key();
-      cursor.val = get_val();
+      if (is_end()) {
+        cursor.key = L_ADDR_NULL;
+        cursor.val = std::nullopt;
+      } else {
+        cursor.key = get_key();
+        cursor.val = get_val();
+      }
       cursor.pos = leaf.pos;
     }
 

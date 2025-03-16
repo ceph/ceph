@@ -196,8 +196,13 @@ struct BtreeCursor {
   CachedExtentRef parent;
   uint64_t modifications;
   key_t key;
-  val_t val;
+  std::optional<val_t> val;
   uint16_t pos;
+
+  bool is_end() const {
+    assert((key != min_max_t<key_t>::null) == (bool)val);
+    return key == min_max_t<key_t>::null;
+  }
 
   bool is_valid() const;
 

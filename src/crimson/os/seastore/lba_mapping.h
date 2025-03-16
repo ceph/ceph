@@ -29,6 +29,12 @@ public:
 	child_pos = {parent->template cast<LBALeafNode>(), physical->pos};
       }
     }
+    // if the mapping is indirect, it mustn't be at the end
+    assert(indirect_cursor
+      ? (!physical_cursor
+	|| ((bool)physical_cursor->val
+	    && physical_cursor->key != L_ADDR_NULL))
+      : true);
   }
 
   static LBAMapping create_physical(LBACursorRef iter) {
@@ -51,6 +57,16 @@ public:
     return !physical_cursor && !indirect_cursor;
   }
 
+  bool is_end() const {
+    bool end = (bool)physical_cursor && !physical_cursor->val;
+    // if the mapping is at the end, it can't be indirect and
+    // the physical cursor must be L_ADDR_NULL
+    assert(end
+      ? (!indirect_cursor && physical_cursor->key == L_ADDR_NULL)
+      : true);
+    return end;
+  }
+
   bool is_indirect() const {
     assert(!is_null());
     return (bool)indirect_cursor;
@@ -69,7 +85,8 @@ public:
   bool is_data_stable() const;
   bool is_clone() const {
     assert(!is_null());
-    return physical_cursor->val.refcount > 1;
+    assert(physical_cursor->val);
+    return physical_cursor->val->refcount > 1;
   }
   bool is_zero_reserved() const {
     assert(!is_null());
@@ -79,27 +96,33 @@ public:
   extent_len_t get_length() const {
     assert(!is_null());
     if (is_indirect()) {
-      return indirect_cursor->val.len;
+      assert(indirect_cursor->val);
+      return indirect_cursor->val->len;
     } else {
-      return physical_cursor->val.len;
+      assert(physical_cursor->val);
+      return physical_cursor->val->len;
     }
   }
 
   paddr_t get_val() const {
     assert(!is_null());
-    return physical_cursor->val.pladdr.get_paddr();
+    assert(physical_cursor->val);
+    return physical_cursor->val->pladdr.get_paddr();
   }
 
   uint32_t get_checksum() const {
     assert(!is_null());
-    return physical_cursor->val.checksum;
+    assert(physical_cursor->val);
+    return physical_cursor->val->checksum;
   }
 
   laddr_t get_key() const {
     assert(!is_null());
     if (is_indirect()) {
+      assert(indirect_cursor->key != L_ADDR_NULL);
       return indirect_cursor->key;
     } else {
+      assert(physical_cursor->key != L_ADDR_NULL);
       return physical_cursor->key;
     }
   }
@@ -108,7 +131,8 @@ public:
   laddr_t get_intermediate_key() const {
     assert(!is_null());
     assert(is_indirect());
-    return indirect_cursor->val.pladdr.get_laddr();
+    assert(indirect_cursor->val);
+    return indirect_cursor->val->pladdr.get_laddr();
   }
   laddr_t get_intermediate_base() const {
     assert(!is_null());
@@ -118,7 +142,8 @@ public:
   extent_len_t get_intermediate_length() const {
     assert(!is_null());
     assert(is_indirect());
-    return physical_cursor->val.len;
+    assert(physical_cursor->val);
+    return physical_cursor->val->len;
   }
   // The start offset of the indirect cursor related to physical cursor
   extent_len_t get_intermediate_offset() const {
