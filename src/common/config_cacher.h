@@ -20,13 +20,12 @@
 
 /**
  * A simple class to cache a single configuration value.
- * Points to note:
- * - as get_tracked_conf_keys() must return a pointer to a null-terminated
- *   array of C-strings, 'keys' - an array - is used to hold the sole key
- *   that this observer is interested in.
- * - the const cast should be removed once we change the
- *   get_tracked_conf_keys() to return const char* const * (or something
- *   similar).
+ *
+ * The md_config_cacher_t object registers itself to receive
+ * notifications of changes to the specified single configuration
+ * option.  When the option changes, the new value is stored
+ * in an atomic variable.  The value can be accessed using
+ * the dereference operator.
  */
 template <typename ValueT>
 class md_config_cacher_t : public md_config_obs_t {

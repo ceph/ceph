@@ -33,27 +33,16 @@ class md_config_obs_impl {
 public:
   virtual ~md_config_obs_impl() {}
 
-  /** @brief Get a table of strings specifying the configuration keys in which the object is interested.
-   * This is called when the object is subscribed to configuration changes with add_observer().
-   * The returned table should not be freed until the observer is removed with remove_observer().
-   * Note that it is not possible to change the set of tracked keys without re-subscribing.
-   *
-   * DEPRECATED! Use get_tracked_keys() instead.
-   */
-  virtual const char** get_tracked_conf_keys() const {
-    return nullptr;
-  }
-
   /**
    * Returns a vector of strings specifying the configuration keys in which
-   * the object is interested.
+   * the object is interested. This is called when the object is subscribed to
+   * configuration changes with add_observer().
+   *
    * Note - the strings in the returned vector are 'moveable'. The caller
    * (ostensibly the observer manager) is expected to move them into its
    * map.
    */
-  virtual std::vector<std::string> get_tracked_keys() const noexcept {
-    return {};
-  }
+  virtual std::vector<std::string> get_tracked_keys() const noexcept = 0;
 
   /// React to a configuration change.
   virtual void handle_conf_change(const ConfigProxy& conf,
