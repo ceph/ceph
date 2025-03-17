@@ -722,3 +722,29 @@ def test_show_cluster_without_shares(tmodule):
 }
     """.strip()
     )
+
+
+def test_show_password_filter_hidden(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(password_filter=smb.enums.PasswordFilter.HIDDEN)
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 4
+    ja = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert ja
+    join_auth = ja[0]
+    assert join_auth['auth']['username'] == 'testadmin'
+    assert join_auth['auth']['password'] == '****************'
+
+
+def test_show_password_filter_b64(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(password_filter=smb.enums.PasswordFilter.BASE64)
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 4
+    ja = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert ja
+    join_auth = ja[0]
+    assert join_auth['auth']['username'] == 'testadmin'
+    assert join_auth['auth']['password'] == 'UGFzc3cwcmQ='
