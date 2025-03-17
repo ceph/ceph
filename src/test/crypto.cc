@@ -23,7 +23,7 @@ public:
 };
 
 TEST(AES, ValidateSecret) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   int l;
 
   for (l=0; l<16; l++) {
@@ -42,7 +42,7 @@ TEST(AES, ValidateSecret) {
 }
 
 TEST(AES, Encrypt) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -82,7 +82,7 @@ TEST(AES, Encrypt) {
 }
 
 TEST(AES, EncryptNoBl) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -126,7 +126,7 @@ TEST(AES, EncryptNoBl) {
 }
 
 TEST(AES, Decrypt) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -166,7 +166,7 @@ TEST(AES, Decrypt) {
 }
 
 TEST(AES, DecryptNoBl) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
   const char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -203,7 +203,7 @@ TEST(AES, DecryptNoBl) {
 
 template <std::size_t TextSizeV>
 static void aes_loop_cephx() {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
 
   CryptoRandom random;
 
@@ -260,7 +260,7 @@ static void aes_loop(const std::size_t text_size) {
   for (int i=0; i<10000; i++) {
     bufferlist cipher;
     {
-      CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+      auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
 
       std::string error;
       CryptoKeyHandler *kh = h->get_key_handler(secret, error);
@@ -273,7 +273,7 @@ static void aes_loop(const std::size_t text_size) {
     plaintext.clear();
 
     {
-      CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+      auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
       std::string error;
       CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
       int r = ckh->decrypt(g_ceph_context, cipher, plaintext, &error);
@@ -357,7 +357,7 @@ static void dump_buf(string title, const unsigned char *buf, int len)
 
 
 TEST(AES256KRB5, Encrypt) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES256KRB5);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
   unsigned char secret_s[] = {
       0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
       0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 };
@@ -369,10 +369,15 @@ TEST(AES256KRB5, Encrypt) {
   bufferlist plaintext;
   plaintext.append((char *)plaintext_s, sizeof(plaintext_s));
 
+  unsigned char confounder_data[] = { 0xB8, 0x0D, 0x32, 0x51, 0xC1, 0xF6, 0x47, 0x14, 0x94, 0x25, 0x6F, 0xFE, 0x71, 0x2D, 0x0B, 0x9A };
+
+  bufferlist confounder;
+  confounder.append((const char *)confounder_data, sizeof(confounder_data));
+
   bufferlist cipher;
   std::string error;
   CryptoKeyHandler *kh = h->get_key_handler(secret, error);
-  int r = kh->encrypt(g_ceph_context, plaintext, cipher, &error);
+  int r = kh->encrypt_ext(g_ceph_context, plaintext, &confounder, cipher, &error);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
 
@@ -397,7 +402,7 @@ TEST(AES256KRB5, Encrypt) {
 }
 
 TEST(AES256KRB5, Decrypt) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES256KRB5);
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
   unsigned char secret_s[] = {
       0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
       0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 };
