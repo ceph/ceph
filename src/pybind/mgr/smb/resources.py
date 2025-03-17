@@ -280,6 +280,20 @@ class UserGroupSettings(_RBase):
     users: List[Dict[str, str]]
     groups: List[Dict[str, str]]
 
+    def convert(self, operation: ConversionOp) -> Self:
+        def _convert_pw_key(dct):
+            pw = dct.get('password', None)
+            if pw is not None:
+                data = dict(dct)
+                data["password"] = _password_convert(pw, operation)
+                return data
+            return dct
+
+        return self.__class__(
+            users=[_convert_pw_key(u) for u in self.users],
+            groups=self.groups,
+        )
+
 
 @resourcelib.component()
 class UserGroupSource(_RBase):
@@ -516,6 +530,15 @@ class UsersAndGroups(_RBase):
         rc.linked_to_cluster.quiet = True
         rc.on_construction_error(InvalidResourceError.wrap)
         return rc
+
+    def convert(self, operation: ConversionOp) -> Self:
+        values = None if not self.values else self.values.convert(operation)
+        return self.__class__(
+            users_groups_id=self.users_groups_id,
+            intent=self.intent,
+            values=values,
+            linked_to_cluster=self.linked_to_cluster,
+        )
 
 
 # SMBResource is a union of all valid top-level smb resource types.
