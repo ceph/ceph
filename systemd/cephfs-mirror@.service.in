@@ -6,7 +6,7 @@ PartOf=cephfs-mirror.target
 
 [Service]
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
-ExecStart=/usr/bin/cephfs-mirror --id %i -f --setuser ceph --setgroup ceph
+ExecStart=@CMAKE_INSTALL_PREFIX@/bin/cephfs-mirror --id %i -f --setuser ceph --setgroup ceph
 LimitNOFILE=1048576
 LimitNPROC=1048576
 LockPersonality=true
