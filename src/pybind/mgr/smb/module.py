@@ -145,6 +145,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _apply_res(
         self,
         resource_input: List[resources.SMBResource],
+        create_only: bool = False,
         password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
         password_filter_out: Optional[PasswordFilter] = None,
     ) -> results.ResultGroup:
@@ -155,7 +156,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             in_op = (in_pf, PasswordFilter.NONE)
             log.debug('Password filtering for resource apply: %r', in_op)
             resource_input = [r.convert(in_op) for r in resource_input]
-        all_results = self._handler.apply(resource_input)
+        all_results = self._handler.apply(
+            resource_input, create_only=create_only
+        )
         if out_pf is not PasswordFilter.NONE:
             # we need to apply the conversion filter to the output
             # resources in the results - otherwise we would show raw
@@ -208,6 +211,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         placement: Optional[str] = None,
         clustering: Optional[SMBClustering] = None,
         public_addrs: Optional[List[str]] = None,
+        password_filter: InputPasswordFilter = InputPasswordFilter.NONE,
+        password_filter_out: Optional[PasswordFilter] = None,
     ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
@@ -318,13 +323,24 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             public_addrs=c_public_addrs,
         )
         to_apply.append(cluster)
-        return self._handler.apply(to_apply, create_only=True).squash(cluster)
+        return self._apply_res(
+            to_apply,
+            create_only=True,
+            password_filter=password_filter,
+            password_filter_out=password_filter_out,
+        ).squash(cluster)
 
     @cli.SMBCommand('cluster rm', perm='rw')
-    def cluster_rm(self, cluster_id: str) -> results.Result:
+    def cluster_rm(
+        self,
+        cluster_id: str,
+        password_filter: PasswordFilter = PasswordFilter.NONE,
+    ) -> results.Result:
         """Remove an smb cluster"""
         cluster = resources.RemovedCluster(cluster_id=cluster_id)
-        return self._handler.apply([cluster]).one()
+        return self._apply_res(
+            [cluster], password_filter_out=password_filter
+        ).one()
 
     @cli.SMBCommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[str]:
@@ -360,7 +376,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 subvolume=subvolume,
             ),
         )
-        return self._handler.apply([share], create_only=True).one()
+        return self._apply_res([share], create_only=True).one()
 
     @cli.SMBCommand('share rm', perm='rw')
     def share_rm(self, cluster_id: str, share_id: str) -> results.Result:
@@ -368,7 +384,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share = resources.RemovedShare(
             cluster_id=cluster_id, share_id=share_id
         )
-        return self._handler.apply([share]).one()
+        return self._apply_res([share]).one()
 
     @cli.SMBCommand("show", perm="r")
     def show(
