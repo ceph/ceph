@@ -121,7 +121,8 @@ def task(ctx, config):
                           '{tdir}/archive/coverage',
                           'rados',
 			  '--no-log-to-stderr',
-                          '--name', role]
+                          '--name', role] +
+                          ['-t', str(concurrency)]
                           + size + objectsize +
                           ['-p' , pool,
                           'bench', str(config.get('time', 360)), runtype,
