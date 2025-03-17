@@ -426,7 +426,7 @@ class SubvolumeBase(object):
             raise VolumeException(-e.args[0], e.args[1])
 
         subvolstat = self.fs.stat(path)
-        if newsize > 0 and newsize < subvolstat.st_size:
+        if 0 < newsize < subvolstat.st_size:
             if noshrink:
                 raise VolumeException(-errno.EINVAL,
                                       "Can't resize the subvolume. "
