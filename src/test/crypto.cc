@@ -405,6 +405,49 @@ TEST(AES256KRB5, Encrypt) {
   delete kh;
 }
 
+TEST(AES256KRB5, EncryptNoBl) {
+  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+  unsigned char secret_s[] = {
+      0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
+      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 };
+
+  bufferptr secret((char *)secret_s, sizeof(secret_s));
+
+  unsigned char confounder_data[] = { 0xB8, 0x0D, 0x32, 0x51, 0xC1, 0xF6, 0x47, 0x14, 0x94, 0x25, 0x6F, 0xFE, 0x71, 0x2D, 0x0B, 0x9A };
+  const CryptoKey::in_slice_t confounder_slice { sizeof(confounder_data), confounder_data };
+
+  unsigned char plaintext_s[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
+
+  std::string error;
+  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, 2, error));
+
+  const CryptoKey::in_slice_t plain_slice { sizeof(plaintext_s), plaintext_s };
+
+  // we need to deduce size first
+  const CryptoKey::out_slice_t probe_slice { 0, nullptr };
+  const auto needed = kh->encrypt_ext(g_ceph_context, plain_slice, &confounder_slice, probe_slice);
+  ASSERT_GE(needed, plain_slice.length);
+
+  boost::container::small_vector<
+    // FIXME?
+    //unsigned char, sizeof(plaintext) + kh->get_block_size()> buf;
+    unsigned char, sizeof(plaintext_s) + 16> buf(needed);
+  const CryptoKey::out_slice_t cipher_slice { needed, buf.data() };
+  const auto cipher_size = kh->encrypt_ext(g_ceph_context, plain_slice, &confounder_slice, cipher_slice);
+  ASSERT_EQ(cipher_size, needed);
+
+  unsigned char want_cipher[] = {
+      0x4E, 0xD7, 0xB3, 0x7C, 0x2B, 0xCA, 0xC8, 0xF7, 0x4F, 0x23, 0xC1, 0xCF, 0x07, 0xE6, 0x2B, 0xC7,
+      0xB7, 0x5F, 0xB3, 0xF6, 0x37, 0xB9, 0xF5, 0x59, 0xC7, 0xF6, 0x64, 0xF6, 0x9E, 0xAB, 0x7B, 0x60,
+      0x92, 0x23, 0x75, 0x26, 0xEA, 0x0D, 0x1F, 0x61, 0xCB, 0x20, 0xD6, 0x9D, 0x10, 0xF2
+  };
+
+  ASSERT_EQ(sizeof(want_cipher), cipher_size);
+
+  const int err = memcmp(buf.data(), want_cipher, sizeof(want_cipher));
+  ASSERT_EQ(0, err);
+}
+
 TEST(AES256KRB5, Decrypt) {
   auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
   unsigned char secret_s[] = {
