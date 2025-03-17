@@ -255,7 +255,7 @@ public:
   int validate_secret(const bufferptr& secret) override {
     return 0;
   }
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override {
+  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, uint32_t usage, string& error) override {
     return new CryptoNoneKeyHandler;
   }
 };
@@ -273,7 +273,7 @@ public:
   }
   int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, uint32_t usage /* unused */, string& error) override;
 };
 
 // when we say AES, we mean AES-128
@@ -477,8 +477,9 @@ int CryptoAES::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
-					     string& error)
+CryptoKeyHandler *CryptoAES::get_key_handler_ext(const bufferptr& secret,
+                                                 uint32_t usage,
+                                                 string& error)
 {
   CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
   ostringstream oss;
@@ -505,7 +506,7 @@ public:
   }
   int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, uint32_t usage, string& error) override;
 };
 
 static constexpr const std::size_t AES256KRB5_KEY_LEN{32};
@@ -717,11 +718,11 @@ public:
   using CryptoKeyHandler::encrypt;
   using CryptoKeyHandler::decrypt;
 
-  int init(const ceph::bufferptr& s, ostringstream& err) {
+  int init(const ceph::bufferptr& s, uint32_t usage, ostringstream& err) {
     cipher = EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL);
     secret = s;
 
-    int r = calc_kx(secret, 0x2 /* usage */,
+    int r = calc_kx(secret, usage,
                     0x55 /* Ki type */,
                     AES256KRB5_HASH_LEN /* 192 bit */,
                     ki,
@@ -731,7 +732,7 @@ public:
     }
     ki_raw = reinterpret_cast<const unsigned char *>(ki.c_str()); /* needed so that we can use ki in const methods */
 
-    r = calc_kx(secret, 0x2 /* usage */,
+    r = calc_kx(secret, usage,
                 0xAA /* Ke type */,
                 32 /* 256 bit */,
                 ke,
@@ -902,12 +903,13 @@ int CryptoAES256KRB5::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-CryptoKeyHandler *CryptoAES256KRB5::get_key_handler(const bufferptr& secret,
-					     string& error)
+CryptoKeyHandler *CryptoAES256KRB5::get_key_handler_ext(const bufferptr& secret,
+                                                        uint32_t usage,
+                                                        string& error)
 {
   CryptoAES256KRB5KeyHandler *ckh = new CryptoAES256KRB5KeyHandler;
   ostringstream oss;
-  if (ckh->init(secret, oss) < 0) {
+  if (ckh->init(secret, usage, oss) < 0) {
     error = oss.str();
     delete ckh;
     return NULL;
