@@ -155,18 +155,28 @@ int CryptoRandom::open_urandom()
 // fallback implementation of the bufferlist-free
 // interface.
 
-std::size_t CryptoKeyHandler::encrypt(
+std::size_t CryptoKeyHandler::encrypt_ext(
   CephContext *cct,
   const CryptoKeyHandler::in_slice_t& in,
+  const CryptoKeyHandler::in_slice_t *confounder,
   const CryptoKeyHandler::out_slice_t& out) const
 {
+  if (out.buf == nullptr) {
+    return enc_size(in, confounder);
+  }
+
   ceph::bufferptr inptr(reinterpret_cast<const char*>(in.buf), in.length);
   ceph::bufferlist plaintext;
   plaintext.append(std::move(inptr));
 
+  ceph::bufferlist confounder_bl;
+  if (confounder) {
+    ceph::bufferptr cfp(reinterpret_cast<const char*>(confounder->buf), confounder->length);
+    confounder_bl.append(std::move(cfp));
+  }
   ceph::bufferlist ciphertext;
   std::string error;
-  const int ret = encrypt(cct, plaintext, ciphertext, &error);
+  const int ret = encrypt_ext(cct, plaintext, (confounder ? &confounder_bl : nullptr), ciphertext, &error);
   if (ret != 0 || !error.empty()) {
     throw std::runtime_error(std::move(error));
   }
@@ -227,11 +237,11 @@ public:
     : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_0B()) {
   }
 
-  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::encrypt_ext;
   using CryptoKeyHandler::decrypt;
 
-  int encrypt(CephContext *cct, const bufferlist& in,
-	       bufferlist& out, std::string *error) const override {
+  int encrypt_ext(CephContext *cct, const bufferlist& in, const bufferlist *confounder,
+                  bufferlist& out, std::string *error) const override {
     out = in;
     return 0;
   }
@@ -289,6 +299,9 @@ public:
     : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
   }
 
+  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::encrypt_ext;
+
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
 
@@ -311,7 +324,8 @@ public:
     return 0;
   }
 
-  int encrypt(CephContext *cct, const ceph::bufferlist& in,
+  int encrypt_ext(CephContext *cct, const ceph::bufferlist& in,
+                  const bufferlist *confounder /* ignored */,
 	      ceph::bufferlist& out,
               std::string* /* unused */) const override {
     ldout(cct, 20) << "CryptoAESKeyHandler::encrypt()" << dendl;
@@ -387,12 +401,17 @@ public:
     return 0;
   }
 
+  std::size_t enc_size(const in_slice_t& in,
+                       const in_slice_t *confounder) const override {
+    // 16 + p2align(10, 16) -> 16
+    // 16 + p2align(16, 16) -> 32
+    return AES_BLOCK_LEN + p2align<std::size_t>(in.length, AES_BLOCK_LEN);
+  }
+
   std::size_t encrypt(CephContext *cct, const in_slice_t& in,
 		      const out_slice_t& out) const override {
     if (out.buf == nullptr) {
-      // 16 + p2align(10, 16) -> 16
-      // 16 + p2align(16, 16) -> 32
-      return AES_BLOCK_LEN + p2align<std::size_t>(in.length, AES_BLOCK_LEN);
+      return enc_size(in, nullptr);
     }
 
     // how many bytes of in.buf hang outside the alignment boundary and how
@@ -715,8 +734,9 @@ public:
   CryptoAES256KRB5KeyHandler() : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
   }
 
-  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::encrypt_ext;
   using CryptoKeyHandler::decrypt;
+  using CryptoKeyHandler::encrypt;
 
   int init(const ceph::bufferptr& s, uint32_t usage, ostringstream& err) {
     cipher = EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL);
@@ -880,6 +900,11 @@ public:
 	      ceph::bufferlist& out,
               std::string* unused) const override {
     return encrypt_ext(cct, in, nullptr,  out, unused);
+  }
+
+  std::size_t enc_size(const in_slice_t& in,
+                       const in_slice_t *confounder) const override {
+    return 24 + (confounder ? confounder->length : 0 ) + in.length;
   }
 };
 
