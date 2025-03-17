@@ -575,3 +575,9 @@ Relevant tracker: https://tracker.ceph.com/issues/57090
 set using the `fs set` command. This flag prevents using a standby for another
 file system (join_fs = X) when standby for the current filesystem is not available.
 Relevant tracker: https://tracker.ceph.com/issues/61599
+
+* MDS now uses host errors, as defined in errno.cc, for current platform.
+errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
+All CEPHFS_E* defines have been removed across Ceph (including the python binding).
+Relevant tracker: https://tracker.ceph.com/issues/64611

@@ -31,6 +31,9 @@ public:
     : Message{MSG_COMMAND_REPLY}, r(_r) {
     header.tid = m->get_tid();
   }
+  // MDS now uses host errors, as defined in errno.cc, for current platform.
+  // errorcode32_t is converting, internally, the error code from host to ceph, when encoding, and vice versa,
+  // when decoding, resulting having LINUX codes on the wire, and HOST code on the receiver.
   MCommandReply(int _r, std::string_view s)
     : Message{MSG_COMMAND_REPLY},
       r(_r), rs(s) { }
