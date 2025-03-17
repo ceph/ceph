@@ -1,4 +1,5 @@
-<cds-overflow-menu [customTrigger]="customTrigger"
+<cds-overflow-menu [customTrigger]="customTrigger" 
+                   (click) ="closeModal()"
                    [flip]="true">
   <li class="cds--overflow-menu-options__option mb-2"
       *ngIf="userPermission.read">
