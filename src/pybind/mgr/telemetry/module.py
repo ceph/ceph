@@ -837,7 +837,7 @@ class Module(MgrModule):
         perf_counters = self.get_perf_counters()
 
         # Initialize 'result' dict
-        result = defaultdict(lambda: defaultdict(dict))
+        result: Dict[str, dict] = defaultdict(lambda: defaultdict(list))
 
         # 'separated' mode
         anonymized_daemon_dict = {}
@@ -876,7 +876,7 @@ class Module(MgrModule):
                 result[daemon][collection] = []
 
                 for sub_collection in sub_collection_list:
-                    sub_collection_result = defaultdict(lambda: defaultdict(dict))
+                    sub_collection_result: Dict[str, dict] = defaultdict(lambda: defaultdict(dict))
                     sub_collection_result['labels'] = sub_collection['labels']
                     for sub_collection_counter_name, sub_collection_counter_info in sub_collection['counters'].items():
                         if mode == 'separated':
