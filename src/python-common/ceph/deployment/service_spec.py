@@ -2,6 +2,7 @@ import fnmatch
 import os
 import re
 import enum
+from enum import Enum
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
@@ -32,6 +33,12 @@ from ceph.utils import is_hex
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
+
+
+class CertificateSource(Enum):
+    SPEC_EMBEDDED = "spec-embedded"
+    CEPHADM_USER_PROVIDED = "cephadm-user-provided"
+    CEPHADM_SIGNED = "cephadm-signed"
 
 
 def handle_type_error(method: FuncT) -> FuncT:
@@ -865,6 +872,8 @@ class ServiceSpec(object):
                  placement: Optional[PlacementSpec] = None,
                  count: Optional[int] = None,
                  config: Optional[Dict[str, str]] = None,
+                 ssl: bool = False,
+                 certificate_source: str = CertificateSource.SPEC_EMBEDDED.value,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
@@ -888,6 +897,9 @@ class ServiceSpec(object):
         #: The name of the service. Required for ``iscsi``, ``nvmeof``, ``mds``, ``nfs``, ``osd``,
         #: ``rgw``, ``container``, ``ingress``
         self.service_id = None
+
+        self.certificate_source = certificate_source
+        self.ssl = ssl
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
             self.service_id = service_id
@@ -1217,6 +1229,7 @@ class RGWSpec(ServiceSpec):
                  rgw_frontend_extra_args: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
+                 certificate_source: str = CertificateSource.SPEC_EMBEDDED.value,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
@@ -1243,6 +1256,8 @@ class RGWSpec(ServiceSpec):
 
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
+            ssl=ssl,
+            certificate_source=certificate_source,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
@@ -1675,6 +1690,7 @@ class IscsiServiceSpec(ServiceSpec):
                  api_user: Optional[str] = 'admin',
                  api_password: Optional[str] = 'admin',
                  api_secure: Optional[bool] = None,
+                 ssl: Optional[bool] = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
@@ -1689,6 +1705,7 @@ class IscsiServiceSpec(ServiceSpec):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
+                                               ssl=ssl,
                                                preview_only=preview_only,
                                                config=config, networks=networks,
                                                extra_container_args=extra_container_args,
@@ -1775,6 +1792,7 @@ class IngressSpec(ServiceSpec):
             'ingress', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            ssl=ssl,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
@@ -1854,6 +1872,8 @@ class MgmtGatewaySpec(ServiceSpec):
                  disable_https: Optional[bool] = False,
                  enable_auth: Optional[bool] = False,
                  port: Optional[int] = None,
+                 ssl: Optional[bool] = True,
+                 certificate_source=CertificateSource.CEPHADM_SIGNED.value,
                  ssl_certificate: Optional[str] = None,
                  ssl_certificate_key: Optional[str] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
@@ -1879,6 +1899,8 @@ class MgmtGatewaySpec(ServiceSpec):
             'mgmt-gateway', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            ssl=ssl,
+            certificate_source=certificate_source,
             preview_only=preview_only,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -1995,7 +2017,9 @@ class OAuth2ProxySpec(ServiceSpec):
                  oidc_issuer_url: Optional[str] = None,
                  redirect_url: Optional[str] = None,
                  cookie_secret: Optional[str] = None,
+                 ssl: Optional[bool] = True,
                  ssl_certificate: Optional[str] = None,
+                 certificate_source=CertificateSource.CEPHADM_SIGNED.value,
                  ssl_certificate_key: Optional[str] = None,
                  allowlist_domains: Optional[List[str]] = None,
                  unmanaged: bool = False,
@@ -2009,6 +2033,8 @@ class OAuth2ProxySpec(ServiceSpec):
             'oauth2-proxy', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            ssl=ssl,
+            certificate_source=certificate_source,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
@@ -2323,6 +2349,8 @@ class MonitoringSpec(ServiceSpec):
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
+            ssl=True,
+            certificate_source=CertificateSource.CEPHADM_SIGNED.value,
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
