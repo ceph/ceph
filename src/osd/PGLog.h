@@ -260,6 +260,14 @@ public:
 	});
     }
 
+    void skip_can_rollback_to_to_head(pg_info_t *info, LogEntryHandler *h) {
+      advance_can_rollback_to(
+	head,
+        [&](pg_log_entry_t &entry) {
+	  h->partialwrite(info, entry);
+	});
+    }
+
     void skip_can_rollback_to_to_head() {
       advance_can_rollback_to(head, [&](const pg_log_entry_t &entry) {});
     }
@@ -842,8 +850,9 @@ public:
       h);
   }
 
-  void skip_rollforward() {
-    log.skip_can_rollback_to_to_head();
+  void skip_rollforward(pg_info_t *info, LogEntryHandler *h) {
+    // Update pwlc during backfill
+    log.skip_can_rollback_to_to_head(info, h);
   }
 
   //////////////////// get or std::set log & missing ////////////////////

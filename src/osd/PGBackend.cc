@@ -396,7 +396,7 @@ void PGBackend::partialwrite(
 		       << " entry = " << entry << dendl;
     ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW written_shards=" << entry.written_shards
 		       << " present_shards=" << entry.present_shards << dendl;
-    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW before partial_writes_last_complete=" << info->partial_writes_last_complete << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW before pwlc=" << info->partial_writes_last_complete << dendl;
     const pg_pool_t &pool = get_parent()->get_pool();
     for (unsigned int shard = 0; shard < get_parent()->get_pool().size; shard++) {
       if (pool.is_nonprimary_shard(shard_id_t(shard))) {
@@ -411,6 +411,7 @@ void PGBackend::partialwrite(
 	    info->partial_writes_last_complete[shard_id_t(shard)].second = entry.version;
 	  } else {
 	    // Subsequent partial write, discontiguous versions  - recovery will be required
+	    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW cannot update shard " << shard << " stuck at " << info->partial_writes_last_complete[shard_id_t(shard)] << dendl;
 	  }
         } else {
 	  // Log updated or shard absent, partial write entry not required
@@ -418,7 +419,7 @@ void PGBackend::partialwrite(
 	}
       }
     }
-    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW after partial_writes_last_complete=" << info->partial_writes_last_complete << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW after pwlc=" << info->partial_writes_last_complete << dendl;
   } else if (info != nullptr) {
     // All shard logs updated - no partial write entries not required
     if (!info->partial_writes_last_complete.empty()) {

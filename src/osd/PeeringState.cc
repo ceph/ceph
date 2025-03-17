@@ -319,35 +319,45 @@ void PeeringState::query_unfound(Formatter *f, string state)
 
 void PeeringState::update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo)
 {
-  peer_info[from] = oinfo;
   if (!oinfo.partial_writes_last_complete.empty()) {
-    // OSD has provided info which includes partial_writes_last_complete data.
+    // oinfo includes partial_writes_last_complete data.
     // Merge this with our copy keeping the most up to date versions
-    psdout(0) << "BILLPROCREPINFO osd." << from << " has partial_writes_last_complete info" << dendl;
+    psdout(0) << "BILLUPDATEPEERINFO osd." << from << " has pwlc=" << oinfo.partial_writes_last_complete << dendl;
     for (const auto & [shard, versionrange] : oinfo.partial_writes_last_complete) {
-      auto & [fromversion, toversion] = versionrange;
+      auto & [ofromversion, otoversion] = versionrange;
       if (info.partial_writes_last_complete.contains(shard)) {
-	if (info.partial_writes_last_complete[shard].second < fromversion) {
-          psdout(0) << "BILLPROCREPINFO osd." << from << " updating shard " << shard << " to " << versionrange << dendl;
+	auto & [fromversion, toversion] = info.partial_writes_last_complete[shard];
+	// Prefer pwlc with a newer toversion, if toverision matches prefer an
+	// older fromversion.
+	if ((otoversion > toversion) ||
+	    ((otoversion == toversion) && (ofromversion < fromversion))) {
+          psdout(0) << "BILLUPDATEPEERINFO osd." << from << " updating shard " << shard << " to " << versionrange << dendl;
 	  info.partial_writes_last_complete[shard] = versionrange;
 	}
       } else {
-        psdout(0) << "BILLPROCREPINFO osd." << from << " setting shard " << shard << " to " << versionrange << dendl;
+        psdout(0) << "BILLUPDATEPEERINFO osd." << from << " setting shard " << shard << " to " << versionrange << dendl;
 	info.partial_writes_last_complete[shard] = versionrange;
       }
     }
+    psdout(0) << "BILLUPDATEPEERINFO our pwlc=" << info.partial_writes_last_complete << dendl;
   }
-  if (info.partial_writes_last_complete.contains(from.shard)) {
+  // 3 cases:
+  // We are the primary - from is the shard that sent the oinfo
+  // We are a replica - from is the primary, it will not have pwlc infomation
+  // Merge - from is pg_whoami, oinfo is a source pg that is being merged
+  if ((from != pg_whoami) && info.partial_writes_last_complete.contains(from.shard)) {
     // Check if last_complete and last_update can be advanced based on knowledge of partial_writes
     const auto & [fromversion, toversion] = info.partial_writes_last_complete[from.shard];
-    if (fromversion <= peer_info[from].last_complete) {
-      psdout(0) << "BILLPROCREPINFO osd." << from << " has last_complete " << peer_info[from].last_complete << " but partial_writes_last_complete says its at " << toversion << dendl;
-      peer_info[from].last_complete = toversion;
-      if (toversion > peer_info[from].last_update) {
-	peer_info[from].last_update = toversion;
+    if (toversion > peer_info[from].last_complete) {
+      if (fromversion <= peer_info[from].last_complete) {
+	psdout(0) << "BILLUPDATEPEERINFO osd." << from << " has last_complete " << peer_info[from].last_complete << " but pwlc says its at " << toversion << dendl;
+	peer_info[from].last_complete = toversion;
+	if (toversion > peer_info[from].last_update) {
+	  peer_info[from].last_update = toversion;
+	}
+      } else {
+	psdout(0) << "BILLUPDATEPEERINFO osd." << from << " has last_complete " << peer_info[from].last_complete << " cannot apply pwlc from " << fromversion << " to " << toversion << dendl;
       }
-    } else if (toversion > peer_info[from].last_complete) {
-      psdout(0) << "BILLPROCREPINFO osd." << from << " has last_complete " << peer_info[from].last_complete << " cannot apply partial_writes_last_complete from " << fromversion << " to " << toversion << dendl;
     }
   }
 }
@@ -372,6 +382,7 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
 
   psdout(10) << " got osd." << from << " " << oinfo << dendl;
   ceph_assert(is_primary());
+  peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
   might_have_unfound.insert(from);
 
@@ -3148,13 +3159,19 @@ void PeeringState::proc_primary_info(
   }
 }
 
-void PeeringState::consider_rollback_pwlc()
+void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
 {
   for (const auto & [shard, versionrange] : info.partial_writes_last_complete) {
-    auto & [fromversion, toversion] = versionrange;
-    if (info.last_complete < toversion) {
-      info.partial_writes_last_complete[shard].second = info.last_complete;
-      psdout(10) << "BILLPROCMASTERLOG shard " << shard << " pwlc was " << versionrange << " rolled back to " << info.partial_writes_last_complete[shard] << dendl;
+    auto [fromversion, toversion] = versionrange;
+    if (last_complete < fromversion) {
+      psdout(10) << "BILLPROCMASTERLOGa shard " << shard << " pwlc was " << versionrange << dendl;
+      info.partial_writes_last_complete[shard] = std::pair(last_complete,last_complete);
+      psdout(10) << "BILLPROCMASTERLOGa shard " << shard << " pwlc rolled back to " << info.partial_writes_last_complete[shard] << dendl;
+      ceph_assert(false); // FIXME: BILL - Don't think this should ever happen
+    } else if (last_complete < toversion) {
+      psdout(10) << "BILLPROCMASTERLOGb shard " << shard << " pwlc was " << versionrange << dendl;
+      info.partial_writes_last_complete[shard].second = last_complete;
+      psdout(10) << "BILLPROCMASTERLOGb shard " << shard << " pwlc rolled back to " << info.partial_writes_last_complete[shard] << dendl;
     }
   }
 }
@@ -3170,17 +3187,19 @@ void PeeringState::proc_master_log(
   if (info.partial_writes_last_complete.contains(from.shard)) {
     // Check if last_complete and last_update can be advanced based on knowledge of partial_writes
     const auto & [fromversion, toversion] = info.partial_writes_last_complete[from.shard];
-    if (fromversion <= oinfo.last_complete) {
-      psdout(0) << "BILLPROCMASTERLOG osd." << from << " has last_complete " << oinfo.last_complete << " but partial_writes_last_complete says its at " << toversion << dendl;
-      oinfo.last_complete = toversion;
-      if (toversion > oinfo.last_update) {
-	oinfo.last_update = toversion;
+    if (toversion > oinfo.last_complete) {
+      if (fromversion <= oinfo.last_complete) {
+	psdout(0) << "BILLPROCMASTERLOG osd." << from << " has last_complete " << oinfo.last_complete << " but pwlc says its at " << toversion << dendl;
+	oinfo.last_complete = toversion;
+	if (toversion > oinfo.last_update) {
+	  oinfo.last_update = toversion;
+	}
+	if (toversion > olog.head) {
+	  olog.head = toversion;
+	}
+      } else {
+	psdout(0) << "BILLPROCMASTERLOG osd." << from << " has last_complete " << oinfo.last_complete << " cannot apply pwlc from " << fromversion << " to " << toversion << dendl;
       }
-      if (toversion > olog.head) {
-	olog.head = toversion;
-      }
-    } else if (toversion > oinfo.last_complete) {
-      psdout(0) << "BILLPROCMASTERLOG osd." << from << " has last_complete " << oinfo.last_complete << " cannot apply partial_writes_last_complete from " << fromversion << " to " << toversion << dendl;
     }
   }
   // For partial writes we may be able to keep some of the divergent entries
@@ -3246,12 +3265,15 @@ void PeeringState::proc_master_log(
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
+  peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  consider_rollback_pwlc();
+  // our log is now authoritative - update pwlc information based
+  // on the log head
+  consider_rollback_pwlc(pg_log.get_head());
 
   // See doc/dev/osd_internals/last_epoch_started
   if (oinfo.last_epoch_started > info.last_epoch_started) {
@@ -3280,6 +3302,7 @@ void PeeringState::proc_replica_log(
 
   pg_log.proc_replica_log(oinfo, olog, omissing, from, pool.info.allows_ecoptimizations());
 
+  peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
   psdout(10) << " peer osd." << from << " now "
 	     << oinfo << " " << omissing << dendl;
@@ -3611,6 +3634,11 @@ void PeeringState::merge_from(
       psdout(10) << "taking source's past_intervals" << dendl;
       past_intervals = source->past_intervals;
     }
+
+    // merge pwlc
+    psdout(0) << "BILL: MERGE before pwlc=" << info.partial_writes_last_complete << dendl;
+    update_peer_info(pg_whoami, source->info);
+    psdout(0) << "BILL: MERGE after pwlc=" << info.partial_writes_last_complete << dendl;
   }
 
   info.last_complete = info.last_update;
@@ -4410,7 +4438,7 @@ void PeeringState::append_log(
       * from the backend and we do not end up in a situation, where the
       * object is deleted before we can _merge_object_divergent_entries().
       */
-    pg_log.skip_rollforward();
+    pg_log.skip_rollforward(&info, handler.get());
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
@@ -6707,22 +6735,25 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
     // Check if last_complete and last_update can be advanced based on knowledge of partial_writes
     const auto & [fromversion, toversion] = msg->info.partial_writes_last_complete[ps->pg_whoami.shard];
-    if (fromversion <= ps->info.last_complete) {
-      psdout(0) << "BILLMLOGREC2 we have last_complete " << ps->info.last_complete << " but partial_writes_last_complete from " << logevt.from << " says its at " << toversion << dendl;
-      ps->info.last_complete = toversion;
-      if (toversion > ps->info.last_update) {
-	ps->info.last_update = toversion;
+    if (toversion > ps->info.last_complete) {
+      if (fromversion <= ps->info.last_complete) {
+	psdout(0) << "BILLMLOGREC2 we have last_complete " << ps->info.last_complete << " but pwlc from " << logevt.from << " says its at " << toversion << dendl;
+	ps->info.last_complete = toversion;
+	if (toversion > ps->info.last_update) {
+	  ps->info.last_update = toversion;
+	}
+	// Need to do this to avoid an assert in merge log
+	if (msg->log.tail > ps->pg_log.get_head()) {
+	  psdout(0) << "BILLMLOGREC2 partial writes advancing log head from " << ps->pg_log.get_head() << " to " << toversion << dendl;
+	  ps->pg_log.set_head(toversion);
+	}
+      } else {
+	psdout(0) << "BILLMLOCREC2 we have last_complete " << ps->info.last_complete << " cannot apply pwlc from " << fromversion << " to " << toversion << dendl;
       }
-      // Need to do this to avoid an assert in merge log
-      if (msg->log.tail > ps->pg_log.get_head()) {
-	psdout(0) << "BILLMLOGREC2 partial writes advancing log head from " << ps->pg_log.get_head() << " to " << toversion << dendl;
-	ps->pg_log.set_head(toversion);
-      }
-    } else if (toversion > ps->info.last_complete) {
-      psdout(0) << "BILLMLOCREC2 we have last_complete " << ps->info.last_complete << " cannot apply partial_writes_last_complete from " << fromversion << " to " << toversion << dendl;
     }
   }
   ps->merge_log(t, logevt.msg->info, std::move(logevt.msg->log), logevt.from);
+  ps->update_peer_info(logevt.from, logevt.msg->info);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -6838,22 +6869,25 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
     if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
       // Check if last_complete and last_update can be advanced based on knowledge of partial_writes
       const auto & [fromversion, toversion] = msg->info.partial_writes_last_complete[ps->pg_whoami.shard];
-      if (fromversion <= ps->info.last_complete) {
-	psdout(0) << "BILLMLOGREC1 we have last_complete " << ps->info.last_complete << " but partial_writes_last_complete from " << logevt.from << " says its at " << toversion << dendl;
-	ps->info.last_complete = toversion;
-	if (toversion > ps->info.last_update) {
-	  ps->info.last_update = toversion;
+      if (toversion > ps->info.last_complete) {
+	if (fromversion <= ps->info.last_complete) {
+	  psdout(0) << "BILLMLOGREC1 we have last_complete " << ps->info.last_complete << " but pwlc from " << logevt.from << " says its at " << toversion << dendl;
+	  ps->info.last_complete = toversion;
+	  if (toversion > ps->info.last_update) {
+	    ps->info.last_update = toversion;
+	  }
+	  // Need to do this to avoid an assert in merge log
+	  if (msg->log.tail > ps->pg_log.get_head()) {
+	    psdout(0) << "BILLMLOGREC1 partial writes advancing log head from " << ps->pg_log.get_head() << " to " << toversion << dendl;
+	    ps->pg_log.set_head(toversion);
+	  }
+	} else {
+	  psdout(0) << "BILLMLOCREC1 we have last_complete " << ps->info.last_complete << " cannot apply pwlc from " << fromversion << " to " << toversion << dendl;
 	}
-	// Need to do this to avoid an assert in merge log
-	if (msg->log.tail > ps->pg_log.get_head()) {
-	  psdout(0) << "BILLMLOGREC1 partial writes advancing log head from " << ps->pg_log.get_head() << " to " << toversion << dendl;
-	  ps->pg_log.set_head(toversion);
-	}
-      } else if (toversion > ps->info.last_complete) {
-	psdout(0) << "BILLMLOCREC1 we have last_complete " << ps->info.last_complete << " cannot apply partial_writes_last_complete from " << fromversion << " to " << toversion << dendl;
       }
     }
     ps->merge_log(t, msg->info, std::move(msg->log), logevt.from);
+    ps->update_peer_info(logevt.from, msg->info);
   }
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -6902,14 +6936,21 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
     // Our last update must be in the range described by partial write
     // last_complete
     ceph_assert(ps->info.last_update >= pwlc.first);
-    // Last complete must match the partial write last_complete
-    ceph_assert(pwlc.second == infoevt.info.last_complete);
+    // Last complete must match the partial write last_update
+    // BILL: Was previous asserting it was == to last_complete but this caused problems when
+    // the primary had missing objects and rolled last complete backwards from last update
+    // to account for the missing objects. We got sent a log up to info.last_update and had
+    // all the entries so our last_update/complete matched the log head and the infoevt last_update,
+    // but then failed the overaggressive assert.
+    ceph_assert(pwlc.second == infoevt.info.last_update);
   } else {
     // Log must match after any divergent entries were rewound
     ceph_assert(infoevt.info.last_update == ps->info.last_update);
   }
   // Log must be consistent with info
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
+  // Update pwlc
+  ps->update_peer_info(infoevt.from, infoevt.info);
   post_event(Activate(infoevt.info.last_epoch_started));
   return transit<ReplicaActive>();
 }
@@ -7632,6 +7673,10 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
 	  p->version == pi.last_update) {
 	// Matched peer's head entry - see if we can advance last_update because of partial written shards
 	eversion_t old_last_update = pi.last_update;
+	if (ps->info.partial_writes_last_complete.contains(i->shard) &&
+	    ps->info.partial_writes_last_complete[i->shard].first < old_last_update) {
+	  old_last_update = ps->info.partial_writes_last_complete[i->shard].first;
+	}
 	++p;
 	while (p != ps->pg_log.get_log().log.end()) {
 	  psdout(0) << "BILL_GET_MISSING: log entry " << p->version << " has written_shards=" << p->written_shards << dendl;
@@ -7643,8 +7688,12 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
 	    // and will explain to PeeringState::Stray::react(const MInfoRec& infoevt) why last_update and complete
 	    // have been advanced
 	    if (ps->info.partial_writes_last_complete.contains(i->shard)) {
-		ps->info.partial_writes_last_complete.at(i->shard).second = p->version;
+	      // Existing pwlc entry - only update if p->version is newer
+	      if (ps->info.partial_writes_last_complete[i->shard].second < p->version) {
+		ps->info.partial_writes_last_complete[i->shard] = std::pair(old_last_update, p->version);
+	      }
 	    } else {
+	      // No existing pwlc entry - create one
 	      ps->info.partial_writes_last_complete[i->shard] = std::pair(old_last_update, p->version);
 	    }
 	    psdout(0) << "BILL_GET_MISSING2: " << i->shard << " pwlc=" << ps->info.partial_writes_last_complete.at(i->shard) << dendl;
@@ -7800,6 +7849,7 @@ boost::statechart::result PeeringState::WaitUpThru::react(const MLogRec& logevt)
   DECLARE_LOCALS;
   psdout(10) << "Noting missing from osd." << logevt.from << dendl;
   ps->peer_missing[logevt.from].claim(std::move(logevt.msg->missing));
+  ps->peer_info[logevt.from] = logevt.msg->info;
   ps->update_peer_info(logevt.from, logevt.msg->info);
   return discard_event();
 }

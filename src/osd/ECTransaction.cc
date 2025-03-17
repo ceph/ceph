@@ -432,6 +432,9 @@ void ECTransaction::generate_transactions(
 
       if (op.is_fresh_object() && entry) {
 	entry->mod_desc.create();
+	// Mark all shards written for new objects so that pwlc advances,
+	// having no log entries at all for a shard causes recovery problems
+	entry->written_shards.insert_range(shard_id_t(0),sinfo.get_k_plus_m());
       }
 
       match(
