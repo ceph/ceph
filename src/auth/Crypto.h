@@ -227,8 +227,14 @@ public:
   virtual int get_type() const = 0;
   virtual int create(CryptoRandom *random, ceph::buffer::ptr& secret) = 0;
   virtual int validate_secret(const ceph::buffer::ptr& secret) = 0;
+  virtual CryptoKeyHandler *get_key_handler_ext(const ceph::buffer::ptr& secret,
+                                                uint32_t usage,
+                                                std::string& error) = 0;
+
   virtual CryptoKeyHandler *get_key_handler(const ceph::buffer::ptr& secret,
-					    std::string& error) = 0;
+                                            std::string& error) {
+    return get_key_handler_ext(secret, 0, error);
+  }
 
   static CryptoHandler *create(int type);
 };
