@@ -50,7 +50,8 @@ public:
     virtual bufferlist read(uint32_t object_offset, uint32_t object_length) = 0;
   };
   Writer(BlueStore* bstore, TransContext* txc, WriteContext* wctx, OnodeRef o)
-    :bstore(bstore), txc(txc), wctx(wctx), onode(o) {
+    :left_shard_bound(0), right_shard_bound(OBJECT_MAX_SIZE)
+    , bstore(bstore), txc(txc), wctx(wctx), onode(o) {
       pp_mode = debug_level_to_pp_mode(bstore->cct);
     }
 public:
@@ -67,7 +68,10 @@ public:
   read_divertor* test_read_divertor = nullptr;
   std::vector<BlobRef> pruned_blobs;
   volatile_statfs statfs_delta;
-
+  uint32_t left_shard_bound;  // if sharding is in effect,
+  uint32_t right_shard_bound; // do not cross this line
+  uint32_t left_affected_range;
+  uint32_t right_affected_range;
 private:
   BlueStore* bstore;
   TransContext* txc;
@@ -140,8 +144,15 @@ private:
   void _align_to_disk_block(
     uint32_t& location,
     uint32_t& ref_end,
-    blob_vec& blobs
-  );
+    blob_vec& blobs);
+
+  void _place_extent_in_blob(
+    Extent* target,
+    uint32_t map_begin,
+    uint32_t map_end,
+    uint32_t in_blob_offset);
+
+  void _maybe_meld_with_prev_extent(exmp_it after_punch_it);
 
   inline void _blob_put_data_subau(
     Blob* blob,
