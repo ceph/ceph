@@ -1081,8 +1081,13 @@ int BlueFS::mount()
     goto out;
   }
 
+  selected_wal_v2 = cct->_conf.get_val<bool>("bluefs_wal_v2");
+  log.use_wal_v2 = selected_wal_v2;
   // init freelist
   for (auto& p : nodes.file_map) {
+    if (p.second->is_new_wal()) {
+      log.use_wal_v2 = true;
+    }
     dout(20) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
       bool is_shared = is_shared_alloc(q.bdev);
@@ -1236,15 +1241,10 @@ int BlueFS::fsck()
   return 0;
 }
 
-int BlueFS::_write_super(int dev, uint8_t wal_version)
+int BlueFS::_write_super(int dev)
 {
   ++super.seq;
-  if (wal_version > 0) {
-    super.wal_version = wal_version;
-  } else {
-    bool use_wal_v2 = cct->_conf.get_val<bool>("bluefs_wal_v2");
-    super.wal_version = use_wal_v2 ? 2 : 1;
-  }
+  super.wal_version = log.use_wal_v2 ? 2 : 1;
   // build superblock
   bufferlist bl;
   encode(super, bl);
@@ -2270,10 +2270,11 @@ int BlueFS::downgrade_wal_to_v1()
     }
   }
 
+  selected_wal_v2 = false;
   // Ensure no dangling wal v2 files are inside transactions.
   _compact_log_sync_LNF_LD();
-  // TODO assert on presence of wal_v2
-  _write_super(BDEV_DB, 1);
+  ceph_assert(!log.use_wal_v2);
+  _write_super(BDEV_DB);
 
   dout(5) << fmt::format("{} success moving data", __func__) << dendl;
 
@@ -2878,7 +2879,7 @@ void BlueFS::_compact_log_dump_metadata_NF(uint64_t start_seq,
   t->uuid = super.uuid;
 
   std::lock_guard nl(nodes.lock);
-
+  bool all_wal_is_v1 = true;
   for (auto& [ino, file_ref] : nodes.file_map) {
     if (ino == 1)
       continue;
@@ -2915,6 +2916,13 @@ void BlueFS::_compact_log_dump_metadata_NF(uint64_t start_seq,
                << file_ref->dirty_seq << " " << file_ref->fnode << dendl;
     }
     t->op_file_update(file_ref->fnode);
+    if (file_ref->is_new_wal()) {
+      all_wal_is_v1 = false;
+    }
+  }
+  if (all_wal_is_v1) {
+    // we are free to select now
+    log.use_wal_v2 = selected_wal_v2;
   }
   for (auto& [path, dir_ref] : nodes.dir_map) {
     dout(20) << __func__ << " op_dir_create " << path << dendl;
@@ -4626,12 +4634,10 @@ int BlueFS::open_for_write(
 
   file->fnode.mtime = ceph_clock_now();
   dout(20) << __func__ << " mapping " << dirname << "/" << filename
-	   << " vsel_hint " << file->vselector_hint
-	   << dendl;
-	*h = _create_writer(file);
-	if (boost::algorithm::ends_with(filename, ".log")) {
-	  bool use_wal_v2 = cct->_conf.get_val<bool>("bluefs_wal_v2");
-    if (use_wal_v2) {
+    << " vsel_hint " << file->vselector_hint << dendl;
+  *h = _create_writer(file);
+  if (boost::algorithm::ends_with(filename, ".log")) {
+    if (selected_wal_v2) {
       file->fnode.type = WAL_V2;
       file->is_wal_read_loaded = false;
       file->wal_marker = File::wal_flush_t::generate_hashed_marker(super.uuid, file->fnode.ino);
