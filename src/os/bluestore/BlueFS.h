@@ -301,33 +301,21 @@ public:
         return sizeof(wal_marker_t);
       }
 
-      uint64_t end_offset() {
-        return get_marker_offset() + tail_size();
-      }
-
-      uint64_t get_payload_offset() {
-        return wal_offset + header_size();
-      }
-
-      uint64_t get_marker_offset() {
-        return get_payload_offset() + wal_length;
-      }
-
-      static constexpr uint64_t extra_envelope_size_on_front_and_tail() {
-        return header_size() + tail_size();
-      }
-
       static wal_marker_t generate_hashed_marker(uuid_d uuid, uint64_t ino) {
         wal_marker_t m;
-        uint8_t uuid_copy[16];
-        memcpy(uuid_copy, uuid.bytes(), 16);
+        const char* uuid_bytes = uuid.bytes();
         uint64_t hashed_ino = ino;
         hashed_ino ^= hashed_ino << 5;
         hashed_ino ^= hashed_ino << 11;
         hashed_ino ^= hashed_ino << 23;
         // use hashed ino in a endiness-agnostic way
+        // U0  U1  U2  U3  U4  U5  U6  U7
+        // U8  U9  U10 U11 U12 U13 U14 U15
+        // H0  H1  H2  H3  H4  H5  H6  H7
+        // ^   ^   ^   ^   ^   ^   ^   ^
+        // m0  m1  m2  m3  m4  m5  m6  m7
         for (int i = 0; i < 8; i++) {
-          m.v[i] = uuid_copy[i] ^ uuid_copy[8 + i] ^ (hashed_ino >> (8 * i));
+          m.v[i] = uuid_bytes[i] ^ uuid_bytes[8 + i] ^ (hashed_ino >> (8 * i));
         }
         return m;
       }
@@ -573,12 +561,14 @@ private:
 
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
+  bool selected_wal_v2 = false; ///< conf "bluefs_wal_v2" at mount
 
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
     uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
     FileWriter *writer = 0;
     bluefs_transaction_t t;
+    bool use_wal_v2 = false; //version of log currently in force
   } log;
 
   struct {
@@ -755,7 +745,7 @@ private:
     char *out);      ///< [out] optional: or copy it here
 
   int _open_super();
-  int _write_super(int dev, uint8_t wal_version = 1);
+  int _write_super(int dev);
   int _check_allocations(const bluefs_fnode_t& fnode,
     boost::dynamic_bitset<uint64_t>* used_blocks,
     bool is_alloc, //true when allocating, false when deallocating
