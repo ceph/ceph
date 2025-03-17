@@ -168,7 +168,7 @@ public:
   void expect_flush_io(MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, send(_))
       .WillOnce(Invoke([&mock_image_ctx, r](io::ImageDispatchSpec* spec) {
-                  ASSERT_TRUE(boost::get<io::ImageDispatchSpec::Flush>(
+                  ASSERT_TRUE(std::get_if<io::ImageDispatchSpec::Flush>(
                     &spec->request) != nullptr);
                   spec->dispatch_result = io::DISPATCH_RESULT_COMPLETE;
                   auto aio_comp = spec->aio_comp;
