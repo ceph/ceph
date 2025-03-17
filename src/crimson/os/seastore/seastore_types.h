@@ -1793,7 +1793,7 @@ enum class omap_type_t : uint8_t {
   XATTR = 0,
   OMAP,
   LOG,
-  NUM_TYPES
+  NONE
 };
 std::ostream &operator<<(std::ostream &out, const omap_type_t &type);
 
@@ -1802,7 +1802,7 @@ struct omap_root_t {
   depth_t depth = 0;
   laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
-  omap_type_t type = omap_type_t::NUM_TYPES;
+  omap_type_t type = omap_type_t::NONE;
 
   omap_root_t() = default;
   omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
@@ -1853,7 +1853,7 @@ std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
 class __attribute__((packed)) omap_root_le_t {
   laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
   depth_le_t depth = init_depth_le(0);
-  omap_type_t type = omap_type_t::NUM_TYPES;
+  omap_type_t type = omap_type_t::NONE;
 
 public: 
   omap_root_le_t() = default;
