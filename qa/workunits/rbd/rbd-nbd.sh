@@ -124,6 +124,20 @@ unmap_device()
     sleep 0.5
 }
 
+function wait_for_blockdev_size() {
+    local dev=$1
+    local size=$2
+
+    for s in 0.25 0.5 0.75 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.25 3.5 3.75; do
+        if (( $(sudo blockdev --getsize64 $dev) == $size )); then
+            return 0
+        fi
+        sleep $s
+    done
+
+    return 1
+}
+
 #
 # main
 #
@@ -205,17 +219,19 @@ used=`rbd -p ${POOL} --format xml du ${IMAGE} |
 unmap_device ${DEV} ${PID}
 
 # resize test
+# also test that try-netlink option is accepted for compatibility
 DEV=`_sudo rbd device -t nbd -o try-netlink map ${POOL}/${IMAGE}`
 get_pid ${POOL}
 devname=$(basename ${DEV})
 blocks=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks}"
 rbd resize ${POOL}/${IMAGE} --size $((SIZE * 2))M
-rbd info ${POOL}/${IMAGE}
+wait_for_blockdev_size ${DEV} $(((SIZE * 2) << 20))
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq $((blocks * 2))
 rbd resize ${POOL}/${IMAGE} --allow-shrink --size ${SIZE}M
+wait_for_blockdev_size ${DEV} $((SIZE << 20))
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
@@ -391,7 +407,7 @@ cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
-OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --show-cookie map ${POOL}/${IMAGE}`
 read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo mount ${DEV} ${TEMPDIR}/mnt
@@ -419,7 +435,7 @@ _sudo umount ${TEMPDIR}/mnt
 unmap_device ${DEV} ${PID}
 # if kernel supports cookies
 if [ -n "${COOKIE}" ]; then
-    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" --options try-netlink map ${POOL}/${IMAGE}`
+    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" map ${POOL}/${IMAGE}`
     read DEV ANOTHER_COOKIE <<< "${OUT}"
     get_pid ${POOL}
     test "${ANOTHER_COOKIE}" = "abc de"
@@ -429,7 +445,7 @@ DEV=
 
 # test detach/attach with --snap-id
 SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
-OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
 read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo rbd device detach ${POOL}/${IMAGE} --snap-id ${SNAPID} --device-type nbd
