@@ -376,7 +376,7 @@ TEST(AES256KRB5, Encrypt) {
 
   bufferlist cipher;
   std::string error;
-  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  CryptoKeyHandler *kh = h->get_key_handler_ext(secret, 2, error);
   int r = kh->encrypt_ext(g_ceph_context, plaintext, &confounder, cipher, &error);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
@@ -423,7 +423,7 @@ TEST(AES256KRB5, Decrypt) {
 
   std::string error;
   bufferlist plaintext;
-  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  CryptoKeyHandler *kh = h->get_key_handler_ext(secret, 2, error);
   int r = kh->decrypt(g_ceph_context, cipher, plaintext, &error);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
