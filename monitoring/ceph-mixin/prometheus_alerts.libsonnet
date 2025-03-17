@@ -896,7 +896,7 @@
           },
         },
         {
-          alert: 'NVMeoFSingleGatewayGroup',
+          alert: 'NVMeoFSingleGateway',
           'for': '5m',
           expr: 'count(ceph_nvmeof_gateway_info) by(cluster,group) == 1',
           labels: { severity: 'warning', type: 'ceph_default' },

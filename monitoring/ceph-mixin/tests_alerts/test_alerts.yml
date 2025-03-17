@@ -2482,7 +2482,7 @@ tests:
           summary: "Max gateway groups exceeded on cluster mycluster"
           description: "You may create many gateway groups, but 4 is the tested limit"
 
- # NVMeoFSingleGatewayGroup
+ # NVMeoFSingleGateway
  - interval: 1m
    input_series:
     - series: 'ceph_nvmeof_gateway_info{group="group-1",addr="1.1.1.2",cluster="mycluster"}'
@@ -2499,7 +2499,7 @@ tests:
            value: 1
    alert_rule_test:
     - eval_time: 5m
-      alertname: NVMeoFSingleGatewayGroup
+      alertname: NVMeoFSingleGateway
       exp_alerts:
       - exp_labels:
           group: group-1
