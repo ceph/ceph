@@ -245,10 +245,10 @@ TEST(AES, LoopCephxV2) {
   aes_loop_cephx<32>();
 }
 
-static void aes_loop(const std::size_t text_size) {
+static void cipher_loop(const std::size_t text_size, int type, int cipher_len) {
   CryptoRandom random;
 
-  bufferptr secret(16);
+  bufferptr secret(cipher_len);
   random.get_bytes(secret.c_str(), secret.length());
 
   bufferptr orig_plaintext(text_size);
@@ -260,7 +260,7 @@ static void aes_loop(const std::size_t text_size) {
   for (int i=0; i<10000; i++) {
     bufferlist cipher;
     {
-      auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
+      auto h = g_ceph_context->get_crypto_manager()->get_handler(type);
 
       std::string error;
       CryptoKeyHandler *kh = h->get_key_handler(secret, error);
@@ -273,7 +273,7 @@ static void aes_loop(const std::size_t text_size) {
     plaintext.clear();
 
     {
-      auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
+      auto h = g_ceph_context->get_crypto_manager()->get_handler(type);
       std::string error;
       CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
       int r = ckh->decrypt(g_ceph_context, cipher, plaintext, &error);
@@ -287,6 +287,10 @@ static void aes_loop(const std::size_t text_size) {
   bufferlist orig;
   orig.append(orig_plaintext);
   ASSERT_EQ(orig, plaintext);
+}
+
+static void aes_loop(const std::size_t text_size) {
+  cipher_loop(text_size, CEPH_CRYPTO_AES, 16);
 }
 
 TEST(AES, Loop) {
@@ -436,5 +440,21 @@ TEST(AES256KRB5, Decrypt) {
   ASSERT_EQ(0, err);
 
   delete kh;
+}
+
+static void aes256krb5_loop(const std::size_t text_size) {
+  cipher_loop(text_size, CEPH_CRYPTO_AES256KRB5, 32);
+}
+
+TEST(AES256KRB5, Loop) {
+  aes256krb5_loop(256);
+}
+
+TEST(AES256KRB5, Loop_29) {
+  aes256krb5_loop(29);
+}
+
+TEST(AES256KRB5, Loop_32) {
+  aes256krb5_loop(32);
 }
 
