@@ -94,6 +94,8 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   if (!pool.ns.empty()) {
     ioctx.set_namespace(pool.ns);
   }
+  // at pool quota, never block waiting for space - we want to error immediately
+  ioctx.set_pool_full_try();
   return 0;
 }
 
