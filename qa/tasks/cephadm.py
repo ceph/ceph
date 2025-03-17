@@ -28,6 +28,7 @@ from teuthology.config import config as teuth_config
 from teuthology.exceptions import ConfigError, CommandFailedError
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks.daemonwatchdog import DaemonWatchdog
 from tasks.util import chacra
 
 # these items we use from ceph.py should probably eventually move elsewhere
@@ -1393,6 +1394,15 @@ def ceph_clients(ctx, config):
             remote.sudo_write_file(client_keyring, keyring, mode='0644')
     yield
 
+@contextlib.contextmanager
+def watchdog_setup(ctx, config):
+    if 'watchdog_setup' in config: 
+        ctx.ceph[config['cluster']].thrashers = []
+        ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config, ctx.ceph[config['cluster']].thrashers)
+        ctx.ceph[config['cluster']].watchdog.start()
+    else:
+        ctx.ceph[config['cluster']].watchdog = None 
+    yield
 
 @contextlib.contextmanager
 def ceph_initial():
@@ -1433,10 +1443,11 @@ def stop(ctx, config):
         cluster, type_, id_ = teuthology.split_role(role)
         ctx.daemons.get_daemon(type_, id_, cluster).stop()
         clusters.add(cluster)
-
-#    for cluster in clusters:
-#        ctx.ceph[cluster].watchdog.stop()
-#        ctx.ceph[cluster].watchdog.join()
+    
+    if ctx.ceph[cluster].watchdog:
+        for cluster in clusters:
+            ctx.ceph[cluster].watchdog.stop()
+            ctx.ceph[cluster].watchdog.join()
 
     yield
 
@@ -1727,6 +1738,63 @@ def crush_setup(ctx, config):
         args=['ceph', 'osd', 'crush', 'tunables', profile])
     yield
 
+
+@contextlib.contextmanager
+def module_setup(ctx, config):
+    cluster_name = config['cluster']
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    modules = config.get('mgr-modules', [])
+    for m in modules:
+        m = str(m)
+        cmd = [
+           'sudo',
+           'ceph',
+           '--cluster',
+           cluster_name,
+           'mgr',
+           'module',
+           'enable',
+           m,
+        ]
+        log.info("enabling module %s", m)
+        _shell(ctx, cluster_name, remote, args=cmd)
+    yield
+
+
+@contextlib.contextmanager
+def conf_setup(ctx, config):
+    cluster_name = config['cluster']
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    configs = config.get('cluster-conf', {})
+    procs = []
+    for section, confs in configs.items():
+        section = str(section)
+        for k, v in confs.items():
+            k = str(k).replace(' ', '_') # pre-pacific compatibility
+            v = str(v)
+            cmd = [
+                'ceph',
+                'config',
+                'set',
+                section,
+                k,
+                v,
+            ]
+            log.info("setting config [%s] %s = %s", section, k, v)
+            procs.append(_shell(ctx, cluster_name, remote, args=cmd, wait=False))
+    log.debug("set %d configs", len(procs))
+    for p in procs:
+        log.debug("waiting for %s", p)
+        p.wait()
+    yield
+
+@contextlib.contextmanager
+def conf_epoch(ctx, config):
+    cm = ctx.managers[config['cluster']]
+    cm.save_conf_epoch()
+    yield
 
 @contextlib.contextmanager
 def create_rbd_pool(ctx, config):
@@ -2145,6 +2213,7 @@ def task(ctx, config):
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
+    :param watchdog_setup: start DaemonWatchdog to watch daemons for failures
     """
     if config is None:
         config = {}
@@ -2219,7 +2288,9 @@ def task(ctx, config):
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
+            lambda: module_setup(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
+            lambda: conf_setup(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: cephfs_setup(ctx=ctx, config=config),
@@ -2231,6 +2302,8 @@ def task(ctx, config):
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
+            lambda: conf_epoch(ctx=ctx, config=config),
+            lambda: watchdog_setup(ctx=ctx, config=config),
     ):
         try:
             if config.get('wait-for-healthy', True):

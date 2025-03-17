@@ -393,10 +393,16 @@ enable_auth = False
 state_update_notify = True
 state_update_interval_sec = 5
 enable_spdk_discovery_controller = False
+rebalance_period_sec = 7
+max_gws_in_grp = 16
+max_ns_to_change_lb_grp = 8
 enable_prometheus_exporter = True
 prometheus_exporter_ssl = False
 prometheus_port = 10008
+prometheus_stats_interval = 10
 verify_nqns = True
+verify_keys = True
+verify_listener_ip = True
 omap_file_lock_duration = 20
 omap_file_lock_retries = 30
 omap_file_lock_retry_sleep_interval = 1.0
@@ -404,7 +410,14 @@ omap_file_update_reloads = 10
 allowed_consecutive_spdk_ping_failures = 1
 spdk_ping_interval_in_seconds = 2.0
 ping_spdk_under_lock = False
-enable_monitor_client = False
+enable_monitor_client = True
+max_hosts_per_namespace = 8
+max_namespaces_with_netmask = 1000
+max_subsystems = 128
+max_hosts = 2048
+max_namespaces = 1024
+max_namespaces_per_subsystem = 256
+max_hosts_per_subsystem = 128
 
 [gateway-logs]
 log_level = INFO
@@ -438,11 +451,12 @@ rpc_socket_dir = /var/tmp/
 rpc_socket_name = spdk.sock
 timeout = 60.0
 bdevs_per_cluster = 32
-log_level = WARNING
+protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
+qos_timeslice_in_usecs = 0
 
 [monitor]
 timeout = 1.0\n"""
