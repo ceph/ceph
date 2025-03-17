@@ -1149,6 +1149,16 @@ public:
     /// ensure that a range of the map is loaded
     void fault_range(KeyValueDB *db,
 		     uint32_t offset, uint32_t length);
+    /// ensure that a range of the map is loaded
+    /// return range that is encompassed by affected shards
+    std::pair<uint32_t, uint32_t> fault_range_ex(
+      KeyValueDB *db,
+      uint32_t offset,
+      uint32_t length);
+    void maybe_load_shard(
+      KeyValueDB *db,
+      int begin_shard,
+      int end_shard);
 
     /// ensure a range of the map is marked dirty
     void dirty_range(uint32_t offset, uint32_t length);
