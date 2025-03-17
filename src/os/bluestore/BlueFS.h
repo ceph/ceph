@@ -944,6 +944,10 @@ private:
 			       size_t read_len,
 			       bufferlist* bl);
   void _check_vselector_LNF();
+  int downgrade_wal_to_v1(
+    const std::string& dir,
+    const std::string& name
+  );
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {
