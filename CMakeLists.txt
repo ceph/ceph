@@ -24,6 +24,7 @@ if(NOT CMAKE_BUILD_TYPE)
   STRING "BUILD_TYPE is ${default_build_type}, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
 message(STATUS "BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
+set(CEPH_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
