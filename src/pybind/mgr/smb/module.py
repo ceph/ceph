@@ -21,6 +21,7 @@ from . import (
 from .enums import (
     AuthMode,
     JoinSourceType,
+    PasswordFilter,
     ShowResults,
     SMBClustering,
     UserGroupSourceType,
@@ -340,6 +341,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self,
         resource_names: Optional[List[str]] = None,
         results: ShowResults = ShowResults.COLLAPSED,
+        password_filter: PasswordFilter = PasswordFilter.NONE,
     ) -> Simplified:
         """Show resources fetched from the local config store based on resource
         type or resource type and id(s).
@@ -351,6 +353,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 resources = self._handler.matching_resources(resource_names)
             except handler.InvalidResourceMatch as err:
                 raise cli.InvalidInputValue(str(err)) from err
+        if password_filter is not PasswordFilter.NONE:
+            op = (PasswordFilter.NONE, password_filter)
+            log.debug('Password filtering for smb show: %r', op)
+            resources = [r.convert(op) for r in resources]
         if len(resources) == 1 and results is ShowResults.COLLAPSED:
             return resources[0].to_simplified()
         return {"resources": [r.to_simplified() for r in resources]}
