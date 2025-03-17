@@ -744,9 +744,10 @@ public:
     return 0;
   }
 
-  int encrypt(CephContext *cct, const ceph::bufferlist& in,
-	      ceph::bufferlist& out,
-              std::string* /* unused */) const override {
+  int encrypt_ext(CephContext *cct, const ceph::bufferlist& in,
+                  const ceph::bufferlist *confounder,
+                  ceph::bufferlist& out,
+                  std::string* /* unused */) const override {
     ldout(cct, 20) << "CryptoAES256KRB5KeyHandler::encrypt()" << dendl;
     // encrypted (confounder | data) | hash
     ceph::bufferptr out_tmp{static_cast<unsigned>(
@@ -756,13 +757,21 @@ public:
     char *aes_enc = out_tmp.c_str();
     int aes_enc_len = AES256KRB5_BLOCK_LEN + in.length();
 
-    /* plaintext confounder */
-    bufferptr confounder(AES256KRB5_BLOCK_LEN);
-    cct->random()->get_bytes(confounder.c_str(), confounder.length());
+    ceph::bufferlist incopy;
+    bufferptr confounder_buf(AES256KRB5_BLOCK_LEN);
+
+    if (!confounder) {
+      cct->random()->get_bytes(confounder_buf.c_str(), confounder_buf.length());
+      incopy.append(confounder_buf);
+    } else {
+      if (confounder->length() != AES256KRB5_BLOCK_LEN) {
+        ldout(cct, 0) << "ERROR: confounder length is expected to be equal to block size (" << AES256KRB5_BLOCK_LEN << ")" << dendl;
+        return -EINVAL;
+      }
+      incopy.append(*confounder);
+    }
 
     // combine confounder with input data
-    ceph::bufferlist incopy;
-    incopy.append(confounder);
     incopy.append(in);
 
     // reinitialize IV each time. It might be unnecessary depending on
@@ -864,6 +873,12 @@ public:
     out.append(tmp_out.c_str() + AES256KRB5_BLOCK_LEN, data_len);
 
     return 0;
+  }
+
+  int encrypt(CephContext *cct, const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+              std::string* unused) const override {
+    return encrypt_ext(cct, in, nullptr,  out, unused);
   }
 };
 

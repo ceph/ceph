@@ -73,6 +73,14 @@ public:
   virtual int encrypt(CephContext *cct,
                       const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const = 0;
+
+  /* should either used internally, or for unitests. Confounder should be nullptr otherwise */
+  virtual int encrypt_ext(CephContext *cct,
+                          const ceph::buffer::list& in,
+                          const ceph::buffer::list *confounder,
+                          ceph::buffer::list& out, std::string *error) const {
+    return -ENOTSUP;
+  }
   virtual int decrypt(CephContext *cct,
                       const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const = 0;
