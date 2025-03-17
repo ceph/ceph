@@ -72,23 +72,33 @@ public:
 
   virtual int encrypt(CephContext *cct,
                       const ceph::buffer::list& in,
-		      ceph::buffer::list& out, std::string *error) const = 0;
+		      ceph::buffer::list& out, std::string *error) const {
+    return encrypt_ext(cct, in, nullptr, out, error);
+  }
 
   /* should either used internally, or for unitests. Confounder should be nullptr otherwise */
   virtual int encrypt_ext(CephContext *cct,
                           const ceph::buffer::list& in,
                           const ceph::buffer::list *confounder,
-                          ceph::buffer::list& out, std::string *error) const {
-    return -ENOTSUP;
-  }
+                          ceph::buffer::list& out, std::string *error) const = 0;
+
   virtual int decrypt(CephContext *cct,
                       const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const = 0;
 
-  // TODO: provide nullptr in the out::buf to get/estimate size requirements?
-  // Or maybe dedicated methods?
+  virtual std::size_t enc_size(const in_slice_t& in,
+                       const in_slice_t *confounder) const {
+    return 0;
+  }
+
   virtual std::size_t encrypt(CephContext *cct,
                               const in_slice_t& in,
+			      const out_slice_t& out) const {
+    return encrypt_ext(cct, in, nullptr, out);
+  }
+  virtual std::size_t encrypt_ext(CephContext *cct,
+                              const in_slice_t& in,
+                              const in_slice_t *confounder,
 			      const out_slice_t& out) const;
   virtual std::size_t decrypt(CephContext *cct,
                               const in_slice_t& in,
