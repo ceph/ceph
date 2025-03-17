@@ -49,7 +49,7 @@ struct onode_layout_t {
     } else if (type == omap_type_t::OMAP) {
       return omap_root;
     } else {
-      ceph_assert(type == omap_type_t::LOG);
+      assert(type == omap_type_t::LOG);
       return log_root;
     }
   }
@@ -104,6 +104,9 @@ public:
   }
   laddr_t get_data_hint() const {
     return get_hint();
+  }
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    return get_layout().get_root(type);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
