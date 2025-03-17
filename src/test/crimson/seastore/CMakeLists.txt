@@ -1,5 +1,4 @@
 if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
-  # See https://tracker.ceph.com/issues/70254
   add_executable(unittest-transaction-manager
     test_block.cc
     test_transaction_manager.cc
@@ -8,16 +7,6 @@ if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
     --memory 256M --smp 1)
   target_link_libraries(
     unittest-transaction-manager
-    ${CMAKE_DL_LIBS}
-    crimson-seastore)
-
-    add_executable(unittest-omap-manager
-    test_omap_manager.cc
-    ../gtest_seastar.cc)
-  add_ceph_unittest(unittest-omap-manager
-    --memory 256M --smp 1)
-  target_link_libraries(
-    unittest-omap-manager
     ${CMAKE_DL_LIBS}
     crimson-seastore)
 endif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
@@ -76,6 +65,16 @@ target_link_libraries(
   crimson-seastore
   crimson-os
   crimson-common)
+
+add_executable(unittest-omap-manager
+  test_omap_manager.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest-omap-manager
+  --memory 256M --smp 1)
+target_link_libraries(
+  unittest-omap-manager
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
 
 add_executable(unittest-seastore
   test_seastore.cc
