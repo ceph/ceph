@@ -207,8 +207,8 @@ std::unique_ptr<IoOp> ReadInjectSequence::next() {
   switch (child_op->getOpType()) {
     case OpType::Remove:
       next_op.swap(child_op);
+      ceph_assert(shard_to_inject.has_value());
       switch (inject_op_type) {
-        ceph_assert(shard_to_inject.has_value());
         case InjectOpType::ReadEIO:
           return ClearReadErrorInjectOp::generate(*shard_to_inject, 0);
         case InjectOpType::ReadMissingShard:
