@@ -1232,13 +1232,27 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
     log_entries,
     txn);
 
+  // flag set to true during async recovery
+  const hobject_t& soid = req->poid;
+  bool async = false;
+  pg_missing_tracker_t pmissing = get_local_missing();
+  if (pmissing.is_missing(soid)) {
+    async = true;
+    DEBUGDPP("{} is missing {} ", *this, *req, pmissing.is_missing(soid));
+    for (auto &&e: log_entries) {
+      DEBUGDPP("{} is add_next_event {} ", *this, *req, e);
+      add_local_next_event(e);
+      DEBUGDPP("{} is add_next_event {} ", *this, *req, e.is_delete());
+    }
+  }
+
   log_operation(std::move(log_entries),
                 req->pg_trim_to,
                 req->version,
                 req->pg_committed_to,
                 !txn.empty(),
                 txn,
-                false);
+                async);
   DEBUGDPP("{} do_transaction", *this, *req);
 
   auto commit_fut = interruptor::make_interruptible(
@@ -1309,7 +1323,7 @@ void PG::log_operation(
                            pg_committed_to,
                            txn,
                            !txn.empty(),
-                           false);
+                           async);
 }
 
 void PG::replica_clear_repop_obc(

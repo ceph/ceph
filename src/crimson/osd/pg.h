@@ -257,6 +257,10 @@ public:
     return peering_state.get_actingset();
   }
 
+  void add_local_next_event(const pg_log_entry_t& e) {
+    peering_state.add_local_next_event(e);
+  }
+
   // DoutPrefixProvider
   std::ostream& gen_prefix(std::ostream& out) const final {
     return out << *this;
