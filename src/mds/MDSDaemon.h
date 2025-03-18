@@ -26,7 +26,7 @@
 
 #include "Beacon.h"
 
-#define CEPH_MDS_PROTOCOL    37 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    36 /* cluster internal */
 
 namespace boost::asio { class io_context; }
 class Context;
