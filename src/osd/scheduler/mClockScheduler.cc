@@ -115,41 +115,6 @@ void mClockScheduler::_init_logger()
   logger->set(l_mclock_all_type_queue_len, 0);
 }
 
-mClockScheduler::mClockScheduler(CephContext *cct,
-  int whoami,
-  uint32_t num_shards,
-  int shard_id,
-  bool is_rotational,
-  unsigned cutoff_priority,
-  MonClient *monc,
-  bool init_perfcounter)
-  : cct(cct),
-    whoami(whoami),
-    num_shards(num_shards),
-    shard_id(shard_id),
-    is_rotational(is_rotational),
-    cutoff_priority(cutoff_priority),
-    monc(monc),
-    logger(nullptr),
-    scheduler(
-      std::bind(&mClockScheduler::ClientRegistry::get_info,
-                &client_registry,
-                _1),
-      dmc::AtLimit::Wait,
-      cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
-{
-  cct->_conf.add_observer(this);
-  ceph_assert(num_shards > 0);
-  set_osd_capacity_params_from_config();
-  set_config_defaults_from_profile();
-  client_registry.update_from_config(
-    cct->_conf, osd_bandwidth_capacity_per_shard);
-
-  if (init_perfcounter) {
-    _init_logger();
-  }
-}
-
 /* ClientRegistry holds the dmclock::ClientInfo configuration parameters
  * (reservation (bytes/second), weight (unitless), limit (bytes/second))
  * for each IO class in the OSD (client, background_recovery,
