@@ -61,7 +61,6 @@ public:
     std::string key;
     snapid_t first;
     bool is_remote = false;
-    bool is_referent_remote = false;
 
     inodeno_t ino;
     unsigned char d_type;
