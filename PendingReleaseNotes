@@ -97,6 +97,10 @@
   redistribution. In contrast, a stretch rule with a single-take configuration
   will not cause any data movement during the upgrade process.
 
+* RGW: The `x-amz-confirm-remove-self-bucket-access` header is now supported by
+  `PutBucketPolicy`. Additionally, the root user will always have access to modify
+  the bucket policy, even if the current policy explicitly denies access.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
