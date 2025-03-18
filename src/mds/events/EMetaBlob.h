@@ -46,7 +46,7 @@ struct MDPeerUpdate;
 
 
 class EMetaBlob {
-
+  using LogSegmentRef = boost::intrusive_ptr<LogSegment>;
 public:
   /* fullbit - a regular dentry + inode
    *
@@ -626,8 +626,8 @@ private:
     out << "]";
   }
 
-  void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
+  void update_segment(LogSegmentRef ls);
+  void replay(MDSRank *mds, LogSegmentRef ls, int type, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
