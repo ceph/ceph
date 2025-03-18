@@ -299,7 +299,7 @@ public:
 
   void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
   void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
-                           CInode *referenti, version_t);
+			   version_t);
 
   void handle_peer_link_prep(const MDRequestRef& mdr);
   void _logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
