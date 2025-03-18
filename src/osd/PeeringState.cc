@@ -2558,7 +2558,11 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     // Caller is GetInfo
     backfill_targets = want_backfill;
     backfill_target_shard_id_set.clear();
-    for (auto &&i : want_backfill) backfill_target_shard_id_set.insert(i.shard);
+    for (auto &&i : want_backfill) {
+      if (i.shard != shard_id_t::NO_SHARD) {
+        backfill_target_shard_id_set.insert(i.shard);
+      }
+    }
   }
   // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
   ceph_assert(
