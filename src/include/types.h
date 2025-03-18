@@ -521,9 +521,12 @@ struct shard_id_t {
   int8_t id;
 
   shard_id_t() : id(0) {}
-  constexpr explicit shard_id_t(int8_t _id) : id(_id) {}
+  explicit constexpr shard_id_t(int8_t _id) : id(_id) {}
 
-  constexpr operator int8_t() const { return id; }
+  explicit constexpr operator int8_t() const { return id; }
+  explicit constexpr operator int64_t() const { return id; }
+  explicit constexpr operator int() const { return id; }
+  explicit constexpr operator unsigned() const { return id; }
 
   const static shard_id_t NO_SHARD;
 
@@ -542,11 +545,40 @@ struct shard_id_t {
     ls.push_back(new shard_id_t(1));
     ls.push_back(new shard_id_t(2));
   }
-  bool operator==(const shard_id_t&) const = default;
-  auto operator<=>(const shard_id_t&) const = default;
+  shard_id_t& operator++() { ++id; return *this; }
+  friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
+                                                    const shard_id_t &rhs) {
+    return lhs.id <=> rhs.id;
+  }
+
+  friend constexpr std::strong_ordering operator<=>(int lhs,
+                                                    const shard_id_t &rhs) {
+    return lhs <=> rhs.id;
+  }
+  friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
+                                                    int rhs) {
+    return lhs.id <=> rhs;
+  }
+
+  shard_id_t& operator=(int other) { id = other; return *this; }
+  bool operator==(const shard_id_t &other) const { return id == other.id; }
+
+  shard_id_t operator+(int other) const { return shard_id_t(id + other); }
+  shard_id_t operator-(int other) const { return shard_id_t(id - other); }
 };
 WRITE_CLASS_ENCODER(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
+template<>
+struct fmt::formatter<shard_id_t>
+{
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const shard_id_t &k, FormatContext& ctx) const
+  {
+    return fmt::format_to(ctx.out(), "{}", k.id);
+  }
+};
 
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
     defined(__FreeBSD__) || defined(_WIN32)
