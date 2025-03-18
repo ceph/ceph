@@ -315,7 +315,7 @@ class AsyncJobs(threading.Thread):
 
         # wake up cancellation waiters if needed
         if cancelled:
-            logging.info("waking up cancellation waiters")
+            log.info("waking up cancellation waiters")
             self.cancel_cv.notifyAll()
 
     def queue_job(self, volname):
