@@ -454,12 +454,12 @@ struct object_data_handler_test_t:
 
   void write_right() {
     write(0, 128<<10, 'x');
-    write(64<<10, 60<<10, 'a');
+    write(64<<10, 64<<10, 'a');
   }
 
   void write_left() {
     write(0, 128<<10, 'x');
-    write(4<<10, 60<<10, 'a');
+    write(0, 64<<10, 'a');
   }
 
   void write_right_left() {
