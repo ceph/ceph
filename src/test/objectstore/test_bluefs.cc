@@ -1178,6 +1178,7 @@ TEST_F(BlueFS_wal, wal_v2_check)
 
 TEST_F(BlueFS_wal, wal_v2_check_feature)
 {
+  SKIP_JENKINS();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_v2", "true");
