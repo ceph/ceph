@@ -8142,7 +8142,6 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   const auto& pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
-  rollback.referent_ino = referent_ino;
   rollback.was_inc = inc;
   if (realm_projected) {
     if (targeti->snaprealm) {
@@ -8302,16 +8301,10 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDReques
 
   // inode
   pi.inode->ctime = rollback.old_ctime;
-  if (rollback.was_inc) {
+  if (rollback.was_inc)
     pi.inode->nlink--;
-    if (rollback.referent_ino > 0) {
-      pi.inode->remove_referent_ino(rollback.referent_ino);
-      dout(10) << __func__ << " referent_inodes " << std::hex << pi.inode->get_referent_inodes()
-               << " referent ino removed " << rollback.referent_ino << dendl;
-    }
-  } else {
+  else
     pi.inode->nlink++;
-  }
 
   map<client_t,ref_t<MClientSnap>> splits;
   if (rollback.snapbl.length() && in->snaprealm) {
