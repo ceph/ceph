@@ -930,9 +930,9 @@ int RGWOrphanSearch::finish()
 
 int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
 				     RGWRados::Object::Stat::Result& result,
-				     std::string& bucket_name,
-				     rgw_obj_key& obj_key,
-                                     std::set<string>& obj_oids)
+				     const std::string& bucket_name,
+				     const rgw_obj_key& obj_key,
+				     std::set<string>& obj_oids)
 {
   obj_oids.clear();
 
@@ -955,9 +955,6 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
       oid << "\"" << dendl;
     return 0;
   }
-
-  bucket_name = bucket.name;
-  obj_key = result.obj.key;
 
   if (!result.manifest) {
     /* a very very old object, or part of a multipart upload during upload */
@@ -1060,21 +1057,20 @@ int RGWRadosList::pop_and_handle_stat_op(
   RGWObjectCtx& obj_ctx,
   std::deque<RGWRados::Object::Stat>& ops)
 {
-  std::string bucket_name;
-  rgw_obj_key obj_key;
   std::set<std::string> obj_oids;
   RGWRados::Object::Stat& front_op = ops.front();
 
   int ret = front_op.wait(dpp);
+  // note: even if we get an error, front_op.result.obj will still be
+  // populated with correct data
+  const std::string bucket_name = front_op.result.obj.bucket.name;
+  const rgw_obj_key obj_key = front_op.result.obj.key;
+
   if (ret == -ENOENT) {
     const auto& result = front_op.result;
     const rgw_bucket& bucket = result.obj.bucket;
     const std::string oid = bucket.marker + "_" + result.obj.get_oid();
     obj_oids.insert(oid);
-
-    // needed for the processing below
-    bucket_name = result.obj.bucket.name;
-    obj_key = result.obj.key;
 
     ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
       ": stat of head object resulted in ENOENT; oid=" << oid << dendl;

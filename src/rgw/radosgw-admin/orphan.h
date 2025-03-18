@@ -259,8 +259,8 @@ class RGWRadosList {
 
   int handle_stat_result(const DoutPrefixProvider *dpp,
 			 RGWRados::Object::Stat::Result& result,
-			 std::string& bucket_name,
-			 rgw_obj_key& obj_key,
+			 const std::string& bucket_name,
+			 const rgw_obj_key& obj_key,
 			 std::set<std::string>& obj_oids);
   int pop_and_handle_stat_op(const DoutPrefixProvider *dpp,
                              RGWObjectCtx& obj_ctx,
