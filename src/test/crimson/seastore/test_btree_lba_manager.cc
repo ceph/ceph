@@ -594,7 +594,7 @@ struct btree_lba_manager_test : btree_test_base {
     (void) with_trans_intr(
       *t.t,
       [=, this](auto &t) {
-	return lba_manager->decref_extent(
+	return lba_manager->remove_mapping(
 	  t,
 	  target->first
 	).si_then([this, &t, target](auto result) {
@@ -609,27 +609,6 @@ struct btree_lba_manager_test : btree_test_base {
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
-  }
-
-  auto incref_mapping(
-    test_transaction_t &t,
-    laddr_t addr) {
-    return incref_mapping(t, t.mappings.find(addr));
-  }
-
-  void incref_mapping(
-    test_transaction_t &t,
-    test_lba_mapping_t::iterator target) {
-    ceph_assert(target->second.refcount > 0);
-    target->second.refcount++;
-    auto refcnt = with_trans_intr(
-      *t.t,
-      [=, this](auto &t) {
-	return lba_manager->incref_extent(
-	  t,
-	  target->first);
-      }).unsafe_get().refcount;
-    EXPECT_EQ(refcnt, target->second.refcount);
   }
 
   std::vector<laddr_t> get_mapped_addresses() {
@@ -754,10 +733,6 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	  check_mappings(t);
 	  check_mappings();
 	}
-	for (auto &ret : rets) {
-	  incref_mapping(t, ret->get_key());
-	  decref_mapping(t, ret->get_key());
-	}
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));
@@ -770,8 +745,6 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       for (unsigned i = 0; i != addresses.size(); ++i) {
 	if (i % 2 == 0) {
-	  incref_mapping(t, addresses[i]);
-	  decref_mapping(t, addresses[i]);
 	  decref_mapping(t, addresses[i]);
 	}
 	logger().debug("submitting transaction");
@@ -790,8 +763,6 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto addresses = get_mapped_addresses();
       auto t = create_transaction();
       for (unsigned i = 0; i != addresses.size(); ++i) {
-	incref_mapping(t, addresses[i]);
-	decref_mapping(t, addresses[i]);
 	decref_mapping(t, addresses[i]);
       }
       check_mappings(t);

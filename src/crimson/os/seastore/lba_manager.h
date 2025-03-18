@@ -120,20 +120,11 @@ public:
   using ref_ret = ref_iertr::future<ref_update_result_t>;
 
   /**
-   * Decrements ref count on extent
+   * Removes a mapping and deal with indirection
    *
    * @return returns resulting refcount
    */
-  virtual ref_ret decref_extent(
-    Transaction &t,
-    laddr_t addr) = 0;
-
-  /**
-   * Increments ref count on extent
-   *
-   * @return returns resulting refcount
-   */
-  virtual ref_ret incref_extent(
+  virtual ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) = 0;
 

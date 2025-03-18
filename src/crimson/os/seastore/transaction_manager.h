@@ -339,18 +339,6 @@ public:
   using ref_iertr = LBAManager::ref_iertr;
   using ref_ret = ref_iertr::future<extent_ref_count_t>;
 
-#ifdef UNIT_TESTS_BUILT
-  /// Add refcount for ref
-  ref_ret inc_ref(
-    Transaction &t,
-    LogicalChildNodeRef &ref);
-
-  /// Add refcount for offset
-  ref_ret inc_ref(
-    Transaction &t,
-    laddr_t offset);
-#endif
-
   /** 
    * remove
    *
