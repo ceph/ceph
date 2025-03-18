@@ -110,9 +110,6 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
   std::vector<C_SaferCond*> on_finishes;
   int r, ret_code;
 
-  cls::rbd::ImageSnapshotNamespaceGroup ne{group_ioctx.get_id(), group_id,
-                                           group_snap.id};
-
   ldout(cct, 20) << "Rolling back snapshots" << dendl;
   int snap_count = group_snap.snaps.size();
 
@@ -189,18 +186,17 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
     on_finishes[i] = new C_SaferCond;
 
     std::shared_lock owner_locker{ictx->owner_lock};
-    std::string snap_name;
     ictx->image_lock.lock_shared();
-    snap_t snap_id = util::get_group_snap_id(ictx, ne);
-    r = ictx->get_snap_name(snap_id, &snap_name);
+    auto info = ictx->get_snap_info(group_snap.snaps[i].snap_id);
     ictx->image_lock.unlock_shared();
 
-    if (r >= 0) {
+    if (info != nullptr) {
       ldout(cct, 20) << "rolling back to individual snapshot for image " << ictx->name
                      << dendl;
-      ictx->operations->execute_snap_rollback(ne, snap_name, pctx, on_finishes[i]);
+      ictx->operations->execute_snap_rollback(info->snap_namespace, info->name,
+                                              pctx, on_finishes[i]);
     } else {
-      on_finishes[i]->complete(r);
+      on_finishes[i]->complete(-ENOENT);
     }
   }
 
