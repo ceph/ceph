@@ -217,6 +217,14 @@ void ECExtentCache::cache_maybe_ready()
   while (!waiting_ops.empty()) {
     OpRef op = waiting_ops.front();
     if (op->invalidates_cache) {
+      /* We must wait for any outstanding reads to complete. The cache replans
+       * all reads as part of invalidate. If an in-flight read completes after
+       * the invalidate, it will potentially corrupt it, leading to data
+       * corruption at the host.
+       */
+      if (op->object.reading) {
+        return;
+      }
       op->object.invalidate(op);
       ceph_assert(!op->invalidates_cache);
     }
@@ -225,8 +233,9 @@ void ECExtentCache::cache_maybe_ready()
      * transaction and pop the front of waiting_ops.  So we abort if either
      * reads are not ready, or the client chooses not to complete the op
      */
-    if (!op->complete_if_reads_cached(op))
+    if (!op->complete_if_reads_cached(op)) {
       return;
+    }
 
     waiting_ops.pop_front();
   }
