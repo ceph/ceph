@@ -33,6 +33,9 @@ Note the following restrictions on manipulating any of these extended attributes
 New subdirectories created under a directory with a ``charmap`` configuration will
 inherit (copy) the parent's configuration.
 
+.. note:: The charmap configuration applies only to the entries in the
+          directory not the name of the directory itself.
+
 .. note:: You can remove a ``charmap`` on a subdirectory which inherited
           the configuration so long as the preconditions apply: it is empty
           and not part of an existing snapshot.
@@ -101,10 +104,10 @@ configuration.
 Case Folding
 ------------
 
-The ``ceph.dir.casesensitive`` attribute accepts a boolean value. By
-default, names are case-sensitive (as normal in a POSIX file system). Setting
-this value to false will make the directory (and its children)
-case-insensitive.
+The ``ceph.dir.casesensitive`` attribute accepts a boolean value. By default,
+names are case-sensitive (as normal in a POSIX file system). Setting this value
+to false will make the named entries in the directory (and its descendent
+directories) case-insensitive.
 
 Case folding requires that names are also normalized. By default, after setting
 a directory to be case-insensitive, the ``charmap`` will be:
