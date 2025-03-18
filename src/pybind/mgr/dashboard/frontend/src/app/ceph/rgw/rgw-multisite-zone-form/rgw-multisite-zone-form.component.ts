@@ -20,9 +20,6 @@ import { ModalService } from '~/app/shared/services/modal.service';
   styleUrls: ['./rgw-multisite-zone-form.component.scss']
 })
 export class RgwMultisiteZoneFormComponent implements OnInit {
-  readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,4}$/;
-  readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
-  readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
   action: string;
   info: any;
   multisiteZoneForm: CdFormGroup;
@@ -88,29 +85,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       master_zone: new UntypedFormControl(false),
       selectedZonegroup: new UntypedFormControl(null),
       zone_endpoints: new UntypedFormControl(null, {
-        validators: [
-          CdValidators.custom('endpoint', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            } else {
-              if (value.includes(',')) {
-                value.split(',').forEach((url: string) => {
-                  return (
-                    !this.endpoints.test(url) && !this.ipv4Rgx.test(url) && !this.ipv6Rgx.test(url)
-                  );
-                });
-              } else {
-                return (
-                  !this.endpoints.test(value) &&
-                  !this.ipv4Rgx.test(value) &&
-                  !this.ipv6Rgx.test(value)
-                );
-              }
-              return false;
-            }
-          }),
-          Validators.required
-        ]
+        validators: [CdValidators.url, Validators.required]
       }),
       access_key: new UntypedFormControl('', {}),
       secret_key: new UntypedFormControl('', {}),
