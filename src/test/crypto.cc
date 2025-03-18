@@ -197,7 +197,7 @@ TEST(AES, DecryptNoBl) {
 
   ASSERT_EQ(plain_size, sizeof(want_plaintext));
 
-  const int err = memcmp(plaintext, want_plaintext, sizeof(plain_size));
+  const int err = memcmp(plaintext, want_plaintext, plain_size);
   ASSERT_EQ(0, err);
 }
 
@@ -359,130 +359,233 @@ static void dump_buf(string title, const unsigned char *buf, int len)
   std::cout << std::endl << std::endl;
 }
 
-
-TEST(AES256KRB5, Encrypt) {
+TEST(AES256KRB5, ValidateSecret) {
   auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
-  unsigned char secret_s[] = {
+  int l;
+
+  for (l=0; l<32; l++) {
+    bufferptr bp(l);
+    int err;
+    err = h->validate_secret(bp);
+    EXPECT_EQ(-EINVAL, err);
+  }
+
+  for (l=32; l<50; l++) {
+    bufferptr bp(l);
+    int err;
+    err = h->validate_secret(bp);
+    EXPECT_EQ(0, err);
+  }
+}
+
+struct test_vec {
+  vector<unsigned char> secret;
+  vector<unsigned char> confounder;
+  vector<unsigned char> plaintext;
+  vector<unsigned char> ciphertext;
+  uint32_t usage = 0;
+};
+
+/*
+ * AES256KRB5 test vectors off RFC8009
+ */
+static test_vec tv[] = {
+  {
+    .secret = {
       0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
-      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 };
-
-  bufferptr secret((char *)secret_s, sizeof(secret_s));
-
-  unsigned char plaintext_s[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
-
-  bufferlist plaintext;
-  plaintext.append((char *)plaintext_s, sizeof(plaintext_s));
-
-  unsigned char confounder_data[] = { 0xB8, 0x0D, 0x32, 0x51, 0xC1, 0xF6, 0x47, 0x14, 0x94, 0x25, 0x6F, 0xFE, 0x71, 0x2D, 0x0B, 0x9A };
-
-  bufferlist confounder;
-  confounder.append((const char *)confounder_data, sizeof(confounder_data));
-
-  bufferlist cipher;
-  std::string error;
-  CryptoKeyHandler *kh = h->get_key_handler_ext(secret, 2, error);
-  int r = kh->encrypt_ext(g_ceph_context, plaintext, &confounder, cipher, &error);
-  ASSERT_EQ(r, 0);
-  ASSERT_EQ(error, "");
-
-  unsigned char want_cipher[] = {
+      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 },
+    .confounder = {
+      0xF7, 0x64, 0xE9, 0xFA, 0x15, 0xC2, 0x76, 0x47, 0x8B, 0x2C, 0x7D, 0x0C, 0x4E, 0x5F, 0x58, 0xE4 },
+    .plaintext = { },
+    .ciphertext = {
+      0x41, 0xF5, 0x3F, 0xA5, 0xBF, 0xE7, 0x02, 0x6D, 0x91, 0xFA, 0xF9, 0xBE, 0x95, 0x91, 0x95, 0xA0,
+      0x58, 0x70, 0x72, 0x73, 0xA9, 0x6A, 0x40, 0xF0, 0xA0, 0x19, 0x60, 0x62, 0x1A, 0xC6, 0x12, 0x74,
+      0x8B, 0x9B, 0xBF, 0xBE, 0x7E, 0xB4, 0xCE, 0x3C },
+    .usage = 2
+  },
+  {
+    .secret = {
+      0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
+      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 },
+    .confounder = {
+      0xB8, 0x0D, 0x32, 0x51, 0xC1, 0xF6, 0x47, 0x14, 0x94, 0x25, 0x6F, 0xFE, 0x71, 0x2D, 0x0B, 0x9A },
+    .plaintext = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 },
+    .ciphertext = {
       0x4E, 0xD7, 0xB3, 0x7C, 0x2B, 0xCA, 0xC8, 0xF7, 0x4F, 0x23, 0xC1, 0xCF, 0x07, 0xE6, 0x2B, 0xC7,
       0xB7, 0x5F, 0xB3, 0xF6, 0x37, 0xB9, 0xF5, 0x59, 0xC7, 0xF6, 0x64, 0xF6, 0x9E, 0xAB, 0x7B, 0x60,
-      0x92, 0x23, 0x75, 0x26, 0xEA, 0x0D, 0x1F, 0x61, 0xCB, 0x20, 0xD6, 0x9D, 0x10, 0xF2
-  };
-  char cipher_s[sizeof(want_cipher)];
+      0x92, 0x23, 0x75, 0x26, 0xEA, 0x0D, 0x1F, 0x61, 0xCB, 0x20, 0xD6, 0x9D, 0x10, 0xF2 },
+    .usage = 2
+  },
+  {
+    .secret = {
+      0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
+      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 },
+    .confounder = {
+      0x53, 0xBF, 0x8A, 0x0D, 0x10, 0x52, 0x65, 0xD4, 0xE2, 0x76, 0x42, 0x86, 0x24, 0xCE, 0x5E, 0x63 },
+    .plaintext = {
+      0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F },
+    .ciphertext = {
+      0xBC, 0x47, 0xFF, 0xEC, 0x79, 0x98, 0xEB, 0x91, 0xE8, 0x11, 0x5C, 0xF8, 0xD1, 0x9D, 0xAC, 0x4B,
+      0xBB, 0xE2, 0xE1, 0x63, 0xE8, 0x7D, 0xD3, 0x7F, 0x49, 0xBE, 0xCA, 0x92, 0x02, 0x77, 0x64, 0xF6,
+      0x8C, 0xF5, 0x1F, 0x14, 0xD7, 0x98, 0xC2, 0x27, 0x3F, 0x35, 0xDF, 0x57, 0x4D, 0x1F, 0x93, 0x2E,
+      0x40, 0xC4, 0xFF, 0x25, 0x5B, 0x36, 0xA2, 0x66 },
+    .usage = 2
+  },
+  {
+    .secret = {
+      0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
+      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 },
+    .confounder = {
+      0x76, 0x3E, 0x65, 0x36, 0x7E, 0x86, 0x4F, 0x02, 0xF5, 0x51, 0x53, 0xC7, 0xE3, 0xB5, 0x8A, 0xF1 },
+    .plaintext = {
+      0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+      0x10, 0x11, 0x12, 0x13, 0x14 },
+    .ciphertext = {
+      0x40, 0x01, 0x3E, 0x2D, 0xF5, 0x8E, 0x87, 0x51, 0x95, 0x7D, 0x28, 0x78, 0xBC, 0xD2, 0xD6, 0xFE,
+      0x10, 0x1C, 0xCF, 0xD5, 0x56, 0xCB, 0x1E, 0xAE, 0x79, 0xDB, 0x3C, 0x3E, 0xE8, 0x64, 0x29, 0xF2,
+      0xB2, 0xA6, 0x02, 0xAC, 0x86, 0xFE, 0xF6, 0xEC, 0xB6, 0x47, 0xD6, 0x29, 0x5F, 0xAE, 0x07, 0x7A,
+      0x1F, 0xEB, 0x51, 0x75, 0x08, 0xD2, 0xC1, 0x6B, 0x41, 0x92, 0xE0, 0x1F, 0x62 },
+    .usage = 2
+  },
+  {}
+};
 
-  ASSERT_EQ(sizeof(cipher_s), cipher.length());
-  cipher.cbegin().copy(sizeof(cipher_s), &cipher_s[0]);
+struct tvbl {
+  bufferptr secret;
+  bufferlist confounder;
+  bufferlist plaintext;
+  bufferlist ciphertext;
+  uint32_t usage;
 
-  dump_buf("ENCRYPTED:", (unsigned char *)cipher.c_str(), cipher.length());
-  dump_buf("EXPECTED:", want_cipher, sizeof(want_cipher));
+  tvbl(test_vec& tv) : secret((char *)tv.secret.data(), tv.secret.size()),
+                                  usage(tv.usage) {
+    confounder.append((char *)tv.confounder.data(), tv.confounder.size());
+    plaintext.append((char *)tv.plaintext.data(), tv.plaintext.size());
+    ciphertext.append((char *)tv.ciphertext.data(), tv.ciphertext.size());
+  }
+};
 
-  int err;
-  err = memcmp(cipher_s, want_cipher, sizeof(want_cipher));
-  ASSERT_EQ(0, err);
+TEST(AES256KRB5, Encrypt) {
+  for (int i = 0; !tv[i].secret.empty(); ++i) {
+    auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+    
+    tvbl t(tv[i]);
 
-  delete kh;
+    auto& secret = t.secret;
+    auto& confounder = t.confounder;
+    auto& plaintext = t.plaintext;
+    auto& want_cipher = t.ciphertext;
+
+    bufferlist cipher;
+    std::string error;
+
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
+    int r = kh->encrypt_ext(g_ceph_context, plaintext, &confounder, cipher, &error);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(error, "");
+
+    ASSERT_EQ(want_cipher.length(), cipher.length());
+
+    dump_buf("ENCRYPTED:", (unsigned char *)cipher.c_str(), cipher.length());
+    dump_buf("EXPECTED:", (unsigned char *)want_cipher.c_str(), want_cipher.length());
+
+    int err;
+    err = memcmp(cipher.c_str(), want_cipher.c_str(), want_cipher.length());
+    ASSERT_EQ(0, err);
+  }
 }
 
 TEST(AES256KRB5, EncryptNoBl) {
-  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
-  unsigned char secret_s[] = {
-      0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
-      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 };
+  for (int i = 0; !tv[i].secret.empty(); ++i) {
+    auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
 
-  bufferptr secret((char *)secret_s, sizeof(secret_s));
+    tvbl t(tv[i]);
 
-  unsigned char confounder_data[] = { 0xB8, 0x0D, 0x32, 0x51, 0xC1, 0xF6, 0x47, 0x14, 0x94, 0x25, 0x6F, 0xFE, 0x71, 0x2D, 0x0B, 0x9A };
-  const CryptoKey::in_slice_t confounder_slice { sizeof(confounder_data), confounder_data };
+    auto& secret = t.secret;
+    auto& confounder = t.confounder;
+    auto& plaintext = t.plaintext;
+    auto& want_cipher = t.ciphertext;
 
-  unsigned char plaintext_s[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
+    const CryptoKey::in_slice_t confounder_slice { confounder.length(), (const unsigned char *)confounder.c_str() };
 
-  std::string error;
-  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, 2, error));
+    std::string error;
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
 
-  const CryptoKey::in_slice_t plain_slice { sizeof(plaintext_s), plaintext_s };
+    const CryptoKey::in_slice_t plain_slice { plaintext.length(), (const unsigned char *)plaintext.c_str() };
 
-  // we need to deduce size first
-  const CryptoKey::out_slice_t probe_slice { 0, nullptr };
-  const auto needed = kh->encrypt_ext(g_ceph_context, plain_slice, &confounder_slice, probe_slice);
-  ASSERT_GE(needed, plain_slice.length);
+    // we need to deduce size first
+    const CryptoKey::out_slice_t probe_slice { 0, nullptr };
+    const auto needed = kh->encrypt_ext(g_ceph_context, plain_slice, &confounder_slice, probe_slice);
+    ASSERT_GE(needed, plain_slice.length);
 
-  boost::container::small_vector<
-    // FIXME?
-    //unsigned char, sizeof(plaintext) + kh->get_block_size()> buf;
-    unsigned char, sizeof(plaintext_s) + 16> buf(needed);
-  const CryptoKey::out_slice_t cipher_slice { needed, buf.data() };
-  const auto cipher_size = kh->encrypt_ext(g_ceph_context, plain_slice, &confounder_slice, cipher_slice);
-  ASSERT_EQ(cipher_size, needed);
+    std::vector<unsigned char> buf(needed);
+    const CryptoKey::out_slice_t cipher_slice { needed, buf.data() };
+    const auto cipher_size = kh->encrypt_ext(g_ceph_context, plain_slice, &confounder_slice, cipher_slice);
+    ASSERT_EQ(cipher_size, needed);
 
-  unsigned char want_cipher[] = {
-      0x4E, 0xD7, 0xB3, 0x7C, 0x2B, 0xCA, 0xC8, 0xF7, 0x4F, 0x23, 0xC1, 0xCF, 0x07, 0xE6, 0x2B, 0xC7,
-      0xB7, 0x5F, 0xB3, 0xF6, 0x37, 0xB9, 0xF5, 0x59, 0xC7, 0xF6, 0x64, 0xF6, 0x9E, 0xAB, 0x7B, 0x60,
-      0x92, 0x23, 0x75, 0x26, 0xEA, 0x0D, 0x1F, 0x61, 0xCB, 0x20, 0xD6, 0x9D, 0x10, 0xF2
-  };
+    dump_buf("ENCRYPTED:", buf.data(), cipher_size);
+    dump_buf("EXPECTED:", (unsigned char *)want_cipher.c_str(), want_cipher.length());
+    ASSERT_EQ(want_cipher.length(), cipher_size);
 
-  ASSERT_EQ(sizeof(want_cipher), cipher_size);
-
-  const int err = memcmp(buf.data(), want_cipher, sizeof(want_cipher));
-  ASSERT_EQ(0, err);
+    const int err = memcmp(buf.data(), want_cipher.c_str(), want_cipher.length());
+    ASSERT_EQ(0, err);
+  }
 }
 
 TEST(AES256KRB5, Decrypt) {
-  auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
-  unsigned char secret_s[] = {
-      0x6D, 0x40, 0x4D, 0x37, 0xFA, 0xF7, 0x9F, 0x9D, 0xF0, 0xD3, 0x35, 0x68, 0xD3, 0x20, 0x66, 0x98,
-      0x00, 0xEB, 0x48, 0x36, 0x47, 0x2E, 0xA8, 0xA0, 0x26, 0xD1, 0x6B, 0x71, 0x82, 0x46, 0x0C, 0x52 };
-  
-  bufferptr secret((const char *)secret_s, sizeof(secret_s));
+  for (int i = 0; !tv[i].secret.empty(); ++i) {
+    auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
 
-  unsigned char cipher_s[] = {
-      0x4E, 0xD7, 0xB3, 0x7C, 0x2B, 0xCA, 0xC8, 0xF7, 0x4F, 0x23, 0xC1, 0xCF, 0x07, 0xE6, 0x2B, 0xC7,
-      0xB7, 0x5F, 0xB3, 0xF6, 0x37, 0xB9, 0xF5, 0x59, 0xC7, 0xF6, 0x64, 0xF6, 0x9E, 0xAB, 0x7B, 0x60,
-      0x92, 0x23, 0x75, 0x26, 0xEA, 0x0D, 0x1F, 0x61, 0xCB, 0x20, 0xD6, 0x9D, 0x10, 0xF2
-  };
+    tvbl t(tv[i]);
 
-  bufferlist cipher;
-  cipher.append((char *)cipher_s, sizeof(cipher_s));
+    auto& secret = t.secret;
+    auto& want_plaintext = t.plaintext;
+    auto& ciphertext = t.ciphertext;
 
-  unsigned char want_plaintext[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
-  char plaintext_s[sizeof(want_plaintext)];
+    std::string error;
+    bufferlist plaintext;
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
+    int r = kh->decrypt(g_ceph_context, ciphertext, plaintext, &error);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(error, "");
 
-  std::string error;
-  bufferlist plaintext;
-  CryptoKeyHandler *kh = h->get_key_handler_ext(secret, 2, error);
-  int r = kh->decrypt(g_ceph_context, cipher, plaintext, &error);
-  ASSERT_EQ(r, 0);
-  ASSERT_EQ(error, "");
+    dump_buf("DECRYPTED:", (unsigned char *)plaintext.c_str(), plaintext.length());
+    dump_buf("EXPECTED:", (unsigned char *)want_plaintext.c_str(), want_plaintext.length());
+    ASSERT_EQ(want_plaintext.length(), plaintext.length());
 
-  ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
-  plaintext.cbegin().copy(sizeof(plaintext_s), &plaintext_s[0]);
+    int err;
+    err = memcmp(plaintext.c_str(), want_plaintext.c_str(), plaintext.length());
+    ASSERT_EQ(0, err);
+  }
+}
 
-  int err;
-  err = memcmp(plaintext_s, want_plaintext, sizeof(want_plaintext));
-  ASSERT_EQ(0, err);
+TEST(AES256KRB5, DecryptNoBl) {
+  for (int i = 0; !tv[i].secret.empty(); ++i)  {
+    auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
 
-  delete kh;
+    tvbl t(tv[i]);
+
+    auto& secret = t.secret;
+    auto& want_plaintext = t.plaintext;
+    auto& ciphertext = t.ciphertext;
+
+    std::size_t plain_buf_size = want_plaintext.length();
+    unsigned char plaintext[plain_buf_size];
+
+    std::string error;
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
+
+    CryptoKey::in_slice_t cipher_slice { ciphertext.length(), (const unsigned char *)ciphertext.c_str() };
+    CryptoKey::out_slice_t plain_slice { plain_buf_size, plaintext };
+    const auto plain_size = kh->decrypt(g_ceph_context, cipher_slice, plain_slice);
+
+    dump_buf("DECRYPTED:", plaintext, plain_size);
+    dump_buf("EXPECTED:", (unsigned char *)want_plaintext.c_str(), want_plaintext.length());
+    ASSERT_EQ(plain_size, want_plaintext.length());
+
+    const int err = memcmp(plaintext, want_plaintext.c_str(), plain_size);
+    ASSERT_EQ(0, err);
+  }
 }
 
 static void aes256krb5_loop(const std::size_t text_size) {
