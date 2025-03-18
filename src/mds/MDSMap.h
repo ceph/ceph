@@ -236,15 +236,6 @@ public:
   bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool was_snaps_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_SNAPS; }
 
-  void set_referent_inodes() {
-    set_flag(CEPH_MDSMAP_REFERENT_INODES);
-    ever_allowed_features |= CEPH_MDSMAP_REFERENT_INODES;
-    explicitly_allowed_features |= CEPH_MDSMAP_REFERENT_INODES;
-  }
-  void clear_referent_inodes() { clear_flag(CEPH_MDSMAP_REFERENT_INODES); }
-  bool allow_referent_inodes() const { return test_flag(CEPH_MDSMAP_REFERENT_INODES); }
-  bool was_referent_inodes_ever_used() const { return ever_allowed_features & CEPH_MDSMAP_REFERENT_INODES; }
-
   void set_standby_replay_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
     ever_allowed_features |= CEPH_MDSMAP_ALLOW_STANDBY_REPLAY;
