@@ -864,12 +864,6 @@ struct inode_t {
     optmetadata.del_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
   }
 
-  const std::vector<uint64_t>& get_referent_inodes() { return referent_inodes; }
-  void add_referent_ino(inodeno_t ref_ino) { referent_inodes.push_back(ref_ino); }
-  void remove_referent_ino(inodeno_t ref_ino) {
-    referent_inodes.erase(remove(referent_inodes.begin(), referent_inodes.end(), ref_ino), referent_inodes.end());
-  }
-
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
@@ -975,7 +969,6 @@ struct inode_t {
   optmetadata_multiton<optmetadata_singleton_server_t,Allocator> optmetadata;
 
   inodeno_t remote_ino = 0; // referent inode - remote inode link
-  std::vector<uint64_t> referent_inodes;
 
 private:
   bool older_is_consistent(const inode_t &other) const;
@@ -1060,8 +1053,6 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(optmetadata, bl, features);
 
   encode(remote_ino, bl);
-  encode(referent_inodes, bl);
-
   ENCODE_FINISH(bl);
 }
 
@@ -1186,7 +1177,6 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 21) {
     decode(remote_ino, p);
-    decode(referent_inodes, p);
   }
   DECODE_FINISH(p);
 }
@@ -1240,8 +1230,7 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
 	fscrypt_file != other.fscrypt_file ||
 	fscrypt_last_block != other.fscrypt_last_block ||
 	optmetadata != other.optmetadata ||
-	remote_ino != other.remote_ino ||
-	referent_inodes != other.referent_inodes) {
+	remote_ino != other.remote_ino) {
       *divergent = true;
     }
     return 0;
