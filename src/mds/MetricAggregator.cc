@@ -44,6 +44,8 @@ enum {
   l_mds_per_client_metrics_total_read_size,
   l_mds_per_client_metrics_total_write_ops,
   l_mds_per_client_metrics_total_write_size,
+  l_mds_per_client_metrics_total_copy_ops,
+  l_mds_per_client_metrics_total_copy_size,
   l_mds_per_client_metrics_last
  };
 
@@ -195,6 +197,10 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
 		"total_write_ops", "Total Write Operations", "wops", PerfCountersBuilder::PRIO_CRITICAL);
     plb.add_u64(l_mds_per_client_metrics_total_write_size,
 		"total_write_size", "Total Write Size", "wsiz", PerfCountersBuilder::PRIO_CRITICAL);
+    plb.add_u64(l_mds_per_client_metrics_total_copy_ops,
+    "total_copy_ops", "Total Copy Ops", "wops", PerfCountersBuilder::PRIO_CRITICAL);
+    plb.add_u64(l_mds_per_client_metrics_total_copy_size,
+    "total_copy_size", "Total Copy Size", "csiz", PerfCountersBuilder::PRIO_CRITICAL);
     client_perf_counters[crpair] = plb.create_perf_counters();
     m_cct->get_perfcounters_collection()->add(client_perf_counters[crpair]);
   }
@@ -255,6 +261,12 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
     if (metrics.write_io_sizes_metric.updated) {
       perf_counter_ptr->set(l_mds_per_client_metrics_total_write_ops, metrics.write_io_sizes_metric.total_ops);
       perf_counter_ptr->set(l_mds_per_client_metrics_total_write_size, metrics.write_io_sizes_metric.total_size);
+    }
+
+    // copy io metrics
+    if (metrics.copy_io_sizes_metric.updated) {
+      perf_counter_ptr->set(l_mds_per_client_metrics_total_copy_ops, metrics.copy_io_sizes_metric.total_ops);
+      perf_counter_ptr->set(l_mds_per_client_metrics_total_copy_size, metrics.copy_io_sizes_metric.total_size);
     }
   }
 

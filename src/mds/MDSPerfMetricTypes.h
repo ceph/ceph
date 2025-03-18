@@ -286,6 +286,30 @@ struct WriteIoSizesMetric {
   }
 };
 
+struct CopyIoSizesMetric {
+  uint64_t total_ops = 0;
+  uint64_t total_size = 0;
+  bool updated = false;
+
+  DENC(CopyIoSizesMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.total_ops, p);
+    denc(v.total_size, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("total_ops", total_ops);
+    f->dump_unsigned("total_size", total_size);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const CopyIoSizesMetric &metric) {
+    os << "{total_ops=" << metric.total_ops << ", total_size=" << metric.total_size <<"}";
+    return os;
+  }
+};
+
 WRITE_CLASS_DENC(CapHitMetric)
 WRITE_CLASS_DENC(ReadLatencyMetric)
 WRITE_CLASS_DENC(WriteLatencyMetric)
@@ -296,6 +320,7 @@ WRITE_CLASS_DENC(PinnedIcapsMetric)
 WRITE_CLASS_DENC(OpenedInodesMetric)
 WRITE_CLASS_DENC(ReadIoSizesMetric)
 WRITE_CLASS_DENC(WriteIoSizesMetric)
+WRITE_CLASS_DENC(CopyIoSizesMetric)
 
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
@@ -310,12 +335,13 @@ struct Metrics {
   OpenedInodesMetric opened_inodes_metric;
   ReadIoSizesMetric read_io_sizes_metric;
   WriteIoSizesMetric write_io_sizes_metric;
+  CopyIoSizesMetric copy_io_sizes_metric;
 
   // metric update type
   uint32_t update_type = UpdateType::UPDATE_TYPE_REFRESH;
 
   DENC(Metrics, v, p) {
-    DENC_START(4, 1, p);
+    DENC_START(5, 1, p);
     denc(v.update_type, p);
     denc(v.cap_hit_metric, p);
     denc(v.read_latency_metric, p);
@@ -333,6 +359,9 @@ struct Metrics {
       denc(v.read_io_sizes_metric, p);
       denc(v.write_io_sizes_metric, p);
     }
+    if (struct_v >= 5) {
+      denc(v.copy_io_sizes_metric, p);
+    }
     DENC_FINISH(p);
   }
 
@@ -348,6 +377,7 @@ struct Metrics {
     f->dump_object("opened_inodes_metric", opened_inodes_metric);
     f->dump_object("read_io_sizes_metric", read_io_sizes_metric);
     f->dump_object("write_io_sizes_metric", write_io_sizes_metric);
+    f->dump_object("copy_io_sizes_metric", copy_io_sizes_metric);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Metrics& metrics) {
@@ -362,6 +392,7 @@ struct Metrics {
        << ", opened_inodes_metric=" << metrics.opened_inodes_metric
        << ", read_io_sizes_metric=" << metrics.read_io_sizes_metric
        << ", write_io_sizes_metric=" << metrics.write_io_sizes_metric
+       << ", copy_io_sizes_metric=" << metrics.copy_io_sizes_metric
        << "}]";
     return os;
   }

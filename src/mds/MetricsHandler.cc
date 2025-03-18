@@ -125,6 +125,7 @@ void MetricsHandler::remove_session(Session *session) {
   metrics.opened_inodes_metric = { };
   metrics.read_io_sizes_metric = { };
   metrics.write_io_sizes_metric = { };
+  metrics.copy_io_sizes_metric = { };
   metrics.update_type = UPDATE_TYPE_REMOVE;
 }
 
@@ -321,6 +322,24 @@ void MetricsHandler::handle_payload(Session *session, const WriteIoSizesPayload 
   metrics.write_io_sizes_metric.total_size = payload.total_size;
   metrics.write_io_sizes_metric.updated = true;
 }
+
+void MetricsHandler::handle_payload(Session *session, const CopyIoSizesPayload &payload) {
+  dout(20) << ": type=" << payload.get_type()
+           << ", session=" << session << ", total_ops=" << payload.total_ops
+           << ", total_size=" << payload.total_size << dendl;
+
+  auto it = client_metrics_map.find(session->info.inst);
+  if (it == client_metrics_map.end()) {
+    return;
+  }
+
+  auto &metrics = it->second.second;
+  metrics.update_type = UPDATE_TYPE_REFRESH;
+  metrics.copy_io_sizes_metric.total_ops = payload.total_ops;
+  metrics.copy_io_sizes_metric.total_size = payload.total_size;
+  metrics.copy_io_sizes_metric.updated = true;
+}
+
 
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {
   dout(5) << ": type=Unknown, session=" << session << ", ignoring unknown payload" << dendl;

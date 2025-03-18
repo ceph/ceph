@@ -26,6 +26,7 @@ struct PinnedIcapsPayload;
 struct OpenedInodesPayload;
 struct ReadIoSizesPayload;
 struct WriteIoSizesPayload;
+struct CopyIoSizesPayload;
 struct UnknownPayload;
 class MClientMetrics;
 class MDSMap;
@@ -107,6 +108,7 @@ private:
   void handle_payload(Session *session, const OpenedInodesPayload &payload);
   void handle_payload(Session *session, const ReadIoSizesPayload &payload);
   void handle_payload(Session *session, const WriteIoSizesPayload &payload);
+  void handle_payload(Session *session, const CopyIoSizesPayload &payload);
   void handle_payload(Session *session, const UnknownPayload &payload);
 
   void set_next_seq(version_t seq);
