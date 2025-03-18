@@ -1450,7 +1450,7 @@ seastar::future<> OSD::handle_rep_op_reply(
 	m->finish_decode();
 	pg->handle_rep_op_reply(*m);
       } else {
-	WARN("stale reply: {}", *m);
+	DEBUG("stale reply: {}", *m);
       }
       return seastar::now();
     });
