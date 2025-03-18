@@ -28,7 +28,7 @@ using ceph::Formatter;
 
 MgrOpRequest::MgrOpRequest(MessageRef req, OpTracker* tracker)
     : TrackedOp(tracker, req->get_recv_stamp()),
-      request(req) {
+      request(req->get()) {
   req_src_inst = req->get_source_inst();
 }
 
