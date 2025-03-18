@@ -968,8 +968,6 @@ struct inode_t {
 
   optmetadata_multiton<optmetadata_singleton_server_t,Allocator> optmetadata;
 
-  inodeno_t remote_ino = 0; // referent inode - remote inode link
-
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
@@ -990,7 +988,7 @@ inline bool operator!=(std::vector<uint8_t,Allocator<uint8_t>> l,
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(21, 6, bl);
+  ENCODE_START(20, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -1052,7 +1050,6 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 
   encode(optmetadata, bl, features);
 
-  encode(remote_ino, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1175,9 +1172,6 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
     decode(optmetadata, p);
   }
 
-  if (struct_v >= 21) {
-    decode(remote_ino, p);
-  }
   DECODE_FINISH(p);
 }
 
@@ -1229,8 +1223,7 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
 	fscrypt_auth != other.fscrypt_auth ||
 	fscrypt_file != other.fscrypt_file ||
 	fscrypt_last_block != other.fscrypt_last_block ||
-	optmetadata != other.optmetadata ||
-	remote_ino != other.remote_ino) {
+	optmetadata != other.optmetadata) {
       *divergent = true;
     }
     return 0;
