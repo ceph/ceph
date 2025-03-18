@@ -988,7 +988,7 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 25) << "radoslist DLO oid=\"" << oid <<
       "\" added bucket=\"" << bucket_name << "\" prefix=\"" <<
       prefix << "\" to process list" << dendl;
-  } else if ((attr_it = result.attrs.find(RGW_ATTR_USER_MANIFEST)) !=
+  } else if ((attr_it = result.attrs.find(RGW_ATTR_SLO_MANIFEST)) !=
 	     result.attrs.end()) {
     // *** handle SLO object ***
 
