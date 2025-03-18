@@ -614,15 +614,35 @@ class TestVolumeRm(TestVolumesHelper):
                 raise RuntimeError("expected the 'fs volume rm' command to fail with EPERM, "
                                    "but it failed with {0}".format(ce.exitstatus))
             else:
-                self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
-
-                #check if it's gone
-                volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
-                if (self.volname in [volume['name'] for volume in volumes]):
-                    raise RuntimeError("Expected the 'fs volume rm' command to succeed. "
-                                       "The volume {0} not removed.".format(self.volname))
+                pass
         else:
             raise RuntimeError("expected the 'fs volume rm' command to fail.")
+
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+        #check if it's gone
+        volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
+        if (self.volname in [volume['name'] for volume in volumes]):
+            raise RuntimeError("Expected the 'fs volume rm' command to succeed. "
+                               "The volume {0} not removed.".format(self.volname))
+
+        o = self.run_ceph_cmd("osd pool ls --format json-pretty")
+        for p in o:
+            self.assertIn(p, o)
+
+    def test_volume_rm_with_rm_pools_opt(self):
+        for m in self.mounts:
+            m.umount_wait()
+
+        self.run_ceph_cmd(f'fs volume rm {self.volname} --rm-pools '
+                           '--yes-i-really-mean-it')
+
+        o = self.run_ceph_cmd('fs volume ls --format=json-pretty')
+        self.assertNotIn(self.volname, o)
+
+        o = self.run_ceph_cmd('osd pool ls --format json-pretty')
+        for p in o:
+            self.assertNotIn(p, o)
 
     def test_volume_rm_arbitrary_pool_removal(self):
         """
