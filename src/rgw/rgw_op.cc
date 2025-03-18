@@ -8500,6 +8500,14 @@ void RGWPutBucketPolicy::send_response()
 
 int RGWPutBucketPolicy::verify_permission(optional_yield y)
 {
+  // If the user is the root account of the bucket owner,
+  // and x-amz-confirm-remove-self-bucket-access was not set,
+  // then the user can put bucket policy.
+  if (s->auth.identity->is_root_of(s->bucket_owner.id) &&
+      s->bucket_attrs.find(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS) == s->bucket_attrs.end()) {
+    return 0;
+  }
+
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
@@ -8549,10 +8557,15 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     }
 
     op_ret = retry_raced_bucket_write(this, s->bucket.get(), [&p, this, &attrs] {
-	attrs[RGW_ATTR_IAM_POLICY].clear();
-	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
-	op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
-	return op_ret;
+        attrs[RGW_ATTR_IAM_POLICY].clear();
+        attrs[RGW_ATTR_IAM_POLICY].append(p.text);
+        if (s->info.env->exists("HTTP_X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS")) {
+          attrs[RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS].clear();
+        } else {
+          attrs.erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
+        }
+        op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
+        return op_ret;
       }, y);
   } catch (rgw::IAM::PolicyParseException& e) {
     ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
@@ -8573,6 +8586,14 @@ void RGWGetBucketPolicy::send_response()
 
 int RGWGetBucketPolicy::verify_permission(optional_yield y)
 {
+  // If the user is the root account of the bucket owner,
+  // and x-amz-confirm-remove-self-bucket-access was not set,
+  // then the user can put bucket policy.
+  if (s->auth.identity->is_root_of(s->bucket_owner.id) &&
+      s->bucket_attrs.find(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS) == s->bucket_attrs.end()) {
+    return 0;
+  }
+
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
@@ -8622,6 +8643,14 @@ void RGWDeleteBucketPolicy::send_response()
 
 int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
 {
+  // If the user is the root account of the bucket owner,
+  // and x-amz-confirm-remove-self-bucket-access was not set,
+  // then the user can put bucket policy.
+  if (s->auth.identity->is_root_of(s->bucket_owner.id) &&
+      s->bucket_attrs.find(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS) == s->bucket_attrs.end()) {
+    return 0;
+  }
+
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
@@ -8645,6 +8674,7 @@ void RGWDeleteBucketPolicy::execute(optional_yield y)
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
       rgw::sal::Attrs& attrs = s->bucket->get_attrs();
       attrs.erase(RGW_ATTR_IAM_POLICY);
+      attrs.erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
       op_ret = s->bucket->put_info(this, false, real_time(), s->yield);
       return op_ret;
     }, y);
