@@ -8,6 +8,8 @@
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/trace/provider.h"
+#include "include/encoding_array.h"
+#include "include/encoding_string_view.h"
 
 using jspan = opentelemetry::trace::Span;
 using jspan_ptr = opentelemetry::nostd::shared_ptr<jspan>;

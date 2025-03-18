@@ -14,12 +14,16 @@
 
 #pragma once
 
-#include <ostream>
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
+
+#include <map>
+#include <ostream>
+#include <set>
+#include <string>
 
 namespace ECUtil {
 

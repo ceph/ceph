@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/Formatter.h"
+#include "include/container_ios.h"
 #include "include/encoding.h"
+#include "include/encoding_map.h"
 #include "include/stringify.h"
 #include "librbd/mirror/snapshot/Types.h"
 

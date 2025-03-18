@@ -13,11 +13,14 @@
  */
 
 #include "Server.h"
+#include "RetryMessage.h"
+#include "RetryRequest.h"
 #include "BatchOp.h"
 
 #include <boost/lexical_cast.hpp>
 #include "include/ceph_assert.h"  // lexical_cast includes system assert.h
 #include "include/cephfs/metrics/Types.h"
+#include "include/cephfs/keys_and_values.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 
 #include <boost/config/warning_disable.hpp>
@@ -289,6 +292,12 @@ Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   dispatch_killpoint_random = g_conf().get_val<double>("mds_server_dispatch_killpoint_random");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
   supported_metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
+}
+
+Server::~Server() {
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
+  delete reconnect_done;
 }
 
 void Server::dispatch(const cref_t<Message> &m)

@@ -15,15 +15,19 @@
  *
  */
 
+#include "OSDMap.h"
+
 #include <algorithm>
 #include <bit>
+#include <iomanip>
 #include <optional>
 #include <random>
+#include <sstream>
 #include <fmt/format.h>
 
 #include <boost/algorithm/string.hpp>
 
-#include "OSDMap.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -31,6 +35,9 @@
 #include "include/ceph_features.h"
 #include "include/common_fwd.h"
 #include "include/str_map.h"
+#include "include/denc_flat_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_unordered_map.h"
 
 #include "common/code_environment.h"
 #include "mon/health_check.h"
@@ -3367,10 +3374,10 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       encode(stretch_mode_bucket, bl);
     }
     if (target_v >= 11) {
-      ::encode(range_blocklist, bl, features);
+      encode(range_blocklist, bl, features);
     }
     if (target_v >= 12) {
-      ::encode(allow_crimson, bl);
+      encode(allow_crimson, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
