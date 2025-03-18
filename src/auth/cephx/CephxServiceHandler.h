@@ -55,7 +55,7 @@ private:
   void build_cephx_response_header(int request_type, int status,
 				   ceph::buffer::list& bl);
 
-  std::vector<std::string> get_tracked_keys() const noexcept override;
+  std::vector<std::string> get_tracked_keys() const noexcept final;
 
   void init_conf(const ConfigProxy& conf);
   void handle_conf_change(const ConfigProxy& conf,
