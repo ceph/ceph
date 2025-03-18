@@ -95,7 +95,7 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
     if (raw_shard < start_shard) {
       // Shards before the start, must start on the next chunk.
       start_adj = chunk_size;
-    } else if (int(raw_shard) == start_shard) {
+    } else if (int(raw_shard) == int(start_shard)) {
       // The start shard itself needs to be moved a partial-chunk forward.
       start_adj = ro_offset % chunk_size;
     }
@@ -103,7 +103,7 @@ void ECUtil::stripe_info_t::ro_range_to_shards(
     // The end is similar to the start, but the end must be rounded up.
     if (raw_shard < last_shard) {
       end_adj = chunk_size;
-    } else if (int(raw_shard) == last_shard) {
+    } else if (int(raw_shard) == int(last_shard)) {
       end_adj = (ro_offset + ro_size - 1) % chunk_size + 1;
     }
 
