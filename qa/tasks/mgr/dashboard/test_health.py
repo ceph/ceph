@@ -61,7 +61,6 @@ class HealthTest(DashboardTestCase):
             'refuse_client_session': bool,
             'refuse_standby_for_another_fs': bool,
             'balance_automate': bool,
-            'allow_referent_inodes': bool,
         }),
         'ever_allowed_features': int,
         'root': int,
