@@ -10,17 +10,17 @@ Introduction
 ------------
 
 Swift offers something called a *container*, which we use interchangeably with
-the term *bucket*, so we say that RGW's buckets implement Swift containers.
+the S3 term *bucket*, so we say that RGW's buckets implement Swift containers.
 
-This document does not consider how RGW operates on these structures,
-e.g. the use of ``encode()`` and ``decode()` methods for serialization and so on.
+This document does not consider how RGW _operates_ on these structures,
+e.g. the use of ``encode()`` and ``decode()`` methods for serialization.
 
 Conceptual View
 ---------------
 
 Although RADOS only knows about pools and objects with their xattrs and
-omap[1], conceptually RGW organizes its data into three different kinds:
-metadata, bucket index, and data.
+omap[1], conceptually RGW maintains three types of information:
+metadata, bucket indexes, and (payload) data.
 
 Metadata
 ^^^^^^^^
