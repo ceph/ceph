@@ -334,7 +334,10 @@ class Module(MgrModule):
             if osd_id in osd_stats:
                 metadata = self.get_metadata('osd', str(osd_id), default=defaultdict(str))
                 stats = osd_stats[osd_id]
-                assert metadata
+                # Ignore this OSD if we cannot retrieve its metadata. This
+                # happens if the OSD is down+out for example.
+                if not metadata:
+                    continue
                 hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
                 kb_avail = stats['kb_avail'] * 1024
