@@ -801,7 +801,7 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
-      - alert: "NVMeoFSingleGatewayGroup"
+      - alert: "NVMeoFSingleGateway"
         annotations:
           description: "Although a single member gateway group is valid, it should only be used for test purposes"
           summary: "The gateway group {{ $labels.group }} consists of a single gateway - HA is not possible on cluster {{ $labels.cluster }}"
