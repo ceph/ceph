@@ -28,10 +28,10 @@ namespace rgw {
 namespace auth {
 
 // match a principal by path/name[:subuser]
-static bool match_principal(std::string_view path,
-                            std::string_view name,
-                            std::string_view subuser,
-                            std::string_view expected)
+bool match_principal(std::string_view path,
+                     std::string_view name,
+                     std::string_view subuser,
+                     std::string_view expected)
 {
   // leading / was already matched by ":user/" in parse_principal()
   if (!path.empty()) {
@@ -64,8 +64,8 @@ static bool match_principal(std::string_view path,
   return (expected == "*" || expected == subuser);
 }
 
-static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
-                        const std::optional<RGWAccountInfo>& account)
+bool match_owner(const rgw_owner& owner, const rgw_user& uid,
+                 const std::optional<RGWAccountInfo>& account)
 {
   return std::visit(fu2::overload(
       [&uid] (const rgw_user& u) { return u == uid; },
@@ -74,9 +74,9 @@ static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
       }), owner);
 }
 
-static bool match_account_or_tenant(const std::optional<RGWAccountInfo>& account,
-                                    std::string_view tenant,
-                                    std::string_view expected)
+bool match_account_or_tenant(const std::optional<RGWAccountInfo>& account,
+                             std::string_view tenant,
+                             std::string_view expected)
 {
   return (account && account->id == expected)
       || (tenant == expected);
