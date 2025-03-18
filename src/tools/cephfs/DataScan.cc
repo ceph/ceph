@@ -1217,8 +1217,6 @@ int DataScan::scan_links()
 
   interval_set<uint64_t> used_inos;
   map<inodeno_t, int> remote_links;
-  map<inodeno_t, vector<uint64_t>>
-      referent_inodes; //referent inode list of primary inode
   map<snapid_t, SnapInfo> snaps;
   snapid_t last_snap = 1;
   snapid_t snaprealm_v2_since = 2;
@@ -1231,7 +1229,6 @@ int DataScan::scan_links()
     int nlink;
     bool is_dir;
     map<snapid_t, SnapInfo> snaps;
-    vector<uint64_t> referent_inodes;
 
     link_info_t() :
       version(0), nlink(0), is_dir(false)
@@ -1247,8 +1244,7 @@ int DataScan::scan_links()
       name(n),
       version(i->version),
       nlink(i->nlink),
-      is_dir(S_IFDIR & i->mode),
-      referent_inodes(i->referent_inodes)
+      is_dir(S_IFDIR & i->mode)
     {}
 
     dirfrag_t
@@ -1351,13 +1347,62 @@ int DataScan::scan_links()
 
             inodeno_t ino = inode.inode->ino;
 
-            if (step == SCAN_INOS) {
-              if (used_inos.contains(ino, 1)) {
-                dup_primaries.emplace(
-                    std::piecewise_construct, std::forward_as_tuple(ino),
-                    std::forward_as_tuple());
-              } else {
-                used_inos.insert(ino);
+	    if (step == SCAN_INOS) {
+	      if (used_inos.contains(ino, 1)) {
+		dup_primaries.emplace(
+                  std::piecewise_construct, std::forward_as_tuple(ino),
+                  std::forward_as_tuple());
+	      } else {
+		used_inos.insert(ino);
+	      }
+	    } else if (step == CHECK_LINK) {
+	      sr_t srnode;
+	      if (inode.snap_blob.length()) {
+		auto p = inode.snap_blob.cbegin();
+		decode(srnode, p);
+		for (auto it = srnode.snaps.begin();
+		     it != srnode.snaps.end(); ) {
+		  if (it->second.ino != ino ||
+		      it->second.snapid != it->first) {
+		    srnode.snaps.erase(it++);
+		  } else {
+		    ++it;
+		  }
+		}
+		if (!srnode.past_parents.empty()) {
+		  snapid_t last = srnode.past_parents.rbegin()->first;
+		  if (last + 1 > snaprealm_v2_since)
+		    snaprealm_v2_since = last + 1;
+		}
+	      }
+	      if (inode.old_inodes && !inode.old_inodes->empty()) {
+		auto _last_snap = inode.old_inodes->rbegin()->first;
+		if (_last_snap > last_snap)
+		  last_snap = _last_snap;
+	      }
+	      auto q = dup_primaries.find(ino);
+	      if (q != dup_primaries.end()) {
+		q->second.push_back(link_info_t(dir_ino, frag_id, dname, inode.inode));
+		q->second.back().snaps.swap(srnode.snaps);
+	      } else {
+		int nlink = 0;
+		auto r = remote_links.find(ino);
+		if (r != remote_links.end())
+		  nlink = r->second;
+		if (!MDS_INO_IS_STRAY(dir_ino))
+		  nlink++;
+		if (inode.inode->nlink != nlink) {
+		  derr << "Bad nlink on " << ino << " expected " << nlink
+		       << " has " << inode.inode->nlink << dendl;
+		  bad_nlink_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+		  bad_nlink_inos[ino].nlink = nlink;
+		}
+		snaps.insert(make_move_iterator(begin(srnode.snaps)),
+			     make_move_iterator(end(srnode.snaps)));
+	      }
+	      if (dnfirst == CEPH_NOSNAP) {
+                injected_inos.insert({ino, link_info_t(dir_ino, frag_id, dname, inode.inode)});
+                dout(20) << "adding " << ino << " for future processing to fix dnfirst" << dendl;
               }
             } else if (step == CHECK_LINK) {
               sr_t srnode;
@@ -1396,20 +1441,11 @@ int DataScan::scan_links()
                   nlink++;
 
                 if (inode.inode->nlink != nlink) {
-                  if (nlink > 1)
-                    ceph_assert(!referent_inodes[ino].empty());
-                  ceph_assert(
-                      static_cast<unsigned int>(nlink) ==
-                      (referent_inodes[ino].size() + 1));
                   derr << "Bad nlink on " << ino << " expected " << nlink
                        << " has " << inode.inode->nlink << dendl;
                   bad_nlink_inos[ino] =
                       link_info_t(dir_ino, frag_id, dname, inode.inode);
                   bad_nlink_inos[ino].nlink = nlink;
-                  dout(1) << "Bad nlink, adding referent inode list "
-                          << referent_inodes[ino] << " to the primary inode "
-                          << ino << dendl;
-                  bad_nlink_inos[ino].referent_inodes = referent_inodes[ino];
                 }
                 snaps.insert(
                     make_move_iterator(begin(srnode.snaps)),
@@ -1461,13 +1497,6 @@ int DataScan::scan_links()
                        << std::dec << "/" << dname << " to remote_links"
                        << dendl;
               remote_links[ino]++;
-              referent_inodes[ino].push_back(referent_ino);
-              dout(20) << "Added referent inode " << referent_ino
-                       << " of dentry 0x" << std::hex << dir_ino << std::dec
-                       << "/" << dname
-                       << " to referent_inodes list of primary inode " << ino
-                       << " referent_inode list after addition "
-                       << referent_inodes[ino] << dendl;
             } else if (step == CHECK_LINK) {
               if (dnfirst == CEPH_NOSNAP) {
                 injected_inos.insert(
@@ -1583,17 +1612,8 @@ int DataScan::scan_links()
     if (nlink != newest.nlink) {
       derr << "Dup primaries - Bad nlink on " << p.first << " expected "
            << nlink << " has " << newest.nlink << dendl;
-      if (nlink > 1)
-        ceph_assert(!referent_inodes[p.first].empty());
-      ceph_assert(
-          static_cast<unsigned int>(nlink) ==
-          (referent_inodes[p.first].size() + 1));
       bad_nlink_inos[p.first] = newest;
       bad_nlink_inos[p.first].nlink = nlink;
-      dout(1) << "Dup primaries - Bad nlink, adding referent inode list "
-              << referent_inodes[p.first] << " to the primary inode " << p.first
-              << dendl;
-      bad_nlink_inos[p.first].referent_inodes = referent_inodes[p.first];
     } else {
       bad_nlink_inos.erase(p.first);
     }
@@ -1655,10 +1675,6 @@ int DataScan::scan_links()
       continue;
 
     inode.get_inode()->nlink = p.second.nlink;
-    inode.get_inode()->referent_inodes = p.second.referent_inodes;
-    dout(10) << "bad_nlink_inos processing - Injecting referent_inodes "
-             << p.second.referent_inodes << " to the primary inode "
-             << inode.inode->ino << dendl;
     r = metadata_driver->inject_linkage(
         p.second.dirino, p.second.name, p.second.frag, inode, first);
     if (r < 0)
