@@ -265,19 +265,14 @@ void CDentry::make_path(filepath& fp, bool projected) const
  * active (no longer projected).  if the passed dnl is projected,
  * don't link in, and do that work later in pop_projected_linkage().
  */
-void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *remote_in, CInode *referent_in)
+void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 {
-  ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
-  ceph_assert(remote_in->ino() == dnl->get_remote_ino());
-  dnl->inode = remote_in;
-
-  if (referent_in) {
-    dnl->referent_inode = referent_in;
-    dnl->referent_ino = referent_in->ino();
-  }
+  ceph_assert(dnl->is_remote());
+  ceph_assert(in->ino() == dnl->get_remote_ino());
+  dnl->inode = in;
 
   if (dnl == &linkage)
-    remote_in->add_remote_parent(this);
+    in->add_remote_parent(this);
 
   // check for reintegration
   dir->mdcache->eval_remote(this);
@@ -285,7 +280,7 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *remote_in, CInode *re
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)
 {
-  ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
+  ceph_assert(dnl->is_remote());
   ceph_assert(dnl->inode);
   
   if (dnl == &linkage)
@@ -305,20 +300,6 @@ void CDentry::push_projected_linkage()
   }
 }
 
-void CDentry::push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino, inodeno_t referent_ino)
-{
-  ceph_assert(remote_ino);
-  ceph_assert(referent_inode);
-  ceph_assert(referent_ino);
-
-  linkage_t *p = _project_linkage();
-  p->referent_inode = referent_inode;
-  referent_inode->push_projected_parent(this);
-  p->referent_ino = referent_ino;
-
-  p->remote_ino = remote_ino;
-  p->remote_d_type = referent_inode->d_type();
-}
 
 void CDentry::push_projected_linkage(CInode *inode)
 {
@@ -352,19 +333,12 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
    * much).
    */
 
-  if (n.is_remote()) {
+  if (n.remote_ino) {
     dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
     if (n.inode) {
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
-  } else if (n.is_referent_remote()){
-    dir->link_referent_inode(this, n.referent_inode, n.remote_ino, n.remote_d_type);
-    if (n.inode) {
-      linkage.inode = n.inode;
-      linkage.inode->add_remote_parent(this);
-    }
-    n.referent_inode->pop_projected_parent();
   } else {
     if (n.inode) {
       dir->link_primary_inode(this, n.inode);
