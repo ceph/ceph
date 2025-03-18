@@ -222,7 +222,7 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
                                                             RGWBucketCtl::Bucket::GetParams()
                                                             .set_objv_tracker(&objv_tracker));
     if (r == -ENOENT) {
-      ret = -ERR_NO_SUCH_BUCKET;
+      ret = 0;
 
       ldpp_dout(dpp, 5) << "WARNING: the bucket entry point has been deleted by a concurrent DELETE bucket request."
                         << " Unlinking the bucket." << dendl;
