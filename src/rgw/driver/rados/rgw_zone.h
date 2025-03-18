@@ -415,6 +415,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     encode(enabled_features, bl);
     encode(cross_zonegroup_export, bl);
     encode(cross_zonegroup_import, bl);
+    encode(same_zonegroup, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -449,6 +450,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     if (struct_v >= 7) {
       decode(cross_zonegroup_export, bl);
       decode(cross_zonegroup_import, bl);
+      decode(same_zonegroup, bl);
     }
     DECODE_FINISH(bl);
   }
