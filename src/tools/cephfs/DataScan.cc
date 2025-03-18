@@ -883,9 +883,8 @@ int DataScan::scan_inodes()
         inode_backtrace_t backtrace;
         file_layout_t loaded_layout = file_layout_t::get_default();
         std::string symlink;
-        inodeno_t remote_inode;
         r = ClsCephFSClient::fetch_inode_accumulate_result(
-            data_io, oid, &backtrace, &loaded_layout, &symlink, &remote_inode,
+            data_io, oid, &backtrace, &loaded_layout, &symlink,
             &accum_res);
 
         if (r == -EINVAL) {
@@ -1097,8 +1096,7 @@ int DataScan::scan_inodes()
 
         InodeStore dentry;
         build_file_dentry(
-            obj_name_ino, file_size, file_mtime, guessed_layout, symlink,
-            remote_inode, &dentry);
+          obj_name_ino, file_size, file_mtime, guessed_layout, &dentry, symlink);
 
         // Inject inode to the metadata pool
         if (have_backtrace) {
@@ -1459,52 +1457,15 @@ int DataScan::scan_links()
               }
             }
           } else if (
-              dentry_type == 'L' || dentry_type == 'l' || dentry_type == 'R' ||
-              dentry_type == 'r') {
+              dentry_type == 'L' || dentry_type == 'l') {
             inodeno_t ino;
-            inodeno_t referent_ino;
-            InodeStore inode;
             unsigned char d_type;
-
-            if (dentry_type == 'r') {
-              DECODE_START(2, q);
-              if (struct_v >= 2)
-                decode(alternate_name, q);
-              dout(20) << "decoding referent inode dentry  type 'r' 0x"
-                       << std::hex << dir_ino << std::dec << "/" << dname
-                       << dendl;
-              inode.decode(q);
-              DECODE_FINISH(q);
-              ino = inode.inode->remote_ino;
-              referent_ino = inode.inode->ino;
-            } else if (dentry_type == 'R') {
-              dout(20) << "decoding referent inode dentry type 'R' 0x"
-                       << std::hex << dir_ino << std::dec << "/" << dname
-                       << dendl;
-              inode.decode_bare(q);
-              ino = inode.inode->remote_ino;
-              referent_ino = inode.inode->ino;
-            } else {
-              CDentry::decode_remote(
-                  dentry_type, ino, d_type, alternate_name, q);
-            }
+            CDentry::decode_remote(
+                dentry_type, ino, d_type, alternate_name, q);
 
             if (step == SCAN_INOS) {
-              dout(20) << "Add referent inode dentry 0x" << std::hex << dir_ino
-                       << std::dec << "/" << dname << " to used_inos" << dendl;
-              used_inos.insert(referent_ino);
-              dout(20) << "Add referent inode dentry 0x" << std::hex << dir_ino
-                       << std::dec << "/" << dname << " to remote_links"
-                       << dendl;
               remote_links[ino]++;
             } else if (step == CHECK_LINK) {
-              if (dnfirst == CEPH_NOSNAP) {
-                injected_inos.insert(
-                    {referent_ino,
-                     link_info_t(dir_ino, frag_id, dname, inode.inode)});
-                dout(20) << "Adding referent inode " << referent_ino
-                         << " for future processing to fix dnfirst" << dendl;
-              }
               if (!used_inos.contains(ino, 1)) {
                 derr << "Bad remote link dentry 0x" << std::hex << dir_ino
                      << std::dec << "/" << dname << ", ino " << ino
@@ -1983,8 +1944,8 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     decode(first, q);
     char dentry_type;
     decode(dentry_type, q);
-    if (dentry_type == 'I' || dentry_type == 'i' || dentry_type == 'R' || dentry_type == 'r') {
-      if (dentry_type == 'i' || dentry_type == 'r') {
+    if (dentry_type == 'I' || dentry_type == 'i') {
+      if (dentry_type == 'i') {
         mempool::mds_co::string alternate_name;
 
         DECODE_START(2, q);
@@ -2468,10 +2429,7 @@ int MetadataDriver::inject_linkage(
 
   bufferlist dentry_bl;
   encode(dnfirst, dentry_bl);
-  if (inode.inode->remote_ino)
-    encode('R', dentry_bl);
-  else
-    encode('I', dentry_bl);
+  encode('I', dentry_bl);
   inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write out
@@ -2646,8 +2604,7 @@ int LocalFileDriver::check_roots(bool *result)
 
 void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const file_layout_t &layout, std::string symlink, inodeno_t remote_inode,
-    InodeStore *out)
+    const file_layout_t &layout, InodeStore *out, std::string symlink)
 {
   ceph_assert(out != NULL);
 
@@ -2679,7 +2636,6 @@ void MetadataTool::build_file_dentry(
   inode->backtrace_version = 1;
   inode->uid = g_conf()->mds_root_ino_uid;
   inode->gid = g_conf()->mds_root_ino_gid;
-  inode->remote_ino = remote_inode;
 }
 
 void MetadataTool::build_dir_dentry(
