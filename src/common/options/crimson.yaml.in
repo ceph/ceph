@@ -152,13 +152,6 @@ options:
   level: advanced
   desc: Size in bytes of extents to keep in cache (per reactor).
   default: 2_G
-- name: seastore_obj_data_write_amplification
-  type: float
-  level: advanced
-  desc: split extent if ratio of total extent size to write size exceeds this value
-  default: 1.25
-# TODO: seastore_obj_data_write_amplification is no longer correct if 
-#       seastore_data_delta_based_overwrite is enabled. So, this should be reconsidered.
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
