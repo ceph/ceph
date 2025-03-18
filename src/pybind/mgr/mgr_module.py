@@ -1629,9 +1629,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     def get_unlabeled_perf_schema(self,
-                        svc_type: str,
-                        svc_name: str) -> Dict[str,
-                                               Dict[str, Dict[str, Union[str, int]]]]:
+                                  svc_type: str,
+                                  svc_name: str) -> Dict[str,
+                                                         Dict[str, Dict[str, Union[str, int]]]]:
         """
         Called by the plugin to fetch unlabeled perf counter schema info.
         svc_name can be nullptr, as can svc_type, in which case
@@ -1669,9 +1669,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     def get_unlabeled_counter(self,
-                    svc_type: str,
-                    svc_name: str,
-                    path: str) -> Dict[str, List[Tuple[float, int]]]:
+                              svc_type: str,
+                              svc_name: str,
+                              path: str) -> Dict[str, List[Tuple[float, int]]]:
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1688,10 +1688,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     def get_latest_unlabeled_counter(self,
-                           svc_type: str,
-                           svc_name: str,
-                           path: str) -> Dict[str, Union[Tuple[float, int],
-                                                         Tuple[float, int, int]]]:
+                                     svc_type: str,
+                                     svc_name: str,
+                                     path: str) -> Dict[str, Union[Tuple[float, int],
+                                                                   Tuple[float, int, int]]]:
         """
         Called by the plugin to fetch only the newest performance unlabeled counter
         data point for a particular counter on a particular service.
