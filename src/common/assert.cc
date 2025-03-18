@@ -43,6 +43,12 @@ namespace ceph {
   {
     ceph_assert(!g_assert_context);
     g_assert_context = cct;
+    const auto supressions = get_str_list(
+      g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+    if (!supressions.empty()) {
+      lderr(g_assert_context) << "WARNING: supressions for ceph_assert present: "
+			      << supressions << dendl;
+    }
   }
 
   [[gnu::cold]] void __ceph_assert_fail(const char *assertion,
