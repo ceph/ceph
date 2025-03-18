@@ -62,20 +62,22 @@ int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclu
     return ret;
   }
   RGWPeriod period;
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
   if (current_period.empty()) {
     /* create new period for the realm */
-    ret = period.init(dpp, cct, sysobj_svc, id, y, false);
+    ret = cfgstore->read_period(dpp, y, period.get_id(), period.get_epoch(), period);
     if (ret < 0 ) {
       return ret;
     }
-    ret = period.create(dpp, y, true);
+    ret = cfgstore->create_period(dpp, y, true, period);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   } else {
     period = RGWPeriod(current_period, 0);
-    int ret = period.init(dpp, cct, sysobj_svc, id, y);
+    ret = cfgstore->read_period(dpp, y, period.get_id(), period.get_epoch(), period);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to init period " << current_period << dendl;
       return ret;
@@ -174,7 +176,9 @@ int RGWRealm::set_current_period(const DoutPrefixProvider *dpp, RGWPeriod& perio
     return ret;
   }
 
-  ret = period.reflect(dpp, y);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  ret = rgw::reflect_period(dpp, y, cfgstore.get(), period);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -228,7 +232,9 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   epoch_t epoch = 0;
 
   RGWPeriod period(period_id, epoch);
-  int r = period.init(dpp, cct, sysobj_svc, get_id(), y);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  int r = cfgstore->read_period(dpp, y, period_id, epoch, period);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "WARNING: period init failed: " << cpp_strerror(-r) << " ... skipping" << dendl;
     return r;

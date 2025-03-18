@@ -660,13 +660,6 @@ public:
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct{nullptr};
-  RGWSI_SysObj *sysobj_svc{nullptr};
-
-  int read_info(const DoutPrefixProvider *dpp, optional_yield y);
-  int read_latest_epoch(const DoutPrefixProvider *dpp,
-                        RGWPeriodLatestEpochInfo& epoch_info,
-			optional_yield y,
-                        RGWObjVersionTracker *objv = nullptr);
   int use_latest_epoch(const DoutPrefixProvider *dpp, optional_yield y);
   int use_current_period();
 
@@ -724,8 +717,6 @@ public:
     realm_id = _realm_id;
   }
 
-  int reflect(const DoutPrefixProvider *dpp, optional_yield y);
-
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const std::string& zonegroup_id) const;
 
@@ -756,22 +747,10 @@ public:
                 optional_yield y) const;
 
   int get_latest_epoch(const DoutPrefixProvider *dpp, epoch_t& epoch, optional_yield y);
-  int set_latest_epoch(const DoutPrefixProvider *dpp, optional_yield y,
-		       epoch_t epoch, bool exclusive = false,
-                       RGWObjVersionTracker *objv = nullptr);
   // update latest_epoch if the given epoch is higher, else return -EEXIST
   int update_latest_epoch(const DoutPrefixProvider *dpp, epoch_t epoch, optional_yield y);
 
-  int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, optional_yield y,
-	    bool setup_obj = true);
-  int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);  
-
-  int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
-  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
-  int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-
   void fork();
-  int update(const DoutPrefixProvider *dpp, optional_yield y);
 
   // commit a staging period; only for use on master zone
   int commit(const DoutPrefixProvider *dpp,
@@ -1018,5 +997,7 @@ class SiteConfig {
 
 /// Test whether all zonegroups in the realm support the given zone feature.
 bool all_zonegroups_support(const SiteConfig& site, std::string_view feature);
+
+std::string gen_random_uuid();
 
 } // namespace rgw

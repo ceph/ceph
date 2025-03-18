@@ -137,6 +137,19 @@ int ImmutableConfigStore::list_period_ids(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int ImmutableConfigStore::read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, std::string_view period_id,
+                                            uint32_t& epoch, RGWObjVersionTracker* objv, RGWPeriod& info)
+{
+  return -ENOENT;
+}
+
+int ImmutableConfigStore::write_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive,
+                                             std::string_view period_id, uint32_t epoch, RGWObjVersionTracker* objv,
+                                             const RGWPeriod& info)
+{
+  return -EROFS;
+}
+
 
 // ZoneGroup
 

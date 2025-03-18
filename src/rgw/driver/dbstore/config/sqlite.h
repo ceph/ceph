@@ -79,6 +79,10 @@ class SQLiteConfigStore : public sal::ConfigStore {
                       optional_yield y, const std::string& marker,
                       std::span<std::string> entries,
                       sal::ListResult<std::string>& result) override;
+  int read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, std::string_view period_id,
+                                uint32_t& epoch, RGWObjVersionTracker* objv, RGWPeriod& info) override;
+  int write_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, std::string_view period_id,
+                                 uint32_t epoch, RGWObjVersionTracker* objv, const RGWPeriod& info) override;
 
   int write_default_zonegroup_id(const DoutPrefixProvider* dpp,
                                  optional_yield y, bool exclusive,
