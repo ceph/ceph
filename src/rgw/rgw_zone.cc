@@ -613,43 +613,6 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   return 0;
 }
 
-int RGWPeriodConfig::read(const DoutPrefixProvider *dpp, RGWSI_SysObj *sysobj_svc, const std::string& realm_id,
-			  optional_yield y)
-{
-  const auto& pool = get_pool(sysobj_svc->ctx());
-  const auto& oid = get_oid(realm_id);
-  bufferlist bl;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    return ret;
-  }
-  using ceph::decode;
-  try {
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-  return 0;
-}
-
-int RGWPeriodConfig::write(const DoutPrefixProvider *dpp, 
-                           RGWSI_SysObj *sysobj_svc,
-			   const std::string& realm_id, optional_yield y)
-{
-  const auto& pool = get_pool(sysobj_svc->ctx());
-  const auto& oid = get_oid(realm_id);
-  bufferlist bl;
-  using ceph::encode;
-  encode(*this, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(false)
-               .write(dpp, bl, y);
-}
-
 void RGWPeriodConfig::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);

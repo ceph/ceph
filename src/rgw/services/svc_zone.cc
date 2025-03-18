@@ -291,7 +291,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     }
     // read period_config into current_period
     auto& period_config = current_period->get_config();
-    ret = period_config.read(dpp, sysobj_svc, zonegroup->realm_id, y);
+    ret = cfgstore->read_period_config(dpp, y, zonegroup->realm_id, period_config);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: failed to read period config: "
           << cpp_strerror(ret) << dendl;
