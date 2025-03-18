@@ -1,8 +1,10 @@
 import pytest
+from argparse import Namespace
 from unittest.mock import patch, Mock, MagicMock, call
 from ceph_volume.objectstore.lvmbluestore import LvmBlueStore
 from ceph_volume.api.lvm import Volume
-from ceph_volume.util import system
+from ceph_volume.util import system, disk
+from typing import Callable
 
 
 class TestLvmBlueStore:
@@ -119,8 +121,10 @@ class TestLvmBlueStore:
 
     @patch('ceph_volume.util.disk.is_partition', Mock(return_value=True))
     @patch('ceph_volume.api.lvm.create_lv')
-    def test_prepare_data_device(self, m_create_lv, factory):
-        args = factory(data='/dev/foo',
+    def test_prepare_data_device(self,
+                                 m_create_lv: MagicMock,
+                                 factory: Callable[..., Namespace]) -> None:
+        args = factory(data='/dev/foo1',
                        data_slots=1,
                        data_size=102400)
         self.lvm_bs.args = args
@@ -175,10 +179,18 @@ class TestLvmBlueStore:
             self.lvm_bs.safe_prepare()
         assert m_rollback_osd.mock_calls == [call('111')]
 
+    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.pre_prepare', Mock(return_value=None))
+    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.prepare_dmcrypt', MagicMock())
+    @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.prepare_osd_req', MagicMock())
+    @patch('ceph_volume.objectstore.bluestore.BlueStore.osd_mkfs', MagicMock())
+    @patch('ceph_volume.util.disk.is_partition', Mock(return_value=True))
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.get_ptuuid', Mock(return_value='c6798f59-01'))
     @patch('ceph_volume.api.lvm.Volume.set_tags', MagicMock())
     @patch('ceph_volume.api.lvm.get_single_lv')
-    def test_prepare(self, m_get_single_lv, is_root, factory):
+    def test_prepare(self,
+                     m_get_single_lv: MagicMock,
+                     is_root: Callable[..., None],
+                     factory: Callable[..., Namespace]) -> None:
         m_get_single_lv.return_value = Volume(lv_name='lv_foo',
                                               lv_path='/fake-path',
                                               vg_name='vg_foo',
@@ -194,16 +206,14 @@ class TestLvmBlueStore:
                        with_tpm=False
                        )
         self.lvm_bs.args = args
-        self.lvm_bs.pre_prepare = lambda: None
         self.lvm_bs.block_lv = MagicMock()
-        self.lvm_bs.prepare_osd_req = MagicMock()
-        self.lvm_bs.osd_mkfs = MagicMock()
-        self.lvm_bs.prepare_dmcrypt = MagicMock()
         self.lvm_bs.secrets['dmcrypt_key'] = 'fake-secret'
         self.lvm_bs.prepare()
         assert self.lvm_bs.wal_device_path == '/dev/foo1'
         assert self.lvm_bs.db_device_path == '/dev/foo2'
-        assert self.lvm_bs.block_lv.set_tags.mock_calls == [call({'ceph.type': 'block', 'ceph.vdo': '0', 'ceph.wal_uuid': 'c6798f59-01', 'ceph.wal_device': '/dev/foo1', 'ceph.db_uuid': 'c6798f59-01', 'ceph.db_device': '/dev/foo2'})]
+        assert self.lvm_bs.block_lv.set_tags.mock_calls == [call({
+            'ceph.type': 'block',
+            })]
         assert not self.lvm_bs.prepare_dmcrypt.called
         assert self.lvm_bs.osd_mkfs.called
         assert self.lvm_bs.prepare_osd_req.called
@@ -248,84 +258,96 @@ class TestLvmBlueStore:
                                                   {})
         assert result == ''
 
-    def test_setup_device_is_none(self):
-        result = self.lvm_bs.setup_device('block',
-                                          None,
-                                          {},
-                                          1,
-                                          1)
-        assert result == ('', '', {})
-
     @patch('ceph_volume.api.lvm.Volume.set_tags', return_value=MagicMock())
     @patch('ceph_volume.util.system.generate_uuid',
            Mock(return_value='d83fa1ca-bd68-4c75-bdc2-464da58e8abd'))
     @patch('ceph_volume.api.lvm.create_lv')
     @patch('ceph_volume.util.disk.is_device', Mock(return_value=True))
-    def test_setup_device_is_device(self, m_create_lv, m_set_tags):
+    def test_setup_metadata_devices_is_device(self,
+                                              m_create_lv: MagicMock,
+                                              m_set_tags: MagicMock,
+                                              factory: Callable[..., Namespace]) -> None:
         m_create_lv.return_value = Volume(lv_name='lv_foo',
                                           lv_path='/fake-path',
                                           vg_name='vg_foo',
                                           lv_tags='',
                                           lv_uuid='fake-uuid')
-        result = self.lvm_bs.setup_device('block',
-                                          '/dev/foo',
-                                          {},
-                                          1,
-                                          1)
-        assert m_create_lv.mock_calls == [call(name_prefix='osd-block',
+        args = factory(cluster_fsid='abcd',
+                       osd_fsid='abc123',
+                       crush_device_class='ssd',
+                       osd_id='111',
+                       block_db='/dev/db',
+                       block_db_size=disk.Size(gb=200),
+                       block_db_slots=1,
+                       block_wal=None,
+                       block_wal_size='0',
+                       block_wal_slots=None)
+        self.lvm_bs.args = args
+        self.lvm_bs.setup_metadata_devices()
+        assert m_create_lv.mock_calls == [call(name_prefix='osd-db',
                                                uuid='d83fa1ca-bd68-4c75-bdc2-464da58e8abd',
                                                vg=None,
-                                               device='/dev/foo',
+                                               device='/dev/db',
                                                slots=1,
                                                extents=None,
-                                               size=1,
-                                               tags={'ceph.type': 'block',
+                                               size=disk.Size(gb=200),
+                                               tags={'ceph.type': 'db',
                                                      'ceph.vdo': '0',
-                                                     'ceph.block_device': '/fake-path',
-                                                     'ceph.block_uuid': 'fake-uuid'})]
-        assert result == ('/fake-path',
-                         'fake-uuid',
-                         {'ceph.type': 'block',
-                          'ceph.vdo': '0',
-                          'ceph.block_device': '/fake-path',
-                          'ceph.block_uuid': 'fake-uuid'
-                          })
+                                                     'ceph.db_device': '/fake-path',
+                                                     'ceph.db_uuid': 'fake-uuid'})]
 
     @patch('ceph_volume.api.lvm.get_single_lv')
     @patch('ceph_volume.api.lvm.Volume.set_tags', return_value=MagicMock())
-    def test_setup_device_is_lv(self, m_set_tags, m_get_single_lv):
+    def test_setup_metadata_devices_is_lv(self,
+                                          m_set_tags: MagicMock,
+                                          m_get_single_lv: MagicMock,
+                                          factory: Callable[..., Namespace]) -> None:
         m_get_single_lv.return_value = Volume(lv_name='lv_foo',
                                               lv_path='/fake-path',
                                               vg_name='vg_foo',
                                               lv_tags='',
                                               lv_uuid='fake-uuid')
-        result = self.lvm_bs.setup_device('block',
-                                          'vg_foo/lv_foo',
-                                          {},
-                                          1,
-                                          1)
-        assert result == ('/fake-path',
-                         'fake-uuid',
-                         {'ceph.type': 'block',
-                          'ceph.vdo': '0',
-                          'ceph.block_device': '/fake-path',
-                          'ceph.block_uuid': 'fake-uuid'
-                          })
+        args = factory(cluster_fsid='abcd',
+                       osd_fsid='abc123',
+                       crush_device_class='ssd',
+                       osd_id='111',
+                       block_db='vg1/lv1',
+                       block_db_size=disk.Size(gb=200),
+                       block_db_slots=1,
+                       block_wal=None,
+                       block_wal_size='0',
+                       block_wal_slots=None)
+        self.lvm_bs.args = args
+        self.lvm_bs.setup_metadata_devices()
+        assert m_set_tags.mock_calls == [call({
+            'ceph.type': 'db',
+            'ceph.vdo': '0',
+            'ceph.db_uuid': 'fake-uuid',
+            'ceph.db_device': '/fake-path'
+            })]
 
+    @patch('ceph_volume.util.disk.is_partition', Mock(return_value=True))
+    @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.get_ptuuid', Mock(return_value='c6798f59-01'))
     @patch('ceph_volume.api.lvm.Volume.set_tags', return_value=MagicMock())
-    def test_setup_device_partition(self, m_set_tags):
-        self.lvm_bs.get_ptuuid = lambda x: 'c6798f59-01'
-        result = self.lvm_bs.setup_device('block',
-                                          '/dev/foo1',
-                                          {},
-                                          1,
-                                          1)
-        assert result == ('/dev/foo1',
-                         'c6798f59-01',
-                         {'ceph.type': 'block',
-                          'ceph.vdo': '0',
-                          'ceph.block_uuid': 'c6798f59-01',
-                          'ceph.block_device': '/dev/foo1'})
+    @patch('ceph_volume.api.lvm.create_lv')
+    def test_setup_metadata_devices_partition(self,
+                                              m_create_lv: MagicMock,
+                                              m_set_tags: MagicMock,
+                                              factory: Callable[..., Namespace]) -> None:
+        args = factory(cluster_fsid='abcd',
+                       osd_fsid='abc123',
+                       crush_device_class='ssd',
+                       osd_id='111',
+                       block_db='/dev/foo1',
+                       block_db_size=disk.Size(gb=200),
+                       block_db_slots=1,
+                       block_wal=None,
+                       block_wal_size='0',
+                       block_wal_slots=None)
+        self.lvm_bs.args = args
+        self.lvm_bs.setup_metadata_devices()
+        m_create_lv.assert_not_called()
+        m_set_tags.assert_not_called()
 
     def test_get_osd_device_path_lv_block(self):
         lvs = [Volume(lv_name='lv_foo',
