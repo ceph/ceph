@@ -690,9 +690,10 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 }
 
 // EMetaBlob::remotebit
-void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
+
+void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(dn, bl);
   encode(std::tuple{
     dnfirst,
@@ -703,15 +704,12 @@ void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
       dirty,
   }, bl, 0);
   encode(alternate_name, bl);
-  encode(referent_ino, bl);
-  if (referent_ino)
-    encode(*referent_inode, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -721,16 +719,6 @@ void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
   decode(dirty, bl);
   if (struct_v >= 3)
     decode(alternate_name, bl);
-  if (struct_v >= 4) {
-    decode(referent_ino, bl);
-    if (referent_ino) {
-      auto _inode = CInode::allocate_inode();
-      decode(*_inode, bl);
-      referent_inode = std::move(_inode);
-    } else {
-      referent_inode = NULL;
-    }
-  }
   DECODE_FINISH(bl);
 }
 
@@ -764,16 +752,14 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
   f->dump_string("d_type", type_string);
   f->dump_string("dirty", dirty ? "true" : "false");
   f->dump_string("alternate_name", alternate_name);
-  f->dump_int("referentino", referent_ino);
 }
 
 void EMetaBlob::remotebit::
 generate_test_instances(std::list<EMetaBlob::remotebit*>& ls)
 {
-  auto _inode = CInode::allocate_inode();
-  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), 2, _inode, false);
+  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), false);
   ls.push_back(remote);
-  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), 2, _inode, false);
+  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), false);
   ls.push_back(remote);
 }
 
