@@ -119,12 +119,12 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
 
 
 MATCHER(IsListSnaps, "") {
-  auto req = boost::get<io::ImageDispatchSpec::ListSnaps>(&arg->request);
+  auto req = std::get_if<io::ImageDispatchSpec::ListSnaps>(&arg->request);
   return (req != nullptr);
 }
 
 MATCHER_P2(IsRead, snap_id, image_interval, "") {
-  auto req = boost::get<io::ImageDispatchSpec::Read>(&arg->request);
+  auto req = std::get_if<io::ImageDispatchSpec::Read>(&arg->request);
   if (req == nullptr ||
       arg->io_context->get_read_snap() != snap_id) {
     return false;
