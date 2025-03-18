@@ -47,8 +47,7 @@ const std::map<int, std::string> MDSMap::flag_display = {
   {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"},
   {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"},
   {CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS, "refuse_standby_for_another_fs"},
-  {CEPH_MDSMAP_BALANCE_AUTOMATE, "balance_automate"},
-  {CEPH_MDSMAP_REFERENT_INODES, "allow_referent_inodes"}
+  {CEPH_MDSMAP_BALANCE_AUTOMATE, "balance_automate"}
 };
 
 MDSMap::MDSMap() noexcept = default;
@@ -272,7 +271,6 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS), test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE), test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE));
-    f->dump_bool(flag_display.at(CEPH_MDSMAP_REFERENT_INODES), allow_referent_inodes());
     f->close_section();
 }
 
@@ -420,8 +418,6 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
   if (test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE))
     out << " " << flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE);
-  if (allow_referent_inodes())
-    out << " " << flag_display.at(CEPH_MDSMAP_REFERENT_INODES);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
