@@ -225,6 +225,7 @@ private:
 
   uint32_t coll_id = 0;
   uint32_t object_id = 0;
+  uint64_t data_features = 0;
 
   /* Transactions are encoded/decoded in two formats. Old format
    * does not page align write data in inter-OSD messages and
@@ -252,6 +253,9 @@ private:
 
 public:
   Transaction() = default;
+  explicit Transaction(uint64_t data_features)
+    : data_features(data_features) {
+  }
 
   //  explicit Transaction(ceph::buffer::list::const_iterator &dp) {
   //    decode(dp);
@@ -268,6 +272,7 @@ public:
     object_index(std::move(other.object_index)),
     coll_id(other.coll_id),
     object_id(other.object_id),
+    data_features(other.data_features),
     old_data_bl(std::move(other.old_data_bl)),
     new_data_aligned_bl(std::move(other.new_data_aligned_bl)),
     new_data_misaligned_bl(std::move(other.new_data_misaligned_bl)),
@@ -284,6 +289,7 @@ public:
     data = std::move(other.data);
     coll_index = std::move(other.coll_index);
     object_index = std::move(other.object_index);
+    data_features = other.data_features;
     coll_id = other.coll_id;
     object_id = other.object_id;
     old_data_bl = std::move(other.old_data_bl);
@@ -405,6 +411,7 @@ public:
     std::swap(on_commit, other.on_commit);
     std::swap(on_applied_sync, other.on_applied_sync);
 
+    std::swap(data_features, other.data_features);
     std::swap(coll_index, other.coll_index);
     std::swap(object_index, other.object_index);
     std::swap(coll_id, other.coll_id);
@@ -532,7 +539,7 @@ public:
   }
   /// Append the operations of the parameter to this Transaction. Those operations are removed from the parameter Transaction
   void append(Transaction& other) {
-
+    ceph_assert(data_features == other.data_features);
     data.ops = data.ops + other.data.ops;
     data.fadvise_flags = data.fadvise_flags | other.data.fadvise_flags;
     on_applied.splice(on_applied.end(), other.on_applied);
@@ -597,7 +604,7 @@ public:
 
   /// How big is the encoded Transaction buffer?
   uint64_t get_encoded_bytes() {
-    //layout: old_data_bl + op_bl + coll_index + object_index + data
+    //layout: old_data_bl + op_bl + coll_index + object_index + data + data_features
 
     // coll_index size, object_index size and sizeof(transaction_data)
     // all here, so they may be computed at compile-time
@@ -616,6 +623,8 @@ public:
 	final_size += p->first.encoded_size();
     }
 
+    final_size += sizeof(data_features);
+
     return old_data_bl.length() +
 	op_bl.length() +
 	final_size;
@@ -624,7 +633,7 @@ public:
   /// Retain old version for regression testing purposes
   uint64_t get_encoded_bytes_test() {
     using ceph::encode;
-    //layout: old_data_bl + op_bl + coll_index + object_index + data
+    //layout: old_data_bl + op_bl + coll_index + object_index + data + data_features
     ceph::buffer::list bl;
     encode(coll_index, bl);
     encode(object_index, bl);
@@ -632,7 +641,8 @@ public:
     return old_data_bl.length() +
 	op_bl.length() +
 	bl.length() +
-	sizeof(data);
+	sizeof(data) +
+	sizeof(data_features);
   }
 
   uint64_t get_num_bytes() {
@@ -1418,6 +1428,7 @@ public:
     data.encode(p_bl);
 
     if (ver >= 10) {
+      encode(data_features, p_bl, d_bl);
       encode(new_data_aligned_bl, p_bl, d_bl);
       encode(new_data_misaligned_bl, p_bl, d_bl);
     }
@@ -1444,6 +1455,7 @@ public:
     object_id = object_index.size();
 
     if (struct_v >= 10) {
+      decode(data_features, p_bl, d_bl);
       decode(new_data_aligned_bl, p_bl, d_bl);
       decode(new_data_misaligned_bl, p_bl, d_bl);
       format = FORMAT_NEW;

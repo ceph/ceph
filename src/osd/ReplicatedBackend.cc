@@ -873,7 +873,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   op->mark_started();
 
   vector<PushReplyOp> replies;
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   if (get_parent()->check_failsafe_full()) {
     dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
     ceph_abort();
@@ -958,7 +958,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     ceph_abort();
   }
 
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   list<pull_complete_info> to_continue;
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
@@ -1055,7 +1055,7 @@ Message * ReplicatedBackend::generate_subop(
 
   // ship resulting transaction, log entries, and pg_stats
   if (!parent->should_send_op(peer, soid)) {
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction t{get_parent()->min_peer_features()};
     wr = new MOSDRepOp(
       reqid, parent->whoami_shard(),
       spg_t(get_info().pgid.pgid, peer.shard),
@@ -1173,7 +1173,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   op->mark_started();
 
-  RepModifyRef rm(std::make_shared<RepModify>());
+  RepModifyRef rm(std::make_shared<RepModify>(get_parent()->min_peer_features()));
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
