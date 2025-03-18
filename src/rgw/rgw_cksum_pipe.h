@@ -191,9 +191,12 @@ namespace rgw::putobj {
     }
 
     const char* expected(const RGWEnv& env) {
-      auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", cksum_hdr.second);
-      auto hv = env.get(hk.c_str());
-      return hv;
+      if (cksum_hdr.second) {
+	auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", cksum_hdr.second);
+	auto hv = env.get(hk.c_str());
+	return hv;
+      }
+      return nullptr;
     }
 
     VerifyResult verify(const RGWEnv& env) {

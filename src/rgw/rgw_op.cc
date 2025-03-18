@@ -15,6 +15,7 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <fmt/format.h>
 
+#include "common/dout.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h"
 #include "common/armor.h"
@@ -4644,6 +4645,7 @@ void RGWPutObj::execute(optional_yield y)
 
   if (cksum_filter) {
     const auto& hdr = cksum_filter->header();
+
     auto expected_ck = cksum_filter->expected(*s->info.env);
     auto cksum_verify =
       cksum_filter->verify(*s->info.env); // valid or no supplied cksum
@@ -4655,7 +4657,7 @@ void RGWPutObj::execute(optional_yield y)
       ldpp_dout_fmt(this, 16,
 		    "{} checksum verified "
 		    "\n\tcomputed={} == \n\texpected={}",
-		    hdr.second,
+		    (hdr.second) ? hdr.second : "(no supplied checksum header)",
 		    cksum->to_armor(),
 		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
 

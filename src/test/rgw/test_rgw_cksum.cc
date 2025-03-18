@@ -786,7 +786,7 @@ TEST(RGWCksum, Combiner1)
   using std::get;
 
   auto t = cksum::Type::crc64nvme;
-  uint16_t flags = rgw::cksum::Cksum::FLAG_NONE;
+  uint16_t flags = rgw::cksum::Cksum::FLAG_CKSUM_NONE;
 
   auto cksums = mpu_checksum_helper(t, flags);
   auto& [cksum1, cksum2, cksum3] = cksums;
