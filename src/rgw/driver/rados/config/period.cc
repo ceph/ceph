@@ -44,9 +44,8 @@ static std::string latest_epoch_oid(const ceph::common::ConfigProxy& conf,
                       period_latest_epoch_info_oid));
 }
 
-static int read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
-                             ConfigImpl* impl, std::string_view period_id,
-                             uint32_t& epoch, RGWObjVersionTracker* objv)
+int RadosConfigStore::read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, std::string_view period_id,
+                             uint32_t& epoch, RGWObjVersionTracker* objv, RGWPeriod& info)
 {
   const auto& pool = impl->period_pool;
   const auto latest_oid = latest_epoch_oid(dpp->get_cct()->_conf, period_id);
@@ -58,10 +57,9 @@ static int read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
   return r;
 }
 
-static int write_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
-                              ConfigImpl* impl, bool exclusive,
-                              std::string_view period_id, uint32_t epoch,
-                              RGWObjVersionTracker* objv)
+int RadosConfigStore::write_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive,
+                                         std::string_view period_id, uint32_t epoch, RGWObjVersionTracker* objv,
+                                         const RGWPeriod& info)
 {
   const auto& pool = impl->period_pool;
   const auto latest_oid = latest_epoch_oid(dpp->get_cct()->_conf, period_id);
@@ -80,8 +78,8 @@ static int delete_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 static int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
-                               ConfigImpl* impl, std::string_view period_id,
-                               uint32_t epoch)
+                               RadosConfigStore& rados_config_store, std::string_view period_id,
+                               uint32_t epoch, RGWPeriod& info)
 {
   static constexpr int MAX_RETRIES = 20;
 
@@ -91,7 +89,7 @@ static int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
     bool exclusive = false;
 
     // read existing epoch
-    int r = read_latest_epoch(dpp, y, impl, period_id, existing_epoch, &objv);
+    int r = rados_config_store.read_latest_epoch(dpp, y, period_id, existing_epoch, &objv, info);
     if (r == -ENOENT) {
       // use an exclusive create to set the epoch atomically
       exclusive = true;
@@ -111,7 +109,7 @@ static int update_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y,
           << " -> " << epoch << " on period=" << period_id << dendl;
     }
 
-    r = write_latest_epoch(dpp, y, impl, exclusive, period_id, epoch, &objv);
+    r = rados_config_store.write_latest_epoch(dpp, y, exclusive, period_id, epoch, &objv, info);
     if (r == -EEXIST) {
       continue; // exclusive create raced with another update, retry
     } else if (r == -ECANCELED) {
@@ -149,7 +147,9 @@ int RadosConfigStore::create_period(const DoutPrefixProvider* dpp,
     return r;
   }
 
-  (void) update_latest_epoch(dpp, y, impl.get(), info.get_id(), info.get_epoch());
+  // non const RGWPeriod
+  RGWPeriod info_copy = info;
+  (void) update_latest_epoch(dpp, y, *this, info.get_id(), info.get_epoch(), info_copy);
   return 0;
 }
 
@@ -162,7 +162,7 @@ int RadosConfigStore::read_period(const DoutPrefixProvider* dpp,
   int r = 0;
   if (!epoch) {
     epoch = 0;
-    r = read_latest_epoch(dpp, y, impl.get(), period_id, *epoch, nullptr);
+    r = read_latest_epoch(dpp, y, period_id, *epoch, nullptr, info);
     if (r < 0) {
       return r;
     }
@@ -182,8 +182,8 @@ int RadosConfigStore::delete_period(const DoutPrefixProvider* dpp,
   // read the latest_epoch
   uint32_t latest_epoch = 0;
   RGWObjVersionTracker latest_objv;
-  int r = read_latest_epoch(dpp, y, impl.get(), period_id,
-                            latest_epoch, &latest_objv);
+  RGWPeriod period; // not used in RadosConfigStore, but needed in the API
+  int r = read_latest_epoch(dpp, y, period_id, latest_epoch, &latest_objv, period);
   if (r < 0 && r != -ENOENT) { // just delete epoch=0 on ENOENT
     ldpp_dout(dpp, 0) << "failed to read latest epoch for period "
         << period_id << ": " << cpp_strerror(r) << dendl;

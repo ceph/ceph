@@ -872,6 +872,87 @@ int SQLiteConfigStore::delete_period(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int SQLiteConfigStore::read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, std::string_view period_id,
+                      uint32_t& epoch, RGWObjVersionTracker* objv, RGWPeriod& info)
+{
+  Prefix prefix{*dpp, "dbconfig:sqlite:read_latest_epoch "}; dpp = &prefix;
+
+  if (period_id.empty()) {
+    ldpp_dout(dpp, 0) << "requires a period id" << dendl;
+    return -EINVAL;
+  }
+
+  try {
+    auto conn = impl->get(dpp);
+    period_select_epoch(dpp, *conn, period_id, epoch, info);
+  } catch (const buffer::error& e) {
+    ldpp_dout(dpp, 20) << "period decode failed: " << e.what() << dendl;
+    return -EIO;
+  } catch (const sqlite::error& e) {
+    ldpp_dout(dpp, 20) << "period select failed: " << e.what() << dendl;
+    if (e.code() == sqlite::errc::done) {
+      return -ENOENT;
+    } else if (e.code() == sqlite::errc::busy) {
+      return -EBUSY;
+    }
+    return -EIO;
+  }
+  return 0;
+}
+
+int SQLiteConfigStore::write_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive,
+                                          std::string_view period_id, uint32_t epoch, RGWObjVersionTracker* objv,
+                                          const RGWPeriod& info)
+{
+  Prefix prefix{*dpp, "dbconfig:sqlite:write_latest_epoch "}; dpp = &prefix;
+
+  if (info.id.empty()) {
+    ldpp_dout(dpp, 0) << "period cannot have an empty id" << dendl;
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  encode(info, bl);
+  const auto data = std::string_view{bl.c_str(), bl.length()};
+
+  try {
+    auto conn = impl->get(dpp);
+    sqlite::stmt_ptr* stmt = nullptr;
+    if (exclusive) {
+      stmt = &conn->statements["period_ins"];
+      if (!*stmt) {
+        const std::string sql = fmt::format(schema::period_insert4,
+                                            P1, P2, P3, P4);
+        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+      }
+    } else {
+      stmt = &conn->statements["period_ups"];
+      if (!*stmt) {
+        const std::string sql = fmt::format(schema::period_upsert4,
+                                            P1, P2, P3, P4);
+        *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
+      }
+    }
+    auto binding = sqlite::stmt_binding{stmt->get()};
+    sqlite::bind_text(dpp, binding, P1, info.id);
+    sqlite::bind_int(dpp, binding, P2, info.epoch);
+    sqlite::bind_text(dpp, binding, P3, info.realm_id);
+    sqlite::bind_text(dpp, binding, P4, data);
+
+    auto reset = sqlite::stmt_execution{stmt->get()};
+    sqlite::eval0(dpp, reset);
+  } catch (const sqlite::error& e) {
+    ldpp_dout(dpp, 20) << "period insert failed: " << e.what() << dendl;
+    if (e.code() == sqlite::errc::foreign_key_constraint) {
+      return -EINVAL; // refers to nonexistent RealmID
+    } else if (e.code() == sqlite::errc::busy) {
+      return -EBUSY;
+    }
+    return -EIO;
+  }
+  return 0;
+}
+
 int SQLiteConfigStore::list_period_ids(const DoutPrefixProvider* dpp,
                                        optional_yield y,
                                        const std::string& marker,

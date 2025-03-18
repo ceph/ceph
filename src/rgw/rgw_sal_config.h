@@ -28,6 +28,7 @@ struct RGWPeriodConfig;
 struct RGWRealm;
 struct RGWZoneGroup;
 struct RGWZoneParams;
+class RGWObjVersionTracker;
 
 namespace rgw::sal {
 
@@ -118,6 +119,10 @@ class ConfigStore {
                               optional_yield y, const std::string& marker,
                               std::span<std::string> entries,
                               ListResult<std::string>& result) = 0;
+  virtual int read_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, std::string_view period_id,
+                                uint32_t& epoch, RGWObjVersionTracker* objv, RGWPeriod& info) = 0;
+  virtual int write_latest_epoch(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, std::string_view period_id,
+                                uint32_t epoch, RGWObjVersionTracker* objv, const RGWPeriod& info) = 0;
   ///@}
 
   /// @group ZoneGroup

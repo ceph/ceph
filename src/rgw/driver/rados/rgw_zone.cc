@@ -20,12 +20,14 @@ RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
 
 struct RGWAccessKey;
 
+namespace rgw {
 /// Generate a random uuid for realm/period/zonegroup/zone ids
-static std::string gen_random_uuid()
+std::string gen_random_uuid()
 {
   uuid_d uuid;
   uuid.generate_random();
   return uuid.to_string();
+}
 }
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
@@ -704,14 +706,12 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
                   RGWPeriod& info, std::ostream& error_stream,
                   bool force_if_stale)
 {
-  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone; // XXX
-
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm.id
       << " period " << current_period.id << dendl;
   // gateway must be in the master zone to commit
-  if (info.master_zone != zone_svc->get_zone_params().id) {
+  if (driver->get_zone()->get_zonegroup().is_master_zonegroup()) {
     error_stream << "Cannot commit period on zone "
-        << zone_svc->get_zone_params().id << ", it must be sent to "
+        << driver->get_zone()->get_id() << ", it must be sent to "
         "the period's master zone " << info.master_zone << '.' << std::endl;
     return -EINVAL;
   }
