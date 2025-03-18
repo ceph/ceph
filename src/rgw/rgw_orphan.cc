@@ -1062,18 +1062,30 @@ int RGWRadosList::pop_and_handle_stat_op(
   RGWRados::Object::Stat& front_op = ops.front();
 
   int ret = front_op.wait(dpp);
-  if (ret < 0) {
-    if (ret != -ENOENT) {
-      ldpp_dout(dpp, -1) << "ERROR: stat_async() returned error: " <<
+  if (ret == -ENOENT) {
+    const auto& result = front_op.result;
+    const rgw_bucket& bucket = result.obj.bucket;
+    const std::string oid = bucket.marker + "_" + result.obj.get_oid();
+    obj_oids.insert(oid);
+
+    // needed for the processing below
+    bucket_name = result.obj.bucket.name;
+    obj_key = result.obj.key;
+
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
+      ": stat of head object resulted in ENOENT; oid=" << oid << dendl;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
+      ": stat_async() returned error: " <<
+      cpp_strerror(-ret) << dendl;
+    goto done;
+  } else {
+    ret = handle_stat_result(dpp, front_op.result, bucket_name, obj_key, obj_oids);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: " << __func__ <<
+	": handle_stat_result() returned error: " <<
 	cpp_strerror(-ret) << dendl;
     }
-    goto done;
-  }
-
-  ret = handle_stat_result(dpp, front_op.result, bucket_name, obj_key, obj_oids);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: handle_stat_result() returned error: " <<
-      cpp_strerror(-ret) << dendl;
   }
 
   // output results
@@ -1095,6 +1107,7 @@ done:
   obj_ctx.invalidate(front_op.result.obj);
 
   ops.pop_front();
+
   return ret;
 }
 
