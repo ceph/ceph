@@ -1696,8 +1696,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	dn->first = dir_follows+1;
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDir *dir = dn->dir;
-          // TODO: What does this mean for referent inode ?? Passing nullptr for now.
-	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
+	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
 	  dout(10) << " olddn " << *olddn << dendl;
 	  ceph_assert(dir->is_projected());
 	  olddn->set_projected_version(dir->get_projected_version());
@@ -1783,8 +1782,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       mut->add_cow_dentry(olddn);
     } else {
       ceph_assert(dnl->is_remote());
-      //No need to journal referent inode for cow
-      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), nullptr, dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
+      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
       olddn->set_projected_version(dir->get_projected_version());
@@ -4833,8 +4831,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
         }
         if (!dn) {
 	  if (d.is_remote()) {
-	    //TODO: Fix for referent remote
-	    dn = dir->add_remote_dentry(ss.name, nullptr, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
+	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
 	  } else if (d.is_null()) {
 	    dn = dir->add_null_dentry(ss.name, d.first, ss.snapid);
 	  } else {
