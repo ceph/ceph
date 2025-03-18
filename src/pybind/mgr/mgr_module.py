@@ -1116,6 +1116,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         self._db_lock = threading.Lock()
 
+        self._rados_connect_lock = threading.Lock()
+
     @classmethod
     def _register_options(cls, module_name: str) -> None:
         cls.MODULE_OPTIONS.append(
@@ -2347,9 +2349,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         if self._rados:
             return self._rados
 
-        ctx_capsule = self.get_context()
-        self._rados = rados.Rados(context=ctx_capsule)
-        self._rados.connect()
+        # Ensure that the obtained Rados object has a successful connection.
+        with self._rados_connect_lock:
+            if self._rados:
+                return self._rados
+            ctx_capsule = self.get_context()
+            _temp_rados = rados.Rados(context=ctx_capsule)
+            _temp_rados.connect()
+            self._rados = _temp_rados
+
         self._ceph_register_client(None, self._rados.get_addrs(), False)
         return self._rados
 
