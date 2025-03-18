@@ -219,10 +219,9 @@ class Watcher : public librados::WatchCtx2 {
     if (cookie != handle) {
       return;
     }
-    if (err == -ENOTCONN) {
-      ldpp_dout(dpp, 4) << "Disconnected watch on " << ref.obj << dendl;
-      restart();
-    }
+    ldpp_dout(dpp, 4) << "Disconnected watch on " << ref.obj
+        << " err=" << err << dendl;
+    restart();
   }
 }; // Watcher
 
