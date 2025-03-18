@@ -430,19 +430,10 @@ public:
     });
   }
 
-  ref_ret decref_extent(
+  ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) final {
     return update_refcount(t, addr, -1, true
-    ).si_then([](auto res) {
-      return std::move(res.ref_update_res);
-    });
-  }
-
-  ref_ret incref_extent(
-    Transaction &t,
-    laddr_t addr) final {
-    return update_refcount(t, addr, 1, false
     ).si_then([](auto res) {
       return std::move(res.ref_update_res);
     });
