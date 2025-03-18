@@ -73,8 +73,8 @@ public:
   CInodeCommitOperation(int prio, int64_t po)
     : pool(po), priority(prio) {
   }
-  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s, inodeno_t ri)
-    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s), remote_inode(ri) {
+  CInodeCommitOperation(int prio, int64_t po, file_layout_t l, uint64_t f, std::string_view s)
+    : pool(po), priority(prio), _layout(l), _features(f), _symlink(s) {
       update_layout_symlink = true;
   }
 
@@ -88,7 +88,6 @@ private:
   file_layout_t _layout;
   uint64_t _features;
   std::string_view _symlink;
-  inodeno_t remote_inode;     // real inode of the referent inode
 };
 
 struct CInodeCommitOperations {
