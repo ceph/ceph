@@ -8,6 +8,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_zone.h"
 #include "rgw_sal_rados.h"
+#include "rgw_sal_config.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
@@ -72,10 +73,15 @@ void RGWOp_Period_Get::execute(optional_yield y)
   RESTArgs::get_string(s, "period_id", period_id, &period_id);
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
+
+  period.set_realm_id(realm_id);
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  op_ret = period.init(this, driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm_id, y);
+
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(this, config_store_type);
+  op_ret = cfgstore->read_period(this, y, period_id, epoch, period);
   if (op_ret < 0)
     ldpp_dout(this, 5) << "failed to read period" << dendl;
 }
@@ -102,7 +108,9 @@ void RGWOp_Period_Post::execute(optional_yield y)
   auto cct = driver->ctx();
 
   // initialize the period without reading from rados
-  period.init(this, cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, y, false);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(this, config_store_type);
+  cfgstore->read_period(this, y,driver->get_zone()->get_current_period_id(), std::nullopt, period);
 
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
@@ -133,7 +141,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   RGWPeriod current_period;
-  op_ret = current_period.init(this, cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm.get_id(), y);
+  op_ret = cfgstore->read_period(this, y, driver->get_zone()->get_current_period_id(), std::nullopt, current_period);
   if (op_ret < 0) {
     ldpp_dout(this, -1) << "failed to read current period: "
         << cpp_strerror(-op_ret) << dendl;
@@ -142,7 +150,16 @@ void RGWOp_Period_Post::execute(optional_yield y)
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    op_ret = period.commit(this, driver, realm, current_period, error_stream, y);
+//    op_ret = period.commit(this, driver, realm, current_period, error_stream, y);
+    std::unique_ptr<rgw::sal::RealmWriter> realm_writer;
+    op_ret = rgw::read_realm(this, null_yield, cfgstore.get(),
+                              period.realm_id, period.get_realm(),
+                              realm, &realm_writer);
+    if (op_ret < 0) {
+      cerr << "Error initializing realm: " << cpp_strerror(-op_ret) << std::endl;
+      return;
+    }
+    op_ret = rgw::commit_period(this, y, cfgstore.get(), driver, realm, *realm_writer, current_period, period, error_stream, false);
     if (op_ret == -EEXIST) {
       op_ret = 0; // succeed on retries so the op is idempotent
       return;
@@ -164,7 +181,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   // write the period to rados
-  op_ret = period.store_info(this, false, y);
+  op_ret = cfgstore->create_period(this, y, false, period);
   if (op_ret < 0) {
     ldpp_dout(this, -1) << "failed to store period " << period.get_id() << dendl;
     return;
@@ -235,7 +252,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
     return;
   }
   // reflect the period into our local objects
-  op_ret = period.reflect(this, y);
+  op_ret = rgw::reflect_period(this, y, cfgstore.get(), period);
   if (op_ret < 0) {
     ldpp_dout(this, -1) << "failed to update local objects: "
         << cpp_strerror(-op_ret) << dendl;

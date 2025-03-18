@@ -6,9 +6,11 @@
 #include "rgw_rest_conn.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
+#include "rgw_sal_config.h"
 
 #include "services/svc_zone.h"
 
+#define FIRST_EPOCH 1
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -68,9 +70,12 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
 			  optional_yield y)
 {
   // try to read the period from rados
+  constexpr auto zero_epoch = 0;
   period.set_id(period_id);
-  period.set_epoch(0);
-  int r = period.init(dpp, cct, svc.sysobj, y);
+  period.set_epoch(zero_epoch);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  int r = cfgstore->read_period(dpp, y, period_id, zero_epoch, period);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
       // can't pull if we're the master
@@ -88,7 +93,10 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
       return r;
     }
     // write the period to rados
-    r = period.store_info(dpp, true, y);
+    period.period_map.id = period.id = rgw::gen_random_uuid();
+    period.epoch = FIRST_EPOCH;
+    constexpr bool exclusive = true;
+    r = cfgstore->create_period(dpp, y, exclusive, period);
     if (r == -EEXIST) {
       r = 0;
     } else if (r < 0) {
@@ -108,7 +116,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
     }
     // reflect period objects if this is the latest version
     if (svc.zone->get_realm().get_current_period() == period_id) {
-      r = period.reflect(dpp, y);
+      r = rgw::reflect_period(dpp, y, cfgstore.get(), period);
       if (r < 0) {
         return r;
       }
