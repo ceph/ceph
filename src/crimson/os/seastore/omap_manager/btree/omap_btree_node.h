@@ -73,6 +73,13 @@ struct OMapNode : LogicalChildNode {
     omap_context_t oc,
     const std::string &key) = 0;
 
+  using iterate_iertr = base_iertr;
+  using iterate_ret = OMapManager::omap_iterate_ret;
+  virtual iterate_ret iterate(
+    omap_context_t oc,
+    ObjectStore::omap_iter_seek_t &start_from,
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> &f) = 0;
+
   using omap_list_config_t = OMapManager::omap_list_config_t;
   using list_iertr = base_iertr;
   using list_bare_ret = OMapManager::omap_list_bare_ret;
