@@ -1433,142 +1433,147 @@ ceph_get_daemon_health_metrics(BaseMgrModule *self, PyObject *args)
 }
 
 PyMethodDef BaseMgrModule_methods[] = {
-  {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
-   "Get a cluster object"},
+    {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
+     "Get a cluster object"},
 
-  {"_ceph_notify_all", (PyCFunction)ceph_notify_all, METH_VARARGS,
-   "notify all modules"},
+    {"_ceph_notify_all", (PyCFunction)ceph_notify_all, METH_VARARGS,
+     "notify all modules"},
 
-  {"_ceph_get_server", (PyCFunction)ceph_get_server, METH_VARARGS,
-   "Get a server object"},
+    {"_ceph_get_server", (PyCFunction)ceph_get_server, METH_VARARGS,
+     "Get a server object"},
 
-  {"_ceph_get_metadata", (PyCFunction)get_metadata, METH_VARARGS,
-   "Get a service's metadata"},
+    {"_ceph_get_metadata", (PyCFunction)get_metadata, METH_VARARGS,
+     "Get a service's metadata"},
 
-  {"_ceph_get_daemon_status", (PyCFunction)get_daemon_status, METH_VARARGS,
-   "Get a service's status"},
+    {"_ceph_get_daemon_status", (PyCFunction)get_daemon_status, METH_VARARGS,
+     "Get a service's status"},
 
-  {"_ceph_send_command", (PyCFunction)ceph_send_command, METH_VARARGS | METH_KEYWORDS,
-   "Send a mon command"},
+    {"_ceph_send_command", (PyCFunction)ceph_send_command,
+     METH_VARARGS | METH_KEYWORDS, "Send a mon command"},
 
-  {"_ceph_set_health_checks", (PyCFunction)ceph_set_health_checks, METH_VARARGS,
-   "Set health checks for this module"},
+    {"_ceph_set_health_checks", (PyCFunction)ceph_set_health_checks,
+     METH_VARARGS, "Set health checks for this module"},
 
-  {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
-   "Get the name of the Mgr daemon where we are running"},
+    {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
+     "Get the name of the Mgr daemon where we are running"},
 
-  {"_ceph_get_ceph_conf_path", (PyCFunction)ceph_get_ceph_conf_path, METH_NOARGS,
-   "Get path to ceph.conf"},
+    {"_ceph_get_ceph_conf_path", (PyCFunction)ceph_get_ceph_conf_path,
+     METH_NOARGS, "Get path to ceph.conf"},
 
-  {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
-   "Get a native configuration option value"},
+    {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
+     "Get a native configuration option value"},
 
-  {"_ceph_get_foreign_option", (PyCFunction)ceph_foreign_option_get, METH_VARARGS,
-   "Get a native configuration option value for another entity"},
+    {"_ceph_get_foreign_option", (PyCFunction)ceph_foreign_option_get,
+     METH_VARARGS,
+     "Get a native configuration option value for another entity"},
 
-  {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
-   "Get a module configuration option value"},
+    {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option,
+     METH_VARARGS, "Get a module configuration option value"},
 
-  {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
-   "Get all KV store values with a given prefix"},
+    {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
+     "Get all KV store values with a given prefix"},
 
-  {"_ceph_set_module_option", (PyCFunction)ceph_set_module_option, METH_VARARGS,
-   "Set a module configuration option value"},
+    {"_ceph_set_module_option", (PyCFunction)ceph_set_module_option,
+     METH_VARARGS, "Set a module configuration option value"},
 
-  {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
-   "Get a stored field"},
+    {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
+     "Get a stored field"},
 
-  {"_ceph_set_store", (PyCFunction)ceph_store_set, METH_VARARGS,
-   "Set a stored field"},
+    {"_ceph_set_store", (PyCFunction)ceph_store_set, METH_VARARGS,
+     "Set a stored field"},
 
-  {"_ceph_get_unlabeled_counter", (PyCFunction)get_unlabeled_counter, METH_VARARGS,
-    "Get a performance counter"},
+    {"_ceph_get_unlabeled_counter", (PyCFunction)get_unlabeled_counter,
+     METH_VARARGS, "Get a performance counter"},
 
-  {"_ceph_get_latest_unlabeled_counter", (PyCFunction)get_latest_unlabeled_counter, METH_VARARGS,
-    "Get the latest performance counter"},
+    {"_ceph_get_latest_unlabeled_counter",
+     (PyCFunction)get_latest_unlabeled_counter, METH_VARARGS,
+     "Get the latest performance counter"},
 
-  {"_ceph_get_unlabeled_perf_schema", (PyCFunction)get_unlabeled_perf_schema, METH_VARARGS,
-    "Get the unlabeled performance counter schema"},
+    {"_ceph_get_unlabeled_perf_schema", (PyCFunction)get_unlabeled_perf_schema,
+     METH_VARARGS, "Get the unlabeled performance counter schema"},
 
-  {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version, METH_NOARGS,
-    "Get the current RocksDB version number"},
+    {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version,
+     METH_NOARGS, "Get the current RocksDB version number"},
 
-  {"_ceph_log", (PyCFunction)ceph_log, METH_VARARGS,
-   "Emit a (local) log message"},
+    {"_ceph_log", (PyCFunction)ceph_log, METH_VARARGS,
+     "Emit a (local) log message"},
 
-  {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
-   "Emit a cluster log message"},
+    {"_ceph_cluster_log", (PyCFunction)ceph_cluster_log, METH_VARARGS,
+     "Emit a cluster log message"},
 
-  {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_NOARGS,
-   "Get the ceph version of this process"},
+    {"_ceph_get_version", (PyCFunction)ceph_get_version, METH_NOARGS,
+     "Get the ceph version of this process"},
 
-  {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
-   "Get the ceph release name of this process"},
+    {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
+     "Get the ceph release name of this process"},
 
-  {"_ceph_lookup_release_name", (PyCFunction)ceph_lookup_release_name, METH_VARARGS,
-   "Get the ceph release name for a given major number"},
+    {"_ceph_lookup_release_name", (PyCFunction)ceph_lookup_release_name,
+     METH_VARARGS, "Get the ceph release name for a given major number"},
 
-  {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
-    "Get a CephContext* in a python capsule"},
+    {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
+     "Get a CephContext* in a python capsule"},
 
-  {"_ceph_get_osdmap", (PyCFunction)ceph_get_osdmap, METH_NOARGS,
-    "Get an OSDMap* in a python capsule"},
+    {"_ceph_get_osdmap", (PyCFunction)ceph_get_osdmap, METH_NOARGS,
+     "Get an OSDMap* in a python capsule"},
 
-  {"_ceph_set_uri", (PyCFunction)ceph_set_uri, METH_VARARGS,
-    "Advertize a service URI served by this module"},
+    {"_ceph_set_uri", (PyCFunction)ceph_set_uri, METH_VARARGS,
+     "Advertize a service URI served by this module"},
 
-  {"_ceph_set_device_wear_level", (PyCFunction)ceph_set_wear_level, METH_VARARGS,
-   "Set device wear_level value"},
+    {"_ceph_set_device_wear_level", (PyCFunction)ceph_set_wear_level,
+     METH_VARARGS, "Set device wear_level value"},
 
-  {"_ceph_have_mon_connection", (PyCFunction)ceph_have_mon_connection,
-    METH_NOARGS, "Find out whether this mgr daemon currently has "
-                 "a connection to a monitor"},
+    {"_ceph_have_mon_connection", (PyCFunction)ceph_have_mon_connection,
+     METH_NOARGS,
+     "Find out whether this mgr daemon currently has "
+     "a connection to a monitor"},
 
-  {"_ceph_update_progress_event", (PyCFunction)ceph_update_progress_event,
-   METH_VARARGS, "Update status of a progress event"},
-  {"_ceph_complete_progress_event", (PyCFunction)ceph_complete_progress_event,
-   METH_VARARGS, "Complete a progress event"},
-  {"_ceph_clear_all_progress_events", (PyCFunction)ceph_clear_all_progress_events,
-   METH_NOARGS, "Clear all progress events"},
+    {"_ceph_update_progress_event", (PyCFunction)ceph_update_progress_event,
+     METH_VARARGS, "Update status of a progress event"},
+    {"_ceph_complete_progress_event", (PyCFunction)ceph_complete_progress_event,
+     METH_VARARGS, "Complete a progress event"},
+    {"_ceph_clear_all_progress_events",
+     (PyCFunction)ceph_clear_all_progress_events, METH_NOARGS,
+     "Clear all progress events"},
 
-  {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
-    METH_VARARGS, "Dispatch a call to another module"},
+    {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote, METH_VARARGS,
+     "Dispatch a call to another module"},
 
-  {"_ceph_add_osd_perf_query", (PyCFunction)ceph_add_osd_perf_query,
-    METH_VARARGS, "Add an osd perf query"},
+    {"_ceph_add_osd_perf_query", (PyCFunction)ceph_add_osd_perf_query,
+     METH_VARARGS, "Add an osd perf query"},
 
-  {"_ceph_remove_osd_perf_query", (PyCFunction)ceph_remove_osd_perf_query,
-    METH_VARARGS, "Remove an osd perf query"},
+    {"_ceph_remove_osd_perf_query", (PyCFunction)ceph_remove_osd_perf_query,
+     METH_VARARGS, "Remove an osd perf query"},
 
-  {"_ceph_get_osd_perf_counters", (PyCFunction)ceph_get_osd_perf_counters,
-    METH_VARARGS, "Get osd perf counters"},
+    {"_ceph_get_osd_perf_counters", (PyCFunction)ceph_get_osd_perf_counters,
+     METH_VARARGS, "Get osd perf counters"},
 
-  {"_ceph_add_mds_perf_query", (PyCFunction)ceph_add_mds_perf_query,
-    METH_VARARGS, "Add an mds perf query"},
+    {"_ceph_add_mds_perf_query", (PyCFunction)ceph_add_mds_perf_query,
+     METH_VARARGS, "Add an mds perf query"},
 
-  {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
-    METH_VARARGS, "Remove an mds perf query"},
+    {"_ceph_remove_mds_perf_query", (PyCFunction)ceph_remove_mds_perf_query,
+     METH_VARARGS, "Remove an mds perf query"},
 
-  {"_ceph_reregister_mds_perf_queries", (PyCFunction)ceph_reregister_mds_perf_queries,
-    METH_NOARGS, "Re-register mds perf queries"},
+    {"_ceph_reregister_mds_perf_queries",
+     (PyCFunction)ceph_reregister_mds_perf_queries, METH_NOARGS,
+     "Re-register mds perf queries"},
 
-  {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
-    METH_VARARGS, "Get mds perf counters"},
+    {"_ceph_get_mds_perf_counters", (PyCFunction)ceph_get_mds_perf_counters,
+     METH_VARARGS, "Get mds perf counters"},
 
-  {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized,
-    METH_VARARGS, "Verify the current session caps are valid"},
+    {"_ceph_is_authorized", (PyCFunction)ceph_is_authorized, METH_VARARGS,
+     "Verify the current session caps are valid"},
 
-  {"_ceph_register_client", (PyCFunction)ceph_register_client,
-    METH_VARARGS, "Register RADOS instance for potential blocklisting"},
+    {"_ceph_register_client", (PyCFunction)ceph_register_client, METH_VARARGS,
+     "Register RADOS instance for potential blocklisting"},
 
-  {"_ceph_unregister_client", (PyCFunction)ceph_unregister_client,
-    METH_VARARGS, "Unregister RADOS instance for potential blocklisting"},
+    {"_ceph_unregister_client", (PyCFunction)ceph_unregister_client,
+     METH_VARARGS, "Unregister RADOS instance for potential blocklisting"},
 
-  {"_ceph_get_daemon_health_metrics", (PyCFunction)ceph_get_daemon_health_metrics,
-    METH_VARARGS, "Get health metrics for all daemons"},
+    {"_ceph_get_daemon_health_metrics",
+     (PyCFunction)ceph_get_daemon_health_metrics, METH_VARARGS,
+     "Get health metrics for all daemons"},
 
-  {NULL, NULL, 0, NULL}
-};
+    {NULL, NULL, 0, NULL}};
 
 
 static PyObject *
