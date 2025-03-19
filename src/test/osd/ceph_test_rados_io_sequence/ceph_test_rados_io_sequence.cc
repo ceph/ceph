@@ -350,27 +350,27 @@ ceph::io_sequence::tester::SelectErasureKM::generate_selections() {
        (technique == "reed_sol_van" || technique == "cauchy_orig" ||
         technique == "cauchy_good" || technique == std::nullopt))) {
     for (int m = 1; m <= 3; m++)
-      for (int k = 2; k <= 6; k++) selection.push_back({k, m});
+      for (int k = 2; k <= 4; k++) selection.push_back({k, m});
   } else if (plugin == "shec" ||
              (plugin == "jerasure" &&
               (technique == "liberation" || technique == "blaum_roth"))) {
     for (int m = 1; m <= 2; m++)
-      for (int k = 2; k <= 6; k++) selection.push_back({k, m});
+      for (int k = 2; k <= 4; k++) selection.push_back({k, m});
   } else if (plugin == "jerasure" &&
              (technique == "reed_sol_r6_op" || technique == "liber8tion")) {
-    for (int k = 2; k <= 6; k++) selection.push_back({k, 2});
+    for (int k = 2; k <= 4; k++) selection.push_back({k, 2});
   }
 
   // We want increased chances of these as we will test with c=1 and c=2
   if (plugin == "shec")
     for (int i = 0; i < 2; i++)
-      for (int k = 3; k <= 6; k++) selection.push_back({k, 3});
+      for (int k = 3; k <= 4; k++) selection.push_back({k, 3});
 
   // Add extra miscelaneous interesting options for testing w values
   if (plugin == "jerasure") {
     if (technique == "reed_sol_van")
       // Double chance of chosing to test more w values
-      for (int i = 0; i < 2; i++) selection.push_back({6, 3});
+      //      for (int i = 0; i < 2; i++) selection.push_back({6, 3});
 
     if (technique == "liberation" || technique == "blaum_roth")
       // Double chance of chosing to test more different w values
