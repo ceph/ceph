@@ -628,6 +628,14 @@ public:
 				  std::string_view marker,
 				  uint32_t max_items,
 				  GroupList& listing) override { return -ENOTSUP; }
+  virtual int store_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          const rgw::IAM::ManagedPolicyInfo& info,
+          bool exclusive) override { return -ENOTSUP; }
+  virtual int count_account_policies(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account_id,
+          uint32_t& count) override { return -ENOTSUP; }
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
