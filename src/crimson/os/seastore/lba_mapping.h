@@ -141,14 +141,20 @@ public:
   }
 
   get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
-  get_logical_extent(Transaction &t);
+  get_logical_extent(Transaction &t) const;
 
-  LBAMapping duplicate() const {
+  const LBAMapping duplicate() const {
+    assert(!is_null());
+    return LBAMapping(direct_cursor, indirect_cursor);
+  }
+
+  LBAMapping deep_duplicate() const {
+    assert(!is_null());
     auto dup_iter = [](const LBACursorRef &iter) -> LBACursorRef {
       if (iter) {
 	return iter->duplicate();
       } else {
-	return nullptr;
+       return nullptr;
       }
     };
     return LBAMapping(dup_iter(direct_cursor), dup_iter(indirect_cursor));
