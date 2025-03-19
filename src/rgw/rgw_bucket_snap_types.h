@@ -75,6 +75,13 @@ struct rgw_bucket_snap_id {
   bool is_set() const {
     return snap_id != SNAP_UNDEFINED;
   }
+
+  rgw_bucket_snap_id get_or(rgw_bucket_snap_id other) const {
+    if (is_set()) {
+      return *this;
+    }
+    return other;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_snap_id)
 
@@ -105,6 +112,9 @@ struct rgw_bucket_snap_range {
 
   bool contains(rgw_bucket_snap_id snap_id) const {
     if (start.is_set()) {
+      if (start == end) {
+        return snap_id == start;
+      }
       return snap_id > start && snap_id <= end;
     }
     return snap_id <= end;

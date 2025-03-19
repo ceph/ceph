@@ -82,10 +82,6 @@ public:
 
   void set_enabled(bool flag) {
     enabled = flag;
-
-    if (enabled) {
-      ++cur_snap;
-    }
   }
 };
 WRITE_CLASS_ENCODER(RGWBucketSnapMgr)

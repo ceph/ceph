@@ -252,6 +252,8 @@ struct rgw_bucket_dir_entry_meta {
       decode(appendable, bl);
     if (struct_v >= 8)
       decode(snap_id, bl);
+    else
+      snap_id = rgw_bucket_snap_id(rgw_bucket_snap_id::SNAP_MIN);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -550,7 +552,8 @@ struct rgw_bucket_dir_entry {
     if (!check_snap_id.is_set()) {
       return (!removed_at_snap().is_set());
     }
-    if (check_snap_id < meta.snap_id) {
+    if (meta.snap_id.is_set() && 
+        check_snap_id < meta.snap_id) {
       /* we were created at a later snapshot than the checked one */
       return false;
     }
