@@ -104,6 +104,8 @@ public:
   const std::string& get_url() { return url; }
 };
 
+class RGWRESTStreamRWRequest;
+
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
 public:
     class ReceiveCB;
@@ -143,6 +145,8 @@ public:
       virtual void set_extra_data_len(uint64_t len) {
         extra_data_len = len;
       }
+      virtual void set_in_stream_req(RGWRESTStreamRWRequest *req) {}
+      virtual void make_sse_s3_key(bool *pause) {}
   };
 
   RGWHTTPStreamRWRequest(CephContext *_cct, const std::string& _method, const std::string& _url,
