@@ -76,7 +76,7 @@ public:
   using next_mapping_ret = next_mapping_iertr::future<LBAMapping>;
   virtual next_mapping_ret next_mapping(
     Transaction &t,
-    LBAMapping mapping) = 0;
+    const LBAMapping mapping) = 0;
 
   /**
    * Allocates a new mapping referenced by LBARef
