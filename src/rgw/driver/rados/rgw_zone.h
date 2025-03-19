@@ -525,47 +525,56 @@ WRITE_CLASS_ENCODER(RGWPeriodConfig)
 class RGWRealm;
 class RGWPeriod;
 
-class RGWRealm : public RGWSystemMetaObj
+class RGWRealm
 {
 public:
+  std::string id;
+  std::string name;
+
+  CephContext *cct{nullptr};
+
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
-  int create_control(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  int delete_control(const DoutPrefixProvider *dpp, optional_yield y);
 public:
   RGWRealm() {}
-  RGWRealm(const std::string& _id, const std::string& _name = "") : RGWSystemMetaObj(_id, _name) {}
-  RGWRealm(CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_cct, _sysobj_svc) {}
-  RGWRealm(const std::string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_name, _cct, _sysobj_svc){}
-  virtual ~RGWRealm() override;
+  RGWRealm(const std::string& _id, const std::string& _name = "") : id(_id), name(_name) {}
+  RGWRealm(CephContext *_cct): cct(_cct) {}
+  RGWRealm(const std::string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): name(_name), cct(_cct){}
 
-  void encode(bufferlist& bl) const override {
+  const std::string& get_name() const { return name; }
+  const std::string& get_id() const { return id; }
+
+  void set_name(const std::string& _name) { name = _name;}
+  void set_id(const std::string& _id) { id = _id;}
+  void clear_id() { id.clear(); }
+
+  virtual ~RGWRealm();
+
+  void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    RGWSystemMetaObj::encode(bl);
+    encode(id, bl);
+    encode(name, bl);
     encode(current_period, bl);
     encode(epoch, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    RGWSystemMetaObj::decode(bl);
+    decode(id, bl);
+    decode(name, bl);
     decode(current_period, bl);
     decode(epoch, bl);
     DECODE_FINISH(bl);
   }
 
-  int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true) override;
-  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
-  rgw_pool get_pool(CephContext *cct) const override;
-  const std::string get_default_oid(bool old_format = false) const override;
-  const std::string& get_names_oid_prefix() const override;
-  const std::string& get_info_oid_prefix(bool old_format = false) const override;
-  std::string get_predefined_id(CephContext *cct) const override;
-  const std::string& get_predefined_name(CephContext *cct) const override;
-
-  using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
+  rgw_pool get_pool(CephContext *cct) const;
+  const std::string get_default_oid(bool old_format = false) const;
+  const std::string& get_names_oid_prefix() const;
+  const std::string& get_info_oid_prefix(bool old_format = false) const;
+  std::string get_predefined_id(CephContext *cct) const;
+  const std::string& get_predefined_name(CephContext *cct) const;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -582,10 +591,6 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   std::string get_control_oid() const;
-  /// send a notify on the realm control object
-  int notify_zone(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y);
-  /// notify the zone of a new period
-  int notify_new_period(const DoutPrefixProvider *dpp, const RGWPeriod& period, optional_yield y);
 
   int find_zone(const DoutPrefixProvider *dpp,
                 const rgw_zone_id& zid,

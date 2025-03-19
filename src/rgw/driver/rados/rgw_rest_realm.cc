@@ -133,7 +133,7 @@ void RGWOp_Period_Post::execute(optional_yield y)
   // period that we haven't restarted with yet. we also don't want to modify
   // the objects in use by RGWRados
   RGWRealm realm(period.get_realm());
-  op_ret = realm.init(this, cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, y);
+  op_ret = rgw::read_realm(this, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
   if (op_ret < 0) {
     ldpp_dout(this, -1) << "failed to read current realm: "
         << cpp_strerror(-op_ret) << dendl;
@@ -273,7 +273,9 @@ void RGWOp_Period_Post::send_response()
   if (notify_realm) {
     // trigger realm reload after sending the response, because reload may
     // race to close this connection
-    notify_realm->notify_new_period(this, period, s->yield);
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    auto cfgstore = DriverManager::create_config_store(this, config_store_type);
+    (void) cfgstore->realm_notify_new_period(this, null_yield, period);
   }
 }
 
@@ -320,7 +322,9 @@ void RGWOp_Realm_Get::execute(optional_yield y)
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  op_ret = realm->init(this, g_ceph_context, static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, y);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(this, config_store_type);
+  op_ret = rgw::read_realm(this, y, cfgstore.get(), realm->get_id(), realm->get_name(), *realm);
   if (op_ret < 0)
     ldpp_dout(this, -1) << "failed to read realm id=" << id
         << " name=" << name << dendl;
@@ -361,8 +365,8 @@ void RGWOp_Realm_List::execute(optional_yield y)
 {
   {
     // read default realm
-    RGWRealm realm(driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj);
-    [[maybe_unused]] int ret = realm.read_default_id(this, default_id, y);
+    RGWRealm realm(driver->ctx());
+    default_id = realm.get_default_oid();
   }
   op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->list_realms(this, realms);
   if (op_ret < 0)
