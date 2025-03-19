@@ -5,6 +5,10 @@
 
 #include "include/types.h"
 #include "rgw_user.h"
+#include "rgw_sal.h"
+#include "rgw_exporter.h"
+#include "rgw_rados.h"
+#include "rgw_bucket.h"
 
 // until everything is moved from rgw_common
 #include "rgw_common.h"
@@ -110,3 +114,18 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
+int RGWUser::get_usage_stats(uint64_t *num_objs, uint64_t *total_bytes) {
+  if (!store || !g_rgw_exporter) {
+    return -EINVAL;
+  }
+
+  RGWUsageStats stats;
+  int ret = g_rgw_exporter->get_user_usage(this->user, &stats);
+  if (ret < 0) {
+    return ret;
+  }
+
+  *num_objs = stats.num_objects;
+  *total_bytes = stats.used_bytes;
+  return 0;
+}

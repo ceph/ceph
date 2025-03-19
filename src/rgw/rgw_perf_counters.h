@@ -49,6 +49,12 @@ enum {
   l_rgw_lua_script_ok,
   l_rgw_lua_script_fail,
 
+  // Usage metrics counters (per-user and per-bucket)
+  l_rgw_user_used_bytes,
+  l_rgw_user_num_objects,
+  l_rgw_bucket_used_bytes,
+  l_rgw_bucket_num_objects,
+  
   l_rgw_last,
 };
 
