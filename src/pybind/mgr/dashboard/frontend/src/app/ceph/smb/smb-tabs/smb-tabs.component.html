@@ -51,6 +51,12 @@
     i18n-heading
     (selected)="onSelected(Tabs.usersgroups)">
   </cds-tab>
+  <cds-tab
+    heading="Overview"
+    [tabContent]="overview"
+    i18n-heading
+    (selected)="onSelected(Tabs.overview)">
+  </cds-tab>
 </cds-tabs>
 
 <ng-template #clusters>
@@ -63,4 +69,8 @@
 
 <ng-template #usersgroups>
   <cd-smb-users-list></cd-smb-users-list>
+</ng-template>
+
+<ng-template #overview>
+  <cd-smb-overview></cd-smb-overview>
 </ng-template>

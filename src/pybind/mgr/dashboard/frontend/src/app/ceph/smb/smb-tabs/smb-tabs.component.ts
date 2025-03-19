@@ -3,7 +3,8 @@ import { Component } from '@angular/core';
 enum TABS {
   'clusters',
   'joinAuths',
-  'usersgroups'
+  'usersgroups',
+  'overview'
 }
 
 @Component({
