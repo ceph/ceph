@@ -204,6 +204,7 @@ static const actpair actpairs[] =
  { "iam:GenerateServiceLastAccessedDetails", iamGenerateServiceLastAccessedDetails},
  { "iam:SimulateCustomPolicy", iamSimulateCustomPolicy},
  { "iam:SimulatePrincipalPolicy", iamSimulatePrincipalPolicy},
+ { "iam:CreatePolicy", iamCreatePolicy},
  { "iam:GetAccountSummary", iamGetAccountSummary},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
@@ -1697,6 +1698,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamSimulatePrincipalPolicy:
     return "iam:SimulatePrincipalPolicy";
+
+  case iamCreatePolicy:
+    return "iam:CreatePolicy";
 
   case iamGetAccountSummary:
     return "iam:GetAccountSummary";
