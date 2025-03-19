@@ -1642,7 +1642,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: list of dicts describing the counters requested
         """
         return self._ceph_get_unlabeled_perf_schema(svc_type, svc_name)
-    
+
     @API.expose
     def get_perf_schema(self,
                         svc_type: str,
@@ -1720,9 +1720,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         :param str svc_type:
         :param str svc_name:
-        :param str counter_name: the key_name of the counter, for example 
+        :param str counter_name: the key_name of the counter, for example
             "osd_scrub_sh_repl"
-        :param str sub_counter_name: the counters present under the key_name, 
+        :param str sub_counter_name: the counters present under the key_name,
             for example "successful_scrubs_elapsed"
         :param list[(str, str)] labels: the labels associated with the counter,
             for example "[("level", "deep"), ("pooltype", "ec")]"
@@ -2243,9 +2243,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return data[1]
         else:
             return 0
-    
+
     @API.expose
-    def get_counter_latest(self, daemon_type: str, daemon_name: str, counter_name: str, 
+    def get_counter_latest(self, daemon_type: str, daemon_name: str, counter_name: str,
                            sub_counter_name: str, labels: List[Tuple[str, str]]) -> int:
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
@@ -2264,7 +2264,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return value, count
         else:
             return 0, 0
-    
+
     @API.expose
     def get_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter_name: str,
                                sub_counter_name: str, labels: List[Tuple[str, str]]) -> Tuple[int, int]:
@@ -2276,7 +2276,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return value, count
         else:
             return 0, 0
-    
+
     @API.expose
     @profile_method()
     def get_unlabeled_perf_counters(
@@ -2358,7 +2358,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
-    
+
     @API.expose
     @profile_method()
     def get_perf_counters(
@@ -2441,7 +2441,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     for sub_counter in sub_counters_list:
                         sub_counter_labels = []
                         sub_counter_info = dict(sub_counter)
-                        
+
                         for label_key, label_value in sub_counter["labels"].items():
                             sub_counter_labels.append((label_key, label_value))
 
@@ -2463,7 +2463,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                                     sub_counter_name,
                                     sub_counter_labels,
                                 )
-                                sub_counter_info['counters'][sub_counter_name]['value'] = v 
+                                sub_counter_info['counters'][sub_counter_name]['value'] = v
                                 sub_counter_info['counters'][sub_counter_name]['count'] = c
 
                             else:
