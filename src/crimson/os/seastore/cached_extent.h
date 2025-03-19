@@ -403,6 +403,8 @@ public:
   virtual extent_types_t get_type() const = 0;
 
   virtual bool is_logical() const {
+    assert(!is_logical_type(get_type()));
+    assert(is_physical_type(get_type()));
     return false;
   }
 
@@ -1349,10 +1351,6 @@ public:
     ceph_assert(0 == "Should never happen for a placeholder");
   }
 
-  bool is_logical() const final {
-    return false;
-  }
-
   void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
 
   std::ostream &print_detail(std::ostream &out) const final {
@@ -1406,6 +1404,8 @@ public:
   }
 
   bool is_logical() const final {
+    assert(is_logical_type(get_type()));
+    assert(!is_physical_type(get_type()));
     return true;
   }
 

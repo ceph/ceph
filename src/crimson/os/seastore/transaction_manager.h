@@ -1043,6 +1043,7 @@ private:
       partial_len,
       [&pref]
       (T &extent) mutable {
+	assert(extent.is_logical());
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	assert(!pref.has_been_invalidated());
@@ -1118,6 +1119,7 @@ private:
       direct_key,
       direct_length,
       [&pref](CachedExtent &extent) mutable {
+	assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
