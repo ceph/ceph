@@ -28,6 +28,7 @@
 #include "rgw_req_context.h"
 #include "include/random.h"
 #include "include/function2.hpp"
+#include "rgw_customer_managed_policy.h"
 
 // FIXME: following subclass dependencies
 #include "driver/rados/rgw_user.h"
@@ -358,6 +359,12 @@ class Driver {
                                     optional_yield y,
                                     std::string_view account_id,
                                     uint32_t& count) = 0;
+
+    /** Count the number of policy belonging to the given account. */
+    virtual int count_account_policy(const DoutPrefixProvider *dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t &count) = 0;
     /** Return a paginated listing of the account's roles. */
     virtual int list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
@@ -625,6 +632,14 @@ class Driver {
 					      std::string trust_policy="",
 					      std::string description="",
 					      std::string max_session_duration_str="",
+                std::multimap<std::string,std::string> tags={}) = 0;
+    virtual std::unique_ptr<RGWCustomerManagedPolicy> get_policy(std::string name,
+					      std::string tenant,
+					      rgw_account_id account_id,
+					      std::string path="",
+					      std::string policy_document="",
+					      std::string description="",
+					      std::string default_version="",
                 std::multimap<std::string,std::string> tags={}) = 0;
     /** Get an IAM Role by ID */
     virtual std::unique_ptr<RGWRole> get_role(std::string id) = 0;

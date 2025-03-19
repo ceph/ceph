@@ -22,6 +22,7 @@
 
 #include "driver/dbstore/common/dbstore.h"
 #include "driver/dbstore/dbstore_mgr.h"
+#include "rgw_customer_managed_policy.h"
 
 namespace rgw { namespace sal {
 
@@ -808,6 +809,11 @@ public:
                               optional_yield y,
                               std::string_view account_id,
                               uint32_t& count) override;
+
+      int count_account_policy(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              std::string_view account_id,
+                              uint32_t& count) override;
       int list_account_roles(const DoutPrefixProvider* dpp,
                              optional_yield y,
                              std::string_view account_id,
@@ -968,6 +974,14 @@ public:
           std::multimap<std::string,std::string> tags={}) override;
       virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
       virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
+      virtual std::unique_ptr<RGWCustomerManagedPolicy> get_policy(std::string name,
+                  std::string tenant,
+                  rgw_account_id account_id,
+                  std::string path="",
+                  std::string policy_document="",
+                  std::string description="",
+                  std::string default_version="",
+                  std::multimap<std::string,std::string> tags={}) override;
       int list_roles(const DoutPrefixProvider *dpp,
                      optional_yield y,
                      const std::string& tenant,

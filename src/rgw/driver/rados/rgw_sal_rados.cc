@@ -33,6 +33,7 @@
 #include "common/errno.h"
 
 #include "role.h"
+#include "policy.h"
 #include "rgw_obj_types.h"
 #include "rgw_rados.h"
 #include "rgw_sal.h"
@@ -86,6 +87,7 @@
 #include "rgw_pubsub.h"
 #include "topic.h"
 #include "topics.h"
+#include "rgw_customer_managed_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1583,6 +1585,17 @@ int RadosStore::count_account_roles(const DoutPrefixProvider* dpp,
   return rgwrados::account::resource_count(dpp, y, rados, obj, count);
 }
 
+int RadosStore::count_account_policy(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_policy_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
 int RadosStore::list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view account_id,
@@ -2310,6 +2323,30 @@ std::unique_ptr<LuaManager> RadosStore::get_lua_manager(const std::string& luaro
 {
   return std::make_unique<RadosLuaManager>(this, luarocks_path);
 }
+std::unique_ptr<RGWCustomerManagedPolicy> RadosStore::get_policy(std::string name,
+					      std::string tenant,
+					      rgw_account_id account_id,
+					      std::string path,
+					      std::string policy_document,
+					      std::string description,
+					      std::string default_version,
+                std::multimap<std::string,std::string> tags)
+{
+  // TODO: need to check RadosRGWCustomerManagedPolicy
+  return std::make_unique<RadosCustomerManagedPolicy>(this, name, tenant, std::move(account_id), path, policy_document, std::move(description), default_version, tags);
+}
+int RadosCustomerManagedPolicy::load_by_name(const DoutPrefixProvider *dpp, optional_yield y) {}
+int RadosCustomerManagedPolicy::load_by_id(const DoutPrefixProvider *dpp, optional_yield y) {}
+int RadosCustomerManagedPolicy::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, const RGWAccountInfo &acc_info, std::map<std::string, bufferlist> &acc_attrs,
+                   RGWObjVersionTracker &objv) {
+  librados::Rados &rados = *store->getRados()->get_rados_handle();
+  RGWServices *svc = store->svc();
+  const RGWZoneParams &zone = svc->zone->get_zone_params();
+  return rgwrados::policy::write(dpp, y, rados, *svc->sysobj, svc->mdlog,
+                                 zone, info, acc_info, acc_attrs, objv,
+                                 ceph::real_time{}, exclusive);
+}
+int RadosCustomerManagedPolicy::delete_obj(const DoutPrefixProvider *dpp, optional_yield y) {}
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
 					      std::string tenant,

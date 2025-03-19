@@ -2106,6 +2106,18 @@ int DaosMultipartWriter::complete(
 
   return ret;
 }
+std::unique_ptr<RGWCustomerManagedPolicy> MotrStore::get_policy(std::string name,
+					      std::string tenant,
+					      rgw_account_id account_id,
+					      std::string path,
+					      std::string policy_document,
+					      std::string description,
+					      std::string default_version,
+                std::multimap<std::string,std::string> tags)
+{
+  RGWCustomerManagedPolicy *p = nullptr;
+  return std::unique_ptr<RGWCustomerManagedPolicy>(p);
+}
 
 std::unique_ptr<RGWRole> DaosStore::get_role(
     std::string name, std::string tenant, rgw_account_id account_id, std::string path,

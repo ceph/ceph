@@ -251,6 +251,14 @@ int FilterDriver::count_account_roles(const DoutPrefixProvider* dpp,
   return next->count_account_roles(dpp, y, account_id, count);
 }
 
+int FilterDriver::count_account_policy(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      uint32_t& count)
+{
+  return next->count_account_policy(dpp, y, account_id, count);
+}
+
 int FilterDriver::list_account_roles(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view account_id,
@@ -623,6 +631,17 @@ std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& lua
   std::unique_ptr<LuaManager> nm = next->get_lua_manager(luarocks_path);
 
   return std::make_unique<FilterLuaManager>(std::move(nm));
+}
+std::unique_ptr<RGWCustomerManagedPolicy> FilterDriver::get_policy(std::string name,
+					      std::string tenant,
+					      rgw_account_id account_id,
+					      std::string path,
+					      std::string policy_document,
+					      std::string description,
+					      std::string default_version,
+                std::multimap<std::string,std::string> tags)
+{
+  return next->get_policy(name, tenant, std::move(account_id), path, policy_document, std::move(description), default_version, tags);
 }
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string name,
