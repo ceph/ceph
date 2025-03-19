@@ -39,6 +39,37 @@ public:
   }
 };
 
+// Global pointer to the exporter instance
+RGWExporter* rgw_exporter = nullptr;
+
+// Function to initialize the exporter
+void rgw_init_exporter(CephContext* cct) {
+    rgw_exporter = new RGWExporter(cct);
+    rgw_exporter->start(); // Start the background thread (e.g., updating every 30 seconds)
+}
+
+// Main initialization function for RGW
+int rgw_main_init(CephContext* cct) {
+    // HSTTODO: other RGW initialization code
+
+    // Initialize the exporter to start collecting usage metrics
+    rgw_init_exporter(cct);
+    
+    return 0;
+}
+
+// Main shutdown function for RGW
+void rgw_main_shutdown() {
+    // HSTTODO:  other shutdown code 
+
+    // Shut down the exporter and clean up resources
+    if (rgw_exporter) {
+        rgw_exporter->stop(); // Signal the background thread to stop and wait for it to join
+        delete rgw_exporter;
+        rgw_exporter = nullptr;
+    }
+}
+
 static int usage()
 {
   cout << "usage: radosgw [options...]" << std::endl;

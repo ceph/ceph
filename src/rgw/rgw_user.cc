@@ -110,3 +110,20 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
+uint64_t RGWUser ::get_usage(const std::string &user_name) {
+  // Create a user instance
+  RGWUser  user(user_name);
+
+  // Retrieve the user's metadata
+  RGWUser Info user_info;
+  int ret = user.get_info(user_info); // Assuming get_info fetches the metadata
+  
+  if (ret < 0) {
+  // Handle error
+  // hstTODO: add a log for it 
+  return 0; // Return 0 if unable to retrieve usage
+  }
+  
+  // Return the bytes used from the user's metadata
+  return user_info.size_rounded; // Assuming bytes_used is a field in RGWUser Info
+}
