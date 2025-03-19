@@ -32,6 +32,7 @@ struct RGWZoneParams {
   rgw_pool topics_pool;
   rgw_pool account_pool;
   rgw_pool group_pool;
+  rgw_pool policy_pool;
   rgw_pool dedup_pool;
   rgw_pool bucket_logging_pool;
   rgw_pool vector_pool;
@@ -64,7 +65,7 @@ struct RGWZoneParams {
   const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(19, 1, bl);
+    ENCODE_START(20, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -104,11 +105,12 @@ struct RGWZoneParams {
     encode(dedup_pool, bl);
     encode(bucket_logging_pool, bl);
     encode(vector_pool, bl);
+    encode(policy_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(19, bl);
+    DECODE_START(20, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -212,6 +214,11 @@ struct RGWZoneParams {
       decode(vector_pool, bl);
     } else {
       vector_pool = name + ".rgw.meta:vector";
+    }
+    if (struct_v >= 20) {
+      decode(policy_pool, bl);
+    } else {
+      policy_pool = log_pool.name + "rgw.policy";
     }
     DECODE_FINISH(bl);
   }

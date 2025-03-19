@@ -192,7 +192,9 @@ enum action_t {
   iamSimulateCustomPolicy,
   iamSimulatePrincipalPolicy,
   iamGetAccountSummary,
+  iamCreatePolicy,
   iamAll,
+
 
   stsAssumeRole,
   stsAssumeRoleWithWebIdentity,
