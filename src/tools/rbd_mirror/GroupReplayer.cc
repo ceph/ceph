@@ -241,6 +241,11 @@ void GroupReplayer<I>::destroy() {
 
 template <typename I>
 void GroupReplayer<I>::sync_group_names() {
+  if (m_local_group_ctx.primary) {
+    reregister_admin_socket_hook();
+    return;
+  }
+
   dout(10) << dendl;
 
   std::string local_group_name;
