@@ -79,6 +79,14 @@ public:
       uint32_t op_flags = 0
       ) final;
 
+    read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+      CollectionRef c,
+      const ghobject_t &oid,
+      ObjectStore::omap_iter_seek_t start_from,
+      omap_iterate_cb_t callback,
+      uint32_t op_flags = 0
+    ) final;
+
     get_attr_errorator::future<ceph::bufferlist> omap_get_header(
       CollectionRef c,
       const ghobject_t& oid,

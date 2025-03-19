@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iostream>
+#include <fmt/format.h>
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -13,12 +14,30 @@
 #include "crimson/osd/exceptions.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_manager.h"
+#include "os/ObjectStore.h" // for ObjectStore::omap_iter_seek_t
+
 
 //TODO: calculate the max key and value sizes the current layout supports,
 //	and return errors during insert if the max is exceeded.
 #define OMAP_INNER_BLOCK_SIZE 8192
 #define OMAP_LEAF_BLOCK_SIZE 65536
 #define LOG_LEAF_BLOCK_SIZE 16384
+
+template <>
+struct fmt::formatter<ObjectStore::omap_iter_seek_t> {
+  constexpr auto parse(format_parse_context& ctx) const {
+    return ctx.begin();
+  }
+
+  auto format(const ObjectStore::omap_iter_seek_t& seek, format_context& ctx) const {
+    return fmt::format_to(
+      ctx.out(),
+      "omap_iter_seek_t{{seek_position='{}', seek_type={}}}",
+      seek.seek_position,
+      seek.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND ? "LOWER_BOUND" : "UPPER_BOUND"
+    );
+  }
+};
 
 namespace crimson::os::seastore {
 
@@ -99,9 +118,34 @@ public:
     const std::string &key) = 0;
 
   /**
+   * omap_iterate
+   *
+   * scan key/value pairs and give key/value from start_from.seek_poistion to function f
+   *
+   * @param omap_root: omap btree root information
+   * @param t: current transaction
+   * @param start_from: seek start key and seek type
+   *                    Upon transaction conflict, start_from will be updated to the
+   *                    upper bound of the last key of the last visited omap leaf node.
+   * @param f: function is called for each seeked key/value pair
+   *
+   */
+   using omap_iterate_cb_t = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+   using omap_iterate_iertr = base_iertr;
+   using omap_iterate_ret = omap_iterate_iertr::future<ObjectStore::omap_iter_ret_t>;
+   virtual omap_iterate_ret omap_iterate(
+     const omap_root_t &omap_root,
+     Transaction &t,
+     ObjectStore::omap_iter_seek_t &start_from,
+     omap_iterate_cb_t callback
+   ) = 0;
+
+  /**
    * omap_list
    *
    * Scans key/value pairs in order.
+   * // TODO: omap_list() is deprecated in favor of omap_iterate()
+   * // TODO: omap_rm_key_range() that omap_list_config_t needs to be dropped from that interface
    *
    * @param omap_root: omap btree root information
    * @param t: current transaction

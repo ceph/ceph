@@ -43,6 +43,7 @@ enum class op_type_t : uint8_t {
     STAT,
     OMAP_GET_VALUES,
     OMAP_GET_VALUES2,
+    OMAP_ITERATE,
     MAX
 };
 
@@ -146,6 +147,13 @@ public:
       const std::optional<std::string> &start, ///< [in] start, empty for begin
       uint32_t op_flags = 0
       ) final; ///< @return <done, values> values.empty() iff done
+
+    read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+      CollectionRef c,
+      const ghobject_t &oid,
+      ObjectStore::omap_iter_seek_t start_from,
+      omap_iterate_cb_t callback,
+      uint32_t op_flags = 0) final;
 
     get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,
@@ -492,6 +500,14 @@ public:
       omap_root_t&& root,
       const std::optional<std::string>& start,
       OMapManager::omap_list_config_t config) const;
+
+    using omaptree_iterate_ret = OMapManager::omap_iterate_ret;
+    omaptree_iterate_ret omaptree_iterate(
+      Transaction& t,
+      omap_root_t&& root,
+      ObjectStore::omap_iter_seek_t &start_from,
+      omap_iterate_cb_t callback
+      );
 
     base_iertr::future<omap_values_t> omaptree_get_values(
       Transaction& t,
