@@ -63,15 +63,39 @@ def export_dict_ops_checks(cluster_id: str,
 
 def export_dict_qos_bw_ops_checks(cluster_id: str,
                                   mgr_obj: Any,
-                                  qos_dict: dict) -> None:
+                                  qos_dict: dict,
+                                  old_qos_block: dict = {}) -> None:
     """Validate the qos block of dict passed to apply_export method"""
     qos_enable = qos_dict.get('enable_qos')
     if qos_enable is None:
         raise Exception('The QOS block requires at least the enable_qos parameter')
     if not isinstance(qos_enable, bool):
         raise Exception('Invalid value for the enable_qos parameter')
-    export_dict_bw_checks(cluster_id, mgr_obj, qos_enable, qos_dict)
-    export_dict_ops_checks(cluster_id, mgr_obj, qos_enable, qos_dict)
+    # if cluster level bandwidth or ops control is disabled or qos type changed to PerClient
+    # but old qos block still has those values we should accept it in apply command
+    validate_bw = True
+    validate_ops = True
+    clust_qos_obj = get_cluster_qos_config(cluster_id, mgr_obj)
+    if clust_qos_obj:
+        if not clust_qos_obj.enable_qos or clust_qos_obj.qos_type == QOSType.PerClient:
+            if old_qos_block == qos_dict:
+                return
+        if clust_qos_obj.enable_qos and clust_qos_obj.bw_obj and not clust_qos_obj.bw_obj.enable_bw_ctrl:
+            keys = [QOSParams.export_writebw.value, QOSParams.export_readbw.value,
+                    QOSParams.client_writebw.value, QOSParams.client_readbw.value,
+                    QOSParams.export_rw_bw.value, QOSParams.client_rw_bw.value,
+                    QOSParams.enable_bw_ctrl.value, QOSParams.combined_bw_ctrl.value]
+            if all(old_qos_block.get(key) == qos_dict.get(key) for key in keys):
+                validate_bw = False
+        if clust_qos_obj.enable_qos and clust_qos_obj.ops_obj and not clust_qos_obj.ops_obj.enable_iops_ctrl:
+            keys = [QOSParams.max_export_iops.value, QOSParams.max_client_iops.value,
+                    QOSParams.enable_iops_ctrl.value]
+            if all(old_qos_block.get(key) == qos_dict.get(key) for key in keys):
+                validate_ops = False
+    if validate_bw:
+        export_dict_bw_checks(cluster_id, mgr_obj, qos_enable, qos_dict)
+    if validate_ops:
+        export_dict_ops_checks(cluster_id, mgr_obj, qos_enable, qos_dict)
 
 
 def export_qos_bw_checks(cluster_id: str,
