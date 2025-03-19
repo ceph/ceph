@@ -380,8 +380,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop)
   for (auto &&[hoid, read_request] : rop.to_read) {
     bool need_attrs = read_request.want_attrs;
 
-    for (auto &&[_, shard_read] : read_request.shard_reads) {
-      if (need_attrs) {
+    for (auto &&[shard, shard_read] : read_request.shard_reads) {
+      if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
 	messages[shard_read.pg_shard].attrs_to_read.insert(hoid);
 	need_attrs = false;
       }
