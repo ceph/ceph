@@ -303,6 +303,7 @@ std::string ceph::io_exerciser::Seq10::get_name() const {
 std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq10::_next() {
   if (!inject_error_done) {
     inject_error_done = true;
+    barrier = true;
     return InjectWriteErrorOp::generate(*shard_to_inject, 0, 0,
                                         std::numeric_limits<uint64_t>::max());
   } else if (!failed_write_done) {
@@ -316,6 +317,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq10::_next() {
     return SingleReadOp::generate(offset, length);
   } else if (!clear_inject_done) {
     clear_inject_done = true;
+    barrier = true;
     return ClearWriteErrorInjectOp::generate(*shard_to_inject, 0);
   } else if (!successful_write_done) {
     successful_write_done = true;

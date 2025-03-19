@@ -354,23 +354,9 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   sinfo.ro_size_to_zero_mask(op.recovery_info.size, zero_mask);
 
   ECUtil::shard_extent_set_t shard_want_to_read(sinfo.get_k_plus_m());
-  for (raw_shard_id_t raw_shard; raw_shard < sinfo.get_k(); ++raw_shard) {
-    shard_id_t shard = sinfo.get_shard(raw_shard);
-    shard_want_to_read[shard].union_of(buffer_superset);
 
-    //FIXME: decode needs to be improved to interpret missing buffers as zero.
-    //       Once this happens, this code can be removed.
-    extent_set zero;
-    zero.intersection_of(zero_mask[shard], buffer_superset);
-    if (!zero.empty() && (zero.range_start() == 0 || op.returned_data->contains_shard(shard))) {
-      op.returned_data->zero_pad(shard, zero.range_start(), zero.size());
-    }
-  }
-
-  uint64_t ro_end = op.returned_data->get_ro_end();
-  if (ro_end == op.recovery_info.size) {
-    op.returned_data->append_zeros_to_ro_offset(
-      sinfo.ro_offset_to_next_stripe_ro_offset(op.returned_data->get_ro_end()));
+  for (auto &shard : op.missing_on_shards) {
+    shard_want_to_read[shard].insert(buffer_superset);
   }
 
   uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
