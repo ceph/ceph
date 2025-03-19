@@ -104,7 +104,9 @@ int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
   for (auto& realm_name : realms) {
     string realm_id;
     RGWRealm realm(realm_id, realm_name);
-    r = realm.init(dpp, cct, sysobj_svc, y);
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+    r = rgw::read_realm(dpp, y, cfgstore.get(), realm_id, realm_name, realm);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << dendl;
       continue;
@@ -136,14 +138,14 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  ret = realm->init(dpp, cct, sysobj_svc, y);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  ret = rgw::read_realm(dpp, y, cfgstore.get(), realm->get_id(), realm->get_name(), *realm);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
   ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
   current_period->set_realm_id(realm->get_id());
   ret = cfgstore->read_period(dpp, y, current_period->get_id(), current_period->epoch, *current_period);
@@ -425,7 +427,7 @@ int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, list<string>& zones)
 
 int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, list<string>& realms)
 {
-  RGWRealm realm(cct, sysobj_svc);
+  RGWRealm realm(cct);
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
   return syspool.list_prefixed_objs(dpp, realm_names_oid_prefix, &realms);
