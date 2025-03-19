@@ -11,6 +11,9 @@
   overflow: auto;
   padding-bottom: 100px;
   padding-top: 48px;
+  height: calc(100vh - 48px); // Account for top padding
+  scroll-behavior: smooth;
+  position: relative;
 }
 
 .rgw-dashboard {
