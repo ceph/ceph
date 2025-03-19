@@ -1747,7 +1747,7 @@ class TestFsAuthorize(CephFSTestCase):
 
         CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
         # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
-        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        features = f"{CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK}"
         mntargs = [f"--client_debug_inject_features={features}"]
 
         # should succeed
@@ -1776,7 +1776,7 @@ class TestFsAuthorize(CephFSTestCase):
 
         CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
         # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
-        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        features = f"{CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK}"
         mntargs = [f"--client_debug_inject_features={features}"]
 
         # should succeed
@@ -1806,7 +1806,7 @@ class TestFsAuthorize(CephFSTestCase):
 
         CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
         # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
-        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        features = f"{CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK}"
         mntargs = [f"--client_debug_inject_features={features}"]
 
         # should succeed

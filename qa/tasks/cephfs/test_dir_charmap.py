@@ -191,7 +191,7 @@ class TestCharMapVxattr(CephFSTestCase, CharMapMixin):
 
         CEPHFS_FEATURE_CHARMAP = 22
         # all but CEPHFS_FEATURE_CHARMAP
-        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_CHARMAP)])
+        features = f"{CEPHFS_FEATURE_CHARMAP}"
         mntargs = [f"--client_debug_inject_features={features}"]
 
         self.mount_a.remount(mntargs=mntargs)
