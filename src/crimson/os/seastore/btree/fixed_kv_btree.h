@@ -286,9 +286,8 @@ public:
     }
 
     // handle_boundary() must be called before get_cursor
-    std::unique_ptr<cursor_t> get_cursor(op_context_t ctx) const {
-      assert(!is_end());
-      return std::make_unique<cursor_t>(
+    boost::intrusive_ptr<cursor_t> get_cursor(op_context_t ctx) const {
+      return new cursor_t(
         ctx,
 	leaf.node,
         leaf.node->modifications,
@@ -500,7 +499,7 @@ public:
       cursor.pos);
   }
 
-  std::unique_ptr<cursor_t> get_cursor(
+  boost::intrusive_ptr<cursor_t> get_cursor(
     op_context_t c,
     TCachedExtentRef<leaf_node_t> leaf,
     node_key_t key)
@@ -521,8 +520,7 @@ public:
     assert(leaf->get_size() != pos);
     auto it = leaf->iter_idx(pos);
     assert(it.get_key() == key);
-    return std::make_unique<cursor_t>(
-      c, leaf, leaf->modifications, key, it.get_val(), pos);
+    return new cursor_t(c, leaf, leaf->modifications, key, it.get_val(), pos);
   }
 
   /**

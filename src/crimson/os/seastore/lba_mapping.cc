@@ -43,7 +43,7 @@ std::ostream &operator<<(std::ostream &out, const lba_mapping_list_t &rhs)
 using lba::LBALeafNode;
 
 get_child_ret_t<LBALeafNode, LogicalChildNode>
-LBAMapping::get_logical_extent(Transaction &t)
+LBAMapping::get_logical_extent(Transaction &t) const
 {
   assert(is_linked_direct());
   ceph_assert(direct_cursor->is_viewable());

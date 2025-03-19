@@ -198,7 +198,9 @@ struct __attribute__((packed)) backref_map_val_le_t {
  * time.
  */
 template <typename key_t, typename val_t>
-struct BtreeCursor {
+struct BtreeCursor
+  : public boost::intrusive_ref_counter<
+      BtreeCursor<key_t, val_t>, boost::thread_unsafe_counter> {
   BtreeCursor(
     op_context_t &ctx,
     CachedExtentRef parent,
@@ -281,7 +283,6 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     assert(!is_indirect());
     return val->refcount;
   }
-
   std::unique_ptr<LBACursor> duplicate() const {
     return std::make_unique<LBACursor>(*this);
   }
@@ -291,7 +292,7 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   using base_iertr = trans_iertr<base_ertr>;
   base_iertr::future<> refresh();
 };
-using LBACursorRef = std::unique_ptr<LBACursor>;
+using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
 struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
   using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
@@ -309,7 +310,7 @@ struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
     return val->type;
   }
 };
-using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
 
 template <typename key_t, typename val_t>
 std::ostream &operator<<(

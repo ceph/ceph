@@ -633,13 +633,13 @@ struct transaction_manager_test_t :
 
   TestBlockRef try_read_pin(
     test_transaction_t &t,
-    LBAMapping &&pin) {
+    const LBAMapping pin) {
     using ertr = with_trans_ertr<TransactionManager::base_iertr>;
     bool indirect = pin.is_indirect();
     auto addr = pin.get_key();
     auto im_addr = pin.get_intermediate_base();
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->read_pin<TestBlock>(trans, std::move(pin));
+      return tm->read_pin<TestBlock>(trans, pin.duplicate());
     }).safe_then([](auto ret) {
       return ertr::make_ready_future<TestBlockRef>(ret.extent);
     }).handle_error(
@@ -1608,13 +1608,12 @@ struct transaction_manager_test_t :
 	    }
 
 	    auto t = create_transaction();
-            auto pin0 = try_get_pin(t, offset);
-	    if (!pin0 || pin0->get_length() != length) {
+            auto last_pin = try_get_pin(t, offset);
+	    if (!last_pin || last_pin->get_length() != length) {
 	      early_exit++;
 	      return;
 	    }
 
-            auto last_pin = pin0->duplicate();
 	    ASSERT_TRUE(!split_points.empty());
 	    for (auto off : split_points) {
 	      if (off == 0 || off >= 255) {
@@ -1629,7 +1628,7 @@ struct transaction_manager_test_t :
 		conflicted++;
 		return;
 	      }
-              last_pin = pin->duplicate();
+              last_pin = std::move(pin);
 	    }
             auto last_ext = try_get_extent(t, last_pin.get_key());
             if (!last_ext) {
@@ -1743,7 +1742,7 @@ struct transaction_manager_test_t :
 	        }
               }
               ASSERT_TRUE(rpin);
-              last_rpin = rpin->duplicate();
+              last_rpin = std::move(*rpin);
 	    }
             auto last_rext = try_get_extent(t, last_rpin.get_key());
             if (!last_rext) {
