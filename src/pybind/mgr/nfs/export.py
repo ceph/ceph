@@ -842,7 +842,11 @@ class ExportMgr:
 
         # check QOS
         if new_export_dict.get('qos_block'):
-            export_dict_qos_bw_ops_checks(cluster_id, self.mgr, dict(new_export_dict.get('qos_block', {})))
+            old_qos = {}
+            if old_export.qos_block:
+                old_qos = old_export.qos_block.to_dict()
+            export_dict_qos_bw_ops_checks(cluster_id, self.mgr, dict(new_export_dict.get('qos_block', {})),
+                                          old_qos)
 
         self.exports[cluster_id].remove(old_export)
 
