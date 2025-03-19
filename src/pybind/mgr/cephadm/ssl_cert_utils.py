@@ -15,6 +15,34 @@ class SSLConfigException(Exception):
     pass
 
 
+def extract_ips_and_fqdns_from_cert(cert_pem: str) -> Tuple[List[str], List[str]]:
+    """
+    Extracts lists of IP addresses and FQDNs (DNS names) from the SAN (Subject Alternative Name) extension of a certificate.
+
+    :param cert_pem: The certificate in PEM format.
+    :return: A tuple containing two lists:
+             - List of IP addresses as strings.
+             - List of FQDNs (DNS names) as strings.
+    """
+    try:
+        # Load the certificate
+        certificate = x509.load_pem_x509_certificate(cert_pem.encode('utf-8'), backend=default_backend())
+
+        try:
+            san_extension = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
+            san = san_extension.value
+            # Extract IP addresses and FQDNs (DNS Names)
+            ip_addresses = [str(ip) for ip in san.get_values_for_type(x509.IPAddress)]
+            fqdns = [str(dns) for dns in san.get_values_for_type(x509.DNSName)]
+            return ip_addresses, fqdns
+        except x509.ExtensionNotFound:
+            # SAN extension not found, return empty lists
+            return [], []
+
+    except Exception as e:
+        raise ValueError(f"Failed to extract IPs and FQDNs from certificate: {e}")
+
+
 def parse_extensions(cert: Certificate) -> Dict:
     """Parse extensions into a readable format."""
     parsed_extensions = {}
