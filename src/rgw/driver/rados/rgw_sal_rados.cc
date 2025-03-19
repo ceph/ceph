@@ -89,6 +89,7 @@
 #include "topic.h"
 #include "topics.h"
 #include "users.h"
+#include "policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1858,6 +1859,17 @@ int RadosStore::count_account_roles(const DoutPrefixProvider* dpp,
   return rgwrados::account::resource_count(dpp, y, rados, obj, count);
 }
 
+int RadosStore::count_account_policies(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::policy::get_policy_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
 int RadosStore::list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view account_id,
@@ -2735,6 +2747,12 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
   } while (is_truncated);
 
   return 0;
+}
+
+int RadosStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
+{
+ return rgwrados::policy::write_policy( dpp, y, *getRados()->get_rados_handle(), *svc()->sysobj, svc()->zone->get_zone_params(), info, exclusive);
 }
 
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,

@@ -850,6 +850,9 @@ struct RGWAccountInfo {
   static constexpr int32_t DEFAULT_ACCESS_KEY_LIMIT = 4;
   int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
 
+  static constexpr int32_t DEFAULT_POLICY_LIMIT = 1500;
+  int32_t max_policies = DEFAULT_POLICY_LIMIT;
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
     encode(id, bl);

@@ -251,6 +251,14 @@ int FilterDriver::count_account_roles(const DoutPrefixProvider* dpp,
   return next->count_account_roles(dpp, y, account_id, count);
 }
 
+int FilterDriver::count_account_policies(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      uint32_t& count)
+{
+  return next->count_account_policies(dpp, y, account_id, count);
+}
+
 int FilterDriver::list_account_roles(const DoutPrefixProvider* dpp,
                                      optional_yield y,
                                      std::string_view account_id,
@@ -701,6 +709,12 @@ int FilterDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
                                      std::vector<RGWOIDCProviderInfo>& providers)
 {
   return next->get_oidc_providers(dpp, y, tenant, providers);
+}
+
+int FilterDriver::store_customer_managed_policy(const DoutPrefixProvider* dpp,
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
+{
+  return next->store_customer_managed_policy(dpp, y, info, exclusive);
 }
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,

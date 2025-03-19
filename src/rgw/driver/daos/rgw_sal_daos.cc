@@ -2165,6 +2165,12 @@ int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
+int DaosStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
+optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
+{
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
 std::unique_ptr<MultipartUpload> DaosBucket::get_multipart_upload(
     const std::string& oid, std::optional<std::string> upload_id,
     ACLOwner owner, ceph::real_time mtime) {

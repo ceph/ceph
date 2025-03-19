@@ -28,6 +28,7 @@
 #include "rgw_req_context.h"
 #include "include/random.h"
 #include "include/function2.hpp"
+#include "rgw_iam_managed_policy.h"
 
 // FIXME: following subclass dependencies
 #include "driver/rados/rgw_user.h"
@@ -389,6 +390,11 @@ class Driver {
                                     optional_yield y,
                                     std::string_view account_id,
                                     uint32_t& count) = 0;
+     /** Count the number of policy belonging to the given account. */
+    virtual int count_account_policies(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count) = 0;
     /** Return a paginated listing of the account's roles. */
     virtual int list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
@@ -690,6 +696,8 @@ class Driver {
                                    optional_yield y,
                                    std::string_view tenant,
                                    std::vector<RGWOIDCProviderInfo>& providers) = 0;
+    virtual int store_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y,const rgw::IAM::ManagedPolicyInfo& info,bool exclusive) = 0;
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
