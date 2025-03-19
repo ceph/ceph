@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any
 import logging
+from enum import Enum
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, verify_cacrt_content, ServerConfigException
@@ -11,6 +12,13 @@ if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+
+class CertStatus(str, Enum):
+    VALID =     "valid"
+    INVALID =   "invalid"
+    EXPIRED =   "expired"
+    EXPIRING =  "expiring"
 
 
 class CertInfo:
@@ -34,6 +42,19 @@ class CertInfo:
         self.is_close_to_expiration = is_close_to_expiration
         self.days_to_expiration = days_to_expiration
         self.error_info = error_info
+
+    @property
+    def signed_by(self) -> str:
+        return "user" if self.user_made else "cephadm"
+
+    @property
+    def status(self) -> CertStatus:
+        """Return certificate status as a CertStatus enum."""
+        if not self.is_valid:
+            return CertStatus.EXPIRED if "expired" in self.error_info.lower() else CertStatus.INVALID
+        if self.is_close_to_expiration:
+            return CertStatus.EXPIRING
+        return CertStatus.VALID
 
     def __str__(self) -> str:
         return f'{self.cert_name} ({self.target})' if self.target else f'{self.cert_name}'
@@ -91,6 +112,7 @@ class CertMgr:
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
+    CEPHADM_SIGNED = 'cephadm-signed'
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -111,10 +133,26 @@ class CertMgr:
             TLSObjectScope.GLOBAL: {},
         }
 
+    def is_cephadm_signed_entity(self, entity: str) -> bool:
+        return entity.startswith(self.CEPHADM_SIGNED)
+
+    def self_signed_cert(self, service_name: str) -> str:
+        return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
+
+    def self_signed_key(self, service_name: str) -> str:
+        return f'{self.CEPHADM_SIGNED}_{service_name}_key'
+
+    def service_name_from_cert(self, cert_name: str) -> str:
+        prefix = f'{self.CEPHADM_SIGNED}_'
+        suffix = '_cert'
+        if cert_name.startswith(prefix) and cert_name.endswith(suffix):
+            return cert_name[len(prefix):-len(suffix)]
+        return 'unkown-service'
+
     def init_tlsobject_store(self) -> None:
-        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs)
+        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs, self.is_cephadm_signed_entity)
         self.cert_store.load()
-        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys)
+        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.is_cephadm_signed_entity)
         self.key_store.load()
         self._initialize_root_ca(self.mgr.get_mgr_ip())
 
@@ -137,6 +175,17 @@ class CertMgr:
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
+
+    def register_self_signed_cert_key_pair(self, service_name: str) -> None:
+        """
+        Registers a self-signed certificate/key for a given service under host scope.
+
+        :param service_name: The name of the service.
+        """
+        ss_cert_name = self.self_signed_cert(service_name)
+        ss_key_name = self.self_signed_key(service_name)
+        self.cert_store.add_entity(self.self_signed_cert(service_name), TLSObjectScope.HOST)
+        self.key_store.add_entity(self.self_signed_key(service_name), TLSObjectScope.HOST)
 
     def register_cert_key_pair(self, entity: str, cert_name: str, key_name: str, scope: TLSObjectScope) -> None:
         """
@@ -173,20 +222,24 @@ class CertMgr:
         if entity not in self.entities[scope]:
             self.entities[scope][entity] = {"certs": [], "keys": []}
 
-        self.entities[scope][entity][obj_type].append(obj_name)
+        if obj_name not in self.entities[scope][entity][obj_type]:
+            self.entities[scope][entity][obj_type].append(obj_name)
 
-    def cert_to_entity(self, cert_name: str) -> str:
+    def get_associated_service(self, cert_info: CertInfo) -> Optional[str]:
         """
-        Retrieves the entity that owns a given certificate or key name.
-
-        :param cert_name: The certificate or key name.
-        :return: The entity name if found, otherwise None.
+        Retrieves the service associeted to the certificate
         """
+        if self.is_cephadm_signed_entity(cert_info.cert_name):
+            return self.service_name_from_cert(cert_info.cert_name)
         for scope_entities in self.entities.values():
             for entity, certs in scope_entities.items():
-                if cert_name in certs:
-                    return entity
-        return 'unkown'
+                if cert_info.cert_name in certs:
+                    cert_scope = self.get_cert_scope(cert_info.cert_name)
+                    if cert_scope == TLSObjectScope.SERVICE:
+                        return cert_info.target
+                    else:
+                        return entity
+        return None
 
     def generate_cert(
         self,
@@ -204,17 +257,34 @@ class CertMgr:
         key_obj = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name, host))
         return key_obj.key if key_obj else None
 
+    def get_self_signed_cert_key_pair(self, service_name: str, hostname: str) -> Tuple[Optional[str], Optional[str]]:
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject(self.self_signed_cert(service_name), host=hostname))
+        key_obj = cast(PrivKey, self.key_store.get_tlsobject(self.self_signed_key(service_name), host=hostname))
+        cert = cert_obj.cert if cert_obj else None
+        key = key_obj.key if key_obj else None
+        return cert, key
+
     def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made)
 
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made)
 
+    def save_self_signed_cert_key_pair(self, service_name: str, cert: str, key: str, host: str) -> None:
+        ss_cert_name = self.self_signed_cert(service_name)
+        ss_key_name = self.self_signed_key(service_name)
+        self.cert_store.save_tlsobject(ss_cert_name, cert, host=host, user_made=False)
+        self.key_store.save_tlsobject(ss_key_name, key, host=host, user_made=False)
+
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.cert_store.rm_tlsobject(cert_name, service_name, host)
 
     def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.key_store.rm_tlsobject(key_name, service_name, host)
+
+    def rm_self_signed_cert_key_pair(self, service_name: str, host: str) -> None:
+        self.rm_cert(self.self_signed_cert(service_name), service_name, host)
+        self.rm_key(self.self_signed_key(service_name), service_name, host)
 
     def cert_ls(self, include_datails: bool = False) -> Dict:
         cert_objects: List = self.cert_store.list_tlsobjects()
@@ -275,6 +345,8 @@ class CertMgr:
         return entities
 
     def get_cert_scope(self, cert_name: str) -> TLSObjectScope:
+        if self.is_cephadm_signed_entity(cert_name):
+            return TLSObjectScope.HOST
         for scope, certificates in self.known_certs.items():
             if cert_name in certificates:
                 return scope
@@ -314,9 +386,9 @@ class CertMgr:
 
         # Generate a short description with a summery of all the detected issues
         issues = [
-            f'{invalid_count} invalid' if invalid_count > 0 else '',
-            f'{expired_count} expired' if expired_count > 0 else '',
-            f'{expiring_count} expiring' if expiring_count > 0 else ''
+            f'{invalid_count} {CertStatus.INVALID.value}' if invalid_count > 0 else '',
+            f'{expired_count} {CertStatus.EXPIRED.value}' if expired_count > 0 else '',
+            f'{expiring_count} {CertStatus.EXPIRING.value}' if expiring_count > 0 else ''
         ]
         issues_description = ', '.join(filter(None, issues))  # collect only non-empty issues
         total_issues = invalid_count + expired_count + expiring_count
@@ -416,7 +488,7 @@ class CertMgr:
             if key_obj:
                 # certificate has a key, let's check the cert/key pair
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj, key_obj)
-            elif key_name in self.known_keys:
+            elif key_name in self.known_keys or self.is_cephadm_signed_entity(key_name):
                 # certificate is supposed to have a key but it's missing
                 logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
                 cert_info = CertInfo(cert_name, target, cert_obj.user_made, False, False, 0, "missing key")
@@ -494,7 +566,11 @@ class CertMgr:
                 continue
 
             if fix_issues and trigger_auto_fix(cert_info, cert_obj):
-                services_to_reconfig.add(self.cert_to_entity(cert_info.cert_name))
+                svc = self.get_associated_service(cert_info)
+                if svc:
+                    services_to_reconfig.add(svc)
+                else:
+                    logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
 
         # Clear previously reported issues as we are newly checking all the certifiactes
         self.certificates_health_report = []
