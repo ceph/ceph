@@ -131,6 +131,7 @@ class PerShardState {
     cached_map_t cur_map,
     epoch_t epoch);
 
+
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
   void for_each_pg(F &&f) const {
@@ -278,6 +279,11 @@ private:
   OSDSuperblock superblock;
   void set_singleton_superblock(OSDSuperblock _superblock) {
     superblock = std::move(_superblock);
+  }
+
+  pool_pg_num_history_t pg_num_history;
+  void set_singleton_pg_num_history(pool_pg_num_history_t _pg_num_history) {
+    pg_num_history = std::move(_pg_num_history);
   }
 
   seastar::future<MURef<MOSDMap>> build_incremental_map_msg(
@@ -487,8 +493,8 @@ public:
     return {get_reactor_utilization()};
   }
 
-  auto get_or_create_pg(spg_t pgid) {
-    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
+  auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
+    return pg_to_shard_mapping.create_split_pg_mapping(pgid, core);
   }
 
   auto remove_pg(spg_t pgid) {

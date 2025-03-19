@@ -1144,7 +1144,6 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
           pg_shard_manager.trim_maps(t, superblock);
           pg_num_history.prune(superblock.get_oldest_map());
 	}
-	pg_shard_manager.get_meta_coll().store_pg_num_history(t, pg_num_history);
 	return pg_shard_manager.set_pg_num_history(pg_num_history);
       }).then([FNAME, this, &t, first, last] {
 
@@ -1156,6 +1155,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 	  superblock.mounted = boot_epoch;
 	  superblock.clean_thru = last;
 	}
+	pg_shard_manager.get_meta_coll().store_pg_num_history(t, pg_num_history);
 	pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
 	return pg_shard_manager.set_superblock(superblock).then(
 	[FNAME, this, &t] {
@@ -1192,14 +1192,6 @@ seastar::future<> OSD::track_pools_and_pg_num_changes(
   if (superblock.maps.empty()) {
     DEBUG(" no maps stored, this is probably the first start of this osd");
     lastmap = added_maps.at(first);
-    for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
-      _track_pools_and_pg_num_changes(t, lastmap,
-				    current_added_map,
-				    current_added_map_epoch);
-      lastmap = current_added_map;
-    }
-    pg_num_history.epoch = last;
-    co_return;
   } else {
     if (first > superblock.get_newest_map() + 1) {
       ceph_assert(first == superblock.cluster_osdmap_trim_lower_bound);
@@ -1212,16 +1204,17 @@ seastar::future<> OSD::track_pools_and_pg_num_changes(
       // This is unexpected
       ceph_abort();
     }
-    OSDMapService::local_cached_map_t lastmap = map;
-    for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
-      _track_pools_and_pg_num_changes(t, lastmap,
-				      current_added_map,
-				      current_added_map_epoch);
-      lastmap = current_added_map;
-    }
-    pg_num_history.epoch = last;
-    co_return;
+    lastmap = map;
   }
+
+  for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
+    _track_pools_and_pg_num_changes(t, lastmap,
+				    current_added_map,
+				    current_added_map_epoch);
+    lastmap = current_added_map;
+  }
+  pg_num_history.epoch = last;
+  co_return;
 }
 
 void OSD::_track_pools_and_pg_num_changes(
