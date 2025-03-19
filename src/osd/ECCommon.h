@@ -83,14 +83,12 @@ struct ECCommon {
 
   struct shard_read_t {
     extent_set extents;
-    extent_set zero_pad;
     std::optional<std::vector<std::pair<int, int>>> subchunk;
     pg_shard_t pg_shard;
     bool operator==(const shard_read_t &other) const;
 
     void print(std::ostream &os) const {
       os << "shard_read_t(extents=[" << extents << "]"
-           << ", zero_pad=" << zero_pad
            << ", subchunk=" << subchunk
            << ", pg_shard=" << pg_shard
            << ")";

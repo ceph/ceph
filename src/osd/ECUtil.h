@@ -851,9 +851,7 @@ public:
 
 typedef enum {
   READ_REQUEST,
-  ZERO_REQUEST,
   READ_DONE,
-  ZERO_DONE,
   INJECT_EIO,
   CANCELLED,
   ERROR,
