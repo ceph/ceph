@@ -40,9 +40,9 @@ public:
   }
 
   LBAMapping() = delete;
-  LBAMapping(const LBAMapping &) = delete;
+  LBAMapping(const LBAMapping &) = default;
   LBAMapping(LBAMapping &&) = default;
-  LBAMapping &operator=(const LBAMapping &) = delete;
+  LBAMapping &operator=(const LBAMapping &) = default;
   LBAMapping &operator=(LBAMapping &&) = default;
   ~LBAMapping() = default;
 
@@ -144,9 +144,10 @@ public:
   }
 
   get_child_ret_t<lba::LBALeafNode, LogicalChildNode>
-  get_logical_extent(Transaction &t);
+  get_logical_extent(Transaction &t) const;
 
   LBAMapping duplicate() const {
+    assert(!is_null());
     auto dup_iter = [](const LBACursorRef &iter) -> LBACursorRef {
       if (iter) {
 	return iter->duplicate();
