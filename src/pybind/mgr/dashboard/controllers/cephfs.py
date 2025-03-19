@@ -193,7 +193,7 @@ class CephFS(RESTController):
         for mds_name in mds_names:
             result[mds_name] = {}
             for counter in counters:
-                data = mgr.get_counter("mds", mds_name, counter)
+                data = mgr.get_unlabeled_counter("mds", mds_name, counter)
                 if data is not None:
                     result[mds_name][counter] = data[counter]
                 else:
@@ -246,10 +246,10 @@ class CephFS(RESTController):
             if daemon_info['state'] != "up:standby-replay":
                 continue
 
-            inos = mgr.get_latest("mds", daemon_info['name'], "mds_mem.ino")
-            dns = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dn")
-            dirs = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dir")
-            caps = mgr.get_latest("mds", daemon_info['name'], "mds_mem.cap")
+            inos = mgr.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.ino")
+            dns = mgr.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.dn")
+            dirs = mgr.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.dir")
+            caps = mgr.get_unlabeled_counter_latest("mds", daemon_info['name'], "mds_mem.cap")
 
             activity = CephService.get_rate(
                 "mds", daemon_info['name'], "mds_log.replay")
@@ -302,16 +302,17 @@ class CephFS(RESTController):
             if up:
                 gid = mdsmap['up']["mds_{0}".format(rank)]
                 info = mdsmap['info']['gid_{0}'.format(gid)]
-                dns = mgr.get_latest("mds", info['name'], "mds_mem.dn")
-                inos = mgr.get_latest("mds", info['name'], "mds_mem.ino")
-                dirs = mgr.get_latest("mds", info['name'], "mds_mem.dir")
-                caps = mgr.get_latest("mds", info['name'], "mds_mem.cap")
+                dns = mgr.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.dn")
+                inos = mgr.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.ino")
+                dirs = mgr.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.dir")
+                caps = mgr.get_unlabeled_counter_latest("mds", info['name'], "mds_mem.cap")
 
                 # In case rank 0 was down, look at another rank's
                 # sessionmap to get an indication of clients.
                 if rank == 0 or client_count == 0:
-                    client_count = mgr.get_latest("mds", info['name'],
-                                                  "mds_sessions.session_count")
+                    client_count = mgr.get_unlabeled_counter_latest(
+                        "mds", info["name"], "mds_sessions.session_count"
+                    )
 
                 laggy = "laggy_since" in info
 
