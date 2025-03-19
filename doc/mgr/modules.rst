@@ -508,7 +508,8 @@ function. This will result in a circular locking exception.
 .. automethod:: MgrModule.get_unlabeled_perf_schema
 .. automethod:: MgrModule.get_unlabeled_counter
 .. automethod:: MgrModule.get_latest_unlabeled_counter
-.. automethod:: MgrModule.get_perf_schema   
+.. automethod:: MgrModule.get_perf_schema
+.. automethod:: MgrModule.get_latest_counter
 .. automethod:: MgrModule.get_mgr_id
 .. automethod:: MgrModule.get_daemon_health_metrics
 

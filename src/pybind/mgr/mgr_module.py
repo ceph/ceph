@@ -1641,7 +1641,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: list of dicts describing the counters requested
         """
         return self._ceph_get_unlabeled_perf_schema(svc_type, svc_name)
-    
+
     @API.expose
     def get_perf_schema(self,
                         svc_type: str,
@@ -1689,8 +1689,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self, svc_type: str, svc_name: str, path: str
     ) -> Dict[str, Union[Tuple[float, int], Tuple[float, int, int]]]:
         """
-        Called by the plugin to fetch only the newest performance counter data
-        point for a particular counter on a particular service.
+        Called by the plugin to fetch only the newest performance unlabeled counter
+        data point for a particular counter on a particular service.
 
         :param str svc_type:
         :param str svc_name:
@@ -1701,6 +1701,32 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             data is available.
         """
         return self._ceph_get_latest_unlabeled_counter(svc_type, svc_name, path)
+
+    @API.expose
+    def get_latest_counter(self,
+                           svc_type: str,
+                           svc_name: str,
+                           counter_name: str,
+                           sub_counter_name: str,
+                           labels: List[Tuple[str, str]]) -> Dict[str, Union[Tuple[float, int],
+                                                                             Tuple[float, int, int]]]:
+        """
+        Called by the plugin to fetch only the newest performance counter data
+        point for a particular counter on a particular service.
+
+        :param str svc_type:
+        :param str svc_name:
+        :param str counter_name: the key_name of the counter, for example
+            "osd_scrub_sh_repl"
+        :param str sub_counter_name: the counters present under the key_name,
+            for example "successful_scrubs_elapsed"
+        :param list[(str, str)] labels: the labels associated with the counter,
+            for example "[("level", "deep"), ("pooltype", "ec")]"
+        :return: A list of two-tuples of (timestamp, value) or three-tuple of
+            (timestamp, value, count) is returned.  This may be empty if no
+            data is available.
+        """
+        return self._ceph_get_latest_counter(svc_type, svc_name, counter_name, sub_counter_name, labels)
 
     @API.expose
     def list_servers(self) -> List[ServerInfoT]:
@@ -2215,9 +2241,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return 0
 
     @API.expose
+    def get_counter_latest(self, daemon_type: str, daemon_name: str, counter_name: str,
+                           sub_counter_name: str, labels: List[Tuple[str, str]]) -> int:
+        data = self.get_latest_counter(
+            daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
+        if data:
+            return data[1]
+        else:
+            return 0
+
+    @API.expose
     def get_unlabeled_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
         data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
+        if data:
+            # https://github.com/python/mypy/issues/1178
+            _, value, count = cast(Tuple[float, int, int], data)
+            return value, count
+        else:
+            return 0, 0
+
+    @API.expose
+    def get_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter_name: str,
+                               sub_counter_name: str, labels: List[Tuple[str, str]]) -> Tuple[int, int]:
+        data = self.get_latest_counter(
+            daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
