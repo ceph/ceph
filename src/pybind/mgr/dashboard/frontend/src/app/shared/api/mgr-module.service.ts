@@ -7,6 +7,7 @@ import { NotificationService } from '../services/notification.service';
 import { TableComponent } from '../datatable/table/table.component';
 import { Router } from '@angular/router';
 import { MgrModuleInfo } from '../models/mgr-modules.interface';
+import { NotificationType } from '../enum/notification-type.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -17,10 +18,10 @@ export class MgrModuleService {
   readonly REFRESH_INTERVAL = 2000;
 
   constructor(
+    private blockUI: BlockUIService,
     private http: HttpClient,
     private notificationService: NotificationService,
     private router: Router,
-    private blockUI: BlockUIService
   ) {}
 
   /**
@@ -82,7 +83,9 @@ export class MgrModuleService {
     module: string,
     enabled: boolean = false,
     table: TableComponent = null,
-    navigateTo: string = ''
+    navigateTo: string = '',
+    notificationText?: string,
+    navigateByUrl?: boolean
   ): void {
     let $obs;
     const fnWaitUntilReconnected = () => {
@@ -99,8 +102,22 @@ export class MgrModuleService {
             if (table) {
               table.refreshBtn();
             }
-            if (navigateTo) {
-              this.router.navigate([navigateTo]);
+
+            if (notificationText) {
+              this.notificationService.show(
+                NotificationType.success,
+                $localize`${notificationText}`
+              );
+            }
+
+            if (!navigateTo) return;
+
+            const navigate = () => this.router.navigate([navigateTo]);
+
+            if (navigateByUrl) {
+              this.router.navigateByUrl('/', { skipLocationChange: true }).then(navigate);
+            } else {
+              navigate();
             }
           },
           () => {
