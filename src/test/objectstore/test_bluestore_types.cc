@@ -16,6 +16,7 @@
 #include "os/bluestore/Writer.h"
 #include "common/pretty_binary.h"
 
+#include <bitset>
 #include <sstream>
 
 #define _STR(x) #x
