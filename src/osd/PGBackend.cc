@@ -400,8 +400,7 @@ void PGBackend::partialwrite(
     const pg_pool_t &pool = get_parent()->get_pool();
     for (unsigned int shard = 0; shard < get_parent()->get_pool().size; shard++) {
       if (pool.is_nonprimary_shard(shard_id_t(shard))) {
-        if (entry.is_present_shard(shard_id_t(shard))&&
-	    !entry.is_written_shard(shard_id_t(shard))) {
+        if (!entry.is_written_shard(shard_id_t(shard))) {
 	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
 	    // 1st partial write since all logs were updated
 	    info->partial_writes_last_complete[shard_id_t(shard)] =
