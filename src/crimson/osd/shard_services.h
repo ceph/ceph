@@ -127,6 +127,7 @@ class PerShardState {
     ShardServices &shard_services,
     epoch_t epoch);
 
+
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>
   void for_each_pg(F &&f) const {
@@ -479,6 +480,10 @@ public:
   };
   shard_stats_t report_stats() {
     return {get_reactor_utilization()};
+  }
+
+  auto create_split_pg_mapping(spg_t pgid, core_id_t core) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core);
   }
 
   auto remove_pg(spg_t pgid) {
