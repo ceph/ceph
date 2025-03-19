@@ -116,6 +116,53 @@ void ECCommon::ReadPipeline::on_change()
   in_progress_client_reads.clear();
 }
 
+void ECCommon::ReadPipeline::get_avail_and_backfill_sets(
+  const hobject_t &hoid,
+  shard_id_set &available,
+  shard_id_set &backfill)
+{
+  for (auto &&pg_shard : get_parent()->get_acting_shards()) {
+    dout(10) << __func__ << ": checking acting " << pg_shard << dendl;
+    const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
+    const shard_id_t &shard = pg_shard.shard;
+    if (cct->_conf->bluestore_debug_inject_read_err &&
+        ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, shard))) {
+      dout(0) << __func__ << " Error inject - Missing shard " << shard << dendl;
+      continue;
+    }
+    if (!missing.is_missing(hoid)) {
+      ceph_assert(!available.count(shard));
+      available.insert(shard);
+    }
+  }
+
+  for (auto &&pg_shard : get_parent()->get_backfill_shards()) {
+    const shard_id_t &shard = pg_shard.shard;
+    if (available.contains(shard)) {
+      continue;
+    }
+    dout(10) << __func__ << ": checking backfill " << pg_shard << dendl;
+    const pg_info_t &info = get_parent()->get_shard_info(pg_shard);
+    const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
+    if (hoid < info.last_backfill && !missing.is_missing(hoid)) {
+      backfill.insert(shard);
+    }
+  }
+
+  map<hobject_t, set<pg_shard_t>>::const_iterator miter =
+    get_parent()->get_missing_loc_shards().find(hoid);
+  if (miter != get_parent()->get_missing_loc_shards().end()) {
+    for (auto &&pg_shard : miter->second) {
+      dout(10) << __func__ << ": checking missing_loc " << pg_shard << dendl;
+      auto m = get_parent()->maybe_get_shard_missing(pg_shard);
+      if (m) {
+	ceph_assert(!(*m).is_missing(hoid));
+      }
+      backfill.insert(pg_shard.shard);
+    }
+  }
+}
+
 void ECCommon::ReadPipeline::get_all_avail_shards(
   const hobject_t &hoid,
   shard_id_set &have,

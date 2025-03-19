@@ -371,6 +371,11 @@ struct ECCommon {
       bool for_recovery,
       const std::optional<std::set<pg_shard_t>>& error_shards = std::nullopt);
 
+    void get_avail_and_backfill_sets(
+      const hobject_t &hoid,
+      shard_id_set &available,
+      shard_id_set &backfill);
+
     friend struct FinishReadOp;
 
     void get_want_to_read_shards(
@@ -473,7 +478,7 @@ struct ECCommon {
         std::map<hobject_t, ECUtil::shard_extent_map_t>* written,
         shard_id_map<ceph::os::Transaction> *transactions,
         DoutPrefixProvider *dpp,
-	const OSDMapRef& osdmap) = 0;
+        const OSDMapRef& osdmap) = 0;
 
       virtual bool skip_transaction(
         std::set<shard_id_t>& pending_roll_forward,
@@ -602,7 +607,7 @@ struct ECCommon {
       CephContext *cct,
       ceph::ErasureCodeInterfaceRef ec_impl)
       : cct(cct),
-	ec_impl(std::move(ec_impl)) {}
+      ec_impl(std::move(ec_impl)) {}
 
     ECUtil::HashInfoRef maybe_put_hash_info(
       const hobject_t &hoid,
@@ -668,12 +673,12 @@ void ECCommon::ReadPipeline::filter_read_op(
        i != op.source_to_obj.end();
        ) {
     for (std::set<hobject_t>::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ) {
-      if (to_cancel.contains(*j))
-	i->second.erase(j++);
-      else
-	++j;
+      j != i->second.end();
+      ) {
+        if (to_cancel.contains(*j))
+          i->second.erase(j++);
+        else
+          ++j;
     }
     if (i->second.empty()) {
       op.source_to_obj.erase(i++);

@@ -467,6 +467,9 @@ public:
   bool supports_partial_writes() const {
     return (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION) != 0;
   }
+  bool supports_parity_delta_writes() const {
+    return (plugin_flags & ErasureCodeInterface::FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION) != 0;
+  }
   uint64_t get_stripe_width() const {
     return stripe_width;
   }
@@ -794,12 +797,16 @@ public:
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
   int encode(ErasureCodeInterfaceRef& ec_impl, const HashInfoRef &hinfo, uint64_t before_ro_size);
+  int encode_parity_delta(ErasureCodeInterfaceRef& ec_impl, shard_extent_map_t &old_sem);
   int decode(ErasureCodeInterfaceRef& ec_impl, ECUtil::shard_extent_set_t want);
   int _decode(ErasureCodeInterfaceRef& ec_impl, const shard_id_set &want_set, const shard_id_set &need_set);
   void get_buffer(shard_id_t shard, uint64_t offset, uint64_t length, buffer::list &append_to) const;
   void get_shard_first_buffer(shard_id_t shard, buffer::list &append_to) const;
   uint64_t get_shard_first_offset(shard_id_t shard) const;
+  void zero_pad(shard_extent_set_t const &pad_to);
   void zero_pad(shard_id_t shard, uint64_t offset, uint64_t length);
+  void pad_with_other(shard_extent_set_t const &pad_to, shard_extent_map_t const &other);
+  void pad_with_other(shard_id_t shard, uint64_t offset, uint64_t length, shard_extent_map_t const &other);
   bufferlist get_ro_buffer(uint64_t ro_offset, uint64_t ro_length);
   /* Returns a buffer assuming that there is a single contigious buffer
    * represented by the map. */
@@ -818,6 +825,7 @@ public:
   void clear();
   uint64_t get_start_offset() const { return start_offset; }
   uint64_t get_end_offset() const { return end_offset; }
+  void deep_copy(shard_extent_map_t const &other);
 
   void assert_buffer_contents_equal(shard_extent_map_t other) const
   {

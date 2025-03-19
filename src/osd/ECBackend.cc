@@ -1573,12 +1573,14 @@ void ECBackend::submit_transaction(
     }
 
     uint64_t old_object_size = 0;
+      bool object_in_cache = false;
     if (rmw_pipeline.extent_cache.contains_object(oid)) {
       /* We have a valid extent cache for this object. If we need to read, we
        * need to behave as if the object is already the size projected by the
        * extent cache, or we may not read enough data.
        */
       old_object_size = rmw_pipeline.extent_cache.get_projected_size(oid);
+      object_in_cache = true;
     } else {
       std::optional<object_info_t> old_oi = get_object_info_from_obc(obc );
       if (old_oi && !inner_op.delete_first) {
@@ -1586,8 +1588,12 @@ void ECBackend::submit_transaction(
       }
     }
 
-    ECTransaction::WritePlanObj plan(oid, inner_op,
-      sinfo, old_object_size, oi, soi, std::move(hinfo), std::move(shinfo));
+      shard_id_set available_shards;
+      shard_id_set backfill_shards;
+      read_pipeline.get_avail_and_backfill_sets(hoid, available_shards, backfill_shards);
+      ECTransaction::WritePlanObj plan(oid, inner_op, sinfo, available_shards, backfill_shards,
+                                       object_in_cache, old_object_size,
+                                       oi, soi, std::move(hinfo), std::move(shinfo));
 
     if (plan.to_read) plans.want_read = true;
     plans.plans.emplace_back(std::move(plan));

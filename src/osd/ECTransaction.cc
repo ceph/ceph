@@ -55,11 +55,20 @@ static void encode_and_write(
   ErasureCodeInterfaceRef &ec_impl,
   ECTransaction::WritePlanObj &plan,
   ECUtil::shard_extent_map_t &shard_extent_map,
+  ECUtil::shard_extent_map_t &old_shard_extent_map,
   uint32_t flags,
   shard_id_map<ObjectStore::Transaction> *transactions,
   DoutPrefixProvider *dpp)
 {
-  int r = shard_extent_map.encode(ec_impl, plan.hinfo, plan.orig_size);
+  int r = 0;
+  if (plan.do_parity_delta_write) {
+    old_shard_extent_map.zero_pad(plan.will_write);
+    shard_extent_map.pad_with_other(plan.will_write, old_shard_extent_map);
+    r = shard_extent_map.encode_parity_delta(ec_impl, old_shard_extent_map);
+  }
+  else {
+    r = shard_extent_map.encode(ec_impl, plan.hinfo, plan.orig_size);
+  }
   ceph_assert(r == 0);
 
   debug(oid, "parity", shard_extent_map, dpp);
@@ -104,6 +113,9 @@ ECTransaction::WritePlanObj::WritePlanObj(
   const hobject_t &hoid,
   const PGTransaction::ObjectOperation &op,
   const ECUtil::stripe_info_t &sinfo,
+  const shard_id_set available_shards,
+  const shard_id_set backfill_shards,
+  const bool object_in_cache,
   uint64_t orig_size,
   const std::optional<object_info_t> &oi,
   const std::optional<object_info_t> &soi,
@@ -111,6 +123,9 @@ ECTransaction::WritePlanObj::WritePlanObj(
   const ECUtil::HashInfoRef &&shinfo) :
 hoid(hoid),
 will_write(sinfo.get_k_plus_m()),
+available_shards(available_shards),
+backfill_shards(backfill_shards),
+object_in_cache(object_in_cache),
 hinfo(hinfo),
 shinfo(shinfo),
 orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
@@ -150,12 +165,12 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
     ro_writes.union_insert(start, end - start);
   }
 
-  extent_set outter_extent_superset;
+  extent_set outer_extent_superset;
 
   std::optional<ECUtil::shard_extent_set_t> inner;
   for (const auto& [ro_off, ro_len] : ro_writes) {
     /* Here, we calculate the "inner" and "outer" extent sets. The inner
-     * represents all complete pages written. The outter represents the rounded
+     * represents all complete pages written. The outer represents the rounded
      * up/down pages. Clearly if the IO is entirely aligned, then the inner
      * and outer sets are the same and we optimise this by avoiding
      * calculating the inner in this case.
@@ -164,19 +179,19 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
      * from the backend as part of the RMW.
      */
     uint64_t raw_end = ro_off + ro_len;
-    uint64_t outter_off = ECUtil::align_page_prev(ro_off);
-    uint64_t outter_len = ECUtil::align_page_next(raw_end) - outter_off;
+    uint64_t outer_off = ECUtil::align_page_prev(ro_off);
+    uint64_t outer_len = ECUtil::align_page_next(raw_end) - outer_off;
     uint64_t inner_off  = ECUtil::align_page_next(ro_off);
     uint64_t inner_len  = std::max(inner_off, ECUtil::align_page_prev(raw_end)) - inner_off;
 
-    if (inner || outter_off != inner_off || outter_len != inner_len) {
+    if (inner || outer_off != inner_off || outer_len != inner_len) {
       if (!inner) inner = ECUtil::shard_extent_set_t(will_write);
       sinfo.ro_range_to_shard_extent_set(inner_off,inner_len, *inner);
     }
 
     // Will write is expanded to page offsets.
-    sinfo.ro_range_to_shard_extent_set(outter_off,outter_len,
-      will_write, outter_extent_superset);
+    sinfo.ro_range_to_shard_extent_set(outer_off,outer_len,
+      will_write, outer_extent_superset);
   }
 
   /* Construct the to read on the stack, to avoid having to insert and
@@ -190,14 +205,14 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
     /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
      * a full read and write is performed for every stripe.
      */
-    outter_extent_superset.align(sinfo.get_chunk_size());
-    if (!outter_extent_superset.empty()) {
+    outer_extent_superset.align(sinfo.get_chunk_size());
+    if (!outer_extent_superset.empty()) {
       for (raw_shard_id_t raw_shard; raw_shard < sinfo.get_k_plus_m(); ++raw_shard) {
         shard_id_t shard = sinfo.get_shard(raw_shard);
-        will_write[shard].union_of(outter_extent_superset);
+        will_write[shard].union_of(outer_extent_superset);
         if (read_mask.contains(shard)) {
           extent_set _read;
-          _read.union_of(outter_extent_superset);
+          _read.union_of(outer_extent_superset);
           _read.intersection_of(read_mask.at(shard));
           if (!_read.empty()) reads.emplace(shard, std::move(_read));
         }
@@ -225,7 +240,7 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
       uint64_t aligned_zero_end = ECUtil::align_page_next(op.truncate->second);
       sinfo.ro_range_to_shard_extent_set(
         aligned_zero_start, aligned_zero_end - aligned_zero_start,
-        zero, outter_extent_superset);
+        zero, outer_extent_superset);
     }
 
     for (raw_shard_id_t raw_shard; raw_shard< sinfo.get_k_plus_m(); ++raw_shard) {
@@ -241,7 +256,7 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
         if (!read_mask.contains(shard))
           continue;
 
-        _to_read.intersection_of(outter_extent_superset, read_mask.at((shard)));
+        _to_read.intersection_of(outer_extent_superset, read_mask.at((shard)));
 
         if (small_set.contains(shard)) {
           _to_read.subtract(small_set.at(shard));
@@ -250,15 +265,80 @@ orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
         if (!_to_read.empty()) {
           reads.emplace(shard, std::move(_to_read));
         }
-      } else if (!outter_extent_superset.empty()) {
-        will_write[shard].union_of(outter_extent_superset);
+      } else if (!outer_extent_superset.empty()) {
+        will_write[shard].union_of(outer_extent_superset);
       }
     }
   }
 
-  // Do not do a read if there is nothing to read!
+  /* Here we decide if we want to do a conventional write or a parity delta write. */
+  do_parity_delta_write = false;
+#if PARTIY_DELTA_WRITES
+  if (sinfo.supports_parity_delta_writes()) {
+    if (!object_in_cache) {
+      if (orig_size == projected_size && !reads.empty()) {
+        bool decision_made = false;
+        shard_id_set data_shards_to_update;
+        shard_id_set data_shards_not_being_updated;
+        for (auto &shard : sinfo.get_data_shards()) {
+          if (will_write.contains(shard))
+            data_shards_to_update.insert(shard);
+          else
+            data_shards_not_being_updated.insert(shard);
+        }
+
+        for (auto &shard : data_shards_to_update) {
+          if (!available_shards.contains(shard)) {
+            // Parity delta write would need to reconstruct a data shard
+            do_parity_delta_write = false;
+            decision_made = true;
+            break;
+          }
+        }
+        if (!decision_made) {
+          for (auto &shard : sinfo.get_parity_shards()) {
+            if (backfill_shards.contains(shard) && !available_shards.contains(shard)) {
+              // Parity delta write would need to reconstruct a parity shard
+              // that cannot be read but needs to be written
+              do_parity_delta_write = false;
+              decision_made = true;
+              break;
+            }
+          }
+        }
+        if (!decision_made) {
+          for (auto &shard : data_shards_not_being_updated) {
+            if (!available_shards.contains(shard)) {
+              // Conventional write would need to do a reconstruct
+              do_parity_delta_write = true;
+              decision_made = true;
+              break;
+            }
+          }
+        }
+        if (!decision_made) {
+          // At this point, work out the read cost of doing a parity delta write vs
+          // the read cost of doing a conventional write and do whatever is cheaper.
+          // Use conventional write in a tie.
+          int pdw_parity_reads = 0;
+          for (auto&& shard : sinfo.get_parity_shards()) {
+            if (available_shards.contains(shard) || backfill_shards.contains(shard))
+              pdw_parity_reads++;
+          }
+          if (data_shards_to_update.size() + pdw_parity_reads < data_shards_not_being_updated.size())
+            do_parity_delta_write = true;
+        }
+      }
+    }
+  }
+#endif
+
   if (!reads.empty()) {
-     to_read = std::move(reads);
+    to_read = std::move(reads);
+  }
+
+  if (do_parity_delta_write) {
+    to_read = will_write;
   }
 
   /* validate post conditions:
@@ -515,10 +595,16 @@ void ECTransaction::generate_transactions(
 	}
       }
 
+      ECUtil::shard_extent_map_t read_sem(&sinfo);
       ECUtil::shard_extent_map_t to_write(&sinfo);
       auto pextiter = partial_extents.find(oid);
       if (pextiter != partial_extents.end()) {
-	to_write = pextiter->second;
+        if (plan.do_parity_delta_write) {
+          read_sem = pextiter->second;
+        }
+        else {
+          to_write = pextiter->second;
+        }
       }
       debug(oid, "to_write", to_write, dpp);
       ldpp_dout(dpp, 20) << "generate_transactions: plan: " << plan << dendl;
@@ -712,7 +798,9 @@ void ECTransaction::generate_transactions(
       if (!to_write.empty()) {
         // Depending on the write, we may or may not have the parity buffers.
         // Here we invent some buffers.
-        to_write.insert_parity_buffers();
+        if (!plan.do_parity_delta_write) {
+          to_write.insert_parity_buffers();
+        }
         if (!sinfo.supports_partial_writes()) {
           for (auto &&[shard, eset] : plan.will_write) {
             if (sinfo.get_raw_shard(shard) >= sinfo.get_k()) continue;
@@ -722,7 +810,7 @@ void ECTransaction::generate_transactions(
             }
           }
         }
-	encode_and_write(pgid, oid, ec_impl, plan, to_write, fadvise_flags,
+	encode_and_write(pgid, oid, ec_impl, plan, to_write, read_sem, fadvise_flags,
 	  transactions, dpp);
       }
 
