@@ -351,6 +351,9 @@
 /* Defined if lua packages can be installed by radosgw */
 #cmakedefine WITH_RADOSGW_LUA_PACKAGES
 
+/* Defined if intel tbb is available for radosgw */
+#cmakedefine WITH_RADOSGW_INTEL_TBB
+
 /* Backend dbstore for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DBSTORE
 
