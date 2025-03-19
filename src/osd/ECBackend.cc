@@ -306,7 +306,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   RecoveryMessages *m)
 {
   dout(10) << __func__ << ": returned " << hoid << " " << buffers_read << dendl;
-  ceph_assert(recovery_ops.count(hoid));
+  ceph_assert(recovery_ops.contains(hoid));
   RecoveryBackend::RecoveryOp &op = recovery_ops[hoid];
 
   if (attrs) {
@@ -640,11 +640,12 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 	pop.recovery_info = op.recovery_info;
 	pop.before_progress = op.recovery_progress;
 	pop.after_progress = after_progress;
-	if (pg_shard != get_parent()->primary_shard())
+	if (pg_shard != get_parent()->primary_shard()) {
 	  // already in crimson -- junction point with PeeringState
 	  get_parent()->begin_peer_recover(
-	    pg_shard,
-	    op.hoid);
+            pg_shard,
+            op.hoid);
+	}
       }
       op.returned_data.reset();
       op.waiting_on_pushes = op.missing_on;
