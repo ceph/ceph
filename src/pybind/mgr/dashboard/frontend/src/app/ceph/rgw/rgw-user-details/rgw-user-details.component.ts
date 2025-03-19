@@ -6,7 +6,6 @@ import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
@@ -14,6 +13,7 @@ import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-u
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Permissions } from '~/app/shared/models/permissions';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-user-details',
@@ -42,7 +42,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   icons = Icons;
 
-  constructor(private rgwUserService: RgwUserService, private modalService: ModalService) {}
+  constructor(private rgwUserService: RgwUserService, private cdsModalService: ModalCdsService) {}
 
   ngOnInit() {
     this.keysColumns = [
@@ -123,16 +123,16 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   showKeyModal() {
     const key = this.keysSelection.first();
-    const modalRef = this.modalService.show(
+    const modalRef = this.cdsModalService.show(
       key.type === 'S3' ? RgwUserS3KeyModalComponent : RgwUserSwiftKeyModalComponent
     );
     switch (key.type) {
       case 'S3':
-        modalRef.componentInstance.setViewing();
-        modalRef.componentInstance.setValues(key.ref.user, key.ref.access_key, key.ref.secret_key);
+        modalRef.setViewing();
+        modalRef.setValues(key.ref.user, key.ref.access_key, key.ref.secret_key);
         break;
       case 'Swift':
-        modalRef.componentInstance.setValues(key.ref.user, key.ref.secret_key);
+        modalRef.setValues(key.ref.user, key.ref.secret_key);
         break;
     }
   }
