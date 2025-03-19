@@ -2356,6 +2356,127 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return result
 
     @API.expose
+    @profile_method()
+    def get_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
+        """
+        Return the perf counters currently known to this ceph-mgr
+        instance, filtered by priority equal to or greater than `prio_limit`.
+        The result is a map of string to dict, associating services
+        (like "osd.123") with their counters.  The counter
+        dict for each service maps counter paths to a counter
+        info structure, which is the information from
+        the schema, plus an additional "value" member with the latest
+        value.
+
+        The returned dictionary looks like:
+        ```
+        {
+            "mon.a": {
+                "AsyncMessenger::Worker": [
+                    {
+                        "labels": {
+                            "id": "1"
+                        },
+                        "counters": {
+                            "msgr_connection_ready_timeouts": {
+                                "type": 10,
+                                "priority": 5,
+                                "units": 1,
+                                "value": 0
+                            },
+                            "msgr_connection_idle_timeouts": {
+                                "type": 10,
+                                "priority": 5,
+                                "units": 1,
+                                "value": 0
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+        ```
+
+        """
+
+        result = defaultdict(dict)   # type: Dict[str, dict]
+
+        for server in self.list_servers():
+            for service in cast(List[ServiceInfoT], server['services']):
+                if service['type'] not in services:
+                    continue
+
+                schemas = self.get_perf_schema(service['type'], service['id'])
+
+                if not schemas:
+                    self.log.warning("No perf counter schema for {0}.{1}".format(
+                        service['type'], service['id']
+                    ))
+                    continue
+
+                # Value is returned in a potentially-multi-service format,
+                # get just the service we're asking about
+                svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
+                labeled_schema = schemas[svc_full_name]
+
+                for counter_name, sub_counters_list in labeled_schema.items():
+                    result[svc_full_name][counter_name] = []
+                    for sub_counter in sub_counters_list:
+                        sub_counter_labels = []
+                        sub_counter_info = dict(sub_counter)
+
+                        for label_key, label_value in sub_counter["labels"].items():
+                            sub_counter_labels.append((label_key, label_value))
+
+                        for sub_counter_name, sub_counter_schema in sub_counter["counters"].items():
+                            priority = sub_counter_schema['priority']
+                            assert isinstance(priority, int)
+                            if priority < prio_limit:
+                                continue
+
+                            tp = sub_counter_schema['type']
+                            assert isinstance(tp, int)
+
+                            # Also populate count for the long running avgs
+                            if tp & self.PERFCOUNTER_LONGRUNAVG:
+                                v, c = self.get_counter_latest_avg(
+                                    service['type'],
+                                    service['id'],
+                                    counter_name,
+                                    sub_counter_name,
+                                    sub_counter_labels,
+                                )
+                                sub_counter_info['counters'][sub_counter_name]['value'] = v
+                                sub_counter_info['counters'][sub_counter_name]['count'] = c
+
+                            else:
+                                sub_counter_info['counters'][sub_counter_name]['value'] = self.get_counter_latest(
+                                    service['type'],
+                                    service['id'],
+                                    counter_name,
+                                    sub_counter_name,
+                                    sub_counter_labels
+                                )
+
+                        result[svc_full_name][counter_name].append(sub_counter_info)
+        self.log.debug("returning {0} counter".format(len(result)))
+
+        return result
+
+    @API.expose
     def set_uri(self, uri: str) -> None:
         """
         If the module exposes a service, then call this to publish the
