@@ -247,7 +247,7 @@ public:
   template <typename T>
   base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
-    LBAMapping pin,
+    const LBAMapping pin,
     extent_len_t partial_off,
     extent_len_t partial_len)
   {
@@ -269,11 +269,12 @@ public:
     SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
               t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
 
-    return seastar::futurize_invoke([this, &t, pin=std::move(pin)]() mutable {
+    return seastar::futurize_invoke([this, &t, pin=pin.duplicate()]() mutable {
       if (pin.is_valid()) {
-	return base_iertr::make_ready_future<LBAMapping>(std::move(pin));
+	return base_iertr::make_ready_future<
+	  LBAMapping>(std::move(const_cast<LBAMapping&>(pin)));
       }
-      return lba_manager->refresh_lba_mapping(t, std::move(pin));
+      return lba_manager->refresh_lba_mapping(t, pin.duplicate());
     }).si_then([&t, this, direct_partial_off, partial_len](auto npin) {
       // checking the lba child must be atomic with creating
       // and linking the absent child
@@ -285,8 +286,13 @@ public:
             t, std::move(extent), direct_partial_off, partial_len);
         });
       } else {
+	auto &r = std::get<0>(ret);
 	return this->pin_to_extent<T>(
-          t, std::move(std::get<0>(ret)), direct_partial_off, partial_len);
+          t,
+	  std::move(r.mapping),
+	  std::move(r.child_pos),
+	  direct_partial_off,
+	  partial_len);
       }
     }).si_then([FNAME, maybe_indirect_info, is_clone, &t](TCachedExtentRef<T> ext) {
       if (maybe_indirect_info.has_value()) {
@@ -303,8 +309,8 @@ public:
 
   base_iertr::future<LBAMapping> next_mapping(
     Transaction &t,
-    LBAMapping mapping) {
-    return lba_manager->next_mapping(t, std::move(mapping));
+    const LBAMapping mapping) {
+    return lba_manager->next_mapping(t, mapping.duplicate());
   }
 
   template <typename T>
@@ -978,11 +984,16 @@ private:
 
   shard_stats_t& shard_stats;
 
+  using LBALeafNode = lba_manager::btree::LBALeafNode;
+  struct unlinked_child_t {
+    LBAMapping mapping;
+    child_pos_t<LBALeafNode> child_pos;
+  };
   template <typename T>
-  std::variant<LBAMapping, get_child_ifut<T>>
+  std::variant<unlinked_child_t, get_child_ifut<T>>
   get_extent_if_linked(
     Transaction &t,
-    LBAMapping pin)
+    const LBAMapping pin)
   {
     ceph_assert(pin.is_valid());
     // checking the lba child must be atomic with creating
@@ -990,7 +1001,7 @@ private:
     auto v = pin.get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=std::move(pin)](auto extent) {
+      ).si_then([pin=pin.duplicate()](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_key();
@@ -1002,13 +1013,15 @@ private:
 	return extent->template cast<T>();
       });
     } else {
-      return pin;
+      return unlinked_child_t{
+	std::move(const_cast<LBAMapping&>(pin)),
+	v.get_child_pos()};
     }
   }
 
   base_iertr::future<LogicalChildNodeRef> read_pin_by_type(
     Transaction &t,
-    LBAMapping pin,
+    const LBAMapping pin,
     extent_types_t type)
   {
     ceph_assert(pin.is_valid());
@@ -1024,7 +1037,7 @@ private:
         return ext;
       });
     } else {
-      return pin_to_extent_by_type(t, std::move(pin), type);
+      return pin_to_extent_by_type(t, pin.duplicate(), v.get_child_pos(), type);
     }
   }
 
@@ -1055,7 +1068,8 @@ private:
   template <typename T>
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
-    LBAMapping pin,
+    const LBAMapping pin,
+    child_pos_t<LBALeafNode> child_pos,
     extent_len_t direct_partial_off,
     extent_len_t partial_len) {
     static_assert(is_logical_type(T::TYPE));
@@ -1076,15 +1090,15 @@ private:
       direct_length,
       direct_partial_off,
       partial_len,
-      [&pin]
+      [pin=pin.duplicate(), child_pos=std::move(child_pos)]
       (T &extent) mutable {
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	assert(pin.is_valid());
-	pin.link_child(extent);
+	child_pos.link_child(&extent);
 	extent.maybe_set_intermediate_laddr(pin);
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
+    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
         auto crc = ref->calc_crc32c();
         SUBTRACET(
@@ -1128,7 +1142,8 @@ private:
     LogicalChildNodeRef>;
   pin_to_extent_by_type_ret pin_to_extent_by_type(
       Transaction &t,
-      LBAMapping pin,
+      const LBAMapping pin,
+      child_pos_t<LBALeafNode> child_pos,
       extent_types_t type)
   {
     LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
@@ -1150,15 +1165,16 @@ private:
       pin.get_val(),
       direct_key,
       direct_length,
-      [&pin](CachedExtent &extent) mutable {
+      [pin=pin.duplicate(), child_pos=std::move(child_pos)]
+      (CachedExtent &extent) mutable {
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
 	assert(pin.is_valid());
-	pin.link_child(lextent);
+	child_pos.link_child(&lextent);
 	lextent.maybe_set_intermediate_laddr(pin);
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
+    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) {
       auto crc = ref->calc_crc32c();
       SUBTRACET(
 	seastore_tm,

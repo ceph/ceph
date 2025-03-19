@@ -272,8 +272,8 @@ public:
           min_max_t<node_key_t>::min;
     }
 
-    std::unique_ptr<cursor_t> get_cursor(op_context_t ctx) const {
-      return std::make_unique<cursor_t>(
+    boost::intrusive_ptr<cursor_t> get_cursor(op_context_t ctx) const {
+      return new cursor_t(
         ctx,
 	leaf.node,
         leaf.node->modifications,

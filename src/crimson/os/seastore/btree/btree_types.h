@@ -191,13 +191,30 @@ struct __attribute__((packed)) backref_map_val_le_t {
 } // namespace backerf
 
 template <typename key_t, typename val_t>
-struct BtreeCursor {
+struct BtreeCursor
+  : public boost::intrusive_ref_counter<
+      BtreeCursor<key_t, val_t>, boost::thread_unsafe_counter> {
   op_context_t ctx;
   CachedExtentRef parent;
   uint64_t modifications;
   key_t key;
   std::optional<val_t> val;
   uint16_t pos;
+
+  BtreeCursor(
+    op_context_t &ctx,
+    CachedExtentRef parent,
+    uint64_t modifications,
+    key_t key,
+    std::optional<val_t> val,
+    uint16_t pos)
+    : ctx(ctx),
+      parent(parent),
+      modifications(modifications),
+      key(std::move(key)),
+      val(std::move(val)),
+      pos(pos)
+  {}
 
   bool is_end() const {
     assert((key != min_max_t<key_t>::null) == (bool)val);
@@ -212,10 +229,10 @@ struct BtreeCursor {
 };
 
 using LBACursor = BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
-using LBACursorRef = std::unique_ptr<LBACursor>;
+using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
 using BackrefCursor = BtreeCursor<paddr_t, backref::backref_map_val_t>;
-using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
 
 template <typename key_t, typename val_t>
 std::ostream &operator<<(

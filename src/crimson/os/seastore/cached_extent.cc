@@ -103,7 +103,7 @@ void CachedExtent::set_invalid(Transaction &t) {
   on_invalidated(t);
 }
 
-void LogicalCachedExtent::maybe_set_intermediate_laddr(LBAMapping &mapping) {
+void LogicalCachedExtent::maybe_set_intermediate_laddr(const LBAMapping &mapping) {
   laddr = mapping.is_indirect()
     ? mapping.get_intermediate_base()
     : mapping.get_key();

@@ -21,14 +21,6 @@ public:
       : physical_cursor(std::move(physical)),
 	indirect_cursor(std::move(indirect))
   {
-    if (physical) {
-      assert(physical->parent);
-      auto parent = physical->parent;
-      if (!parent->is_pending()) {
-	using LBALeafNode = lba_manager::btree::LBALeafNode;
-	child_pos = {parent->template cast<LBALeafNode>(), physical->pos};
-      }
-    }
     // if the mapping is indirect, it mustn't be at the end
     assert(indirect_cursor
       ? (!physical_cursor
@@ -154,20 +146,20 @@ public:
   }
 
   get_child_ret_t<lba_manager::btree::LBALeafNode, LogicalChildNode>
-  get_logical_extent(Transaction &t);
+  get_logical_extent(Transaction &t) const;
 
-  void link_child(LogicalChildNode &extent) {
-    ceph_assert(child_pos);
-    child_pos->link_child(&extent);
+  const LBAMapping duplicate() const {
+    assert(!is_null());
+    return LBAMapping(physical_cursor, indirect_cursor);
   }
 
-  LBAMapping duplicate() const {
+  LBAMapping deep_duplicate() const {
     assert(!is_null());
     auto dup_iter = [](const LBACursorRef &iter) -> LBACursorRef {
       if (iter) {
-	return std::make_unique<LBACursor>(*iter);
+       return new LBACursor(*iter);
       } else {
-	return nullptr;
+       return nullptr;
       }
     };
     return LBAMapping(dup_iter(physical_cursor), dup_iter(indirect_cursor));
@@ -243,7 +235,6 @@ private:
   LBACursorRef physical_cursor;
   LBACursorRef indirect_cursor;
   using LBALeafNode = lba_manager::btree::LBALeafNode;
-  std::optional<child_pos_t<LBALeafNode>> child_pos;
 };
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);

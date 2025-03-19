@@ -42,7 +42,7 @@ std::ostream &operator<<(std::ostream &out, const lba_mapping_list_t &rhs)
 using lba_manager::btree::LBALeafNode;
 
 get_child_ret_t<LBALeafNode, LogicalChildNode>
-LBAMapping::get_logical_extent(Transaction &t)
+LBAMapping::get_logical_extent(Transaction &t) const
 {
   assert(!is_null());
   ceph_assert(physical_cursor->is_valid());
@@ -50,12 +50,8 @@ LBAMapping::get_logical_extent(Transaction &t)
   assert(i.pos != std::numeric_limits<uint16_t>::max());
   ceph_assert(t.get_trans_id() == i.ctx.trans.get_trans_id());
   auto p = physical_cursor->parent->cast<LBALeafNode>();
-  auto v = p->template get_child<LogicalChildNode>(
+  return p->template get_child<LogicalChildNode>(
     t, i.ctx.cache, i.pos, i.key);
-  if (!v.has_child()) {
-    child_pos = v.get_child_pos();
-  }
-  return v;
 }
 
 bool LBAMapping::is_stable() const {

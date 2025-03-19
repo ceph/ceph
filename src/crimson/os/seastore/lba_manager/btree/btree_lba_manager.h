@@ -182,7 +182,7 @@ public:
 
   next_mapping_ret next_mapping(
     Transaction &t,
-    LBAMapping mapping) final;
+    const LBAMapping mapping) final;
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
