@@ -1628,10 +1628,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(ServerInfoT, self._ceph_get_server(hostname))
 
     @API.expose
-    def get_perf_schema(self,
-                        svc_type: str,
-                        svc_name: str) -> Dict[str,
-                                               Dict[str, Dict[str, Union[str, int]]]]:
+    def get_unlabeled_perf_schema(
+        self, svc_type: str, svc_name: str
+    ) -> Dict[str, Dict[str, Dict[str, Union[str, int]]]]:
         """
         Called by the plugin to fetch perf counter schema info.
         svc_name can be nullptr, as can svc_type, in which case
@@ -1641,7 +1640,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param str svc_name:
         :return: list of dicts describing the counters requested
         """
-        return self._ceph_get_perf_schema(svc_type, svc_name)
+        return self._ceph_get_unlabeled_perf_schema(svc_type, svc_name)
 
     def get_rocksdb_version(self) -> str:
         """
@@ -1652,10 +1651,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_get_rocksdb_version()
 
     @API.expose
-    def get_counter(self,
-                    svc_type: str,
-                    svc_name: str,
-                    path: str) -> Dict[str, List[Tuple[float, int]]]:
+    def get_unlabeled_counter(
+        self, svc_type: str, svc_name: str, path: str
+    ) -> Dict[str, List[Tuple[float, int]]]:
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1668,14 +1666,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             of two-tuples of (timestamp, value).  This may be empty if no data is
             available.
         """
-        return self._ceph_get_counter(svc_type, svc_name, path)
+        return self._ceph_get_unlabeled_counter(svc_type, svc_name, path)
 
     @API.expose
-    def get_latest_counter(self,
-                           svc_type: str,
-                           svc_name: str,
-                           path: str) -> Dict[str, Union[Tuple[float, int],
-                                                         Tuple[float, int, int]]]:
+    def get_latest_unlabeled_counter(
+        self, svc_type: str, svc_name: str, path: str
+    ) -> Dict[str, Union[Tuple[float, int], Tuple[float, int, int]]]:
         """
         Called by the plugin to fetch only the newest performance counter data
         point for a particular counter on a particular service.
@@ -1688,7 +1684,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             (timestamp, value, count) is returned.  This may be empty if no
             data is available.
         """
-        return self._ceph_get_latest_counter(svc_type, svc_name, path)
+        return self._ceph_get_latest_unlabeled_counter(svc_type, svc_name, path)
 
     @API.expose
     def list_servers(self) -> List[ServerInfoT]:
@@ -2194,8 +2190,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(OSDMap, self._ceph_get_osdmap())
 
     @API.expose
-    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
-        data = self.get_latest_counter(
+    def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
+        data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
             return data[1]
@@ -2203,8 +2199,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return 0
 
     @API.expose
-    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
-        data = self.get_latest_counter(
+    def get_unlabeled_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+        data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
             # https://github.com/python/mypy/issues/1178
@@ -2247,7 +2243,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 if service['type'] not in services:
                     continue
 
-                schemas = self.get_perf_schema(service['type'], service['id'])
+                schemas = self.get_unlabeled_perf_schema(service['type'], service['id'])
                 if not schemas:
                     self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
@@ -2275,7 +2271,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     counter_info = dict(counter_schema)
                     # Also populate count for the long running avgs
                     if tp & self.PERFCOUNTER_LONGRUNAVG:
-                        v, c = self.get_latest_avg(
+                        v, c = self.get_unlabeled_counter_latest_avg(
                             service['type'],
                             service['id'],
                             counter_path
@@ -2283,7 +2279,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         counter_info['value'], counter_info['count'] = v, c
                         result[svc_full_name][counter_path] = counter_info
                     else:
-                        counter_info['value'] = self.get_latest(
+                        counter_info['value'] = self.get_unlabeled_counter_latest(
                             service['type'],
                             service['id'],
                             counter_path
