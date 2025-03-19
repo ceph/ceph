@@ -595,8 +595,7 @@ void BootstrapRequest<I>::handle_get_local_group_name(int r) {
 
   if (m_group_name.empty()) {
     m_group_name = local_group_name;
-  } else if (m_group_name != local_group_name) {
-    // should never happen
+  } else if (m_group_name != local_group_name && m_remote_mirror_group_primary) {
     derr << "local group name '" << local_group_name << "' does not match "
          << "remote group name '" << m_group_name << "'" << dendl;
     finish(-EINVAL);
