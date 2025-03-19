@@ -258,6 +258,7 @@ options:
   - mds_client
   flags:
   - startup
+  fmt_desc: Set the feature bits that needs to be excluded
   with_legacy: true
 - name: client_max_inline_size
   type: size
