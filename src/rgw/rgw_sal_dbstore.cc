@@ -1519,6 +1519,12 @@ namespace rgw::sal {
     return 0;
   }
 
+int DBStore::create_customer_managed_policy(const DoutPrefixProvider* dpp,
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
+{
+  return -ENOTSUP;
+}
+
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -1708,6 +1714,14 @@ namespace rgw::sal {
   }
 
   int DBStore::count_account_roles(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   uint32_t& count)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::count_account_policies(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view account_id,
                                    uint32_t& count)
