@@ -80,8 +80,7 @@
                formControlName="display_name"
                name="display_name"
                id="display_name"
-               [invalid]="userForm.controls.display_name.invalid && (userForm.controls.display_name.dirty)"
-               [readonly]="editing"/>
+               [invalid]="userForm.showError('display_name', formDir)"/>
       </cds-text-label>
       <ng-template #displayNameError>
         <span class="invalid-feedback"

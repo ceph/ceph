@@ -37,7 +37,7 @@ export class UsersPageHelper extends PageHelper {
     this.navigateEdit(name, false, true, null);
 
     // Change the full name field
-    cy.get('input#display_name').click().clear({ force: true }).type(new_fullname, { force: true });
+    cy.get('input#display_name').click().clear().type(new_fullname);
 
     // Change the email field
     cy.get('#email').click().clear().type(new_email);
