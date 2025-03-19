@@ -429,7 +429,7 @@ def configure_storage_classes(ctx, clients, storage_classes):
                         '--rgw-zone', ctx.rgw.zone,
                         '--placement-id', 'default-placement',
                         '--storage-class', name,
-                        '--data-pool', 'default.rgw.buckets.data.' + name.lower()] + args or [],
+                        '--data-pool', 'default.rgw.buckets.data.' + name.lower()] + (args or []),
                     check_status=True)
     yield
 
