@@ -729,7 +729,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
 
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 std::move(opv), info->target.flags | CEPH_OSD_FLAG_READ,
-		 fu2::unique_function<Op::OpSig>{CB_Linger_Ping(this, info, now)},
+		 CB_Linger_Ping(this, info, now),
 		 nullptr, nullptr);
   o->target = info->target;
   o->should_resend = false;
@@ -757,7 +757,7 @@ void Objecter::_linger_ping(LingerOp *info, bs::error_code ec, ceph::coarse_mono
       ec = _normalize_watch_error(ec);
       info->last_error = ec;
       if (info->handle) {
-	asio::defer(finish_strand, CB_DoWatchError(this, info, ec));
+	asio::post(finish_strand, CB_DoWatchError(this, info, ec));
       }
     }
   } else {

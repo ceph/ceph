@@ -2063,7 +2063,7 @@ public:
     }
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
-       int f, OpComp&& fin, version_t *ov, int *offset = nullptr,
+       int f, OpComp fin, version_t *ov, int *offset = nullptr,
        ZTracer::Trace *parent_trace = nullptr) :
       target(o, ol, f),
       ops(std::move(_ops)),
@@ -2095,26 +2095,6 @@ public:
       objver(ov),
       data_offset(offset),
       otel_trace(otel_trace) {
-      if (target.base_oloc.key == o)
-	target.base_oloc.key.clear();
-      if (parent_trace && parent_trace->valid()) {
-        trace.init("op", nullptr, parent_trace);
-        trace.event("start");
-      }
-    }
-
-    Op(const object_t& o, const object_locator_t& ol, osdc_opvec&&  _ops,
-       int f, fu2::unique_function<OpSig>&& fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr) :
-      target(o, ol, f),
-      ops(std::move(_ops)),
-      out_bl(ops.size(), nullptr),
-      out_handler(ops.size()),
-      out_rval(ops.size(), nullptr),
-      out_ec(ops.size(), nullptr),
-      onfinish(std::move(fin)),
-      objver(ov),
-      data_offset(offset) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       if (parent_trace && parent_trace->valid()) {
