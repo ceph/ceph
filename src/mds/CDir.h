@@ -61,6 +61,7 @@ public:
     std::string key;
     snapid_t first;
     bool is_remote = false;
+    bool is_referent_remote = false;
 
     inodeno_t ino;
     unsigned char d_type;
@@ -380,13 +381,15 @@ public:
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_primary_dentry(std::string_view dname, CInode *in, mempool::mds_co::string alternate_name,
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
-                             mempool::mds_co::string alternate_name,
+  CDentry* add_remote_dentry(std::string_view dname, CInode *ref_in, inodeno_t ino,
+                             unsigned char d_type, mempool::mds_co::string alternate_name,
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
   void link_primary_inode( CDentry *dn, CInode *in );
+  void link_null_referent_inode(CDentry *dn, inodeno_t referent_ino, inodeno_t rino, unsigned char d_type);
+  void link_referent_inode(CDentry *dn, CInode *in, inodeno_t ino, unsigned char d_type);
   void unlink_inode(CDentry *dn, bool adjust_lru=true);
   void try_remove_unlinked_dn(CDentry *dn);
 

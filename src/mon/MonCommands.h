@@ -353,7 +353,9 @@ COMMAND("fs new "
 	"name=force,type=CephBool,req=false "
 	"name=allow_dangerous_metadata_overlay,type=CephBool,req=false "
 	"name=fscid,type=CephInt,range=0,req=false "
-	"name=recover,type=CephBool,req=false",
+	"name=recover,type=CephBool,req=false "
+	"name=yes_i_really_really_mean_it,type=CephBool,req=false "
+	"name=set,type=CephString,n=N,req=false",
 	"make new filesystem using named pools <metadata> and <data>",
 	"fs", "rw")
 COMMAND("fs fail "
@@ -398,6 +400,7 @@ COMMAND("fs set "
           "|session_autoclose"
           "|session_timeout"
           "|standby_count_wanted"
+          "|allow_referent_inodes"
           " "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "

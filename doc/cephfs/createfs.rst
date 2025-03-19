@@ -52,12 +52,15 @@ Once the pools are created, you may enable the file system using the ``fs new`` 
 
 .. code:: bash
 
-    $ ceph fs new <fs_name> <metadata> <data> [--force] [--allow-dangerous-metadata-overlay] [<fscid:int>] [--recover]
+    $ ceph fs new <fs_name> <metadata> <data> [--force] [--allow-dangerous-metadata-overlay] [<fscid:int>] [--recover] [--yes-i-really-really-mean-it] [<set>...]
 
 This command creates a new file system with specified metadata and data pool.
 The specified data pool is the default data pool and cannot be changed once set.
 Each file system has its own set of MDS daemons assigned to ranks so ensure that
 you have sufficient standby daemons available to accommodate the new file system.
+
+.. note::
+   ``--yes-i-really-really-mean-it`` may be used for some ``fs set`` commands
 
 The ``--force`` option is used to achieve any of the following:
 
@@ -82,11 +85,14 @@ failed. So when a MDS daemon eventually picks up rank 0, the daemon reads the
 existing in-RADOS metadata and doesn't overwrite it. The flag also prevents the
 standby MDS daemons to join the file system.
 
+The ``set`` option allows to set multiple options supported by ``fs set``
+atomically with the creation of the file system.
+
 For example:
 
 .. code:: bash
 
-    $ ceph fs new cephfs cephfs_metadata cephfs_data
+    $ ceph fs new cephfs cephfs_metadata cephfs_data set max_mds 2 allow_standby_replay true
     $ ceph fs ls
     name: cephfs, metadata pool: cephfs_metadata, data pools: [cephfs_data ]
 

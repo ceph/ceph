@@ -402,8 +402,12 @@ class MDSClusterBase(CephClusterBase):
     def mds_is_running(self, mds_id):
         return self.mds_daemons[mds_id].running()
 
-    def newfs(self, name='cephfs', create=True):
-        return Filesystem(self._ctx, name=name, create=create)
+    def newfs(self, name='cephfs', create=True, **kwargs):
+        """
+        kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
+        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        """
+        return Filesystem(self._ctx, name=name, create=create, **kwargs)
 
     def status(self, epoch=None):
         return FSStatus(self.mon_manager, epoch)
@@ -535,7 +539,11 @@ class FilesystemBase(MDSClusterBase):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph'):
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph', **kwargs):
+        """
+        kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
+        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        """
         super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
 
         self.name = name
@@ -554,7 +562,7 @@ class FilesystemBase(MDSClusterBase):
             if fscid is not None:
                 raise RuntimeError("cannot specify fscid when creating fs")
             if create and not self.legacy_configured():
-                self.create()
+                self.create(**kwargs)
         else:
             if fscid is not None:
                 self.id = fscid
@@ -643,6 +651,9 @@ class FilesystemBase(MDSClusterBase):
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", yes, '--yes-i-really-mean-it')
 
+    def set_allow_referent_inodes(self, yes):
+        self.set_var("allow_referent_inodes", yes)
+
     def set_bal_rank_mask(self, bal_rank_mask):
         self.set_var("bal_rank_mask", bal_rank_mask)
 
@@ -681,7 +692,11 @@ class FilesystemBase(MDSClusterBase):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
-    def create(self, recover=False, metadata_overlay=False):
+    def create(self, **kwargs):
+        """
+        kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
+        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        """
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
@@ -690,6 +705,12 @@ class FilesystemBase(MDSClusterBase):
             data_pool_name = "{0}_data".format(self.name)
         else:
             data_pool_name = self.data_pool_name
+
+        recover = kwargs.pop("recover", False)
+        metadata_overlay = kwargs.pop("metadata_overlay", False)
+        yes_i_really_really_mean_it = kwargs.pop("yes_i_really_really_mean_it",
+                                                 False)
+        fs_ops = kwargs.pop("fs_ops", None)
 
         # will use the ec pool to store the data and a small amount of
         # metadata still goes to the primary data pool for all files.
@@ -724,6 +745,12 @@ class FilesystemBase(MDSClusterBase):
             args.append('--recover')
         if metadata_overlay:
             args.append('--allow-dangerous-metadata-overlay')
+        if yes_i_really_really_mean_it:
+            args.append('--yes-i-really-really-mean-it')
+        if fs_ops:
+            args.append('set')
+            for key_or_val in fs_ops:
+                args.append(key_or_val)
         self.run_ceph_cmd(*args)
 
         if not recover:
@@ -942,6 +969,18 @@ class FilesystemBase(MDSClusterBase):
 
     def get_var(self, var, status=None):
         return self.get_mds_map(status=status)[var]
+
+    def get_var_from_fs(self, fsname, var):
+        val = None
+        for fs in self.status().get_filesystems():
+            if fs["mdsmap"]["fs_name"] == fsname:
+                try:
+                    val = fs["mdsmap"][var]
+                    break
+                except KeyError:
+                    val = fs["mdsmap"]["flags_state"][var]
+                    break
+        return val
 
     def set_dir_layout(self, mount, path, layout):
         for name, value in layout.items():
@@ -1262,9 +1301,15 @@ class FilesystemBase(MDSClusterBase):
 
             status = self.status()
 
-    def dencoder(self, obj_type, obj_blob):
-        args = [os.path.join(self._prefix, "ceph-dencoder"), 'type', obj_type, 'import', '-', 'decode', 'dump_json']
+    def dencoder(self, obj_type, obj_blob, skip=0, stray_okay=False):
+        args = [os.path.join(self._prefix, "ceph-dencoder"), 'type', obj_type]
+        if stray_okay:
+            args.extend(["stray_okay"])
+        if skip != 0 :
+            args.extend(["skip", str(skip)])
+        args.extend(['import', '-', 'decode', 'dump_json'])
         p = self.mon_manager.controller.run(args=args, stdin=BytesIO(obj_blob), stdout=BytesIO())
+
         return p.stdout.getvalue()
 
     def rados(self, *args, **kwargs):
@@ -1481,6 +1526,43 @@ class FilesystemBase(MDSClusterBase):
         args = ["setxattr", obj_name, xattr_name, data]
         self.rados(args, pool=pool)
 
+    def read_meta_inode(self, dir_ino, file_name, pool=None):
+        """
+        Get decoded in-memory inode from the metadata pool
+        """
+        if pool is None:
+            pool = self.get_metadata_pool_name()
+
+        dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
+        args=["getomapval", dirfrag_obj_name, file_name+"_head", "-"]
+        try:
+            proc = self.rados(args, pool=pool, stdout=BytesIO())
+        except CommandFailedError as e:
+            log.error(e.__str__())
+            raise ObjectNotFound(dirfrag_obj_name)
+
+        obj_blob = proc.stdout.getvalue()
+        return json.loads(self.dencoder("inode_t<std::allocator>", obj_blob, 25, True).strip())
+
+    def read_remote_inode(self, ino_no, pool=None):
+        """
+        Read the remote_inode xattr from the data pool, return a dict in the
+        format given by inodeno_t::dump, which is something like:
+
+        ::
+
+            rados -p cephfs_data getxattr 100000001f8.00000000 remote_inode > out.bin
+            ceph-dencoder type inodeno_t import out.bin decode dump_json
+
+            {
+                 "val": 1099511627778
+            }
+
+        :param pool: name of pool to read backtrace from.  If omitted, FS must have only
+                     one data pool and that will be used.
+        """
+        return self._read_data_xattr(ino_no, "remote_inode", "inodeno_t", pool)
+
     def read_symlink(self, ino_no, pool=None):
         return self._read_data_xattr(ino_no, "symlink", "string_wrapper", pool)
 
@@ -1543,6 +1625,15 @@ class FilesystemBase(MDSClusterBase):
         exist_objects = self.rados(["ls"], pool=self.get_data_pool_name(), stdout=StringIO()).stdout.getvalue().split("\n")
 
         return want_objects, exist_objects
+
+    def list_data_objects (self):
+        """
+        Get the list of existing data objects in the data pool
+        """
+        existing_objects = self.rados(["ls"], pool=self.get_data_pool_name(), stdout=StringIO()).stdout.getvalue().split("\n")
+
+        return existing_objects
+
 
     def data_objects_present(self, ino, size):
         """

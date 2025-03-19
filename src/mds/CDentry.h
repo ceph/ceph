@@ -54,20 +54,26 @@ public:
     CInode *inode = nullptr;
     inodeno_t remote_ino = 0;
     unsigned char remote_d_type = 0;
+    CInode *referent_inode = nullptr;
+    inodeno_t referent_ino = 0;
     
     linkage_t() {}
 
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
     bool is_primary() const { return remote_ino == 0 && inode != 0; }
-    bool is_remote() const { return remote_ino > 0; }
-    bool is_null() const { return remote_ino == 0 && inode == 0; }
+    bool is_remote() const { return remote_ino > 0 && referent_inode == nullptr && referent_ino == 0; }
+    bool is_null() const { return remote_ino == 0 && inode == 0 && referent_ino == 0 && referent_inode == nullptr; }
+    bool is_referent_remote() const {return remote_ino > 0 && referent_ino != 0 && referent_inode != nullptr;}
 
     CInode *get_inode() { return inode; }
     const CInode *get_inode() const { return inode; }
     inodeno_t get_remote_ino() const { return remote_ino; }
     unsigned char get_remote_d_type() const { return remote_d_type; }
     std::string get_remote_d_type_string() const;
+    CInode *get_referent_inode() { return referent_inode; }
+    const CInode *get_referent_inode() const { return referent_inode; }
+    inodeno_t get_referent_ino() const { return referent_ino; }
 
     void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
@@ -111,8 +117,8 @@ public:
   {}
   CDentry(std::string_view n, __u32 h,
           mempool::mds_co::string alternate_name,
-          inodeno_t ino, unsigned char dt,
-	  snapid_t f, snapid_t l) :
+          inodeno_t ino, inodeno_t referent_ino,
+	  unsigned char dt, snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
@@ -123,6 +129,7 @@ public:
   {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
+    linkage.referent_ino = referent_ino;
   }
 
   ~CDentry() override {
@@ -184,6 +191,7 @@ public:
     p->remote_d_type = d_type;
   }
   void push_projected_linkage(CInode *inode); 
+  void push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino, inodeno_t referent_ino);
   linkage_t *pop_projected_linkage();
 
   bool is_projected() const { return !projected.empty(); }
@@ -231,7 +239,7 @@ public:
   int get_num_dir_auth_pins() const;
   
   // remote links
-  void link_remote(linkage_t *dnl, CInode *in);
+  void link_remote(linkage_t *dnl, CInode *remote_in, CInode *ref_in=nullptr);
   void unlink_remote(linkage_t *dnl);
   
   // copy cons

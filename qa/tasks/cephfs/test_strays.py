@@ -380,7 +380,15 @@ class TestStrays(CephFSTestCase):
         in reintegration of inode into the previously-remote dentry,
         rather than lingering as a stray indefinitely.
         """
+
+        # stray perf count numbers in the test don't match when referent inode feature
+        # is enabled because referent inodes becomes a stray whenever hardlink is
+        # deleted or stray is reintegrated, so disable referent inodes here. The
+        # same test for referent inodes is added at qa/tasks/cephfs/test_referent.py
+        self.fs.set_allow_referent_inodes(False)
+
         # Write some bytes to file_a
+
         size_mb = 8
         self.mount_a.run_shell(["mkdir", "dir_1"])
         self.mount_a.write_n_mb("dir_1/file_a", size_mb)
@@ -542,6 +550,13 @@ class TestStrays(CephFSTestCase):
         then we make a stray for B which is then reintegrated
         into one of his hardlinks.
         """
+
+        # stray perf count numbers in the test don't match when referent inode feature
+        # is enabled because referent inodes becomes a stray whenever hardlink is
+        # deleted or stray is reintegrated, so disable referent inodes here. The
+        # same test for referent inodes is added at qa/tasks/cephfs/test_referent.py
+        self.fs.set_allow_referent_inodes(False)
+
         # Create file_a, file_b, and a hardlink to file_b
         size_mb = 8
         self.mount_a.write_n_mb("file_a", size_mb)
