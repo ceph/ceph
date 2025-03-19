@@ -1480,6 +1480,10 @@ public:
     Incremental *pending_inc,
     OSDMap& tmp_osd_map) const;
 
+  void rm_all_upmap_prims(
+    CephContext *cct,
+    OSDMap::Incremental *pending_inc); // total
+
   int calc_desired_primary_distribution(
     CephContext *cct,
     int64_t pid, // pool id
