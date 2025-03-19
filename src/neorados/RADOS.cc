@@ -1373,6 +1373,7 @@ class Notifier : public async::service_list_base_hook {
   };
 
   asio::io_context::executor_type ex;
+  Objecter::LingerOp* linger_op;
   // Zero for unbounded. I would not recommend this.
   const uint32_t capacity;
 
@@ -1383,14 +1384,18 @@ class Notifier : public async::service_list_base_hook {
   uint64_t next_id = 0;
 
   void service_shutdown() {
+    if (linger_op) {
+      linger_op->put();
+    }
     std::unique_lock l(m);
     handlers.clear();
   }
 
 public:
 
-  Notifier(asio::io_context::executor_type ex, uint32_t capacity)
-    : ex(ex), capacity(capacity),
+  Notifier(asio::io_context::executor_type ex, Objecter::LingerOp* linger_op,
+	   uint32_t capacity)
+    : ex(ex), linger_op(linger_op), capacity(capacity),
       svc(asio::use_service<async::service<Notifier>>(
 	    asio::query(ex, boost::asio::execution::context))) {
     // register for service_shutdown() notifications
@@ -1507,7 +1512,11 @@ void RADOS::watch_(Object o, IOContext _ioc,
     linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
-      [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
+      [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
+	if (e) {
+	  linger_op->objecter->linger_cancel(linger_op);
+	  cookie = 0;
+	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
       }), nullptr);
 }
@@ -1525,7 +1534,7 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
   uint64_t cookie = linger_op->get_cookie();
   // Shared pointer to avoid a potential race condition
   linger_op->user_data.emplace<std::shared_ptr<Notifier>>(
-    std::make_shared<Notifier>(get_executor(), queue_size));
+    std::make_shared<Notifier>(get_executor(), linger_op, queue_size));
   auto& n = ceph::any_cast<std::shared_ptr<Notifier>&>(
     linger_op->user_data);
   linger_op->handle = std::ref(*n);
@@ -1537,7 +1546,12 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
     linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
     asio::bind_executor(
       std::move(e),
-      [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
+      [c = std::move(c), cookie, linger_op](bs::error_code e, cb::list) mutable {
+	if (e) {
+	  linger_op->user_data.reset();
+	  linger_op->objecter->linger_cancel(linger_op);
+	  cookie = 0;
+	}
 	asio::dispatch(asio::append(std::move(c), e, cookie));
       }), nullptr);
 }
@@ -1610,9 +1624,7 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
-			     if (!ec) {
-			       objecter->linger_cancel(linger_op);
-			     }
+			     objecter->linger_cancel(linger_op);
 			     asio::dispatch(asio::append(std::move(c), ec));
 			   }));
 }
