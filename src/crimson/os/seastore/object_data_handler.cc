@@ -155,8 +155,9 @@ remap_ret remap_mappings(
 	      laddr,
 	      remap.len
 	    ).si_then([&mappings, ctx](auto new_mapping) {
-	      mappings.emplace_back(new_mapping.duplicate());
-	      return ctx.tm.next_mapping(ctx.t, std::move(new_mapping));
+	      auto fut = ctx.tm.next_mapping(ctx.t, new_mapping.duplicate());
+	      mappings.emplace_back(std::move(new_mapping));
+	      return fut;
 	    }).si_then([&next_mapping](auto new_mapping) {
 	      next_mapping = std::move(new_mapping);
 	      return seastar::now();
