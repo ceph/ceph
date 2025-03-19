@@ -296,7 +296,7 @@ class CephFS(RESTController):
                 # sessionmap to get an indication of clients.
                 if rank == 0 or client_count == 0:
                     client_count = mgr.get_unlabeled_counter_latest("mds", info['name'],
-                                                  "mds_sessions.session_count")
+                                                                    "mds_sessions.session_count")
 
                 laggy = "laggy_since" in info
 
