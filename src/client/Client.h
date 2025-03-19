@@ -858,6 +858,7 @@ public:
 
   bool use_faked_inos() { return _use_faked_inos; }
   vinodeno_t map_faked_ino(ino_t ino);
+  std::string remove_feature_bits(const std::string& input);
 
   //notify the mds to flush the mdlog
   void flush_mdlog_sync(Inode *in);
