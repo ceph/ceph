@@ -48,84 +48,6 @@ const string& RGWRealm::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_realm;
 }
 
-int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  int ret = RGWSystemMetaObj::create(dpp, y, exclusive);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  // create the control object for watch/notify
-  ret = create_control(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR creating control for new realm " << name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  RGWPeriod period;
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-  if (current_period.empty()) {
-    /* create new period for the realm */
-    ret = cfgstore->read_period(dpp, y, period.get_id(), period.get_epoch(), period);
-    if (ret < 0 ) {
-      return ret;
-    }
-    ret = cfgstore->create_period(dpp, y, true, period);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  } else {
-    period = RGWPeriod(current_period, 0);
-    ret = cfgstore->read_period(dpp, y, period.get_id(), period.get_epoch(), period);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to init period " << current_period << dendl;
-      return ret;
-    }
-  }
-  ret = set_current_period(dpp, period, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed set current period " << current_period << dendl;
-    return ret;
-  }
-  // try to set as default. may race with another create, so pass exclusive=true
-  // so we don't override an existing default
-  ret = set_as_default(dpp, y, true);
-  if (ret < 0 && ret != -EEXIST) {
-    ldpp_dout(dpp, 0) << "WARNING: failed to set realm as default realm, ret=" << ret << dendl;
-  }
-
-  return 0;
-}
-
-int RGWRealm::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  int ret = RGWSystemMetaObj::delete_obj(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-  return delete_control(dpp, y);
-}
-
-int RGWRealm::create_control(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  auto pool = rgw_pool{get_pool(cct)};
-  auto oid = get_control_oid();
-  bufferlist bl;
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
-}
-
-int RGWRealm::delete_control(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  auto pool = rgw_pool{get_pool(cct)};
-  auto obj = rgw_raw_obj{pool, get_control_oid()};
-  auto sysobj = sysobj_svc->get_obj(obj);
-  return sysobj.wop().remove(dpp, y);
-}
-
 rgw_pool RGWRealm::get_pool(CephContext *cct) const
 {
   if (cct->_conf->rgw_realm_root_pool.empty()) {
@@ -170,14 +92,20 @@ int RGWRealm::set_current_period(const DoutPrefixProvider *dpp, RGWPeriod& perio
   epoch = period.get_realm_epoch();
   current_period = period.get_id();
 
-  int ret = update(dpp, y);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  std::unique_ptr<rgw::sal::RealmWriter> writer;
+  int ret = cfgstore->create_realm(dpp, y, false, *this, &writer);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: realm create: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  ret = rgw::realm_set_current_period(dpp, y, cfgstore.get(), *writer, *this, period);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: period update: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
   ret = rgw::reflect_period(dpp, y, cfgstore.get(), period);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
@@ -190,30 +118,6 @@ int RGWRealm::set_current_period(const DoutPrefixProvider *dpp, RGWPeriod& perio
 string RGWRealm::get_control_oid() const
 {
   return get_info_oid_prefix() + id + ".control";
-}
-
-int RGWRealm::notify_zone(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y)
-{
-  rgw_pool pool{get_pool(cct)};
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, get_control_oid()});
-  int ret = sysobj.wn().notify(dpp, bl, 0, nullptr, y);
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
-}
-
-int RGWRealm::notify_new_period(const DoutPrefixProvider *dpp, const RGWPeriod& period, optional_yield y)
-{
-  bufferlist bl;
-  using ceph::encode;
-  // push the period to dependent zonegroups/zones
-  encode(RGWRealmNotify::ZonesNeedPeriod, bl);
-  encode(period, bl);
-  // reload the gateway with the new period
-  encode(RGWRealmNotify::Reload, bl);
-
-  return notify_zone(dpp, bl, y);
 }
 
 
@@ -256,7 +160,8 @@ void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
 
 void RGWRealm::dump(Formatter *f) const
 {
-  RGWSystemMetaObj::dump(f);
+  encode_json("id", id , f);
+  encode_json("name", name , f);
   encode_json("current_period", current_period, f);
   encode_json("epoch", epoch, f);
 }
@@ -264,7 +169,8 @@ void RGWRealm::dump(Formatter *f) const
 
 void RGWRealm::decode_json(JSONObj *obj)
 {
-  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("current_period", current_period, obj);
   JSONDecoder::decode_json("epoch", epoch, obj);
 }
