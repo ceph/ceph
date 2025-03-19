@@ -366,7 +366,7 @@ public:
       for (std::set<pg_shard_t>::const_iterator i = _have.begin();
 	   i != _have.end();
 	   ++i) {
-	have.insert(i->shard);
+	have.insert(static_cast<int>(i->shard));
       }
       std::map<int, std::vector<std::pair<int, int>>> min;
       return ec_impl->minimum_to_decode(want, have, &min) == 0;

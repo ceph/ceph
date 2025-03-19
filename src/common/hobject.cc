@@ -491,7 +491,7 @@ void ghobject_t::dump(Formatter *f) const
   if (generation != NO_GEN)
     f->dump_int("generation", generation);
   if (shard_id != shard_id_t::NO_SHARD)
-    f->dump_int("shard_id", shard_id);
+    f->dump_int("shard_id", int(shard_id));
   f->dump_int("max", (int)max);
 }
 
@@ -548,14 +548,16 @@ bool ghobject_t::parse(const string& s)
   // look for shard# prefix
   const char *start = s.c_str();
   const char *p;
-  int sh = shard_id_t::NO_SHARD;
+  shard_id_t sh = shard_id_t::NO_SHARD;
   for (p = start; *p && isxdigit(*p); ++p) ;
   if (!*p && *p != '#')
     return false;
   if (p > start) {
-    int r = sscanf(s.c_str(), "%x", &sh);
+    unsigned int sh_i;
+    int r = sscanf(s.c_str(), "%x", &sh_i);
     if (r < 1)
       return false;
+    sh = shard_id_t(sh_i);
     start = p + 1;
   } else {
     ++start;

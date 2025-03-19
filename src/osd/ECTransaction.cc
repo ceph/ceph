@@ -73,8 +73,8 @@ static void encode_and_write(
   }
 
   for (auto &&i : *transactions) {
-    ceph_assert(buffers.count(i.first));
-    bufferlist &enc_bl = buffers[i.first];
+    ceph_assert(buffers.count(static_cast<int>(i.first)));
+    bufferlist &enc_bl = buffers[static_cast<int>(i.first)];
     if (offset >= before_size) {
       i.second.set_alloc_hint(
 	coll_t(spg_t(pgid, i.first)),
