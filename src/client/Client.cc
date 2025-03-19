@@ -12545,7 +12545,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   if (f->flags & O_DIRECT)
     have &= ~(CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO);
 
-  bool buffered_write = (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO));
+  bool buffered_write = (cct->_conf->client_oc && (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO)));
   ceph::ref_t<WriteEncMgr> enc_mgr;
 
   if (buffered_write) {
