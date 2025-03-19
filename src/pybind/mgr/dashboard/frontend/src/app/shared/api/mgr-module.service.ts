@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BlockUI, NgBlockUI } from 'ng-block-ui';
+import { BlockUIService } from 'ng-block-ui';
 
 import { Observable, timer as observableTimer } from 'rxjs';
 import { NotificationService } from '../services/notification.service';
 import { TableComponent } from '../datatable/table/table.component';
 import { Router } from '@angular/router';
 import { MgrModuleInfo } from '../models/mgr-modules.interface';
+import { NotificationType } from '../enum/notification-type.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -14,12 +15,10 @@ import { MgrModuleInfo } from '../models/mgr-modules.interface';
 export class MgrModuleService {
   private url = 'api/mgr/module';
 
-  @BlockUI()
-  blockUI: NgBlockUI;
-
   readonly REFRESH_INTERVAL = 2000;
 
   constructor(
+    private blockUI: BlockUIService,
     private http: HttpClient,
     private notificationService: NotificationService,
     private router: Router
@@ -84,7 +83,9 @@ export class MgrModuleService {
     module: string,
     enabled: boolean = false,
     table: TableComponent = null,
-    navigateTo: string = ''
+    navigateTo: string = '',
+    notificationText?: string,
+    navigateByUrl?: boolean
   ): void {
     let $obs;
     const fnWaitUntilReconnected = () => {
@@ -96,13 +97,27 @@ export class MgrModuleService {
             // Resume showing the notification toasties.
             this.notificationService.suspendToasties(false);
             // Unblock the whole UI.
-            this.blockUI.stop();
+            this.blockUI.stop('global');
             // Reload the data table content.
             if (table) {
               table.refreshBtn();
             }
-            if (navigateTo) {
-              this.router.navigate([navigateTo]);
+
+            if (notificationText) {
+              this.notificationService.show(
+                NotificationType.success,
+                $localize`${notificationText}`
+              );
+            }
+
+            if (!navigateTo) return;
+
+            const navigate = () => this.router.navigate([navigateTo]);
+
+            if (navigateByUrl) {
+              this.router.navigateByUrl('/', { skipLocationChange: true }).then(navigate);
+            } else {
+              navigate();
             }
           },
           () => {
@@ -126,7 +141,7 @@ export class MgrModuleService {
         this.notificationService.suspendToasties(true);
         // Block the whole UI to prevent user interactions until
         // the connection to the backend is reestablished
-        this.blockUI.start($localize`Reconnecting, please wait ...`);
+        this.blockUI.start('global', $localize`Reconnecting, please wait ...`);
         fnWaitUntilReconnected();
       }
     );
