@@ -26,7 +26,7 @@ int RGWHTTPSimpleRequest::get_status()
   return status;
 }
 
-int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val) 
+int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val, bool *pause)
 {
   if (name == "CONTENT_LENGTH") {
     string err;
@@ -42,7 +42,7 @@ int RGWHTTPSimpleRequest::handle_header(const string& name, const string& val)
   return 0;
 }
 
-int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
+int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len, bool *pause)
 {
   unique_lock guard(out_headers_lock);
 
@@ -88,7 +88,7 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
           }
           buf[i] = '\0';
           out_headers[buf] = l;
-          int r = handle_header(buf, l);
+          int r = handle_header(buf, l, pause);
           if (r < 0)
             return r;
         }
@@ -992,7 +992,7 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
   return status;
 }
 
-int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
+int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val, bool *pause)
 {
   if (name == "RGWX_EMBEDDED_METADATA_LEN") {
     string err;
