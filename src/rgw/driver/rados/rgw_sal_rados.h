@@ -201,6 +201,10 @@ class RadosStore : public StoreDriver {
                             optional_yield y,
                             std::string_view account_id,
                             uint32_t& count) override;
+    int count_account_policies(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            uint32_t& count) override;
     int list_account_roles(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            std::string_view account_id,
@@ -409,6 +413,8 @@ class RadosStore : public StoreDriver {
                            optional_yield y,
                            std::string_view tenant,
                            std::vector<RGWOIDCProviderInfo>& providers) override;
+    int store_customer_managed_policy(const DoutPrefixProvider* dpp,
+          optional_yield y, const ManagedPolicyInfo& info, bool exclusive) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
