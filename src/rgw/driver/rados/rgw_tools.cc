@@ -155,17 +155,22 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, const map<string, bufferlist> *pattrs)
 {
+  ldpp_dout(dpp, 0) << " RAJA rgw_put_system_obj "<< dendl;
   map<string,bufferlist> no_attrs;
   if (!pattrs) {
+    
+  ldpp_dout(dpp, 0) << " RAJA rgw_put_system_obj there is no pattern"<< dendl;
     pattrs = &no_attrs;
   }
 
+  ldpp_dout(dpp, 0) << " RAJA rgw_put_system_obj pool name: " << pool.name << "oid: " << oid << dendl;
   rgw_raw_obj obj(pool, oid);
 
   auto sysobj = svc_sysobj->get_obj(obj);
   int ret;
 
   if (pattrs != no_change_attrs()) {
+    ldpp_dout(dpp, 0) << " RAJA rgw_put_system_obj set attribute"<< dendl;
     ret = sysobj.wop()
       .set_objv_tracker(objv_tracker)
       .set_exclusive(exclusive)
@@ -173,13 +178,15 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
       .set_attrs(*pattrs)
       .write(dpp, data, y);
   } else {
+    ldpp_dout(dpp, 0) << " RAJA rgw_put_system_obj no attribute" << dendl;
     ret = sysobj.wop()
       .set_objv_tracker(objv_tracker)
       .set_exclusive(exclusive)
       .set_mtime(set_mtime)
       .write_data(dpp, data, y);
   }
-
+  
+  ldpp_dout(dpp, 0) << " RAJA rgw_put_system_obj ret: " << ret << dendl;
   return ret;
 }
 

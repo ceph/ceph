@@ -289,6 +289,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("log_pool", log_pool, obj);
   JSONDecoder::decode_json("intent_log_pool", intent_log_pool, obj);
   JSONDecoder::decode_json("roles_pool", roles_pool, obj);
+  JSONDecoder::decode_json("policy_pool", policy_pool, obj);
   JSONDecoder::decode_json("reshard_pool", reshard_pool, obj);
   JSONDecoder::decode_json("usage_log_pool", usage_log_pool, obj);
   JSONDecoder::decode_json("user_keys_pool", user_keys_pool, obj);
@@ -317,6 +318,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("intent_log_pool", intent_log_pool, f);
   encode_json("usage_log_pool", usage_log_pool, f);
   encode_json("roles_pool", roles_pool, f);
+  encode_json("policy_pool", policy_pool, f);
   encode_json("reshard_pool", reshard_pool, f);
   encode_json("user_keys_pool", user_keys_pool, f);
   encode_json("user_email_pool", user_email_pool, f);
@@ -482,6 +484,7 @@ void add_zone_pools(const RGWZoneParams& info,
   pools.insert(info.user_uid_pool);
   pools.insert(info.otp_pool);
   pools.insert(info.roles_pool);
+  pools.insert(info.policy_pool);
   pools.insert(info.reshard_pool);
   pools.insert(info.oidc_pool);
   pools.insert(info.notif_pool);
@@ -588,6 +591,7 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   user_swift_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.swift", user_swift_pool);
   user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
   roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
+  policy_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:policy", policy_pool);
   reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
   otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
   oidc_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:oidc", oidc_pool);
@@ -1284,6 +1288,7 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   info.user_swift_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:users.swift", info.user_swift_pool);
   info.user_uid_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:users.uid", info.user_uid_pool);
   info.roles_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:roles", info.roles_pool);
+  info.policy_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:policy", info.policy_pool);
   info.reshard_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:reshard", info.reshard_pool);
   info.otp_pool = fix_zone_pool_dup(pools, info.name, ".rgw.otp", info.otp_pool);
   info.oidc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:oidc", info.oidc_pool);
