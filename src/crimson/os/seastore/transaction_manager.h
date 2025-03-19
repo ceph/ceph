@@ -1045,7 +1045,7 @@ private:
     auto v = pin.get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=std::move(pin)](auto extent) {
+      ).si_then([pin=pin.duplicate()](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
@@ -1055,7 +1055,7 @@ private:
       });
     } else {
       return unlinked_child_t{
-	std::move(pin),
+	std::move(const_cast<LBAMapping&>(pin)),
 	v.get_child_pos()};
     }
   }
@@ -1078,7 +1078,7 @@ private:
         return ext;
       });
     } else {
-      return pin_to_extent_by_type(t, std::move(pin), v.get_child_pos(), type);
+      return pin_to_extent_by_type(t, pin.duplicate(), v.get_child_pos(), type);
     }
   }
 
@@ -1117,6 +1117,7 @@ private:
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
+    assert(pin.is_viewable());
     using ret = pin_to_extent_ret<T>;
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
@@ -1144,7 +1145,7 @@ private:
 	maybe_init(extent);
 	extent.set_seen_by_users();
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
+    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
         auto crc = ref->calc_crc32c();
         SUBTRACET(
@@ -1195,6 +1196,7 @@ private:
     LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
     SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
               t, pin, type);
+    assert(pin.is_viewable());
     assert(is_logical_type(type));
     assert(is_background_transaction(t.get_src()));
     laddr_t direct_key = pin.get_intermediate_base();
@@ -1215,7 +1217,7 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
+    ).si_then([FNAME, &t, pin=pin.duplicate(), this](auto ref) {
       auto crc = ref->calc_crc32c();
       SUBTRACET(
 	seastore_tm,
