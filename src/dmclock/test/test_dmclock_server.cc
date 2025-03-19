@@ -912,7 +912,7 @@ namespace crimson {
       for (int i = 0; i < 6; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 
 	if (client1 == retn.client) ++c1_count;
 	else if (client2 == retn.client) ++c2_count;
@@ -967,7 +967,7 @@ namespace crimson {
       for (int i = 0; i < 6; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 
 	if (client1 == retn.client) ++c1_count;
 	else if (client2 == retn.client) ++c2_count;
@@ -1022,7 +1022,7 @@ namespace crimson {
       for (int i = 0; i < 10; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 
 	if (i > 5) continue;
 	if (client1 == retn.client) ++c1_count;
@@ -1056,7 +1056,7 @@ namespace crimson {
       for (int i = 0; i < 6; ++i) {
 	Queue::PullReq pr = pq->pull_request();
 	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 
 	if (client1 == retn.client) ++c1_count;
 	else if (client2 == retn.client) ++c2_count;
@@ -1123,7 +1123,7 @@ namespace crimson {
 	  if (i < num_requests * lower_bound || i > num_requests * upper_bound) {
 	    continue;
 	  }
-	  auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+	  auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 	  if (client1 == retn.client) {
 	    ++c1_count;
 	  } else if (client2 == retn.client) {
@@ -1279,7 +1279,7 @@ namespace crimson {
 
       EXPECT_EQ(Queue::NextReqType::future, pr.type);
 
-      Time when = boost::get<Time>(pr.data);
+      Time when = std::get<Time>(pr.data);
       EXPECT_EQ(now + 100, when);
     }
 
@@ -1310,7 +1310,7 @@ namespace crimson {
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
 
-      auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+      auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(client1, retn.client);
     }
 
@@ -1341,7 +1341,7 @@ namespace crimson {
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
 
-      auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+      auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(client1, retn.client);
     }
 
@@ -1456,7 +1456,7 @@ namespace crimson {
       for (int i = 0; i < 2; ++i) {
         Queue::PullReq pr = pq->pull_request();
         EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-        auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+        auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 
         if (client1 == retn.client) {
           ++c1_count;
@@ -1483,7 +1483,7 @@ namespace crimson {
       for (int i = 0; i < 50; ++i) {
         Queue::PullReq pr = pq->pull_request();
         EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-        auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+        auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
 
         if (client1 == retn.client) {
           ++c1_count;
@@ -1513,7 +1513,7 @@ namespace crimson {
       // Trying to pull a request after restoring the limit should succeed.
       pr = pq->pull_request(old_time + 2.0);
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
-      auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+      auto& retn = std::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(retn.client, client2);
       EXPECT_EQ(47u, pq->request_count());
     } // dmclock_server_pull.pull_wait_at_limit
