@@ -184,3 +184,17 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
   return ret;
 }
 
+int RGWBucket::get_usage_stats(uint64_t *num_objs, uint64_t *total_bytes) {
+  if (!store) {
+    return -EINVAL;
+  }
+  // Fetch bucket stats from the RGW store (through RGWRados)
+  RGWBucketStats stats;
+  int ret = store->get_bucket_stats(this->bucket, &stats);
+  if (ret < 0) {
+    return ret;
+  }
+  *num_objs = stats.num_objects;
+  *total_bytes = stats.num_bytes;
+  return 0;
+}

@@ -30,6 +30,7 @@
 #include "rgw_lua.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
+#include "rgw_exporter.h"
 
 
 class RGWPauser : public RGWRealmReloader::Pauser {
@@ -55,6 +56,9 @@ namespace rgw {
 
 namespace lua { class Background; }
 namespace sal { class ConfigStore; }
+
+class RGWExporter;
+extern RGWExporter *g_rgw_exporter;
 
 class RGWLib;
 class AppMain {

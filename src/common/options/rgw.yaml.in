@@ -4260,3 +4260,7 @@ options:
   services:
   - rgw
   with_legacy: true
+-name: rgw_enable_usage_perf_counters
+  type: bool
+  default: false
+  desc: Enable periodic updating of usage perf counters for buckets and users

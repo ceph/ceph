@@ -14,6 +14,8 @@
 #include "rgw_common.h"
 #include "rgw_lib.h"
 #include "rgw_log.h"
+#include "rgw_exporter.h"
+#include "rgw_usage_updater.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -38,7 +40,38 @@ public:
     exit(1);
   }
 };
+/*
+// Global pointer to the exporter instance
+RGWExporter* rgw_exporter = nullptr;
 
+// Function to initialize the exporter
+void rgw_init_exporter(CephContext* cct) {
+    rgw_exporter = new RGWExporter(cct);
+    rgw_exporter->start(); // Start the background thread (e.g., updating every 30 seconds)
+}
+
+// Main initialization function for RGW
+int rgw_main_init(CephContext* cct) {
+    // HSTTODO: other RGW initialization code
+
+    // Initialize the exporter to start collecting usage metrics
+    rgw_init_exporter(cct);
+    
+    return 0;
+}
+
+// Main shutdown function for RGW
+void rgw_main_shutdown() {
+    // HSTTODO:  other shutdown code 
+
+    // Shut down the exporter and clean up resources
+    if (rgw_exporter) {
+        rgw_exporter->stop(); // Signal the background thread to stop and wait for it to join
+        delete rgw_exporter;
+        rgw_exporter = nullptr;
+    }
+}
+*/
 static int usage()
 {
   cout << "usage: radosgw [options...]" << std::endl;
@@ -110,6 +143,8 @@ int main(int argc, char *argv[])
   main.init_frontends1(false /* nfs */);
   main.init_numa();
 
+  std::unique_ptr<RGWUsageUpdater> usage_updater;
+
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
@@ -140,6 +175,14 @@ int main(int argc, char *argv[])
   main.init_perfcounters();
   main.init_http_clients();
 
+  bool enable_user_metrics = cct->_conf->rgw_user_counters_cache;
+  bool enable_bucket_metrics = cct->_conf->rgw_bucket_counters_cache;
+  if (enable_user_metrics || enable_bucket_metrics) {
+    // Create the global exporter
+    g_rgw_exporter = new RGWExporter(cct, store->getRados());
+    g_rgw_exporter->start();
+  }
+
   r = main.init_storage();
   if (r < 0) {
     mutex.lock();
@@ -150,6 +193,11 @@ int main(int argc, char *argv[])
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return -r;
   }
+
+  if (cct->_conf->rgw_enable_usage_perf_counters) {
+    usage_updater = std::make_unique<RGWUsageUpdater>(main.store.get(), cct.get());
+    usage_updater->start();
+  }  
 
   main.cond_init_apis();
 
@@ -179,6 +227,17 @@ int main(int argc, char *argv[])
 
   derr << "shutting down" << dendl;
 
+  if (g_rgw_exporter) {
+    g_rgw_exporter->stop();
+    delete g_rgw_exporter;
+    g_rgw_exporter = nullptr;
+  }
+  
+  if (usage_updater) {
+    usage_updater->stop();
+    usage_updater.reset();
+  }
+  
   const auto finalize_async_signals = []() {
     unregister_async_signal_handler(SIGHUP, rgw::signal::sighup_handler);
     unregister_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);
