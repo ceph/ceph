@@ -9,5 +9,6 @@
     (import 'dashboards/ceph-cluster.libsonnet') +
     (import 'dashboards/rgw-s3-analytics.libsonnet') +
     (import 'dashboards/multi-cluster.libsonnet') +
+    (import 'dashboards/smb-overview.libsonnet') +
     { _config:: $._config },
 }
