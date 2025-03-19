@@ -53,6 +53,11 @@
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
 
+>=19.2.2
+
+* RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
+  existing versioning-enabled bucket that was not created with Object Lock enabled.
+
 >=19.0.0
 
 * ceph: a new --daemon-output-file switch is available for `ceph tell` commands
