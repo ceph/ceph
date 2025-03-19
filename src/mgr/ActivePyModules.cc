@@ -877,6 +877,76 @@ PyObject* ActivePyModules::with_unlabled_perf_counters(
   return f.get();
 }
 
+// Holds a list of label pairs for a counter, [(level, shallow), (pooltype, replicated)]
+typedef std::vector<pair<std::string_view, std::string_view>> perf_counter_label_pairs;
+
+PyObject* ActivePyModules::with_perf_counters(
+    std::function<void(
+	PerfCounterInstance &counter_instance,
+	PerfCounterType &counter_type,
+	PyFormatter& f)> fct,
+    const std::string& svc_name,
+    const std::string& svc_id,
+    std::string_view counter_name,
+    std::string_view sub_counter_name,
+    const perf_counter_label_pairs& labels) const
+{
+  PyFormatter f;
+  /*
+    The resolved counter path, they are of the format
+    <counter_name>.<sub_counter_name> If the counter name has labels, then they
+    are segregated via NULL delimters.
+
+    Eg:
+      - labeled counter:
+        "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+      - unlabeled counter: "osd.stat_bytes"
+  */
+  std::string resolved_path;
+  Formatter::ArraySection perf_counter_value_section(f, counter_name);
+
+  // Construct the resolved path
+  if (labels.empty()) {
+    resolved_path =
+	std::string(counter_name) + "." + std::string(sub_counter_name);
+  } else {
+    perf_counter_label_pairs perf_counter_labels = labels;
+    std::string counter_name_with_labels = ceph::perf_counters::detail::create(
+	counter_name.data(), perf_counter_labels.data(),
+	perf_counter_labels.data() + perf_counter_labels.size());
+    resolved_path = std::string(counter_name_with_labels) + "." +
+		    std::string(sub_counter_name);
+  }
+
+  {
+    without_gil_t no_gil;
+    std::lock_guard l(lock);
+    auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
+    if (metadata) {
+      std::lock_guard l2(metadata->lock);
+      if (metadata->perf_counters.instances.count(resolved_path)) {
+	auto counter_instance =
+	    metadata->perf_counters.instances.at(resolved_path);
+	auto counter_type = metadata->perf_counters.types.at(resolved_path);
+	with_gil(no_gil, [&] { fct(counter_instance, counter_type, f); });
+      } else {
+	dout(4) << fmt::format(
+		       "Missing counter: '{}' ({}.{})", resolved_path, svc_name,
+		       svc_id)
+		<< dendl;
+	dout(20) << "Paths are:" << dendl;
+	for (const auto& i : metadata->perf_counters.instances) {
+	  dout(20) << i.first << dendl;
+	}
+      }
+    } else {
+      dout(4) << fmt::format("No daemon state for {}.{}", svc_name, svc_id)
+	      << dendl;
+    }
+  }
+  return f.get();
+}
+
 PyObject* ActivePyModules::get_unlabeled_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
@@ -931,6 +1001,32 @@ PyObject* ActivePyModules::get_latest_unlabeled_counter_python(
     }
   };
   return with_unlabled_perf_counters(extract_latest_counters, svc_name, svc_id, path);
+}
+
+PyObject* ActivePyModules::get_latest_counter_python(
+    const std::string& svc_name,
+    const std::string& svc_id,
+    std::string_view counter_name,
+    std::string_view sub_counter_name,
+    const perf_counter_label_pairs& labels)
+{
+  auto extract_latest_counters = [](PerfCounterInstance& counter_instance,
+				    PerfCounterType& counter_type,
+				    PyFormatter& f) {
+    if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+      const auto& datapoint = counter_instance.get_latest_data_avg();
+      f.dump_float("t", datapoint.t);
+      f.dump_unsigned("s", datapoint.s);
+      f.dump_unsigned("c", datapoint.c);
+    } else {
+      const auto& datapoint = counter_instance.get_latest_data();
+      f.dump_float("t", datapoint.t);
+      f.dump_unsigned("v", datapoint.v);
+    }
+  };
+  return with_perf_counters(
+      extract_latest_counters, svc_name, svc_id, counter_name, sub_counter_name,
+      labels);
 }
 
 PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
@@ -994,9 +1090,6 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
   }
   return f.get();
 }
-
-// Holds a list of label pairs for a counter, [(level, shallow), (pooltype, replicated)]
-typedef std::vector<pair<std::string_view, std::string_view>> perf_counter_label_pairs;
 
 PyObject* ActivePyModules::get_perf_schema_python(
     const std::string& svc_type,
