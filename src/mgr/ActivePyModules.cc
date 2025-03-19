@@ -995,6 +995,179 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
   return f.get();
 }
 
+// Holds a list of label pairs for a counter, [(level, shallow), (pooltype, replicated)]
+typedef std::vector<pair<std::string_view, std::string_view>> perf_counter_label_pairs;
+
+PyObject* ActivePyModules::get_perf_schema_python(
+    const std::string& svc_type,
+    const std::string& svc_id)
+{
+  without_gil_t no_gil;
+  std::lock_guard l(lock);
+
+  DaemonStateCollection daemons;
+
+  if (svc_type == "") {
+    daemons = daemon_state.get_all();
+  } else if (svc_id.empty()) {
+    daemons = daemon_state.get_by_service(svc_type);
+  } else {
+    auto key = DaemonKey{svc_type, svc_id};
+    // so that the below can be a loop in all cases
+    auto got = daemon_state.get(key);
+    if (got != nullptr) {
+      daemons[key] = got;
+    }
+  }
+
+  auto f = with_gil(no_gil, [&] { return PyFormatter(); });
+
+  auto dump_sub_counter_information = [](PyFormatter *f, PerfCounterType type) {
+    // Labels can also have "." in them, eg (notice, client.4620):
+    // "mds_client_metrics-cephfs^@client^@client.4620^@rank^@0^@.avg_metadata_latency"
+    // Hence search for the last occurence of "." to get sub counter name
+    size_t pos = type.path.rfind('.');
+    std::string sub_counter_name = type.path.substr(pos + 1, type.path.length());
+    Formatter::ObjectSection counter_section(*f, sub_counter_name);
+    f->create_unique("description", type.description);
+    if (!type.nick.empty()) {
+      f->dump_string("nick", type.nick);
+    }
+    f->dump_unsigned("type", type.type);
+    f->dump_unsigned("priority", type.priority);
+    f->dump_unsigned("units", type.unit);
+  };
+
+  auto dump_counter_with_labels = [&dump_sub_counter_information](
+				      PyFormatter *f, auto key_labels,
+				      auto type) {
+    f->open_object_section("");	 // counter should be enclosed by array
+
+    for (Formatter::ObjectSection labels_section{*f, "labels"};
+	 const auto &label : key_labels) {
+      f->dump_string(label.first, label.second);
+    }
+
+    f->open_object_section("counters");
+    dump_sub_counter_information(f, type);
+  };
+
+
+  if (!daemons.empty()) {
+    for (auto &[key, state] : daemons) {
+      std::lock_guard l(state->lock);
+      with_gil(no_gil, [&, key = ceph::to_string(key), state = state] {
+	std::string_view key_name, prev_key_name;
+	perf_counter_label_pairs prev_key_labels;
+	Formatter::ObjectSection counter_section(
+	    f, key.c_str());  // Main Object Section
+	std::optional<Formatter::ArraySection> array_section;
+
+	for (const auto &[counter_name_with_labels, _] :
+	     state->perf_counters.instances) {
+	  /*
+              The path of the counter can either be:
+                - labeled counter path: "osd_scrub_sh_repl^@level^@shallow^@pooltype^@replicated^@.successful_scrubs_elapsed"
+                - unlabeled counter path: "osd.stat_bytes"
+
+              For the above counters:
+                - key_names are: 'osd_scrub_sh_repl' and 'osd'
+                - counter names are: 'successful_scrubs_elapsed' and 'stat_bytes'
+
+          */
+	  auto type = state->perf_counters.types[counter_name_with_labels];
+
+	  // create a vector of labels i.e [(level, shallow), (pooltype, replicated)]
+	  perf_counter_label_pairs key_labels;
+	  auto labels =
+	      ceph::perf_counters::key_labels(counter_name_with_labels);
+	  std::copy_if(
+	      labels.begin(), labels.end(), std::back_inserter(key_labels),
+	      [](const auto &label) { return !label.first.empty(); });
+
+	  // Extract the key names from the counter path, these key names form
+	  // the main object section for their counters
+	  string key_name_without_counter;
+	  if (key_labels.empty()) {
+	    size_t pos = counter_name_with_labels.rfind('.');
+	    key_name_without_counter = counter_name_with_labels.substr(0, pos);
+	    key_name = key_name_without_counter;  // key_name, osd
+	  } else {
+	    // key_name, osd_scrub_sh_repl
+	    key_name = ceph::perf_counters::key_name(counter_name_with_labels);
+	  }
+
+	  /*
+            Construct a schema in the following format
+            {
+              "osd": [
+                {
+                  "labels": {},
+                  "counters":{
+                    "stat_byte": {
+                      "description": "",
+                      "nick": "",
+                      ...
+                    }
+                  }
+                }
+              ],
+              "osd_scrub_sh_repl":[
+                {
+                  "labels": {                         <---- 'label' section
+                    "level": "shallow",
+                    "pooltype": "replicated"
+                  },
+                  "counters":{                        <---- 'counters' section
+                    "successful_scrubs_elapsed":{     <---- 'sub counter' section
+                      "description": "",
+                      "nick": "",
+                      ...
+                    }
+                  }
+                }                                     <---- 'counter object' close
+              ]
+            }
+          */
+
+	  if (prev_key_name != key_name) {
+	    if (!prev_key_name.empty()) {
+	      f.close_section();  // close 'counters'
+	      f.close_section();  // close 'counter object' section
+	    }
+	    prev_key_name = key_name;
+	    prev_key_labels = key_labels;
+	    array_section.emplace(f, key_name);
+	    dump_counter_with_labels(&f, key_labels, type);
+	  } else if (
+	      prev_key_name == key_name && prev_key_labels == key_labels) {
+	    dump_sub_counter_information(&f, type);
+	  } else if (
+	      prev_key_name == key_name && prev_key_labels != key_labels) {
+	    f.close_section();	// close previous 'counters' section
+	    f.close_section();	// close previous counter object section
+	    dump_counter_with_labels(&f, key_labels, type);
+	  } else {
+	    dout(4)
+		<< fmt::format(
+		       "{} unable to create perf schema, not a valid condition",
+		       __func__)
+		<< dendl;
+	  }
+	}
+	f.close_section();  // close 'counters'
+	f.close_section();  // close 'counter object' section
+      });
+    }
+  } else {
+    dout(4) << fmt::format(
+		   "{}: No daemon state found for  {}.{}", __func__, svc_type,
+		   svc_id)
+	    << dendl;
+  }
+  return f.get();
+}
+
 PyObject* ActivePyModules::get_rocksdb_version()
 {
   std::string version = std::to_string(ROCKSDB_MAJOR) + "." +
