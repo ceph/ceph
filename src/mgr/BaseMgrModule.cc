@@ -1485,7 +1485,7 @@ PyMethodDef BaseMgrModule_methods[] = {
     "Get a performance counter"},
 
   {"_ceph_get_latest_unlabeled_counter", (PyCFunction)get_latest_unlabeled_counter, METH_VARARGS,
-    "Get the latest performance counter"},
+    "Fetch (or get) the latest (or updated) value of an unlabeled counter"},
 
   {"_ceph_get_unlabeled_perf_schema", (PyCFunction)get_unlabeled_perf_schema, METH_VARARGS,
     "Get the unlabeled performance counter schema"},

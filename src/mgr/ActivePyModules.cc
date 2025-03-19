@@ -19,6 +19,7 @@
 #include <rocksdb/version.h>
 
 #include "common/errno.h"
+#include "common/perf_counters_key.h"
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
@@ -964,8 +965,17 @@ PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
         f.open_object_section(key.c_str());
         for (auto ctr_inst_iter : state->perf_counters.instances) {
           const auto &counter_name = ctr_inst_iter.first;
-          f.open_object_section(counter_name.c_str());
-          auto type = state->perf_counters.types[counter_name];
+
+	  // Ignore labeled counters. The perf schema format below can not
+	  // accomodate counters with labels. A new representation format is
+	  // requried to do support this.
+	  auto labels = ceph::perf_counters::key_labels(counter_name);
+	  if (labels.begin() != labels.end()) {
+	    continue;
+	  }
+
+	  f.open_object_section(counter_name.c_str());
+	  auto type = state->perf_counters.types[counter_name];
           f.dump_string("description", type.description);
           if (!type.nick.empty()) {
             f.dump_string("nick", type.nick);
