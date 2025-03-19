@@ -15,6 +15,34 @@ class SSLConfigException(Exception):
     pass
 
 
+def extract_ips_and_fqdns_from_cert(cert_pem: str) -> Tuple[List[str], List[str]]:
+    """
+    Extracts lists of IP addresses and FQDNs (DNS names) from the SAN (Subject Alternative Name) extension of a certificate.
+
+    :param cert_pem: The certificate in PEM format.
+    :return: A tuple containing two lists:
+             - List of IP addresses as strings.
+             - List of FQDNs (DNS names) as strings.
+    """
+    try:
+        # Load the certificate
+        certificate = x509.load_pem_x509_certificate(cert_pem.encode('utf-8'), backend=default_backend())
+
+        try:
+            san_extension = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
+            san = san_extension.value
+            # Extract IP addresses and FQDNs (DNS Names)
+            ip_addresses = [str(ip) for ip in san.get_values_for_type(x509.IPAddress)]
+            fqdns = [str(dns).lower() for dns in san.get_values_for_type(x509.DNSName)]
+            return sorted(ip_addresses), sorted(fqdns)
+        except x509.ExtensionNotFound:
+            # SAN extension not found, return empty lists
+            return [], []
+
+    except Exception as e:
+        raise ValueError(f"Failed to extract IPs and FQDNs from certificate: {e}")
+
+
 def parse_extensions(cert: Certificate) -> Dict:
     """Parse extensions into a readable format."""
     parsed_extensions = {}
@@ -204,11 +232,11 @@ class SSLCerts:
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(public_key)
 
-        san_list: List[x509.GeneralName] = [x509.DNSName(host) for host in hosts]
+        san_list: List[x509.GeneralName] = [x509.DNSName(host.lower()) for host in hosts]
         if valid_ips:
             san_list.extend(ips)
         if custom_san_list:
-            san_list.extend([x509.DNSName(n) for n in custom_san_list])
+            san_list.extend([x509.DNSName(n.lower()) for n in custom_san_list])
 
         builder = builder.add_extension(
             x509.SubjectAlternativeName(
