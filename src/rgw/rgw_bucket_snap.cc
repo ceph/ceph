@@ -65,7 +65,13 @@ int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info,
   }
 
   rgw_bucket_snap snap;
-  snap.id = cur_snap++;
+
+  if (!cur_snap.is_set()) {
+    cur_snap = rgw_bucket_snap_id(rgw_bucket_snap_id::SNAP_MIN);
+    snap.id = cur_snap;
+  } else {
+    snap.id = cur_snap++;
+  }
   snap.info = info;
 
   snaps[snap.id] = snap;

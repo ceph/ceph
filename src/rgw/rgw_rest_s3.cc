@@ -1832,7 +1832,11 @@ static int parse_snap_range(const string& s, rgw_bucket_snap_range *result, stri
       return r;
     }
     result->end = snap_id;
-    result->start.init(snap_id.snap_id - 1);
+    if (snap_id.snap_id == 0) {
+      result->start = snap_id;
+    } else {
+      result->start.init(snap_id.snap_id - 1);
+    }
     return 0;
   }
 
