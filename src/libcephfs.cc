@@ -322,7 +322,15 @@ public:
 
   int chdir(const char *to, const UserPerm& perms)
   {
-    return client->chdir(to, cwd, perms);
+    int rc = client->chdir(to, perms);
+    if (rc == 0) {
+      /* Current API requires "cwd" to be refreshed after every chdir so that
+       * getcwd on an unlinked cwd will still return the old path. Note:
+       * Client::getcwd now returns an error but leaves the "cwd" string
+       * unmodified for this purpose. */
+      client->getcwd(cwd, perms);
+    }
+    return rc;
   }
 
   CephContext *get_ceph_context() const {
@@ -516,6 +524,55 @@ extern "C" int ceph_set_mount_timeout(struct ceph_mount_info *cmount, uint32_t t
   auto timeout_str = stringify(timeout);
   return ceph_conf_set(cmount, "client_mount_timeout", timeout_str.c_str());
 }
+
+class CommandCContext : public Context {
+public:
+  CommandCContext(libcephfs_c_completion_t c, void* ud) : c(c), ud(ud) {}
+
+  void finish(int rc) {
+    c(rc, outbl.c_str(), outbl.length(), outs.c_str(), outs.size(), ud);
+  }
+
+  libcephfs_c_completion_t c;
+  void* ud;
+  bufferlist outbl;
+  std::string outs;
+};
+
+extern "C" int ceph_mds_command2(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    int one_shot,
+    libcephfs_c_completion_t c,
+    void* ud)
+{
+  bufferlist inbl;
+  std::vector<string> cmdv;
+
+  if (!cmount->is_initialized()) {
+    return -ENOTCONN;
+  }
+
+  // Construct inputs
+  for (size_t i = 0; i < cmdlen; ++i) {
+    cmdv.push_back(cmd[i]);
+  }
+  inbl.append(inbuf, inbuflen);
+
+  // Issue remote command
+  auto* ctx = new CommandCContext(c, ud);
+  int r = cmount->get_client()->mds_command(mds_spec, cmdv, inbl, &ctx->outbl, &ctx->outs, ctx, one_shot);
+
+  if (r != 0) {
+    delete ctx;
+    return r;
+  }
+
+  return 0;
+}
+
 
 extern "C" int ceph_mds_command(struct ceph_mount_info *cmount,
     const char *mds_spec,
