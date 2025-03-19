@@ -537,6 +537,7 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_ATTACH_GROUP_POLICY:
   case RGW_OP_DETACH_GROUP_POLICY:
   case RGW_OP_LIST_ATTACHED_GROUP_POLICIES:
+  case RGW_OP_CREATE_POLICY:
     return true;
   default:
     return false;
