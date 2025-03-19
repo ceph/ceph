@@ -53,11 +53,9 @@ seastar::future<> PGSplitting::start()
     auto pg_epoch = child_pg_info.second;
     children_pgids.insert(child_pg);
     // Map each child pg ID to a core
-    return shard_services.get_or_create_pg(child_pg).then([FNAME, child_pg]
-      (auto core) {
+    return shard_services.create_split_pg_mapping(child_pg, seastar::this_shard_id()).then(
+	[this, FNAME, child_pg, pg_epoch] (auto core) {
       DEBUG(" PG {} mapped to {}", child_pg.pgid, core);
-      return seastar::now();
-    }).then([this, FNAME, child_pg, pg_epoch] {
       DEBUG(" {} map epoch: {}", child_pg.pgid, pg_epoch);
       return shard_services.get_map(pg_epoch).then(
 	[this, child_pg] (auto&& map) {
