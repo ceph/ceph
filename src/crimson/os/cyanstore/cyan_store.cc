@@ -413,6 +413,33 @@ auto CyanStore::Shard::omap_get_values(
     std::make_tuple(true, std::move(values)));
 }
 
+auto CyanStore::Shard::omap_iterate(
+  CollectionRef ch,
+  const ghobject_t &oid,
+  ObjectStore::omap_iter_seek_t start_from,
+  omap_iterate_cb_t callback,
+  uint32_t op_flags)
+  -> CyanStore::Shard::read_errorator::future<ObjectStore::omap_iter_ret_t>
+{
+  auto c = static_cast<Collection*>(ch.get());
+  logger().debug("{} {} {}", __func__, c->get_cid(), oid);
+  auto o = c->get_object(oid);
+  if (!o) {
+    return crimson::ct_error::enoent::make();
+  }
+  auto ret = ObjectStore::omap_iter_ret_t::NEXT;
+  auto i = (start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND) ?
+            o->omap.lower_bound(start_from.seek_position) :
+            o->omap.upper_bound(start_from.seek_position);
+  for (; i != o->omap.end(); ++i) {
+    ceph::bufferlist bl = i->second;
+    std::string result(bl.c_str(), bl.length());
+    ret = callback(i->first, result);
+    if (ret == ObjectStore::omap_iter_ret_t::STOP)
+      break;
+  }
+  return read_errorator::make_ready_future<ObjectStore::omap_iter_ret_t>(ret);
+}
 auto CyanStore::Shard::omap_get_header(
   CollectionRef ch,
   const ghobject_t& oid,

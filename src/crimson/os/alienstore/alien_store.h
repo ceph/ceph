@@ -81,6 +81,13 @@ public:
     uint64_t limit,
     uint32_t op_flags = 0) const final;
 
+  read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+    CollectionRef c,
+    const ghobject_t &oid,
+    ObjectStore::omap_iter_seek_t start_from,
+    omap_iterate_cb_t callback,
+    uint32_t op_flags = 0) final;
+
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_core_t>> list_collections() final;
