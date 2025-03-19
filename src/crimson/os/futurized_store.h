@@ -17,6 +17,7 @@
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
 #include "osd/osd_types.h"
+#include "os/ObjectStore.h"
 
 namespace ceph::os {
 class Transaction;
@@ -94,6 +95,37 @@ public:
       const std::optional<std::string> &start, ///< [in] start, empty for begin
       uint32_t op_flags = 0
       ) = 0; ///< @return <done, values> values.empty() only if done
+
+    /**
+     * Iterate over object map with user-provided callable
+     *
+     * Warning! f cannot block or perform IO and must not wait on a future.
+     *
+     * @param c collection
+     * @param oid object
+     * @param start_from where the iterator should point to at
+     *                   the beginning
+     * @param f callable that takes OMAP key and corresponding
+     *          value as string_views and controls iteration
+     *          by the return. It is executed for every object's
+     *          OMAP entry from `start_from` till end of the
+     *          object's OMAP or till the iteration is stopped
+     *          by `STOP`. Please note that if there is no such
+     *          entry, `visitor` will be called 0 times.
+     * @return omap_iter_ret_t on success
+     *         omap_iter_ret_t::STOP means omap_iterate() is stopped by f,
+     *         omap_iter_ret_t::NEXT means omap_iterate() reaches the end of omap tree
+     */
+    using omap_iterate_cb_t = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+    virtual read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+      CollectionRef c,   ///< [in] collection
+      const ghobject_t &oid, ///< [in] object
+      ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+      omap_iterate_cb_t callback,
+      ///< [in] the callback function for each OMAP entry after start_from till end of the OMAP or
+      /// till the iteration is stopped by `STOP`.
+      uint32_t op_flags = 0
+      ) = 0;
 
     virtual get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,

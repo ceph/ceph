@@ -465,6 +465,35 @@ auto AlienStore::omap_get_values(CollectionRef ch,
   });
 }
 
+AlienStore::read_errorator::future<ObjectStore::omap_iter_ret_t>
+AlienStore::omap_iterate(CollectionRef ch,
+                         const ghobject_t &oid,
+                         ObjectStore::omap_iter_seek_t start_from,
+                         omap_iterate_cb_t callback,
+                         uint32_t op_flags)
+{
+  logger().debug("{} with_start", __func__);
+  assert(tp);
+  return do_with_op_gate(oid, [ch, start_from, callback, this] (auto& oid) {
+    return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [ch, oid, start_from, callback, this] {
+      auto c = static_cast<AlienCollection*>(ch.get());
+      return store->omap_iterate(
+        c->collection, oid, start_from, callback);
+    }).then([] (int r)
+      -> read_errorator::future<ObjectStore::omap_iter_ret_t> {
+      if (r == -ENOENT) {
+        return crimson::ct_error::enoent::make();
+      } else {
+        if (r == 1) {
+          return read_errorator::make_ready_future<ObjectStore::omap_iter_ret_t>(ObjectStore::omap_iter_ret_t::STOP);
+        } else {
+          return read_errorator::make_ready_future<ObjectStore::omap_iter_ret_t>(ObjectStore::omap_iter_ret_t::NEXT);
+        }
+      }
+    });
+  });
+}
+
 seastar::future<> AlienStore::do_transaction_no_callbacks(
   CollectionRef ch,
   ceph::os::Transaction&& txn)
