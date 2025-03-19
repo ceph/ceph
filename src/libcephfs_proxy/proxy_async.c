@@ -26,7 +26,7 @@ static int32_t libcephfsd_cbk_nonblocking_rw(proxy_async_t *async,
 
 	info->result = cbk->ll_nonblocking_rw.res;
 
-	if ((size >= 0) && !info->write) {
+	if (!info->write) {
 		iov = info->iov;
 		count = info->iovcnt;
 		while (size > 0) {
