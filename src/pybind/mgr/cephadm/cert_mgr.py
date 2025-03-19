@@ -91,6 +91,7 @@ class CertMgr:
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
+    CEPHADM_SIGNED = 'cephadm-signed'
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -110,6 +111,19 @@ class CertMgr:
             TLSObjectScope.HOST: {},
             TLSObjectScope.GLOBAL: {},
         }
+
+    def self_signed_cert(self, service_name: str) -> str:
+        return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
+
+    def self_signed_key(self, service_name: str) -> str:
+        return f'{self.CEPHADM_SIGNED}_{service_name}_key'
+
+    def service_name_from_cert(self, cert_name: str) -> str:
+        prefix = f'{self.CEPHADM_SIGNED}_'
+        suffix = '_cert'
+        if cert_name.startswith(prefix) and cert_name.endswith(suffix):
+            return cert_name[len(prefix):-len(suffix)]
+        return 'unkown-service'
 
     def init_tlsobject_store(self) -> None:
         self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs)
@@ -137,6 +151,19 @@ class CertMgr:
 
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
+
+    def register_self_signed_cert_key_pair(self, service_name: str) -> None:
+        """
+        Registers a self-signed certificate/key for a given service under host scope.
+
+        :param service_name: The name of the service.
+        """
+        ss_cert_name = self.self_signed_cert(service_name)
+        ss_key_name = self.self_signed_key(service_name)
+        logger.info(f"redo: BEGIN registring self-signed for service '{service_name}' ({ss_cert_name}/{ss_key_name}).")
+        self.cert_store.add_entity(self.self_signed_cert(service_name), TLSObjectScope.HOST)
+        self.key_store.add_entity(self.self_signed_key(service_name), TLSObjectScope.HOST)
+        logger.info(f"redo: END registring self-signed for service '{service_name}' ({ss_cert_name}/{ss_key_name}).")
 
     def register_cert_key_pair(self, entity: str, cert_name: str, key_name: str, scope: TLSObjectScope) -> None:
         """
@@ -173,7 +200,8 @@ class CertMgr:
         if entity not in self.entities[scope]:
             self.entities[scope][entity] = {"certs": [], "keys": []}
 
-        self.entities[scope][entity][obj_type].append(obj_name)
+        if obj_name not in self.entities[scope][entity][obj_type]:
+            self.entities[scope][entity][obj_type].append(obj_name)
 
     def cert_to_entity(self, cert_name: str) -> str:
         """
@@ -182,11 +210,13 @@ class CertMgr:
         :param cert_name: The certificate or key name.
         :return: The entity name if found, otherwise None.
         """
+        if cert_name.startswith(self.CEPHADM_SIGNED):
+            return self.service_name_from_cert(cert_name)
         for scope_entities in self.entities.values():
             for entity, certs in scope_entities.items():
                 if cert_name in certs:
                     return entity
-        return 'unkown'
+        return 'unkown-service'
 
     def generate_cert(
         self,
@@ -204,17 +234,37 @@ class CertMgr:
         key_obj = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name, host))
         return key_obj.key if key_obj else None
 
+    def get_self_signed_cert_key_pair(self, service_name: str, hostname: str) -> Tuple[Optional[str], Optional[str]]:
+        logger.info(f"redo: getting self-signed cert/key for {service_name} from host '{hostname}'.")
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject(self.self_signed_cert(service_name), host=hostname))
+        key_obj = cast(PrivKey, self.key_store.get_tlsobject(self.self_signed_key(service_name), host=hostname))
+        cert = cert_obj.cert if cert_obj else None
+        key = key_obj.key if key_obj else None
+        return cert, key
+
     def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made)
 
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made)
 
+    def save_self_signed_cert_key_pair(self, service_name: str, cert: str, key: str, host: str) -> None:
+        logger.info(f"redo: saving cert/key for {service_name} for host '{host}'.")
+        ss_cert_name = self.self_signed_cert(service_name)
+        ss_key_name = self.self_signed_key(service_name)
+        self.cert_store.save_tlsobject(ss_cert_name, cert, host=host, user_made=False)
+        self.key_store.save_tlsobject(ss_key_name, key, host=host, user_made=False)
+
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.cert_store.rm_tlsobject(cert_name, service_name, host)
 
     def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.key_store.rm_tlsobject(key_name, service_name, host)
+
+    def rm_self_signed_cert_key_pair(self, service_name: str, host: str) -> None:
+        logger.info(f"redo: removing cert/key for {service_name} from host '{host}'.")
+        self.rm_cert(self.self_signed_cert(service_name), service_name, host)
+        self.rm_key(self.self_signed_key(service_name), service_name, host)
 
     def cert_ls(self, include_datails: bool = False) -> Dict:
         cert_objects: List = self.cert_store.list_tlsobjects()
@@ -275,6 +325,8 @@ class CertMgr:
         return entities
 
     def get_cert_scope(self, cert_name: str) -> TLSObjectScope:
+        if cert_name.startswith('cephadm-signed'):
+            return TLSObjectScope.HOST
         for scope, certificates in self.known_certs.items():
             if cert_name in certificates:
                 return scope
