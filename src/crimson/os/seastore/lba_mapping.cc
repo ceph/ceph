@@ -42,7 +42,7 @@ std::ostream &operator<<(std::ostream &out, const lba_mapping_list_t &rhs)
 using lba_manager::btree::LBALeafNode;
 
 get_child_ret_t<LBALeafNode, LogicalChildNode>
-LBAMapping::get_logical_extent(Transaction &t)
+LBAMapping::get_logical_extent(Transaction &t) const
 {
   assert(!is_null());
   ceph_assert(direct_cursor->is_valid());
