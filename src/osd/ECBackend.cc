@@ -1219,9 +1219,6 @@ void ECBackend::handle_sub_read_reply(
       if (complete.errors.contains(read.pg_shard)) continue;
 
       complete.processed_read_requests[shard].union_of(read.extents);
-      complete.processed_read_requests[shard].union_of(read.zero_pad);
-      if (read.zero_pad.empty())
-        continue;
 
       if (!rop.complete.contains(hoid) ||
         !complete.buffers_read.contains(shard)) {
@@ -1233,13 +1230,6 @@ void ECBackend::handle_sub_read_reply(
           rop.complete.emplace(hoid, read_result_t(&sinfo));
         }
       }
-      for (auto &&[off, len] : read.zero_pad) {
-        bufferlist bl;
-        bl.append_zero(len);
-        auto &buffers_read = complete.buffers_read;
-        buffers_read.insert_in_shard(shard, off, bl);
-      }
-      rop.debug_log.emplace_back(ECUtil::ZERO_DONE, read.pg_shard, read.zero_pad);
     }
   }
   for (auto &&[hoid, attr] : op.attrs_read) {

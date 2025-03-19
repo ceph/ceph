@@ -310,15 +310,13 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     }
 
     extents.align(CEPH_PAGE_SIZE);
-    if (zero_mask.contains(shard)) {
-      shard_read.zero_pad.intersection_of(extents, zero_mask.at(shard));
-    }
     if (read_mask.contains(shard)) {
       shard_read.extents.intersection_of(extents, read_mask.at(shard));
     }
 
-    ceph_assert(!shard_read.zero_pad.empty() || !shard_read.extents.empty());
-    read_request.shard_reads[shard_id] = std::move(shard_read);
+    if(!shard_read.extents.empty()) {
+      read_request.shard_reads[shard_id] = std::move(shard_read);
+    }
   }
 
   dout(20) << __func__ << " for_recovery: " << for_recovery
@@ -374,8 +372,7 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     // Ignore where shard has not been read at all.
     if (read_result.processed_read_requests.contains(shard_id)) {
       shard_read.extents.subtract(read_result.processed_read_requests.at(shard_id));
-      shard_read.zero_pad.subtract(read_result.processed_read_requests.at(shard_id));
-      do_erase = shard_read.extents.empty() && shard_read.zero_pad.empty();
+      do_erase = shard_read.extents.empty();
     }
 
     if (do_erase) {
@@ -447,11 +444,6 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop)
         rop.debug_log.emplace_back(ECUtil::READ_REQUEST, shard_read.pg_shard, shard_read.extents);
         empty = false;
       }
-      if (!shard_read.zero_pad.empty()) {
-        rop.debug_log.emplace_back(ECUtil::ZERO_REQUEST, shard_read.pg_shard, shard_read.zero_pad);
-        empty = false;
-      }
-
       ceph_assert(!empty);
       for (auto &[start, len] : shard_read.extents) {
 	messages[shard_read.pg_shard].to_read[hoid].push_back(
@@ -672,7 +664,6 @@ bool ec_align_t::operator==(const ec_align_t &other) const {
 bool ECCommon::shard_read_t::operator==(const shard_read_t &other) const {
   return extents == other.extents &&
     subchunk == other.subchunk &&
-    zero_pad == other.zero_pad &&
     pg_shard == other.pg_shard;
 }
 

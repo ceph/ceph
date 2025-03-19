@@ -992,9 +992,7 @@ std::ostream& operator<<(std::ostream& out, const log_entry_t& rhs)
 {
   switch(rhs.event) {
   case READ_REQUEST: out << "READ_REQUEST"; break;
-  case ZERO_REQUEST: out << "ZERO_REQUEST"; break;
   case READ_DONE: out << "READ_DONE"; break;
-  case ZERO_DONE: out << "ZERO_DONE"; break;
   case INJECT_EIO: out << "INJECT_EIO"; break;
   case CANCELLED: out << "CANCELLED"; break;
   case ERROR: out << "ERROR"; break;
