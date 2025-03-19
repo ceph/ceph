@@ -203,6 +203,13 @@ class SubvolumeBase(object):
         except EarmarkException:
             attrs["earmark"] = ''
 
+        try:
+            attrs["normalization"] = self.fs.getxattr(pathname,
+                                                      'ceph.dir.normalization'
+                                                      ).decode('utf-8')
+        except cephfs.NoData:
+            attrs["normalization"] = None
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -293,6 +300,13 @@ class SubvolumeBase(object):
         if earmark is not None:
             fs_earmark = CephFSVolumeEarmarking(self.fs, path)
             fs_earmark.set_earmark(earmark)
+
+        normalization = attrs.get("normalization")
+        if normalization is not None:
+            try:
+                self.fs.setxattr(path, "ceph.dir.normalization", normalization.encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
 
     def _resize(self, path, newsize, noshrink):
         try:
@@ -480,6 +494,13 @@ class SubvolumeBase(object):
         except EarmarkException:
             earmark = ''
 
+        try:
+            normalization = self.fs.getxattr(subvolpath,
+                                             'ceph.dir.normalization'
+                                             ).decode('utf-8')
+        except cephfs.NoData:
+            normalization = "none"
+
         subvol_info = {
                 'path': subvolpath,
                 'type': etype.value,
@@ -499,7 +520,9 @@ class SubvolumeBase(object):
                 'pool_namespace': pool_namespace,
                 'features': self.features,
                 'state': self.state.value,
-                'earmark': earmark}
+                'earmark': earmark,
+                'normalization': normalization,
+        }
 
         subvol_src_info = self._get_clone_source()
         if subvol_src_info:
