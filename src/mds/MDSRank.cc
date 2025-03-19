@@ -206,10 +206,6 @@ private:
     // Now everyone I'm interested in is expired
     mdlog->trim_expired_segments();
 
-    dout(5) << __func__ << ": trim complete, expire_pos/trim_pos is now "
-            << std::hex << mdlog->get_journaler()->get_expire_pos() << "/"
-            << mdlog->get_journaler()->get_trimmed_pos() << dendl;
-
     write_journal_head();
   }
 
@@ -237,6 +233,10 @@ private:
 
   void finish(int r) override {
     dout(20) << __func__ << ": r=" << r << dendl;
+
+    dout(5) << __func__ << ": trimming is complete; wait for journal head write. Journal expire_pos/trim_pos is now "
+            << std::hex << mdlog->get_journaler()->get_expire_pos() << "/"
+            << mdlog->get_journaler()->get_trimmed_pos() << dendl;
     on_finish->complete(r);
   }
 
