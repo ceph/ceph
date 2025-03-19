@@ -390,7 +390,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data->erase_after_ro_offset(aligned_size);
 
   for (auto && shard : op.missing_on_shards) {
-    if (read_mask.contains(shard)) {
+   if (read_mask.contains(shard) && op.returned_data->contains_shard(shard)) {
       ceph_assert(read_mask.at(shard).range_end() >=
         op.returned_data->get_extent_map(shard).get_end_off());
     }
