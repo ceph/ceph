@@ -81,7 +81,7 @@ class CephFSMount(object):
         self._netns_name = None
         self.nsid = -1
         if brxnet is None:
-            self.ceph_brx_net = '192.168.0.0/16'
+            self.ceph_brx_net = '192.168.144.0/20'
         else:
             self.ceph_brx_net = brxnet
 
