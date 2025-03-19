@@ -269,14 +269,9 @@ public:
     Transaction &t,
     laddr_t offset, extent_len_t length) final;
 
-  get_mappings_ret get_mappings(
-    Transaction &t,
-    laddr_list_t &&list) final;
-
   get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) final;
-
 
   struct alloc_mapping_info_t {
     laddr_t key = L_ADDR_NULL; // once assigned, the allocation to
