@@ -3164,10 +3164,13 @@ void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
   for (const auto & [shard, versionrange] : info.partial_writes_last_complete) {
     auto [fromversion, toversion] = versionrange;
     if (last_complete < fromversion) {
+      // It is possible that we need to rollback pwlc, this can happen if we attempt peering with an OSD missing
+      // but do not manage to activate (typically because of a wait upthru) before the missing OSD returns
       psdout(10) << "BILLPROCMASTERLOGa shard " << shard << " pwlc was " << versionrange << dendl;
       info.partial_writes_last_complete[shard] = std::pair(last_complete,last_complete);
+      // Assign the current epoch to the version number so that this is recognised as the newest pwlc update
+      info.partial_writes_last_complete[shard].second.epoch = get_osdmap_epoch();
       psdout(10) << "BILLPROCMASTERLOGa shard " << shard << " pwlc rolled back to " << info.partial_writes_last_complete[shard] << dendl;
-      ceph_assert(false); // FIXME: BILL - Don't think this should ever happen
     } else if (last_complete < toversion) {
       psdout(10) << "BILLPROCMASTERLOGb shard " << shard << " pwlc was " << versionrange << dendl;
       info.partial_writes_last_complete[shard].second = last_complete;
