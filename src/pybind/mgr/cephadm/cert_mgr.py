@@ -263,6 +263,13 @@ class CertMgr:
         self.cert_store.save_tlsobject(ss_cert_name, cert, host=host, user_made=False)
         self.key_store.save_tlsobject(ss_key_name, key, host=host, user_made=False)
 
+    def save_self_signed_cert_key_pair(self, service_name: str, cert: str, key: str, host: str) -> None:
+        logger.info(f"redo: saving cert/key for {service_name} for host '{host}'.")
+        ss_cert_name = self.self_signed_cert(service_name)
+        ss_key_name = self.self_signed_key(service_name)
+        self.cert_store.save_tlsobject(ss_cert_name, cert, host=host, user_made=False)
+        self.key_store.save_tlsobject(ss_key_name, key, host=host, user_made=False)
+
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         self.cert_store.rm_tlsobject(cert_name, service_name, host)
 
