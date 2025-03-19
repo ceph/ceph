@@ -1,9 +1,9 @@
 tasks:
 - ceph-fuse:
     client.0:
-      client_feature_range: "[0-13],[15-21]"
+      client_feature_range: "14,22"
     client.1:
-      client_feature_range: "[0-13],[15-21]"
+      client_feature_range: "14,22"
 - print: "**** done client"
 - workunit:
     clients:
