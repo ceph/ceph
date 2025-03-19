@@ -198,6 +198,7 @@ static const actpair actpairs[] =
  { "iam:GenerateServiceLastAccessedDetails", iamGenerateServiceLastAccessedDetails},
  { "iam:SimulateCustomPolicy", iamSimulateCustomPolicy},
  { "iam:SimulatePrincipalPolicy", iamSimulatePrincipalPolicy},
+ { "iam:CreatePolicy", iamCreatePolicy},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
