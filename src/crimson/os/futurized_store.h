@@ -17,6 +17,7 @@
 #include "include/buffer_fwd.h"
 #include "include/uuid.h"
 #include "osd/osd_types.h"
+#include "os/ObjectStore.h"
 
 namespace ceph::os {
 class Transaction;
@@ -94,6 +95,14 @@ public:
       const std::optional<std::string> &start, ///< [in] start, empty for begin
       uint32_t op_flags = 0
       ) = 0; ///< @return <done, values> values.empty() only if done
+
+    virtual read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+      CollectionRef c,   ///< [in] collection
+      const ghobject_t &oid, ///< [in] object
+      const ObjectStore::omap_iter_seek_t &start_from, ///< [in] where the iterator should point to at the beginning
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> &f,
+      uint32_t op_flags = 0
+      ) = 0;
 
     virtual get_attr_errorator::future<bufferlist> omap_get_header(
       CollectionRef c,
