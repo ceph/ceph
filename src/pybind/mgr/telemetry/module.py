@@ -986,8 +986,8 @@ class Module(MgrModule):
             res[anon_host][anon_devid] = m
         return res
 
-    def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
-        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+    def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
+        data = self.get_unlabeled_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
         else:
@@ -1203,22 +1203,22 @@ class Module(MgrModule):
                 rbytes = 0
                 rsnaps = 0
                 for gid, mds in fs['info'].items():
-                    num_sessions += self.get_latest('mds', mds['name'],
+                    num_sessions += self.get_unlabeled_counter_latest('mds', mds['name'],
                                                     'mds_sessions.session_count')
-                    cached_ino += self.get_latest('mds', mds['name'],
+                    cached_ino += self.get_unlabeled_counter_latest('mds', mds['name'],
                                                   'mds_mem.ino')
-                    cached_dn += self.get_latest('mds', mds['name'],
+                    cached_dn += self.get_unlabeled_counter_latest('mds', mds['name'],
                                                  'mds_mem.dn')
-                    cached_cap += self.get_latest('mds', mds['name'],
+                    cached_cap += self.get_unlabeled_counter_latest('mds', mds['name'],
                                                   'mds_mem.cap')
-                    subtrees += self.get_latest('mds', mds['name'],
+                    subtrees += self.get_unlabeled_counter_latest('mds', mds['name'],
                                                 'mds.subtrees')
                     if mds['rank'] == 0:
-                        rfiles = self.get_latest('mds', mds['name'],
+                        rfiles = self.get_unlabeled_counter_latest('mds', mds['name'],
                                                  'mds.root_rfiles')
-                        rbytes = self.get_latest('mds', mds['name'],
+                        rbytes = self.get_unlabeled_counter_latest('mds', mds['name'],
                                                  'mds.root_rbytes')
-                        rsnaps = self.get_latest('mds', mds['name'],
+                        rsnaps = self.get_unlabeled_counter_latest('mds', mds['name'],
                                                  'mds.root_rsnaps')
                 report['fs']['filesystems'].append({  # type: ignore
                     'max_mds': fs['max_mds'],

@@ -225,7 +225,7 @@ class Module(MgrModule):
         for osd in osd_map["osds"]:
             osd['stats'] = {}
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
-                osd['stats'][s.split('.')[1]] = self.get_latest('osd', str(osd["osd"]), s)
+                osd['stats'][s.split('.')[1]] = self.get_unlabeled_counter_latest('osd', str(osd["osd"]), s)
 
     def _config_dump(self):
         """Report cluster configuration

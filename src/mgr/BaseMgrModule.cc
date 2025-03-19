@@ -640,44 +640,44 @@ ceph_get_context(BaseMgrModule *self)
 }
 
 static PyObject*
-get_counter(BaseMgrModule *self, PyObject *args)
+get_unlabeled_counter(BaseMgrModule *self, PyObject *args)
 {
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
+  if (!PyArg_ParseTuple(args, "sss:get_unlabeled_counter", &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
-  return self->py_modules->get_counter_python(
+  return self->py_modules->get_unlabeled_counter_python(
       svc_name, svc_id, counter_path);
 }
 
 static PyObject*
-get_latest_counter(BaseMgrModule *self, PyObject *args)
+get_latest_unlabeled_counter(BaseMgrModule *self, PyObject *args)
 {
   char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
+  if (!PyArg_ParseTuple(args, "sss:get_latest_unlabeled_counter", &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
-  return self->py_modules->get_latest_counter_python(
+  return self->py_modules->get_latest_unlabeled_counter_python(
       svc_name, svc_id, counter_path);
 }
 
 static PyObject*
-get_perf_schema(BaseMgrModule *self, PyObject *args)
+get_unlabeled_perf_schema(BaseMgrModule *self, PyObject *args)
 {
   char *type_str = nullptr;
   char *svc_id = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:get_perf_schema", &type_str,
+  if (!PyArg_ParseTuple(args, "ss:get_unlabeled_perf_schema", &type_str,
                                                     &svc_id)) {
     return nullptr;
   }
 
-  return self->py_modules->get_perf_schema_python(type_str, svc_id);
+  return self->py_modules->get_unlabeled_perf_schema_python(type_str, svc_id);
 }
 
 static PyObject*
@@ -1481,14 +1481,14 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_set_store", (PyCFunction)ceph_store_set, METH_VARARGS,
    "Set a stored field"},
 
-  {"_ceph_get_counter", (PyCFunction)get_counter, METH_VARARGS,
+  {"_ceph_get_unlabeled_counter", (PyCFunction)get_unlabeled_counter, METH_VARARGS,
     "Get a performance counter"},
 
-  {"_ceph_get_latest_counter", (PyCFunction)get_latest_counter, METH_VARARGS,
+  {"_ceph_get_latest_unlabeled_counter", (PyCFunction)get_latest_unlabeled_counter, METH_VARARGS,
     "Get the latest performance counter"},
 
-  {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
-    "Get the performance counter schema"},
+  {"_ceph_get_unlabeled_perf_schema", (PyCFunction)get_unlabeled_perf_schema, METH_VARARGS,
+    "Get the unlabeled performance counter schema"},
 
   {"_ceph_get_rocksdb_version", (PyCFunction)ceph_get_rocksdb_version, METH_NOARGS,
     "Get the current RocksDB version number"},

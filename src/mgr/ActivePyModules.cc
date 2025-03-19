@@ -839,7 +839,7 @@ void ActivePyModules::_refresh_config_map()
   }
 }
 
-PyObject* ActivePyModules::with_perf_counters(
+PyObject* ActivePyModules::with_unlabled_perf_counters(
     std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
     const std::string &svc_id,
@@ -876,7 +876,7 @@ PyObject* ActivePyModules::with_perf_counters(
   return f.get();
 }
 
-PyObject* ActivePyModules::get_counter_python(
+PyObject* ActivePyModules::get_unlabeled_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path)
@@ -905,10 +905,10 @@ PyObject* ActivePyModules::get_counter_python(
       }
     }
   };
-  return with_perf_counters(extract_counters, svc_name, svc_id, path);
+  return with_unlabled_perf_counters(extract_counters, svc_name, svc_id, path);
 }
 
-PyObject* ActivePyModules::get_latest_counter_python(
+PyObject* ActivePyModules::get_latest_unlabeled_counter_python(
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path)
@@ -929,10 +929,10 @@ PyObject* ActivePyModules::get_latest_counter_python(
       f.dump_unsigned("v", datapoint.v);
     }
   };
-  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path);
+  return with_unlabled_perf_counters(extract_latest_counters, svc_name, svc_id, path);
 }
 
-PyObject* ActivePyModules::get_perf_schema_python(
+PyObject* ActivePyModules::get_unlabeled_perf_schema_python(
     const std::string &svc_type,
     const std::string &svc_id)
 {
