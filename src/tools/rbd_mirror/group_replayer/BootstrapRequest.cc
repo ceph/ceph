@@ -1258,67 +1258,6 @@ void BootstrapRequest<I>::handle_create_local_mirror_group(int r) {
     return;
   }
 
-  create_local_non_primary_group_snapshot();
-}
-
-template <typename I>
-void BootstrapRequest<I>::create_local_non_primary_group_snapshot() {
-  dout(10) << dendl;
-
-  std::string remote_fsid;
-  librados::Rados remote_rados(m_remote_io_ctx);
-  int r = remote_rados.cluster_fsid(&remote_fsid);
-  if (r < 0) {
-    derr << "failed to retrieve remote cluster fsid: " << cpp_strerror(r)
-	 << dendl;
-    return;
-  }
-
-  RemotePoolMeta remote_pool_meta;
-  r = m_pool_meta_cache->get_remote_pool_meta(remote_fsid,
-                                              m_remote_io_ctx.get_id(),
-                                              &remote_pool_meta);
-  if (r < 0 || remote_pool_meta.mirror_peer_uuid.empty()) {
-    derr << "failed to retrieve mirror peer uuid from remote image pool"
-         << dendl;
-    finish(r < 0 ? r : -EINVAL);
-    return;
-  }
-
-  librados::ObjectWriteOperation op;
-  std::string group_snap_id = librbd::util::generate_image_id(m_local_io_ctx);
-  cls::rbd::GroupSnapshot group_snap{
-    group_snap_id,
-    cls::rbd::GroupSnapshotNamespaceMirror{
-      cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
-      {}, remote_pool_meta.mirror_peer_uuid, {}},
-      prepare_non_primary_mirror_snap_name(m_global_group_id, group_snap_id),
-      cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  librbd::cls_client::group_snap_set(&op, group_snap);
-  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-  librbd::cls_client::group_snap_set(&op, group_snap);
-
-  auto comp = create_rados_callback<
-      BootstrapRequest<I>,
-      &BootstrapRequest<I>::handle_create_local_non_primary_group_snapshot>(this);
-
-  r = m_local_io_ctx.aio_operate(
-      librbd::util::group_header_name(*m_local_group_id), comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_create_local_non_primary_group_snapshot(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    derr << "error creating local non-primary group snapshot: "
-         << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
   notify_mirroring_watcher();
 }
 
