@@ -5,6 +5,12 @@
   and is now deprecated. If the NBD netlink interface is not supported by the
   kernel, then the mapping is retried using the legacy ioctl interface.
 
+* RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
+  users to clear all pg-upmap-primary mappings in the osdmap when desired.
+  Related trackers:
+   - https://tracker.ceph.com/issues/67179
+   - https://tracker.ceph.com/issues/66867
+
 >=18.2.4
 --------
 
