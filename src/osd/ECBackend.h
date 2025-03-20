@@ -60,12 +60,8 @@ public:
       PGBackend::RecoveryHandle *h
     );
 
-  bool _handle_message(
-    OpRequestRef op
-      );
-  bool can_handle_while_inactive(
-    OpRequestRef op
-      );
+  bool _handle_message(OpRequestRef op);
+  bool can_handle_while_inactive(OpRequestRef op);
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_committed(

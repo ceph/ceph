@@ -231,6 +231,12 @@ namespace ECUtil {
     int shard_count() { return map.size(); }
     extent_set &at(shard_id_t shard) { return map.at(shard); }
     const extent_set &at(shard_id_t shard) const { return map.at(shard); }
+    extent_set get(shard_id_t shard) const {
+      if (!map.contains(shard)) {
+        return extent_set();
+      }
+      return at(shard);
+    }
     extent_set &operator[] (shard_id_t shard) { return map[shard]; }
     bool operator== (shard_extent_set_t const &other) const {
       return map == other.map;

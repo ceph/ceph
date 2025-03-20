@@ -123,11 +123,11 @@ ECTransaction::WritePlanObj::WritePlanObj(
   const ECUtil::HashInfoRef &&shinfo) :
 hoid(hoid),
 will_write(sinfo.get_k_plus_m()),
+hinfo(hinfo),
+shinfo(shinfo),
 available_shards(available_shards),
 backfill_shards(backfill_shards),
 object_in_cache(object_in_cache),
-hinfo(hinfo),
-shinfo(shinfo),
 orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
 {
   extent_set ro_writes;

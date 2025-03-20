@@ -489,7 +489,9 @@ struct ECCommon {
           remote_shard_extent_map.insert(std::pair(oid, result));
         }
 
-        if (!--pending_cache_ops) pipeline->cache_ready(*this);
+        if (!--pending_cache_ops) {
+          pipeline->cache_ready(*this);
+        }
       }
 
       void print(std::ostream &os) const {
@@ -526,15 +528,16 @@ struct ECCommon {
     }
 
     using OpRef = std::shared_ptr<Op>;
-    using op_list = boost::intrusive::list<Op>;
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
     std::map<hobject_t, eversion_t> oid_to_version;
 
+    std::list<OpRef> waiting_commit;
     eversion_t completed_to;
     eversion_t committed_to;
     void start_rmw(OpRef op);
     void cache_ready(Op &op);
+    void try_finish_rmw();
     void finish_rmw(OpRef const &op);
 
     void on_change();
