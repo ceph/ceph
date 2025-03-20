@@ -2722,7 +2722,7 @@ test_resync_marker()
   # demote primary and request resync on secondary - check that group does not get deleted (due to resync request flag)
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}" 
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
-  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped'
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
 
   get_id_from_group_info ${secondary_cluster} ${pool}/${group0} group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated with no primary"
@@ -2743,9 +2743,7 @@ test_resync_marker()
 
   # demote - neither site is primary
   mirror_group_demote "${secondary_cluster}" "${pool}/${group0}" 
-
-  # wait for the demote snapshot to be synced before promoting the other site
-  wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
 
   # promote original primary again
   mirror_group_promote "${primary_cluster}" "${pool}/${group0}"
@@ -3054,7 +3052,7 @@ run_all_tests()
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
   run_test_all_scenarios test_enable_mirroring_when_duplicate_group_exists
   run_test_all_scenarios test_odf_failover_failback
-  #run_test_all_scenarios test_resync_marker
+  run_test_all_scenarios test_resync_marker
   #run_test_all_scenarios test_force_promote_before_initial_sync
 }
 
