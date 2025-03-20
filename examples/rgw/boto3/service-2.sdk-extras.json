@@ -88,6 +88,12 @@
                     "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
                     "location":"querystring",
                     "locationName":"allow-unordered"
+                },
+                "SnapRange": {
+                    "shape":"SnapRange",
+                    "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-range"
                 }
             }
         },
@@ -98,6 +104,62 @@
                     "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
                     "location":"querystring",
                     "locationName":"allow-unordered"
+                },
+                "SnapRange": {
+                    "shape":"SnapRange",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-range"
+                }
+            }
+        },
+        "GetObjectRequest": {
+            "members": {
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
+                }
+            }
+        },
+        "GetObjectAclRequest": {
+            "members": {
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
+                }
+            }
+        },
+        "GetObjectTaggingRequest": {
+            "members": {
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
+                }
+            }
+        },
+        "GetObjectAttributesRequest": {
+            "members": {
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
+                }
+            }
+        },
+        "HeadObjectRequest": {
+            "members": {
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
                 }
             }
         },
@@ -489,6 +551,7 @@
             ]
         },
         "BucketIndexNumShards":{"type":"integer"},
+        "SnapRange":{"type":"string"},
         "ListBucketSnapshotsRequest":{
             "type":"structure",
             "required":[ "Bucket" ],
