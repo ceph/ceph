@@ -270,12 +270,6 @@ void Replayer<I>::load_local_group_snapshots() {
 
     if (m_stop_requested) {
       return;
-    } else if (is_resync_requested()) {
-      m_stop_requested = true;
-      dout(10) << "local group resync requested" << dendl;
-      // send stop for Group Replayer
-      notify_group_listener_stop();
-      return;
     } else if (is_rename_requested()) {
       m_stop_requested = true;
       dout(10) << "remote group rename requested" << dendl;
@@ -378,22 +372,35 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   }
   m_in_flight_op_tracker.finish_op();
 
+  auto last_local_snap = m_local_group_snaps.rbegin();
+  auto last_remote_snap = m_remote_group_snaps.rbegin();
   if (r < 0) {  // may be remote group is deleted?
     derr << "error listing remote mirror group snapshots: " << cpp_strerror(r)
          << dendl;
     notify_group_listener_stop();
     return;
+  } else if (is_resync_requested()) {
+    dout(10) << "local group resync requested" << dendl;
+    auto last_remote_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &last_remote_snap->snapshot_namespace);
+    if (last_remote_snap_ns &&
+        last_remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+      m_stop_requested = true;
+      // send stop for Group Replayer
+      notify_group_listener_stop();
+      return;
+    }
+    dout(10) << "turns out remote is not primary, we cannot resync, will retry later"
+             << dendl;
   }
 
   if (!m_local_group_snaps.empty()) {
-    auto last_local_snap = m_local_group_snaps.rbegin();
     unlink_group_snapshots(last_local_snap->id);
     auto last_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &last_local_snap->snapshot_namespace);
     if (last_local_snap_ns &&
         last_local_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED &&
         !m_remote_group_snaps.empty()) {
-      auto last_remote_snap = m_remote_group_snaps.rbegin();
       if (last_local_snap->id == last_remote_snap->id) {
         m_stop_requested = true;
         notify_group_listener_stop();
