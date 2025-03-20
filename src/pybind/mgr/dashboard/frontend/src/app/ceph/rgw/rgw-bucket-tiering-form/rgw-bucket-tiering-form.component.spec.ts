@@ -62,6 +62,7 @@ describe('RgwBucketTieringFormComponent', () => {
 
   it('should call setLifecyclePolicy function', () => {
     component.ngOnInit();
+    component.bucket.tenant = '';
     component.tieringForm.setValue({
       name: 'test',
       storageClass: 'CLOUD',
@@ -80,7 +81,8 @@ describe('RgwBucketTieringFormComponent', () => {
     expect(setLifecycleSpy).toHaveBeenCalledWith(
       'bucket1',
       JSON.stringify(component.configuredLifecycle.LifecycleConfiguration),
-      'dashboard'
+      'dashboard',
+      component.bucket.tenant
     );
   });
 });
