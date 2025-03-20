@@ -31,7 +31,6 @@
 /* This file is soon going to be replaced (before next release), so we are going
  * to simply ignore all deprecated warnings.
  * */
-IGNORE_DEPRECATED
 
 //forward declaration
 struct ECSubWrite;
@@ -393,13 +392,12 @@ class ECBackend : public ECCommon {
       bool is_repair
     );
 
- public:
   PGBackend::Listener *parent;
   CephContext *cct;
   ECSwitch *switcher;
-  struct ReadPipeline read_pipeline;
-  struct RMWPipeline rmw_pipeline;
-  struct ECRecoveryBackend recovery_backend;
+  ReadPipeline read_pipeline;
+  RMWPipeline rmw_pipeline;
+  ECRecoveryBackend recovery_backend;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
 
@@ -531,5 +529,3 @@ class ECBackend : public ECCommon {
     return object_size_to_shard_size(logical_size, shard_id);
   }
 };
-
-END_IGNORE_DEPRECATED
