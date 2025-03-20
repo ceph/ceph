@@ -134,7 +134,7 @@ private:
 	  f->open_object_section("dev");
 	  f->dump_string("device", bluefs->get_device_name(dev));
 	  ceph_assert(bluefs->alloc[dev]);
-          auto total = bluefs->get_total(dev);
+          auto total = bluefs->get_block_device_size(dev);
           auto free = bluefs->get_free(dev);
           auto used = bluefs->get_used(dev);
 
@@ -480,15 +480,15 @@ void BlueFS::_shutdown_logger()
 void BlueFS::_update_logger_stats()
 {
   if (alloc[BDEV_WAL]) {
-    logger->set(l_bluefs_wal_total_bytes, _get_total(BDEV_WAL));
+    logger->set(l_bluefs_wal_total_bytes, _get_block_device_size(BDEV_WAL));
     logger->set(l_bluefs_wal_used_bytes, _get_used(BDEV_WAL));
   }
   if (alloc[BDEV_DB]) {
-    logger->set(l_bluefs_db_total_bytes, _get_total(BDEV_DB));
+    logger->set(l_bluefs_db_total_bytes, _get_block_device_size(BDEV_DB));
     logger->set(l_bluefs_db_used_bytes, _get_used(BDEV_DB));
   }
   if (alloc[BDEV_SLOW]) {
-    logger->set(l_bluefs_slow_total_bytes, _get_total(BDEV_SLOW));
+    logger->set(l_bluefs_slow_total_bytes, _get_block_device_size(BDEV_SLOW));
     logger->set(l_bluefs_slow_used_bytes, _get_used(BDEV_SLOW));
   }
 }
@@ -587,7 +587,7 @@ uint64_t BlueFS::_get_used(unsigned id) const
   if (is_shared_alloc(id)) {
     used = shared_alloc->bluefs_used;
   } else {
-    used = _get_total(id) - alloc[id]->get_free();
+    used = _get_block_device_size(id) - alloc[id]->get_free();
   }
   return used;
 }
@@ -599,15 +599,15 @@ uint64_t BlueFS::get_used(unsigned id)
   return _get_used(id);
 }
 
-uint64_t BlueFS::_get_total(unsigned id) const
+uint64_t BlueFS::_get_block_device_size(unsigned id) const
 {
   ceph_assert(id < bdev.size());
   return bdev[id] ? bdev[id]->get_size() : 0;
 }
 
-uint64_t BlueFS::get_total(unsigned id)
+uint64_t BlueFS::get_block_device_size(unsigned id)
 {
-  return _get_total(id);
+  return _get_block_device_size(id);
 }
 
 uint64_t BlueFS::get_free(unsigned id)
@@ -658,7 +658,7 @@ void BlueFS::dump_block_extents(ostream& out)
     if (!bdev[i] || !alloc[i]) {
       continue;
     }
-    auto total = get_total(i);
+    auto total = get_block_device_size(i);
     auto free = get_free(i);
 
     out << i << " : device size 0x" << std::hex << total
@@ -695,9 +695,9 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   if (vselector == nullptr) {
     vselector.reset(
       new OriginalVolumeSelector(
-        _get_total(BlueFS::BDEV_WAL) * 95 / 100,
-        _get_total(BlueFS::BDEV_DB) * 95 / 100,
-        _get_total(BlueFS::BDEV_SLOW) * 95 / 100));
+        _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
   }
 
   _init_logger();
@@ -816,7 +816,7 @@ void BlueFS::_init_alloc()
         // isn't aligned with recommended alloc unit.
         // Final decision whether locked tail to be maintained is made after
         // BlueFS replay depending on existing allocations.
-        uint64_t size0 = _get_total(id);
+        uint64_t size0 = _get_block_device_size(id);
         uint64_t size = size0 - reserved;
         size = p2align(size, alloc_size[id]) + reserved;
         if (size < size0) {
@@ -839,7 +839,7 @@ void BlueFS::_init_alloc()
 				    bdev[id]->get_size(),
 				    bdev[id]->get_block_size(),
 				    name);
-      uint64_t free_len = locked_offs ? locked_offs : _get_total(id) - reserved;
+      uint64_t free_len = locked_offs ? locked_offs : _get_block_device_size(id) - reserved;
       alloc[id]->init_add_free(reserved, free_len);
     }
   }
@@ -1050,9 +1050,9 @@ int BlueFS::mount()
   if (vselector == nullptr) {
     vselector.reset(
       new OriginalVolumeSelector(
-        _get_total(BlueFS::BDEV_WAL) * 95 / 100,
-        _get_total(BlueFS::BDEV_DB) * 95 / 100,
-        _get_total(BlueFS::BDEV_SLOW) * 95 / 100));
+        _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
   }
 
   _init_alloc();
