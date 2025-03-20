@@ -5443,7 +5443,16 @@ void RGWDeleteObj::execute(optional_yield y)
     bool null_verid;
     {
       int state_loaded = -1;
-      bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
+
+      // load object attrs to check for object lock
+      op_ret = s->object->get_obj_attrs(y, this);
+      if (op_ret < 0) {
+        ldpp_dout(this, 0) << "ERROR: failed to get obj attrs obj=" << s->object << " ret=" << op_ret << dendl;
+        return;
+      }
+
+      bool check_obj_lock = s->object->get_attrs().count(RGW_ATTR_OBJECT_RETENTION) > 0 ||
+                            s->object->get_attrs().count(RGW_ATTR_OBJECT_LEGAL_HOLD) > 0;
       null_verid = (s->object->get_instance() == "null");
 
       op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
@@ -7380,8 +7389,19 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
 
   if (!rgw::sal::Object::empty(obj.get())) {
     int state_loaded = -1;
-    bool check_obj_lock = obj->have_instance() && bucket->get_info().obj_lock_enabled();
-    const auto ret = state_loaded = obj->load_obj_state(dpp, y, true);
+
+    // load object attrs to check for object lock
+    int ret = obj->get_obj_attrs(y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to get obj attrs obj=" << obj << " ret=" << ret << dendl;
+      // Something went wrong.
+      send_partial_response(o, false, "", ret);
+      return;
+    }
+
+    bool check_obj_lock = obj->get_attrs().count(RGW_ATTR_OBJECT_RETENTION) > 0 ||
+                          obj->get_attrs().count(RGW_ATTR_OBJECT_LEGAL_HOLD) > 0;
+    ret = state_loaded = obj->load_obj_state(dpp, y, true);
 
     if (ret < 0) {
       if (ret == -ENOENT) {
