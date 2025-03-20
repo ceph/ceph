@@ -24,6 +24,8 @@
 #include "messages/MMDSTableRequest.h"
 #include "messages/MMDSMetrics.h"
 
+#include "events/ESubtreeMap.h"
+
 #include "mgr/MgrClient.h"
 
 #include "MDSDaemon.h"
@@ -90,7 +92,8 @@ private:
 
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
-    mdlog->start_new_segment();
+    auto *sle = mdcache->create_subtree_map();
+    mdlog->submit_entry(sle);
 
     Context *ctx = new LambdaContext([this](int r) {
         handle_flush_mdlog(r);
