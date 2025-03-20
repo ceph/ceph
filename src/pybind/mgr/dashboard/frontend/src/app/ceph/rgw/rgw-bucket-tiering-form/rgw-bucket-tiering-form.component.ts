@@ -55,7 +55,7 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
 
   ngOnInit() {
     this.rgwBucketService
-      .getLifecycle(this.bucket.bucket, this.bucket.owner)
+      .getLifecycle(this.bucket.bucket, this.bucket.owner, this.bucket.tenant)
       .subscribe((lifecycle) => {
         this.configuredLifecycle = lifecycle || { LifecycleConfiguration: { Rules: [] } };
         if (this.editing) {
@@ -219,7 +219,8 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
         .setLifecycle(
           this.bucket.bucket,
           JSON.stringify(this.configuredLifecycle.LifecycleConfiguration),
-          this.bucket.owner
+          this.bucket.owner,
+          this.bucket.tenant
         )
         .subscribe({
           next: () => {
@@ -244,7 +245,8 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
         .setLifecycle(
           this.bucket.bucket,
           JSON.stringify(this.configuredLifecycle.LifecycleConfiguration),
-          this.bucket.owner
+          this.bucket.owner,
+          this.bucket.tenant
         )
         .subscribe({
           next: () => {
