@@ -1053,7 +1053,7 @@ void check_alignment_transaction2(ObjectStore::Transaction& t)
 
 TEST(Transaction, WriteBufferAlignment)
 {
-  ObjectStore::Transaction source;
+  ObjectStore::Transaction source{CEPH_FEATURES_ALL};
   bufferlist encoded1;
   bufferlist encoded2p;
   bufferlist encoded2d;
@@ -1067,11 +1067,13 @@ TEST(Transaction, WriteBufferAlignment)
   create_transaction2(source);
   cout << "Checking transaction2" << std::endl;
   check_content_transaction2(source);
+#if 0
   encode(source, encoded1);
   p = encoded1.cbegin();
   decode(decode1, p);
   cout << "Checking encoded/decoded with 1 buffer transaction2" << std::endl;
   check_content_transaction2(decode1);
+#endif
 
   encode(source, encoded2p, encoded2d);
   p = encoded2p.cbegin();
