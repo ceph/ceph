@@ -1032,6 +1032,7 @@ add_executable(unittest_ceph_assert
   ceph_assert.cc)
 add_ceph_unittest(unittest_ceph_assert)
 target_link_libraries(unittest_ceph_assert ceph-common global)
+endif()
 
 find_package(benchmark QUIET)
 if (benchmark_FOUND)
@@ -1039,6 +1040,11 @@ if (benchmark_FOUND)
   bench_lrus.cc
   )
   target_link_libraries(bench_lrus ceph-common global-static benchmark::benchmark Boost::context)
+
+  add_executable(bench_secmem
+  bench_secmem.cc
+  )
+  target_link_libraries(bench_secmem ceph-common global-static benchmark::benchmark keyutils)
 else()
   message(STATUS "Google Benchmark not found. Skipping micro benchmark tests")
 endif()
