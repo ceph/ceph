@@ -5,7 +5,7 @@
           identifier="id"
           forceIdentifier="true"
           selectionType="single"
-          [hasDetails]="true"
+          [hasDetails]="false"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions">
@@ -27,6 +27,20 @@
                 i18n>CephFS</ng-container>
   <ng-container *ngIf="value.name==='RGW'"
                 i18n>Object Gateway</ng-container>
+</ng-template>
+
+<ng-template #protocolTpl
+             let-protocols="data.value">
+  <span *ngFor="let protocol of protocols">
+    <cds-tag size="md">NFSv{{protocol}}</cds-tag>
+  </span>
+</ng-template>
+
+<ng-template #transportTpl
+             let-transports="data.value">
+  <span *ngFor="let transport of transports">
+    <cds-tag size="md">{{transport}}</cds-tag>
+  </span>
 </ng-template>
 
 <ng-template #pathTmpl
