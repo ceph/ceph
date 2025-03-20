@@ -146,7 +146,7 @@ private:
    *    |  REMOVE_LOCAL_MIRROR_GROUP ----> CREATE_LOCAL_MIRROR_GROUP
    *    |     |                   (if stale)  |
    *    |     v                               v
-   *    |  REMOVE_LOCAL_GROUP              CREATE_LOCAL_NON_PRIMARY_GROUP_SNAPSHOT
+   *    |  REMOVE_LOCAL_GROUP              NOFTIFY_MIRRORING_WATCHER
    *    |     |        (if removing)          |
    *    |     v                               |
    *    |  REMOVE_LOCAL_GROUP_ID              |
@@ -268,9 +268,6 @@ private:
 
   void create_local_mirror_group();
   void handle_create_local_mirror_group(int r);
-
-  void create_local_non_primary_group_snapshot();
-  void handle_create_local_non_primary_group_snapshot(int r);
 
   void notify_mirroring_watcher();
   void handle_notify_mirroring_watcher(int r);
