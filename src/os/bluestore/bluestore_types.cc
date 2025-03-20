@@ -1427,7 +1427,7 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   onode1->expected_write_size = 7890;
   onode1->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP);
 
-  ceph::buffer::ptr buf1 = ceph::buffer::create(50);
+  ceph::buffer::ptr_rw buf1 = ceph::buffer::create(50);
   memset(buf1.c_str(), 0x42, 50);
   onode1->attrs["chaos_attr1"] = buf1;
 
@@ -1442,7 +1442,7 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   onode2->expected_write_size = 4321;
   onode2->set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
 
-  ceph::buffer::ptr buf2 = ceph::buffer::create(30);
+  ceph::buffer::ptr_rw buf2 = ceph::buffer::create(30);
   memset(buf2.c_str(), 0xAB, 30);
   onode2->attrs["glitch_attr"] = buf2;
 
@@ -1457,7 +1457,7 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   onode3->expected_write_size = 1;
   onode3->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
 
-  ceph::buffer::ptr buf3 = ceph::buffer::create(100);
+  ceph::buffer::ptr_rw buf3 = ceph::buffer::create(100);
   memset(buf3.c_str(), 0xFF, 100);
   onode3->attrs["maxed_out"] = buf3;
 
