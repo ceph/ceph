@@ -781,6 +781,14 @@ status()
         done
     done
 
+    echo "Dumping contents of $CMD_STDOUT"
+    cat "$CMD_STDOUT" || :
+    echo 
+
+    echo "Dumping contents of $CMD_STDERR"
+    cat "$CMD_STDERR" || :
+    echo 
+
     return ${ret}
 }
 
@@ -1588,7 +1596,7 @@ remove_snapshot()
     local image=$3
     local snap=$4
 
-    rbd --cluster ${cluster} snap rm ${pool}/${image}@${snap}
+    run_cmd "rbd --cluster ${cluster} snap rm ${pool}/${image}@${snap}"
 }
 
 rename_snapshot()
@@ -1601,6 +1609,43 @@ rename_snapshot()
 
     rbd --cluster ${cluster} snap rename ${pool}/${image}@${snap} \
         ${pool}/${image}@${new_snap}
+}
+
+get_snap_count()
+{
+    local cluster=$1
+    local image_spec=$2
+    local snap=$3
+    local -n _snap_count=$4
+    
+    run_cmd "rbd --cluster=${cluster} snap ls --all --format xml --pretty-format ${image_spec}"
+    if [ "${snap}" = '*' ]; then
+        _snap_count="$($XMLSTARLET sel -t -v "count(//snapshots/snapshot)" < "$CMD_STDOUT")"
+    else
+        _snap_count="$($XMLSTARLET sel -t -v "count(//snapshots/snapshot[name='${snap}'])" < "$CMD_STDOUT")"
+    fi
+}
+
+check_snap_doesnt_exist()
+{
+    local cluster=$1
+    local image_spec=$2
+    local snap=$3
+    local count
+
+    get_snap_count "${cluster}" "${image_spec}" "${snap}" count
+    test 0 = "${count}" || { fail "snap count = ${count}"; return 1; }
+}
+
+check_snap_exists()
+{
+    local cluster=$1
+    local image_spec=$2
+    local snap=$3
+    local count
+
+    get_snap_count "${cluster}" "${image_spec}" "${snap}" count
+    test 1 = "${count}" || { fail "snap count = ${count}"; return 1; }
 }
 
 purge_snapshots()
