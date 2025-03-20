@@ -350,13 +350,15 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data.emplace(std::move(buffers_read));
   extent_set buffer_superset = op.returned_data->get_extent_superset();
 
-  ECUtil::shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
-  sinfo.ro_size_to_zero_mask(op.recovery_info.size, zero_mask);
-
+  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+  sinfo.ro_size_to_read_mask(op.recovery_info.size, read_mask);
   ECUtil::shard_extent_set_t shard_want_to_read(sinfo.get_k_plus_m());
 
   for (auto &shard : op.missing_on_shards) {
-    shard_want_to_read[shard].insert(buffer_superset);
+    shard_want_to_read[shard].intersection_of(read_mask.get(shard), buffer_superset);
+    if (shard_want_to_read[shard].empty()) {
+      shard_want_to_read.erase(shard);
+    }
   }
 
   uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
@@ -367,9 +369,6 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data->insert_parity_buffers();
   r = op.returned_data->encode(ec_impl, NULL, 0);
   ceph_assert(r==0);
-
-  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
-  sinfo.ro_size_to_read_mask(aligned_size, read_mask);
 
   // Finally, we don't want to write any padding, so truncate the buffer
   // to remove it.
@@ -1126,9 +1125,7 @@ void ECBackend::handle_sub_write_reply(
   const ECSubWriteReply &ec_write_reply_op,
   const ZTracer::Trace &trace)
 {
-  map<ceph_tid_t, RMWPipeline::OpRef>::iterator i = rmw_pipeline.tid_to_op_map.find(ec_write_reply_op.tid);
-  ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
-  RMWPipeline::OpRef &op = i->second;
+  RMWPipeline::OpRef &op = rmw_pipeline.tid_to_op_map.at(ec_write_reply_op.tid);
   if (ec_write_reply_op.committed) {
     trace.event("sub write committed");
     ceph_assert(op->pending_commits > 0);
@@ -1138,14 +1135,6 @@ void ECBackend::handle_sub_write_reply(
     }
   }
 
-  if (op->pending_commits == 0 &&
-      op->on_all_commit &&
-      !op->pending_cache_ops) {
-    dout(10) << __func__ << " Calling on_all_commit on " << op << dendl;
-    op->on_all_commit->complete(0);
-    op->on_all_commit = 0;
-    op->trace.event("ec write all committed");
-  }
   if (cct->_conf->bluestore_debug_inject_read_err &&
       (op->pending_commits == 1) &&
       ECInject::test_write_error2(op->hoid)) {
@@ -1158,7 +1147,7 @@ void ECBackend::handle_sub_write_reply(
 
   if (op->pending_commits == 0)
   {
-    rmw_pipeline.finish_rmw(op);
+    rmw_pipeline.try_finish_rmw();
   }
 }
 
@@ -1549,7 +1538,7 @@ void ECBackend::submit_transaction(
     }
 
     uint64_t old_object_size = 0;
-      bool object_in_cache = false;
+    bool object_in_cache = false;
     if (rmw_pipeline.extent_cache.contains_object(oid)) {
       /* We have a valid extent cache for this object. If we need to read, we
        * need to behave as if the object is already the size projected by the

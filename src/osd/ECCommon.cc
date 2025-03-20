@@ -683,6 +683,8 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op)
   tid_to_op_map[op->tid] = op;
 
   op->pending_cache_ops = op->plan.plans.size();
+  waiting_commit.push_back(op);
+
   for (auto &plan : op->plan.plans) {
     ECExtentCache::OpRef cache_op = extent_cache.prepare(plan.hoid,
       plan.to_read,
@@ -861,9 +863,30 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
   }
 };
 
+void ECCommon::RMWPipeline::try_finish_rmw() {
+  while (waiting_commit.size() > 0) {
+    OpRef op = waiting_commit.front();
+
+    if (op->pending_commits != 0 || op->pending_cache_ops != 0) {
+      return;
+    }
+
+    waiting_commit.pop_front();
+    finish_rmw(op);
+  }
+}
+
 void ECCommon::RMWPipeline::finish_rmw(OpRef const &op)
 {
   dout(20) << __func__ << " op=" << *op << dendl;
+
+  if (op->on_all_commit) {
+    dout(10) << __func__ << " Calling on_all_commit on " << op << dendl;
+    op->on_all_commit->complete(0);
+    op->on_all_commit = nullptr;
+    op->trace.event("ec write all committed");
+  }
+
   if (op->pg_committed_to > completed_to)
     completed_to = op->pg_committed_to;
   if (op->version > committed_to)
@@ -907,6 +930,7 @@ void ECCommon::RMWPipeline::on_change()
   extent_cache.on_change();
   tid_to_op_map.clear();
   oid_to_version.clear();
+  waiting_commit.clear();
 }
 
 void ECCommon::RMWPipeline::on_change2() {
