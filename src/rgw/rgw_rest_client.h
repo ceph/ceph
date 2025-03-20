@@ -23,7 +23,7 @@ protected:
   size_t max_response; /* we need this as we don't stream out response */
   bufferlist response;
 
-  virtual int handle_header(const std::string& name, const std::string& val);
+  virtual int handle_header(const std::string& name, const std::string& val, bool *pause);
   void get_params_str(std::map<std::string, std::string>& extra_args, std::string& dest);
 
 public:
@@ -46,7 +46,7 @@ public:
       params = *_params;
   }
 
-  int receive_header(void *ptr, size_t len) override;
+  int receive_header(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
   int send_data(void *ptr, size_t len, bool* pause=nullptr) override;
 
@@ -100,6 +100,8 @@ public:
   const std::string& get_url() { return url; }
 };
 
+class RGWRESTStreamRWRequest;
+
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
 public:
     class ReceiveCB;
@@ -122,7 +124,7 @@ private:
 protected:
   bufferlist outbl;
 
-  int handle_header(const std::string& name, const std::string& val) override;
+  int handle_header(const std::string& name, const std::string& val, bool *pause) override;
 public:
   int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
@@ -137,6 +139,8 @@ public:
       virtual void set_extra_data_len(uint64_t len) {
         extra_data_len = len;
       }
+      virtual void set_in_stream_req(RGWRESTStreamRWRequest *req) {}
+      virtual void make_sse_s3_key(bool *pause) {}
   };
 
   RGWHTTPStreamRWRequest(CephContext *_cct, const std::string& _method, const std::string& _url,

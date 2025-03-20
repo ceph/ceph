@@ -3472,11 +3472,13 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   const DoutPrefixProvider *dpp;
   CephContext* cct;
-  rgw_obj obj;
+  rgw::sal::Driver* driver;
+  const rgw_obj& obj;
   rgw::sal::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
   bool try_etag_verify;
   rgw::putobj::etag_verifier_ptr etag_verifier;
+  std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::sal::ObjectProcessor *processor;
@@ -3487,22 +3489,30 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
   uint64_t data_len{0};
-  map<string, bufferlist> src_attrs;
+  rgw::sal::Attrs src_attrs;
+  rgw::sal::Attrs enc_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
+  RGWRESTStreamRWRequest *in_stream_req;
+  boost::asio::io_context& io_context;
   std::function<int(map<string, bufferlist>&)> attrs_handler;
 
 public:
   RGWRadosPutObj(const DoutPrefixProvider *dpp,
                  CephContext* cct,
+                 rgw::sal::Driver* driver,
+                 const rgw_obj& obj,
                  CompressorRef& plugin,
                  boost::optional<RGWPutObj_Compress>& compressor,
                  rgw::sal::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data,
+                 boost::asio::io_context& _io_context,
                  std::function<int(map<string, bufferlist>&)> _attrs_handler) :
                        dpp(dpp),
                        cct(cct),
+                       driver(driver),
+                       obj(obj),
                        filter(p),
                        compressor(compressor),
                        try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
@@ -3510,6 +3520,7 @@ public:
                        processor(p),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
+                       io_context(_io_context),
                        attrs_handler(_attrs_handler) {}
 
 
@@ -3668,13 +3679,55 @@ public:
     return filter->process(std::move(bl), lofs);
   }
 
+  void set_in_stream_req(RGWRESTStreamRWRequest *req) override {
+    in_stream_req = req;
+  }
+
+  void make_sse_s3_key(bool *pause) override {
+    if (pause) *pause = true; // xxx: could this race with the spawn? (i.e. pause is set to curl after the spawn)
+
+    boost::asio::spawn(io_context, [&](boost::asio::yield_context yield) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      int ret = driver->load_bucket(dpp, obj.bucket, &bucket, yield);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to load bucket info for bucket="
+                          << obj.bucket << " ret=" << ret << dendl;
+
+        in_stream_req->cancel();
+        return;
+      }
+
+      std::unique_ptr<BlockCrypt> block_crypt;
+      std::string err_msg;
+      ret = handle_sse_s3_encryption(dpp, cct, yield, bucket.get(), obj.key, &err_msg, enc_attrs, &block_crypt, nullptr);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to handle sse-s3 encryption for bucket="
+                          << obj.bucket << " key=" << obj.key << " ret=" << ret << " err_msg=" << err_msg << dendl;
+
+        in_stream_req->cancel();
+        return;
+      }
+
+      if (block_crypt != nullptr) {
+        encrypt.reset(new RGWPutObj_BlockEncrypt(dpp, cct, filter, std::move(block_crypt), yield));
+        filter = &*encrypt;
+      }
+
+      in_stream_req->unpause_receive();
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
+    });
+  }
+
   int flush() {
     return filter->process({}, data_len);
   }
 
   bufferlist& get_extra_data() { return extra_data_bl; }
 
-  map<string, bufferlist>& get_attrs() { return src_attrs; }
+  rgw::sal::Attrs& get_attrs() { return src_attrs; }
+
+  rgw::sal::Attrs& get_enc_attrs() { return enc_attrs; }
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
@@ -4342,7 +4395,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
   std::optional<rgw_user> override_owner;
 
-  RGWRadosPutObj cb(rctx.dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+  RGWRadosPutObj cb(rctx.dpp, cct, driver, dest_obj, plugin, compressor, &processor, progress_cb, progress_data, driver->get_io_context(),
                     [&](map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
 
@@ -4351,7 +4404,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                                                dest_bucket_info,
                                                dest_placement_rule,
                                                obj_attrs,
-					       &override_owner,
+                                               &override_owner,
                                                &ptail_rule);
                       if (ret < 0) {
                         ldpp_dout(rctx.dpp, 5) << "Aborting fetch: source " << fetched_obj
@@ -4418,6 +4471,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     if (ret < 0) {
       goto set_err_state;
     }
+
+    cb.set_in_stream_req(in_stream_req);
 
     ret = conn->complete_request(rctx.dpp, in_stream_req, &etag, &set_mtime,
                                  &accounted_size, nullptr, nullptr, rctx.y);
@@ -4554,6 +4609,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
     attrs = cb.get_attrs();
+  }
+
+  // merge enc attrs
+  for (auto& i : cb.get_enc_attrs()) {
+    attrs[i.first] = i.second;
   }
 
   if (copy_if_newer) {
@@ -5287,7 +5347,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   }
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
-  RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+  RGWRadosPutObj cb(dpp, cct, driver, dest_obj, plugin, compressor, &processor, progress_cb, progress_data, driver->get_io_context(),
                     [&](map<string, bufferlist> obj_attrs) {
                       // XXX: do we need filter() like in fetch_remote_obj() cb
                       dest_placement.inherit_from(dest_bucket_info.placement_rule);
