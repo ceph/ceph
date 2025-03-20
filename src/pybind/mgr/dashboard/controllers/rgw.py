@@ -726,13 +726,18 @@ class RgwBucket(RgwRESTController):
     @RESTController.Collection(method='PUT', path='/lifecycle')
     @allow_empty_body
     def set_lifecycle_policy(self, bucket_name: str = '', lifecycle: str = '', daemon_name=None,
-                             owner=None):
+                             owner=None, tenant=None):
+        owner = self._get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         if lifecycle == '{}':
             return self._delete_lifecycle(bucket_name, daemon_name, owner)
         return self._set_lifecycle(bucket_name, lifecycle, daemon_name, owner)
 
     @RESTController.Collection(method='GET', path='/lifecycle')
-    def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None):
+    def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None,
+                             tenant=None):
+        owner = self._get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         return self._get_lifecycle(bucket_name, daemon_name, owner)
 
     @Endpoint(method='GET', path='/ratelimit')
