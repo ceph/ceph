@@ -3147,6 +3147,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
       }
       break;
     }
+
     if (snap != snaps.rend()) {
       // Check for group membership match
       std::vector<cls::rbd::GroupImageSpec> rollback_images;
@@ -3225,7 +3226,12 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
       }
       ldout(cct, 5) << "successfully rollbacked to group snapshot: "
                     << snap->name << dendl;
-    } // Rollback to last good snapshot done
+      // Rollback to last good snapshot done
+    } else {
+      lderr(cct) << "failed to rollback, no initial group snapshot available"
+                 << dendl;
+      return -EINVAL;
+    }
   }
 
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
