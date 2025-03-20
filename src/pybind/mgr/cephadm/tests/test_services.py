@@ -4063,6 +4063,7 @@ class TestMgmtGateway:
                                              }
 
                                              upstream prometheus_servers {
+                                              ip_hash;
                                               server 192.168.100.100:9095;
                                               server 192.168.100.101:9095;
                                              }
@@ -4315,6 +4316,7 @@ class TestMgmtGateway:
                                              }
 
                                              upstream prometheus_servers {
+                                              ip_hash;
                                               server 192.168.100.100:9095;
                                               server 192.168.100.101:9095;
                                              }
