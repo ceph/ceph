@@ -170,7 +170,7 @@ public:
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
 
-    if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+    if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
       header.version = 3;
       encode(op_t, data, data);
     } else {

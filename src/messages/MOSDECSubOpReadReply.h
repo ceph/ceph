@@ -68,7 +68,7 @@ public:
     using ceph::encode;
     encode(pgid, payload);
     encode(map_epoch, payload);
-    if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+    if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
       header.version = 2;
       encode(op, payload);
     } else {
