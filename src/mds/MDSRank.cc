@@ -98,8 +98,7 @@ private:
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
     auto* sle = mdcache->create_subtree_map();
-    mdlog->submit_entry(sle);
-    seq = sle->get_seq();
+    seq = mdlog->submit_entry(sle);
 
     Context *ctx = new LambdaContext([this](int r) {
         handle_clear_mdlog(r);
