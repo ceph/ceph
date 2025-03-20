@@ -27,24 +27,22 @@
 #include "PGTransaction.h"
 
 namespace ECTransaction {
-  class WritePlanObj
-  {
-  public:
+class WritePlanObj {
+ public:
+  const hobject_t hoid;
+  std::optional<ECUtil::shard_extent_set_t> to_read;
+  ECUtil::shard_extent_set_t will_write;
+  const ECUtil::HashInfoRef hinfo;
+  const ECUtil::HashInfoRef shinfo;
+  const shard_id_set available_shards;
+  const shard_id_set backfill_shards;
+  const bool object_in_cache;
+  const uint64_t orig_size;
+  uint64_t projected_size;
+  bool invalidates_cache;
+  bool do_parity_delta_write;
 
-    const hobject_t hoid;
-    std::optional<ECUtil::shard_extent_set_t> to_read;
-    ECUtil::shard_extent_set_t will_write;
-    const ECUtil::HashInfoRef hinfo;
-    const ECUtil::HashInfoRef shinfo;
-    const shard_id_set available_shards;
-    const shard_id_set backfill_shards;
-    const bool object_in_cache;
-    const uint64_t orig_size;
-    uint64_t projected_size;
-    bool invalidates_cache;
-    bool do_parity_delta_write;
-
-    WritePlanObj(
+  WritePlanObj(
       const hobject_t &hoid,
       const PGTransaction::ObjectOperation &op,
       const ECUtil::stripe_info_t &sinfo,
@@ -55,32 +53,36 @@ namespace ECTransaction {
       const std::optional<object_info_t> &oi,
       const std::optional<object_info_t> &soi,
       const ECUtil::HashInfoRef &&hinfo,
-      const ECUtil::HashInfoRef &&shinfo);
+      const ECUtil::HashInfoRef &&shinfo
+    );
 
-    friend std::ostream& operator<<(std::ostream& lhs, const WritePlanObj& rhs);
-  };
+  friend std::ostream &operator<<(std::ostream &lhs, const WritePlanObj &rhs);
+};
 
-  struct WritePlan {
-    bool want_read;
-    std::list<WritePlanObj> plans;
-  };
-  std::ostream& operator<<(std::ostream& lhs, const ECTransaction::WritePlan& rhs);
-  std::ostream& operator<<(std::ostream& lhs, const WritePlanObj& rhs);
+struct WritePlan {
+  bool want_read;
+  std::list<WritePlanObj> plans;
+};
 
-  void generate_transactions(
-    PGTransaction* _t,
+std::ostream &operator<<(std::ostream &lhs, const ECTransaction::WritePlan &rhs
+  );
+std::ostream &operator<<(std::ostream &lhs, const WritePlanObj &rhs);
+
+void generate_transactions(
+    PGTransaction *_t,
     WritePlan &plan,
     ceph::ErasureCodeInterfaceRef &ec_impl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
     const std::map<hobject_t, ECUtil::shard_extent_map_t> &partial_extents,
     std::vector<pg_log_entry_t> &entries,
-    std::map<hobject_t, ECUtil::shard_extent_map_t>* written_map,
+    std::map<hobject_t, ECUtil::shard_extent_map_t> *written_map,
     shard_id_map<ceph::os::Transaction> *transactions,
     std::set<hobject_t> *temp_added,
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef& osdmap);
+    const OSDMapRef &osdmap
+  );
 };
 
 #endif
