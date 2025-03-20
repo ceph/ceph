@@ -606,11 +606,12 @@ public:
       const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
       const std::map<std::string, std::string> &peer_mirror_uuids_to_name,
       const MirrorDaemonServiceInfo &daemon_service_info,
-      at::Format::Formatter formatter)
+      at::Format::Formatter formatter, bool* saw_image)
     : ImageRequestBase(io_ctx, throttle, image_name),
       m_instance_ids(instance_ids), m_mirror_peers(mirror_peers),
       m_peer_mirror_uuids_to_name(peer_mirror_uuids_to_name),
-      m_daemon_service_info(daemon_service_info), m_formatter(formatter) {
+      m_daemon_service_info(daemon_service_info), m_formatter(formatter),
+      m_saw_image(saw_image) {
   }
 
 protected:
@@ -692,6 +693,7 @@ protected:
       }
       m_formatter->close_section(); // image
     } else {
+      *m_saw_image = true;
       std::cout << std::endl
                 << m_mirror_image_global_status.name << ":" << std::endl
   	        << "  global_id:   "
@@ -741,6 +743,7 @@ private:
   const std::map<std::string, std::string> &m_peer_mirror_uuids_to_name;
   const MirrorDaemonServiceInfo &m_daemon_service_info;
   at::Format::Formatter m_formatter;
+  bool *m_saw_image;
   std::string m_image_id;
   librbd::mirror_image_global_status_t m_mirror_image_global_status;
 };
@@ -1642,12 +1645,10 @@ int execute_status(const po::variables_map &vm,
       }
       formatter->close_section(); // daemons
     } else {
-      std::cout << std::endl << "DAEMONS" << std::endl;
-      if (mirror_services.empty()) {
-        std::cout << "  none" << std::endl;
-      }
+      std::cout << std::endl << "DAEMONS";
       for (auto& mirror_service : mirror_services) {
-        std::cout << "service " << mirror_service.service_id << ":"
+        std::cout << std::endl
+                  << "service " << mirror_service.service_id << ":"
                   << std::endl
                   << "  instance_id: " << mirror_service.instance_id
                   << std::endl
@@ -1660,7 +1661,9 @@ int execute_status(const po::variables_map &vm,
         if (!mirror_service.callouts.empty()) {
           std::cout << "  callouts: " << mirror_service.callouts << std::endl;
         }
-        std::cout << std::endl;
+      }
+      if (mirror_services.empty()) {
+        std::cout << std::endl << "  none" << std::endl;
       }
     }
 
@@ -1675,7 +1678,7 @@ int execute_status(const po::variables_map &vm,
     if (formatter != nullptr) {
       formatter->open_array_section("images");
     } else {
-      std::cout << "IMAGES";
+      std::cout << std::endl << "IMAGES";
     }
 
     std::map<std::string, std::string> instance_ids;
@@ -1702,13 +1705,18 @@ int execute_status(const po::variables_map &vm,
       start_image_id = ids.rbegin()->first;
     }
 
+    bool saw_image = false;
     ImageRequestGenerator<StatusImageRequest> generator(
       io_ctx, instance_ids, mirror_peers, peer_mirror_uuids_to_name,
-      daemon_service_info, formatter);
+      daemon_service_info, formatter, &saw_image);
     ret = generator.execute();
 
     if (formatter != nullptr) {
       formatter->close_section(); // images
+    } else {
+      if (saw_image == false) {
+        std::cout << std::endl << "  none" << std::endl;
+      }
     }
   }
 
