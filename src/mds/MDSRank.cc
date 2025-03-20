@@ -96,8 +96,8 @@ private:
 
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
-    auto sle = mdcache->create_subtree_map();
-    mdlog->submit_entry(sle);
+    auto* sle = mdcache->create_subtree_map();
+    [[maybe_unused]] LogSegment::seq_t seq = mdlog->submit_entry(sle);
 
     Context *ctx = new LambdaContext([this](int r) {
         handle_flush_mdlog(r);
