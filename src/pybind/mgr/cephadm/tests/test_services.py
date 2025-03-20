@@ -4037,7 +4037,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4285,7 +4285,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
