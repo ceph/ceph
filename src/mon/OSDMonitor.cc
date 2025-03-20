@@ -8240,6 +8240,30 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
   }
 
+  bool allow_ec_optimizations = false;
+  if (g_conf()->osd_pool_default_flag_ec_optimizations) {
+    // Try and enable ec_optimizations, fail silently
+    // 1) pool type must be erasure coded
+    // 2) require_osd_release must be tentacle or newer
+    // 3) clay is not supported
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (osdmap.require_osd_release >= ceph_release_t::tentacle) {
+	ErasureCodeInterfaceRef erasure_code;
+        stringstream tmp;
+        int err = get_erasure_code(erasure_code_profile, &erasure_code, &tmp);
+        if (err == 0) {
+          if (!(erasure_code->get_supported_optimizations() &
+              ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS)) {
+	    allow_ec_optimizations = true;
+	  }
+	} else {
+	  *ss << "get_erasure_code failed: " << tmp.str();
+	  return -EINVAL;
+        }
+      }
+    }
+  }
+
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -8269,6 +8293,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf()->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  if (allow_ec_optimizations) {
+    pi->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    pi->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  }
   pi->set_flag(pg_pool_t::FLAG_CREATING);
   if (g_conf()->osd_pool_use_gmt_hitset)
     pi->use_gmt_hitset = true;
