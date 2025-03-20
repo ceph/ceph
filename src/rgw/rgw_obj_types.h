@@ -135,6 +135,12 @@ struct rgw_obj_key {
   rgw_obj_key(const std::string& n, const std::string& i, const std::string& _ns) : name(n), ns(_ns) {
     _init_instance(i);
   }
+  rgw_obj_key(const std::string& n, const std::string& i, std::optional<rgw_bucket_snap_id> _snap_id) : name(n) {
+    _init_instance(i);
+    if (_snap_id) {
+      set_snap_id(*_snap_id);
+    }
+  }
 
   rgw_obj_key(const rgw_obj_index_key& k) {
     parse_index_key(k.name, &name, &ns);

@@ -1859,7 +1859,7 @@ static int parse_snap_range(const string& s, rgw_bucket_snap_range *result, stri
 int RGWListBucket_ObjStore_S3::get_common_params()
 {
   list_versions = s->info.args.exists("versions");
-  const char *snap_range_header = s->info.env->get("HTTP_RGWX_SNAP_RANGE");
+  const char *snap_range_header = s->info.env->get("HTTP_X_RGW_SNAP_RANGE");
   if (snap_range_header) {
     string snap_range_str(snap_range_header);
     string err;
@@ -5532,6 +5532,15 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
     first = req;
   }
 
+  std::optional<rgw_bucket_snap_id> opt_snap_id;
+  const char *snap_param = s->info.env->get("HTTP_X_RGW_SNAP_ID");
+  if (snap_param) {
+    string err;
+    auto sid = strict_strtol(snap_param, 10, &err);
+    if (err.empty()) {
+      opt_snap_id = rgw_bucket_snap_id((uint64_t)sid);
+    }
+  }
   /*
    * XXX The intent of the check for empty is apparently to let the bucket
    * name from DNS to be set ahead. However, we currently take the DNS
@@ -5554,16 +5563,16 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
      * These calls will always create an object with no bucket. */
     if (!encoded_obj_str.empty()) {
       if (s->bucket) {
-	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = s->bucket->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"), opt_snap_id));
       } else {
-	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId")));
+	s->object = driver->get_object(rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"), opt_snap_id));
       }
     }
   } else {
     if (s->bucket) {
-      s->object = s->bucket->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = s->bucket->get_object(rgw_obj_key(req_name, s->info.args.get("versionId"), opt_snap_id));
     } else {
-      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId")));
+      s->object = driver->get_object(rgw_obj_key(req_name, s->info.args.get("versionId"), opt_snap_id));
     }
   }
   return 0;
