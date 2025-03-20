@@ -14,6 +14,8 @@
 * RGW: For compatibility with AWS S3, LastModified timestamps are now truncated
   to the second. Note that during upgrade, users may observe these timestamps
   moving backwards as a result.
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
