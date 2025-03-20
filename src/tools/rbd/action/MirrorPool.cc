@@ -680,7 +680,7 @@ protected:
           m_formatter->dump_string("site_name",
             (name_it != m_peer_mirror_uuids_to_name.end() ?
                name_it->second : ""));
-          m_formatter->dump_string("mirror_uuids", status.mirror_uuid);
+          m_formatter->dump_string("mirror_uuid", status.mirror_uuid);
 
           m_formatter->dump_string(
             "state", utils::mirror_image_site_status_state(status));
