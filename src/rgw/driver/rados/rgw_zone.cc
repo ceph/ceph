@@ -832,15 +832,17 @@ int create_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
     info.id = gen_random_uuid();
   }
 
-  // insert the default placement target if it doesn't exist
-  constexpr std::string_view default_placement_name = "default-placement";
+  if (info.placement_targets.empty()) {
+    // insert the default placement target if it doesn't exist
+    constexpr std::string_view default_placement_name = "default-placement";
 
-  RGWZoneGroupPlacementTarget placement_target;
-  placement_target.name = default_placement_name;
+    RGWZoneGroupPlacementTarget placement_target;
+    placement_target.name = default_placement_name;
 
-  info.placement_targets.emplace(default_placement_name, placement_target);
-  if (info.default_placement.name.empty()) {
-    info.default_placement.name = default_placement_name;
+    info.placement_targets.emplace(default_placement_name, placement_target);
+    if (info.default_placement.name.empty()) {
+      info.default_placement.name = default_placement_name;
+    }
   }
 
   int r = cfgstore->create_zonegroup(dpp, y, exclusive, info, nullptr);
@@ -1020,13 +1022,15 @@ int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
     info.id = gen_random_uuid();
   }
 
-  // add default placement with empty pool name
-  RGWZonePlacementInfo placement;
-  rgw_pool pool;
-  placement.storage_classes.set_storage_class(
-      RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-  // don't overwrite if it already exists
-  info.placement_pools.emplace("default-placement", std::move(placement));
+  if (info.placement_pools.empty()) {
+    // add default placement with empty pool name
+    RGWZonePlacementInfo placement;
+    rgw_pool pool;
+    placement.storage_classes.set_storage_class(
+        RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+    // don't overwrite if it already exists
+    info.placement_pools.emplace("default-placement", std::move(placement));
+  }
 
   // build a set of all pool names used by other zones
   std::set<rgw_pool> pools;
