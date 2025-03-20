@@ -556,7 +556,7 @@ private:
   void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
-  uint64_t _get_total(unsigned id) const;
+  uint64_t _get_block_device_size(unsigned id) const;
   uint64_t _get_minimal_reserved(unsigned id) const;
 
   FileRef _get_file(uint64_t ino);
@@ -708,7 +708,7 @@ public:
     const bluefs_layout_t& layout);
 
   uint64_t get_used();
-  uint64_t get_total(unsigned id);
+  uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
   uint64_t get_full_reserved(unsigned id);

@@ -112,7 +112,7 @@ TEST(BlueFS, mkfs_mount) {
   ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
-  ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size);
+  ASSERT_EQ(fs.get_block_device_size(BlueFS::BDEV_DB), size);
   ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size);
   fs.umount();
 }

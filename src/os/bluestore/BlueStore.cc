@@ -7698,16 +7698,16 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     }
     if (cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
       vselector = new FitToFastVolumeSelector(
-        bluefs->get_total(BlueFS::BDEV_WAL) * 95 / 100,
-        bluefs->get_total(BlueFS::BDEV_DB) * 95 / 100,
-        bluefs->get_total(BlueFS::BDEV_SLOW) * 95 / 100);
+        bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100);
     } else {
       double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
       vselector =
         new RocksDBBlueFSVolumeSelector(
-          bluefs->get_total(BlueFS::BDEV_WAL) * 95 / 100,
-          bluefs->get_total(BlueFS::BDEV_DB) * 95 / 100,
-          bluefs->get_total(BlueFS::BDEV_SLOW) * 95 / 100,
+          bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+          bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+          bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
 	  rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number,
           rocks_opts.max_bytes_for_level_base,
           rocks_opts.max_bytes_for_level_multiplier,
@@ -12120,7 +12120,7 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
     buf->internally_reserved = 0;
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
-      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
+      buf->total += bluefs->get_block_device_size(BlueFS::BDEV_DB);
     }
     // call any non-omap bluefs space "internal metadata"
     buf->internal_metadata =
@@ -19138,7 +19138,7 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     bluefs->get_used(BlueFS::BDEV_SLOW) : 0;
   if (used > 0) {
       auto db_used = bluefs->get_used(BlueFS::BDEV_DB);
-      auto db_total = bluefs->get_total(BlueFS::BDEV_DB);
+      auto db_total = bluefs->get_block_device_size(BlueFS::BDEV_DB);
       ostringstream ss;
       ss << "spilled over " << byte_u_t(used)
          << " metadata from 'db' device (" << byte_u_t(db_used)
