@@ -78,6 +78,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 log = logging.getLogger()
 
@@ -411,6 +412,7 @@ class Builder:
 
     def __init__(self):
         self._did_steps = set()
+        self._reported_failed = False
 
     def wants(self, step, ctx, *, force=False, top=False):
         log.info("want to execute build step: %s", step)
@@ -422,12 +424,34 @@ class Builder:
             return
         if not self._did_steps:
             prepare_env_once(ctx)
-        self._steps[step](ctx)
-        self._did_steps.add(step)
-        log.info("step done: %s", step)
+        with self._timer(step):
+            self._steps[step](ctx)
+            self._did_steps.add(step)
 
     def available_steps(self):
         return [str(k) for k in self._steps]
+
+    @contextlib.contextmanager
+    def _timer(self, step):
+        ns = argparse.Namespace(start=time.monotonic())
+        status = "not-started"
+        try:
+            yield ns
+            status = "completed"
+        except Exception:
+            status = "failed"
+            raise
+        finally:
+            ns.end = time.monotonic()
+            ns.duration = int(ns.end - ns.start)
+            hrs, _rest = map(int, divmod(ns.duration, 3600))
+            mins, secs = map(int, divmod(_rest, 60))
+            ns.duration_hms = f"{hrs:02}:{mins:02}:{secs:02}"
+            if not self._reported_failed:
+                log.info(
+                    "step done: %s %s in %s", step, status, ns.duration_hms
+                )
+            self._reported_failed = status == "failed"
 
     @classmethod
     def set(self, step):
