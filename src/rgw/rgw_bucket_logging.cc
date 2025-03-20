@@ -305,7 +305,12 @@ int commit_logging_object(const configuration& conf,
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
   }
-  return target_bucket->commit_logging_object(obj_name, y, dpp);
+  if (const auto ret = target_bucket->commit_logging_object(obj_name, y, dpp); ret <0 ) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << obj_name << "' of bucket '" <<
+      target_bucket->get_key() << "'. ret = " << ret << dendl;
+    return ret;
+  }
+  return 0;
 }
 
 int rollover_logging_object(const configuration& conf,
@@ -546,6 +551,32 @@ int log_record(rgw::sal::Driver* driver,
       ldpp_dout(dpp, 1) << "ERROR: failed to format record when writing to logging object '" <<
         obj_name << "' due to unsupported logging type" << dendl;
       return -EINVAL;
+  }
+
+  // get quota of the owner of the target bucket
+  RGWQuota user_quota;
+  if (ret = get_owner_quota_info(dpp, y, driver, target_bucket->get_owner(), user_quota); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get quota of owner of target logging bucket '" <<
+      target_bucket_id << "' failed. ret = " << ret << dendl;
+    return ret;
+  }
+  // start with system default quota
+  // and combine with the user quota
+  RGWQuota quota;
+  driver->get_quota(quota);
+  if (target_bucket->get_info().quota.enabled) {
+    quota.bucket_quota = target_bucket->get_info().quota;
+  } else if (user_quota.bucket_quota.enabled) {
+    quota.bucket_quota = user_quota.bucket_quota;
+  }
+  if (user_quota.user_quota.enabled) {
+    quota.user_quota = user_quota.user_quota;
+  }
+  // verify there is enough quota to write the record
+  if (ret = target_bucket->check_quota(dpp, quota, record.length(), y); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: quota check on target logging bucket '" <<
+      target_bucket_id << "' failed. ret = " << ret << dendl;
+    return ret;
   }
 
   if (ret = target_bucket->write_logging_object(obj_name,
