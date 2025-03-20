@@ -514,6 +514,35 @@ const routes: Routes = [
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
               {
+                path: `share/${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
+                component: SmbShareFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `${URLVerbs.EDIT}/:cluster_id`,
+                component: SmbClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
+              {
+                path: `ad/${URLVerbs.CREATE}`,
+                component: SmbJoinAuthFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `ad/${URLVerbs.EDIT}/:authId`,
+                component: SmbJoinAuthFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
+              {
+                path: `standalone/${URLVerbs.CREATE}`,
+                component: SmbUsersgroupsFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `standalone/${URLVerbs.EDIT}/:usersGroupsId`,
+                component: SmbUsersgroupsFormComponent
+              },
+              {
                 path: `share/${URLVerbs.EDIT}/:clusterId/:shareId`,
                 component: SmbShareFormComponent,
                 data: { breadcrumbs: ActionLabels.EDIT }

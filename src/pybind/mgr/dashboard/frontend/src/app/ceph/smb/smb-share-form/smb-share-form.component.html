@@ -9,7 +9,62 @@
            class="form-header">
         {{ action | titlecase }} {{ resource | upperFirst }}
       </div>
-
+      <!-- cluster_id -->
+      <div class="form-item"
+           *ngIf="smbClusters$ | async as clusters">
+        <cds-select
+          formControlName="cluster_id"
+          name="cluster_id"
+          for="cluster_id"
+          label="Cluster"
+          cdRequiredField="Cluster"
+          id="cluster_id"
+          [invalid]="
+            smbShareForm.controls.cluster_id.invalid && smbShareForm.controls.cluster_id.dirty
+          "
+          [invalidText]="clusterError"
+          [skeleton]="allClusters === null"
+          [helperText]="clusterHelperText"
+          i18n
+        >
+          <option *ngIf="clusters === null"
+                  value="">Loading...</option>
+          <option *ngIf="clusters !== null && clusters.length === 0"
+                  value="">
+            -- No cluster available --
+          </option>
+          <option *ngIf="clusters !== null && clusters.length > 0"
+                  value="">
+            -- Select the cluster --
+          </option>
+          <option *ngFor="let cluster of clusters"
+                  [value]="cluster.cluster_id">
+            {{ cluster.cluster_id }}
+          </option>
+        </cds-select>
+        <cd-alert-panel
+          *ngIf="clusters.length === 0"
+          type="info"
+          actionName="Create"
+          spacingClass="mt-2"
+          (action)="router.navigate(['cephfs/smb/create'])"
+          i18n
+          >To create a new SMB share, you need to create an SMB Cluster.
+        </cd-alert-panel>
+        <ng-template #clusterHelperText>
+          <span i18n> This is the ID of an SMB Cluster</span>
+        </ng-template>
+        <ng-template #clusterError>
+          <span
+            class="invalid-feedback"
+            *ngIf="
+              smbShareForm.showError('cluster_id', formDir, 'required') || allClusters?.length === 0
+            "
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
       <!-- Share Id -->
       <div class="form-item">
         <cds-text-label
@@ -62,6 +117,7 @@
           </option>
           <option *ngFor="let filesystem of allFsNames"
                   [value]="filesystem.name"
+                  [selected]="filesystem.name === smbShareForm.get('volume').value"
                   i18n>
             {{ filesystem.name }}
           </option>

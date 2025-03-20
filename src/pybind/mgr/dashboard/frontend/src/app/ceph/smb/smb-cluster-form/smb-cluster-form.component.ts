@@ -267,21 +267,6 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     const domainSettingsControl = this.smbForm.get('domain_settings');
     const authMode = this.smbForm.get('auth_mode').value;
 
-    const values = this.smbForm.getRawValue();
-    const serviceSpec: object = {
-      placement: {}
-    };
-    switch (values['placement']) {
-      case PLACEMENT.host:
-        if (values['hosts'].length > 0) {
-          serviceSpec['placement']['hosts'] = this.selectedHosts;
-        }
-        break;
-      case PLACEMENT.label:
-        serviceSpec['placement']['label'] = this.selectedLabels;
-        break;
-    }
-
     // Domain Setting should be mandatory if authMode is "Active Directory"
     if (authMode === AUTHMODE.activeDirectory && !domainSettingsControl.value) {
       domainSettingsControl.setErrors({ required: true });
@@ -317,7 +302,22 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   private buildRequest() {
+    // const values = this.smbForm.getRawValue();
+
     const values = this.smbForm.getRawValue();
+    const serviceSpec: object = {
+      placement: {}
+    };
+    switch (values['placement']) {
+      case PLACEMENT.host:
+        if (values['hosts'].length > 0) {
+          serviceSpec['placement']['hosts'] = this.selectedHosts;
+        }
+        break;
+      case PLACEMENT.label:
+        serviceSpec['placement']['label'] = this.selectedLabels;
+        break;
+    }
     const rawFormValue = _.cloneDeep(this.smbForm.value);
     const clusterId = this.smbForm.get('cluster_id')?.value;
     const authMode = this.smbForm.get('auth_mode')?.value;
@@ -359,7 +359,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       );
     }
 
-    const serviceSpec = this.getPlacementSpec(values);
+    // const serviceSpec = this.getPlacementSpec(values);
+    // console.log(serviceSpec, "test")
     if (serviceSpec) {
       requestModel.cluster_resource.placement = serviceSpec;
     }
