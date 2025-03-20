@@ -322,18 +322,7 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalChildNodeRef get_mutable_extent(Transaction &t, LogicalChildNodeRef ref) {
-    LOG_PREFIX(TransactionManager::get_mutable_extent);
-    auto ret = cache->duplicate_for_write(
-      t,
-      ref)->cast<LogicalChildNode>();
-    if (!ret->has_laddr()) {
-      SUBDEBUGT(seastore_tm, "duplicate from {}", t, *ref);
-      ret->set_laddr(ref->get_laddr());
-    } else {
-      assert(ref->is_mutable());
-      assert(&*ref == &*ret);
-    }
-    return ret;
+    return cache->duplicate_for_write(t, ref)->cast<LogicalChildNode>();
   }
 
   using ref_iertr = LBAManager::ref_iertr;
