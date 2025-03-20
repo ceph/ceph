@@ -157,17 +157,16 @@ print_stacktrace() {
 }
 
 run_cmd_internal() {
-    local cmd=$1
-    local exit_on_failure=$2
-    local as_admin=$3
+    local exit_on_failure=$1 ; shift
+    local as_admin=$1 ; shift
     local rc
     local frame=0 LINE SUB FILE
 
     if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
         if [ 'true' = "${as_admin}" ]; then
-            echo "CEPH_ARGS=''" "$cmd"
+            echo "CEPH_ARGS=''" "$@"
         else
-            echo "CEPH_ARGS='--id ${CEPH_ID}'" "$cmd"
+            echo "CEPH_ARGS='--id ${CEPH_ID}'" "$@"
         fi
     fi
 
@@ -177,11 +176,11 @@ run_cmd_internal() {
         export CEPH_ARGS="--id ${CEPH_ID}"
     fi
 
-    echo "${cmd}" >> "${TEMPDIR}/rbd-mirror.cmd.log"
+    echo "$@" >> "${TEMPDIR}/rbd-mirror.cmd.log"
 
     # Don't exit immediately if the command exits with a non-zero status.
     set +e
-    $cmd >"${CMD_STDOUT}" 2>"${CMD_STDERR}"
+    eval $@ >"${CMD_STDOUT}" 2>"${CMD_STDERR}"
     rc=$?
     set -e
 
@@ -213,29 +212,21 @@ run_cmd_internal() {
 }
 
 run_cmd() {
-    local cmd=$1
-
-    run_cmd_internal "$cmd" 'true' 'false'
+    run_cmd_internal 'true' 'false' $@
 }
 
 # run the command but ignore any failure and return the exit status
 try_cmd() {
-    local cmd=$1
-
-    run_cmd_internal "$cmd" 'false' 'false'
+    run_cmd_internal 'false' 'false' $@
 }
 
 run_admin_cmd() {
-    local cmd=$1
-
-    run_cmd_internal "$cmd" 'true' 'true'
+    run_cmd_internal 'true' 'true' $@
 }
 
 # run the command but ignore any failure and return the exit status
 try_admin_cmd() {
-    local cmd=$1
-
-    run_cmd_internal "$cmd" 'false' 'true'
+    run_cmd_internal 'false' 'true' $@
 }
 
 fail() {
@@ -395,6 +386,35 @@ peer_add()
         fi
     done
 
+    return 1
+}
+
+namespace_create()
+{
+    local cluster=$1
+    local namespace_spec=$2
+
+    run_cmd "rbd --cluster ${cluster} namespace create ${namespace_spec}"
+}
+
+namespace_remove()
+{
+    local cluster=$1
+    local namespace_spec=$2
+    local runner=${3:-"run_cmd"}
+
+    "$runner" "rbd --cluster ${cluster} namespace remove ${namespace_spec}"
+}
+
+namespace_remove_retry()
+{
+    local cluster=$1
+    local namespace_spec=$2
+
+    for s in 0 1 2 4 8 16 32; do
+        sleep ${s}
+        namespace_remove "${cluster}" "${namespace_spec}" "try_cmd" && return 0
+    done
     return 1
 }
 
@@ -1950,6 +1970,21 @@ test_image_with_global_id_count()
     test "${test_image_count}" = "$(xmlstarlet sel -t -v "count(//image/mirroring[global_id='${global_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
+get_pool_image_count()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local -n _pool_image_count=$4
+    
+    run_cmd "rbd --cluster ${cluster} ls ${pool} --format xml --pretty-format"
+    if [ "${image}" = '*' ]; then
+        _pool_image_count="$($XMLSTARLET sel -t -v "count(//images/name)" < "$CMD_STDOUT")"
+    else
+        _pool_image_count="$($XMLSTARLET sel -t -v "count(//images[name='${image}'])" < "$CMD_STDOUT")"
+    fi
+}
+
 test_image_count()
 {
     local cluster=$1
@@ -1957,8 +1992,23 @@ test_image_count()
     local image=$3
     local test_image_count=$4
 
-    run_cmd "rbd --cluster ${cluster} ls ${pool} --format xml --pretty-format"
-    test "${test_image_count}" = "$(xmlstarlet sel -t -v "count(//images[name='${image}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+    local actual_image_count
+    get_pool_image_count "${cluster}" "${pool}" "${image}" actual_image_count
+    test "${test_image_count}" = "${actual_image_count}" || { fail; return 1; }
+}
+
+wait_for_pool_image_count()
+{
+    local cluster=$1
+    local pool=$2
+    local count=$3
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        test_image_count "${cluster}" "${pool}" '*' "${count}" && return 0
+    done
+    return 1
 }
 
 test_image_with_global_id_not_present()
@@ -2207,28 +2257,10 @@ wait_for_group_synced()
 {
     local cluster=$1
     local group_spec=$2
-
-    # Determine secondary cluster
-    local secondary_cluster
-    get_fields_from_mirror_group_status "${cluster}" "${group_spec}" secondary_cluster "(//group/peer_sites/peer_site/site_name)"
-
-    local secondary_group_spec
-    IFS='/' read -r -a group_fields <<< "${group_spec}"
-    if [ "${#group_fields[@]}" -eq 3 ]; then
-      local pool local_namespace secondary_namespace group
-      pool="${group_fields[0]}"
-      local_namespace="${group_fields[1]}"
-      group="${group_fields[2]}"
-
-      # Determine secondary cluster namespace
-      run_cmd "rbd --cluster ${cluster} mirror pool info ${pool}/${local_namespace} --format xml --pretty-format" || { fail; return 1; }
-      secondary_namespace=$(xmlstarlet sel -t -v "//${pool}/remote_namespace" < ${CMD_STDOUT}) || { fail "no remote namespace"; return 1; }
-      secondary_group_spec="${pool}/${secondary_namespace}/${group}"
-    else  
-      secondary_group_spec="${group_spec}"
-    fi
-
+    local secondary_cluster=$3
+    local secondary_group_spec=$4
     local group_snap_id
+    
     get_newest_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
     wait_for_group_snap_present "${secondary_cluster}" "${secondary_group_spec}" "${group_snap_id}"
     wait_for_group_snap_sync_complete "${secondary_cluster}" "${secondary_group_spec}" "${group_snap_id}"
@@ -2635,7 +2667,7 @@ wait_for_test_group_snap_sync_complete()
     local group_snap_id=$3
     local s
 
-    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32 32 32 64; do
         sleep ${s}
         test_group_snap_sync_complete "${cluster}" "${group_spec}" "${group_snap_id}" && return 0
     done
