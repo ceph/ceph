@@ -371,10 +371,10 @@ void create_check_transaction1(ObjectStore::Transaction& t_in, bool create, bool
         ASSERT_TRUE(c1 == i.get_cid(op->cid));
 	ASSERT_TRUE(o1 == i.get_oid(op->oid));
         string name = i.decode_string();
-        bufferptr bp;
-        i.decode_bp(bp);
+        bufferlist bl;
+        i.decode_bl(bl);
         ASSERT_TRUE(name == "attr1");
-	check_pattern(bp, bl2_seed, bl2_len);
+	check_pattern(bl, bl2_seed, bl2_len);
       }
       break;
     case 8:
@@ -386,10 +386,10 @@ void create_check_transaction1(ObjectStore::Transaction& t_in, bool create, bool
         ASSERT_TRUE(c2 == i.get_cid(op->cid));
 	ASSERT_TRUE(o2 == i.get_oid(op->oid));
         string name = i.decode_string();
-        bufferptr bp;
-        i.decode_bp(bp);
+        bufferlist bl;
+        i.decode_bl(bl);
         ASSERT_TRUE(name == "attr2");
-	check_pattern(bp, bl2_seed, bl2_len);
+	check_pattern(bl, bl2_seed, bl2_len);
       }
       break;
     case 9:
