@@ -21,7 +21,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Permission } from '~/app/shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -43,6 +43,8 @@ import { RgwMultisiteWizardComponent } from '../rgw-multisite-wizard/rgw-multisi
 import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { MgrModuleInfo } from '~/app/shared/models/mgr-modules.interface';
+import { RGW } from '../utils/constants';
 
 const BASE_URL = 'rgw/multisite/configuration';
 
@@ -68,7 +70,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   blockUI: NgBlockUI;
 
   icons = Icons;
-  permission: Permission;
+  permissions: Permissions;
   selection = new CdTableSelection();
   createTableActions: CdTableAction[];
   migrateTableAction: CdTableAction[];
@@ -144,7 +146,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     private rgwMultisiteService: RgwMultisiteService,
     private changeDetectionRef: ChangeDetectorRef
   ) {
-    this.permission = this.authStorageService.getPermissions().rgw;
+    this.permissions = this.authStorageService.getPermissions();
   }
 
   openModal(entity: any | string, edit = false) {
@@ -305,25 +307,22 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         },
         (_error) => {}
       );
-    this.mgrModuleService.list().subscribe((moduleData: any) => {
-      this.rgwModuleData = moduleData.filter((module: object) => module['name'] === 'rgw');
+
+    // Only get the module status if you can read from configOpt
+    if (this.permissions.configOpt.read) this.getRgwModuleStatus();
+  }
+
+  ngOnDestroy() {
+    this.sub.unsubscribe();
+  }
+
+  private getRgwModuleStatus() {
+    this.mgrModuleService.list().subscribe((moduleData: MgrModuleInfo[]) => {
+      this.rgwModuleData = moduleData.filter((module: MgrModuleInfo) => module.name === RGW);
       if (this.rgwModuleData.length > 0) {
         this.rgwModuleStatus = this.rgwModuleData[0].enabled;
       }
     });
-  }
-  /* setConfigValues() {
-    this.rgwDaemonService
-      .setMultisiteConfig(
-        this.defaultsInfo['defaultRealmName'],
-        this.defaultsInfo['defaultZonegroupName'],
-        this.defaultsInfo['defaultZoneName']
-      )
-      .subscribe(() => {});
-  }*/
-
-  ngOnDestroy() {
-    this.sub.unsubscribe();
   }
 
   private abstractTreeData(multisiteInfo: [object, object, object]): any[] {
@@ -637,7 +636,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     };
 
     if (!this.rgwModuleStatus) {
-      $obs = this.mgrModuleService.enable('rgw');
+      $obs = this.mgrModuleService.enable(RGW);
     }
     $obs.subscribe(
       () => undefined,
