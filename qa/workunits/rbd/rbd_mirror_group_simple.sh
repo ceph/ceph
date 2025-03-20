@@ -2645,13 +2645,7 @@ test_force_promote_before_initial_sync()
   # check that latest snap is incomplete
   test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 
 
-  # force promote the group on the secondary - TODO this should fail with a sensible error message
-  # need to fix the test to check for the failure - use expect_failure once the error message is known
-  # see https://ibm-systems-storage.slack.com/archives/C07J9Q2E268/p1741107842904719?thread_ts=1740716823.395479&cid=C07J9Q2E268
-  mirror_group_promote "${secondary_cluster}" "${pool}/${group0}" '--force'
-
-  # demote and try to resync again
-  mirror_group_demote "${secondary_cluster}" "${pool}/${group0}"
+  expect_failure "no initial group snapshot available" rbd --cluster=${secondary_cluster} mirror group promote ${pool}/${group0} --force
 
   mirror_group_resync ${secondary_cluster} ${pool}/${group0}
   start_mirrors "${secondary_cluster}"
@@ -3343,7 +3337,7 @@ run_all_tests()
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_group_and_images_exists
   run_test_all_scenarios test_odf_failover_failback
   run_test_all_scenarios test_resync_marker
-  #run_test_all_scenarios test_force_promote_before_initial_sync
+  run_test_all_scenarios test_force_promote_before_initial_sync
   run_test_all_scenarios test_image_snapshots_with_group
   # TODO next test fails as group name is incorrectly synced without a mirror group snapshot command
   #run_test_all_scenarios test_group_rename
