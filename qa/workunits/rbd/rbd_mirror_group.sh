@@ -7,7 +7,7 @@
 # socket, temporary files, and launches rbd-mirror daemon.
 #
 
-if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
+if [ -n "${RBD_MIRROR_HIDE_BASH_DEBUGGING}" ]; then
   set -e
 else  
   set -ex
