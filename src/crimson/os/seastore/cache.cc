@@ -919,14 +919,14 @@ void Cache::invalidate_extent(
     CachedExtent& extent)
 {
   if (!extent.may_conflict()) {
-    assert(extent.transactions.empty());
+    assert(extent.read_transactions.empty());
     extent.set_invalid(t);
     return;
   }
 
   LOG_PREFIX(Cache::invalidate_extent);
   bool do_conflict_log = true;
-  for (auto &&i: extent.transactions) {
+  for (auto &&i: extent.read_transactions) {
     if (!i.t->conflicted) {
       if (do_conflict_log) {
         SUBDEBUGT(seastore_t, "conflict begin -- {}", t, extent);
@@ -1181,7 +1181,7 @@ CachedExtentRef Cache::duplicate_for_write(
   ret->prior_instance = i;
   // duplicate_for_write won't occur after ool write finished
   assert(!i->prior_poffset);
-  auto [iter, inserted] = i->mutation_pendings.insert(*ret);
+  auto [iter, inserted] = i->mutation_pending_extents.insert(*ret);
   ceph_assert(inserted);
   t.add_mutated_extent(ret);
   if (is_root_type(ret->get_type())) {

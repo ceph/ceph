@@ -688,8 +688,8 @@ private:
       on_cache(*ret);
 
       // replace placeholder in transactions
-      while (!cached->transactions.empty()) {
-        auto t = cached->transactions.begin()->t;
+      while (!cached->read_transactions.empty()) {
+        auto t = cached->read_transactions.begin()->t;
         t->replace_placeholder(*cached, *ret);
       }
 

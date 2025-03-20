@@ -74,7 +74,7 @@ class read_set_item_t {
     &read_set_item_t::trans_hook>;
 
 public:
-  struct cmp_t {
+  struct extent_cmp_t {
     using is_transparent = paddr_t;
     bool operator()(const read_set_item_t<T> &lhs, const read_set_item_t &rhs) const;
     bool operator()(const paddr_t &lhs, const read_set_item_t<T> &rhs) const;
@@ -113,10 +113,14 @@ public:
   read_set_item_t(read_set_item_t &&) = default;
   ~read_set_item_t() = default;
 };
+
 template <typename T>
-using read_set_t = std::set<
+using read_extent_set_t = std::set<
   read_set_item_t<T>,
-  typename read_set_item_t<T>::cmp_t>;
+  typename read_set_item_t<T>::extent_cmp_t>;
+
+template <typename T>
+using read_trans_set_t = typename read_set_item_t<T>::trans_set_t;
 
 struct trans_spec_view_t {
   // if the extent is pending, contains the id of the owning transaction;
@@ -874,7 +878,7 @@ private:
   CachedExtent* get_transactional_view(Transaction &t);
   CachedExtent* get_transactional_view(transaction_id_t tid);
 
-  read_set_item_t<Transaction>::trans_set_t transactions;
+  read_trans_set_t<Transaction> read_transactions;
 
   placement_hint_t user_hint = PLACEMENT_HINT_NULL;
 
@@ -883,7 +887,7 @@ private:
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
 
 protected:
-  trans_view_set_t mutation_pendings;
+  trans_view_set_t mutation_pending_extents;
   trans_view_set_t retired_transactions;
 
   CachedExtent(CachedExtent &&other) = delete;
@@ -1169,7 +1173,7 @@ template <typename T, typename C, typename Cmp>
 class addr_extent_set_base_t
   : public std::set<C, Cmp> {};
 
-using pextent_set_t = addr_extent_set_base_t<
+using retired_extent_set_t = addr_extent_set_base_t<
   paddr_t,
   trans_retired_extent_link_t,
   ref_paddr_cmp
@@ -1468,17 +1472,17 @@ read_set_item_t<T>::read_set_item_t(T *t, CachedExtentRef ref)
 {}
 
 template <typename T>
-inline bool read_set_item_t<T>::cmp_t::operator()(
+inline bool read_set_item_t<T>::extent_cmp_t::operator()(
   const read_set_item_t<T> &lhs, const read_set_item_t<T> &rhs) const {
   return lhs.ref->poffset < rhs.ref->poffset;
 }
 template <typename T>
-inline bool read_set_item_t<T>::cmp_t::operator()(
+inline bool read_set_item_t<T>::extent_cmp_t::operator()(
   const paddr_t &lhs, const read_set_item_t<T> &rhs) const {
   return lhs < rhs.ref->poffset;
 }
 template <typename T>
-inline bool read_set_item_t<T>::cmp_t::operator()(
+inline bool read_set_item_t<T>::extent_cmp_t::operator()(
   const read_set_item_t<T> &lhs, const paddr_t &rhs) const {
   return lhs.ref->poffset < rhs;
 }
