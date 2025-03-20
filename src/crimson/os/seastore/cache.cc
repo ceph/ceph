@@ -1155,10 +1155,13 @@ CachedExtentRef Cache::duplicate_for_write(
   LOG_PREFIX(Cache::duplicate_for_write);
   assert(i->is_fully_loaded());
 
-  if (i->is_mutable())
+  if (i->is_mutable()) {
     return i;
+  }
 
   if (i->is_exist_clean()) {
+    assert(i->is_logical());
+    assert(static_cast<LogicalCachedExtent&>(*i).has_laddr());
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
     i->last_committed_crc = i->calc_crc32c();
@@ -1189,6 +1192,12 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
+  if (i->is_logical()) {
+    auto& lextent = static_cast<LogicalCachedExtent&>(*i);
+    assert(lextent.has_laddr());
+    assert(ret->is_logical());
+    static_cast<LogicalCachedExtent&>(*ret).set_laddr(lextent.get_laddr());
+  }
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }
