@@ -171,15 +171,15 @@ public:
 
     assert(ref->is_valid());
 
-    auto it = ref->transactions.lower_bound(
+    auto it = ref->read_transactions.lower_bound(
       this, read_set_item_t<Transaction>::trans_cmp_t());
-    if (it != ref->transactions.end() && it->t == this) {
+    if (it != ref->read_transactions.end() && it->t == this) {
       return false;
     }
 
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
-    ref->transactions.insert_before(
+    ref->read_transactions.insert_before(
       it, const_cast<read_set_item_t<Transaction>&>(*iter));
     return true;
   }
@@ -191,13 +191,13 @@ public:
 
     assert(ref->is_valid());
 
-    auto it = ref->transactions.lower_bound(
+    auto it = ref->read_transactions.lower_bound(
       this, read_set_item_t<Transaction>::trans_cmp_t());
-    assert(it == ref->transactions.end() || it->t != this);
+    assert(it == ref->read_transactions.end() || it->t != this);
 
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
-    ref->transactions.insert_before(
+    ref->read_transactions.insert_before(
       it, const_cast<read_set_item_t<Transaction>&>(*iter));
   }
 
@@ -306,7 +306,7 @@ public:
       assert(where->ref.get() == &placeholder);
       where = read_set.erase(where);
       auto it = read_set.emplace_hint(where, this, &extent);
-      extent.transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
+      extent.read_transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
     }
     {
       auto where = retired_set.find(&placeholder);
@@ -610,7 +610,7 @@ private:
    * Submitting a transaction mutating any contained extent/addr will
    * invalidate *this.
    */
-  read_set_t<Transaction> read_set; ///< set of extents read by paddr
+  read_extent_set_t<Transaction> read_set; ///< set of extents read by paddr
 
   uint64_t fresh_backref_extents = 0; // counter of new backref extents
 
@@ -663,7 +663,7 @@ private:
    *
    * Set of extents retired by *this.
    */
-  pextent_set_t retired_set;
+  retired_extent_set_t retired_set;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
