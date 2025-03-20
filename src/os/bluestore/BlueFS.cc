@@ -702,7 +702,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
 
   _init_logger();
 
-  super.version = 0;
+  super.seq = 0;
   super.block_size = bdev[BDEV_DB]->get_block_size();
   super.osd_uuid = osd_uuid;
   super.uuid.generate_random();
@@ -1215,20 +1215,20 @@ int BlueFS::fsck()
 
 int BlueFS::_write_super(int dev)
 {
-  ++super.version;
+  ++super.seq;
   // build superblock
   bufferlist bl;
   encode(super, bl);
   uint32_t crc = bl.crc32c(-1);
   encode(crc, bl);
   dout(10) << __func__ << " super block length(encoded): " << bl.length() << dendl;
-  dout(10) << __func__ << " superblock " << super.version << dendl;
+  dout(10) << __func__ << " superblock " << super.seq << dendl;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   ceph_assert_always(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
   bdev[dev]->write(get_super_offset(), bl, false, WRITE_LIFE_SHORT);
-  dout(20) << __func__ << " v " << super.version
+  dout(20) << __func__ << " seq " << super.seq
            << " crc 0x" << std::hex << crc
            << " offset 0x" << get_super_offset() << std::dec
            << dendl;
@@ -1263,7 +1263,7 @@ int BlueFS::_open_super()
          << dendl;
     return -EIO;
   }
-  dout(10) << __func__ << " superblock " << super.version << dendl;
+  dout(10) << __func__ << " superblock " << super.seq << dendl;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   return 0;
 }

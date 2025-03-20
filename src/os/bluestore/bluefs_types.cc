@@ -75,7 +75,7 @@ void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
 }
 
 // bluefs_super_t
-bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {
+bluefs_super_t::bluefs_super_t() : seq(0), block_size(4096) {
 }
 
 void bluefs_super_t::encode(bufferlist& bl) const
@@ -83,7 +83,7 @@ void bluefs_super_t::encode(bufferlist& bl) const
   ENCODE_START(2, 1, bl);
   encode(uuid, bl);
   encode(osd_uuid, bl);
-  encode(version, bl);
+  encode(seq, bl);
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
@@ -95,7 +95,7 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
   DECODE_START(2, p);
   decode(uuid, p);
   decode(osd_uuid, p);
-  decode(version, p);
+  decode(seq, p);
   decode(block_size, p);
   decode(log_fnode, p);
   if (struct_v >= 2) {
@@ -108,7 +108,7 @@ void bluefs_super_t::dump(Formatter *f) const
 {
   f->dump_stream("uuid") << uuid;
   f->dump_stream("osd_uuid") << osd_uuid;
-  f->dump_unsigned("version", version);
+  f->dump_unsigned("seq", seq);
   f->dump_unsigned("block_size", block_size);
   f->dump_object("log_fnode", log_fnode);
 }
@@ -117,7 +117,7 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
 {
   ls.push_back(new bluefs_super_t);
   ls.push_back(new bluefs_super_t);
-  ls.back()->version = 1;
+  ls.back()->seq = 1;
   ls.back()->block_size = 4096;
 }
 
@@ -125,7 +125,7 @@ ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
   return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
-	     << " v " << s.version
+	     << " seq " << s.seq
 	     << " block_size 0x" << std::hex << s.block_size
 	     << " log_fnode 0x" << s.log_fnode
 	     << std::dec << ")";
