@@ -249,6 +249,9 @@ def _git_command(ctx, args):
     return cmd
 
 
+# Assume that the git version will not be changing after the 1st time
+# the command is run.
+@functools.cache
 def _git_current_branch(ctx):
     cmd = _git_command(ctx, ["rev-parse", "--abbrev-ref", "HEAD"])
     res = _run(cmd, check=True, capture_output=True)
