@@ -172,7 +172,7 @@ class SMBService(CephService):
 
     def _pool_caps_from_uri(self, uri: str) -> List[str]:
         if not uri.startswith('rados://'):
-            logger.warning("ignoring unexpected uri scheme: %r", uri)
+            logger.debug("ignoring unexpected uri scheme: %r", uri)
             return []
         part = uri[8:].rstrip('/')
         if part.count('/') > 1:
