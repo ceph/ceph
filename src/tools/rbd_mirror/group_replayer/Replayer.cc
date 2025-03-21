@@ -78,7 +78,7 @@ bool Replayer<I>::is_replay_interrupted() {
 template <typename I>
 bool Replayer<I>::is_replay_interrupted(std::unique_lock<ceph::mutex>* locker) {
 
-  if (m_state == STATE_COMPLETE) {
+  if (m_state == STATE_COMPLETE || m_stop_requested) {
     locker->unlock();
     return true;
   }
@@ -1220,7 +1220,7 @@ void Replayer<I>::shut_down(Context* on_finish) {
 
   {
     std::unique_lock locker{m_lock};
-    m_stop_requested = true;
+    m_stop_requested = false;
     ceph_assert(m_on_shutdown == nullptr);
     std::swap(m_on_shutdown, on_finish);
 
