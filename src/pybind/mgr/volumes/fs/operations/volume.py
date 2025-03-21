@@ -99,7 +99,7 @@ def create_volume(mgr, volname, placement):
     return create_mds(mgr, volname, placement)
 
 
-def delete_volume(mgr, volname, metadata_pool, data_pools):
+def delete_volume(mgr, volname, should_rm_pools):
     """
     delete the given module (tear down mds, remove filesystem, remove pools)
     """
@@ -125,15 +125,21 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
         err = "Filesystem not found for volume '{0}'".format(volname)
         log.warning(err)
         return -errno.ENOENT, "", err
-    r, outb, outs = remove_pool(mgr, metadata_pool)
-    if r != 0:
-        return r, outb, outs
 
-    for data_pool in data_pools:
-        r, outb, outs = remove_pool(mgr, data_pool)
+    result_str = ''
+    if should_rm_pools:
+        metadata_pool, data_pools = get_pool_names(self.mgr, volname)
+
+        r, outb, outs = remove_pool(mgr, metadata_pool)
         if r != 0:
             return r, outb, outs
-    result_str = f"metadata pool: {metadata_pool} data pool: {str(data_pools)} removed.\n"
+
+        for data_pool in data_pools:
+            r, outb, outs = remove_pool(mgr, data_pool)
+            if r != 0:
+                return r, outb, outs
+        result_str += f"metadata pool: {metadata_pool} data pool: {str(data_pools)} removed.\n"
+
     result_str += "If there are active snapshot schedules associated with this "
     result_str += "volume, you might see EIO errors in the mgr logs or at the "
     result_str += "snap-schedule command-line due to the missing volume. "

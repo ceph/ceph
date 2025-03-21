@@ -123,31 +123,32 @@ class VolumeClient(CephfsClient["Module"]):
     def create_fs_volume(self, volname, placement):
         return create_volume(self.mgr, volname, placement)
 
-    def delete_fs_volume(self, volname, confirm):
+    def delete_fs_volume(self, volname, should_rm_pools, confirm):
+        if volume_exists(volname):
+            return -errno.ENOENT, '', f'volume {volname} does not exist'
+
         if confirm != "--yes-i-really-mean-it":
             return -errno.EPERM, "", "WARNING: this will *PERMANENTLY DESTROY* all data " \
                 "stored in the filesystem '{0}'. If you are *ABSOLUTELY CERTAIN* " \
                 "that is what you want, re-issue the command followed by " \
                 "--yes-i-really-mean-it.".format(volname)
 
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config get',
-            'key': 'mon_allow_pool_delete',
-            'who': 'mon',
-            'format': 'json',
-        })
-        mon_allow_pool_delete = json.loads(out)
-        if not mon_allow_pool_delete:
-            return -errno.EPERM, "", "pool deletion is disabled; you must first " \
-                "set the mon_allow_pool_delete config option to true before volumes " \
-                "can be deleted"
+        if should_rm_pools:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config get',
+                'key': 'mon_allow_pool_delete',
+                'who': 'mon',
+                'format': 'json',
+            })
+            mon_allow_pool_delete = json.loads(out)
+            if not mon_allow_pool_delete:
+                return -errno.EPERM, "", "pool deletion is disabled; you must first " \
+                    "set the mon_allow_pool_delete config option to true before volumes " \
+                    "can be deleted"
 
-        metadata_pool, data_pools = get_pool_names(self.mgr, volname)
-        if not metadata_pool:
-            return -errno.ENOENT, "", "volume {0} doesn't exist".format(volname)
         self.purge_queue.cancel_jobs(volname)
         self.connection_pool.del_connections(volname, wait=True)
-        return delete_volume(self.mgr, volname, metadata_pool, data_pools)
+        return delete_volume(self.mgr, volname, should_rm_pools)
 
     def list_fs_volumes(self):
         volnames = list_volumes(self.mgr)
