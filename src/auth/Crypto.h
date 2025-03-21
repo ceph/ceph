@@ -275,6 +275,7 @@ public:
   }
 
   static int get_key_type(const std::string& s);
+  static const std::set<int>& get_secure_key_types();
   bool crypto_type_supported(int type) const;
 
   std::shared_ptr<CryptoHandler> get_handler(int type);
