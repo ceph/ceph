@@ -372,7 +372,6 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   }
   m_in_flight_op_tracker.finish_op();
 
-  auto last_local_snap = m_local_group_snaps.rbegin();
   auto last_remote_snap = m_remote_group_snaps.rbegin();
   if (r < 0) {  // may be remote group is deleted?
     derr << "error listing remote mirror group snapshots: " << cpp_strerror(r)
@@ -395,7 +394,8 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   }
 
   if (!m_local_group_snaps.empty()) {
-    unlink_group_snapshots(last_local_snap->id);
+    unlink_group_snapshots();
+    auto last_local_snap = m_local_group_snaps.rbegin();
     auto last_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &last_local_snap->snapshot_namespace);
     if (last_local_snap_ns &&
@@ -945,12 +945,15 @@ bool Replayer<I>::prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap)
 }
 
 template <typename I>
-void Replayer<I>::unlink_group_snapshots(
-    const std::string &group_snap_id) {
+void Replayer<I>::unlink_group_snapshots() {
+  if (m_local_group_snaps.empty()) {
+    return;
+  }
   int r;
+  auto last_local_snap_id = m_local_group_snaps.rbegin()->id;
   for (auto local_snap = m_local_group_snaps.begin();
       local_snap != m_local_group_snaps.end(); ++local_snap) {
-    if (local_snap->id == group_snap_id) {
+    if (local_snap->id == last_local_snap_id) {
       break;
     }
     std::unique_lock locker{m_lock};
@@ -977,7 +980,7 @@ void Replayer<I>::unlink_group_snapshots(
       // If next local snap is end, or if it is the syncing in-progress snap,
       // then we still need this group snapshot.
       if (next_local_snap == m_local_group_snaps.end() ||
-          (next_local_snap->id == group_snap_id &&
+          (next_local_snap->id == last_local_snap_id &&
            next_local_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE)) {
         break;
       }
