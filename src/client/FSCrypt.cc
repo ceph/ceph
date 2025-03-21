@@ -28,6 +28,7 @@
 #include <openssl/core_names.h>
 
 #include <string.h>
+#include <shared_mutex>
 
 #define dout_subsys ceph_subsys_client
 
