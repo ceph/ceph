@@ -2690,25 +2690,13 @@ void OSDMap::_pg_to_raw_osds(
     *ppps = pps;
 }
 
-int OSDMap::_pick_primary(const pg_pool_t& pool, const vector<int>& osds) const
+int OSDMap::_pick_primary(const vector<int>& osds) const
 {
-  //FIXME: BILL - Need to delete this and switch to using pg_temp instead to
-  //change primary, otherwise we need to pre-req clients running tentacle to
-  //use allow_ec_optimizations
-  shard_id_t shard(0);
-  for (auto osd : osds) {
-    if (!pool.is_nonprimary_shard(shard) && osd != CRUSH_ITEM_NONE) {
-      return osd;
-    }
-    ++shard;
-  }
-  // PG is incomplete - pick any available OSD
   for (auto osd : osds) {
     if (osd != CRUSH_ITEM_NONE) {
       return osd;
     }
   }
-  // PG is empty
   return -1;
 }
 
@@ -2860,26 +2848,65 @@ void OSDMap::_apply_primary_affinity(ps_t seed,
   }
 }
 
-static std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool, std::vector<int> *pg_temp)
+/* EC pools with allow_ec_optimizations set have some shards that cannot
+ * become the primary because they are not updated on every I/O. To avoid
+ * requiring clients to be upgraded to use these new pools the logic in
+ * OSDMap which selects a primary cannot be changed. Instead choose_acting
+ * is modified to set pgtemp when it is necessary to override the choice
+ * of primary, and this vector is reordered so that shards that are
+ * permitted to be the primary are listed first. The existing OSDMap code
+ * will then choose a suitable shard as primary except when the pg is
+ * incomplete and the choice of primary doesn't matter. This function is
+ * called by OSDMonitor when setting pg_temp to transform the vector.
+ */
+const std::vector<int> OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
+			 const std::vector<int>& pg_temp) const
 {
-#if 0
-  //FIXME: BILL - This is in the wrong place, think this needs to be in PeeringState??
-  if (!pool.nonprimary_shards.empty()) {
+  // Only perform the transform for pools with allow_ec_optimizations set
+  if (pool.allows_ecoptimizations()) {
     std::vector<int> result;
-    int primaryshard = 0;
-    int nonprimaryshard = pool.size - pool.nonprimary_shards.size();
-    assert(pg_temp->size() == pool.size);
-    for (auto shard = 0; shard < pool.size; shard++) {
+    std::vector<int> nonprimary;
+    int shard = 0;
+    for (auto osd : pg_temp) {
       if (pool.is_nonprimary_shard(shard_id_t(shard))) {
-       result.emplace_back((*pg_temp)[nonprimaryshard++]);
+	nonprimary.emplace_back(osd);
       } else {
-       result.emplace_back((*pg_temp)[primaryshard++]);
+	result.emplace_back(osd);
       }
+      shard++;
     }
+    result.insert(result.end(), nonprimary.begin(), nonprimary.end());
     return result;
   }
-#endif
-  return *pg_temp;
+  return pg_temp;
+}
+
+/* The function above reorders the pg_temp vector. This transformation needs
+ * to be reversed by OSDs (but not clients) and is called by PeeringState
+ * when initializing the the acting set.
+ */
+const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+	const pg_t pg, const std::vector<int>& acting) const
+{
+  // Only perform the transform for pools with allow_ec_optimizations set
+  // that also have pg_temp set
+  if (pool.allows_ecoptimizations()) {
+    if (pg_temp->find(pool.raw_pg_to_pg(pg)) != pg_temp->end()) {
+      std::vector<int> result;
+      int primaryshard = 0;
+      int nonprimaryshard = pool.size - pool.nonprimary_shards.size();
+      assert(acting.size() == pool.size);
+      for (auto shard = 0; shard < pool.size; shard++) {
+	if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+	  result.emplace_back(acting[nonprimaryshard++]);
+	} else {
+	  result.emplace_back(acting[primaryshard++]);
+	}
+      }
+      return result;
+    }
+  }
+  return acting;
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
@@ -2906,23 +2933,10 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
   if (pp != primary_temp->end()) {
     *temp_primary = pp->second;
   } else if (!temp_pg->empty()) { // apply pg_temp's primary
-    vector<int> temp_pg_shard = pgtemp_undo_primaryfirst(pool, temp_pg);
-    //FIXME: BILL: Delete the nonprimary_shard stuff here - need to set pg_temp instead :-(
-    for (unsigned i = 0; i < temp_pg_shard.size(); ++i) {
-      if (pool.is_nonprimary_shard(shard_id_t(i))) {
-	// Shard cannot be a primary
-	continue;
-      }
-      if ((temp_pg_shard)[i] != CRUSH_ITEM_NONE) {
-	*temp_primary = temp_pg_shard[i];
-	return;
-      }
-    }
-    // PG is incomplete - choose any shard
-    for (unsigned i = 0; i < temp_pg_shard.size(); ++i) {
-      if (temp_pg_shard[i] != CRUSH_ITEM_NONE) {
-	*temp_primary = temp_pg_shard[i];
-	return;
+    for (unsigned i = 0; i < temp_pg->size(); ++i) {
+      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = (*temp_pg)[i];
+	break;
       }
     }
   }
@@ -2937,7 +2951,7 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
     return;
   }
   _pg_to_raw_osds(*pool, pg, raw, NULL);
-  *primary = _pick_primary(*pool, *raw);
+  *primary = _pick_primary(*raw);
 }
 
 void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int>*raw,
@@ -2966,7 +2980,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _pg_to_raw_osds(*pool, pg, &raw, &pps);
   _apply_upmap(*pool, pg, &raw);
   _raw_to_up_osds(*pool, raw, up);
-  *primary = _pick_primary(*pool, raw);
+  *primary = _pick_primary(raw);
   _apply_primary_affinity(pps, *pool, up, primary);
 }
 
@@ -2999,7 +3013,7 @@ void OSDMap::_pg_to_up_acting_osds(
     _pg_to_raw_osds(*pool, pg, &raw, &pps);
     _apply_upmap(*pool, pg, &raw);
     _raw_to_up_osds(*pool, raw, &_up);
-    _up_primary = _pick_primary(*pool, _up);
+    _up_primary = _pick_primary(_up);
     _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
     if (_acting.empty()) {
       _acting = _up;
@@ -3017,7 +3031,7 @@ void OSDMap::_pg_to_up_acting_osds(
     // https://tracker.ceph.com/issues/59491
     // primary-temp has selected an OSD outside of the acting
     // set - ignore it and make a sensible choice
-    _acting_primary = _pick_primary(*pool, _acting);
+    _acting_primary = _pick_primary(_acting);
   }
   if (acting)
     acting->swap(_acting);
