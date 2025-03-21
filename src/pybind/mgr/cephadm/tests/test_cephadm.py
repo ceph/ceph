@@ -462,7 +462,7 @@ class TestCephadm(object):
 
                 now = str_to_datetime('2023-10-18T22:45:29.119250Z')
                 with mock.patch("cephadm.inventory.datetime_now", lambda: now):
-                    c = cephadm_module.daemon_action('redeploy', d_name)
+                    c = cephadm_module.daemon_action('redeploy', d_name, force=True)
                     assert wait(cephadm_module,
                                 c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
@@ -474,7 +474,7 @@ class TestCephadm(object):
 
                 later = str_to_datetime('2023-10-18T23:46:37.119250Z')
                 with mock.patch("cephadm.inventory.datetime_now", lambda: later):
-                    c = cephadm_module.daemon_action('redeploy', d_name)
+                    c = cephadm_module.daemon_action('redeploy', d_name, force=True)
                     assert wait(cephadm_module,
                                 c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
 
@@ -501,7 +501,7 @@ class TestCephadm(object):
             with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
                 [daemon_name] = d_names
 
-                cephadm_module._schedule_daemon_action(daemon_name, action)
+                cephadm_module._schedule_daemon_action(daemon_name, action, force=True)
 
                 assert cephadm_module.cache.get_scheduled_daemon_action(
                     'test', daemon_name) == action
@@ -2916,6 +2916,7 @@ Traceback (most recent call last):
 
                 cephadm_module.set_osd_spec('osd.foo', ['1'])
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.HostCache.save_host")
     def test_daemon_action_schedule_and_remove(self, _save_host, cephadm_module: CephadmOrchestrator):
         """
@@ -2988,10 +2989,10 @@ Traceback (most recent call last):
 
                 assert cephadm_module.cache.is_force_action('test', daemon_name) is False
 
-                assert cephadm_module.cache.set_force_action('test', daemon_name, True)
+                cephadm_module.cache.set_force_action('test', daemon_name, True)
                 assert cephadm_module.cache.is_force_action('test', daemon_name) is True
 
-                assert cephadm_module.cache.set_force_action('test', daemon_name, False)
+                cephadm_module.cache.set_force_action('test', daemon_name, False)
                 assert cephadm_module.cache.is_force_action('test', daemon_name) is False
 
                 actions = wait(cephadm_module, cephadm_module.list_daemon_actions())
@@ -3002,4 +3003,3 @@ Traceback (most recent call last):
                 assert len(actions) == 0
 
                 _save_host.assert_called_with('test')
->>>>>>> 88230a8abe2 (mgr/cephadm: daemon actions done by cephadm default to force to pass ok-to-stop)
