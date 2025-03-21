@@ -38,6 +38,102 @@ ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 	     << std::dec;
 }
 
+bluefs_locked_extents_t::bluefs_locked_extents_t(uint64_t head_reserved,
+  uint64_t full_size, uint64_t alloc_size)
+{
+  // Calculating three extents which are potential candidates for locking:
+  // [start, end]
+  // - head: [reserved, p2nphase(reserved, alloc_size)]
+  // - gray_tail: an area which should be locked if head becomes void
+  // - tail: [p2align(full_size, alloc_size), full_size]
+  // Final decision whether locked extents to be maintained is made after
+  // BlueFS replay depending on existing allocations.
+  // This class performs that recalculation on  reset_intercepted() calls
+  // which indicate existing allocations to it.
+  //
+
+  head_offset = head_reserved;
+  head_length = p2nphase(head_reserved, alloc_size);
+  if (head_reserved) {
+    ceph_assert(full_size > head_reserved);
+    uint64_t gray_free_end = p2align(full_size - head_reserved, alloc_size);
+    gray_free_end += head_reserved;
+    if (gray_free_end < full_size) {
+      gray_tail_offset = gray_free_end;
+      gray_tail_length = full_size - gray_free_end;
+    }
+  }
+  uint64_t free_end = p2align(full_size, alloc_size);
+  if (free_end < full_size) {
+    tail_offset = free_end;
+    tail_length = full_size - free_end;
+  }
+}
+
+void bluefs_locked_extents_t::reset_intersected(const bluefs_extent_t& e)
+{
+  if (e.offset < head_end() && e.end() > head_offset) {
+    head_offset = 0;
+    head_length = 0;
+  }
+  if (e.offset < gray_tail_end() && e.end() > gray_tail_offset) {
+    gray_tail_offset = 0;
+    gray_tail_length = 0;
+  }
+  if (e.offset < tail_end() && e.end() > tail_offset) {
+    tail_offset = 0;
+    tail_length = 0;
+  }
+}
+
+bluefs_locked_extents_t bluefs_locked_extents_t::get_merged() const
+{
+  bluefs_locked_extents_t res;
+  res.head_offset = head_offset;
+  res.head_length = head_length;
+  if (gray_tail_length) {
+    if (tail_length) {
+      ceph_assert(gray_tail_offset > 0);
+      ceph_assert(tail_offset > 0);
+      res.tail_offset = std::min(tail_offset, gray_tail_offset);
+      res.tail_length = std::max(tail_end(), gray_tail_end()) - res.tail_offset;
+    } else {
+      res.tail_offset = gray_tail_offset;
+      res.tail_length = gray_tail_length;
+    }
+  } else {
+    res.tail_offset = tail_offset;
+    res.tail_length = tail_length;
+  }
+  return res;
+}
+
+bluefs_locked_extents_t bluefs_locked_extents_t::finalize() const
+{
+  bluefs_locked_extents_t res;
+  if (head_length) {
+    res.head_offset = head_offset;
+    res.head_length = head_length;
+    if (tail_length) {
+      res.tail_offset = tail_offset;
+      res.tail_length = tail_length;
+    }
+  } else {
+    res.tail_offset = gray_tail_offset;
+    res.tail_length = gray_tail_length;
+  }
+  return res;
+}
+
+ostream& operator<<(ostream& out, const bluefs_locked_extents_t& e)
+{
+  return out << std::hex
+             << "<0x" << e.head_offset << "~" << e.head_length
+             << ", [0x"  << e.gray_tail_offset << "~" << e.gray_tail_length
+             << "], 0x"  << e.tail_offset << "~" << e.tail_length << ">"
+	     << std::dec;
+}
+
 // bluefs_layout_t
 
 void bluefs_layout_t::encode(bufferlist& bl) const
