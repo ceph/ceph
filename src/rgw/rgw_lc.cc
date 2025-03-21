@@ -1517,7 +1517,7 @@ public:
 
     r = zonegroup.get_placement_tier(target_placement, &oc.tier);
 
-    if (!r && oc.tier->get_tier_type() == "cloud-s3") {
+    if (!r && oc.tier->is_tier_type_s3()) {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
       if (!oc.o.is_current() &&
           !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {

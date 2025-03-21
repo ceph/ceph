@@ -969,7 +969,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
   RGWObjManifest m;
   try { 
     decode(m, attr_iter->second);
-    if (m.get_tier_type() != "cloud-s3") {
+    if (!m.is_tier_type_s3()) {
       ldpp_dout(dpp, 20) << "not a cloud tier object " <<  s->object->get_key().name << dendl;
       if (restore_op) {
         op_ret = -ERR_INVALID_OBJECT_STATE;
@@ -983,7 +983,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
     m.get_tier_config(&tier_config);
     if (sync_cloudtiered) {
       bufferlist t, t_tier;
-      t.append("cloud-s3");
+      t.append(m.get_tier_type());
       attrs[RGW_ATTR_CLOUD_TIER_TYPE] = t;
       encode(tier_config, t_tier);
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
@@ -1015,11 +1015,9 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
         s->err.message = "failed to restore object";
         return op_ret;
       }
-      rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier.get());
-      tier_config.tier_placement = rtier->get_rt();
       if (!restore_op) {
-        if (tier_config.tier_placement.allow_read_through) {
-          days = tier_config.tier_placement.read_through_restore_days;
+        if (tier->allow_read_through()) {
+          days = tier->get_read_through_restore_days();
         } else { //read-through is not enabled
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "Read through is not enabled for this config";
@@ -4413,7 +4411,7 @@ void RGWPutObj::execute(optional_yield y)
       RGWObjManifest m;
       try{
         decode(m, bl);
-        if (m.get_tier_type() == "cloud-s3") {
+        if (m.is_tier_type_s3()) {
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "This object was transitioned to cloud-s3";
           ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
@@ -5869,7 +5867,7 @@ void RGWCopyObj::execute(optional_yield y)
       RGWObjManifest m;
       try{
         decode(m, bl);
-        if (m.get_tier_type() == "cloud-s3") {
+        if (m.is_tier_type_s3()) {
           op_ret = -ERR_INVALID_OBJECT_STATE;
           s->err.message = "This object was transitioned to cloud-s3";
           ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
