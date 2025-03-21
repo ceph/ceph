@@ -840,7 +840,7 @@ To move the pool back to non-stretch, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph osd pool stretch unset {pool-name}
+   ceph osd pool stretch unset {pool-name} {crush_rule} {size} {min_size}
 
 Here are the breakdowns of the arguments:
 
@@ -850,6 +850,28 @@ Here are the breakdowns of the arguments:
    i.e., set with the command `ceph osd pool stretch set`.
 
    :Type: String
+   :Required: Yes.
+
+.. describe:: {crush_rule}
+      
+   The crush rule to use after exiting the stretch pool. The type of pool must match the type of crush_rule
+   (replicated or erasure).
+
+   :Type: String
+   :Required: Yes.
+
+.. describe:: {size}
+         
+   The number of replicas for objects after exiting stretch pool.
+   
+   :Type: Integer
+   :Required: Yes.
+
+.. describe:: {min_size}
+            
+   The minimum number of replicas required for I/O after exiting stretch pool.
+
+   :Type: Integer
    :Required: Yes.
 
 Showing values of a stretch pool
