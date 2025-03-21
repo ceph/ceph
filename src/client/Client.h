@@ -1464,6 +1464,7 @@ private:
   // each step, with complete only releasing this object once all is finally
   // complete.
   public:
+    client_t const whoami;
     C_Read_Sync_NonBlocking(Client *clnt, Context *onfinish, Fh *f, Inode *in,
                             uint64_t fpos, uint64_t off, uint64_t len,
                             bufferlist *bl, Filer *filer, int have_caps)
@@ -1477,7 +1478,8 @@ private:
       fini = false;
     }
 
-    void retry();
+    void start();
+    FSCryptFDataDencRef fscrypt_denc;
 
   private:
     Client *clnt;
@@ -1486,6 +1488,8 @@ private:
     Inode *in;
     uint64_t off;
     uint64_t len;
+    uint64_t read_start;
+    uint64_t read_len;
     int left;
     int wanted;
     bufferlist *bl;
@@ -1497,6 +1501,7 @@ private:
     uint64_t pos;
     bool fini;
 
+    void retry();
     void finish(int r) override;
 
     void complete(int r) override
