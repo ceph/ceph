@@ -251,7 +251,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(*this, *paxos, "monmap"));
   paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, *this, *paxos, "osdmap"));
   paxos_service[PAXOS_LOG].reset(new LogMonitor(*this, *paxos, "logm"));
-  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(*this, *paxos, "auth"));
+  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(cct, *this, *paxos, "auth"));
   paxos_service[PAXOS_MGR].reset(new MgrMonitor(*this, *paxos, "mgr"));
   paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(*this, *paxos, "mgrstat"));
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));

@@ -67,7 +67,7 @@ int main(int argc, const char **argv)
   map<string,bufferlist> caps;
   std::string fn;
 
-  int key_type = CEPH_CRYPTO_AES256KRB5;
+  int key_type = CryptoManager::get_key_type("recommended");
 
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
