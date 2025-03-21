@@ -1143,6 +1143,14 @@ public:
       assert(offset < laddr_t::UNIT_SIZE);
       return offset;
     }
+    bool has_offset() const {
+      return offset != 0;
+    }
+    bool is_aligned(size_t alignment) const {
+      assert(alignment % laddr_t::UNIT_SIZE == 0);
+      return !has_offset() &&
+	base % (alignment >> UNIT_SHIFT) == 0;
+    }
     laddr_t checked_to_laddr() const {
       assert(offset == 0);
       return laddr_t(base);
