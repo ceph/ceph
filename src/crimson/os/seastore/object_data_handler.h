@@ -228,17 +228,25 @@ public:
 
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
-  write_ret overwrite(
+  /*write_ret overwrite(
     context_t ctx,        ///< [in] ctx
     laddr_t data_base,    ///< [in] data base laddr
     objaddr_t offset,     ///< [in] write offset
     extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
     std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
     lba_mapping_list_t &&pins ///< [in] set of pins overlapping above region
-  );
+  );*/
+
+  write_ret overwrite(
+    context_t ctx,
+    laddr_t data_base,
+    objaddr_t offset,
+    extent_len_t len,
+    std::optional<bufferlist> &&bl,
+    LBAMapping first_mapping);
 
   /// Ensures object_data reserved region is prepared
-  write_ret prepare_data_reservation(
+  write_iertr::future<LBAMapping> prepare_data_reservation(
     context_t ctx,
     object_data_t &object_data,
     extent_len_t size);
