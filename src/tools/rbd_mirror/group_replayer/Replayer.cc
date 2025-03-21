@@ -734,9 +734,8 @@ void Replayer<I>::try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
     dout(10) << "found regular snap, snap name: " << snap.name
              << ", remote group snap id: " << snap.id << dendl;
     C_SaferCond *ctx = new C_SaferCond;
-    create_regular_snapshot(snap.name, snap.id, ctx);
+    create_regular_snapshot(&snap, locker, ctx);
     ctx->wait();
-    locker.unlock();
   }
 }
 
@@ -791,8 +790,8 @@ void Replayer<I>::create_mirror_snapshot(
   m_local_group_snaps.push_back(local_snap);
 
   auto comp = create_rados_callback(
-      new LambdaContext([this, group_snap_id, on_finish](int r) {
-        handle_create_mirror_snapshot(r, group_snap_id, on_finish);
+      new LambdaContext([this, snap, on_finish](int r) {
+        handle_create_mirror_snapshot(r, snap, on_finish);
         }));
 
   librados::ObjectWriteOperation op;
@@ -802,35 +801,34 @@ void Replayer<I>::create_mirror_snapshot(
   ceph_assert(r == 0);
   locker.unlock();
   comp->release();
-
-  // if m_replayer in the ImageReplayer is null this cannot be forwarded.
-  // May be we should retry this setting in the validate_image_snaps_sync_complete().
-  // Same for image_replayer->prune_snapshot(); setting actually!!!!
-  set_image_replayer_limits("", snap);
 }
 
 template <typename I>
 void Replayer<I>::handle_create_mirror_snapshot(
-    int r, const std::string &group_snap_id, Context *on_finish) {
-  dout(10) << group_snap_id << ", r=" << r << dendl;
+    int r, cls::rbd::GroupSnapshot *snap, Context *on_finish) {
+  dout(10) << snap->id << ", r=" << r << dendl;
 
   if (r < 0) { // clean the group snapshot here
     dout(10) << "cleaning snapshot as failed group_snap_set previously with : "
-             << group_snap_id << ", this will be attempted to sync later"
-             << dendl;
+             << snap->id << ", this will be attempted to sync later" << dendl;
     r = librbd::cls_client::group_snap_remove(&m_local_io_ctx,
-        librbd::util::group_header_name(m_local_group_id), group_snap_id);
+        librbd::util::group_header_name(m_local_group_id), snap->id);
     if (r < 0) {
       derr << "failed to remove group snapshot : "
-           << group_snap_id << " : " << cpp_strerror(r) << dendl;
+           << snap->id << " : " << cpp_strerror(r) << dendl;
     }
     for (auto local_snap = m_local_group_snaps.begin();
         local_snap != m_local_group_snaps.end(); ++local_snap) {
-      if (local_snap->id != group_snap_id) {
+      if (local_snap->id != snap->id) {
         continue;
       }
       m_local_group_snaps.erase(local_snap);
     }
+  } else {
+    // if m_replayer in the ImageReplayer is null this cannot be forwarded.
+    // May be we should retry this setting in the validate_image_snaps_sync_complete().
+    // Same for image_replayer->prune_snapshot(); setting actually!!!!
+    set_image_replayer_limits("", snap);
   }
 
   on_finish->complete(r);
@@ -1050,15 +1048,17 @@ void Replayer<I>::unlink_group_snapshots() {
 
 template <typename I>
 void Replayer<I>::create_regular_snapshot(
-    const std::string &group_snap_name,
-    const std::string &group_snap_id,
+    cls::rbd::GroupSnapshot *snap,
+    std::unique_lock<ceph::mutex> &locker,
     Context *on_finish) {
+  auto group_snap_id = snap->id;
   dout(10) << group_snap_id << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   librados::ObjectWriteOperation op;
   cls::rbd::GroupSnapshot group_snap{
     group_snap_id, // keeping it same as remote group snap id
     cls::rbd::GroupSnapshotNamespaceUser{},
-      group_snap_name,
+      snap->name,
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   m_local_group_snaps.push_back(group_snap);
 
@@ -1070,6 +1070,7 @@ void Replayer<I>::create_regular_snapshot(
   int r = m_local_io_ctx.aio_operate(
       librbd::util::group_header_name(m_local_group_id), comp, &op);
   ceph_assert(r == 0);
+  locker.unlock();
   comp->release();
 }
 
@@ -1095,7 +1096,7 @@ void Replayer<I>::handle_create_regular_snapshot(
       }
       m_local_group_snaps.erase(local_snap);
     }
-  }
+  } // Note IR's don't need setting set_image_replayer_limits() for regular snaps.
 
   on_finish->complete(r);
 }
