@@ -106,6 +106,7 @@ private:
   AsyncOpTracker m_in_flight_op_tracker;
 
   bool m_stop_requested = false;
+  bool m_retry_validate_snap = false;
 
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
@@ -151,6 +152,7 @@ private:
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void remove_mirror_peer_uuid(const std::string &snap_id);
+  void handle_remove_mirror_peer_uuid(int r, const std::string &snap_id);
   bool prune_all_image_snapshots(cls::rbd::GroupSnapshot *local_snap);
   void unlink_group_snapshots();
 
@@ -159,13 +161,16 @@ private:
     const std::string &group_snap_id,
     Context *on_finish);
   void handle_create_regular_snapshot(int r, Context *on_finish);
+  void handle_create_regular_snapshot(
+      int r, const std::string &group_snap_id, Context *on_finish);
   void set_image_replayer_limits(const std::string &image_id,
                                  cls::rbd::GroupSnapshot *remote_snap);
 
   void regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish);
-  void handle_regular_snapshot_complete(int r, Context *on_finish);
+  void handle_regular_snapshot_complete(
+    int r, const std::string &group_snap_id, Context *on_finish);
 };
 
 } // namespace group_replayer
