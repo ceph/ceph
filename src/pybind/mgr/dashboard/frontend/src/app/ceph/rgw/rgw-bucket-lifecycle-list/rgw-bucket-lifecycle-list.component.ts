@@ -94,7 +94,7 @@ export class RgwBucketLifecycleListComponent implements OnInit {
 
   loadLifecyclePolicies(context: CdTableFetchDataContext) {
     const allLifecycleRules$ = this.rgwBucketService
-      .getLifecycle(this.bucket.bucket, this.bucket.owner)
+      .getLifecycle(this.bucket.bucket, this.bucket.owner, this.bucket.tenant)
       .pipe(
         tap((lifecycle) => {
           this.lifecycleRuleList = lifecycle;
@@ -144,7 +144,12 @@ export class RgwBucketLifecycleListComponent implements OnInit {
 
   submitLifecycleConfig(rules: any) {
     this.rgwBucketService
-      .setLifecycle(this.bucket.bucket, JSON.stringify(rules), this.bucket.owner)
+      .setLifecycle(
+        this.bucket.bucket,
+        JSON.stringify(rules),
+        this.bucket.owner,
+        this.bucket.tenant
+      )
       .subscribe({
         next: () => {
           this.notificationService.show(
