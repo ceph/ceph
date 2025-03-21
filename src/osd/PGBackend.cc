@@ -211,8 +211,11 @@ void PGBackend::rollback(
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
       auto dpp = pg->get_parent()->get_dpp();
-      const uint64_t shard_size = pg->object_size_to_shard_size(old_size, pg->get_parent()->whoami_shard().shard);
-      ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " rollback append object_size " << old_size << " shard_size " << shard_size << dendl;
+      const uint64_t shard_size = pg->object_size_to_shard_size(old_size,
+		       pg->get_parent()->whoami_shard().shard);
+      ldpp_dout(dpp, 20) << " entry " << entry.version
+			 << " rollback append object_size " << old_size
+			 << " shard_size " << shard_size << dendl;
       pg->rollback_append(hoid, shard_size, &temp);
       temp.append(t);
       temp.swap(t);
@@ -223,18 +226,27 @@ void PGBackend::rollback(
       if (pool.is_nonprimary_shard(pg->get_parent()->whoami_shard().shard)) {
         if (entry.is_written_shard(pg->get_parent()->whoami_shard().shard)) {
 	  // Written shard - only rollback OI attr
-	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " written shard OI attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " written shard OI attr rollback "
+			     << pg->get_parent()->whoami_shard().shard
+			     << dendl;
 	  ObjectStore::Transaction temp;
 	  pg->rollback_setattrs(hoid, attrs, &temp, true);
 	  temp.append(t);
 	  temp.swap(t);
 	} else {
 	  // Unwritten shard - nothing to rollback
-	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " unwritten shard skipping attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " unwritten shard skipping attr rollback "
+			     << pg->get_parent()->whoami_shard().shard
+			     << dendl;
 	}
       } else {
 	// Primary shard - rollback all attrs
-	ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " primary_shard attr rollback " << pg->get_parent()->whoami_shard().shard << dendl;
+	ldpp_dout(dpp, 20) << " entry " << entry.version
+			   << " primary_shard attr rollback "
+			   << pg->get_parent()->whoami_shard().shard
+			   << dendl;
 	ObjectStore::Transaction temp;
 	pg->rollback_setattrs(hoid, attrs, &temp, false);
 	temp.append(t);
@@ -272,25 +284,38 @@ void PGBackend::rollback(
       const std::vector<shard_id_set> &shards) override {
       ObjectStore::Transaction temp;
       const pg_pool_t& pool = pg->get_parent()->get_pool();
-      ceph_assert(entry.written_shards.empty() || pool.allows_ecoptimizations());
+      ceph_assert(entry.written_shards.empty() ||
+		  pool.allows_ecoptimizations());
       auto dpp = pg->get_parent()->get_dpp();
       bool donework = false;
       ceph_assert(shards.empty() || shards.size() == extents.size());
       for (unsigned int i=0;i<extents.size();i++) {
-        if (shards.empty() || shards[i].empty() || shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
+        if (shards.empty() ||
+	    shards[i].empty() ||
+	    shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
 	  // Written shard - rollback extents
-	  const uint64_t shard_size = pg->object_size_to_shard_size(object_size, pg->get_parent()->whoami_shard().shard);
-	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version
-			     << " written shard rollback_extents " << entry.written_shards
-			     << " shards " << (shards.empty()?shard_id_set():shards[i]) << " " <<
-	                        pg->get_parent()->whoami_shard().shard << " " <<
-	                        object_size << " " <<
-	                        shard_size << dendl;
-	  pg->rollback_extents(gen, extents[i].first, extents[i].second, hoid, shard_size, &temp);
+	  const uint64_t shard_size = pg->object_size_to_shard_size(
+					object_size,
+					pg->get_parent()->whoami_shard().shard);
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " written shard rollback_extents "
+			     << entry.written_shards
+			     << " shards "
+			     << (shards.empty()?shard_id_set():shards[i])
+			     << " " << pg->get_parent()->whoami_shard().shard
+			     << " " << object_size
+			     << " " << shard_size
+			     << dendl;
+	  pg->rollback_extents(gen, extents[i].first, extents[i].second,
+			       hoid, shard_size, &temp);
 	  donework = true;
 	} else {
 	  // Unwritten shard - nothing to rollback
-	  ldpp_dout(dpp, 20) << "BILLR: entry " << entry.version << " unwritten shard skipping rollback_extents " << entry.written_shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
+	  ldpp_dout(dpp, 20) << " entry " << entry.version
+			     << " unwritten shard skipping rollback_extents "
+			     << entry.written_shards
+			     << " " << pg->get_parent()->whoami_shard().shard
+			     << dendl;
 	}
       }
       if (donework) {
@@ -334,15 +359,19 @@ struct Trimmer : public ObjectModDesc::Visitor {
     auto dpp = pg->get_parent()->get_dpp();
     ceph_assert(shards.empty() || shards.size() == extents.size());
     for (unsigned int i=0;i<extents.size();i++) {
-      if (shards.empty() || shards[i].empty() || shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
-        ldpp_dout(dpp, 30) << __func__ << " BILLT: written_shard trim " << shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
+      if (shards.empty() ||
+	  shards[i].empty() ||
+	  shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
+        ldpp_dout(dpp, 30) << __func__ << " trim " << shards << " "
+			   << pg->get_parent()->whoami_shard().shard << dendl;
         pg->trim_rollback_object(
           soid,
           gen,
           t);
 	break;
       } else {
-	ldpp_dout(dpp, 20) << __func__ << " BILLT: not written_shard skipping trim " << shards << " " << pg->get_parent()->whoami_shard().shard << dendl;
+	ldpp_dout(dpp, 20) << __func__ << " skipping trim " << shards << " "
+			   << pg->get_parent()->whoami_shard().shard << dendl;
       }
     }
   }
@@ -389,28 +418,30 @@ void PGBackend::partialwrite(
   if (!entry.written_shards.empty()) {
     // Must provide *info if log contains partial writes and mark it dirty
     ceph_assert(info != nullptr);
-    // Skip the metadata shards (0 and the coding parity shards)
-    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW version=" << entry.version
-		       << " last_update=" << info->last_update
-		       << " last_complete=" << info->last_complete
-		       << " entry = " << entry << dendl;
-    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW written_shards=" << entry.written_shards
-		       << " present_shards=" << entry.present_shards << dendl;
-    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW before pwlc=" << info->partial_writes_last_complete << dendl;
+    ldpp_dout(dpp, 20) << __func__ << " version=" << entry.version
+		       << " written_shards=" << entry.written_shards
+		       << " present_shards=" << entry.present_shards
+		       << " pwlc=" << info->partial_writes_last_complete
+		       << dendl;
     const pg_pool_t &pool = get_parent()->get_pool();
-    for (unsigned int shard = 0; shard < get_parent()->get_pool().size; shard++) {
+    for (unsigned int shard = 0;
+	 shard < get_parent()->get_pool().size;
+	 shard++) {
       if (pool.is_nonprimary_shard(shard_id_t(shard))) {
         if (!entry.is_written_shard(shard_id_t(shard))) {
 	  if (!info->partial_writes_last_complete.contains(shard_id_t(shard))) {
 	    // 1st partial write since all logs were updated
 	    info->partial_writes_last_complete[shard_id_t(shard)] =
 	      std::pair(entry.prior_version, entry.version);
-	  } else if (info->partial_writes_last_complete[shard_id_t(shard)].second.version + 1 == entry.version.version) {
+	  } else if (info->partial_writes_last_complete[shard_id_t(shard)]
+		     .second.version + 1 == entry.version.version) {
 	    // Subsequent partial write, version is sequential
-	    info->partial_writes_last_complete[shard_id_t(shard)].second = entry.version;
+	    info->partial_writes_last_complete[shard_id_t(shard)].second =
+	      entry.version;
 	  } else {
-	    // Subsequent partial write, discontiguous versions  - recovery will be required
-	    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW cannot update shard " << shard << " stuck at " << info->partial_writes_last_complete[shard_id_t(shard)] << dendl;
+	    // Subsequent partial write, discontiguous versions
+	    ldpp_dout(dpp, 20) << __func__ << " cannot update shard " << shard
+			       << dendl;
 	  }
         } else {
 	  // Log updated or shard absent, partial write entry not required
@@ -418,11 +449,12 @@ void PGBackend::partialwrite(
 	}
       }
     }
-    ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW after pwlc=" << info->partial_writes_last_complete << dendl;
+    ldpp_dout(dpp, 20) << __func__ << " after pwlc="
+		       << info->partial_writes_last_complete << dendl;
   } else if (info != nullptr) {
     // All shard logs updated - no partial write entries not required
     if (!info->partial_writes_last_complete.empty()) {
-      ldpp_dout(dpp, 20) << __func__ << ": BILL_LOG_PW clear all shards" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << " clear pwlc" << dendl;
     }
     info->partial_writes_last_complete.clear();
   }
@@ -649,7 +681,7 @@ void PGBackend::rollback_try_stash(
   version_t old_version,
   ObjectStore::Transaction *t) {
   ceph_assert(!hoid.is_temp());
-  dout(20) << __func__ << " BILLR: " << hoid << " " << old_version << dendl;
+  dout(20) << __func__ << " " << hoid << " " << old_version << dendl;
   t->remove(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
@@ -669,14 +701,17 @@ void PGBackend::rollback_extents(
   auto shard = get_parent()->whoami_shard().shard;
   if (offset >= shard_size) {
     // extent on this shard is beyond the end of the object - nothing to do
-    dout(20) << __func__ << " BILLR: " << hoid << " " << offset << "~" << length << " is out of range " << shard_size << dendl;
+    dout(20) << __func__ << " " << hoid << " "
+	     << offset << "~" << length << " is out of range "
+	     << shard_size << dendl;
   } else {
     if (offset + length > shard_size) {
-      dout(20) << __func__ << " BILLR: " << length << " is being truncated" << dendl;
+      dout(20) << __func__ << " " << length << " is being truncated" << dendl;
       // extent on this shard goes beyond end of the object - truncate length
       length = shard_size - offset;
     }
-    dout(20) << __func__ << " BILLR: " << hoid << " " << offset << "~" << length << dendl;
+    dout(20) << __func__ << " " << hoid << " " << offset << "~" << length
+	     << dendl;
     t->clone_range(
       coll,
       ghobject_t(hoid, gen, shard),
@@ -692,7 +727,7 @@ void PGBackend::trim_rollback_object(
   version_t old_version,
   ObjectStore::Transaction *t) {
   ceph_assert(!hoid.is_temp());
-  dout(20) << __func__ << " BILLT: " << hoid << " " << old_version << dendl;
+  dout(20) << __func__ << " trim " << hoid << " " << old_version << dendl;
   t->remove(
     coll, ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard));
 }
