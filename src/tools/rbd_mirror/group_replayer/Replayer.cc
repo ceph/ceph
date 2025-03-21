@@ -1163,7 +1163,6 @@ template <typename I>
 void Replayer<I>::regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish) {
-  dout(10) << dendl;
   std::unique_lock locker{m_lock};
   auto itl = std::find_if(
       m_local_group_snaps.begin(), m_local_group_snaps.end(),
@@ -1248,22 +1247,32 @@ void Replayer<I>::regular_snapshot_complete(
       image_snap_complete = false; // reset
     }
   }
-  locker.lock();
   if (itr->snaps.size() == local_image_snap_specs.size()) {
+    locker.lock();
     itl->snaps = local_image_snap_specs;
     itl->state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-  }
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::group_snap_set(&op, *itl);
+    librados::ObjectWriteOperation op;
+    librbd::cls_client::group_snap_set(&op, *itl);
 
-  auto comp = create_rados_callback(
-      new LambdaContext([this, group_snap_id, on_finish](int r) {
-        handle_regular_snapshot_complete(r, group_snap_id, on_finish);
-      }));
-  int r = m_local_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_local_group_id), comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+    auto comp = create_rados_callback(
+        new LambdaContext([this, group_snap_id, on_finish](int r) {
+          handle_regular_snapshot_complete(r, group_snap_id, on_finish);
+        }));
+    int r = m_local_io_ctx.aio_operate(
+        librbd::util::group_header_name(m_local_group_id), comp, &op);
+    ceph_assert(r == 0);
+    locker.unlock();
+    comp->release();
+
+    dout(10) << "local group snap info: "
+      << "id: " << itl->id
+      << ", name: " << itl->name
+      << ", state: " << itl->state
+      << ", snaps.size: " << itl->snaps.size()
+      << dendl;
+  } else {
+    on_finish->complete(0);
+  }
 }
 
 template <typename I>
