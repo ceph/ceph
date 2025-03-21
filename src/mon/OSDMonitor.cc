@@ -4173,29 +4173,6 @@ void OSDMonitor::update_up_thru(int from, epoch_t up_thru)
   }
 }
 
-static std::vector<int> pgtemp_primaryfirst(pg_pool_t& pool, const std::vector<int>& pg_temp)
-{
-#if 0
-  //FIXME: BILL - Enable this
-  if (!pool.nonprimary_shards.empty()) {
-    std::vector<int> result;
-    std::vector<int> nonprimary;
-    int shard = 0;
-    for (auto osd : pg_temp) {
-      if (pool.is_nonprimary_shard(shard_id_t(shard))) {
-	nonprimary.emplace_back(osd);
-      } else {
-	result.emplace_back(osd);
-      }
-      shard++;
-    }
-    result.insert( result.end(), nonprimary.begin(), nonprimary.end() );
-    return result;
-  }
-#endif
-  return pg_temp;
-}
-
 bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -4222,9 +4199,7 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
     else
       pg_pool = *osdmap.get_pg_pool(pool);
 
-    dout(10) << __func__ << "BILL_PGTEMP: from " << p->second << dendl;
-    std::vector<int> pg_temp = pgtemp_primaryfirst(pg_pool, p->second);
-    dout(10) << __func__ << "BILL_PGTEMP: to " << pg_temp << dendl;
+    std::vector<int> pg_temp = osdmap.pgtemp_primaryfirst(pg_pool, p->second);
     pending_inc.new_pg_temp[p->first] =
       mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end());
 
@@ -8933,9 +8908,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	   pg_temp != osdmap.pg_temp->end();
 	   ++pg_temp) {
 	if (pg_temp->first.pool() == pool) {
-	  dout(10) << __func__ << " BILL_PGTEMP " << pg_temp->first << " re-encoding pg_temp " << pg_temp->second << dendl;
-	  std::vector<int> new_pg_temp = pgtemp_primaryfirst(p, pg_temp->second);
-	  dout(10) << __func__ << " BILL_PGTEMP " << new_pg_temp << dendl;
+	  std::vector<int> new_pg_temp = osdmap.pgtemp_primaryfirst(p, pg_temp->second);
 	  pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
 	}
       }

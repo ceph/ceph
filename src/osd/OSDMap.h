@@ -1232,7 +1232,7 @@ private:
     const pg_pool_t& pool, pg_t pg,
     std::vector<int> *osds,
     ps_t *ppps) const;
-  int _pick_primary(const pg_pool_t& pool, const std::vector<int>& osds) const;
+  int _pick_primary(const std::vector<int>& osds) const;
   void _remove_nonexistent_osds(const pg_pool_t& pool, std::vector<int>& osds) const;
 
   void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
@@ -1345,6 +1345,9 @@ public:
     }
     return false;
   }
+
+  const std::vector<int> pgtemp_primaryfirst(const pg_pool_t& pool, const std::vector<int>& pg_temp) const;
+  const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool, const pg_t pg, const std::vector<int>& acting) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);
