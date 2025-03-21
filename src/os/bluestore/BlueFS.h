@@ -522,9 +522,11 @@ private:
   std::vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
-  std::vector<bluefs_extent_t> locked_alloc;       ///< candidate extents for locked alocations,
-                                                   ///< no alloc/release reqs matching these space
-                                                   ///< to be issued to allocator.
+  std::vector<bluefs_locked_extents_t> locked_alloc;  ///< candidate extents
+                                                      ///< at both dev's head and tail
+                                                      ///< locked for allocations,
+                                                      ///< no alloc/release reqs matching
+                                                      ///< these space to be issued to allocator.
 
 
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;

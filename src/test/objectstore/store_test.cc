@@ -11993,7 +11993,7 @@ TEST_P(StoreTestSpecificAUSize, BlueFSReservedTest) {
             g_conf()->bluefs_alloc_size);
 
   ASSERT_EQ(fs->get_full_reserved(BlueFS::BDEV_WAL),
-            wal_extra);
+            g_conf()->bluefs_alloc_size + wal_extra);
 }
 
 #endif  // WITH_BLUESTORE

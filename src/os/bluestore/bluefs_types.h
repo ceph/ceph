@@ -35,6 +35,37 @@ WRITE_CLASS_DENC(bluefs_extent_t)
 
 std::ostream& operator<<(std::ostream& out, const bluefs_extent_t& e);
 
+struct bluefs_locked_extents_t {
+  uint64_t head_offset = 0;
+  uint32_t head_length = 0;
+
+  uint64_t gray_tail_offset = 0;
+  uint32_t gray_tail_length = 0;
+
+  uint64_t tail_offset = 0;
+  uint32_t tail_length = 0;
+
+  bluefs_locked_extents_t() {}
+  bluefs_locked_extents_t(uint64_t head_reserved, uint64_t full_size, uint64_t alloc_size);
+
+  void reset() {
+    *this = bluefs_locked_extents_t();
+  }
+  uint64_t head_end() const { return head_offset + head_length; }
+  uint64_t gray_tail_end() const { return gray_tail_offset + gray_tail_length; }
+  uint64_t tail_end() const { return tail_offset + tail_length; }
+
+  void reset_intersected(const bluefs_extent_t& e);
+
+  // returns extents in a form where tails are merged
+  bluefs_locked_extents_t get_merged() const;
+
+  // returns final locked extents where head/tail are present only
+  bluefs_locked_extents_t finalize() const;
+};
+
+std::ostream& operator<<(std::ostream& out, const bluefs_locked_extents_t& e);
+
 struct bluefs_fnode_delta_t {
   uint64_t ino;
   uint64_t size;
