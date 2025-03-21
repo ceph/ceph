@@ -1620,17 +1620,17 @@ struct transaction_manager_test_t :
 		continue;
 	      }
               auto new_off = get_laddr_hint(off << 10)
-		  .get_byte_distance<extent_len_t>(last_pin.get_key());
-              auto new_len = last_pin.get_length() - new_off;
+		  .get_byte_distance<extent_len_t>(last_pin->get_key());
+              auto new_len = last_pin->get_length() - new_off;
               //always remap right extent at new split_point
-	      auto pin = remap_pin(t, std::move(last_pin), new_off, new_len);
+	      auto pin = remap_pin(t, std::move(*last_pin), new_off, new_len);
               if (!pin) {
 		conflicted++;
 		return;
 	      }
               last_pin = std::move(pin);
 	    }
-            auto last_ext = try_get_extent(t, last_pin.get_key());
+            auto last_ext = try_get_extent(t, last_pin->get_key());
             if (!last_ext) {
               conflicted++;
               return;
