@@ -686,7 +686,7 @@ class TestMirroring(CephFSTestCase):
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
-        for i in range(8):
+        for i in range(100):
             filename = f'file.{i}'
             self.mount_a.write_n_mb(os.path.join('d0', filename), 1024)
 
