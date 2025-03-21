@@ -46,6 +46,11 @@ public:
   LBAMapping &operator=(LBAMapping &&) = default;
   ~LBAMapping() = default;
 
+  // whether the mapping corresponds to a pending extent
+  bool is_pending() const {
+    return !is_indirect() && !is_data_stable();
+  }
+
   bool is_linked_direct() const {
     return (bool)direct_cursor;
   }
