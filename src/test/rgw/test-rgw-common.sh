@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-rgw_flags="--debug-rgw=20 --debug-ms=1"
+rgw_flags="--debug-rgw-notification=20 --debug-rgw=20 --debug-ms=1"
 
 function _assert {
   src=$1; shift

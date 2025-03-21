@@ -98,7 +98,7 @@ class filepath {
     ino = b;
   }
   void set_path(std::string_view s) {
-    if (s[0] == '/') {
+    if (!s.empty() && s[0] == '/') {
       path = s.substr(1);
       ino = 1;
     } else {
@@ -128,6 +128,24 @@ class filepath {
   const std::string& operator[](int i) const {
     if (bits.empty() && path.length() > 0) parse_bits();
     return bits[i];
+  }
+
+  auto begin() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).begin();
+  }
+  auto rbegin() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).rbegin();
+  }
+
+  auto end() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).end();
+  }
+  auto rend() const {
+    if (bits.empty() && path.length() > 0) parse_bits();
+    return std::as_const(bits).rend();
   }
 
   const std::string& last_dentry() const {

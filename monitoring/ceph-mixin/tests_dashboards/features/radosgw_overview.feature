@@ -7,6 +7,7 @@ Scenario: "Test Average GET Latencies"
     | ceph_rgw_op_get_obj_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 20 60 80 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 1 1 1 |
   When interval is `30s`
+  And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `Average GET/PUT Latencies by RGW Instance` with legend `GET {{rgw_host}}` shows:
     | metrics | values |
     | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo", cluster="mycluster"} | 1.5 |
@@ -18,6 +19,7 @@ Scenario: "Test Average PUT Latencies"
     | ceph_rgw_op_put_obj_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 10 30 50 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 1 1 1 |
   When interval is `30s`
+  And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `Average GET/PUT Latencies by RGW Instance` with legend `PUT {{rgw_host}}` shows:
     | metrics | values |
     | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo", cluster="mycluster"} | 1 |
@@ -28,6 +30,7 @@ Scenario: "Test Total Requests/sec by RGW Instance"
     | ceph_rgw_req{instance="127.0.0.1", instance_id="92806566", job="ceph", cluster="mycluster"} | 10 50 100 |
     | ceph_rgw_metadata{ceph_daemon="rgw.1", hostname="localhost", instance="127.0.0.1", instance_id="92806566", job="ceph", cluster="mycluster"} | 1 1 1 |
   When interval is `30s`
+  And variable `rgw_servers` is `rgw.1`
   Then Grafana panel `Total Requests/sec by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
     | {rgw_host="1"} | 1.5 |
@@ -39,6 +42,7 @@ Scenario: "Test GET Latencies by RGW Instance"
     | ceph_rgw_op_get_obj_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 20 60 80 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 1 1 1 |
   When interval is `30s`
+  And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `GET Latencies by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
     | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo", cluster="mycluster"} | 1.5 |
@@ -71,6 +75,7 @@ Scenario: "Test Bandwidth by RGW Instance"
     | ceph_rgw_metadata{ceph_daemon="rgw.1", hostname="localhost", instance="127.0.0.1", instance_id="92806566", job="ceph", cluster="mycluster"} | 1 1 1 |
   When evaluation time is `1m`
   And interval is `30s`
+  And variable `rgw_servers` is `rgw.1`
   Then Grafana panel `Bandwidth by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
     | {ceph_daemon="rgw.1", instance_id="92806566", rgw_host="1"} | 2.25 |
@@ -83,6 +88,7 @@ Scenario: "Test PUT Latencies by RGW Instance"
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph", cluster="mycluster"} | 1 1 1 |
   When evaluation time is `1m`
   And interval is `30s`
+  And variable `rgw_servers` is `rgw.foo`
   Then Grafana panel `PUT Latencies by RGW Instance` with legend `{{rgw_host}}` shows:
     | metrics | values |
     | {ceph_daemon="rgw.foo", instance="127.0.0.1", instance_id="58892247", job="ceph", rgw_host="foo", cluster="mycluster"} | 1 |

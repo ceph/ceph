@@ -407,7 +407,7 @@ void rgw::AppMain::init_opslog()
     olog_manifold->add_sink(ops_log_file);
   }
   olog_manifold->add_sink(new OpsLogRados(env.driver));
-  olog = olog_manifold;
+  env.olog.reset(olog_manifold);
 } /* init_opslog */
 
 int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
@@ -449,7 +449,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 
   // initialize RGWProcessEnv
   env.rest = &rest;
-  env.olog = olog;
   env.auth_registry = rgw::auth::StrategyRegistry::create(
       dpp->get_cct(), *implicit_tenant_context, env.driver);
   env.ratelimiting = ratelimiter.get();
@@ -592,8 +591,6 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
-
-  delete olog;
 
   if (lua_background) {
     lua_background->shutdown();

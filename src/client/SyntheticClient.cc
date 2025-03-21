@@ -1218,8 +1218,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       // Client users should remember their path, but since this
       // is just a synthetic client we ignore it.
-      std::string ignore;
-      client->chdir(a, ignore, perms);
+      client->chdir(a, perms);
     } else if (strcmp(op, "statfs") == 0) {
       struct statvfs stbuf;
       client->statfs("/", &stbuf, perms);
