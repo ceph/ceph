@@ -404,8 +404,23 @@ supports the following settings:
 .. confval:: log_flush_on_exit
 .. confval:: clog_to_monitors
 .. confval:: clog_to_syslog
-.. confval:: mon_cluster_log_to_syslog
+
+Monitors
+--------
+
+.. confval:: mon_cluster_log_level
 .. confval:: mon_cluster_log_file
+.. confval:: mon_cluster_log_to_file
+.. confval:: mon_cluster_log_to_syslog
+.. confval:: mon_cluster_log_to_syslog_facility
+.. confval:: mon_cluster_log_to_stderr
+.. confval:: mon_cluster_log_to_journald
+.. confval:: mon_cluster_log_to_graylog
+.. confval:: mon_cluster_log_to_graylog_host
+.. confval:: mon_cluster_log_to_graylog_port
+.. confval:: mon_log_max
+.. confval:: mon_health_to_clog
+.. confval:: mon_health_to_clog_interval
 
 OSD
 ---

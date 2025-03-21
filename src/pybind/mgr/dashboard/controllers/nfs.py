@@ -14,6 +14,7 @@ from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.exception import DashboardException, handle_cephfs_error, \
     serialize_dashboard_exception
+from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, Task, UIRouter
 from ._version import APIVersion
@@ -87,7 +88,11 @@ def NfsTask(name, metadata, wait_for):  # noqa: N802
 class NFSGaneshaCluster(RESTController):
     @ReadPermission
     @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
-    def list(self):
+    def list(self, info: Optional[bool] = False):
+        if str_to_bool(info):
+            return [
+                {"name": key, **value} for key, value in mgr.remote('nfs', 'cluster_info').items()
+            ]
         return mgr.remote('nfs', 'cluster_ls')
 
 
@@ -109,11 +114,11 @@ class NFSGaneshaExports(RESTController):
         export['fsal'] = schema_fsal_info
         return export
 
-    @EndpointDoc("List all NFS-Ganesha exports",
+    @EndpointDoc("List all or cluster specific NFS-Ganesha exports ",
                  responses={200: [EXPORT_SCHEMA]})
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self, cluster_id=None) -> List[Dict[str, Any]]:
         exports = []
-        for export in mgr.remote('nfs', 'export_ls'):
+        for export in mgr.remote('nfs', 'export_ls', cluster_id, True):
             exports.append(self._get_schema_export(export))
 
         return exports

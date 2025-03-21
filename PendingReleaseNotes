@@ -14,6 +14,8 @@
 * RGW: For compatibility with AWS S3, LastModified timestamps are now truncated
   to the second. Note that during upgrade, users may observe these timestamps
   moving backwards as a result.
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
@@ -104,6 +106,11 @@
 * erasure-code: The default plugin for erasure coded pools has been changed
   from Jerasure to ISA-L. This change applies to new clusters only. ISA-L is
   recommended for new pools because the Jerasure library is no longer maintained.
+
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
+
 
 >=19.2.1
 

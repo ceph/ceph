@@ -5929,7 +5929,7 @@ int main(int argc, const char **argv)
       /* Tier options */
       bool tier_class = false;
       std::string storage_class = rule.get_storage_class();
-      RGWZoneGroupPlacementTier t{storage_class};
+      RGWZoneGroupPlacementTier t;
       RGWZoneGroupPlacementTier *pt = &t;
 
 	  auto ptiter = target.tier_targets.find(storage_class);
@@ -5937,8 +5937,8 @@ int main(int argc, const char **argv)
         pt = &ptiter->second;
         tier_class = true;
       } else if (tier_type_specified) {
-        if (tier_type == "cloud-s3") {
-          /* we support only cloud-s3 tier-type for now.
+        if (RGWTierType::is_tier_type_supported(tier_type)) {
+          /* we support only cloud-s3 & cloud-s3-glacier tier-type for now.
            * Once set cant be reset. */
           tier_class = true;
           pt->tier_type = tier_type;

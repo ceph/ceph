@@ -737,7 +737,16 @@ class RgwClient(RestClient):
         try:
             result = request(
                 raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
-            return xmltodict.parse(remove_namespace(result), process_namespaces=False)
+            lifecycle = xmltodict.parse(remove_namespace(result), process_namespaces=False)
+            if lifecycle is not None:
+                lifecycle_config = lifecycle.get('LifecycleConfiguration', {})
+                rule = lifecycle_config.get('Rule')
+
+                if isinstance(rule, dict):
+                    lifecycle_config['Rule'] = [rule]
+
+                lifecycle['LifecycleConfiguration'] = lifecycle_config
+            return lifecycle
         except RequestException as e:
             if e.content:
                 root = ET.fromstring(e.content)
