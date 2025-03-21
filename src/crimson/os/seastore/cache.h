@@ -153,7 +153,7 @@ public:
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     LOG_PREFIX(Cache::retire_extent);
     SUBDEBUGT(seastore_cache, "retire extent -- {}", t, *ref);
-    t.add_to_retired_set(ref);
+    t.add_present_to_retired_set(ref);
   }
 
   /// Declare paddr retired in t

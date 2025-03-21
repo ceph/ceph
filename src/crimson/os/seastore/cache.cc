@@ -62,7 +62,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   auto result = t.get_extent(addr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
     DEBUGT("retire {}~0x{:x} on t -- {}", t, addr, length, *ext);
-    t.add_to_retired_set(CachedExtentRef(&*ext));
+    t.add_present_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_iertr::now();
   } else if (result == Transaction::get_extent_ret::RETIRED) {
     ERRORT("retire {}~0x{:x} failed, already retired -- {}", t, addr, length, *ext);
@@ -90,8 +90,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
            t, addr, length, *ext);
     add_extent(ext);
   }
-  t.add_to_read_set(ext);
-  t.add_to_retired_set(ext);
+  t.add_absent_to_retired_set(ext);
   return retire_extent_iertr::now();
 }
 
@@ -117,8 +116,7 @@ void Cache::retire_absent_extent_addr(
   DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
 	 t, addr, length, *ext);
   add_extent(ext);
-  t.add_to_read_set(ext);
-  t.add_to_retired_set(ext);
+  t.add_absent_to_retired_set(ext);
 }
 
 void Cache::dump_contents()
