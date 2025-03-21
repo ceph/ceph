@@ -139,7 +139,7 @@ private:
     std::unique_lock<ceph::mutex> &locker,
     Context *on_finish);
   void handle_create_mirror_snapshot(
-    int r, const std::string &group_snap_id, Context *on_finish);
+    int r, cls::rbd::GroupSnapshot *snap, Context *on_finish);
 
   std::string prepare_non_primary_mirror_snap_name(
     const std::string &global_group_id, const std::string &snap_id);
@@ -157,10 +157,9 @@ private:
   void unlink_group_snapshots();
 
   void create_regular_snapshot(
-    const std::string &group_snap_name,
-    const std::string &group_snap_id,
+    cls::rbd::GroupSnapshot *snap,
+    std::unique_lock<ceph::mutex> &locker,
     Context *on_finish);
-  void handle_create_regular_snapshot(int r, Context *on_finish);
   void handle_create_regular_snapshot(
       int r, const std::string &group_snap_id, Context *on_finish);
   void set_image_replayer_limits(const std::string &image_id,
