@@ -70,6 +70,9 @@ import argparse
 import contextlib
 import enum
 import glob
+import hashlib
+import functools
+import json
 import logging
 import os
 import pathlib
@@ -165,6 +168,18 @@ class DidNotExecute(Exception):
     pass
 
 
+_CONTAINER_SOURCES = [
+    "Dockerfile.build",
+    "src/script/lib-build.sh",
+    "src/script/run-make.sh",
+    "ceph.spec.in",
+    "do_cmake.sh",
+    "install-deps.sh",
+    "run-make-check.sh",
+    "src/script/buildcontainer-setup.sh",
+]
+
+
 def _cmdstr(cmd):
     return " ".join(shlex.quote(c) for c in cmd)
 
@@ -248,6 +263,20 @@ def _git_current_sha(ctx, short=True):
     cmd = _git_command(ctx, args)
     res = _run(cmd, check=True, capture_output=True)
     return res.stdout.decode("utf8").strip()
+
+
+@functools.cache
+def _hash_sources(bsize=4096):
+    hh = hashlib.sha256()
+    buf = bytearray(bsize)
+    for path in sorted(_CONTAINER_SOURCES):
+        with open(path, "rb") as fh:
+            while True:
+                rlen = fh.readinto(buf)
+                hh.update(buf[:rlen])
+                if rlen < len(buf):
+                    break
+    return f"sha256:{hh.hexdigest()}"
 
 
 class Steps(StrEnum):
@@ -501,6 +530,7 @@ def build_container(ctx):
         "--pull",
         "-t",
         ctx.image_name,
+        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
         f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
@@ -521,15 +551,39 @@ def build_container(ctx):
         _run(cmd, check=True, ctx=ctx)
 
 
-@Builder.set(Steps.CONTAINER)
-def get_container(ctx):
-    """Build or fetch a container image that we will build in."""
+def _check_cached_image(ctx):
     inspect_cmd = [
         ctx.container_engine,
         "image",
         "inspect",
         ctx.image_name,
     ]
+    res = _run(inspect_cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.info("Container image %s not present", ctx.image_name)
+        return False, False
+
+    log.info("Container image %s present", ctx.image_name)
+    ctr_info = json.loads(res.stdout)[0]
+    labels = {}
+    if "Labels" in ctr_info:
+        labels = ctr_info["Labels"]
+    elif "Labels" in ctr_info.get("ContainerConfig", {}):
+        labels = ctr_info["ContainerConfig"]["Labels"]
+    elif "Labels" in ctr_info.get("Config", {}):
+        labels = ctr_info["Config"]["Labels"]
+    saved_hash = labels.get("io.ceph.build-with-container.src", "")
+    curr_hash = _hash_sources()
+    if saved_hash == curr_hash:
+        log.info("Container passes source check")
+        return True, True
+    log.info("Container sources do not match: %s", curr_hash)
+    return True, False
+
+
+@Builder.set(Steps.CONTAINER)
+def get_container(ctx):
+    """Build or fetch a container image that we will build in."""
     pull_cmd = [
         ctx.container_engine,
         "pull",
@@ -537,16 +591,18 @@ def get_container(ctx):
     ]
     allowed = ctx.cli.image_sources or ImageSource
     if ImageSource.CACHE in allowed:
-        res = _run(inspect_cmd, check=False, capture_output=True)
-        if res.returncode == 0:
-            log.info("Container image %s present", ctx.image_name)
+        log.info("Checking for cached image")
+        present, hash_ok = _check_cached_image(ctx)
+        if present and hash_ok or len(allowed) == 1:
             return
-        log.info("Container image %s not present", ctx.image_name)
     if ImageSource.PULL in allowed:
+        log.info("Checking for image in remote repository")
         res = _run(pull_cmd, check=False, capture_output=True)
         if res.returncode == 0:
             log.info("Container image %s pulled successfully", ctx.image_name)
-            return
+            present, hash_ok = _check_cached_image(ctx)
+            if present and hash_ok:
+                return
     log.info("Container image %s needed", ctx.image_name)
     if ImageSource.BUILD in allowed:
         ctx.build.wants(Steps.BUILD_CONTAINER, ctx)
