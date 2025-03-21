@@ -250,7 +250,7 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
 
   // Without subtracting 1, we wind up sending bad data into the
   // parser:
-  if (!parser.parse(bl.c_str(), bl.length() - 1)) {
+  if (!parser.parse(bl.c_str(), bl.length())) {
     err_msg = "Malformed JSON (RGWPolicy)";
     dout(0) << "malformed json (RGWPolicy)" << dendl;
     return -EINVAL;

@@ -289,12 +289,7 @@ public:
 
   // operate on a string/stringlike range or object:
   bool parse(std::string_view sv);
-
-  bool parse(const char *buf_, int len) {
- 	return buf_ ? 
-	        parse(std::string_view { buf_, static_cast<std::string_view::size_type>(len) }) 
-	       : false;
-  }
+  bool parse(const char *buf_, int len);
 
   // operate on a data file:
   bool parse(const char *file_name);

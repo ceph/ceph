@@ -146,6 +146,40 @@ bool JSONParser::parse(std::string_view json_string_view)
   return false; 
 }
 
+bool JSONParser::parse(const char *buf_, int len)
+{
+  if (nullptr == buf_ || 0 >= len) {
+   return false;
+  }
+
+  if (!parse_json({ buf_, static_cast<size_t>(len) }, data)) {
+   return false;
+  }
+
+  // recursively evaluate the result:
+  handle_value(data);
+
+  if (data.is_object() or data.is_array()) 
+   return true;
+
+  if (data.is_string()) {
+    val.set(data.as_string(), true);
+    return true;
+  } 
+
+  // For any other kind of value:
+  std::string s = boost::json::serialize(data);
+
+  // Was the entire string read?
+  if (s.size() == static_cast<uint64_t>(len)) { 
+    val.set(s, false);
+    return true;
+  }
+
+  // Could not parse and convert:
+  return false; 
+}
+
 // parse a supplied ifstream:
 bool JSONParser::parse(const char *file_name)
 {
