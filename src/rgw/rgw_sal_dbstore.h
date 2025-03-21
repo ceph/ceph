@@ -207,7 +207,10 @@ protected:
     virtual ~DBPlacementTier() = default;
 
     virtual const std::string& get_tier_type() { return tier.tier_type; }
+    virtual bool is_tier_type_s3() { return (tier.is_tier_type_s3()); }
     virtual const std::string& get_storage_class() { return tier.storage_class; }
+    virtual bool allow_read_through() { return tier.allow_read_through; }
+    virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
     virtual bool retain_head_object() { return tier.retain_head_object; }
     RGWZoneGroupPlacementTier& get_rt() { return tier; }
   };

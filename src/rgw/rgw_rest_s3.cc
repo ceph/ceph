@@ -3642,8 +3642,9 @@ void RGWRestoreObj_ObjStore_S3::send_response()
   if (restore_ret == 0) {
     s->err.http_ret = 202; // OK
   } else if (restore_ret == 1) {
-    s->err.http_ret = 409; // Conflict
-    dump_header(s, "x-amz-restore", "on-going-request=\"true\"");
+    restore_ret = -ERR_RESTORE_ALREADY_IN_PROGRESS;
+    set_req_state_err(s, restore_ret);
+    dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
   } else if (restore_ret == 2) {
     rgw::sal::Attrs attrs;
     ceph::real_time expiration_date;
