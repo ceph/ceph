@@ -136,6 +136,7 @@ public:
     friend ObjectContextLoader;
 
     void set_state_obc(state_t &s, ObjectContextRef _obc) {
+      ceph_assert(s.is_empty());
       s.obc = std::move(_obc);
       s.obc->append_to(loader.obc_set_accessing);
     }
