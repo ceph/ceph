@@ -1774,6 +1774,297 @@ TEST(BlueFS, test_69481_truncate_asserts) {
   fs.umount();
 }
 
+TEST(bluefs_locked_extents_t, basics) {
+  const uint64_t M = 1 << 20;
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t fullsize = 128*M;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection
+    lcke.reset_intersected(bluefs_extent_t(0, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // gray_tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M + reserved, 0x1000));
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M - 0x1000, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x1000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x10000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, std::min(lcke.gray_tail_offset, lcke.tail_offset));
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection
+    lcke.reset_intersected(bluefs_extent_t(0, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - extra_tail + reserved);
+    ASSERT_EQ(lcke.gray_tail_length, extra_tail - reserved);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    // gray_tail has intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M + reserved, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x1000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, std::min(lcke.gray_tail_offset, lcke.tail_offset));
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection, hopefully partial
+    lcke.reset_intersected(bluefs_extent_t(reserved - 0x1000, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, fullsize - au + reserved - extra_tail);
+    ASSERT_EQ(lcke.gray_tail_length, au - reserved + extra_tail);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.gray_tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.gray_tail_length);
+
+    // tail&gray_tail have intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+  {
+    uint64_t reserved = 0x2000;
+    uint64_t au = 1*M;
+    uint64_t extra_tail = 0x2000;
+    uint64_t fullsize = 128*M + extra_tail;
+    bluefs_locked_extents_t lcke(reserved, fullsize, au);
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // no ops
+    lcke.reset_intersected(bluefs_extent_t(0, 1*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 10*M, 1*M));
+    lcke.reset_intersected(bluefs_extent_t(0, 127*M, reserved));
+    ASSERT_EQ(lcke.head_offset, reserved);
+    ASSERT_EQ(lcke.head_length, au - reserved);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    // get_merged verification
+    auto e1 = lcke.get_merged();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.gray_tail_offset, 0);
+    ASSERT_EQ(e1.gray_tail_length, 0);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, fullsize - e1.tail_offset);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, lcke.head_offset);
+    ASSERT_EQ(e1.head_length, lcke.head_length);
+    ASSERT_EQ(e1.tail_offset, lcke.tail_offset);
+    ASSERT_EQ(e1.tail_length, lcke.tail_length);
+
+    // head has intersection, hopefully partial
+    lcke.reset_intersected(bluefs_extent_t(reserved - 0x1000, reserved, au));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, fullsize - extra_tail);
+    ASSERT_EQ(lcke.tail_length, extra_tail);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+
+    // tail have intersections
+    lcke.reset_intersected(bluefs_extent_t(0, 128*M, 0x1000));
+    ASSERT_EQ(lcke.head_offset, 0);
+    ASSERT_EQ(lcke.head_length, 0);
+    ASSERT_EQ(lcke.gray_tail_offset, 0);
+    ASSERT_EQ(lcke.gray_tail_length, 0);
+    ASSERT_EQ(lcke.tail_offset, 0);
+    ASSERT_EQ(lcke.tail_length, 0);
+
+    e1 = lcke.finalize();
+    ASSERT_EQ(e1.head_offset, 0);
+    ASSERT_EQ(e1.head_length, 0);
+    ASSERT_EQ(e1.tail_offset, 0);
+    ASSERT_EQ(e1.tail_length, 0);
+  }
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {

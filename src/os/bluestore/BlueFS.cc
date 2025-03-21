@@ -640,7 +640,8 @@ uint64_t BlueFS::_get_minimal_reserved(unsigned id) const
 uint64_t BlueFS::get_full_reserved(unsigned id)
 {
   if (!is_shared_alloc(id)) {
-    return locked_alloc[id].length + _get_minimal_reserved(id);
+    return locked_alloc[id].head_length + locked_alloc[id].tail_length +
+      _get_minimal_reserved(id);
   }
   return 0;
 }
@@ -708,6 +709,18 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   super.uuid.generate_random();
 
   _init_alloc();
+
+  // temporary lock candidate regions to forbid their use during mkfs
+  for (uint8_t i = 0; i < MAX_BDEV; i++) {
+    if (!alloc[i]) continue;
+    bluefs_locked_extents_t res_la = locked_alloc[i].get_merged();
+    if (res_la.head_length) {
+      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length);
+    }
+    if (res_la.tail_length) {
+      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length);
+    }
+  }
 
   // init log
   FileRef log_file = ceph::make_ref<File>();
@@ -793,7 +806,7 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
-    locked_alloc[id] = bluefs_extent_t();
+    locked_alloc[id].reset();
 
     if (is_shared_alloc(id)) {
       dout(1) << __func__ << " shared, id " << id << std::hex
@@ -810,37 +823,37 @@ void BlueFS::_init_alloc()
         name += to_string(uintptr_t(this));
 
       auto reserved = _get_minimal_reserved(id);
-      uint64_t locked_offs = 0;
-      {
-        // Try to lock tailing space at device if allocator controlled space
-        // isn't aligned with recommended alloc unit.
-        // Final decision whether locked tail to be maintained is made after
-        // BlueFS replay depending on existing allocations.
-        uint64_t size0 = _get_block_device_size(id);
-        uint64_t size = size0 - reserved;
-        size = p2align(size, alloc_size[id]) + reserved;
-        if (size < size0) {
-          locked_offs = size;
-          locked_alloc[id] = bluefs_extent_t(id, locked_offs, uint32_t(size0 - size));
-        }
+      uint64_t full_size = _get_block_device_size(id);
+      uint64_t free_end = p2align(full_size, alloc_size[id]);
+
+      // Trying to lock the following extents:
+      // [reserved, alloc_size] and [p2align(dev_size, alloc_size), dev_size]
+      // to make all the allocations alligned to alloc_size if possible.
+      // Final decision whether locked head/tail to be maintained is made after
+      // BlueFS replay depending on existing allocations.
+      auto &locked = locked_alloc[id];
+      locked.head_offset = reserved;
+      locked.head_length = p2nphase(reserved, alloc_size[id]);
+      if (free_end < full_size) {
+        locked.tail_offset = free_end;
+        locked.tail_length = full_size - free_end;
       }
       string alloc_type = cct->_conf->bluefs_allocator;
       dout(1) << __func__ << " new, id " << id << std::hex
               << ", allocator name " << name
               << ", allocator type " << alloc_type
-              << ", capacity 0x" << bdev[id]->get_size()
+              << ", capacity 0x" << full_size
               << ", reserved 0x" << reserved
-              << ", locked 0x" << locked_alloc[id].offset
-              << "~" << locked_alloc[id].length
+              << ", maybe locked " << locked
               << ", block size 0x" << bdev[id]->get_block_size()
               << ", alloc unit 0x" << alloc_size[id]
               << std::dec << dendl;
-      alloc[id] = Allocator::create(cct, alloc_type,
-				    bdev[id]->get_size(),
+      alloc[id] = Allocator::create(cct,
+                                    alloc_type,
+				    full_size,
 				    bdev[id]->get_block_size(),
 				    name);
-      uint64_t free_len = locked_offs ? locked_offs : _get_block_device_size(id) - reserved;
-      alloc[id]->init_add_free(reserved, free_len);
+      alloc[id]->init_add_free(reserved, full_size - reserved);
     }
   }
 }
@@ -1066,7 +1079,7 @@ int BlueFS::mount()
 
   // init freelist
   for (auto& p : nodes.file_map) {
-    dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
+    dout(20) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
       bool is_shared = is_shared_alloc(q.bdev);
       ceph_assert(!is_shared || (is_shared && shared_alloc));
@@ -1074,24 +1087,26 @@ int BlueFS::mount()
         shared_alloc->bluefs_used += q.length;
         alloc[q.bdev]->init_rm_free(q.offset, q.length);
       } else if (!is_shared) {
-        if (locked_alloc[q.bdev].length) {
-          auto locked_offs = locked_alloc[q.bdev].offset;
-          if (q.offset + q.length > locked_offs) {
-            // we already have allocated extents in locked range,
-            // do not enforce this lock then.
-            bluefs_extent_t dummy;
-            std::swap(locked_alloc[q.bdev], dummy);
-            alloc[q.bdev]->init_add_free(dummy.offset, dummy.length);
-            dout(1) << __func__ << std::hex
-                    << " unlocked at " << q.bdev
-                    << " 0x" << dummy.offset << "~" << dummy.length
-                    << std::dec << dendl;
-          }
-        }
+        locked_alloc[q.bdev].reset_intersected(q);
         alloc[q.bdev]->init_rm_free(q.offset, q.length);
       }
     }
   }
+  // finalize and apply locked allocation regions
+  for (uint8_t i = 0; i < MAX_BDEV; i++) {
+    bluefs_locked_extents_t res_la = locked_alloc[i].finalize();
+    dout(1) << __func__ << std::hex
+            << " final locked allocations " << (int)i
+            << " " << locked_alloc[i] << " => " << res_la
+            << dendl;
+    if (res_la.head_length) {
+      alloc[i]->init_rm_free(res_la.head_offset, res_la.head_length);
+    }
+    if (res_la.tail_length) {
+      alloc[i]->init_rm_free(res_la.tail_offset, res_la.tail_length);
+    }
+  }
+
   if (shared_alloc) {
     shared_alloc->need_init = false;
     dout(1) << __func__ << " shared_bdev_used = "
