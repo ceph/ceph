@@ -840,6 +840,22 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_auth_allow_insecure_key
+  type: bool
+  level: advanced
+  desc: Allow the creation of keys with insecure type.
+  long_desc: >
+    By default, the Monitors will allow creation of keys with a cipher type
+    known to be insecure so long as the Monitors also allow that cipher to
+    authenticate. When that cipher type is removed from the authentication
+    list, the Monitors will also disable the default value of this
+    configuration. When disabled, ceph commands can no longer create keys with
+    an insecure cipher type.
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced

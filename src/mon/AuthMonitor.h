@@ -106,8 +106,9 @@ public:
 
 private:
   std::vector<Incremental> pending_auth;
-  uint64_t max_global_id;
-  uint64_t last_allocated_id;
+  uint64_t max_global_id = 0;
+  uint64_t last_allocated_id = 0;
+  boost::intrusive_ptr<CephContext> cct;
 
   // these are protected by mon->auth_lock
   int mon_num = 0, mon_rank = 0;
@@ -178,6 +179,8 @@ private:
   bool prep_auth(MonOpRequestRef op, bool paxos_writable);
 
   bool preprocess_command(MonOpRequestRef op);
+
+  int get_cipher_type(const cmdmap_t& cmdmap, std::ostream& ss) const;
   bool prepare_command(MonOpRequestRef op);
 
   void _encode_keyring(KeyRing& kr, const EntityName& entity,
@@ -193,15 +196,15 @@ private:
   int _check_and_encode_caps(const std::map<std::string, std::string>& caps,
     std::map<std::string, bufferlist>& encoded_caps, std::stringstream& ss);
 
-  int _update_or_create_entity(const EntityName& entity,
+  int _update_or_create_entity(const EntityName& entity, int key_type,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
     std::stringstream& ss, std::stringstream& ds, bufferlist* rdata=nullptr,
     Formatter* fmtr=nullptr, bool create_entity=false);
-  int _create_entity(const EntityName& entity,
+  int _create_entity(const EntityName& entity, int key_type,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
     std::stringstream& ss, std::stringstream& ds, bufferlist* rdata,
     Formatter* fmtr);
-  int _update_caps(const EntityName& entity,
+  int _update_caps(const EntityName& entity, int key_type,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
     std::stringstream& ss, std::stringstream& ds, bufferlist* rdata,
     Formatter* fmtr);
@@ -233,10 +236,8 @@ private:
       const EntityAuth& auth);
 
  public:
-  AuthMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
-    : PaxosService(mn, p, service_name),
-      max_global_id(0),
-      last_allocated_id(0)
+  AuthMonitor(CephContext* cct, Monitor &mn, Paxos &p, const std::string& service_name)
+    : PaxosService(mn, p, service_name), cct(cct)
   {}
 
   void pre_auth(MAuth *m);

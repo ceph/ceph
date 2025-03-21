@@ -1140,6 +1140,9 @@ int CryptoManager::get_key_type(const std::string& s)
 {
   auto l = s;
   std::transform(l.begin(), l.end(), l.begin(), ::tolower);
+  if (l == "recommended") {
+    return CEPH_CRYPTO_AES256KRB5;
+  }
   if (l == "aes") {
     return CEPH_CRYPTO_AES;
   }
@@ -1150,6 +1153,12 @@ int CryptoManager::get_key_type(const std::string& s)
     return CEPH_CRYPTO_NONE;
   }
   return -ENOENT;
+}
+
+const std::set<int>& CryptoManager::get_secure_key_types()
+{
+  static const std::set<int> secure_keys{CEPH_CRYPTO_AES256KRB5};
+  return secure_keys;
 }
 
 bool CryptoManager::crypto_type_supported(int type) const
