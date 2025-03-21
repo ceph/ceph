@@ -241,7 +241,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return ''
 
     @handle_orch_error
-    def service_action(self, action, service_name):
+    def service_action(self, action, service_name, force=True):
         return 'done'
 
     @handle_orch_error
