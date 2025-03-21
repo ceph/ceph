@@ -63,6 +63,9 @@ static void encode_and_write(
   ) {
   int r = 0;
   if (plan.do_parity_delta_write) {
+    /* For parity delta writes, we remove any unwanted writes before calculating
+     * the parity.
+     */
     old_shard_extent_map.zero_pad(plan.will_write);
     shard_extent_map.pad_with_other(plan.will_write, old_shard_extent_map);
     r = shard_extent_map.encode_parity_delta(ec_impl, old_shard_extent_map);
@@ -70,6 +73,8 @@ static void encode_and_write(
     r = shard_extent_map.encode(ec_impl, plan.hinfo, plan.orig_size);
   }
   ceph_assert(r == 0);
+  // Remove any unnecessary writes.
+  shard_extent_map.intersect(plan.will_write);
 
   debug(oid, "parity", shard_extent_map, dpp);
   ldpp_dout(dpp, 20) << __func__ << ": " << oid
@@ -113,8 +118,8 @@ ECTransaction::WritePlanObj::WritePlanObj(
     const hobject_t &hoid,
     const PGTransaction::ObjectOperation &op,
     const ECUtil::stripe_info_t &sinfo,
-    const shard_id_set available_shards,
-    const shard_id_set backfill_shards,
+    const shard_id_set readable_shards,
+    const shard_id_set writable_shards,
     const bool object_in_cache,
     uint64_t orig_size,
     const std::optional<object_info_t> &oi,
@@ -126,12 +131,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
   will_write(sinfo.get_k_plus_m()),
   hinfo(hinfo),
   shinfo(shinfo),
-  available_shards(available_shards),
-  backfill_shards(backfill_shards),
   object_in_cache(object_in_cache),
   orig_size(orig_size) // On-disk object sizes are rounded up to the next page.
 {
-  extent_set ro_writes;
+  extent_set unaligned_ro_writes;
 
   projected_size = oi ? oi->size : 0;
 
@@ -142,207 +145,118 @@ ECTransaction::WritePlanObj::WritePlanObj(
   hobject_t source;
   invalidates_cache = op.has_source(&source) || op.is_delete();
 
-  /* If we are truncating, then we need to over-write the new end to
-   * the end of that page with zeros. Everything after that will get
-   * truncated to the shard objects. */
-  if (op.truncate &&
-    op.truncate->first < projected_size) {
-    ro_writes.union_insert(ECUtil::align_page_prev(op.truncate->first),
-                           ECUtil::align_page_next(projected_size));
-  }
+  op.buffer_updates.to_interval_set(unaligned_ro_writes);
+  /* We can get multiple truncates/appends in a single tranaction. These get
+   * simplified to two values - a minimum and a maximum. It is not guaranteed
+   * that this region has writes.  We create writes for this region so as to
+   * essentially write zeros (or holes) in that region.
+   */
 
-  /* Convert the RO buffer update extent map into shard coordinates.
-   * Do not round up to the nearest 4k just yet, because we need to read any
-   * partially written page, which we work out in the next loop. */
-  for (auto &&extent: op.buffer_updates) {
-    using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
-    ceph_assertf(!boost::get<BufferUpdate::CloneRange>(&(extent.get_val())),
-                 "CloneRange is not allowed, do_op should have returned ENOTSUPP");
-
-    uint64_t start = extent.get_off();
-    uint64_t end = start + extent.get_len();
-
-    ro_writes.union_insert(start, end - start);
-  }
-
-  extent_set outer_extent_superset;
-
-  std::optional<ECUtil::shard_extent_set_t> inner;
-  for (const auto &[ro_off, ro_len]: ro_writes) {
-    /* Here, we calculate the "inner" and "outer" extent sets. The inner
-     * represents all complete pages written. The outer represents the rounded
-     * up/down pages. Clearly if the IO is entirely aligned, then the inner
-     * and outer sets are the same and we optimise this by avoiding
-     * calculating the inner in this case.
-     *
-     * This is useful because partially written pages must be fully read
-     * from the backend as part of the RMW.
-     */
-    uint64_t raw_end = ro_off + ro_len;
-    uint64_t outer_off = ECUtil::align_page_prev(ro_off);
-    uint64_t outer_len = ECUtil::align_page_next(raw_end) - outer_off;
-    uint64_t inner_off = ECUtil::align_page_next(ro_off);
-    uint64_t inner_len = std::max(inner_off, ECUtil::align_page_prev(raw_end)) -
-        inner_off;
-
-    if (inner || outer_off != inner_off || outer_len != inner_len) {
-      if (!inner) inner = ECUtil::shard_extent_set_t(will_write);
-      sinfo.ro_range_to_shard_extent_set(inner_off, inner_len, *inner);
+  if (op.truncate) {
+    uint64_t start = op.truncate->first;
+    uint64_t end = projected_size;
+    if (projected_size > op.truncate->second ) {
+      end = op.truncate->second;
     }
-
-    // Will write is expanded to page offsets.
-    sinfo.ro_range_to_shard_extent_set(outer_off, outer_len,
-                                       will_write, outer_extent_superset);
+    if (end > start) {
+      unaligned_ro_writes.insert(start, end - start);
+    }
   }
 
-  /* Construct the to read on the stack, to avoid having to insert and
-   * erase into maps */
+  /* Calculate any non-aligned pages. These need to be read and written */
+  extent_set aligned_ro_writes(unaligned_ro_writes);
+  aligned_ro_writes.align(CEPH_PAGE_SIZE);
+  extent_set partial_page_ro_writes(aligned_ro_writes);
+  partial_page_ro_writes.subtract(unaligned_ro_writes);
+  partial_page_ro_writes.align(CEPH_PAGE_SIZE);
+
+  extent_set write_superset;
+  for (auto &&[off, len] : unaligned_ro_writes) {
+    sinfo.ro_range_to_shard_extent_set_with_superset(
+      off, len, will_write, write_superset);
+  }
+  write_superset.align(CEPH_PAGE_SIZE);
+
+  shard_id_set writable_parity_shards = shard_id_set::intersection(sinfo.get_parity_shards(), writable_shards);
+  for (auto shard : writable_parity_shards) {
+    will_write[shard].insert(write_superset);
+  }
+
   ECUtil::shard_extent_set_t reads(sinfo.get_k_plus_m());
+  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+
   if (!sinfo.supports_partial_writes()) {
-    ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
-    sinfo.ro_size_to_stripe_aligned_read_mask(orig_size, read_mask);
-
-    /* We are not yet attempting to optimise this path and we are instead opting to maintain the old behaviour, where
-     * a full read and write is performed for every stripe.
-     */
-    outer_extent_superset.align(sinfo.get_chunk_size());
-    if (!outer_extent_superset.empty()) {
-      for (raw_shard_id_t raw_shard; raw_shard < sinfo.get_k_plus_m(); ++
-           raw_shard) {
-        shard_id_t shard = sinfo.get_shard(raw_shard);
-        will_write[shard].union_of(outer_extent_superset);
-        if (read_mask.contains(shard)) {
-          extent_set _read;
-          _read.union_of(outer_extent_superset);
-          _read.intersection_of(read_mask.at(shard));
-          if (!_read.empty()) reads.emplace(shard, std::move(_read));
-        }
-      }
+    for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
+      will_write[shard].insert(write_superset);
     }
+    will_write.align(sinfo.get_chunk_size());
+    reads = will_write;
+    sinfo.ro_size_to_read_mask(sinfo.ro_offset_to_next_stripe_ro_offset(orig_size), read_mask);
+    reads.intersection_of(read_mask);
+    do_parity_delta_write = false;
   } else {
-    ECUtil::shard_extent_set_t &small_set = inner ? *inner : will_write;
-    ECUtil::shard_extent_set_t zero(sinfo.get_k_plus_m());
-    ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+    will_write.align(CEPH_PAGE_SIZE);
+    ECUtil::shard_extent_set_t pdw_reads(will_write);
 
-    sinfo.ro_size_to_read_mask(orig_size, read_mask);
+    sinfo.ro_size_to_read_mask(ECUtil::align_page_next(orig_size), read_mask);
 
-    /* Here we deal with potentially zeroing out any buffers. We rely on a
-     * *store requirement that any holes in objects are padded with zeros when
-     * read, therefore there is no requirement to write them.
-     * For certain truncates, however, we need to be careful, as we must zero
-     * out any unwritten sections in the overwrite.  At the time of writing,
-     * this would take up space, but it is anticipated that the forthcoming
-     * zero-buffer enhancements will make this space efficient.  Multiple
-     * truncates/appends within a single transactions are expected be very rare.
+    /* Next we need to add the reads required for a conventional write */
+    for (auto shard : sinfo.get_data_shards()) {
+      reads[shard].insert(write_superset);
+      if (will_write.contains(shard)) {
+        reads[shard].subtract(will_write.at(shard));
+      }
+      if (reads[shard].empty()) {
+        reads.erase(shard);
+      }
+    }
+
+    /* We now need to add in the partial page ro writes. This is not particularly
+     * efficient as the are many divs in here, but non-4k aligned writes are
+     * not very efficient anyway
      */
-
-    if (op.truncate && op.truncate->first < op.truncate->second) {
-      uint64_t aligned_zero_start = ECUtil::align_page_next(op.truncate->first);
-      uint64_t aligned_zero_end = ECUtil::align_page_next(op.truncate->second);
+    for (auto &&[off, len] : partial_page_ro_writes) {
       sinfo.ro_range_to_shard_extent_set(
-        aligned_zero_start, aligned_zero_end - aligned_zero_start,
-        zero, outer_extent_superset);
+        off, len, reads);
     }
 
-    for (raw_shard_id_t raw_shard; raw_shard < sinfo.get_k_plus_m(); ++
-         raw_shard) {
-      shard_id_t shard = sinfo.get_shard(raw_shard);
-      extent_set _to_read;
+    reads.intersection_of(read_mask);
 
-      if (raw_shard < sinfo.get_k()) {
-        if (zero.contains(shard)) {
-          will_write[shard].union_of(zero.at(shard));
-        }
+    /* Here we decide if we want to do a conventional write or a parity delta write. */
+    if (sinfo.supports_parity_delta_writes() && !object_in_cache &&
+        orig_size == projected_size && !reads.empty()) {
 
-        if (!read_mask.contains(shard))
-          continue;
+      shard_id_set read_shards = reads.get_shard_id_set();
+      shard_id_set pdw_read_shards = pdw_reads.get_shard_id_set();
 
-        _to_read.intersection_of(outer_extent_superset, read_mask.at((shard)));
+      if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
+        // Some kind of reconstruct would be needed for PDW, so don't bother.
+        do_parity_delta_write = false;
+      } else if (!shard_id_set::difference(read_shards, readable_shards).empty()) {
+        // Some kind of reconstruct is needed for conventional, but NOT for PDW!
+        do_parity_delta_write = true;
+      } else {
+        /* Everything we need for both is available, opt for which ever is less
+         * reads.
+         */
+        do_parity_delta_write = pdw_read_shards.size() < read_shards.size();
+      }
 
-        if (small_set.contains(shard)) {
-          _to_read.subtract(small_set.at(shard));
-        }
-
-        if (!_to_read.empty()) {
-          reads.emplace(shard, std::move(_to_read));
-        }
-      } else if (!outer_extent_superset.empty()) {
-        will_write[shard].union_of(outer_extent_superset);
+      if (do_parity_delta_write) {
+        to_read = std::move(pdw_reads);
+        reads.clear(); // So we don't stash it at the end.
       }
     }
-  }
 
-  /* Here we decide if we want to do a conventional write or a parity delta write. */
-  do_parity_delta_write = false;
-#if PARTIY_DELTA_WRITES
-  if (sinfo.supports_parity_delta_writes()) {
-    if (!object_in_cache) {
-      if (orig_size == projected_size && !reads.empty()) {
-        bool decision_made = false;
-        shard_id_set data_shards_to_update;
-        shard_id_set data_shards_not_being_updated;
-        for (auto &shard: sinfo.get_data_shards()) {
-          if (will_write.contains(shard))
-            data_shards_to_update.insert(shard);
-          else
-            data_shards_not_being_updated.insert(shard);
-        }
-
-        for (auto &shard: data_shards_to_update) {
-          if (!available_shards.contains(shard)) {
-            // Parity delta write would need to reconstruct a data shard
-            do_parity_delta_write = false;
-            decision_made = true;
-            break;
-          }
-        }
-        if (!decision_made) {
-          for (auto &shard: sinfo.get_parity_shards()) {
-            if (backfill_shards.contains(shard) && !available_shards.
-              contains(shard)) {
-              // Parity delta write would need to reconstruct a parity shard
-              // that cannot be read but needs to be written
-              do_parity_delta_write = false;
-              decision_made = true;
-              break;
-            }
-          }
-        }
-        if (!decision_made) {
-          for (auto &shard: data_shards_not_being_updated) {
-            if (!available_shards.contains(shard)) {
-              // Conventional write would need to do a reconstruct
-              do_parity_delta_write = true;
-              decision_made = true;
-              break;
-            }
-          }
-        }
-        if (!decision_made) {
-          // At this point, work out the read cost of doing a parity delta write vs
-          // the read cost of doing a conventional write and do whatever is cheaper.
-          // Use conventional write in a tie.
-          int pdw_parity_reads = 0;
-          for (auto &&shard: sinfo.get_parity_shards()) {
-            if (available_shards.contains(shard) || backfill_shards.contains(
-              shard))
-              pdw_parity_reads++;
-          }
-          if (data_shards_to_update.size() + pdw_parity_reads <
-            data_shards_not_being_updated.size())
-            do_parity_delta_write = true;
-        }
-      }
-    }
+    /* NOTE: We intentionally leave un-writable shards in the write plan.  As
+     * it is actually less efficient to take them out:- PDWs still need to
+     * compute the deltas and conventional writes still need to calcualte the
+     * parity. The transaction will be dropped by generate_transactions.
+     */
   }
-#endif
 
   if (!reads.empty()) {
     to_read = std::move(reads);
-  }
-
-  if (do_parity_delta_write) {
-    to_read = will_write;
   }
 
   /* validate post conditions:
@@ -515,9 +429,6 @@ void ECTransaction::generate_transactions(
 
       if (op.is_fresh_object() && entry) {
         entry->mod_desc.create();
-        // Mark all shards written for new objects so that pwlc advances,
-        // having no log entries at all for a shard causes recovery problems
-        entry->written_shards.insert_range(shard_id_t(0), sinfo.get_k_plus_m());
       }
 
       match(
@@ -798,6 +709,14 @@ void ECTransaction::generate_transactions(
             rollback_shards.emplace_back(to_clone_shards);
           }
         }
+      }
+
+      /* The write plan is permitted to drop parity shards when the shard is
+       * missing. However, written_shards must contain all parity shards.
+       * Note that the write plan will *not* drop data shards.
+       */
+      if (entry && !entry->written_shards.empty()) {
+        entry->written_shards.insert(sinfo.get_parity_shards());
       }
 
       if (!to_write.empty()) {

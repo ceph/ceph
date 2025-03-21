@@ -15,12 +15,6 @@
 #ifndef ECTRANSACTION_H
 #define ECTRANSACTION_H
 
-// Set to 1 to turn on parity delta writes
-// Set to 0 to always use conventional writes instead
-#define PARTIY_DELTA_WRITES 1
-
-#include <ostream>
-
 #include "ECUtil.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
@@ -34,8 +28,6 @@ class WritePlanObj {
   ECUtil::shard_extent_set_t will_write;
   const ECUtil::HashInfoRef hinfo;
   const ECUtil::HashInfoRef shinfo;
-  const shard_id_set available_shards;
-  const shard_id_set backfill_shards;
   const bool object_in_cache;
   const uint64_t orig_size;
   uint64_t projected_size;
@@ -46,8 +38,8 @@ class WritePlanObj {
       const hobject_t &hoid,
       const PGTransaction::ObjectOperation &op,
       const ECUtil::stripe_info_t &sinfo,
-      const shard_id_set available_shards,
-      const shard_id_set backfill_shards,
+      const shard_id_set readable_shards,
+      const shard_id_set writable_shards,
       const bool object_in_cache,
       uint64_t orig_size,
       const std::optional<object_info_t> &oi,

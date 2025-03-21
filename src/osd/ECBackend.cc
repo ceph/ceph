@@ -142,13 +142,10 @@ void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid,
 
 struct RecoveryMessages {
   map<hobject_t, ECCommon::read_request_t> recovery_reads;
-  map<hobject_t, ECUtil::shard_extent_set_t> want_to_read;
 
   void recovery_read(const hobject_t &hoid,
-                     ECUtil::shard_extent_set_t &&_want_to_read,
                      const ECCommon::read_request_t &read_request) {
     ceph_assert(!recovery_reads.count(hoid));
-    want_to_read.emplace(hoid, std::move(_want_to_read));
     recovery_reads.insert(make_pair(hoid, read_request));
   }
 
@@ -302,6 +299,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
   ECUtil::shard_extent_map_t &&buffers_read,
   std::optional<map<string, bufferlist, less<>>> attrs,
+  const ECUtil::shard_extent_set_t &want_to_read,
   RecoveryMessages *m) {
   dout(10) << __func__ << ": returned " << hoid << " " << buffers_read << dendl;
   ceph_assert(recovery_ops.contains(hoid));
@@ -347,15 +345,24 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   ceph_assert(op.obc);
 
   op.returned_data.emplace(std::move(buffers_read));
-  extent_set buffer_superset = op.returned_data->get_extent_superset();
 
   ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
   sinfo.ro_size_to_read_mask(op.recovery_info.size, read_mask);
   ECUtil::shard_extent_set_t shard_want_to_read(sinfo.get_k_plus_m());
 
-  for (auto &shard: op.missing_on_shards) {
+  for (auto &[shard, eset] : want_to_read) {
+    /* Read buffers do not need recovering! */
+    if (buffers_read.contains(shard)) {
+      continue;
+    }
+
+    /* Read-buffers will be truncated to the end-of-object. Do not attempt
+     * to recover off-the-end.
+     */
     shard_want_to_read[shard].intersection_of(read_mask.get(shard),
-                                              buffer_superset);
+                                              eset);
+
+    /* Some shards may be empty */
     if (shard_want_to_read[shard].empty()) {
       shard_want_to_read.erase(shard);
     }
@@ -440,6 +447,7 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
       hoid,
       std::move(res.buffers_read),
       res.attrs,
+      req.shard_want_to_read,
       &rm);
   }
 
@@ -561,7 +569,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
         }
       }
 
-      read_request_t read_request(want,
+      read_request_t read_request(std::move(want),
                                   op.recovery_progress.first && !op.obc,
                                   op.obc
                                     ? op.obc->obs.oi.size
@@ -588,7 +596,6 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       } else {
         m->recovery_read(
           op.hoid,
-          std::move(want),
           read_request);
         dout(10) << __func__ << ": IDLE return " << op << dendl;
         return;
@@ -1565,12 +1572,10 @@ void ECBackend::submit_transaction(
         }
       }
 
-      shard_id_set available_shards;
-      shard_id_set backfill_shards;
-      read_pipeline.get_avail_and_backfill_sets(hoid, available_shards,
-                                                backfill_shards);
-      ECTransaction::WritePlanObj plan(oid, inner_op, sinfo, available_shards,
-                                       backfill_shards,
+      auto [readable_shards, writable_shards] =
+        read_pipeline.get_readable_writable_shard_id_sets();
+      ECTransaction::WritePlanObj plan(oid, inner_op, sinfo, readable_shards,
+                                       writable_shards,
                                        object_in_cache, old_object_size,
                                        oi, soi, std::move(hinfo),
                                        std::move(shinfo));
