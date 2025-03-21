@@ -1050,7 +1050,8 @@ auto with_objects_data(
     });
 }
 
-ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
+ObjectDataHandler::write_iertr::future<LBAMapping>
+ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
   object_data_t &object_data,
   extent_len_t size)
@@ -1063,7 +1064,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
            ctx.t,
            object_data.get_reserved_data_base(),
            object_data.get_reserved_data_len());
-    return write_iertr::now();
+    return write_iertr::make_ready_future<LBAMapping>();
   } else {
     DEBUGT("reserving: {}~0x{:x}",
            ctx.t,
@@ -1078,7 +1079,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
       object_data.update_reserved(
 	pin.get_key(),
 	pin.get_length());
-      return write_iertr::now();
+      return pin;
     }).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
       write_iertr::pass_further{}
@@ -1270,6 +1271,81 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
   }
 }
 
+using remap_ret = ObjectDataHandler::write_iertr::future<std::vector<LBAMapping>>;
+template <std::size_t N>
+remap_ret remap_mappings(
+  context_t ctx,
+  LBAMapping mapping,
+  std::array<TransactionManager::remap_entry, N> remaps)
+{
+  if (mapping.get_val().is_zero()) {
+    return seastar::do_with(
+      std::vector<TransactionManager::remap_entry>(
+	remaps.begin(), remaps.end()),
+      std::vector<LBAMapping>(),
+      [ctx, mapping=std::move(mapping)](auto &remaps, auto &mappings) mutable {
+      auto orig_laddr = mapping.get_key();
+      return ctx.tm.remove(ctx.t, std::move(mapping)
+      ).si_then([&remaps, ctx, &mappings, orig_laddr](auto next_mapping) {
+	return seastar::do_with(
+	  std::move(next_mapping),
+	  [ctx, &remaps, orig_laddr, &mappings](auto &next_mapping) {
+	  return trans_intr::do_for_each(
+	    remaps.begin(),
+	    remaps.end(),
+	    [ctx, &next_mapping, orig_laddr, &mappings]
+	    (const auto &remap) mutable {
+	    auto laddr = (orig_laddr + remap.offset).checked_to_laddr();
+	    return ctx.tm.reserve_region(
+	      ctx.t,
+	      std::move(next_mapping),
+	      laddr,
+	      remap.len
+	    ).si_then([&mappings, ctx](auto new_mapping) {
+	      mappings.emplace_back(new_mapping.duplicate());
+	      return ctx.tm.next_mapping(ctx.t, std::move(new_mapping));
+	    }).si_then([&next_mapping](auto new_mapping) {
+	      next_mapping = std::move(new_mapping);
+	      return seastar::now();
+	    });
+	  });
+	});
+      }).si_then([&mappings] { return std::move(mappings); });
+    }).handle_error_interruptible(
+      ObjectDataHandler::write_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"ObjectDataHandler::read hit invalid error"
+      }
+    );
+  } else {
+    return ctx.tm.remap_pin<ObjectDataBlock, N>(
+      ctx.t, std::move(mapping), std::move(remaps));
+  }
+}
+
+ObjectDataHandler::read_ret load_padding(
+  ObjectDataHandler::context_t ctx,
+  const LBAMapping mapping,
+  extent_len_t offset,
+  extent_len_t len)
+{
+  if (mapping.get_val().is_zero()) {
+    bufferlist bl;
+    bl.append_zero(len);
+    return ObjectDataHandler::read_iertr::make_ready_future<
+      bufferlist>(std::move(bl));
+  } else {
+    return ctx.tm.read_pin<ObjectDataBlock>(ctx.t, mapping.duplicate()
+    ).si_then([offset, len](auto maybe_indirect_left_extent) {
+      auto read_bl = maybe_indirect_left_extent.get_bl();
+      ceph::bufferlist prepend_bl;
+      prepend_bl.substr_of(read_bl, offset, len);
+      return ObjectDataHandler::read_iertr::make_ready_future<
+	bufferlist>(std::move(prepend_bl));
+    });
+  }
+}
+
 /**
  * get_to_writes
  *
@@ -1284,7 +1360,389 @@ extent_to_write_list_t get_to_writes(laddr_t offset, bufferlist &bl)
   return ret;
 };
 
+struct overwrite_params_t {
+  laddr_t data_base = L_ADDR_NULL;
+  objaddr_t offset = 0;
+  extent_len_t len = 0;
+  laddr_t first_key = L_ADDR_NULL;
+  extent_len_t first_len = 0;
+  laddr_offset_t raw_begin;
+  laddr_t data_begin = L_ADDR_NULL;
+  laddr_offset_t raw_end;
+  laddr_t data_end = L_ADDR_NULL;
+};
+
+using do_mappings_ret = ObjectDataHandler::write_iertr::future<LBAMapping>;
+
+do_mappings_ret maybe_delta_based_overwrite(
+  context_t ctx,
+  const overwrite_params_t &params,
+  LBAMapping mapping,
+  bufferlist &bl,
+  extent_len_t delta_based_overwrite_max_extent_size)
+{
+  if (mapping.is_indirect() ||
+      params.len > delta_based_overwrite_max_extent_size ||
+      mapping.get_val().is_zero()) {
+    return ObjectDataHandler::write_iertr::make_ready_future<
+      LBAMapping>(std::move(mapping));
+  }
+
+  laddr_interval_set_t range;
+  range.insert(mapping.get_key(), mapping.get_length());
+  bool in_range = range.contains(
+    params.data_begin,
+    params.data_end.template get_byte_distance<
+      extent_len_t>(params.data_begin));
+  if (!in_range) {
+    return ObjectDataHandler::write_iertr::make_ready_future<
+      LBAMapping>(std::move(mapping));
+  }
+
+  // delta based overwrite
+  return ctx.tm.read_pin<ObjectDataBlock>(
+    ctx.t,
+    std::move(mapping)
+  ).handle_error_interruptible(
+    TransactionManager::base_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "ObjectDataHandler::do_remapping hit invalid error"
+    }
+  ).si_then([ctx](auto maybe_indirect_extent) {
+    assert(!maybe_indirect_extent.is_indirect());
+    return ctx.tm.get_mutable_extent(ctx.t, maybe_indirect_extent.extent);
+  }).si_then([&params, &bl](auto extent) {
+    auto odblock = extent->template cast<ObjectDataBlock>();
+    odblock->overwrite(
+      params.first_key.template get_byte_distance<
+	extent_len_t>(params.raw_begin),
+      std::move(bl));
+    return ObjectDataHandler::write_iertr::make_ready_future<
+      LBAMapping>();
+  });
+}
+
+do_mappings_ret do_first_mapping(
+  context_t ctx,
+  overwrite_params_t &params,
+  LBAMapping first_mapping,
+  bufferlist &client_bl,
+  bufferlist &write_bl)
+{
+  if (!first_mapping.is_stable()) {
+    // merge with existing pending extents
+    auto length = params.first_key.template get_byte_distance<
+      extent_len_t>(params.raw_begin);
+    assert(params.offset >= length);
+    params.offset -= length;
+    params.len += length;
+    params.data_begin = params.first_key;
+    params.raw_begin = laddr_offset_t{params.first_key};
+    return load_padding(ctx, first_mapping.duplicate(), 0, length
+    ).si_then([&client_bl, &write_bl, first_mapping=first_mapping.duplicate(),
+	      &params, ctx](auto headbl) mutable {
+      write_bl.append(headbl);
+      write_bl.append(client_bl);
+      auto first_end = (params.first_key + params.first_len).checked_to_laddr();
+      if (params.raw_end < first_end) {
+	auto off = params.raw_end.template get_byte_distance<
+	  extent_len_t>(params.first_key);
+	auto len = params.raw_end.template get_byte_distance<
+	  extent_len_t>(first_end);
+	params.data_end = first_end;
+	params.raw_end = laddr_offset_t{first_end};
+	params.len += len;
+	return load_padding(ctx, first_mapping.duplicate(), off, len);
+      }
+      return ObjectDataHandler::read_iertr::make_ready_future<bufferlist>();
+    }).si_then([first_mapping=std::move(first_mapping),
+		&write_bl, ctx](auto tailbl) mutable {
+      write_bl.append(tailbl);
+      return ctx.tm.remove(ctx.t, std::move(first_mapping));
+    }).handle_error_interruptible(
+      ObjectDataHandler::base_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"ObjectDataHandler::read hit invalid error"
+      }
+    );
+  }
+  auto pad_fut = ObjectDataHandler::read_iertr::make_ready_future<bufferlist>();
+  if (params.raw_begin != params.data_begin) {
+    // load the left padding
+    assert(params.raw_begin > params.data_begin);
+    pad_fut = load_padding(
+      ctx,
+      first_mapping.duplicate(),
+      params.first_key.template get_byte_distance<
+	extent_len_t>(params.data_begin),
+      params.raw_begin.get_offset());
+  }
+  return pad_fut.si_then([&write_bl, first_mapping=std::move(first_mapping),
+			  &params, &client_bl, ctx](auto headbl) mutable {
+    using remap_entry = TransactionManager::remap_entry;
+    if (headbl.length() > 0) {
+      write_bl.append(headbl);
+    }
+    write_bl.append(client_bl);
+    if (params.first_key == params.data_begin) {
+      return TransactionManager::remap_pin_iertr::make_ready_future<
+	LBAMapping>(std::move(first_mapping));
+    }
+
+    if (params.first_key + params.first_len > params.data_end) {
+      auto pad_fut = ObjectDataHandler::read_iertr::make_ready_future<
+	bufferlist>();
+      if (params.raw_end != params.data_end) {
+	// load the right padding
+	pad_fut = load_padding(
+	  ctx,
+	  first_mapping.duplicate(),
+	  params.raw_end.template get_byte_distance<
+	    extent_len_t>(first_mapping.get_key()),
+	  params.data_end.template get_byte_distance<
+	    extent_len_t>(params.raw_end));
+      }
+      return pad_fut.si_then(
+	[&params, first_mapping=std::move(first_mapping),
+	&write_bl, ctx](auto tailbl) mutable {
+	if (tailbl.length() > 0) {
+	  write_bl.append(tailbl);
+	}
+	return remap_mappings<2>(
+	  ctx,
+	  std::move(first_mapping),
+	  std::array{
+	    // from the start of the first_mapping to the offset of overwrite
+	    remap_entry{
+	      0,
+	      params.data_begin.template get_byte_distance<
+		extent_len_t>(params.first_key)},
+	    // from the end of overwrite to the end of the first mapping
+	    remap_entry{
+	      params.data_end.template get_byte_distance<
+		extent_len_t>(params.first_key),
+	      (params.first_key + params.first_len
+		).checked_to_laddr().template get_byte_distance<
+		  extent_len_t>(params.data_end)}}
+	).si_then([](auto mappings) {
+	  assert(mappings.size() == 2);
+	  return std::move(mappings.back());
+	});
+      });
+    } else {
+      return remap_mappings<1>(
+	ctx,
+	std::move(first_mapping),
+	std::array{
+	  remap_entry{
+	    0,
+	    params.data_begin.template get_byte_distance<
+	      extent_len_t>(params.first_key)}}
+      ).si_then([ctx](auto mappings) {
+	assert(mappings.size() == 1);
+	return ctx.tm.next_mapping(ctx.t, std::move(mappings.front()));
+      });
+    }
+  });
+}
+
+do_mappings_ret do_middle_mappings(
+  context_t ctx,
+  const overwrite_params_t &params,
+  LBAMapping mapping)
+{
+  // remove all middle mappings
+  return seastar::do_with(
+    std::move(mapping),
+    [ctx, &params](auto &mapping) {
+    return trans_intr::repeat([ctx, &params, &mapping] {
+      assert(mapping.get_key() >= params.data_begin);
+      auto mapping_end =
+	(mapping.get_key() + mapping.get_length()).checked_to_laddr();
+      if (mapping_end > params.raw_end) {
+	return ObjectDataHandler::base_iertr::make_ready_future<
+	  seastar::stop_iteration>(
+	    seastar::stop_iteration::yes);
+      }
+      return ctx.tm.remove(ctx.t, std::move(mapping)
+      ).si_then([&mapping](auto next_mapping) {
+	mapping = std::move(next_mapping);
+	return seastar::stop_iteration::no;
+      }).handle_error_interruptible(
+	ObjectDataHandler::base_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "ObjectDataHandler::read hit invalid error"
+	}
+      );
+    }).si_then([&mapping] {
+      return std::move(mapping);
+    });
+  });
+}
+
+do_mappings_ret do_last_mapping(
+  context_t ctx,
+  overwrite_params_t &params,
+  LBAMapping mapping,
+  bufferlist &write_bl)
+{
+  if (!mapping.is_stable()) {
+    // merge with existing pending extents
+    auto offset = params.raw_end.template get_byte_distance<
+      extent_len_t>(mapping.get_key());
+    auto first_end = (params.first_key + params.first_len).checked_to_laddr();
+    auto len = mapping.get_length() - offset;
+    params.data_end = first_end;
+    params.raw_end = laddr_offset_t{first_end};
+    params.len += len;
+    return load_padding(ctx, mapping.duplicate(), offset, len
+    ).si_then([&write_bl, mapping=std::move(mapping), ctx](auto tailbl) mutable {
+      write_bl.append(tailbl);
+      return ctx.tm.remove(ctx.t, std::move(mapping));
+    }).handle_error_interruptible(
+      ObjectDataHandler::base_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"ObjectDataHandler::read hit invalid error"
+      }
+    );
+  }
+  auto mapping_end =
+    (mapping.get_key() + mapping.get_length()).checked_to_laddr();
+  auto pad_fut = ObjectDataHandler::read_iertr::make_ready_future<bufferlist>();
+  if (mapping_end >= params.data_end &&
+      params.raw_end != params.data_end) {
+    // load the right padding
+    pad_fut = load_padding(
+      ctx,
+      mapping.duplicate(),
+      params.raw_end.template get_byte_distance<
+	extent_len_t>(mapping.get_key()),
+      params.data_end.template get_byte_distance<
+	extent_len_t>(params.raw_end));
+  }
+  return pad_fut.si_then(
+    [mapping_end, mapping=std::move(mapping),
+    &write_bl, ctx, &params](auto tailbl) mutable {
+    if (tailbl.length() > 0) {
+      write_bl.append(tailbl);
+    }
+    if (mapping_end > params.data_end) {
+      auto laddr = mapping.get_key();
+      using remap_entry = TransactionManager::remap_entry;
+      return remap_mappings<1>(
+	ctx,
+	std::move(mapping),
+	std::array{
+	  remap_entry{
+	    params.data_end.template get_byte_distance<
+	      extent_len_t>(laddr),
+	    mapping_end.template get_byte_distance<
+	      extent_len_t>(params.data_end)}}
+      ).si_then([](auto mappings) {
+	assert(mappings.size() == 1);
+	return std::move(mappings.front());
+      });
+    }
+    return ctx.tm.remove(ctx.t, std::move(mapping)
+    ).si_then([](auto next_mapping) {
+      return std::move(next_mapping);
+    }).handle_error_interruptible(
+      ObjectDataHandler::base_iertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"ObjectDataHandler::read hit invalid error"
+      }
+    );
+  });
+}
+
 ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
+  context_t ctx,
+  laddr_t data_base,
+  objaddr_t offset,
+  extent_len_t len,
+  std::optional<bufferlist> &&bl,
+  LBAMapping first_mapping)
+{
+  LOG_PREFIX(ObjectDataHandler::overwrite);
+  assert(!bl.has_value() || bl->length() == len);
+  auto raw_begin = data_base + offset;
+  auto raw_end = data_base + offset + len;
+  assert(first_mapping.get_key() <= raw_begin.get_aligned_laddr());
+  DEBUGT(
+    "data_base={}, offset=0x{:x}, len=0x{:x}, "
+    "{}, data_begin={}, data_end={}",
+    ctx.t, data_base, offset, len, first_mapping,
+    raw_begin.get_aligned_laddr(), raw_end.get_roundup_laddr());
+  return seastar::do_with(
+    bufferlist{},
+    overwrite_params_t{
+      data_base,
+      offset,
+      len,
+      first_mapping.get_key(),
+      first_mapping.get_length(),
+      raw_begin,
+      raw_begin.get_aligned_laddr(),
+      raw_end,
+      raw_end.get_roundup_laddr()},
+    std::move(bl),
+    [this, ctx, first_mapping=std::move(first_mapping)]
+    (auto &_bl, auto &params, auto &bl) mutable {
+    return maybe_delta_based_overwrite(
+      ctx, params, std::move(first_mapping), *bl,
+      delta_based_overwrite_max_extent_size
+    ).si_then([ctx, &params, &_bl, &bl](auto mapping) {
+      if (mapping.is_null()) {
+	// the modified range is within the first mapping
+	return write_iertr::now();
+      }
+
+      return do_first_mapping(
+	ctx, params, std::move(mapping), *bl, _bl
+      ).si_then([&params, ctx](auto mapping) {
+	return do_middle_mappings(ctx, params, std::move(mapping));
+      }).si_then([&params, ctx, &_bl](auto mapping) {
+	if (mapping.get_key() >= params.data_end) {
+	  return write_iertr::make_ready_future<LBAMapping>(std::move(mapping));
+	}
+	return do_last_mapping(ctx, params, std::move(mapping), _bl);
+      }).si_then([ctx, &params, &_bl](auto mapping) {
+	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
+	  ctx.t,
+	  params.data_begin,
+	  params.data_end.template get_byte_distance<
+	    extent_len_t>(params.data_begin),
+	  std::move(mapping)
+	).si_then([&params, &_bl](auto extents) {
+	  auto off = params.data_begin;
+	  auto left = params.data_begin.template get_byte_distance<
+	    extent_len_t>(params.data_end);
+	  auto iter = _bl.cbegin();
+	  assert(_bl.length() == left);
+	  for (auto &extent : extents) {
+	    ceph_assert(left >= extent->get_length());
+	    if (extent->get_laddr() != off) {
+	      logger().debug(
+		"object_data_handler::do_insertions alloc got addr {},"
+		" should have been {}",
+		extent->get_laddr(),
+		off);
+	    }
+	    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+	    off = (off + extent->get_length()).checked_to_laddr();
+	    left -= extent->get_length();
+	  }
+	  return ObjectDataHandler::write_iertr::now();
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  ObjectDataHandler::write_iertr::pass_further{}
+	);
+      });
+    });
+  });
+}
+
+/*ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   context_t ctx,
   laddr_t data_base,
   objaddr_t offset,
@@ -1382,7 +1840,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
       });
     });
   });
-}
+}*/
 
 ObjectDataHandler::zero_ret ObjectDataHandler::zero(
   context_t ctx,
@@ -1404,7 +1862,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
 	ctx,
 	object_data,
 	p2roundup(offset + len, ctx.tm.get_block_size())
-      ).si_then([this, ctx, offset, len, &object_data] {
+      ).si_then([this, ctx, offset, len, &object_data](auto) {
 	auto data_base = object_data.get_reserved_data_base();
 	laddr_offset_t l_start = data_base + offset;
 	laddr_offset_t l_end = l_start + len;
@@ -1419,7 +1877,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
 	).si_then([this, ctx, data_base, offset, len](auto pins) {
 	  return overwrite(
 	    ctx, data_base, offset, len,
-	    std::nullopt, std::move(pins));
+	    std::nullopt, std::move(pins.front()));
 	});
       });
     });
@@ -1445,24 +1903,25 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	ctx,
 	object_data,
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
-      ).si_then([this, ctx, offset, &object_data, &bl] {
+      ).si_then([this, ctx, offset, &object_data, &bl]
+		(auto mapping) -> write_ret {
 	auto data_base = object_data.get_reserved_data_base();
-	laddr_offset_t l_start = data_base + offset;
-	laddr_offset_t l_end = l_start + bl.length();
-	laddr_t aligned_start = l_start.get_aligned_laddr();
-	loffset_t aligned_length =
-	    l_end.get_roundup_laddr().get_byte_distance<
-	      loffset_t>(aligned_start);
-	return ctx.tm.get_pins(
-	  ctx.t,
-	  aligned_start,
-	  aligned_length
-	).si_then([this, ctx, offset, data_base, &bl](
-		   auto pins) {
+	if (!mapping.is_null()) {
 	  return overwrite(
 	    ctx, data_base, offset, bl.length(),
-	    bufferlist(bl), std::move(pins));
-	});
+	    bufferlist(bl), std::move(mapping));
+	}
+	laddr_offset_t l_start = data_base + offset;
+	laddr_t aligned_start = l_start.get_aligned_laddr();
+	return ctx.tm.get_pin(ctx.t, aligned_start, true
+	).si_then([this, ctx, offset, data_base, &bl](auto pin) {
+	  return overwrite(
+	    ctx, data_base, offset, bl.length(),
+	    bufferlist(bl), std::move(pin));
+	}).handle_error_interruptible(
+	  write_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected enoent"}
+	);
       });
     });
 }
@@ -1675,7 +2134,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
 	return prepare_data_reservation(
 	  ctx,
 	  object_data,
-	  p2roundup(offset, ctx.tm.get_block_size()));
+	  p2roundup(offset, ctx.tm.get_block_size())).discard_result();
       } else {
 	return truncate_iertr::now();
       }
@@ -1786,7 +2245,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
       ctx,
       d_object_data,
       object_data.get_reserved_data_len()
-    ).si_then([&object_data, &d_object_data, ctx, this] {
+    ).si_then([&object_data, &d_object_data, ctx, this](auto) {
       assert(!object_data.is_null());
       auto base = object_data.get_reserved_data_base();
       auto len = object_data.get_reserved_data_len();
@@ -1800,7 +2259,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
 	ctx,
 	object_data,
 	d_object_data.get_reserved_data_len()
-      ).si_then([&d_object_data, ctx, &object_data, base, len, this] {
+      ).si_then([&d_object_data, ctx, &object_data, base, len, this](auto) {
 	LOG_PREFIX("ObjectDataHandler::clone");
 	DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
 	  ctx.t,
