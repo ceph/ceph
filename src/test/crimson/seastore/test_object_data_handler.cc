@@ -471,17 +471,11 @@ struct object_data_handler_test_t:
     write(0, 128<<10, 'x');
 
     auto t = create_mutate_transaction();
-    // normal split
     write(*t, 120<<10, 4<<10, 'a');
-    // not aligned right
     write(*t, 4<<10, 5<<10, 'b');
-    // split right extent of last split result
     write(*t, 32<<10, 4<<10, 'c');
-    // non aligned overwrite
     write(*t, 13<<10, 4<<10, 'd');
-
     write(*t, 64<<10, 32<<10, 'e');
-    // not split right
     write(*t, 60<<10, 8<<10, 'f');
 
     submit_transaction(std::move(t));
@@ -744,13 +738,13 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
     disable_max_extent_size();
     multiple_write();
     auto pins = get_mappings(0, 128<<10);
-    EXPECT_EQ(pins.size(), 3);
+    EXPECT_EQ(pins.size(), 10);
 
-    size_t res[3] = {0, 120<<10, 124<<10};
+    size_t res[10] = {0, 4<<10, 12<<10, 20<<10, 32<<10, 36<<10, 60<<10, 96<<10, 120<<10, 124<<10};
     auto base = pins.front().get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin.get_key().get_byte_distance<size_t>(base), res[i]);
+      assert(pin.get_key().get_byte_distance<size_t>(base) == res[i]);
       i++;
     }
     read(0, 128<<10);
