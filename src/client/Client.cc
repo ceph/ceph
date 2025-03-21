@@ -11319,7 +11319,18 @@ void Client::C_Read_Finisher::finish_io(int r)
   onfinish->complete(r);
   delete this;
 }
+void Client::C_Read_Sync_NonBlocking::start()
+{
+  clnt->fscrypt->prepare_data_read(in->fscrypt_ctx,
+                            &in->fscrypt_key_validator,
+			    off, len, in->size,
+			    &read_start, &read_len,
+			    &fscrypt_denc);
 
+  pos = read_start;
+  left = read_len;
+  retry();
+}
 void Client::C_Read_Sync_NonBlocking::retry()
 {
   filer->read_trunc(in->ino, &in->layout, in->snapid, pos, left, &tbl, 0,
@@ -11333,6 +11344,13 @@ void Client::C_Read_Sync_NonBlocking::retry()
 void Client::C_Read_Sync_NonBlocking::finish(int r)
 {
   clnt->client_lock.lock();
+
+  auto effective_size = in->effective_size();
+
+  auto target_len = std::min(len, effective_size - off);
+
+  bufferlist encbl;
+  bufferlist *pbl = (fscrypt_denc ? &encbl : bl);
 
   if (r == -ENOENT) {
     // if we get ENOENT from OSD, assume 0 bytes returned
@@ -11348,19 +11366,19 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
     read += r;
     pos += r;
     left -= r;
-    bl->claim_append(tbl);
+    pbl->claim_append(tbl);
   }
 
   // short read?
   if (r >= 0 && r < wanted) {
-    if (pos < in->effective_size()) {
+    if (pos < effective_size) {
       // zero up to known EOF
-      int64_t some = in->effective_size() - pos;
+      int64_t some = effective_size - pos;
       if (some > left)
         some = left;
       auto z = buffer::ptr_node::create(some);
       z->zero();
-      bl->push_back(std::move(z));
+      pbl->push_back(std::move(z));
       read += some;
       pos += some;
       left -= some;
@@ -11376,7 +11394,7 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
     }
 
     // eof?  short read.
-    if ((uint64_t)pos >= in->effective_size())
+    if ((uint64_t)pos >= effective_size)
       goto success;
 
     wanted = left;
@@ -11386,9 +11404,27 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
   }
 
 success:
+  if (r >= 0) {
+    if (fscrypt_denc) {
+      std::vector<ObjectCacher::ObjHole> holes;
+      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
+      if (r < 0) {
+	ldout(clnt->cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
+      }
+      bl->claim_append(*pbl);
+    }
 
-  r = read;
-  clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric(false, mono_clock_now() - start_time, r));
+    // r is expected to hold value of effective bytes read.
+    // in the case of fscrypt, this will be the logical size. So if all bytes read
+    // is equal to read_len, then display logical size.
+    if (read_len == read) {
+      r = len;
+    } else {
+      r = read;
+    }
+
+    clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric(false, mono_clock_now() - start_time, r));
+  }
 error:
 
   onfinish->complete(r);
@@ -11553,7 +11589,7 @@ retry:
       crf.release();
 
       // Now make first attempt at performing _read_sync
-      crsa->retry();
+      crsa->start();
 
       // Now the C_Read_Sync_NonBlocking is going to handle EVERYTHING else
       // Allow caller to wait on onfinish...
@@ -11901,10 +11937,12 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
-      bl->claim_append(*pbl);
-    }
 
-    read = pbl->length();
+      read = pbl->length();
+      bl->claim_append(*pbl);
+    } else {
+      read = pbl->length();
+    }
   }
   return read;
 }
