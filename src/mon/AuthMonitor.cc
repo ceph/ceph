@@ -30,6 +30,7 @@
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
+#include "auth/Crypto.h"
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
 
@@ -1383,6 +1384,21 @@ bool AuthMonitor::valid_caps(const vector<string>& caps, ostream *out)
   return true;
 }
 
+int AuthMonitor::get_cipher_type(const cmdmap_t& cmdmap, std::ostream& ss) const
+{
+  std::string key_string_type;
+  cmd_getval_or<std::string>(cmdmap, "key_type", key_string_type, std::string("recommended"));
+  auto key_type = CryptoManager::get_key_type(key_string_type);
+  auto&& secure_key_types = CryptoManager::get_secure_key_types();
+  if (!secure_key_types.contains(key_type)) {
+    if (!cct->_conf.get_val<bool>("mon_auth_allow_insecure_key")) {
+      ss << "creating key with insecure key type (\"" << key_string_type << "\") not allowed";
+      return -EPERM;
+    }
+  }
+  return key_type;
+}
+
 bool AuthMonitor::prepare_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
@@ -1464,6 +1480,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
      *  - if command adds brand new entity, handle it.
      *  - if command adds new state to existing entity, return error.
      */
+    int key_type = get_cipher_type(cmdmap, ss);
+    if (key_type < 0) {
+      goto done;
+    }
+
     KeyServerData::Incremental auth_inc;
     auth_inc.name = entity;
     bufferlist bl = m->get_data();
@@ -1542,7 +1563,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     if (!has_keyring) {
       dout(10) << "AuthMonitor::prepare_command generating random key for "
         << auth_inc.name << dendl;
-      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
+      new_inc.key.create(g_ceph_context, key_type);
     }
     new_inc.caps = new_caps;
 
@@ -1557,6 +1578,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   } else if ((prefix == "auth get-or-create-pending" ||
 	      prefix == "auth clear-pending" ||
 	      prefix == "auth commit-pending")) {
+    int key_type = get_cipher_type(cmdmap, ss);
+    if (key_type < 0) {
+      goto done;
+    }
+
     if (mon.monmap->min_mon_release < ceph_release_t::quincy) {
       err = -EPERM;
       ss << "pending_keys are not available until after upgrading to quincy";
@@ -1597,7 +1623,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	auth_inc.op = KeyServerData::AUTH_INC_ADD;
 	auth_inc.name = entity;
 	auth_inc.auth = entity_auth;
-	auth_inc.auth.pending_key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
+	auth_inc.auth.pending_key.create(g_ceph_context, key_type);
 	push_cephx_inc(auth_inc);
 	kr.add(entity, auth_inc.auth.key, auth_inc.auth.pending_key);
         push_cephx_inc(auth_inc);
@@ -1642,6 +1668,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	      prefix == "auth get-or-create") &&
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
+
+    int key_type = get_cipher_type(cmdmap, ss);
+    if (key_type < 0) {
+      goto done;
+    }
 
     if (!valid_caps(caps_vec, &ss)) {
       err = -EINVAL;
@@ -1713,7 +1744,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
+    auth_inc.auth.key.create(g_ceph_context, key_type);
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
@@ -1741,6 +1772,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "fs authorize") {
+    int key_type = get_cipher_type(cmdmap, ss);
+    if (key_type < 0) {
+      goto done;
+    }
+
     string filesystem;
     cmd_getval(cmdmap, "filesystem", filesystem);
     string mon_cap_string = "allow r";
@@ -1857,7 +1893,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
+    auth_inc.auth.key.create(g_ceph_context, key_type);
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
@@ -1924,6 +1960,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
+    int key_type = get_cipher_type(cmdmap, ss);
+    if (key_type < 0) {
+      goto done;
+    }
+
     EntityAuth entity_auth;
     if (!mon.key_server.get_auth(entity, entity_auth)) {
       ss << "entity does not exist";
@@ -1931,7 +1972,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    entity_auth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
+    entity_auth.key.create(g_ceph_context, key_type);
 
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
