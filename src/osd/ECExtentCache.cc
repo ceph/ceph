@@ -27,7 +27,6 @@ void ECExtentCache::Object::request(OpRef &op)
 
   extent_set eset = op->get_pin_eset(line_size);
 
-  /* Manipulation of lines must take the mutex. */
   for (auto &&[start, len]: eset ) {
     for (uint64_t to_pin = start; to_pin < start + len; to_pin += line_size) {
       LineRef l;
@@ -401,7 +400,9 @@ void ECExtentCache::LRU::discard() {
 
 extent_set ECExtentCache::Op::get_pin_eset(uint64_t alignment) const {
   extent_set eset = writes.get_extent_superset();
-  if (reads) reads->get_extent_superset(eset);
+  if (reads) {
+    reads->get_extent_superset(eset);
+  }
   eset.align(alignment);
 
   return eset;

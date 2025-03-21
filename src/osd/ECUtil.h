@@ -247,7 +247,9 @@ namespace ECUtil {
       return lhs;
     }
     void get_extent_superset(extent_set &eset) const {
-      for (auto &&[_, e]: map) eset.union_of(e);
+      for (auto &&[_, e]: map) {
+        eset.union_of(e);
+      }
     }
     extent_set get_extent_superset() const {
       extent_set eset;
@@ -262,6 +264,7 @@ namespace ECUtil {
     size_t get_max_shards() const { return map.max_size(); }
 
     void subtract(const shard_extent_set_t &set);
+    void intersection_of(const shard_extent_set_t &set);
     void insert(const shard_extent_set_t &set);
 
     /** return the sum of extent_set.size) */
@@ -275,6 +278,12 @@ namespace ECUtil {
     void populate_shard_id_set(shard_id_set &set) const
     {
       map.populate_bitset_set(set);
+    }
+
+    shard_id_set get_shard_id_set() const {
+      shard_id_set r;
+      map.populate_bitset_set(r);
+      return r;
     }
   };
 
@@ -405,7 +414,9 @@ public:
         k(k),
         m(m),
         chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
-        chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+        chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+        data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+        parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
     ceph_assert(stripe_width % k == 0);
   }
   stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
@@ -417,7 +428,9 @@ public:
         k(k),
         m(m),
         chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
-        chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)) {
+        chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
+        data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
+        parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
     ceph_assert(stripe_width % k == 0);
   }
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
@@ -585,6 +598,15 @@ public:
     for (shard_id_t shard : get_parity_shards()) {
       shard_extent_set[shard].union_of(parity);
     }
+  }
+
+  void ro_range_to_shard_extent_set_with_superset(
+      uint64_t ro_offset,
+      uint64_t ro_size,
+      ECUtil::shard_extent_set_t &shard_extent_set,
+      extent_set &superset) const {
+    ro_range_to_shards(ro_offset, ro_size, &shard_extent_set, &superset, NULL,
+                        NULL);
   }
 
   void ro_range_to_shard_extent_map(
@@ -779,12 +801,10 @@ public:
     return ret;
   }
 
-  shard_extent_set_t to_shard_extent_set(shard_extent_set_t set) const {
-    shard_extent_set_t ret(sinfo->get_k_plus_m());
+  void to_shard_extent_set(shard_extent_set_t &set) const {
     for (auto &&[shard, emap] : extent_maps) {
       emap.to_interval_set(set[shard]);
     }
-    return ret;
   }
 
   bool contains_shard(shard_id_t shard) const {

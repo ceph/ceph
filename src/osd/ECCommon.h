@@ -117,8 +117,16 @@ struct ECCommon {
       want_attrs(want_attrs),
       object_size(object_size) {}
 
-    read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
+    read_request_t(const ECUtil::shard_extent_set_t &&shard_want_to_read,
                    bool want_attrs, uint64_t object_size
+      ) :
+      shard_want_to_read(shard_want_to_read),
+      shard_reads(shard_want_to_read.get_max_shards()),
+      want_attrs(want_attrs),
+      object_size(object_size) {}
+
+    read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
+               bool want_attrs, uint64_t object_size
       ) :
       shard_want_to_read(shard_want_to_read),
       shard_reads(shard_want_to_read.get_max_shards()),
@@ -408,11 +416,7 @@ struct ECCommon {
         const std::optional<std::set<pg_shard_t>> &error_shards = std::nullopt
       );
 
-    void get_avail_and_backfill_sets(
-        const hobject_t &hoid,
-        shard_id_set &available,
-        shard_id_set &backfill
-      );
+    const std::pair<const shard_id_set, const shard_id_set> get_readable_writable_shard_id_sets();
 
     friend struct FinishReadOp;
 
@@ -529,8 +533,7 @@ struct ECCommon {
           ceph::os::Transaction &transaction
         ) = 0;
 
-      void cache_ready(hobject_t &oid, const ECUtil::shard_extent_map_t &result
-        ) {
+      void cache_ready(hobject_t &oid, const ECUtil::shard_extent_map_t &result) {
         if (!result.empty()) {
           remote_shard_extent_map.insert(std::pair(oid, result));
         }

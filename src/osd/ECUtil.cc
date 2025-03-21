@@ -530,8 +530,10 @@ namespace ECUtil {
       }
       s.extent_maps[shard_id_t(0)] = old_sem.extent_maps[data_shard];
       s.extent_maps[shard_id_t(1)] = extent_maps[data_shard];
-      for (auto i = sinfo->get_k(); i < sinfo->get_k_plus_m(); i++) {
-        s.extent_maps[shard_id_t(i)] = extent_maps[shard_id_t(i)];
+      for (shard_id_t parity_shard : sinfo->get_parity_shards()) {
+        if (extent_maps.contains(parity_shard)) {
+          s.extent_maps[parity_shard] = extent_maps[parity_shard];
+        }
       }
 
       s.compute_ro_range();
@@ -541,7 +543,6 @@ namespace ECUtil {
         shard_id_map<bufferptr> &data_shards = iter.get_in_bufferptrs();
         shard_id_map<bufferptr> &parity_shards = iter.get_out_bufferptrs();
 
-        ceph_assert(parity_shards.size() == sinfo->get_m());
         unsigned int size = iter.get_length();
         ceph_assert(size % 4096 == 0);
         ceph_assert(size > 0);
@@ -916,7 +917,22 @@ void shard_extent_map_t::pad_with_other(shard_id_t shard, uint64_t offset, uint6
         continue;
 
       at(shard).subtract(eset);
-      if(at(shard).empty()) erase(shard);
+      if(at(shard).empty()) {
+        erase(shard);
+      }
+    }
+  }
+
+void shard_extent_set_t::intersection_of(const shard_extent_set_t &other) {
+    for (shard_id_t s; s < map.max_size(); ++s) {
+      if (!map.contains(s) || !other.contains(s)) {
+        erase(s);
+      } else {
+        at(s).intersection_of(other.at(s));
+        if (at(s).empty()) {
+          erase(s);
+        }
+      }
     }
   }
 
