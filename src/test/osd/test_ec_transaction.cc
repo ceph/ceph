@@ -45,10 +45,15 @@ TEST(ectransaction, two_writes_separated_append)
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
   ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool);
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     0,
     std::nullopt,
     std::nullopt,
@@ -76,11 +81,16 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
   ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 3112960;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
 
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     oi.size,
     oi,
     std::nullopt,
@@ -110,10 +120,16 @@ TEST(ectransaction, partial_write)
   ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 8;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 3);
+
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     0,
     oi,
     std::nullopt,
@@ -146,10 +162,15 @@ TEST(ectransaction, overlapping_write_non_aligned)
   ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 8;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     8,
     oi,
     std::nullopt,
@@ -183,10 +204,15 @@ TEST(ectransaction, test_appending_write_non_aligned)
   ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 4*4096;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     8,
     oi,
     std::nullopt,
@@ -220,10 +246,15 @@ TEST(ectransaction, append_with_large_hole)
   ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 25*4096;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     4096,
     oi,
     std::nullopt,
@@ -257,10 +288,15 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
   ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 25*4096;
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(), 3);
   ECTransaction::WritePlanObj plan(
     h,
     op,
     sinfo,
+    shards,
+    shards,
+    false,
     4096,
     oi,
     std::nullopt,
@@ -276,5 +312,52 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
   ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
   ref_write[shard_id_t(0)].insert(12*4096, 4096);
   ref_write[shard_id_t(2)].insert(12*4096, 4096);
+  ASSERT_EQ(ref_write, plan.will_write);
+}
+
+TEST(ectransaction, test_overwrite_with_missing)
+{
+  hobject_t h;
+  PGTransaction::ObjectOperation op, op2;
+  bufferlist a;
+
+  // We have a 4k write quite a way after the current limit of a 4k object
+  a.append_zero(14*1024);
+  op.buffer_updates.insert(0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  object_info_t oi;
+  oi.size = 42*1024;
+  shard_id_set shards;
+  shards.insert(shard_id_t(0));
+  shards.insert(shard_id_t(1));
+
+  ECTransaction::WritePlanObj plan(
+    h,
+    op,
+    sinfo,
+    shards,
+    shards,
+    false,
+    42*1024,
+    oi,
+    std::nullopt,
+    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
+    nullptr);
+
+  generic_derr << "plan " << plan << dendl;
+
+  // No reads (because not yet written)
+  ASSERT_TRUE(plan.to_read);
+  ECUtil::shard_extent_set_t ref_read(sinfo.get_k_plus_m());
+  ref_read[shard_id_t(1)].insert(4096, 4096);
+  ASSERT_EQ(ref_read, plan.to_read);
+
+  // Writes should grow to 4k
+  ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
+  ref_write[shard_id_t(0)].insert(0, 8192);
+  ref_write[shard_id_t(1)].insert(0, 8192);
   ASSERT_EQ(ref_write, plan.will_write);
 }
