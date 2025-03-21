@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore compression mode: aggressive
+        bluestore compression algorithm: zstd
