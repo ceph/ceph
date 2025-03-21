@@ -1,11 +1,14 @@
 import logging
-from typing import List, Any, Tuple, Dict, cast, Optional
+from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 from copy import copy
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec
+from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from .service_registry import register_cephadm_service
+
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +23,24 @@ class OAuth2ProxyService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        # adding dependency as redirect_url calculation depends on the mgmt-gateway
+        deps = [
+            f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
+            for service in ['mgmt-gateway']
+            for d in mgr.cache.get_daemons_by_service(service)
+        ]
+        return deps
+
     def get_service_ips_and_hosts(self, service_name: str) -> List[str]:
         entries = set()
-        mgmt_gw_spec = cast(MgmtGatewaySpec, self.mgr.spec_store['mgmt-gateway'].spec)
-        if mgmt_gw_spec.virtual_ip is not None:
-            entries.add(mgmt_gw_spec.virtual_ip)
+        if 'mgmt-gateway' in self.mgr.spec_store:
+            mgmt_gw_spec = cast(MgmtGatewaySpec, self.mgr.spec_store['mgmt-gateway'].spec)
+            if mgmt_gw_spec.virtual_ip is not None:
+                entries.add(mgmt_gw_spec.virtual_ip)
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
@@ -86,7 +102,7 @@ class OAuth2ProxyService(CephadmService):
             }
         }
 
-        return daemon_config, []
+        return daemon_config, sorted(OAuth2ProxyService.get_dependencies(self.mgr))
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
