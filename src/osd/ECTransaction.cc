@@ -705,7 +705,6 @@ void ECTransaction::generate_transactions(
           }
           if (clone_end > start) {
             rollback_extents.emplace_back(make_pair(start, clone_end - start));
-            ldpp_dout(dpp, 20) << "BILLCL: " << to_clone_shards << dendl;
             rollback_shards.emplace_back(to_clone_shards);
           }
         }
