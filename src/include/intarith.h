@@ -111,6 +111,17 @@ constexpr inline T p2roundup(T x, T align) {
   return -(-x & -align);
 }
 
+/*
+ * checks if x is power of 2
+ * eg, p2isp2(0x123)  == false
+ * eg, p2isp2(0)      == true
+ * eg, p2isp2(0x2000) == true
+ */
+template<typename T>
+constexpr inline T p2isp2(T x) {
+  return (x & (x - 1)) == 0;
+}
+
 // count bits (set + any 0's that follow)
 template<std::integral T>
 unsigned cbits(T v) {
