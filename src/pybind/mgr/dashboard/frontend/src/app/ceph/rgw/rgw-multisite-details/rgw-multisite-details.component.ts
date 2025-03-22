@@ -11,7 +11,7 @@ import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { forkJoin, Subscription, timer as observableTimer } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
@@ -37,7 +37,6 @@ import { RgwMultisiteZoneFormComponent } from '../rgw-multisite-zone-form/rgw-mu
 import { RgwMultisiteZonegroupFormComponent } from '../rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
-import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { Router } from '@angular/router';
 import { RgwMultisiteWizardComponent } from '../rgw-multisite-wizard/rgw-multisite-wizard.component';
 import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
@@ -65,9 +64,6 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     noRealmExists: $localize`No realm exists`,
     disableExport: $localize`Please create master zone group and master zone for each of the realms`
   };
-
-  @BlockUI()
-  blockUI: NgBlockUI;
 
   icons = Icons;
   permissions: Permissions;
@@ -128,6 +124,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   rgwModuleData: string | any[] = [];
   activeId: string;
   activeNodeId?: string;
+  MODULE_NAME = 'rgw';
+  NAVIGATE_TO = '/rgw/multisite';
 
   constructor(
     private modalService: ModalService,
@@ -610,44 +608,13 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   }
 
   enableRgwModule() {
-    let $obs;
-    const fnWaitUntilReconnected = () => {
-      observableTimer(2000).subscribe(() => {
-        // Trigger an API request to check if the connection is
-        // re-established.
-        this.mgrModuleService.list().subscribe(
-          () => {
-            // Resume showing the notification toasties.
-            this.notificationService.suspendToasties(false);
-            // Unblock the whole UI.
-            this.blockUI.stop();
-            // Reload the data table content.
-            this.notificationService.show(NotificationType.success, $localize`Enabled RGW Module`);
-            this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-              this.router.navigate(['/rgw/multisite']);
-            });
-            // Reload the data table content.
-          },
-          () => {
-            fnWaitUntilReconnected();
-          }
-        );
-      });
-    };
-
-    if (!this.rgwModuleStatus) {
-      $obs = this.mgrModuleService.enable(RGW);
-    }
-    $obs.subscribe(
-      () => undefined,
-      () => {
-        // Suspend showing the notification toasties.
-        this.notificationService.suspendToasties(true);
-        // Block the whole UI to prevent user interactions until
-        // the connection to the backend is reestablished
-        this.blockUI.start($localize`Reconnecting, please wait ...`);
-        fnWaitUntilReconnected();
-      }
+    this.mgrModuleService.updateModuleState(
+      this.MODULE_NAME,
+      false,
+      null,
+      this.NAVIGATE_TO,
+      'Enabled RGW Module',
+      true
     );
   }
 }

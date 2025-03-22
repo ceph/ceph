@@ -15,6 +15,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryNotificationComponent } from './telemetry-notification.component';
+import { BlockUIModule } from 'ng-block-ui';
 
 describe('TelemetryActivationNotificationComponent', () => {
   let component: TelemetryNotificationComponent;
@@ -41,7 +42,13 @@ describe('TelemetryActivationNotificationComponent', () => {
 
   configureTestBed({
     declarations: [TelemetryNotificationComponent, AlertPanelComponent],
-    imports: [NgbAlertModule, HttpClientTestingModule, ToastrModule.forRoot(), PipesModule],
+    imports: [
+      NgbAlertModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot(),
+      PipesModule,
+      BlockUIModule.forRoot()
+    ],
     providers: [MgrModuleService, UserService]
   });
 
