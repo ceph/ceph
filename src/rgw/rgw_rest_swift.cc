@@ -361,6 +361,7 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& ent)
   if (need_stats) {
     s->formatter->dump_int("count", ent.count);
     s->formatter->dump_int("bytes", ent.size);
+    dump_time(s, "last_modified", ent.modification_time);
   }
 
   s->formatter->close_section();
