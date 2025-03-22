@@ -128,8 +128,15 @@ class CloneProgressReporterHelper(TestVolumesHelper):
         This helper methods goes through this dictionary and picks only
         (filters in) clone events.
         '''
-        clone_pevs = {}
+        if progress_events == {}:
+            return {}
 
+        if not isinstance(progress_events, dict):
+            raise RuntimeError('variable "progress_events" should be '
+                               'dictionary, regardless of whether with or '
+                               'without any members')
+
+        clone_pevs = {}
         for k, v in progress_events.items():
             if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
                 clone_pevs[k] = v
