@@ -3363,12 +3363,17 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   return 0;
 
 done_cancel:
-  int ret = index_op->cancel(rctx.dpp, meta.remove_objs, rctx.y, log_op);
-  if (ret < 0) {
-    ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
-  }
+  // if r == -ETIMEDOUT, rgw can't determine whether or not the rados op succeeded
+  // we shouldn't be calling index_op->cancel() in this case
+  // Instead, we should leave that pending entry in the index so than bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
+  if (r != -ETIMEDOUT) {
+    int ret = index_op->cancel(rctx.dpp, meta.remove_objs, rctx.y, log_op);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
+    }
 
-  meta.canceled = true;
+    meta.canceled = true;
+  }
 
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
