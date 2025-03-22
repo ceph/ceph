@@ -1224,7 +1224,10 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   // TODO: head_obj_wop.meta.ptag
   // the owner of the logging object is the bucket owner
   // not the user that wrote the log that triggered the commit
-  const ACLOwner owner{bucket_info.owner, ""}; // TODO: missing display name
+  ACLOwner owner{bucket_info.owner, ""};
+  if (auto i = get_attrs().find(RGW_ATTR_ACL); i != get_attrs().end()) {
+    std::ignore = store->getRados()->decode_policy(dpp, i->second, &owner);
+  }
   head_obj_wop.meta.owner = owner;
   const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl_data).to_str();
   bufferlist bl_etag;

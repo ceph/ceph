@@ -143,10 +143,11 @@ extern void decode_json_obj(rgw_placement_rule& v, JSONObj *obj);
 namespace rgw {
 namespace auth {
 class Principal {
-  enum types { User, Role, Account, Wildcard, OidcProvider, AssumedRole };
+  enum types { User, Role, Account, Wildcard, OidcProvider, AssumedRole, Service };
   types t;
   rgw_user u;
   std::string idp_url;
+  std::string service_id;
 
   explicit Principal(types t)
     : t(t) {}
@@ -183,6 +184,12 @@ public:
     return Principal(AssumedRole, std::move(t), std::move(u));
   }
 
+  static Principal service(std::string&& s) {
+    auto p = Principal(Service);
+    p.service_id = std::move(s);
+    return p;
+  }
+
   bool is_wildcard() const {
     return t == Wildcard;
   }
@@ -207,6 +214,10 @@ public:
     return t == AssumedRole;
   }
 
+  bool is_service() const {
+    return t == Service;
+  }
+
   const std::string& get_account() const {
     return u.tenant;
   }
@@ -225,6 +236,10 @@ public:
 
   const std::string& get_role() const {
     return u.id;
+  }
+
+  const std::string& get_service() const {
+    return service_id;
   }
 
   bool operator ==(const Principal& o) const {

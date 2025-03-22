@@ -584,6 +584,8 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
 	  "for an assumed role, "
 	  "`arn:aws:iam::tenant:user/user-name` for a user, "
 	  "`arn:aws:iam::tenant:oidc-provider/idp-url` for OIDC.", s);
+  } else if (w->id == TokenID::Service) {
+      return Principal::service(std::move(s));
   }
 
   if (errmsg)
@@ -1266,13 +1268,14 @@ Effect Statement::eval_principal(const Environment& e,
     if (ida->get_identity_type() != TYPE_ROLE && !princ.empty() && !is_identity(*ida, princ)) {
       return Effect::Deny;
     }
-    if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
+    if ((ida->get_identity_type() == TYPE_ROLE || ida->get_identity_type() == TYPE_RGW) &&
+        !princ.empty()) {
       bool princ_matched = false;
       for (auto p : princ) { // Check each principal to determine the type of the one that has matched
         if (ida->is_identity(p)) {
           if (p.is_assumed_role() || p.is_user()) {
             if (princ_type) *princ_type = PolicyPrincipal::Session;
-          } else {
+          } else if (p.is_role()) {
             if (princ_type) *princ_type = PolicyPrincipal::Role;
           }
           princ_matched = true;

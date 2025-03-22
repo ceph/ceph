@@ -215,7 +215,7 @@ std::string full_bucket_name(const std::unique_ptr<rgw::sal::Bucket>& bucket) {
 }
 
 int new_logging_object(const configuration& conf,
-    const std::unique_ptr<rgw::sal::Bucket>& bucket,
+    const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
     std::string& obj_name,
     const DoutPrefixProvider *dpp,
     optional_yield y,
@@ -226,7 +226,6 @@ int new_logging_object(const configuration& conf,
   localtime_r(&tt, &t);
 
   const auto unique = unique_string<UniqueStringLength>();
-  const auto old_name = obj_name;
 
   switch (conf.obj_key_format) {
     case KeyFormat::Simple:
@@ -241,32 +240,33 @@ int new_logging_object(const configuration& conf,
         const auto source_region = ""; // TODO
         obj_name = fmt::format("{}{}/{}/{}/{:%Y/%m/%d}/{:%Y-%m-%d-%H-%M-%S}-{}",
           conf.target_prefix,
-          to_string(bucket->get_owner()),
+          to_string(target_bucket->get_owner()),
           source_region,
-          full_bucket_name(bucket),
+          full_bucket_name(target_bucket),
           t,
           t,
           unique);
       }
       break;
   }
-  int ret = bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp, init_obj, objv_tracker);
+  const auto& target_bucket_id = target_bucket->get_key();
+  auto ret = target_bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp, init_obj, objv_tracker);
   if (ret == -EEXIST || ret == -ECANCELED) {
-   if (ret = bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
+   if (ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of bucket '" <<
-        conf.target_bucket << "' and prefix '" << conf.target_prefix << "', ret = " << ret << dendl;
+        target_bucket_id << "' and prefix '" << conf.target_prefix << "', ret = " << ret << dendl;
       return ret;
     }
     ldpp_dout(dpp, 20) << "INFO: name already set. got name of logging object '" << obj_name <<  "' of bucket '" <<
-      conf.target_bucket << "' and prefix '" << conf.target_prefix << "'" << dendl;
+      target_bucket_id << "' and prefix '" << conf.target_prefix << "'" << dendl;
     return -ECANCELED;
   } else if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write name of logging object '" << obj_name << "' of bucket '" <<
-      conf.target_bucket << "'. ret = " << ret << dendl;
+      target_bucket_id << "'. ret = " << ret << dendl;
     return ret;
   }
   ldpp_dout(dpp, 20) << "INFO: wrote name of logging object '" << obj_name <<  "' of bucket '" <<
-      conf.target_bucket << "'" << dendl;
+      target_bucket_id << "'" << dendl;
   return 0;
 }
 
@@ -393,7 +393,7 @@ S3 bucket short (ceph) log record
 
 int log_record(rgw::sal::Driver* driver,
     const sal::Object* obj,
-    const req_state* s,
+    req_state* s,
     const std::string& op_name,
     const std::string& etag,
     size_t size,
@@ -421,6 +421,13 @@ int log_record(rgw::sal::Driver* driver,
     ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << target_bucket_id << "'. ret = " << ret << dendl;
     return ret;
   }
+
+    rgw::ARN target_resource_arn(target_bucket_id, conf.target_prefix);
+    if (ret = verify_target_bucket_policy(dpp, target_bucket.get(), target_resource_arn, s); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to verify target bucket policy for bucket '" << target_bucket_id <<
+        "'. ret = " << ret << dendl;
+      return -EACCES;
+    }
   std::string obj_name;
   RGWObjVersionTracker objv_tracker;
   ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv_tracker);
@@ -478,7 +485,7 @@ int log_record(rgw::sal::Driver* driver,
     bucket_owner = to_string(s->src_object->get_bucket()->get_owner());
     bucket_name = s->src_bucket_name;
   } else {
-    bucket_owner = to_string( s->bucket->get_owner());
+    bucket_owner = to_string(s->bucket->get_owner());
     bucket_name = full_bucket_name(s->bucket);
   }
 
@@ -576,7 +583,7 @@ std::string object_name_oid(const rgw::sal::Bucket* bucket, const std::string& p
 int log_record(rgw::sal::Driver* driver,
     LoggingType type,
     const sal::Object* obj,
-    const req_state* s,
+    req_state* s,
     const std::string& op_name,
     const std::string& etag,
     size_t size,
@@ -798,6 +805,37 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
   }
   ldpp_dout(dpp, 20) << "INFO: successfully updated bucket logging source '" <<
     info.bucket << "'"<< dendl;
+  return 0;
+}
+
+int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
+    rgw::sal::Bucket* target_bucket,
+    const rgw::ARN& target_resource_arn,
+    req_state* s) {
+  // verify target permissions for bucket logging
+  // this is implementing the policy based permission granting from:
+  // https://docs.aws.amazon.com/AmazonS3/latest/userguide/enable-server-access-logging.html#grant-log-delivery-permissions-general
+  const auto& target_attrs = target_bucket->get_attrs();
+  const auto& target_bucket_id = target_bucket->get_key();
+  if (const auto policy = get_iam_policy_from_attr(s->cct, target_attrs, target_bucket_id.tenant); policy) {
+    ldpp_dout(dpp, 20) << "INFO: logging bucket '" << target_bucket_id <<
+      "' policy: " << *policy << dendl;
+    rgw::auth::ServiceIdentity ident(rgw::bucketlogging::service_principal);
+    const auto source_bucket_arn = rgw::ARN(s->bucket->get_key()).to_string();
+    const auto source_account = to_string(s->bucket_owner.id);
+    s->env.emplace("aws:SourceArn", source_bucket_arn);
+    s->env.emplace("aws:SourceAccount", source_account);
+    if (policy->eval(s->env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
+      ldpp_dout(dpp, 1) << "ERROR: logging bucket: '" << target_bucket_id <<
+        "' must have a bucket policy that allows logging service principal to put objects in the following resource ARN: '" <<
+        target_resource_arn.to_string() << "' from source bucket ARN: '" << source_bucket_arn <<
+        "' and source account: '" << source_account << "'" <<  dendl;
+      return -EACCES;
+    }
+  } else {
+    ldpp_dout(dpp, 1) << "ERROR: logging bucket '" << target_bucket_id << "' must have bucket policy to allow logging" << dendl;
+    return -EACCES;
+  }
   return 0;
 }
 
