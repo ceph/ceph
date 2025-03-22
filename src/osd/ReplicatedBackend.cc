@@ -873,7 +873,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   op->mark_started();
 
   vector<PushReplyOp> replies;
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   if (get_parent()->check_failsafe_full()) {
     dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
     ceph_abort();
@@ -958,7 +958,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     ceph_abort();
   }
 
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   list<pull_complete_info> to_continue;
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
@@ -1051,21 +1051,26 @@ Message * ReplicatedBackend::generate_subop(
 {
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
   // forward the write/update/whatever
-  MOSDRepOp *wr = new MOSDRepOp(
-    reqid, parent->whoami_shard(),
-    spg_t(get_info().pgid.pgid, peer.shard),
-    soid, acks_wanted,
-    get_osdmap_epoch(),
-    parent->get_last_peering_reset_epoch(),
-    tid, at_version);
+  MOSDRepOp *wr;
 
   // ship resulting transaction, log entries, and pg_stats
   if (!parent->should_send_op(peer, soid)) {
-    ObjectStore::Transaction t;
-    encode(t, wr->get_data());
+    ObjectStore::Transaction t{get_parent()->min_peer_features()};
+    wr = new MOSDRepOp(
+      reqid, parent->whoami_shard(),
+      spg_t(get_info().pgid.pgid, peer.shard),
+      soid, acks_wanted,
+      get_osdmap_epoch(),
+      parent->get_last_peering_reset_epoch(),
+      tid, at_version, t);
   } else {
-    encode(op_t, wr->get_data());
-    wr->get_header().data_off = op_t.get_data_alignment();
+    wr = new MOSDRepOp(
+      reqid, parent->whoami_shard(),
+      spg_t(get_info().pgid.pgid, peer.shard),
+      soid, acks_wanted,
+      get_osdmap_epoch(),
+      parent->get_last_peering_reset_epoch(),
+      tid, at_version, op_t);
   }
 
   wr->logbl = log_entries;
@@ -1145,8 +1150,8 @@ void ReplicatedBackend::issue_op(
 // sub op modify
 void ReplicatedBackend::do_repop(OpRequestRef op)
 {
-  static_cast<MOSDRepOp*>(op->get_nonconst_req())->finish_decode();
-  auto m = op->get_req<MOSDRepOp>();
+  auto m = static_cast<MOSDRepOp*>(op->get_nonconst_req());
+  m->finish_decode();
   int msg_type = m->get_type();
   ceph_assert(MSG_OSD_REPOP == msg_type);
 
@@ -1158,7 +1163,6 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 	   << " " << m->logbl.length()
 	   << dendl;
 
-
   // sanity checks
   ceph_assert(m->map_epoch >= get_info().history.same_interval_since);
 
@@ -1169,7 +1173,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   op->mark_started();
 
-  RepModifyRef rm(std::make_shared<RepModify>());
+  RepModifyRef rm(std::make_shared<RepModify>(get_parent()->min_peer_features()));
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
@@ -1179,16 +1183,13 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // shipped transaction and log entries
   vector<pg_log_entry_t> log;
 
-  auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
-  decode(rm->opt, p);
-
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
     add_temp_obj(m->new_temp_oid);
   }
   if (m->discard_temp_oid != hobject_t()) {
     dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
-    if (rm->opt.empty()) {
+    if (m->op_t.empty()) {
       dout(10) << __func__ << ": removing object " << m->discard_temp_oid
 	       << " since we won't get the transaction" << dendl;
       rm->localt.remove(coll, ghobject_t(m->discard_temp_oid));
@@ -1196,13 +1197,13 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     clear_temp_obj(m->discard_temp_oid);
   }
 
-  p = const_cast<bufferlist&>(m->logbl).begin();
+  auto p = const_cast<bufferlist&>(m->logbl).cbegin();
   decode(log, p);
-  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  m->op_t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   bool update_snaps = false;
-  if (!rm->opt.empty()) {
-    // If the opt is non-empty, we infer we are before
+  if (!m->op_t.empty()) {
+    // If the transaction is non-empty, we infer we are before
     // last_backfill (according to the primary, not our
     // not-quite-accurate value), and should update the
     // collections now.  Otherwise, we do it later on push.
@@ -1233,13 +1234,13 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     rm->localt,
     async);
 
-  rm->opt.register_on_commit(
+  m->op_t.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
-  tls.push_back(std::move(rm->opt));
+  tls.push_back(std::move(m->op_t));
   parent->queue_transactions(tls, op);
   // op is cleaned up by oncommit/onapply when both are executed
   dout(30) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;

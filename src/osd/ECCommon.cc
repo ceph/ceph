@@ -826,7 +826,7 @@ bool ECCommon::RMWPipeline::try_reads_to_commit()
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
-    trans[i->shard];
+    trans.emplace(i->shard, get_parent()->min_peer_features());
   }
 
   op->trace.event("start ec write");

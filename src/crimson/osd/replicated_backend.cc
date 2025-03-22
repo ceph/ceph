@@ -39,7 +39,7 @@ ReplicatedBackend::_read(const hobject_t& hoid,
 MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
   const pg_shard_t &pg_shard,
   const hobject_t &hoid,
-  const bufferlist &encoded_txn,
+  const ceph::os::Transaction& txn,
   const osd_op_params_t &osd_op_p,
   epoch_t min_epoch,
   epoch_t map_epoch,
@@ -57,15 +57,8 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
     map_epoch,
     min_epoch,
     tid,
-    osd_op_p.at_version);
-  if (send_op) {
-    m->set_data(encoded_txn);
-  } else {
-    ceph::os::Transaction t;
-    bufferlist bl;
-    encode(t, bl);
-    m->set_data(bl);
-  }
+    osd_op_p.at_version,
+    send_op ? txn : ceph::os::Transaction{});
   encode(log_entries, m->logbl);
   m->pg_trim_to = osd_op_p.pg_trim_to;
   m->pg_committed_to = osd_op_p.pg_committed_to;
@@ -97,8 +90,6 @@ ReplicatedBackend::submit_transaction(
       pg_shards.size(),
       osd_op_p.at_version,
       pg.get_last_complete()).first;
-  bufferlist encoded_txn;
-  encode(txn, encoded_txn);
 
   bool is_delete = false;
   for (auto &le : log_entries) {
@@ -120,11 +111,11 @@ ReplicatedBackend::submit_transaction(
     MURef<MOSDRepOp> m;
     if (pg.should_send_op(pg_shard, hoid)) {
       m = new_repop_msg(
-	pg_shard, hoid, encoded_txn, osd_op_p,
+	pg_shard, hoid, txn, osd_op_p,
 	min_epoch, map_epoch, log_entries, true, tid);
     } else {
       m = new_repop_msg(
-	pg_shard, hoid, encoded_txn, osd_op_p,
+	pg_shard, hoid, txn, osd_op_p,
 	min_epoch, map_epoch, log_entries, false, tid);
       if (pg.is_missing_on_peer(pg_shard, hoid)) {
 	if (_new_clone) {
