@@ -16,6 +16,12 @@
     user policy list attached        list attached managed policies
     caps add                         add user capabilities
     caps rm                          remove user capabilities
+    dedup stats                      Collcet & display dedup statistics
+    dedup abort                      Abort dedup
+    dedup restart dry                Restart dedup (dry run)
+    dedup restart                    Restart dedup
+    dedup pause                      Pause dedup
+    dedup resume                     Resume paused dedup
     subuser create                   create a new subuser
     subuser modify                   modify subuser
     subuser rm                       remove subuser
