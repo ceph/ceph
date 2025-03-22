@@ -11,6 +11,6 @@ tasks:
       - ceph versions
       - ceph orch upgrade status
       - ceph health detail
-      - ceph versions | jq -e '.overall | length == 1'
-      - ceph versions | jq -e '.overall | keys' | grep $sha1
+      - time timeout 60 bash -c "until ceph versions | jq -e '.overall | length == 1'; do sleep 2; done"
+      - time timeout 60 bash -c "until ceph versions | jq -e '.overall | keys' | grep $sha1; do sleep 2; done"
       - ceph orch ls | grep '^osd '
