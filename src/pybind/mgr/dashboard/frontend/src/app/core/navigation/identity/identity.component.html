@@ -3,7 +3,7 @@
   <li disabled="true"
       class="show cds--overflow-menu-options__option cds--overflow-menu-options__option--disabled my-2"
       i18n>
-    <div class="cds--overflow-menu-options__btn">Logged in as {{ username }}
+    <div class="cds--overflow-menu-options__btn">Logged in as {{ username.length > 5 ? username.slice(0,4) + '...' : username }}
     </div>
   </li>
   <li class="cds--overflow-menu-options__option cds--overflow-menu--divider mb-2">
