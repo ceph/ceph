@@ -716,6 +716,24 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   maybe_kick_pct_update();
 }
 
+static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
+{
+  // XXX: This function MUST be compliant with the bufferlist marshalling format!
+  // Otherwise scrubs-during-upgrade will explode.
+  __u32 len = data.length();
+  auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
+  crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
+
+#ifndef _NDEBUG
+  // let's verify the compatibility but, due to performance penalty,
+  // only in debug builds.
+  ceph::bufferlist bl;
+  bl.append(data);
+  ceph_assert(crc = bl.crc32c(orig_crc));
+#endif
+  return crc;
+}
+
 int ReplicatedBackend::be_deep_scrub(
   const hobject_t &poid,
   ScrubMap &map,
@@ -776,7 +794,7 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap header
   if (pos.omap_pos.empty()) {
-    pos.omap_hash = bufferhash(-1);
+    pos.omap_hash = -1;
 
     bufferlist hdrbl;
     r = store->omap_get_header(
@@ -793,44 +811,40 @@ int ReplicatedBackend::be_deep_scrub(
     if (r == 0 && hdrbl.length()) {
       bool encoded = false;
       dout(25) << "CRC header " << cleanbin(hdrbl, encoded, true) << dendl;
-      pos.omap_hash << hdrbl;
+      pos.omap_hash = hdrbl.crc32c(pos.omap_hash);
     }
   }
 
   // omap
-  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  auto result = store->omap_iterate(
     ch,
-    ghobject_t(
-      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-  ceph_assert(iter);
-  if (pos.omap_pos.length()) {
-    iter->lower_bound(pos.omap_pos);
-  } else {
-    iter->seek_to_first();
-  }
-  int max = g_conf()->osd_deep_scrub_keys;
-  while (iter->status() == 0 && iter->valid()) {
-    pos.omap_bytes += iter->value().length();
-    ++pos.omap_keys;
-    --max;
-    // fixme: we can do this more efficiently.
-    bufferlist bl;
-    encode(iter->key(), bl);
-    encode(iter->value(), bl);
-    pos.omap_hash << bl;
-
-    iter->next();
-
-    if (iter->valid() && max == 0) {
-      pos.omap_pos = iter->key();
-      return -EINPROGRESS;
-    }
-    if (iter->status() < 0) {
-      dout(25) << __func__ << "  " << poid
-	       << " on omap scan, db status error" << dendl;
-      o.read_error = true;
-      return 0;
-    }
+    ghobject_t{
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard},
+    // try to seek as many keys-at-once as possible for the sake of performance.
+    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+    // than just seek(n).
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = pos.omap_pos,
+      .seek_type = omap_iter_seek_t::LOWER_BOUND
+    },
+    [&pos, max=cct->_conf->osd_deep_scrub_keys]
+    (std::string_view key, std::string_view value) mutable {
+      pos.omap_bytes += value.length();
+      ++pos.omap_keys;
+      pos.omap_hash = crc32_netstring(pos.omap_hash, key);
+      pos.omap_hash = crc32_netstring(pos.omap_hash, value);
+      if (--max == 0) {
+        pos.omap_pos = key;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      } else {
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      }
+    });
+  if (result < 0) {
+    return -EIO;
+  } else if (const auto more = static_cast<bool>(result); more) {
+    return -EINPROGRESS;
   }
 
   if (pos.omap_keys > cct->_conf->
@@ -846,7 +860,7 @@ int ReplicatedBackend::be_deep_scrub(
     map.has_large_omap_object_errors = true;
   }
 
-  o.omap_digest = pos.omap_hash.digest();
+  o.omap_digest = pos.omap_hash;
   o.omap_digest_present = true;
   dout(20) << __func__ << " done with " << poid << " omap_digest "
 	   << std::hex << o.omap_digest << std::dec << dendl;
@@ -2108,6 +2122,12 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
   }
 }
 
+static bufferlist to_bufferlist(std::string_view in) {
+  bufferlist bl;
+  bl.append(in);
+  return bl;
+}
+
 int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				     const ObjectRecoveryProgress &progress,
 				     ObjectRecoveryProgress *out_progress,
@@ -2169,29 +2189,40 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
-    ObjectMap::ObjectMapIterator iter =
-      store->get_omap_iterator(ch,
-			       ghobject_t(recovery_info.soid));
-    ceph_assert(iter);
-    for (iter->lower_bound(progress.omap_recovered_to);
-	 iter->valid();
-	 iter->next()) {
-      if (!out_op->omap_entries.empty() &&
-	  ((cct->_conf->osd_recovery_max_omap_entries_per_chunk > 0 &&
-	    out_op->omap_entries.size() >= cct->_conf->osd_recovery_max_omap_entries_per_chunk) ||
-	   available <= iter->key().size() + iter->value().length()))
-	break;
-      out_op->omap_entries.insert(make_pair(iter->key(), iter->value()));
-
-      if ((iter->key().size() + iter->value().length()) <= available)
-	available -= (iter->key().size() + iter->value().length());
-      else
-	available = 0;
-    }
-    if (!iter->valid())
+    using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+    auto result = store->omap_iterate(
+      ch,
+      ghobject_t{recovery_info.soid},
+      // try to seek as many keys-at-once as possible for the sake of performance.
+      // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
+      // than just seek(n).
+      ObjectStore::omap_iter_seek_t{
+        .seek_position = progress.omap_recovered_to,
+        .seek_type = omap_iter_seek_t::LOWER_BOUND
+      },
+      [&available, &new_progress, &omap_entries=out_op->omap_entries,
+       max_entries=cct->_conf->osd_recovery_max_omap_entries_per_chunk]
+      (std::string_view key, std::string_view value) mutable {
+        const auto num_new_bytes = key.size() + value.size();
+        if (auto cur_num_entries = omap_entries.size(); cur_num_entries > 0) {
+	  if (max_entries > 0 && cur_num_entries >= max_entries) {
+            new_progress.omap_recovered_to = key;
+            return ObjectStore::omap_iter_ret_t::STOP; // want more!
+	  }
+	  if (num_new_bytes >= available) {
+            new_progress.omap_recovered_to = key;
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+        }
+        omap_entries.insert(make_pair(key, to_bufferlist(value)));
+	available -= std::min(available, num_new_bytes);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
+    if (result < 0) {
+      return -EIO;
+    } else if (const auto more = static_cast<bool>(result); !more) {
       new_progress.omap_complete = true;
-    else
-      new_progress.omap_recovered_to = iter->key();
+    }
   }
 
   if (available > 0) {

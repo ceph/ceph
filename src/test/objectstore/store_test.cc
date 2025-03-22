@@ -3709,23 +3709,18 @@ TEST_P(StoreTest, OmapSimple) {
     ASSERT_EQ(r.size(), km.size());
     cout << "r: " << r << std::endl;
   }
-  // test iterator with seek_to_first
+  // test iterator with initial lower_bound. when an empty
+  // string is passed, lower_bound() becomes an alias
+  // to seek_to_first().
   {
     map<string,bufferlist> r;
-    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-    for (iter->seek_to_first(); iter->valid(); iter->next()) {
-      r[iter->key()] = iter->value();
-    }
-    cout << "r: " << r << std::endl;
-    ASSERT_EQ(r.size(), km.size());
-  }
-  // test iterator with initial lower_bound
-  {
-    map<string,bufferlist> r;
-    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-    for (iter->lower_bound(string()); iter->valid(); iter->next()) {
-      r[iter->key()] = iter->value();
-    }
+    store->omap_iterate(
+      ch, hoid,
+      ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&r] (std::string_view key, std::string_view value) mutable {
+        r[std::string{key}].append(value);
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
     cout << "r: " << r << std::endl;
     ASSERT_EQ(r.size(), km.size());
   }
@@ -6184,8 +6179,6 @@ TEST_P(StoreTest, OMapIterator) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ObjectMap::ObjectMapIterator iter;
-  bool correct;
   //basic iteration
   for (int i = 0; i < 100; i++) {
     if (!(i%5)) {
@@ -6194,26 +6187,28 @@ TEST_P(StoreTest, OMapIterator) {
     bufferlist bl;
 
     // FileStore may deadlock two active iterators over the same data
-    iter = ObjectMap::ObjectMapIterator();
-
-    iter = store->get_omap_iterator(ch, hoid);
-    for (iter->seek_to_first(), count=0; iter->valid(); iter->next(), count++) {
-      string key = iter->key();
-      bufferlist value = iter->value();
-      correct = attrs.count(key) && (string(value.c_str()) == string(attrs[key].c_str()));
-      if (!correct) {
-	if (attrs.count(key) > 0) {
-	  std::cout << "key " << key << "in omap , " << value.c_str() << " : " << attrs[key].c_str() << std::endl;
-	}
-	else
-	  std::cout << "key " << key << "should not exists in omap" << std::endl;
-      }
-      ASSERT_EQ(correct, true);
-    }
+    count = 0;
+    store->omap_iterate(
+      ch, hoid,
+      ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [&attrs, &count] (std::string_view key_, std::string_view value) mutable {
+        std::string key{key_};
+        const bool correct = attrs.count(key) && (value == attrs[key].to_str());
+        if (!correct) {
+          if (attrs.count(key) > 0) {
+            std::cout << "key " << key << "in omap , " << value << " : " << attrs[key].c_str() << std::endl;
+          }
+          else {
+            std::cout << "key " << key << "should not exists in omap" << std::endl;
+          }
+        }
+        [correct] { // workaround the void return within the macro
+	  ASSERT_EQ(correct, true);
+	}();
+        ++count;
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      });
     ASSERT_EQ((int)attrs.size(), count);
-
-    // FileStore may deadlock an active iterator vs queue_transaction
-    iter = ObjectMap::ObjectMapIterator();
 
     char buf[100];
     snprintf(buf, sizeof(buf), "%d", i);
@@ -6229,25 +6224,40 @@ TEST_P(StoreTest, OMapIterator) {
     ASSERT_EQ(r, 0);
   }
 
-  iter = store->get_omap_iterator(ch, hoid);
+  std::string out_key;
+  auto get_single_key =
+    [&out_key](std::string_view key, std::string_view value) mutable {
+      out_key = std::string{key};
+      return ObjectStore::omap_iter_ret_t::STOP;
+    };
   //lower bound
   string bound_key = "key-5";
-  iter->lower_bound(bound_key);
-  correct = bound_key <= iter->key();
+  store->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = bound_key,
+      .seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND
+    },
+    get_single_key);
+  bool correct = bound_key <= out_key;
   if (!correct) {
-    std::cout << "lower bound, bound key is " << bound_key << " < iter key is " << iter->key() << std::endl;
+    std::cout << "lower bound, bound key is " << bound_key << " < out key is " << out_key << std::endl;
   }
   ASSERT_EQ(correct, true);
   //upper bound
-  iter->upper_bound(bound_key);
-  correct = iter->key() > bound_key;
+  store->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = bound_key,
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+    },
+    get_single_key);
+  correct = out_key > bound_key;
   if (!correct) {
-    std::cout << "upper bound, bound key is " << bound_key << " >= iter key is " << iter->key() << std::endl;
+    std::cout << "upper bound, bound key is " << bound_key << " >= out key is " << out_key << std::endl;
   }
   ASSERT_EQ(correct, true);
 
-  // FileStore may deadlock an active iterator vs queue_transaction
-  iter = ObjectMap::ObjectMapIterator();
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);

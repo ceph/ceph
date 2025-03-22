@@ -6347,7 +6347,8 @@ struct ScrubMapBuilder {
   int64_t data_pos = 0;
   std::string omap_pos;
   int ret = 0;
-  ceph::buffer::hash data_hash, omap_hash;  ///< accumulatinng hash value
+  ceph::buffer::hash data_hash;  ///< accumulating hash value
+  uint32_t omap_hash;
   uint64_t omap_keys = 0;
   uint64_t omap_bytes = 0;
 
