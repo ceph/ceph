@@ -9079,7 +9079,9 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext 
       r = 0;
     }
   }
-  fin->complete(r < 0 ? r : 0);
+  if (fin) {
+    fin->complete(r < 0 ? r : 0);
+  }
 }
 
 
