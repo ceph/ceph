@@ -254,6 +254,11 @@ def init(parse_args):
     non_account_alt_user_creds = gen_credentials()
     non_account_alt_user = multisite.User('nonaccountalttester', tenant=args.tenant)
 
+    alt_user_creds = gen_credentials()
+    log.debug('created alt_user_creds access key=%s secret=%s', alt_user_creds.access_key, alt_user_creds.secret)
+    alt_user = multisite.User('alt_tester', tenant=args.tenant, account='RGW11111111111111111')
+    log.debug('created alt_user=%s', alt_user.name)
+
     realm = multisite.Realm('r')
     if bootstrap:
         # create the realm on c1
@@ -402,6 +407,10 @@ def init(parse_args):
                     arg = ['--display-name', 'NonAccountAltTestUser']
                     arg += non_account_alt_user_creds.credential_args()
                     non_account_alt_user.create(zone, arg)
+                    #create alt user
+                    arg = ['--display-name', '"Alt Test User"']
+                    arg += alt_user_creds.credential_args()
+                    alt_user.create(zone, arg)
                 else:
                     # read users and update keys
                     admin_user.info(zone)
@@ -412,6 +421,8 @@ def init(parse_args):
                     non_account_user_creds = non_account_user.credentials[0]
                     non_account_alt_user.info(zone)
                     non_account_alt_user_creds = non_account_alt_user.credentials[0]
+                    alt_user.info(zone)
+                    alt_user_creds = alt_user.credentials[0]
 
     if not bootstrap:
         period.get(c1)
@@ -420,7 +431,7 @@ def init(parse_args):
                     checkpoint_delay=args.checkpoint_delay,
                     reconfigure_delay=args.reconfigure_delay,
                     tenant=args.tenant)
-    init_multi(realm, user, non_account_user, non_account_alt_user, config)
+    init_multi(realm, user, alt_user, non_account_user, non_account_alt_user, config)
 
 def setup_module():
     init(False)
