@@ -22,7 +22,7 @@
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtilL.h"
 #include "ECTypes.h"
-#if WITH_SEASTAR
+#if WITH_CRIMSON
 #include "ECExtentCacheL.h"
 #include "crimson/osd/object_context.h"
 #include "os/Transaction.h"
