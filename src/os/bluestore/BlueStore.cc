@@ -3570,10 +3570,8 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
   ceph_abort_msg("no available blob id");
 }
 
-void BlueStore::ExtentMap::reshard(
-  KeyValueDB *db,
-  KeyValueDB::Transaction t)
-{
+BlueStore::ExtentMap::ReshardPlan BlueStore::ExtentMap::reshard_decision() {
+  ReshardPlan plan;
   auto cct = onode->c->store->cct; // used by dout
 
   dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
@@ -3612,24 +3610,11 @@ void BlueStore::ExtentMap::reshard(
     needs_reshard_end = OBJECT_MAX_SIZE;
   }
 
-  fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
-
   // we may need to fault in a larger interval later must have all
   // referring extents for spanning blobs loaded in order to have
   // accurate use_tracker values.
   uint32_t spanning_scan_begin = needs_reshard_begin;
   uint32_t spanning_scan_end = needs_reshard_end;
-
-  // remove old keys
-  string key;
-  for (unsigned i = shard_index_begin; i < shard_index_end; ++i) {
-    generate_extent_shard_key_and_apply(
-      onode->key, shards[i].shard_info->offset, &key,
-      [&](const string& final_key) {
-	t->rmkey(PREFIX_OBJ, final_key);
-      }
-      );
-  }
 
   // calculate average extent size
   unsigned bytes = 0;
@@ -3708,6 +3693,47 @@ void BlueStore::ExtentMap::reshard(
   auto& extent_map_shards = onode->onode.extent_map_shards;
   dout(20) << __func__ << "  new " << new_shard_info << dendl;
   dout(20) << __func__ << "  old " << extent_map_shards << dendl;
+
+  plan.shard_index_begin = shard_index_begin;
+  plan.shard_index_end = shard_index_end;
+  plan.spanning_scan_begin = spanning_scan_begin;
+  plan.spanning_scan_end = spanning_scan_end;
+  plan.new_shard_info = std::move(new_shard_info);
+  return plan;
+}
+
+
+void BlueStore::ExtentMap::reshard_action(
+  ReshardPlan& plan,
+  KeyValueDB *db,
+  KeyValueDB::Transaction t) {
+  auto cct = onode->c->store->cct; // For configuration and logging
+
+  std::vector<bluestore_onode_t::shard_info> new_shard_info = plan.new_shard_info;
+  unsigned shard_index_begin = plan.shard_index_begin;
+  unsigned shard_index_end = plan.shard_index_end;
+  uint32_t spanning_scan_begin = plan.spanning_scan_begin;
+  uint32_t spanning_scan_end = plan.spanning_scan_end;
+
+  dout(20) << __func__ << " applying plan with shards [" << shard_index_begin << ","
+           << shard_index_end << ")" << dendl;
+
+  // Fault the range
+  fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
+
+  // Remove old shard keys
+  string key;
+  for (unsigned i = shard_index_begin; i < shard_index_end; ++i) {
+    generate_extent_shard_key_and_apply(
+      onode->key, shards[i].shard_info->offset, &key,
+      [&](const string& final_key) {
+	t->rmkey(PREFIX_OBJ, final_key);
+      }
+      );
+  }
+
+  // Update extent_map_shards and shards
+  auto& extent_map_shards = onode->onode.extent_map_shards;
   if (extent_map_shards.empty()) {
     // no old shards to keep
     extent_map_shards.swap(new_shard_info);
@@ -3881,6 +3907,13 @@ void BlueStore::ExtentMap::reshard(
   }
 
   clear_needs_reshard();
+}
+
+void BlueStore::ExtentMap::reshard(
+  KeyValueDB *db,
+  KeyValueDB::Transaction t) {
+  auto plan = reshard_decision();
+  reshard_action(plan, db, t);
 }
 
 bool BlueStore::ExtentMap::encode_some(
