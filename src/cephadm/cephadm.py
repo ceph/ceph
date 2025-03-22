@@ -134,13 +134,13 @@ from cephadmlib.net_utils import (
 )
 from cephadmlib.locking import FileLock
 from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
-from cephadmlib.packagers import create_packager, Packager
+from cephadmlib.packagers import create_packager
 from cephadmlib.logging import (
     cephadm_init_logging,
     Highlight,
     LogDestination,
 )
-from cephadmlib.systemd import check_unit, check_units, terminate_service
+from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
 from cephadmlib import systemd_unit
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
@@ -2946,6 +2946,13 @@ def command_bootstrap(ctx):
     if getattr(ctx, 'custom_prometheus_alerts', None):
         cli(['orch', 'prometheus', 'set-custom-alerts', '-i', '/etc/ceph/custom_alerts.yml'])
 
+    # Enable logrotate.timer
+    _, _, installed = check_unit(ctx, 'logrotate')
+    if not installed:
+        logger.warning('Log rotation will not occur because the logrotate service is not installed. Please install it to enable log rotation.')
+    else:
+        logger.info('enable logrotate.timer service')
+        enable_service(ctx, 'logrotate.timer')
     return ctx.error_code
 
 ##################################
@@ -4385,7 +4392,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 
 
 def check_time_sync(
-    ctx: CephadmContext, enabler: Optional[Packager] = None
+    ctx: CephadmContext
 ) -> bool:
     units = [
         'chrony.service',  # 18.04 (at least)
@@ -4397,7 +4404,7 @@ def check_time_sync(
         'openntpd.service',  # ubuntu / debian
         'timemaster.service',  # linuxptp on ubuntu/debian
     ]
-    if not check_units(ctx, units, enabler):
+    if not check_units(ctx, units):
         logger.warning('No time sync service is running; checked for %s' % units)
         return False
     return True
@@ -4465,7 +4472,7 @@ def command_prepare_host(ctx: CephadmContext) -> None:
         pkg.install(['chrony'])
         # check again, and this time try to enable
         # the service
-        check_time_sync(ctx, enabler=pkg)
+        check_time_sync(ctx)
 
     if 'expect_hostname' in ctx and ctx.expect_hostname and ctx.expect_hostname != get_hostname():
         logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), ctx.expect_hostname))
