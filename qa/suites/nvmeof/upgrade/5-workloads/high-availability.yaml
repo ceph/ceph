@@ -1,0 +1,23 @@
+tasks:
+- workunit:
+    no_coverage_and_limits: true
+    clients:
+      client.0:
+        - nvmeof/basic_tests.sh
+    env:
+      RBD_POOL: mypool
+      RBD_IMAGE_PREFIX: myimage
+
+- nvmeof.thrash:
+    checker_host: 'client.0'
+
+- workunit:
+    no_coverage_and_limits: true
+    timeout: 30m
+    clients:
+      client.0:
+        - nvmeof/fio_test.sh --rbd_iostat
+    env:
+      RBD_POOL: mypool
+      IOSTAT_INTERVAL: '10'
+      RUNTIME: '600'
