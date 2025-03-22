@@ -44,7 +44,7 @@ from ceph.deployment.service_spec import (
     NvmeofServiceSpec,
 )
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
-from cephadm.serve import CephadmServe
+from cephadm.serve import CephadmServe, REQUIRES_POST_ACTIONS
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
@@ -664,7 +664,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.template = TemplateMgr(self)
 
-        self.requires_post_actions: Set[str] = set()
         self.need_connect_dashboard_rgw = False
 
         self.config_checker = CephadmConfigChecks(self)
@@ -1000,6 +999,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     'error': DaemonDescriptionStatus.error,
                     'unknown': DaemonDescriptionStatus.error,
                 }[d['state']]
+
             sd = orchestrator.DaemonDescription(
                 daemon_type=daemon_type,
                 daemon_id='.'.join(d['name'].split('.')[1:]),
@@ -1030,6 +1030,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 extra_container_args=d.get('extra_container_args'),
                 extra_entrypoint_args=d.get('extra_entrypoint_args'),
             )
+
+            if daemon_type in REQUIRES_POST_ACTIONS:
+                # If post action is required for daemon, then restore value of pending_daemon_config
+                try:
+                    cached_dd = self.cache.get_daemon(sd.name(), host)
+                    sd.update_pending_daemon_config(cached_dd.pending_daemon_config)
+                except orchestrator.OrchestratorError:
+                    pass
+
             dm[sd.name()] = sd
         self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
         self.cache.update_host_daemons(host, dm)
