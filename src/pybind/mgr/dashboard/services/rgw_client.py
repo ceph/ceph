@@ -13,6 +13,11 @@ from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 
+try:
+    import xmltodict
+except ModuleNotFoundError:
+    logging.error("Module 'xmltodict' is not installed.")
+
 from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
@@ -787,23 +792,30 @@ class RgwClient(RestClient):
     @RestClient.api_get('/{bucket_name}?lifecycle')
     def get_lifecycle(self, bucket_name, request=None):
         # pylint: disable=unused-argument
+
+        # xmltodict parser will prepend namespace to json keys as {ns0:key}
+        def remove_namespace(xml: str):
+            """Remove namespace in given xml string."""
+            root = ET.fromstring(xml)
+            for elem in root.iter():
+                tag_elements = elem.tag.split("}")  # tag: {ns}tagname
+                # Removing namespaces and attributes
+                elem.tag = tag_elements[1]
+                elem.attrib.clear()
+
+            return ET.tostring(root)
+
         try:
-            decoded_request = request(raw_content=True).decode("utf-8")  # type: ignore
-            result = {
-                'LifecycleConfiguration':
-                json.loads(
-                    decoded_request,
-                    object_pairs_hook=RgwClient._handle_rules
-                )
-            }
+            result = request(
+                raw_content=True, headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            return xmltodict.parse(remove_namespace(result), process_namespaces=False)
         except RequestException as e:
             if e.content:
-                content = json_str_to_object(e.content)
-                if content.get(
-                        'Code') == 'NoSuchLifecycleConfiguration':
+                root = ET.fromstring(e.content)
+                code = root.find('Code')
+                if code is not None and code.text == 'NoSuchLifecycleConfiguration':
                     return None
             raise DashboardException(msg=str(e), component='rgw')
-        return result
 
     @staticmethod
     def dict_to_xml(data):
