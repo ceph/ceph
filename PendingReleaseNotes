@@ -4,6 +4,8 @@
 * RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
   and is now deprecated. If the NBD netlink interface is not supported by the
   kernel, then the mapping is retried using the legacy ioctl interface.
+* RGW: IAM policy evaluation now supports conditions ArnEquals and ArnLike, along
+  with their Not and IfExists variants.
 
 >=18.2.4
 --------
