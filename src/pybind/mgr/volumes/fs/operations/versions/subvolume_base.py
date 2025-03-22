@@ -203,6 +203,19 @@ class SubvolumeBase(object):
         except EarmarkException:
             attrs["earmark"] = ''
 
+        try:
+            attrs["normalization"] = self.fs.getxattr(pathname,
+                                                      'ceph.dir.normalization'
+                                                      ).decode('utf-8')
+        except cephfs.NoData:
+            attrs["normalization"] = None
+
+        try:
+            case_insensitive = self.fs.getxattr(pathname, 'ceph.dir.caseinsensitive').decode('utf-8')
+            attrs["case_insensitive"] = case_insensitive == "0"
+        except cephfs.NoData:
+            attrs["case_insensitive"] = False
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -293,6 +306,20 @@ class SubvolumeBase(object):
         if earmark is not None:
             fs_earmark = CephFSVolumeEarmarking(self.fs, path)
             fs_earmark.set_earmark(earmark)
+
+        normalization = attrs.get("normalization")
+        if normalization is not None:
+            try:
+                self.fs.setxattr(path, "ceph.dir.normalization", normalization.encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
+
+        case_insensitive = attrs.get("case_insensitive")
+        if case_insensitive:
+            try:
+                self.fs.setxattr(path, "ceph.dir.casesensitive", "0".encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
 
     def _resize(self, path, newsize, noshrink):
         try:
@@ -452,6 +479,21 @@ class SubvolumeBase(object):
         except EarmarkException:
             earmark = ''
 
+        try:
+            normalization = self.fs.getxattr(subvolpath,
+                                             'ceph.dir.normalization'
+                                             ).decode('utf-8')
+        except cephfs.NoData:
+            normalization = "none"
+
+        try:
+            case_insensitive = self.fs.getxattr(subvolpath,
+                                                'ceph.dir.casesensitive'
+                                                ).decode('utf-8')
+            case_insensitive = case_insensitive == "0"
+        except cephfs.NoData:
+            case_insensitive = False
+
         return {'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
@@ -470,7 +512,9 @@ class SubvolumeBase(object):
                 'pool_namespace': pool_namespace,
                 'features': self.features,
                 'state': self.state.value,
-                'earmark': earmark}
+                'earmark': earmark,
+                'normalization': normalization,
+                'case_insensitive': case_insensitive}
 
     def set_user_metadata(self, keyname, value):
         try:
