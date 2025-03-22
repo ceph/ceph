@@ -1692,6 +1692,10 @@ paths:
           application/json:
             schema:
               properties:
+                data_pool:
+                  type: string
+                metadata_pool:
+                  type: string
                 name:
                   type: string
                 service_spec:
