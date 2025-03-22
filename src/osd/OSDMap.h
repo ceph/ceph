@@ -1492,7 +1492,10 @@ public:
     OSDMap& tmp_osd_map,
     const std::optional<rb_policy>& rbp = std::nullopt) const;
 
-  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid);
+  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid); // per pool
+  void rm_all_upmap_prims(
+    CephContext *cct,
+    OSDMap::Incremental *pending_inc); // total
 
   int calc_desired_primary_distribution(
     CephContext *cct,

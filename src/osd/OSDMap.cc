@@ -5218,6 +5218,20 @@ void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_i
   }
 }
 
+void OSDMap::rm_all_upmap_prims(
+  CephContext *cct,
+  OSDMap::Incremental *pending_inc)
+{
+  for (const auto& [pg, _] : pg_upmap_primaries) {
+    if (pending_inc->new_pg_upmap_primary.contains(pg)) {
+        ldout(cct, 30) << __func__ << "Removing pending pg_upmap_prim for pg " << pg << dendl;
+        pending_inc->new_pg_upmap_primary.erase(pg);
+      }
+    ldout(cct, 30) << __func__ << "Removing pg_upmap_prim for pg " << pg << dendl;
+    pending_inc->old_pg_upmap_primary.insert(pg);
+  }
+}
+
 int OSDMap::calc_desired_primary_distribution(
   CephContext *cct,
   int64_t pid,
