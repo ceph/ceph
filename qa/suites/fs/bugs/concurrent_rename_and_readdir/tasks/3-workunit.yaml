@@ -1,0 +1,5 @@
+tasks:
+  - workunit:
+      clients:
+        all:
+         - suites/concurrent_readdir_rename.sh
