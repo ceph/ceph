@@ -596,6 +596,15 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   target_link_libraries(rgw PRIVATE RDKafka::RDKafka)
 endif()
 
+if(WITH_RADOSGW_INTEL_TBB)
+  find_package(TBB REQUIRED CONFIG)
+  target_link_libraries(rgw_common
+    PRIVATE
+      TBB::tbb
+      TBB::tbbmalloc
+      TBB::tbbmalloc_proxy)
+endif()
+
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
