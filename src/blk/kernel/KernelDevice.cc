@@ -59,7 +59,7 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
     discard_callback(d_cb),
@@ -88,10 +88,27 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     }
     io_queue = std::make_unique<aio_queue_t>(iodepth);
   }
+
+  char name[128];
+  sprintf(name, "blk-kernel-device-%s", dev_name);
+  PerfCountersBuilder b(cct, name,
+                       l_blk_kernel_device_first, l_blk_kernel_device_last);
+  b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_blk_kernel_device_discard_op, "discard_op",
+            "Number of discard ops issued to kernel device");
+  b.add_u64_counter(l_blk_kernel_discard_threads, "discard_threads",
+            "Number of discard threads running");
+
+  logger.reset(b.create_perf_counters());
+  cct->get_perfcounters_collection()->add(logger.get());
 }
 
 KernelDevice::~KernelDevice()
 {
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger.get());
+    logger.reset();
+  }
   cct->_conf.remove_observer(this);
 }
 
@@ -538,6 +555,11 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
 
   uint64_t oldcount = discard_threads.size();
   uint64_t newcount = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  if (newcount == 0) {
+    //backward compatibility mode to make sure legacy "bdev_async_discard" is
+    // taken into account if set.
+    newcount = cct->_conf.get_val<bool>("bdev_async_discard") ? 1 : 0;
+  }
   if (!cct->_conf.get_val<bool>("bdev_enable_discard") || !support_discard || discard_stop) {
     newcount = 0;
   }
@@ -569,6 +591,7 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
       t->join();
     }
   }
+  logger->set(l_blk_kernel_discard_threads, discard_threads.size());
 }
 
 void KernelDevice::_discard_stop()
@@ -782,6 +805,7 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_running ++;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
+      logger->inc(l_blk_kernel_device_discard_op, discard_processing.num_intervals());
       for (auto p = discard_processing.begin(); p != discard_processing.end(); ++p) {
         _discard(p.get_start(), p.get_len());
       }
@@ -1517,6 +1541,7 @@ const char** KernelDevice::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "bdev_async_discard_threads",
+    "bdev_async_discard",
     "bdev_enable_discard",
     NULL
   };
@@ -1526,7 +1551,8 @@ const char** KernelDevice::get_tracked_conf_keys() const
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
-  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
+  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_async_discard") ||
+      changed.count("bdev_enable_discard")) {
     _discard_update_threads();
   }
 }
