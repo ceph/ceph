@@ -67,11 +67,24 @@ alert rules file, developers should include any necessary changes to the MIB.
       `golang-github-google-jsonnet` in fedora
 - Install [jsonnet-bundler](https://github.com/jsonnet-bundler/jsonnet-bundler)
 
-To rebuild all the generated files, you can run `tox -egrafonnet-fix`.
+To rebuild all the generated files, you can run `tox -e jsonnet-fix`.
 
 The jsonnet code located in this directory depends on some Jsonnet third party
 libraries. To update those libraries you can run `jb update` and then update
-the generated files using `tox -egrafonnet-fix`.
+the generated files using `tox -e jsonnet-fix`.
+
+### Building from grafana libsonnet from json 
+
+If a new grafana dashboard (or changes in existing one) is added from UI, 
+we need to convert JSON from grafana UI to libsonnet in 
+`monitoring/ceph-mixin/dashboards/`. 
+
+To automatically convert JSON to libsonnet, run script `grafana-libsonnet-to-json.py` 
+from `monitoring/ceph-mixin` directory: 
+
+```
+python3 grafana-json-to-libsonnet.py <input_json_path> <output_libsonnet_path>
+```
 
 ### Building alerts from `prometheus_alerts.libsonnet`
 
