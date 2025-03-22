@@ -22,6 +22,7 @@ if(NOT CMAKE_BUILD_TYPE)
     message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
   endif()
 endif()
+set(CEPH_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
