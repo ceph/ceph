@@ -151,7 +151,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
 }
 
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y) 
+                            Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
@@ -198,7 +198,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
     }
   }
 
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y);  
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,

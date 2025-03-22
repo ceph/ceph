@@ -687,7 +687,7 @@ TEST_F(D4NFilterFixture, SetObjectAttrs) {
   map<string, bufferlist> test_attrs{{"test_attrs_key_extra", bl}};
   fields.push_back("test_attrs_key_extra");
 
-  EXPECT_EQ(testObject_SetObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
+  EXPECT_EQ(testObject_SetObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield, 0), 0);
 
   client.hgetall("rgw-object:test_object_SetObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
@@ -733,7 +733,7 @@ TEST_F(D4NFilterFixture, GetObjectAttrs) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_GetObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_GetObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_GetObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -780,7 +780,7 @@ TEST_F(D4NFilterFixture, DelObjectAttrs) {
  
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_DelObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelObjectAttrs->set_obj_attrs(dpp, &test_attrs, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -795,7 +795,7 @@ TEST_F(D4NFilterFixture, DelObjectAttrs) {
 
   client.sync_commit();
 
-  EXPECT_EQ(testObject_DelObjectAttrs->set_obj_attrs(dpp, NULL, &test_attrs, null_yield), 0);
+  EXPECT_EQ(testObject_DelObjectAttrs->set_obj_attrs(dpp, NULL, &test_attrs, null_yield, 0), 0);
 
   /* Check that the attribute does not exist after deletion */ 
   client.hgetall("rgw-object:test_object_DelObjectAttrs:cache", [](cpp_redis::reply& reply) {
@@ -843,7 +843,7 @@ TEST_F(D4NFilterFixture, SetLongObjectAttrs) {
     fields.push_back(tmp_key);
   }
 
-  EXPECT_EQ(testObject_SetLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  EXPECT_EQ(testObject_SetLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield, 0), 0);
 
   client.hgetall("rgw-object:test_object_SetLongObjectAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
@@ -898,7 +898,7 @@ TEST_F(D4NFilterFixture, GetLongObjectAttrs) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_GetLongObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_GetLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_GetLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -957,7 +957,7 @@ TEST_F(D4NFilterFixture, ModifyObjectAttr) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_ModifyObjectAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_ModifyObjectAttr->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_ModifyObjectAttr->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -1024,7 +1024,7 @@ TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelLongObjectAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_DelLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelLongObjectAttrs->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
@@ -1039,7 +1039,7 @@ TEST_F(D4NFilterFixture, DelLongObjectAttrs) {
 
   client.sync_commit();
 
-  EXPECT_EQ(testObject_DelLongObjectAttrs->set_obj_attrs(dpp, NULL, &test_attrs_long, null_yield), 0);
+  EXPECT_EQ(testObject_DelLongObjectAttrs->set_obj_attrs(dpp, NULL, &test_attrs_long, null_yield, 0), 0);
 
   /* Check that the attributes do not exist after deletion */
   client.hgetall("rgw-object:test_object_DelLongObjectAttrs:cache", [](cpp_redis::reply& reply) {
@@ -1085,7 +1085,7 @@ TEST_F(D4NFilterFixture, DelObjectAttr) {
   
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelObjectAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_DelObjectAttr->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelObjectAttr->set_obj_attrs(dpp, &test_attrs_long, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
@@ -1226,7 +1226,7 @@ TEST_F(D4NFilterFixture, SetDelAttrs) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_SetDelAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_SetDelAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_SetDelAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -1236,7 +1236,7 @@ TEST_F(D4NFilterFixture, SetDelAttrs) {
   map<string, bufferlist> test_attrs_new{{"test_attrs_key_extra", bl}};
   fields.push_back("test_attrs_key_extra");
   
-  EXPECT_EQ(testObject_SetDelAttrs->set_obj_attrs(dpp, &test_attrs_new, &test_attrs_base, null_yield), 0);
+  EXPECT_EQ(testObject_SetDelAttrs->set_obj_attrs(dpp, &test_attrs_new, &test_attrs_base, null_yield, 0), 0);
 
   client.hgetall("rgw-object:test_object_SetDelAttrs:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
@@ -1288,7 +1288,7 @@ TEST_F(D4NFilterFixture, ModifyNonexistentAttr) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_ModifyNonexistentAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_ModifyNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_ModifyNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
   
@@ -1355,7 +1355,7 @@ TEST_F(D4NFilterFixture, ModifyGetAttrs) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_ModifyGetAttrs.get())->get_next();
 
-  ASSERT_EQ(testObject_ModifyGetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_ModifyGetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
@@ -1424,7 +1424,7 @@ TEST_F(D4NFilterFixture, DelNonexistentAttr) {
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelNonexistentAttr.get())->get_next();
 
-  ASSERT_EQ(testObject_DelNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0), 0);
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
   ASSERT_NE(nextObject->get_attrs().empty(), true);
  
@@ -1481,7 +1481,7 @@ TEST_F(D4NFilterFixture, DelSetWithNonexisentAttr) {
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  ASSERT_EQ(testObject_DelSetWithNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield), 0);
+  ASSERT_EQ(testObject_DelSetWithNonexistentAttr->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0), 0);
 
   static rgw::sal::Object* nextObject = dynamic_cast<rgw::sal::FilterObject*>(testObject_DelSetWithNonexistentAttr.get())->get_next();
 
@@ -1491,7 +1491,7 @@ TEST_F(D4NFilterFixture, DelSetWithNonexisentAttr) {
   EXPECT_EQ(testObject_DelSetWithNonexistentAttr->delete_obj_attrs(dpp, "test_attrs_key_extra_5", null_yield), 0);
   
   /* Attempt to delete a set of attrs, including one that does not exist */
-  EXPECT_EQ(testObject_DelSetWithNonexistentAttr->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield), 0);
+  EXPECT_EQ(testObject_DelSetWithNonexistentAttr->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield, 0), 0);
 
   client.hgetall("rgw-object:test_object_DelSetWithNonexistentAttr:cache", [](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
@@ -1555,7 +1555,7 @@ TEST_F(D4NFilterFixture, StoreSetAttrs) {
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  testObject_StoreSetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
+  testObject_StoreSetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
@@ -1611,7 +1611,7 @@ TEST_F(D4NFilterFixture, StoreGetAttrs) {
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  testObject_StoreGetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
+  testObject_StoreGetAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0);
   nextObject->get_obj_attrs(null_yield, dpp, NULL);
 
   /* Change an attribute through redis */
@@ -1802,7 +1802,7 @@ TEST_F(D4NFilterFixture, StoreDelAttrs) {
     test_attrs_base.insert({tmp_key, bl_tmp});
   }
 
-  testObject_StoreDelAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield);
+  testObject_StoreDelAttrs->set_obj_attrs(dpp, &test_attrs_base, NULL, null_yield, 0);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
@@ -1828,7 +1828,7 @@ TEST_F(D4NFilterFixture, StoreDelAttrs) {
     ++i;
   }
 
-  testObject_StoreDelAttrs->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield);
+  testObject_StoreDelAttrs->set_obj_attrs(dpp, NULL, &test_attrs_base, null_yield, 0);
 
   ASSERT_EQ(nextObject->get_obj_attrs(null_yield, dpp, NULL), 0);
 
