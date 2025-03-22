@@ -242,31 +242,6 @@ BtreeLBAManager::_get_original_mappings(
   });
 }
 
-
-BtreeLBAManager::get_mappings_ret
-BtreeLBAManager::get_mappings(
-  Transaction &t,
-  laddr_list_t &&list)
-{
-  LOG_PREFIX(BtreeLBAManager::get_mappings);
-  TRACET("{}", t, list);
-  auto l = std::make_unique<laddr_list_t>(std::move(list));
-  auto retptr = std::make_unique<lba_pin_list_t>();
-  auto &ret = *retptr;
-  return trans_intr::do_for_each(
-    l->begin(),
-    l->end(),
-    [this, &t, &ret](const auto &p) {
-      return this->get_mappings(t, p.first, p.second).si_then(
-	[&ret](auto res) {
-	  ret.splice(ret.end(), res, res.begin(), res.end());
-	  return get_mappings_iertr::now();
-	});
-    }).si_then([l=std::move(l), retptr=std::move(retptr)]() mutable {
-      return std::move(*retptr);
-    });
-}
-
 BtreeLBAManager::get_mapping_ret
 BtreeLBAManager::get_mapping(
   Transaction &t,

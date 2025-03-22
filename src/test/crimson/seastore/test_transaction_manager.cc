@@ -687,18 +687,7 @@ struct transaction_manager_test_t :
     return pin;
   }
 
-  void inc_ref(test_transaction_t &t, laddr_t offset) {
-    ceph_assert(test_mappings.contains(offset, t.mapping_delta));
-    ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
-
-    auto refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->inc_ref(trans, offset);
-    }).unsafe_get();
-    auto check_refcnt = test_mappings.inc_ref(offset, t.mapping_delta);
-    EXPECT_EQ(refcnt, check_refcnt);
-  }
-
-  void dec_ref(test_transaction_t &t, laddr_t offset) {
+  void remove(test_transaction_t &t, laddr_t offset) {
     ceph_assert(test_mappings.contains(offset, t.mapping_delta));
     ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
 
@@ -1964,7 +1953,7 @@ TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 	'a');
       ASSERT_EQ(ADDR, extent->get_laddr());
       check_mappings(t);
-      dec_ref(t, ADDR);
+      remove(t, ADDR);
       check_mappings(t);
 
       extent = alloc_extent(
@@ -2000,58 +1989,11 @@ TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 240; ++i) {
-	dec_ref(
+	remove(
 	  t,
 	  get_laddr_hint(i * SIZE));
       }
       check_mappings(t);
-      submit_transaction(std::move(t));
-      check();
-    }
-  });
-}
-
-TEST_P(tm_single_device_test_t, inc_dec_ref)
-{
-  constexpr size_t SIZE = 4096;
-  run_async([this] {
-    laddr_t ADDR = get_laddr_hint(0xFF * SIZE);
-    {
-      auto t = create_transaction();
-      auto extent = alloc_extent(
-	t,
-	ADDR,
-	SIZE,
-	'a');
-      ASSERT_EQ(ADDR, extent->get_laddr());
-      check_mappings(t);
-      check();
-      submit_transaction(std::move(t));
-      check();
-    }
-    replay();
-    {
-      auto t = create_transaction();
-      inc_ref(t, ADDR);
-      check_mappings(t);
-      check();
-      submit_transaction(std::move(t));
-      check();
-    }
-    {
-      auto t = create_transaction();
-      dec_ref(t, ADDR);
-      check_mappings(t);
-      check();
-      submit_transaction(std::move(t));
-      check();
-    }
-    replay();
-    {
-      auto t = create_transaction();
-      dec_ref(t, ADDR);
-      check_mappings(t);
-      check();
       submit_transaction(std::move(t));
       check();
     }
@@ -2108,7 +2050,7 @@ TEST_P(tm_single_device_test_t, random_writes)
 	    get_laddr_hint(TOTAL + (k * PADDING_SIZE)),
 	    PADDING_SIZE);
 	  for (auto &padding : paddings) {
-	    dec_ref(t, padding->get_laddr());
+	    remove(t, padding->get_laddr());
 	  }
 	}
 	submit_transaction(std::move(t));

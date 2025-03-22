@@ -81,8 +81,8 @@ CachedExtent* CachedExtent::get_transactional_view(Transaction &t) {
 }
 
 CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
-  auto it = mutation_pendings.find(tid, trans_spec_view_t::cmp_t());
-  if (it != mutation_pendings.end()) {
+  auto it = mutation_pending_extents.find(tid, trans_spec_view_t::cmp_t());
+  if (it != mutation_pending_extents.end()) {
     return (CachedExtent*)&(*it);
   } else {
     return this;

@@ -62,7 +62,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   auto result = t.get_extent(addr, &ext);
   if (result == Transaction::get_extent_ret::PRESENT) {
     DEBUGT("retire {}~0x{:x} on t -- {}", t, addr, length, *ext);
-    t.add_to_retired_set(CachedExtentRef(&*ext));
+    t.add_present_to_retired_set(CachedExtentRef(&*ext));
     return retire_extent_iertr::now();
   } else if (result == Transaction::get_extent_ret::RETIRED) {
     ERRORT("retire {}~0x{:x} failed, already retired -- {}", t, addr, length, *ext);
@@ -90,8 +90,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
            t, addr, length, *ext);
     add_extent(ext);
   }
-  t.add_to_read_set(ext);
-  t.add_to_retired_set(ext);
+  t.add_absent_to_retired_set(ext);
   return retire_extent_iertr::now();
 }
 
@@ -117,8 +116,7 @@ void Cache::retire_absent_extent_addr(
   DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
 	 t, addr, length, *ext);
   add_extent(ext);
-  t.add_to_read_set(ext);
-  t.add_to_retired_set(ext);
+  t.add_absent_to_retired_set(ext);
 }
 
 void Cache::dump_contents()
@@ -919,14 +917,14 @@ void Cache::invalidate_extent(
     CachedExtent& extent)
 {
   if (!extent.may_conflict()) {
-    assert(extent.transactions.empty());
+    assert(extent.read_transactions.empty());
     extent.set_invalid(t);
     return;
   }
 
   LOG_PREFIX(Cache::invalidate_extent);
   bool do_conflict_log = true;
-  for (auto &&i: extent.transactions) {
+  for (auto &&i: extent.read_transactions) {
     if (!i.t->conflicted) {
       if (do_conflict_log) {
         SUBDEBUGT(seastore_t, "conflict begin -- {}", t, extent);
@@ -1155,10 +1153,13 @@ CachedExtentRef Cache::duplicate_for_write(
   LOG_PREFIX(Cache::duplicate_for_write);
   assert(i->is_fully_loaded());
 
-  if (i->is_mutable())
+  if (i->is_mutable()) {
     return i;
+  }
 
   if (i->is_exist_clean()) {
+    assert(i->is_logical());
+    assert(static_cast<LogicalCachedExtent&>(*i).has_laddr());
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
     i->last_committed_crc = i->calc_crc32c();
@@ -1178,7 +1179,7 @@ CachedExtentRef Cache::duplicate_for_write(
   ret->prior_instance = i;
   // duplicate_for_write won't occur after ool write finished
   assert(!i->prior_poffset);
-  auto [iter, inserted] = i->mutation_pendings.insert(*ret);
+  auto [iter, inserted] = i->mutation_pending_extents.insert(*ret);
   ceph_assert(inserted);
   t.add_mutated_extent(ret);
   if (is_root_type(ret->get_type())) {
@@ -1189,6 +1190,12 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
+  if (i->is_logical()) {
+    auto& lextent = static_cast<LogicalCachedExtent&>(*i);
+    assert(lextent.has_laddr());
+    assert(ret->is_logical());
+    static_cast<LogicalCachedExtent&>(*ret).set_laddr(lextent.get_laddr());
+  }
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }

@@ -51,17 +51,6 @@ public:
     laddr_t offset, extent_len_t length) = 0;
 
   /**
-   * Fetches mappings for a list of laddr_t in range [offset, offset + len)
-   *
-   * Future will not resolve until all pins have resolved (set_paddr called)
-   * For indirect lba mappings, get_mappings will always retrieve the original
-   * lba value.
-   */
-  virtual get_mappings_ret get_mappings(
-    Transaction &t,
-    laddr_list_t &&extent_lisk) = 0;
-
-  /**
    * Fetches the mapping for laddr_t
    *
    * Future will not resolve until the pin has resolved (set_paddr called)
@@ -120,20 +109,11 @@ public:
   using ref_ret = ref_iertr::future<ref_update_result_t>;
 
   /**
-   * Decrements ref count on extent
+   * Removes a mapping and deal with indirection
    *
    * @return returns resulting refcount
    */
-  virtual ref_ret decref_extent(
-    Transaction &t,
-    laddr_t addr) = 0;
-
-  /**
-   * Increments ref count on extent
-   *
-   * @return returns resulting refcount
-   */
-  virtual ref_ret incref_extent(
+  virtual ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) = 0;
 

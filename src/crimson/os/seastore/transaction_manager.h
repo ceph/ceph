@@ -322,34 +322,11 @@ public:
 
   /// Obtain mutable copy of extent
   LogicalChildNodeRef get_mutable_extent(Transaction &t, LogicalChildNodeRef ref) {
-    LOG_PREFIX(TransactionManager::get_mutable_extent);
-    auto ret = cache->duplicate_for_write(
-      t,
-      ref)->cast<LogicalChildNode>();
-    if (!ret->has_laddr()) {
-      SUBDEBUGT(seastore_tm, "duplicate from {}", t, *ref);
-      ret->set_laddr(ref->get_laddr());
-    } else {
-      assert(ref->is_mutable());
-      assert(&*ref == &*ret);
-    }
-    return ret;
+    return cache->duplicate_for_write(t, ref)->cast<LogicalChildNode>();
   }
 
   using ref_iertr = LBAManager::ref_iertr;
   using ref_ret = ref_iertr::future<extent_ref_count_t>;
-
-#ifdef UNIT_TESTS_BUILT
-  /// Add refcount for ref
-  ref_ret inc_ref(
-    Transaction &t,
-    LogicalChildNodeRef &ref);
-
-  /// Add refcount for offset
-  ref_ret inc_ref(
-    Transaction &t,
-    laddr_t offset);
-#endif
 
   /** 
    * remove
@@ -1055,6 +1032,7 @@ private:
       partial_len,
       [&pref]
       (T &extent) mutable {
+	assert(extent.is_logical());
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	assert(!pref.has_been_invalidated());
@@ -1130,6 +1108,7 @@ private:
       direct_key,
       direct_length,
       [&pref](CachedExtent &extent) mutable {
+	assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
