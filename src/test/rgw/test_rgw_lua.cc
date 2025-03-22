@@ -141,6 +141,7 @@ class TestAccounter : public io::Accounter, public io::BasicClient {
 
 protected:
   virtual int init_env(CephContext *cct) override {
+    env.init(cct);
     return 0;
   }
 
@@ -235,6 +236,7 @@ void set_read_time(rgw::sal::LuaManager* manager, unsigned read_time) {
   auto store = make_store();                   \
   pe.lua.manager = std::make_unique<TestLuaManager>(); \
   RGWEnv e; \
+  e.init(g_cct); \
   req_state s(g_cct, pe, &e, 0);
 
 #define INIT_TRACE tracer.init(g_cct, "test"); \
