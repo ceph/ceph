@@ -502,14 +502,6 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   return 0;
 }
 
-void rgw_generate_secret_key(CephContext* cct,
-                             std::string& secret_key)
-{
-  char secret_key_buf[SECRET_KEY_LEN + 1];
-  gen_rand_alphanumeric_plain(cct, secret_key_buf, sizeof(secret_key_buf));
-  secret_key = secret_key_buf;
-}
-
 int rgw_generate_access_key(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             rgw::sal::Driver* driver,

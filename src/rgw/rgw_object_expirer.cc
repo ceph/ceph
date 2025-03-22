@@ -89,7 +89,11 @@ int main(const int argc, const char **argv)
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
   DriverManager::Config cfg;
+#ifdef WITH_RADOSGW_RADOS
   cfg.store_name = "rados";
+#else
+  cfg.store_name = "posix";
+#endif
   cfg.filter_name = "none";
   std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
   auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
