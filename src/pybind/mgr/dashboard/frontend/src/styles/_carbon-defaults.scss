@@ -3,6 +3,7 @@
   $flex-grid-columns: 16,
   $use-flexbox-grid: true,
 );
+@use 'sass:meta';
 @use '@carbon/colors';
 @use './src/styles/vendor/variables' as vv;
 @use './themes/default';
@@ -37,6 +38,10 @@ Custom theme
 ******************************************/
 @forward './themes/content';
 
+//TODO: need to remove
+:root {
+  #{--cds-support-error}: meta.inspect(theme.$support-error);
+}
 /******************************************
 Datatable
 ******************************************/
