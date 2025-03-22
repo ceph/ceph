@@ -110,3 +110,7 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
+uint64_t RGWUserInfo::get_total_usage() const {
+    return usage.total_bytes;
+}
+
