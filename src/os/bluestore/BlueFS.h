@@ -520,9 +520,14 @@ private:
    */
   std::vector<BlockDevice*> bdev;                  ///< block devices we can use
   std::vector<IOContext*> ioc;                     ///< IOContexts for bdevs
-  std::vector<uint64_t> block_reserved;            ///< starting reserve extent per device
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
+  std::vector<bluefs_locked_extents_t> locked_alloc;  ///< candidate extents
+                                                      ///< at both dev's head and tail
+                                                      ///< locked for allocations,
+                                                      ///< no alloc/release reqs matching
+                                                      ///< these space to be issued to allocator.
+
 
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
@@ -553,8 +558,8 @@ private:
   void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
-  uint64_t _get_total(unsigned id) const;
-
+  uint64_t _get_block_device_size(unsigned id) const;
+  uint64_t _get_minimal_reserved(unsigned id) const;
 
   FileRef _get_file(uint64_t ino);
   void _drop_link_D(FileRef f);
@@ -684,6 +689,7 @@ public:
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
+  int super_dump();
 
   void collect_metadata(std::map<std::string,std::string> *pm, unsigned skip_bdev_id);
   void get_devices(std::set<std::string> *ls);
@@ -704,9 +710,10 @@ public:
     const bluefs_layout_t& layout);
 
   uint64_t get_used();
-  uint64_t get_total(unsigned id);
+  uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
+  uint64_t get_full_reserved(unsigned id);
   void dump_perf_counters(ceph::Formatter *f);
 
   void dump_block_extents(std::ostream& out);
@@ -768,7 +775,6 @@ public:
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
                        bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
-  uint64_t get_block_device_size(unsigned bdev) const;
   BlockDevice* get_block_device(unsigned bdev) const;
 
   // handler for discard event
