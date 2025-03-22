@@ -440,7 +440,7 @@ public:
     }
 
   public:
-    uint16_t get_index() const {
+    uint16_t get_offset() const {
       return index;
     }
 
@@ -504,7 +504,7 @@ public:
     inner_remove(iter);
   }
 
-  StringKVInnerNodeLayout() : buf(nullptr) {}
+  StringKVInnerNodeLayout(char *buf) : buf(buf) {}
 
   void set_layout_buf(char *_buf) {
     assert(buf == nullptr);
@@ -762,7 +762,7 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len;
         if (size >= pivot_size){
-          pivot_idx = ite.get_index();
+          pivot_idx = ite.get_offset();
           break;
         }
       }
@@ -773,7 +773,7 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len;
         if (size >= more_size){
-          pivot_idx = ite.get_index() + left.get_size();
+          pivot_idx = ite.get_offset() + left.get_size();
           break;
         }
       }
@@ -1056,7 +1056,7 @@ public:
     }
 
   public:
-    uint16_t get_index() const {
+    uint16_t get_offset() const {
       return index;
     }
 
@@ -1387,7 +1387,7 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len + node_key.val_len;
         if (size >= pivot_size){
-          pivot_idx = ite.get_index();
+          pivot_idx = ite.get_offset();
           break;
         }
       }
@@ -1398,7 +1398,7 @@ public:
         auto node_key = ite->get_node_key();
         size += node_key.key_len + node_key.val_len;
         if (size >= more_size){
-          pivot_idx = ite.get_index() + left.get_size();
+          pivot_idx = ite.get_offset() + left.get_size();
           break;
         }
       }

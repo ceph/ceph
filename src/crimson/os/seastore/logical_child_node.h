@@ -42,7 +42,9 @@ public:
 protected:
   void on_replace_prior() final {
     child_node_t::on_replace_prior();
+    do_on_replace_prior();
   }
+  virtual void do_on_replace_prior() {}
 };
 using LogicalChildNodeRef = TCachedExtentRef<LogicalChildNode>;
 } // namespace crimson::os::seastore
