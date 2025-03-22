@@ -31,7 +31,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -168,6 +168,12 @@ private:
   ~MOSDOpReply() final {}
 
 public:
+  bool encode_should_dezeroize(uint64_t features) const override {
+    return header.version >= 9;
+  }
+  bool decode_should_rezeroize() const override {
+    return header.version >= 9;
+  }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     if(false == bdata_encode) {
@@ -221,6 +227,9 @@ public:
         if (do_redirect) {
           encode(redirect, payload);
         }
+        if ((features & CEPH_FEATURE_DEZEROIZE_BL) == 0) {
+          header.version = 8;
+        }
       }
       encode_trace(payload, features);
     }
@@ -230,7 +239,7 @@ public:
     auto p = payload.cbegin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version == HEAD_VERSION || header.version == 8) {
       decode(oid, p);
       decode(pgid, p);
       decode(flags, p);

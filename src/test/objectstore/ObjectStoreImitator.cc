@@ -337,7 +337,7 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
   uint64_t prev_pool_id = META_POOL_ID;
 
   for (int pos = 0; i.have_op(); ++pos) {
-    Transaction::Op *op = i.decode_op();
+    const Transaction::Op *op = i.decode_op();
     int r = 0;
 
     // no coll or obj

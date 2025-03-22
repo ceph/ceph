@@ -341,7 +341,7 @@ TEST_F(IsaErasureCodeTest, encode)
 				 in,
 				 &encoded));
     EXPECT_EQ(4u, encoded.size());
-    char *last_chunk = encoded[1].c_str();
+    const char *last_chunk = encoded[1].c_str();
     int length =encoded[1].length();
     EXPECT_EQ('X', last_chunk[0]);
     EXPECT_EQ('\0', last_chunk[length - trail_length]);
@@ -412,7 +412,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   const int m = 4;
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -469,11 +469,11 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   // create buffers with a copy of the original data to be able to compare it after decoding
   {
     for (int i = 0; i < (k + m); i++) {
-      buffer::ptr newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      buffer::ptr_rw newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      newenc.zero();
+      newenc.set_length(0);
+      newenc.append(encoded[i].c_str(), length);
       enc[i] = newenc;
-      enc[i].zero();
-      enc[i].set_length(0);
-      enc[i].append(encoded[i].c_str(), length);
     }
   }
 
@@ -539,7 +539,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   const int m = 4;
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -596,11 +596,11 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   // create buffers with a copy of the original data to be able to compare it after decoding
   {
     for (int i = 0; i < (k + m); i++) {
-      buffer::ptr newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      buffer::ptr_rw newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      newenc.zero();
+      newenc.set_length(0);
+      newenc.append(encoded[i].c_str(), length);
       enc[i] = newenc;
-      enc[i].zero();
-      enc[i].set_length(0);
-      enc[i].append(encoded[i].c_str(), length);
     }
   }
 
@@ -666,7 +666,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   const int m = 4;
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -723,11 +723,11 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   // create buffers with a copy of the original data to be able to compare it after decoding
   {
     for (int i = 0; i < (k + m); i++) {
-      buffer::ptr newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      buffer::ptr_rw newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      newenc.zero();
+      newenc.set_length(0);
+      newenc.append(encoded[i].c_str(), length);
       enc[i] = newenc;
-      enc[i].zero();
-      enc[i].set_length(0);
-      enc[i].append(encoded[i].c_str(), length);
     }
   }
 
@@ -792,7 +792,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   const int m = 1;
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -849,11 +849,11 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   // create buffers with a copy of the original data to be able to compare it after decoding
   {
     for (int i = 0; i < (k + m); i++) {
-      buffer::ptr newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      buffer::ptr_rw newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      newenc.zero();
+      newenc.set_length(0);
+      newenc.append(encoded[i].c_str(), length);
       enc[i] = newenc;
-      enc[i].zero();
-      enc[i].set_length(0);
-      enc[i].append(encoded[i].c_str(), length);
     }
   }
 

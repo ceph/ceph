@@ -1083,15 +1083,15 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   int len = 0;
   {
     ACCOUNTING_IO(s)->set_account(true);
-    bufferptr bp(cl);
-
-    const auto read_len  = recv_body(s, bp.c_str(), cl);
+    auto bp = buffer::ptr_node::create(buffer::create(cl));
+    const auto read_len  = recv_body(s, bp->c_str(), cl);
     if (read_len < 0) {
       return read_len;
     }
 
     len = read_len;
-    bl.append(bp, 0, len);
+    bp->set_length(len);
+    bl.push_back(std::move(bp));
 
     ACCOUNTING_IO(s)->set_account(false);
   }
@@ -1228,13 +1228,14 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
   if (max > in_data.length()) {
     uint64_t need_to_read = cl - in_data.length();
 
-    bufferptr bp(need_to_read);
+    auto bp = buffer::ptr_node::create(buffer::create(need_to_read));
 
-    const auto read_len = recv_body(s, bp.c_str(), need_to_read);
+    const auto read_len = recv_body(s, bp->c_str(), need_to_read);
     if (read_len < 0) {
       return read_len;
     }
-    in_data.append(bp, 0, read_len);
+    bp->set_length(read_len);
+    in_data.push_back(std::move(bp));
   }
 
   done = false;
@@ -1261,12 +1262,12 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
     int left = in_data.length() - max;
     if (left < skip + 2) {
       int need = skip + 2 - left;
-      bufferptr boundary_bp(need);
-      const int r = recv_body(s, boundary_bp.c_str(), need);
+      auto boundary_bp = buffer::ptr_node::create(buffer::create(need));
+      const int r = recv_body(s, boundary_bp->c_str(), need);
       if (r < 0) {
         return r;
       }
-      in_data.append(boundary_bp);
+      in_data.push_back(std::move(boundary_bp));
     }
     max += skip; // skip boundary for next time
     if (in_data.length() >= max + 2) {
@@ -1511,15 +1512,15 @@ static std::tuple<int, bufferlist> read_all_chunked_input(req_state *s, const ui
 
   int read_len = 0;
   do {
-    bufferptr bp(need_to_read + 1);
-    read_len = recv_body(s, bp.c_str(), need_to_read);
+    auto bp = buffer::ptr_node::create(buffer::create(need_to_read + 1));
+    read_len = recv_body(s, bp->c_str(), need_to_read);
     if (read_len < 0) {
       return std::make_tuple(read_len, std::move(bl));
     }
 
-    bp.c_str()[read_len] = '\0';
-    bp.set_length(read_len);
-    bl.append(bp);
+    bp->c_str()[read_len] = '\0';
+    bp->set_length(read_len);
+    bl.push_back(std::move(bp));
 
     if (read_len == need_to_read) {
       if (need_to_read < MAX_READ_CHUNK)
@@ -1555,16 +1556,16 @@ std::tuple<int, bufferlist > rgw_rest_read_all_input(req_state *s,
       return std::make_tuple(-ERANGE, std::move(bl));
     }
 
-    bufferptr bp(cl + 1);
+    auto bp = buffer::ptr_node::create(buffer::create(cl + 1));
   
-    len = recv_body(s, bp.c_str(), cl);
+    len = recv_body(s, bp->c_str(), cl);
     if (len < 0) {
       return std::make_tuple(len, std::move(bl));
     }
 
-    bp.c_str()[len] = '\0';
-    bp.set_length(len);
-    bl.append(bp);
+    bp->c_str()[len] = '\0';
+    bp->set_length(len);
+    bl.push_back(std::move(bp));
 
   } else if (allow_chunked && !s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");

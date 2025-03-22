@@ -257,7 +257,7 @@ RecordScanner::read_ret CircularBoundedJournal::read(paddr_t start, size_t len)
   LOG_PREFIX(CircularBoundedJournal::read);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(start);
   DEBUG("reading data from addr {} read length {}", addr, len);
-  auto bptr = bufferptr(ceph::buffer::create_page_aligned(len));
+  auto bptr = bufferptr_rw(ceph::buffer::create_page_aligned(len));
   return cjs.read(addr, bptr 
   ).safe_then([bptr=std::move(bptr)]() {
     return read_ret(

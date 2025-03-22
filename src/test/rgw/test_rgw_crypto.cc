@@ -98,13 +98,10 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  buffer::ptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   for (unsigned int step : {1, 2, 3, 5, 7, 11, 13, 17})
   {
@@ -151,13 +148,10 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_2)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  buffer::ptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   for (unsigned int step : {1, 2, 3, 5, 7, 11, 13, 17})
   {
@@ -200,13 +194,10 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_3)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  buffer::ptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   for (unsigned int step : {1, 2, 3, 5, 7, 11, 13, 17})
   {
@@ -278,13 +269,10 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_size_0_15)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  buffer::ptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   for (unsigned int step : {1, 2, 3, 5, 7, 11, 13, 17})
   {
@@ -328,13 +316,10 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_last_block)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  buffer::ptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   for (unsigned int step : {1, 2, 3, 5, 7, 11, 13, 17})
   {
@@ -405,13 +390,10 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_ranges)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  bufferptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   uint8_t key[32];
   for(size_t i=0;i<sizeof(key);i++)
@@ -452,13 +434,10 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_chunks)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  bufferptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   uint8_t key[32];
   for(size_t i=0;i<sizeof(key);i++)
@@ -704,13 +683,10 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
   const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
   //create some input for encryption
   const off_t test_range = 1024*1024;
-  bufferptr buf(test_range);
-  char* p = buf.c_str();
-  for(size_t i = 0; i < buf.length(); i++)
-    p[i] = i + i*i + (i >> 2);
-
   bufferlist input;
-  input.append(buf);
+  char* p = input.append_hole(test_range).c_str();
+  for(size_t i = 0; i < test_range; i++)
+    p[i] = i + i*i + (i >> 2);
 
   uint8_t key[32];
   for(size_t i=0;i<sizeof(key);i++)

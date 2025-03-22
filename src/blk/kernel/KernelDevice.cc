@@ -1439,7 +1439,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 {
   uint64_t aligned_off = p2align(off, block_size);
   uint64_t aligned_len = p2roundup(off+len, block_size) - aligned_off;
-  bufferptr p = ceph::buffer::create_small_page_aligned(aligned_len);
+  buffer::ptr_rw p = ceph::buffer::create_small_page_aligned(aligned_len);
   int r = 0;
 
   auto start1 = mono_clock::now();

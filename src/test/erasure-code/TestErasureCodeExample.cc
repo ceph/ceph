@@ -171,18 +171,19 @@ TEST(ErasureCodeExample, decode)
   ErasureCodeExample example;
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
-  in_ptr.zero();
-  in_ptr.set_length(0);
+  auto in_ptr =
+    buffer::ptr_node::create(buffer::create_page_aligned(LARGE_ENOUGH));
+  in_ptr->zero();
+  in_ptr->set_length(0);
   const char *payload =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  in_ptr.append(payload, strlen(payload));
+  in_ptr->append(payload, strlen(payload));
   bufferlist in;
-  in.push_back(in_ptr);
+  in.push_back(std::move(in_ptr));
   int want_to_encode[] = { 0, 1, 2 };
   map<int, bufferlist> encoded;
   EXPECT_EQ(0, example.encode(set<int>(want_to_encode, want_to_encode+3),

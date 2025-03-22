@@ -99,7 +99,7 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
   bufferlist bl;
   encode(super, bl);
   auto iter = bl.begin();
-  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
+  auto bp = bufferptr_rw(ceph::buffer::create_page_aligned(super.block_size));
   assert(bl.length() < super.block_size);
   iter.copy(bl.length(), bp.c_str());
   return write(RBM_START_ADDRESS, bp);
@@ -111,7 +111,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   LOG_PREFIX(RBMDevice::read_rbm_superblock);
   assert(super.block_size > 0);
   return seastar::do_with(
-    bufferptr(ceph::buffer::create_page_aligned(super.block_size)),
+    bufferptr_rw(ceph::buffer::create_page_aligned(super.block_size)),
     [this, addr, FNAME](auto &bptr) {
     return read(
       addr,
@@ -237,7 +237,7 @@ write_ertr::future<> EphemeralRBMDevice::write(
 
 read_ertr::future<> EphemeralRBMDevice::read(
   uint64_t offset,
-  bufferptr &bptr) {
+  bufferptr_rw &bptr) {
   LOG_PREFIX(EphemeralRBMDevice::read);
   ceph_assert(buf);
   DEBUG(

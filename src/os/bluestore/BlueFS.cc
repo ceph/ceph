@@ -885,7 +885,7 @@ int BlueFS::_read_and_check(uint8_t ndev, uint64_t off, uint64_t len,
       //use beginning, replace 8K in the middle with zeros, use tail
       bufferlist temp;
       bl.splice(0, len / 2 - block_size, &temp);
-      temp.append(buffer::create(block_size * 2, 0));
+      temp.push_back(buffer::create(block_size * 2, 0));
       bl.splice(block_size * 2, len / 2 - block_size, &temp);
       bl = temp;
       inject_read_zeros--;

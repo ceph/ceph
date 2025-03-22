@@ -198,7 +198,7 @@ public:
     size_t offset,
     size_t length,
     const ceph::buffer::list &bl,
-    ceph::buffer::ptr* csum_data
+    ceph::buffer::ptr_rw* csum_data
     ) {
     return calculate<Alg>(-1, csum_block_size, offset, length, bl, csum_data);
   }
@@ -210,7 +210,7 @@ public:
       size_t offset,
       size_t length,
       const ceph::buffer::list &bl,
-      ceph::buffer::ptr* csum_data) {
+      ceph::buffer::ptr_rw* csum_data) {
     ceph_assert(length % csum_block_size == 0);
     size_t blocks = length / csum_block_size;
     ceph::buffer::list::const_iterator p = bl.begin();

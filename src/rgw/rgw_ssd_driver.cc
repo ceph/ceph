@@ -422,10 +422,8 @@ int SSDDriver::AsyncReadOp::prepare_libaio_read_op(const DoutPrefixProvider *dpp
         posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d4n_l1_fadvise);
     }
 
-    bufferptr bp(read_len);
-    aio_cb->aio_buf = bp.c_str();
-    result.append(std::move(bp));
-
+    auto filler = result.append_hole(read_len);
+    aio_cb->aio_buf = filler.c_str();
     aio_cb->aio_nbytes = read_len;
     aio_cb->aio_offset = read_ofs;
     aio_cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
