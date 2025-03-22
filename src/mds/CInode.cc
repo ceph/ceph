@@ -1771,7 +1771,7 @@ void CInode::decode_lock_ilink(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(_inode->version, p);
   utime_t tm;
   decode(tm, p);

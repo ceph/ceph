@@ -626,7 +626,7 @@ struct RGWZoneGroupPlacementTier {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(tier_type, bl);
     decode(storage_class, bl);
     decode(retain_head_object, bl);
