@@ -10175,7 +10175,7 @@ public:
     }
     /// Check whether there is anything to do.
     bool _empty() override {
-      ceph_assert(false);
+      ceph_abort();
     }
 
     /// Get the next work item to process.
@@ -10242,7 +10242,7 @@ public:
      * so at most one copy will execute simultaneously for a given thread pool.
      * It can be used for non-thread-safe finalization. */
     void _void_process_finish(void*) override {
-      ceph_assert(false);
+      ceph_abort();
     }
 
     bool queue(

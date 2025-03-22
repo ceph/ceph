@@ -276,7 +276,7 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace, uint64_t pool_id,
       return ret;
     default:
       lderr(m_cct) << "unrecognized object cache status" << dendl;
-      ceph_assert(0);
+      ceph_abort();
   }
 }
 
