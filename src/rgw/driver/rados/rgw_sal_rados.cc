@@ -33,6 +33,7 @@
 #include "common/errno.h"
 
 #include "role.h"
+#include "policy.h"
 #include "rgw_obj_types.h"
 #include "rgw_rados.h"
 #include "rgw_sal.h"
@@ -86,6 +87,7 @@
 #include "rgw_pubsub.h"
 #include "topic.h"
 #include "topics.h"
+#include "rgw_customer_managed_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -5059,7 +5061,17 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   return rgwrados::role::remove(dpp, y, rados, *svc->sysobj, svc->mdlog, zone,
                                 info.tenant, info.account_id, info.name);
 }
+// RGWRoleInfo rgw::sal::RGWRole::info
 
+int RadosCustomerManagedPolicy::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
+{
+  librados::Rados &rados = *store->getRados()->get_rados_handle();
+  RGWServices *svc = store->svc();
+  const RGWZoneParams &zone = svc->zone->get_zone_params();
+  return rgwrados::policy::write(dpp, y, rados, *svc->sysobj, svc->mdlog,
+                               zone, info, info.objv_tracker,
+                               ceph::real_time{}, exclusive);
+}
 } // namespace rgw::sal
 
 extern "C" {
