@@ -44,6 +44,30 @@ class TLSObjectStore():
         self.global_tlsobjects = known_entities[TLSObjectScope.GLOBAL]
         self.store_prefix = f'{TLSOBJECT_STORE_PREFIX}{tlsobject_class.STORAGE_PREFIX}.'
 
+    def add_entity(self, entity: str, scope: TLSObjectScope) -> None:
+        """
+        Adds a new entity under the specified scope if it does not already exist.
+        Args:
+            entity (str): The name of the entity to add.
+            scope (TLSObjectScope): The scope of the entity (SERVICE, HOST, or GLOBAL).
+        Raises:
+            ValueError: If an invalid scope is provided.
+        """
+        if entity not in self.known_entities:
+            # Initialize an empty dictionary to track TLS objects for this entity
+            logger.info(f"redo: Added new entity '{entity}' under scope '{scope.value}'.")
+            self.known_entities[entity] = {}
+
+        # Add to the appropriate scope list
+        if scope == TLSObjectScope.SERVICE and entity not in self.per_service_name_tlsobjects:
+            self.per_service_name_tlsobjects.append(entity)
+        elif scope == TLSObjectScope.HOST and entity not in self.per_host_tlsobjects:
+            self.per_host_tlsobjects.append(entity)
+        elif scope == TLSObjectScope.GLOBAL and entity not in self.global_tlsobjects:
+            self.global_tlsobjects.append(entity)
+        elif scope not in [TLSObjectScope.HOST, TLSObjectScope.SERVICE, TLSObjectScope.GLOBAL]:
+            raise ValueError(f"Invalid TLSObjectScope '{scope}' for entity '{entity}'")
+
     def determine_tlsobject_target(self, entity: str, target: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
         if entity in self.per_service_name_tlsobjects:
             return (target, None)
@@ -142,11 +166,16 @@ class TLSObjectStore():
     def load(self) -> None:
         for k, v in self.mgr.get_store_prefix(self.store_prefix).items():
             entity = k[len(self.store_prefix):]
-            if entity not in self.known_entities:
+            # FIXME (don't have this hardcoded check here)
+            is_self_signed_entity = entity.startswith('cephadm-signed')
+            if not is_self_signed_entity and entity not in self.known_entities:
                 logger.warning(f"TLSObjectStore: Discarding unknown entity '{entity}'")
                 continue
             entity_targets = json.loads(v)
-            if entity in self.per_service_name_tlsobjects or entity in self.per_host_tlsobjects:
+            if is_self_signed_entity or (entity in self.per_service_name_tlsobjects) or (entity in self.per_host_tlsobjects):
+                # FIXME (don't have this hardcoded scope here)
+                if is_self_signed_entity and entity not in self.per_host_tlsobjects:
+                    self.per_host_tlsobjects.append(entity)
                 self.known_entities[entity] = {}
                 for target in entity_targets:
                     tlsobject = self.tlsobject_class.from_json(entity_targets[target])
