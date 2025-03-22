@@ -783,6 +783,35 @@ public:
     return is_pending() && pending_for_transaction == id;
   }
 
+  enum class viewable_state_t {
+    stable,              // viewable
+    pending,             // viewable
+    invalid,             // unviewable
+    stable_retired,      // unviewable
+    stable_with_pending, // unviewable
+  };
+
+  std::pair<bool, viewable_state_t>
+  is_viewable_by_trans(transaction_id_t id) const {
+    if (!is_valid()) {
+      return std::make_pair(false, viewable_state_t::invalid);
+    }
+    if (is_pending()) {
+      assert(is_pending_in_trans(id));
+      return std::make_pair(true, viewable_state_t::pending);
+    }
+    // shared by multiple transactions
+    assert(is_stable_written());
+    auto cmp = trans_spec_view_t::cmp_t();
+    if (mutation_pendings.find(id, cmp) != mutation_pendings.end()) {
+      return std::make_pair(false, viewable_state_t::stable_with_pending);
+    }
+    if (retired_transactions.find(id, cmp) != retired_transactions.end()) {
+      return std::make_pair(false, viewable_state_t::stable_retired);
+    }
+    return std::make_pair(true, viewable_state_t::stable);
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -1083,8 +1112,7 @@ protected:
   friend class crimson::os::seastore::SegmentedAllocator;
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
-  template <typename, typename>
-  friend class BtreeNodeMapping;
+  friend class LBAMapping;
   friend class ::btree_lba_manager_test;
   friend class ::lba_btree_test;
   friend class ::btree_test_base;
@@ -1094,6 +1122,7 @@ protected:
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
+std::ostream &operator<<(std::ostream &, CachedExtent::viewable_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
 
 /// Compare extents by paddr
@@ -1275,41 +1304,6 @@ public:
 
 private:
   uint64_t bytes = 0;
-};
-
-template <typename key_t, typename>
-class PhysicalNodeMapping;
-
-template <typename key_t, typename val_t>
-using PhysicalNodeMappingRef = std::unique_ptr<PhysicalNodeMapping<key_t, val_t>>;
-
-template <typename key_t, typename val_t>
-class PhysicalNodeMapping {
-public:
-  PhysicalNodeMapping() = default;
-  PhysicalNodeMapping(const PhysicalNodeMapping&) = delete;
-  virtual extent_len_t get_length() const = 0;
-  virtual val_t get_val() const = 0;
-  virtual key_t get_key() const = 0;
-  virtual bool has_been_invalidated() const = 0;
-  virtual CachedExtentRef get_parent() const = 0;
-  virtual uint16_t get_pos() const = 0;
-  virtual uint32_t get_checksum() const {
-    ceph_abort("impossible");
-    return 0;
-  }
-  virtual bool is_parent_viewable() const = 0;
-  virtual bool is_parent_valid() const = 0;
-  virtual bool parent_modified() const {
-    ceph_abort("impossible");
-    return false;
-  };
-
-  virtual void maybe_fix_pos() {
-    ceph_abort("impossible");
-  }
-
-  virtual ~PhysicalNodeMapping() {}
 };
 
 /**
@@ -1497,5 +1491,6 @@ using lextent_list_t = addr_extent_list_base_t<
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 #endif
