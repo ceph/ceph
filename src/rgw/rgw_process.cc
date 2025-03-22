@@ -351,7 +351,7 @@ int process_request(const RGWProcessEnv& penv,
     goto done;
   }
   req->op = op;
-  ldpp_dout(op, 10) << "op=" << typeid(*op).name() << dendl;
+  ldpp_dout(op, 10) << "op=" << typeid(*op).name() << " " << dendl;
   s->op_type = op->get_type();
 
   try {

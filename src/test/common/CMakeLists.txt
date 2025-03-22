@@ -312,6 +312,10 @@ target_link_libraries(unittest_dns_resolve global)
 add_ceph_unittest(unittest_dns_resolve)
 endif()
 
+add_executable(unittest_dout_fmt test_dout_fmt.cc $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_dout_fmt global)
+add_ceph_unittest(unittest_dout_fmt)
+
 # We're getting an ICE when trying to compile this test using mingw-gcc and
 # recent Boost versions. Note that mingw-llvm works fine.
 if (NOT WIN32 OR (NOT(CMAKE_CXX_COMPILER_ID STREQUAL GNU)))
