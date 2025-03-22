@@ -266,9 +266,9 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
       }
     }
   }
-  if ((d < k) || (d > k + m - 1)) {
+  if ((d < k + 1) || (d > k + m - 1)) {
     *ss << "value of d " << d
-        << " must be within [ " << k << "," << k+m-1 << "]" << std::endl;
+        << " must be within [" << k + 1 << "," << k + m - 1 << "]" << std::endl;
     err = -EINVAL;
     return err;
   }
