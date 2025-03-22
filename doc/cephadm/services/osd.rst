@@ -273,26 +273,29 @@ Remove an OSD
 
 Removing an OSD from a cluster involves two steps:
 
-#. evacuating all placement groups (PGs) from the OSD
-#. removing the PG-free OSD from the cluster
+#. Evacuating all placement groups (PGs) from the OSD
+#. Removing the PG-free OSD from the cluster
 
 The following command performs these two steps:
 
 .. prompt:: bash #
 
-  ceph orch osd rm <osd_id(s)> [--replace] [--force]
+  ceph orch osd rm <osd_id(s)> [--replace] [--force] [--zap]
 
 Example:
 
 .. prompt:: bash #
 
   ceph orch osd rm 0
+  ceph orch osd rm 1138 --zap
 
 Expected output::
 
   Scheduled OSD(s) for removal
 
-OSDs that are not safe to destroy will be rejected.
+OSDs that are not safe to destroy will be rejected.  Adding the ``--zap`` flag
+directs the orchestrator to remove all LVM and partition information from the
+OSD's drives, leaving it a blank slate for redeployment or other reuse.
 
 .. note::
     After removing OSDs, if the drives the OSDs were deployed on once again
