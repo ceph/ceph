@@ -8530,6 +8530,13 @@ class TestCloneProgressReporter(TestVolumesHelper):
         This helper methods goes through this dictionary and picks only
         (filters in) clone events.
         '''
+        if progress_events == {}:
+            return
+        elif not progress_events:
+            raise RuntimeError('variable "progress_events" should be '
+                               'dictionary, regardless of whether with or '
+                               'without any members')
+
         clone_pevs = {}
 
         # Set this variable to true if "mgr-vol-ongoing-clones" or
