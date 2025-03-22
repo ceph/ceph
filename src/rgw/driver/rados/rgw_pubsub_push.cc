@@ -317,7 +317,8 @@ public:
                         args.get_optional("ca-location"),
                         args.get_optional("mechanism"),
                         args.get_optional("user-name"),
-                        args.get_optional("password"))) {
+                        args.get_optional("password"),
+                        args.get_optional("kafka-brokers"))) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
