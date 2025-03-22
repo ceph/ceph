@@ -77,7 +77,14 @@ options:
   level: advanced
   desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
     failed
-  default: 10
+  default: 15
+  services:
+  - mon
+- name: mon_nvmeofgw_skip_failovers_interval
+  type: secs
+  level: advanced
+  desc: Period in seconds in which no failovers are performed in GW's pool-group
+  default: 12
   services:
   - mon
 - name: mon_nvmeofgw_set_group_id_retry
