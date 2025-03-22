@@ -5,6 +5,7 @@ add_library(rbd_mirror_types STATIC
 
 set(rbd_mirror_internal
   ClusterWatcher.cc
+  GroupReplayer.cc
   ImageDeleter.cc
   ImageMap.cc
   ImageReplayer.cc
@@ -25,6 +26,8 @@ set(rbd_mirror_internal
   Threads.cc
   Throttler.cc
   Types.cc
+  group_replayer/BootstrapRequest.cc
+  group_replayer/Replayer.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc
   image_deleter/TrashRemoveRequest.cc
@@ -61,7 +64,7 @@ set(rbd_mirror_internal
   image_sync/SyncPointCreateRequest.cc
   image_sync/SyncPointPruneRequest.cc
   image_sync/Utils.cc
-  pool_watcher/RefreshImagesRequest.cc
+  pool_watcher/RefreshEntitiesRequest.cc
   service_daemon/Types.cc)
 
 add_library(rbd_mirror_internal STATIC
