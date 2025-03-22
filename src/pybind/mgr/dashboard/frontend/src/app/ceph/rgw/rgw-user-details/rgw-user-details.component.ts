@@ -1,4 +1,12 @@
-import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import {
+  Component,
+  Input,
+  OnChanges,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  ViewEncapsulation
+} from '@angular/core';
 
 import _ from 'lodash';
 
@@ -18,7 +26,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 @Component({
   selector: 'cd-rgw-user-details',
   templateUrl: './rgw-user-details.component.html',
-  styleUrls: ['./rgw-user-details.component.scss']
+  styleUrls: ['./rgw-user-details.component.scss'],
+  encapsulation: ViewEncapsulation.None
 })
 export class RgwUserDetailsComponent implements OnChanges, OnInit {
   @ViewChild('accessKeyTpl')
@@ -39,7 +48,6 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   keysSelection: CdTableSelection = new CdTableSelection();
   tableAction: CdTableAction[] = [];
   permissions: Permissions;
-
   icons = Icons;
 
   constructor(private rgwUserService: RgwUserService, private cdsModalService: ModalCdsService) {}
@@ -72,7 +80,6 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         icon: Icons.show
       }
     ];
-
     if (this.selection) {
       this.user = this.selection;
 

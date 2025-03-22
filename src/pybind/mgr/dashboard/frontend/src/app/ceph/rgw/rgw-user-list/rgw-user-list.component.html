@@ -44,3 +44,11 @@
   <ng-template #noObjectQuota
                i18n>No Limit</ng-template>
 </ng-template>
+
+<ng-template #accountTmpl
+             let-row="data.row">
+  <cds-tooltip [description]="row.account?.name ? (row.type === 'root' ? 'Account root user' :'') : ''"
+               [align]="'top'">
+    {{row.account?.name}}
+  </cds-tooltip>
+</ng-template>
