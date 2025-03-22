@@ -103,3 +103,30 @@ Primaries are updated with an offline optimizer that is built into the
 To see some details about what the tool is doing, you can pass
 ``--debug-osd 10`` to ``osdmaptool``. To see even more details, pass
 ``--debug-osd 20`` to ``osdmaptool``.
+
+Troubleshooting
+===============
+
+Removing pg-upmap-primary mappings
+------------------------------------
+
+For scenarios where you need to manually remove ``pg-upmap-primary`` mappings, Ceph provides the following
+developer-level commands. These commands should be used with caution, as they directly modify
+primary PG mappings and can impact read performance (this excludes any data movement).
+
+.. note::
+
+  Users affected by `#66867 <https://tracker.ceph.com/issues/66867>`_ or `#61948 <https://tracker.ceph.com/issues/61948>`_
+  may find these commands useful when dealing with unexpected ``pg-upmap-primary`` behavior.
+
+To remove a specific ``pg-upmap-primary`` mapping, use:
+
+.. prompt:: bash $
+
+   ceph osd rm-pg-upmap-primary <pgid>
+
+If you need to clear **all** ``pg-upmap-primary`` mappings in your cluster, you may use:
+
+.. prompt:: bash $
+
+   ceph osd rm-pg-upmap-primary-all

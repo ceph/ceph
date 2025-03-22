@@ -107,6 +107,11 @@
   metadata and data pool names to be used for creating the volume. If either
   is not passed or if either is a non-empty pool, the command will abort.
 
+* RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
+  users to clear all pg-upmap-primary mappings in the osdmap when desired.
+  Related trackers:
+   - https://tracker.ceph.com/issues/67179
+   - https://tracker.ceph.com/issues/66867
 
 >=19.2.1
 
