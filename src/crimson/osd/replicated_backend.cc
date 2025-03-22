@@ -167,6 +167,7 @@ ReplicatedBackend::submit_transaction(
     }
     if (--peers->pending == 0) {
       // no peers other than me, replication size is 1
+      WARNDPP("no peers other than me, completing write", dpp);
       pg.complete_write(peers->at_version, peers->last_complete);
       peers->all_committed.set_value();
       peers->all_committed = {};
@@ -209,6 +210,7 @@ void ReplicatedBackend::on_actingset_changed(bool same_primary)
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
 {
   LOG_PREFIX(ReplicatedBackend::got_rep_op_reply);
+  DEBUGDPP("got reply from {} - {}",dpp, reply.from, reply);
   auto found = pending_trans.find(reply.get_tid());
   if (found == pending_trans.end()) {
     WARNDPP("cannot find rep op for message {}", dpp, reply);
@@ -217,11 +219,14 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
   auto& peers = found->second;
   for (auto& peer : peers.acked_peers) {
     if (peer.shard == reply.from) {
-      peer.last_complete_ondisk = reply.get_last_complete_ondisk();
-      pg.update_peer_last_complete_ondisk(
-	peer.shard, peer.last_complete_ondisk);
+      if (peer.last_complete_ondisk < reply.get_last_complete_ondisk()) {
+        peer.last_complete_ondisk = reply.get_last_complete_ondisk();
+        pg.update_peer_last_complete_ondisk(
+          peer.shard, peer.last_complete_ondisk);
+      }
       if (--peers.pending == 0) {
-        pg.complete_write(peers.at_version, peers.last_complete);
+        DEBUGDPP("all peers have acked", dpp);
+        pg.try_complete_write(peers.at_version, peers.last_complete);
         peers.all_committed.set_value();
         peers.all_committed = {};
       }
