@@ -1,16 +1,21 @@
-from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from ..controllers.rgw_iam import RgwUserAccountsController
-from ..services.rgw_iam import RgwAccounts
+from ..tests import ControllerTestCase
 
 
-class TestRgwUserAccountsController(TestCase):
+class TestRgwUserAccountsController(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([RgwUserAccountsController], '/test')
 
-    @patch.object(RgwAccounts, 'create_account')
-    def test_create_account(self, mock_create_account):
-        mockReturnVal = {
-            "id": "RGW18661471562806836",
+    @patch('dashboard.controllers.rgw.RgwAccounts.get_accounts')
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.get_account')
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.proxy')
+    def test_account_list(self, mock_proxy, mock_get_account, mock_get_accounts):
+        mock_get_accounts.return_value = ['RGW67392003738907404']
+        mock_proxy.return_value = {
+            "id": "RGW67392003738907404",
             "tenant": "",
             "name": "",
             "email": "",
@@ -35,71 +40,46 @@ class TestRgwUserAccountsController(TestCase):
             "max_access_keys": 4
         }
 
-        # Mock the return value of the create_account method
-        mock_create_account.return_value = mockReturnVal
-
-        controller = RgwUserAccountsController()
-        result = controller.create(account_name='test_account', tenant='',
-                                   email='test@example.com', max_buckets=1000,
-                                   max_users=1000, max_roles=1000, max_group=1000,
-                                   max_access_keys=4)
-
-        # Check if the account creation method was called with the correct parameters
-        mock_create_account.assert_called_with('test_account', '', 'test@example.com',
-                                               1000, 1000, 1000, 1000, 4)
-        # Check the returned result
-        self.assertEqual(result, mockReturnVal)
-
-    @patch.object(RgwAccounts, 'get_accounts')
-    def test_list_accounts(self, mock_get_accounts):
-        mock_return_value = [
-            "RGW22222222222222222",
-            "RGW59378973811515857",
-            "RGW11111111111111111"
-        ]
-
-        mock_get_accounts.return_value = mock_return_value
-
-        controller = RgwUserAccountsController()
-        result = controller.list(detailed=False)
-
-        mock_get_accounts.assert_called_with(False)
-
-        self.assertEqual(result, mock_return_value)
-
-    @patch.object(RgwAccounts, 'get_accounts')
-    def test_list_accounts_with_details(self, mock_get_accounts):
-        mock_return_value = [
-            {
-                "id": "RGW22222222222222222",
-                "tenant": "",
-                "name": "Account2",
-                "email": "account2@ceph.com",
-                "quota": {
-                    "enabled": False,
-                    "check_on_raw": False,
-                    "max_size": -1,
-                    "max_size_kb": 0,
-                    "max_objects": -1
-                },
-                "bucket_quota": {
-                    "enabled": False,
-                    "check_on_raw": False,
-                    "max_size": -1,
-                    "max_size_kb": 0,
-                    "max_objects": -1
-                },
-                "max_users": 1000,
-                "max_roles": 1000,
-                "max_groups": 1000,
-                "max_buckets": 1000,
-                "max_access_keys": 4
+        mock_get_account.side_effect = lambda account_id, daemon_name=None: {
+            "id": account_id,
+            "tenant": "",
+            "name": "",
+            "email": "",
+            "quota": {
+                "enabled": False,
+                "check_on_raw": False,
+                "max_size": -1,
+                "max_size_kb": 0,
+                "max_objects": -1
             },
+            "bucket_quota": {
+                "enabled": False,
+                "check_on_raw": False,
+                "max_size": -1,
+                "max_size_kb": 0,
+                "max_objects": -1
+            },
+            "max_users": 1000,
+            "max_roles": 1000,
+            "max_groups": 1000,
+            "max_buckets": 1000,
+            "max_access_keys": 4
+        }
+        self._get('/test/api/rgw/accounts?daemon_name=dummy-daemon')
+        self.assertStatus(200)
+        self.assertJsonBody(['RGW67392003738907404'])
+
+        mock_get_accounts.assert_called_once()
+
+        self._get('/test/api/rgw/accounts?daemon_name=dummy-daemon&detailed=true')
+        self.assertStatus(200)
+
+        expected_detailed_response = [
             {
-                "id": "RGW11111111111111111",
+                "id": "RGW67392003738907404",
                 "tenant": "",
-                "name": "Account1",
-                "email": "account1@ceph.com",
+                "name": "",
+                "email": "",
                 "quota": {
                     "enabled": False,
                     "check_on_raw": False,
@@ -121,23 +101,22 @@ class TestRgwUserAccountsController(TestCase):
                 "max_access_keys": 4
             }
         ]
+        self.assertJsonBody(expected_detailed_response)
 
-        mock_get_accounts.return_value = mock_return_value
+        mock_get_account.assert_has_calls([
+            call('RGW67392003738907404', 'dummy-daemon')
+        ])
 
-        controller = RgwUserAccountsController()
-        result = controller.list(detailed=True)
+        self._get('/test/api/rgw/accounts/RGW67392003738907404?daemon_name=dummy-daemon')
+        self.assertStatus(200)
 
-        mock_get_accounts.assert_called_with(True)
-
-        self.assertEqual(result, mock_return_value)
-
-    @patch.object(RgwAccounts, 'get_account')
-    def test_get_account(self, mock_get_account):
-        mock_return_value = {
-            "id": "RGW22222222222222222",
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.proxy')
+    def test_create_account(self, mock_proxy):
+        mock_proxy.return_value = {
+            "id": "RGW67392003738907404",
             "tenant": "",
-            "name": "Account2",
-            "email": "account2@ceph.com",
+            "name": "jack",
+            "email": "",
             "quota": {
                 "enabled": False,
                 "check_on_raw": False,
@@ -158,33 +137,34 @@ class TestRgwUserAccountsController(TestCase):
             "max_buckets": 1000,
             "max_access_keys": 4
         }
-        mock_get_account.return_value = mock_return_value
 
-        controller = RgwUserAccountsController()
-        result = controller.get(account_id='RGW22222222222222222')
+        self._post('/test/api/rgw/accounts?daemon_name=dummy-daemon', data={
+            'account_name': 'jack',
+            'max_buckets': '1000',
+            'max_users': '1000',
+            'max_roles': '1000',
+            'max_group': '1000',
+            'max_access_keys': '4'
+        })
 
-        mock_get_account.assert_called_with('RGW22222222222222222')
+        mock_proxy.assert_called_once_with(
+            'dummy-daemon', 'POST', 'account', {
+                'name': 'jack',
+                'max-buckets': '1000',
+                'max-users': '1000',
+                'max-roles': '1000',
+                'max-group': '1000',
+                'max-access-keys': '4'
+            })
 
-        self.assertEqual(result, mock_return_value)
-
-    @patch.object(RgwAccounts, 'delete_account')
-    def test_delete_account(self, mock_delete_account):
-        mock_delete_account.return_value = None
-
-        controller = RgwUserAccountsController()
-        result = controller.delete(account_id='RGW59378973811515857')
-
-        mock_delete_account.assert_called_with('RGW59378973811515857')
-
-        self.assertEqual(result, None)
-
-    @patch.object(RgwAccounts, 'modify_account')
-    def test_set_account_name(self, mock_modify_account):
-        mock_return_value = mock_return_value = {
-            "id": "RGW59378973811515857",
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.get_account')
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.proxy')
+    def test_get_account(self, mock_get_account, mock_proxy):
+        mock_proxy.return_value = {
+            "id": "RGW67392003738907404",
             "tenant": "",
-            "name": "new_account_name",
-            "email": "new_email@example.com",
+            "name": "",
+            "email": "",
             "quota": {
                 "enabled": False,
                 "check_on_raw": False,
@@ -205,20 +185,91 @@ class TestRgwUserAccountsController(TestCase):
             "max_buckets": 1000,
             "max_access_keys": 4
         }
-        mock_modify_account.return_value = mock_return_value
 
-        controller = RgwUserAccountsController()
-        result = controller.set(account_id='RGW59378973811515857', account_name='new_account_name',
-                                email='new_email@example.com', tenant='', max_buckets=1000,
-                                max_users=1000, max_roles=1000, max_group=1000, max_access_keys=4)
+        mock_get_account.side_effect = lambda account_id, daemon_name=None: {
+            "id": account_id,
+            "tenant": "",
+            "name": "",
+            "email": "",
+            "quota": {
+                "enabled": False,
+                "check_on_raw": False,
+                "max_size": -1,
+                "max_size_kb": 0,
+                "max_objects": -1
+            },
+            "bucket_quota": {
+                "enabled": False,
+                "check_on_raw": False,
+                "max_size": -1,
+                "max_size_kb": 0,
+                "max_objects": -1
+            },
+            "max_users": 1000,
+            "max_roles": 1000,
+            "max_groups": 1000,
+            "max_buckets": 1000,
+            "max_access_keys": 4
+        }
+        self._get('/test/api/rgw/accounts/RGW67392003738907404?daemon_name=dummy-daemon')
+        self.assertStatus(200)
 
-        mock_modify_account.assert_called_with('RGW59378973811515857', 'new_account_name',
-                                               'new_email@example.com', '', 1000, 1000, 1000,
-                                               1000, 4)
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.proxy')
+    def test_delete_account(self, mock_proxy):
+        mock_proxy.return_value = None
 
-        self.assertEqual(result, mock_return_value)
+        self._delete('/test/api/rgw/accounts/RGW67392003738907404?daemon_name=dummy-daemon')
+        self.assertStatus(204)
 
-    @patch.object(RgwAccounts, 'set_quota')
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.proxy')
+    def test_set_account(self, mock_proxy):
+        mock_proxy.return_value = {
+            "id": "RGW67392003738907404",
+            "tenant": "",
+            "name": "jack",
+            "email": "",
+            "quota": {
+                "enabled": False,
+                "check_on_raw": False,
+                "max_size": -1,
+                "max_size_kb": 0,
+                "max_objects": -1
+            },
+            "bucket_quota": {
+                "enabled": False,
+                "check_on_raw": False,
+                "max_size": -1,
+                "max_size_kb": 0,
+                "max_objects": -1
+            },
+            "max_users": 1000,
+            "max_roles": 1000,
+            "max_groups": 1000,
+            "max_buckets": 1000,
+            "max_access_keys": 4
+        }
+
+        self._put('/test/api/rgw/accounts/RGW67392003738907404?daemon_name=dummy-daemon', data={
+            'account_name': 'jack',
+            'max_buckets': '1000',
+            'max_users': '1000',
+            'max_roles': '1000',
+            'max_group': '1000',
+            'max_access_keys': '4'
+        })
+
+        mock_proxy.assert_called_once_with(
+            'dummy-daemon', 'PUT', 'account', {
+                'id': 'RGW67392003738907404',
+                'name': 'jack',
+                'max-buckets': '1000',
+                'max-users': '1000',
+                'max-roles': '1000',
+                'max-group': '1000',
+                'max-access-keys': '4'
+            })
+
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.set_quota')
     def test_set_quota(self, mock_set_quota):
         mock_return_value = {
             "id": "RGW11111111111111111",
@@ -249,14 +300,13 @@ class TestRgwUserAccountsController(TestCase):
         mock_set_quota.return_value = mock_return_value
 
         controller = RgwUserAccountsController()
-        result = controller.set_quota(quota_type='account', account_id='RGW11111111111111111',
-                                      max_size='10GB', max_objects='1000', enabled=True)
+        result = controller.set_quota('account', 'RGW11111111111111111', '10GB', '1000', True)
 
         mock_set_quota.assert_called_with('account', 'RGW11111111111111111', '10GB', '1000', True)
 
         self.assertEqual(result, mock_return_value)
 
-    @patch.object(RgwAccounts, 'set_quota_status')
+    @patch('dashboard.controllers.rgw_iam.RgwUserAccountsController.set_quota_status')
     def test_set_quota_status(self, mock_set_quota_status):
         mock_return_value = {
             "id": "RGW11111111111111111",
@@ -287,9 +337,7 @@ class TestRgwUserAccountsController(TestCase):
         mock_set_quota_status.return_value = mock_return_value
 
         controller = RgwUserAccountsController()
-        result = controller.set_quota_status(quota_type='account',
-                                             account_id='RGW11111111111111111',
-                                             quota_status='enabled')
+        result = controller.set_quota_status('account', 'RGW11111111111111111', 'enabled')
 
         mock_set_quota_status.assert_called_with('account', 'RGW11111111111111111', 'enabled')
 
