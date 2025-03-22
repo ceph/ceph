@@ -1539,9 +1539,10 @@ struct multipart_upload_info
   RGWObjectRetention obj_retention;
   RGWObjectLegalHold obj_legal_hold;
   rgw::cksum::Type cksum_type {rgw::cksum::Type::none};
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_NONE};
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(dest_placement, bl);
     encode(obj_retention_exist, bl);
     encode(obj_legal_hold_exist, bl);
@@ -1549,11 +1550,12 @@ struct multipart_upload_info
     encode(obj_legal_hold, bl);
     uint16_t ct{uint16_t(cksum_type)};
     encode(ct, bl);
+    encode(cksum_flags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
     decode(dest_placement, bl);
     if (struct_v >= 2) {
       decode(obj_retention_exist, bl);
@@ -1564,6 +1566,9 @@ struct multipart_upload_info
 	uint16_t ct;
 	decode(ct, bl);
 	cksum_type = rgw::cksum::Type(ct);
+	if (struct_v >= 4) {
+	  decode(cksum_flags, bl);
+	}
       }
     } else {
       obj_retention_exist = false;
