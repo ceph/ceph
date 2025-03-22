@@ -253,6 +253,24 @@ int RGWSystemMetaObj::read_info(const DoutPrefixProvider *dpp, const string& obj
   return 0;
 }
 
+void RGWCrossZoneGroup::dump(Formatter *f) const
+{
+  encode_json("enable", enable, f);
+  encode_json("forbid", forbid, f);
+}
+void RGWCrossZoneGroup::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("enable", enable, obj);
+  JSONDecoder::decode_json("forbid", forbid, obj);
+}
+void RGWCrossZoneGroup::generate_test_instances(list<RGWCrossZoneGroup*>& o)
+{
+  o.push_back(new RGWCrossZoneGroup);
+  o.push_back(new RGWCrossZoneGroup);
+  o.back()->enable.insert("a");
+  o.back()->forbid.insert("b");
+}
+
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
   RGWSystemMetaObj::decode_json(obj);
@@ -275,6 +293,11 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("sync_policy", sync_policy, obj);
   JSONDecoder::decode_json("enabled_features", enabled_features, obj);
+  JSONDecoder::decode_json("cross_zonegroup_export", cross_zonegroup_export, obj);
+  JSONDecoder::decode_json("cross_zonegroup_import", cross_zonegroup_import, obj);
+  if (std::string str; JSONDecoder::decode_json("same_zonegroup", str, obj)) {
+    same_zonegroup = rgw::parse_can_sync(str);
+  }
 }
 
 RGWZoneParams::~RGWZoneParams() {}
@@ -747,6 +770,9 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json("realm_id", realm_id, f);
   encode_json("sync_policy", sync_policy, f);
   encode_json("enabled_features", enabled_features, f);
+  encode_json("cross_zonegroup_export", cross_zonegroup_export, f);
+  encode_json("cross_zonegroup_import", cross_zonegroup_import, f);
+  encode_json("same_zonegroup", to_string(same_zonegroup), f);
 }
 
 void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
@@ -1442,5 +1468,28 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   return 0;
 }
 
-} // namespace rgw
+std::string to_string(CanSync value)
+{
+  switch (value) {
+    case CanSync::Allowed:
+      return "allowed";
+    case CanSync::Enabled:
+      return "enabled";
+    case CanSync::Forbidden:
+    default:
+      return "forbidden";
+  }
+}
 
+CanSync parse_can_sync(std::string_view str)
+{
+  if (str == "allowed") {
+    return CanSync::Allowed;
+  } else if (str == "enabled") {
+    return CanSync::Enabled;
+  } else { // unrecognized values default to Forbidden
+    return CanSync::Forbidden;
+  }
+}
+
+} // namespace rgw

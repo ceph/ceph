@@ -62,6 +62,24 @@ extern std::string default_storage_pool_suffix;
 
 } /* namespace rgw_zone_defaults */
 
+namespace rgw {
+
+/// Tristate to control whether a cross-zonegroup replication path is enabled.
+enum class CanSync : uint8_t {
+  Allowed, //< Not enabled or forbidden, but individual zonegroups can opt in.
+  Enabled, //< Enabled by default, but individual zonegroups can opt out.
+  Forbidden, //< Forbidden by default, and individual zonegroups cannot enable.
+};
+/// Return CanSync as a string.
+std::string to_string(CanSync value);
+/// Parse CanSync from a string. Unrecognized values default to Forbidden.
+CanSync parse_can_sync(std::string_view str);
+
+/// Set of cross-zonegroup replication peer ids. Wildcard "*" matches any peer.
+using SyncPeerSet = boost::container::flat_set<std::string, std::less<>>;
+
+} // namespace rgw
+
 struct RGWNameToId {
   std::string obj_id;
 
