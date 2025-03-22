@@ -120,6 +120,40 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
   }
 }
 
+seastar::future<> PGShardMapping::create_split_pg_mapping(
+  spg_t pgid,
+  core_id_t core_to_update)
+{
+  LOG_PREFIX(PGShardMapping::create_split_pg_mapping);
+  return container().invoke_on(
+        0, [pgid, core_to_update, FNAME](auto &primary_mapping) {
+  auto [insert_iter, inserted] =
+          primary_mapping.pg_to_core.emplace(pgid, core_to_update);
+  DEBUG("mapping pg {} to core {} (primary)",
+              pgid, core_to_update);
+  return primary_mapping.container().invoke_on_others(
+          [pgid, core_to_update, FNAME](auto &other_mapping) {
+    auto find_iter = other_mapping.pg_to_core.find(pgid);
+    if (find_iter == other_mapping.pg_to_core.end()) {
+      DEBUG("mapping pg {} to core {} (others)",
+	    pgid, core_to_update);
+      auto [insert_iter, inserted] =
+	other_mapping.pg_to_core.emplace(pgid, core_to_update);
+      assert(inserted);
+    } else {
+      auto core_found = find_iter->second;
+      if (core_found != core_to_update) {
+	ERROR("the mapping is inconsistent for pg {} (others): core {}, expected {}",
+	      pgid, core_found, core_to_update);
+	ceph_abort("The pg mapping is inconsistent!");
+      }
+      DEBUG("mapping pg {} to core {} (others): already mapped",
+	    pgid, core_to_update);
+    }
+  });
+ });
+}
+
 seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
   LOG_PREFIX(PGShardMapping::remove_pg_mapping);
   auto find_iter = pg_to_core.find(pgid);
@@ -205,18 +239,19 @@ void PGMap::set_creating(spg_t pgid)
   pg->second.creating = true;
 }
 
-void PGMap::pg_created(spg_t pgid, Ref<PG> pg)
+void PGMap::pg_created(spg_t pgid, Ref<PG> pg, bool is_split)
 {
   LOG_PREFIX(PGMap::pg_created);
   DEBUG("Created {}", pgid);
   ceph_assert(!pgs.count(pgid));
   pgs.emplace(pgid, pg);
-
-  auto creating_iter = pgs_creating.find(pgid);
-  ceph_assert(creating_iter != pgs_creating.end());
-  auto promise = std::move(creating_iter->second.promise);
-  pgs_creating.erase(creating_iter);
-  promise.set_value(pg);
+  if (!is_split) {
+    auto creating_iter = pgs_creating.find(pgid);
+    ceph_assert(creating_iter != pgs_creating.end());
+    auto promise = std::move(creating_iter->second.promise);
+    pgs_creating.erase(creating_iter);
+    promise.set_value(pg);
+  }
 }
 
 void PGMap::pg_loaded(spg_t pgid, Ref<PG> pg)

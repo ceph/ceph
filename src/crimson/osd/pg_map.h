@@ -34,6 +34,9 @@ public:
     return iter == pg_to_core.end() ? NULL_CORE : iter->second;
   }
 
+  seastar::future<> create_split_pg_mapping(
+  spg_t pgid,
+  core_id_t core_to_update);
   /// Returns mapping for pgid, creates new one if it doesn't already exist
   seastar::future<core_id_t> get_or_create_pg_mapping(
     spg_t pgid,
@@ -121,7 +124,7 @@ public:
   /**
    * Set newly created pg
    */
-  void pg_created(spg_t pgid, Ref<PG> pg);
+  void pg_created(spg_t pgid, Ref<PG> pg, bool is_split);
 
   /**
    * Add newly loaded pg
