@@ -67,9 +67,13 @@ void DaemonMetricCollector::shutdown(){
   io.stop();
 }
 
-std::string DaemonMetricCollector::get_metrics() {
+std::string DaemonMetricCollector::get_metrics(std::map<std::string, std::string> filters) {
   const std::lock_guard<std::mutex> lock(metrics_mutex);
-  return metrics;
+  if (filters.empty()) {
+    return metrics;
+  } else {
+    return builder->filtered_dump(filters);
+  }
 }
 
 template <class T>
@@ -461,10 +465,49 @@ void OrderedMetricsBuilder::add(std::string value, std::string name,
   metric.add(labels, value);
 }
 
-std::string OrderedMetricsBuilder::dump() {
+std::string MetricsBuilder::dump() {
+  out.clear();
   for (auto &[name, metric] : metrics) {
     out += metric.dump() + "\n";
   }
+  return out;
+}
+
+std::string MetricsBuilder::filtered_dump(std::map<std::string, std::string> filters) {
+  out.clear();
+
+  std::string only_filters = filters[OnlyFilterPrefix];
+  std::string exclude_filters = filters[ExcludeFilterPrefix];
+
+  if (!only_filters.empty()) {
+    std::vector<std::string> only_filters_list = split_string_on_delimeter(only_filters, ',');
+    for (std::map<std::string, Metric>::iterator it = metrics.begin(); it != metrics.end(); ++it) {
+      for (const auto& pattern : only_filters_list) {
+        if (it->first.find(pattern) == 0) { 
+          out += it->second.dump() + "\n";
+          break;
+        }
+      }
+    }
+  }
+
+  if (!exclude_filters.empty()) {
+    std::vector<std::string> exclude_filters_list = split_string_on_delimeter(exclude_filters, ',');
+    for (std::map<std::string, Metric>::iterator it = metrics.begin(); it != metrics.end(); ++it) {
+      auto is_exclude_match = false;
+      for (const auto& pattern : exclude_filters_list) {
+        auto is_pattern_match = it->first.find(pattern) == 0;
+        is_exclude_match = is_exclude_match || is_pattern_match;
+        if (is_pattern_match) {
+          break;
+        }
+      }
+      if (!is_exclude_match) {
+        out += it->second.dump() + "\n";
+      }
+    }
+  }
+
   return out;
 }
 
@@ -473,10 +516,8 @@ void UnorderedMetricsBuilder::add(std::string value, std::string name,
                                   labels_t labels) {
   Metric metric(name, mtype, description);
   metric.add(labels, value);
-  out += metric.dump() + "\n\n";
+  metrics[name] = metric;
 }
-
-std::string UnorderedMetricsBuilder::dump() { return out; }
 
 void Metric::add(labels_t labels, std::string value) {
   metric_entry entry;
