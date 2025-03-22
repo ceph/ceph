@@ -294,7 +294,33 @@ class SubvolumeBase(object):
             fs_earmark = CephFSVolumeEarmarking(self.fs, path)
             fs_earmark.set_earmark(earmark)
 
+    def separate_unit_suffix(self, subvol_size):
+        import re
+        unit_map = {"K": pow(1024, 1),
+                    "M": pow(1024, 2),
+                    "G": pow(1024, 3),
+                    "T": pow(1024, 4),
+                    "P": pow(1024, 5),
+                    "E": pow(1024, 6)}
+        pattern = r'^(\d+\.?\d*)([KMGTPE]i?B?|B)$'
+        match = re.match(pattern, subvol_size)
+        if match:
+            number = match.group(1)
+            unit = match.group(2)
+            multiplier = unit_map.get(unit[0])
+            if multiplier is not None:
+                return float(number) * multiplier
+            else:
+                raise VolumeException(-errno.EINVAL,
+                                      f"Invalid subvolume unit: {unit}")
+        else:
+            return None
+
     def _resize(self, path, newsize, noshrink):
+        num = self.separate_unit_suffix(newsize)
+        if num is not None:
+            newsize = num
+
         try:
             newsize = int(newsize)
             if newsize <= 0:
@@ -319,7 +345,7 @@ class SubvolumeBase(object):
             raise VolumeException(-e.args[0], e.args[1])
 
         subvolstat = self.fs.stat(path)
-        if newsize > 0 and newsize < subvolstat.st_size:
+        if 0 < newsize < subvolstat.st_size:
             if noshrink:
                 raise VolumeException(-errno.EINVAL,
                                       "Can't resize the subvolume. "
