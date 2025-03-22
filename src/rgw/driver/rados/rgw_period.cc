@@ -2,8 +2,12 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_sync.h"
+#include "rgw_sal.h"
+#include "rgw_sal_config.h"
 
 #include "services/svc_zone.h"
+
+#define FIRST_EPOCH 1
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -31,99 +35,15 @@ int RGWPeriod::get_latest_epoch(const DoutPrefixProvider *dpp, epoch_t& latest_e
 {
   RGWPeriodLatestEpochInfo info;
 
-  int ret = read_latest_epoch(dpp, info, y);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  int ret = cfgstore->read_latest_epoch(dpp, y, id, info.epoch, nullptr, *this);
   if (ret < 0) {
     return ret;
   }
 
   latest_epoch = info.epoch;
 
-  return 0;
-}
-
-int RGWPeriod::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  rgw_pool pool(get_pool(cct));
-
-  // delete the object for each period epoch
-  for (epoch_t e = 1; e <= epoch; e++) {
-    RGWPeriod p{get_id(), e};
-    rgw_raw_obj oid{pool, p.get_period_oid()};
-    auto sysobj = sysobj_svc->get_obj(oid);
-    int ret = sysobj.wop().remove(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: failed to delete period object " << oid
-          << ": " << cpp_strerror(-ret) << dendl;
-    }
-  }
-
-  // delete the .latest_epoch object
-  rgw_raw_obj oid{pool, get_period_oid_prefix() + get_latest_epoch_oid()};
-  auto sysobj = sysobj_svc->get_obj(oid);
-  int ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "WARNING: failed to delete period object " << oid
-        << ": " << cpp_strerror(-ret) << dendl;
-  }
-  return ret;
-}
-
-int RGWPeriod::update(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  auto zone_svc = sysobj_svc->get_zone_svc();
-  ldpp_dout(dpp, 20) << __func__ << " realm " << realm_id << " period " << get_id() << dendl;
-  list<string> zonegroups;
-  int ret = zone_svc->list_zonegroups(dpp, zonegroups);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to list zonegroups: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  // clear zone short ids of removed zones. period_map.update() will add the
-  // remaining zones back
-  period_map.short_zone_ids.clear();
-
-  for (auto& iter : zonegroups) {
-    RGWZoneGroup zg(string(), iter);
-    ret = zg.init(dpp, cct, sysobj_svc, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: zg.init() failed: " << cpp_strerror(-ret) << dendl;
-      continue;
-    }
-
-    if (zg.realm_id != realm_id) {
-      ldpp_dout(dpp, 20) << "skipping zonegroup " << zg.get_name() << " zone realm id " << zg.realm_id << ", not on our realm " << realm_id << dendl;
-      continue;
-    }
-
-    if (zg.master_zone.empty()) {
-      ldpp_dout(dpp, 0) << "ERROR: zonegroup " << zg.get_name() << " should have a master zone " << dendl;
-      return -EINVAL;
-    }
-
-    if (zg.zones.find(zg.master_zone) == zg.zones.end()) {
-      ldpp_dout(dpp, 0) << "ERROR: zonegroup " << zg.get_name()
-                   << " has a non existent master zone "<< dendl;
-      return -EINVAL;
-    }
-
-    if (zg.is_master_zonegroup()) {
-      master_zonegroup = zg.get_id();
-      master_zone = zg.master_zone;
-    }
-
-    int ret = period_map.update(zg, cct);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
-  ret = period_config.read(dpp, sysobj_svc, realm_id, y);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to read period config: "
-        << cpp_strerror(ret) << dendl;
-    return ret;
-  }
   return 0;
 }
 
@@ -207,12 +127,11 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
                       std::ostream& error_stream, optional_yield y,
 		      bool force_if_stale)
 {
-  auto zone_svc = sysobj_svc->get_zone_svc();
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm.get_id() << " period " << current_period.get_id() << dendl;
   // gateway must be in the master zone to commit
-  if (master_zone != zone_svc->get_zone_params().get_id()) {
+  if (driver->get_zone()->get_zonegroup().is_master_zonegroup()) {
     error_stream << "Cannot commit period on zone "
-        << zone_svc->get_zone_params().get_id() << ", it must be sent to "
+        << driver->get_zone()->get_id() << ", it must be sent to "
         "the period's master zone " << master_zone << '.' << std::endl;
     return -EINVAL;
   }
@@ -233,6 +152,9 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
         "and try again." << std::endl;
     return -EINVAL;
   }
+
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
     // store the current metadata sync status in the period
@@ -243,7 +165,11 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
       return r;
     }
     // create an object with a new period id
-    r = create(dpp, y, true);
+    period_map.id = id = rgw::gen_random_uuid();
+    epoch = FIRST_EPOCH;
+
+    constexpr bool exclusive = true;
+    r = cfgstore->create_period(dpp, y, exclusive, *this);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
@@ -273,7 +199,7 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
   set_predecessor(current_period.get_predecessor());
   realm_epoch = current_period.get_realm_epoch();
   // write the period to rados
-  int r = store_info(dpp, false, y);
+  int r = cfgstore->create_period(dpp, y, false, *this);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "failed to store period: " << cpp_strerror(-r) << dendl;
     return r;
@@ -284,7 +210,7 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
     return r;
   }
-  r = reflect(dpp, y);
+  r = rgw::reflect_period(dpp, y, cfgstore.get(), *this);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "failed to update local objects: " << cpp_strerror(-r) << dendl;
     return r;

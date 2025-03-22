@@ -6,6 +6,7 @@
 #include "common/errno.h"
 
 #include "rgw_zone.h"
+#include "rgw_sal.h"
 #include "rgw_sal_config.h"
 #include "rgw_sync.h"
 
@@ -202,7 +203,9 @@ int RGWZoneGroup::read_default_id(const DoutPrefixProvider *dpp, string& default
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
     // no default realm exist
     if (ret < 0) {
       return read_id(dpp, default_zonegroup_name, default_id, y);
@@ -386,7 +389,9 @@ int RGWZoneParams::read_default_id(const DoutPrefixProvider *dpp, string& defaul
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
     //no default realm exist
     if (ret < 0) {
       return read_id(dpp, default_zone_name, default_id, y);
@@ -403,7 +408,9 @@ int RGWZoneParams::set_as_default(const DoutPrefixProvider *dpp, optional_yield 
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
@@ -611,43 +618,6 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   }
 
   return 0;
-}
-
-int RGWPeriodConfig::read(const DoutPrefixProvider *dpp, RGWSI_SysObj *sysobj_svc, const std::string& realm_id,
-			  optional_yield y)
-{
-  const auto& pool = get_pool(sysobj_svc->ctx());
-  const auto& oid = get_oid(realm_id);
-  bufferlist bl;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    return ret;
-  }
-  using ceph::decode;
-  try {
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-  return 0;
-}
-
-int RGWPeriodConfig::write(const DoutPrefixProvider *dpp, 
-                           RGWSI_SysObj *sysobj_svc,
-			   const std::string& realm_id, optional_yield y)
-{
-  const auto& pool = get_pool(sysobj_svc->ctx());
-  const auto& oid = get_oid(realm_id);
-  bufferlist bl;
-  using ceph::encode;
-  encode(*this, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(false)
-               .write(dpp, bl, y);
 }
 
 void RGWPeriodConfig::decode_json(JSONObj *obj)
@@ -1241,7 +1211,9 @@ int RGWZoneGroup::set_as_default(const DoutPrefixProvider *dpp, optional_yield y
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
+    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+    int ret = rgw::read_realm(dpp, y, cfgstore.get(), realm.get_id(), realm.get_name(), realm);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
