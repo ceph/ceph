@@ -5,7 +5,7 @@ FROM $FROM_IMAGE
 ARG FROM_IMAGE
 
 # Ceph branch name
-ARG CEPH_REF="main"
+ARG CEPH_REF
 
 # Ceph SHA1
 ARG CEPH_SHA1
