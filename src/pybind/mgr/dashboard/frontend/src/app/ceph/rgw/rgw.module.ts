@@ -82,7 +82,8 @@ import {
   AccordionModule,
   TagModule,
   TooltipModule,
-  ComboBoxModule
+  ComboBoxModule,
+  ToggletipModule
 } from 'carbon-components-angular';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -130,10 +131,10 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
     RadioModule,
     TagModule,
     TooltipModule,
-    ComboBoxModule
+    ComboBoxModule,
+    ToggletipModule
   ],
   exports: [
-    RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
