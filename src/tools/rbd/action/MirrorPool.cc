@@ -665,7 +665,7 @@ protected:
           local_status));
         m_formatter->dump_string("description", local_status.description);
         if (mirror_service != nullptr) {
-          mirror_service->dump_image(m_formatter);
+          mirror_service->dump(m_formatter);
         }
         m_formatter->dump_string("last_update", utils::timestr(
           local_status.last_update));
@@ -702,7 +702,7 @@ protected:
                   << "  description: " << local_status.description << std::endl;
         if (mirror_service != nullptr) {
           std::cout << "  service:     " <<
-            mirror_service->get_image_description() << std::endl;
+            mirror_service->get_description() << std::endl;
         }
         std::cout << "  last_update: " << utils::timestr(
           local_status.last_update) << std::endl;
@@ -823,6 +823,36 @@ int get_mirror_image_status(
       *mirror_image_health = MIRROR_HEALTH_ERROR;
     }
     *total_images += it.second;
+  }
+
+  return 0;
+}
+
+int get_mirror_group_status(
+    librados::IoCtx& io_ctx, uint32_t* total_groups,
+    std::map<librbd::mirror_group_status_state_t, int>* mirror_group_states,
+    MirrorHealth* mirror_group_health) {
+  librbd::RBD rbd;
+  int r = rbd.mirror_group_status_summary(io_ctx, mirror_group_states);
+  if (r < 0) {
+    std::cerr << "rbd: failed to get status summary for mirrored groups: "
+	      << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  *mirror_group_health = MIRROR_HEALTH_OK;
+  for (auto &it : *mirror_group_states) {
+    auto &state = it.first;
+    if (*mirror_group_health < MIRROR_HEALTH_WARNING &&
+	(state != MIRROR_GROUP_STATUS_STATE_REPLAYING &&
+	 state != MIRROR_GROUP_STATUS_STATE_STOPPED)) {
+      *mirror_group_health = MIRROR_HEALTH_WARNING;
+    }
+    if (*mirror_group_health < MIRROR_HEALTH_ERROR &&
+	state == MIRROR_GROUP_STATUS_STATE_ERROR) {
+      *mirror_group_health = MIRROR_HEALTH_ERROR;
+    }
+    *total_groups += it.second;
   }
 
   return 0;
@@ -1569,10 +1599,18 @@ int execute_status(const po::variables_map &vm,
   librbd::RBD rbd;
 
   uint32_t total_images = 0;
+  uint32_t total_groups = 0;
   std::map<librbd::mirror_image_status_state_t, int> mirror_image_states;
+  std::map<librbd::mirror_group_status_state_t, int> mirror_group_states;
   MirrorHealth mirror_image_health = MIRROR_HEALTH_UNKNOWN;
+  MirrorHealth mirror_group_health = MIRROR_HEALTH_UNKNOWN;
   r = get_mirror_image_status(io_ctx, &total_images, &mirror_image_states,
                               &mirror_image_health);
+  if (r < 0) {
+    return r;
+  }
+  r = get_mirror_group_status(io_ctx, &total_groups, &mirror_group_states,
+                              &mirror_group_health);
   if (r < 0) {
     return r;
   }
@@ -1583,7 +1621,9 @@ int execute_status(const po::variables_map &vm,
   MirrorHealth mirror_daemon_health = daemon_service_info.get_daemon_health();
   auto mirror_services = daemon_service_info.get_mirror_services();
 
-  auto mirror_health = std::max(mirror_image_health, mirror_daemon_health);
+  auto mirror_health = std::max(std::max(mirror_image_health,
+                                         mirror_group_health),
+                                mirror_daemon_health);
 
   if (formatter != nullptr) {
     formatter->open_object_section("status");
@@ -1591,12 +1631,21 @@ int execute_status(const po::variables_map &vm,
     formatter->dump_stream("health") << mirror_health;
     formatter->dump_stream("daemon_health") << mirror_daemon_health;
     formatter->dump_stream("image_health") << mirror_image_health;
-    formatter->open_object_section("states");
+    formatter->open_object_section("image_states");
     for (auto &it : mirror_image_states) {
       std::string state_name = utils::mirror_image_status_state(it.first);
       formatter->dump_int(state_name.c_str(), it.second);
     }
-    formatter->close_section(); // states
+    formatter->close_section(); // image_states
+    if (total_groups > 0) {
+      formatter->dump_stream("group_health") << mirror_group_health;
+      formatter->open_object_section("group_states");
+      for (auto &it : mirror_group_states) {
+        std::string state_name = utils::mirror_group_status_state(it.first);
+        formatter->dump_int(state_name.c_str(), it.second);
+      }
+      formatter->close_section(); // group_states
+    }
     formatter->close_section(); // summary
   } else {
     std::cout << "health: " << mirror_health << std::endl;
@@ -1606,6 +1655,14 @@ int execute_status(const po::variables_map &vm,
     for (auto &it : mirror_image_states) {
       std::cout << "    " << it.second << " "
 		<< utils::mirror_image_status_state(it.first) << std::endl;
+    }
+    if (total_groups > 0) {
+      std::cout << "group health: " << mirror_group_health << std::endl;
+      std::cout << "groups: " << total_groups << " total" << std::endl;
+      for (auto &it : mirror_group_states) {
+        std::cout << "    " << it.second << " "
+                  << utils::mirror_group_status_state(it.first) << std::endl;
+      }
     }
   }
 
@@ -1665,6 +1722,105 @@ int execute_status(const po::variables_map &vm,
     std::map<std::string, std::string> peer_mirror_uuids_to_name;
     utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,
                                                  &peer_mirror_uuids_to_name);
+
+    std::map<std::string, librbd::mirror_group_global_status_t> mirror_groups;
+    r = rbd.mirror_group_global_status_list(io_ctx, "", 1024, &mirror_groups);
+    if (r < 0) {
+      std::cerr << "Failed to list mirror groups: " << r << std::endl;
+    }
+    librbd::mirror_group_site_status_t local_status_group;
+    if (total_groups > 0) {
+      if (formatter != nullptr) {
+        formatter->open_array_section("groups");
+        for (auto &[group_id, group_status] : mirror_groups) {
+          int local_site_group_r = utils::get_local_mirror_group_status(
+          group_status, &local_status_group);
+          group_status.site_statuses.erase(
+            std::remove_if(group_status.site_statuses.begin(),
+                          group_status.site_statuses.end(),
+                          [](auto& group_status) {
+                return (group_status.mirror_uuid ==
+                          RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+              }),
+            group_status.site_statuses.end());
+          formatter->open_object_section("group");
+          formatter->dump_string("name", group_status.name);
+          formatter->dump_string("global_id",group_status.info.global_id);
+          if (local_site_group_r >= 0) {
+            formatter->dump_string("state", utils::mirror_group_site_status_state(
+              local_status_group));
+            formatter->dump_string("description", local_status_group.description);
+            formatter->dump_string("last_update", utils::timestr(
+              local_status_group.last_update));
+          }
+          formatter->open_array_section("peer_sites");
+          for (auto& status : group_status.site_statuses) {
+            formatter->open_object_section("peer_site");
+
+            auto name_it = peer_mirror_uuids_to_name.find(status.mirror_uuid);
+            formatter->dump_string("site_name",
+              (name_it != peer_mirror_uuids_to_name.end() ? name_it->second : ""));
+            formatter->dump_string("mirror_uuid", status.mirror_uuid);
+
+            formatter->dump_string("state", utils::mirror_group_site_status_state(
+              status));
+            formatter->dump_string("description", status.description);
+            formatter->dump_string("last_update", utils::timestr(
+              status.last_update));
+            formatter->close_section(); // peer_site
+          }
+          formatter->close_section(); // peer_sites
+          formatter->close_section(); // group
+        }
+        formatter->close_section(); // groups
+      } else {
+        std::cout << "GROUPS" << std::endl;
+        for (auto &[group_id, group_status] : mirror_groups) {
+          int local_site_group_r = utils::get_local_mirror_group_status(
+            group_status, &local_status_group);
+          group_status.site_statuses.erase(
+            std::remove_if(group_status.site_statuses.begin(),
+                          group_status.site_statuses.end(),
+                          [](auto& group_status) {
+                return (group_status.mirror_uuid ==
+                          RBD_MIRROR_GROUP_STATUS_LOCAL_MIRROR_UUID);
+              }),
+            group_status.site_statuses.end());
+          std::cout << group_status.name << ":\n"  
+              << "  global_id: " << group_status.info.global_id << "\n";
+          if(local_site_group_r >= 0){
+            std::cout << "  state:       " << utils::mirror_group_site_status_state(
+                    local_status_group) << "\n"
+                  << "  description: " << local_status_group.description << "\n";
+            std::cout << "  last_update: " << utils::timestr(
+              local_status_group.last_update) << std::endl;
+          }
+          if (!group_status.site_statuses.empty()) {
+            std::cout << "  peer_sites:" << std::endl;
+
+            bool first_site = true;
+            for (auto& site : group_status.site_statuses) {
+              if (!first_site) {
+                std::cout << std::endl;
+              }
+              first_site = false;
+
+              auto name_it = peer_mirror_uuids_to_name.find(site.mirror_uuid);
+              std::cout << "    name: "
+                        << (name_it != peer_mirror_uuids_to_name.end() ?
+                              name_it->second : site.mirror_uuid)
+                        << std::endl
+                        << "    state: " << utils::mirror_group_site_status_state(
+                          site) << std::endl
+                        << "    description: " << site.description << std::endl
+                        << "    last_update: " << utils::timestr(
+                          site.last_update) << std::endl;
+            }
+          }
+          std::cout << std::endl;
+        }
+      }
+    }
 
     if (formatter != nullptr) {
       formatter->open_array_section("images");

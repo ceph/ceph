@@ -39,8 +39,8 @@ struct MirrorService {
 
   MirrorHealth health = MIRROR_HEALTH_UNKNOWN;
 
-  std::string get_image_description() const;
-  void dump_image(argument_types::Format::Formatter formatter) const;
+  std::string get_description() const;
+  void dump(argument_types::Format::Formatter formatter) const;
 };
 
 typedef std::list<MirrorService> MirrorServices;

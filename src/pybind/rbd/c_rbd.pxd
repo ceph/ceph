@@ -112,6 +112,10 @@ cdef extern from "rbd/librbd.h" nogil:
         char *name
         int64_t pool
 
+    ctypedef struct rbd_group_spec_t:
+        char *id
+        char *name
+
     ctypedef struct rbd_image_spec_t:
         char *id
         char *name
@@ -193,6 +197,18 @@ cdef extern from "rbd/librbd.h" nogil:
         uint32_t site_statuses_count
         rbd_mirror_image_site_status_t *site_statuses
 
+    ctypedef enum rbd_mirror_group_state_t:
+        _RBD_MIRROR_GROUP_DISABLING "RBD_MIRROR_GROUP_DISABLING"
+        _RBD_MIRROR_GROUP_ENABLING "RBD_MIRROR_GROUP_ENABLING"
+        _RBD_MIRROR_GROUP_ENABLED "RBD_MIRROR_GROUP_ENABLED"
+        _RBD_MIRROR_GROUP_DISABLED "RBD_MIRROR_GROUP_DISABLED"
+
+    ctypedef struct rbd_mirror_group_info_t:
+        char *global_id
+        rbd_mirror_image_mode_t mirror_image_mode
+        rbd_mirror_group_state_t state
+        bint primary
+
     ctypedef enum rbd_lock_mode_t:
         _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
         _RBD_LOCK_MODE_SHARED "RBD_LOCK_MODE_SHARED"
@@ -230,6 +246,7 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef enum rbd_group_snap_namespace_type_t:
         _RBD_GROUP_SNAP_NAMESPACE_TYPE_USER "RBD_GROUP_SNAP_NAMESPACE_TYPE_USER"
+        _RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR "RBD_GROUP_SNAP_NAMESPACE_TYPE_MIRROR"
 
     ctypedef struct rbd_group_image_snap_info_t:
         char *image_name
@@ -244,6 +261,13 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_group_snap_namespace_type_t namespace_type
         size_t image_snaps_count
         rbd_group_image_snap_info_t *image_snaps
+
+    ctypedef struct rbd_group_snap_mirror_namespace_t:
+        rbd_snap_mirror_state_t state;
+        size_t mirror_peer_uuids_count;
+        char* mirror_peer_uuids;
+        char* primary_mirror_uuid;
+        char* primary_snap_id;
 
     ctypedef enum rbd_image_migration_state_t:
         _RBD_IMAGE_MIGRATION_STATE_UNKNOWN "RBD_IMAGE_MIGRATION_STATE_UNKNOWN"
@@ -465,6 +489,33 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_mirror_image_info_list_cleanup(char **image_ids,
                                             rbd_mirror_image_info_t *info_entries,
                                             size_t num_entries)
+    int rbd_mirror_group_create_snapshot(rados_ioctx_t gp_ioctx,
+                                         const char *gp_name, uint32_t flags,
+                                         char *snap_id,
+                                         size_t *max_snap_id_len)
+    int rbd_aio_mirror_group_create_snapshot(rados_ioctx_t gp_ioctx,
+                                             const char *gp_name,
+                                             uint32_t flags, char *snap_id,
+                                             size_t *max_snap_id_len,
+                                             rbd_completion_t c)
+    int rbd_mirror_group_get_info(rados_ioctx_t gp_ioctx, const char *gp_name,
+                                  rbd_mirror_group_info_t *mirror_gp_info,
+                                  size_t info_size)
+    void rbd_mirror_group_get_info_cleanup(
+        rbd_mirror_group_info_t *mirror_gp_info)
+    int rbd_aio_mirror_group_get_info(rados_ioctx_t gp_ioctx,
+                                      const char *gp_name,
+                                      rbd_mirror_group_info_t *mirror_gp_info,
+                                      size_t info_size, rbd_completion_t c)
+    int rbd_mirror_group_info_list(rados_ioctx_t gp_ioctx,
+                                   rbd_mirror_image_mode_t *mode_filter,
+                                   const char *start_id, size_t max,
+                                   char **group_ids,
+                                   rbd_mirror_group_info_t *info_entries,
+                                   size_t *num_entries);
+    void rbd_mirror_group_info_list_cleanup(
+        char **group_ids, rbd_mirror_group_info_t *info_entries,
+        size_t num_entries);
 
     int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
                               char *value, size_t *val_len)
@@ -700,13 +751,17 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_list2(rados_ioctx_t p, rbd_group_spec_t *groups,
+                        size_t *size);
     int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
                          char *group_id, size_t *size)
+    int rbd_group_get_name(rados_ioctx_t p, const char *group_id,
+                           char *group_name, size_t *size);
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
-			    rados_ioctx_t image_p, const char *image_name)
+                            rados_ioctx_t image_p, const char *image_name)
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
                                rados_ioctx_t image_p, const char *image_name)
 
@@ -717,6 +772,9 @@ cdef extern from "rbd/librbd.h" nogil:
                              size_t *image_size)
     void rbd_group_image_list_cleanup(rbd_group_image_info_t *images,
                                       size_t group_image_info_size, size_t len)
+    int rbd_group_spec_list_cleanup(rbd_group_spec_t *groups,
+                                    size_t group_spec_size,
+                                    size_t num_groups);
 
     int rbd_group_snap_create2(rados_ioctx_t group_p, const char *group_name,
                                const char *snap_name, uint32_t flags)
@@ -742,6 +800,12 @@ cdef extern from "rbd/librbd.h" nogil:
 
     int rbd_group_snap_rollback(rados_ioctx_t group_p, const char *group_name,
                                 const char *snap_name)
+
+    int rbd_group_snap_get_mirror_namespace(
+        rados_ioctx_t group_p, const char *group_name, const char *snap_id,
+        rbd_group_snap_mirror_namespace_t* mirror_namespace)
+    int rbd_group_snap_mirror_namespace_cleanup(
+        rbd_group_snap_mirror_namespace_t *mirror_namespace)
 
     int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
                           size_t *max_watchers)

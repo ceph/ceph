@@ -893,7 +893,7 @@ cdef nogil:
                                 size_t group_info_size):
         pass
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
-			    rados_ioctx_t image_p, const char *image_name):
+                            rados_ioctx_t image_p, const char *image_name):
         pass
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
                                rados_ioctx_t image_p, const char *image_name):
@@ -933,6 +933,13 @@ cdef nogil:
         pass
     int rbd_group_snap_rollback(rados_ioctx_t group_p, const char *group_name,
                                 const char *snap_name):
+        pass
+    int rbd_group_snap_get_mirror_namespace(
+        rados_ioctx_t group_p, const char *group_name, const char *snap_id,
+        rbd_group_snap_mirror_namespace_t* mirror_namespace):
+        pass
+    int rbd_group_snap_mirror_namespace_cleanup(
+        rbd_group_snap_mirror_namespace_t *mirror_namespace):
         pass
     int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
                           size_t *max_watchers):
