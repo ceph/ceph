@@ -2224,7 +2224,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 {
   LogChannelRef clog = mdcache->mds->clog;
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
-	   << omap.size() << " keys for " << *this << dendl;
+	   << omap.size() << " keys for " << *this
+           << (complete ? " (complete)" : " (incomplete)")
+           << dendl;
 
   ceph_assert(r == 0 || r == -ENOENT || r == -ENODATA);
   ceph_assert(is_auth());
@@ -2236,7 +2238,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     clog->error() << "dir " << dirfrag() << " object missing on disk; some "
                      "files may be lost (" << get_path() << ")";
 
-    go_bad(complete);
+    go_bad(true);
     return;
   }
 
@@ -2250,14 +2252,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	   << ": " << err.what() << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
 		   << err.what() << " (" << get_path() << ")";
-      go_bad(complete);
+      go_bad(true);
       return;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes ("
                   << get_path() << ")";
-      go_bad(complete);
+      go_bad(true);
       return;
     }
   }
