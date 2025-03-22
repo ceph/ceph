@@ -144,51 +144,9 @@ test_object() {
     echo "numtests=$numtests" >> $output_file
 }
 
-waitall() { # PID...
-   ## Wait for children to exit and indicate whether all exited with 0 status.
-   local errors=0
-   while :; do
-     debug "Processes remaining: $*"
-     for pid in "$@"; do
-       shift
-       if kill -0 "$pid" 2>/dev/null; then
-         debug "$pid is still alive."
-         set -- "$@" "$pid"
-       elif wait "$pid"; then
-         debug "$pid exited with zero exit status."
-       else
-         debug "$pid exited with non-zero exit status."
-         errors=$(($errors + 1))
-       fi
-     done
-     [ $# -eq 0 ] && break
-     sleep ${WAITALL_DELAY:-1}
-    done
-   [ $errors -eq 0 ]
-}
-
 ######
 # MAIN
 ######
-
-do_join() {
-        waitall $pids
-        pids=""
-        # Reading the output of jobs to compute failed & numtests
-        # Tests are run in parallel but sum should be done sequentialy to avoid
-        # races between threads
-        while [ "$running_jobs" -ge 0 ]; do
-            if [ -f $output_file.$running_jobs ]; then
-                read_failed=$(grep "^failed=" $output_file.$running_jobs | cut -d "=" -f 2)
-                read_numtests=$(grep "^numtests=" $output_file.$running_jobs | cut -d "=" -f 2)
-                rm -f $output_file.$running_jobs
-                failed=$(($failed + $read_failed))
-                numtests=$(($numtests + $read_numtests))
-            fi
-            running_jobs=$(($running_jobs - 1))
-        done
-        running_jobs=0
-}
 
 # Using $MAX_PARALLEL_JOBS jobs if defined, unless the number of logical
 # processors
@@ -200,6 +158,7 @@ else
 fi
 
 output_file=`mktemp /tmp/output_file-XXXXXXXXX`
+job_index=0
 running_jobs=0
 
 for arversion in `ls $dir/archive | sort -n`; do
@@ -211,21 +170,37 @@ for arversion in `ls $dir/archive | sort -n`; do
   fi
 
   for type in `ls $vdir/objects`; do
-    test_object $type $output_file.$running_jobs &
+    test_object $type $output_file.$job_index &
     pids="$pids $!"
+    job_index=$(($job_index + 1))
     running_jobs=$(($running_jobs + 1))
 
     # Once we spawned enough jobs, let's wait them to complete
     # Every spawned job have almost the same execution time so
     # it's not a big deal having them not ending at the same time
     if [ "$running_jobs" -eq "$max_parallel_jobs" ]; then
-	do_join
+      wait -n
+      running_jobs=$(($running_jobs - 1))
     fi
-    rm -f ${output_file}*
   done
 done
 
-do_join
+wait
+
+# Reading the output of jobs to compute failed & numtests
+# Tests are run in parallel but sum should be done sequentialy to avoid
+# races between threads
+while [ "$job_index" -ge 0 ]; do
+    if [ -f $output_file.$job_index ]; then
+        read_failed=$(grep "^failed=" $output_file.$job_index | cut -d "=" -f 2)
+        read_numtests=$(grep "^numtests=" $output_file.$job_index | cut -d "=" -f 2)
+        rm -f $output_file.$job_index
+        failed=$(($failed + $read_failed))
+        numtests=$(($numtests + $read_numtests))
+    fi
+    job_index=$(($job_index - 1))
+done
+rm -f ${output_file}*
 
 if [ $failed -gt 0 ]; then
   echo "FAILED $failed / $numtests tests."
