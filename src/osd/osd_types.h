@@ -19,38 +19,39 @@
 #define CEPH_OSD_TYPES_H
 
 #include <atomic>
-#include <sstream>
-#include <cstdio>
+#include <cstdint>
+#include <list>
+#include <map>
 #include <memory>
+#include <ostream>
+#include <set>
+#include <string>
 #include <string_view>
 
-#include <boost/scoped_ptr.hpp>
-#include <boost/optional/optional_io.hpp>
 #include <boost/variant.hpp>
+#ifdef WITH_SEASTAR
 #include <boost/smart_ptr/local_shared_ptr.hpp>
+#endif
 
-#include "include/rados/rados_types.hpp"
 #include "include/mempool.h"
 #include "common/fmt_common.h"
 
 #include "msg/msg_types.h"
+#include "include/common_fwd.h" // for CephContext
 #include "include/compat.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
-#include "common/ceph_context.h"
-#include "common/histogram.h"
+#include "common/dout.h"
+#include "common/histogram.h" // for pow2_hist_t
 #include "include/interval_set.h"
 #include "include/inline_memory.h"
 #include "common/Formatter.h"
-#include "common/bloom_filter.hpp"
 #include "common/hobject.h"
 #include "common/snap_types.h"
+#include "common/strtol.h" // for ritoa()
 #include "HitSet.h"
-#include "Watch.h"
 #include "librados/ListObjectImpl.h"
-#include "compressor/Compressor.h"
-#include "osd_perf_counters.h"
 #include "pg_features.h"
 #include "ECTypes.h"
 

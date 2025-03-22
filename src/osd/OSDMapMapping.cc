@@ -7,6 +7,7 @@
 #define dout_subsys ceph_subsys_mon
 
 #include "common/debug.h"
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
 
 using std::vector;
 
