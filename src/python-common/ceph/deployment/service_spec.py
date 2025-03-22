@@ -1234,6 +1234,7 @@ class RGWSpec(ServiceSpec):
                  rgw_bucket_counters_cache_size: Optional[int] = None,
                  generate_cert: bool = False,
                  disable_multisite_sync_traffic: Optional[bool] = None,
+                 rgw_exit_timeout_secs: int = 120,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1288,6 +1289,8 @@ class RGWSpec(ServiceSpec):
         self.generate_cert = generate_cert
         #: Used to make RGW not do multisite replication so it can dedicate to IO
         self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
+        #: How long the RGW will wait to try and complete client requests when told to shut down
+        self.rgw_exit_timeout_secs = rgw_exit_timeout_secs
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()

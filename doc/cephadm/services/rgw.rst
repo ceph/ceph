@@ -199,6 +199,41 @@ RGW daemons deployed for that RGW service. For example
     The daemon can still receive replication data unless it has been removed
     from the zonegroup and zone replication endpoints.
 
+Draining client connections on shutdown
+---------------------------------------
+
+When an RGW daemon is stopped by for any reason, including during the cephadm upgrade process,
+RGW offers a setting that will delay shutdown as the RGW daemon attempts to complete ongoing
+client requests. This setting is off by default but activated manually by either passing
+``--stop-timeout=<timeout-in-seconds>`` to the RGW process or by setting the
+``rgw_exit_timeout_secs`` config option for the RGW daemon. Cephadm can handle setting this
+up through the spec file by specifying the ``rgw_exit_timeout_secs`` parameter in the spec
+file. For example
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_zonegroup: myzg
+      rgw_exit_timeout_secs: 120
+
+would tell the RGW daemons cephadm deploys for the rgw.foo service to wait up to 120
+seconds for current client requests to complete. Note that the RGW daemon will refuse
+additional client requests during this time.
+
+.. note:: In cephadm deployments this setting defaults to on and 120 seconds. If you would
+    like to disable this feature you must set ``rgw_exit_timeout_secs`` to 0 in the spec
+
+.. note:: Modifications to this setting in the spec will not be picked up by the RGW daemons
+    in the service until they are redeployed using either the ``ceph orch redeploy <service-name>``
+    or ``ceph orch daemon redeploy <daemon-name>`` commands
+
+
 Service specification
 ---------------------
 
