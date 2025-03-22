@@ -1122,6 +1122,9 @@ def store_arg(desc: argdesc, args: Sequence[ValidatedArg], d: ValidatedArgs):
         # prefixes' values should be a space-joined concatenation
         d[desc.name] += ' ' + desc.instance.val
     else:
+        # did we already get this argument
+        if desc.name in d:
+            raise ArgumentError(f"Duplicate argument '{desc.name}' found.")
         # if first CephPrefix or any other type, just set it
         d[desc.name] = desc.instance.val
 
