@@ -1123,6 +1123,7 @@ public:
   uint64_t get_up_osd_features() const;
 
   void get_upmap_pgs(std::vector<pg_t> *upmap_pgs) const;
+  int get_num_pg_upmap_primaries();
   bool check_pg_upmaps(
     CephContext *cct,
     const std::vector<pg_t>& to_check,
