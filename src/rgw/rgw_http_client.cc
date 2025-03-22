@@ -1136,10 +1136,15 @@ void *RGWHTTPManager::reqs_thread_entry()
         if (!req_data->user_ret) {
           curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
-          status = rgw_http_error_to_errno(http_status);
-          if (result != CURLE_OK && status == 0) {
-            dout(0) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << ", maybe network unstable" << dendl;
-            status = -EAGAIN;
+          if (http_status == 0 && result == CURLE_COULDNT_CONNECT) {
+            dout(0) << "ERROR: Failed to connect. curl error: " << curl_easy_strerror((CURLcode)result) << dendl;
+            status = -EIO;
+          } else {
+            status = rgw_http_error_to_errno(http_status);
+            if (result != CURLE_OK && status == 0) {
+              dout(0) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << ", maybe network unstable" << dendl;
+              status = -EAGAIN;
+            }
           }
         } else {
           status = *req_data->user_ret;
