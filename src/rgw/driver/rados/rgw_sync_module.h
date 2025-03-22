@@ -73,7 +73,7 @@ public:
   // indication whether the sync module start with full sync (default behavior)
   // incremental sync would follow anyway
   virtual bool should_full_sync() const {
-      return true;
+    return true;
   }
 };
 
@@ -91,7 +91,7 @@ public:
     return false;
   }
   virtual bool supports_data_export() = 0;
-  virtual int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
+  virtual int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
 typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
@@ -134,13 +134,13 @@ public:
     return module->supports_data_export();
   }
 
-  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const std::string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const std::string& name, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return -ENOENT;
     }
 
-    return module.get()->create_instance(dpp, cct, config, instance);
+    return module.get()->create_instance(dpp, cct, config, zonegroup, instance);
   }
 
   std::vector<std::string> get_registered_module_names() const {
