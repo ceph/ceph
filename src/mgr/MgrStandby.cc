@@ -197,9 +197,8 @@ int MgrStandby::init()
   objecter.start();
   timer.init();
 
-  py_module_registry.init();
   mgr_perf_start(g_ceph_context);
-
+  py_module_registry.init();
 
   tick();
 
