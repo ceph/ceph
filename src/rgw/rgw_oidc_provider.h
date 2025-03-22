@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "common/ceph_json.h"
+#include "rgw_common.h"
 
 struct RGWOIDCProviderInfo
 {
@@ -18,6 +19,8 @@ struct RGWOIDCProviderInfo
   std::string tenant; // tenant-name or account-id
   std::vector<std::string> client_ids;
   std::vector<std::string> thumbprints;
+  RGWObjVersionTracker objv_tracker;
+  ceph::real_time mtime;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);

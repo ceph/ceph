@@ -400,11 +400,14 @@ class RadosStore : public StoreDriver {
                            optional_yield y,
                            std::string_view tenant,
                            std::string_view url,
+                           RGWObjVersionTracker* objv_tracker,
                            RGWOIDCProviderInfo& info) override;
-    int delete_oidc_provider(const DoutPrefixProvider* dpp,
+    int delete_oidc_provider(const DoutPrefixProvider *dpp,
                              optional_yield y,
                              std::string_view tenant,
-                             std::string_view url) override;
+                             std::string_view url,
+                             RGWObjVersionTracker& objv_tracker,
+                             RGWOIDCProviderInfo& info) override;
     int get_oidc_providers(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            std::string_view tenant,
@@ -1211,5 +1214,4 @@ public:
   int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) override;
   int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
-
 }} // namespace rgw::sal
