@@ -12,6 +12,7 @@ import { CephModule } from './ceph/ceph.module';
 import { CoreModule } from './core/core.module';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
+import { ScrollRestorationService } from './shared/services/scroll-restoration.service';
 import { SharedModule } from './shared/shared.module';
 
 @NgModule({
@@ -45,7 +46,8 @@ import { SharedModule } from './shared/shared.module';
       provide: APP_BASE_HREF,
       useValue: '/' + (window.location.pathname.split('/', 1)[1] || '')
     },
-    provideHttpClient(withInterceptorsFromDi())
+    provideHttpClient(withInterceptorsFromDi()),
+    ScrollRestorationService
   ]
 })
-export class AppModule {}
+export class AppModule { }
