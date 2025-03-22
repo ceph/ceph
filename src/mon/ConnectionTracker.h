@@ -51,6 +51,21 @@ struct ConnectionReport {
 };
 WRITE_CLASS_ENCODER(ConnectionReport);
 
+struct DirectedGraph {
+  // The set of nodes in the graph
+  // works with only non-negative ranks
+  // because we only run the algorithm when
+  // all monitors have valid ranks.
+  std::map<unsigned, std::set<unsigned>> outgoing_edges;
+  std::map<unsigned, std::set<unsigned>> incoming_edges;
+  CephContext *cct;
+  DirectedGraph(CephContext *c) : cct(c) {}
+  void add_outgoing_edge(unsigned from, unsigned to);
+  void add_incoming_edge(unsigned to, unsigned from);
+  bool has_outgoing_edge(unsigned from, unsigned to) const;
+  bool has_incoming_edge(unsigned to, unsigned from) const;
+};
+
 class RankProvider {
  public:
   /**
@@ -127,6 +142,12 @@ class ConnectionTracker {
   * current and history of each peer_report.
   */
   bool is_clean(int mon_rank, int monmap_size);
+  /**
+   * Get the set of monitor pairs that are disconnected
+   * due to network partitions.
+   * This is a set of pairs (rank1, rank2) where rank1 < rank2.
+   */
+  std::set<std::pair<unsigned, unsigned>> get_netsplit(std::set<unsigned> &mons_down);
   /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import
