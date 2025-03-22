@@ -38,7 +38,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   nsForm: CdFormGroup;
   subsystemNQN: string;
   rbdPools: Array<Pool> = null;
-  units: Array<string> = ['KiB', 'MiB', 'GiB', 'TiB'];
+  units: Array<string> = ['MiB', 'GiB', 'TiB'];
   nsid: string;
   currentBytes: number;
   invalidSizeError: boolean;
