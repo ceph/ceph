@@ -270,7 +270,11 @@ class StoreBucket : public Bucket {
         RGWObjVersionTracker* objv_tracker) override { return 0; }
     int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
     int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
-    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
+    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp,
+        bool async_completion, boost::optional<const std::string&> transaction_id = boost::none) override {
+      return 0;
+    }
+    int complete_logging_object_write(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& transaction_id) override {
       return 0;
     }
 

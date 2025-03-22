@@ -27,15 +27,18 @@
  * we don't have a tag for this refcount, we consider this tag as a wildcard. So if the refcount
  * is being decreased by an unknown tag and we still have one wildcard tag, we'll accept it
  * as the relevant tag, and the refcount will be decreased.
+ *
+ * If must_exist is set to "false", the object will be created if it doesn't exist when increasing
+ * the refcount. This is useful for cases where we want the object to be created with a refcount.
  */
 
-void cls_refcount_get(librados::ObjectWriteOperation& op, const std::string& tag, bool implicit_ref = false);
+void cls_refcount_get(librados::ObjectWriteOperation& op, const std::string& tag, bool implicit_ref = false, bool must_exist = true);
 void cls_refcount_put(librados::ObjectWriteOperation& op, const std::string& tag, bool implicit_ref = false);
 void cls_refcount_set(librados::ObjectWriteOperation& op, std::list<std::string>& refs);
 // these overloads which call io_ctx.operate() or io_ctx.exec() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()/exec()
 #ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_refcount_read(librados::IoCtx& io_ctx, std::string& oid, std::list<std::string> *refs, bool implicit_ref = false);
+int cls_refcount_read(librados::IoCtx& io_ctx, const std::string& oid, std::list<std::string> *refs, bool implicit_ref = false);
 #endif
 
 #endif
