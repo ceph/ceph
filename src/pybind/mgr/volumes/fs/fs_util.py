@@ -94,6 +94,35 @@ def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     return entries
 
 
+def listdir_by_ctime_order(fs, path):
+    entry_names = listdir(fs, path, filter_files=False)
+    if not entry_names:
+        return []
+
+    # dir entries with ctime obtained by statig them. this variable contains
+    # a list of tuples where each tuple has 2 members: entry name and ctime.
+    ens_with_ctime = []
+    for en in entry_names:
+        d_path = os.path.join(path, en)
+        try:
+            stb = fs.lstat(d_path)
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                log.debug('directory "{d_path}" went missing, perhaps it was '
+                          'in trash directory and has been purged.')
+                continue
+            else:
+                raise
+
+        # add ctime next to clone entry
+        ens_with_ctime.append((en, stb.st_ctime))
+
+    ens_with_ctime.sort(key=lambda ctime: en[1])
+
+    # remove ctime and return list of clone entries sorted by ctime.
+    return [i[0] for i in ens_with_ctime]
+
+
 def has_subdir(fs, dirpath, filter_entries=None):
     """
     Check the presence of directory (only dirs) for a given path

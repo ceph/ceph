@@ -8530,11 +8530,29 @@ class TestCloneProgressReporter(TestVolumesHelper):
         This helper methods goes through this dictionary and picks only
         (filters in) clone events.
         '''
+        if progress_events == {}:
+            return
+        elif not progress_events:
+            raise RuntimeError('variable "progress_events" should be '
+                               'dictionary, regardless of whether with or '
+                               'without any members')
+
         clone_pevs = {}
 
+        # Set this variable to true if "mgr-vol-ongoing-clones" or
+        # "mgr-vol-total-clones" were found in the contents of
+        # "progress_events" variable.
+        one_of_the_pevs_occurred = False
         for k, v in progress_events.items():
             if 'mgr-vol-ongoing-clones' in k or 'mgr-vol-total-clones' in k:
                 clone_pevs[k] = v
+                one_of_the_pevs_occurred = True
+
+        if not one_of_the_pevs_occurred:
+            raise RuntimeError('Progress event with ID "mgr-vol-ongoing-clones"'
+                               ' or "mgr-vol-total-clones" was expected in the '
+                               'output of "ceph status" command but neither was'
+                               ' found.')
 
         return clone_pevs
 
