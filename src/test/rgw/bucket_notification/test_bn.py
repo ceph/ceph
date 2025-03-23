@@ -545,7 +545,7 @@ def list_topics(assert_len=None, tenant=''):
         result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
     parsed_result = json.loads(result[0])
     if assert_len:
-        assert_equal(len(parsed_result['topics']), assert_len)
+        assert_equal(len(parsed_result), assert_len)
     return parsed_result
 
 
@@ -5546,7 +5546,6 @@ def test_notification_caching():
     conn.delete_bucket(bucket_name)
     if receiver is not None:
         stop_kafka_receiver(receiver, task)
-
 
 @attr('kafka_test')
 def test_connection_caching():
