@@ -11514,7 +11514,6 @@ next:
       owner = rgw_account_id{account_id};
     }
 
-    formatter->open_object_section("result");
     rgw_pubsub_topics result;
     if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
         driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
@@ -11559,7 +11558,6 @@ next:
         encode_json("marker", next_token, formatter.get());
       }
     }
-    formatter->close_section(); // result
     formatter->flush(cout);
   }
 
