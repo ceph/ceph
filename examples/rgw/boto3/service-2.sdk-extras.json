@@ -94,6 +94,12 @@
                     "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
                     "location":"header",
                     "locationName":"x-rgw-snap-range"
+                },
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
                 }
             }
         },
@@ -110,6 +116,12 @@
                     "documentation":"<p></p>",
                     "location":"header",
                     "locationName":"x-rgw-snap-range"
+                },
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
                 }
             }
         },
@@ -501,6 +513,12 @@
                     "documentation":"<p></p>",
                     "location":"header",
                     "locationName":"x-rgw-snap-range"
+                },
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
                 }
             }
         },

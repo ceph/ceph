@@ -1856,6 +1856,23 @@ static int parse_snap_range(const string& s, rgw_bucket_snap_range *result, stri
   return 0;
 }
 
+static std::optional<rgw_bucket_snap_id> get_snap_id_param(req_state *s)
+{
+  const char *snap_param = s->info.env->get("HTTP_X_RGW_SNAP_ID");
+  if (!snap_param) {
+    return nullopt;
+  }
+
+  std::optional<rgw_bucket_snap_id> opt_snap_id;
+  string err;
+  auto sid = strict_strtol(snap_param, 10, &err);
+  if (err.empty()) {
+    opt_snap_id = rgw_bucket_snap_id((uint64_t)sid);
+  }
+
+  return opt_snap_id;
+}
+
 static int get_snap_range_param(const DoutPrefixProvider *dpp, req_state *s, rgw_bucket_snap_range *psnap_range)
 {
   const char *snap_range_header = s->info.env->get("HTTP_X_RGW_SNAP_RANGE");
@@ -1866,6 +1883,15 @@ static int get_snap_range_param(const DoutPrefixProvider *dpp, req_state *s, rgw
     if (r < 0) {
       ldpp_dout(dpp, 5) << "failed to parse snap_range (snap_range_str=" << snap_range_str << "): " + err << dendl;
       return r;
+    }
+  } else {
+    auto snap_id_opt = get_snap_id_param(s);
+    if (snap_id_opt) {
+      psnap_range->end = *snap_id_opt;
+      if (snap_id_opt->is_set() &&
+          snap_id_opt->snap_id > rgw_bucket_snap_id::SNAP_MIN) {
+        psnap_range->start = psnap_range->end - 1;
+      }
     }
   }
   return 0;
@@ -5504,23 +5530,6 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
 RGWOp *RGWHandler_REST_Obj_S3::op_options()
 {
   return new RGWOptionsCORS_ObjStore_S3;
-}
-
-static std::optional<rgw_bucket_snap_id> get_snap_id_param(req_state *s)
-{
-  const char *snap_param = s->info.env->get("HTTP_X_RGW_SNAP_ID");
-  if (!snap_param) {
-    return nullopt;
-  }
-
-  std::optional<rgw_bucket_snap_id> opt_snap_id;
-  string err;
-  auto sid = strict_strtol(snap_param, 10, &err);
-  if (err.empty()) {
-    opt_snap_id = rgw_bucket_snap_id((uint64_t)sid);
-  }
-
-  return opt_snap_id;
 }
 
 int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
