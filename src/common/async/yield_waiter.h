@@ -16,6 +16,7 @@
 #pragma once
 
 #include <exception>
+#include <mutex>
 #include <optional>
 #include <boost/asio/append.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
@@ -24,6 +25,29 @@
 #include <boost/asio/spawn.hpp>
 
 namespace ceph::async {
+
+namespace detail {
+
+// handler wrapper that reacquires a lock immediately before completion
+template <typename Handler, typename BasicLockable>
+struct lock_handler {
+  Handler handler;
+  BasicLockable* lock = nullptr;
+
+  template <typename ...Args>
+  void operator()(Args&& ...args) {
+    if (lock) {
+      lock->lock();
+    }
+    std::move(handler)(std::forward<Args>(args)...);
+  }
+};
+
+// deduction guide required by windows?
+template <typename Handler, typename BasicLockable>
+lock_handler(Handler&&, BasicLockable*) -> lock_handler<Handler, BasicLockable>;
+
+} // namespace detail
 
 /// Captures a yield_context handler for deferred completion or cancellation.
 template <typename Ret>
@@ -52,7 +76,25 @@ class yield_waiter {
           if (slot.is_connected()) {
             slot.template emplace<op_cancellation>(this);
           }
-          state.emplace(std::move(h));
+          constexpr std::unique_lock<std::mutex>* lock = nullptr;
+          state.emplace(std::move(h), lock);
+        }, token);
+  }
+
+  /// Suspends the given yield_context until the captured handler is invoked
+  /// via complete() or cancel(). The given lock is released immediately before
+  /// it suspends and reacquired immediately after it resumes.
+  template <typename CompletionToken>
+  auto async_wait(std::unique_lock<std::mutex>& lock, CompletionToken&& token)
+  {
+    return boost::asio::async_initiate<CompletionToken, Signature>(
+        [this, &lock] (handler_type h) {
+          auto slot = get_associated_cancellation_slot(h);
+          if (slot.is_connected()) {
+            slot.template emplace<op_cancellation>(this);
+          }
+          state.emplace(std::move(h), &lock);
+          lock.unlock(); // unlock before suspend
         }, token);
   }
 
@@ -61,8 +103,10 @@ class yield_waiter {
   {
     auto s = std::move(*state);
     state.reset();
-    auto h = boost::asio::append(std::move(s.handler), ec, std::move(value));
-    boost::asio::dispatch(std::move(h));
+    boost::asio::dispatch(
+        boost::asio::append(
+            detail::lock_handler{std::move(s.handler), s.lock},
+            ec, std::move(value)));
   }
 
   /// Destroy the completion handler.
@@ -80,10 +124,10 @@ class yield_waiter {
   struct handler_state {
     handler_type handler;
     work_guard work;
+    std::unique_lock<std::mutex>* lock = nullptr;
 
-    explicit handler_state(handler_type&& h)
-      : handler(std::move(h)),
-        work(make_work_guard(handler))
+    handler_state(handler_type&& h, std::unique_lock<std::mutex>* lock)
+      : handler(std::move(h)), work(make_work_guard(handler)), lock(lock)
     {}
   };
   std::optional<handler_state> state;
@@ -134,7 +178,25 @@ class yield_waiter<void> {
           if (slot.is_connected()) {
             slot.template emplace<op_cancellation>(this);
           }
-          state.emplace(std::move(h));
+          constexpr std::unique_lock<std::mutex>* lock = nullptr;
+          state.emplace(std::move(h), lock);
+        }, token);
+  }
+
+  /// Suspends the given yield_context until the captured handler is invoked
+  /// via complete() or cancel(). The given lock is released immediately before
+  /// it suspends and reacquired immediately after it resumes.
+  template <typename CompletionToken>
+  auto async_wait(std::unique_lock<std::mutex>& lock, CompletionToken&& token)
+  {
+    return boost::asio::async_initiate<CompletionToken, Signature>(
+        [this, &lock] (handler_type h) {
+          auto slot = get_associated_cancellation_slot(h);
+          if (slot.is_connected()) {
+            slot.template emplace<op_cancellation>(this);
+          }
+          state.emplace(std::move(h), &lock);
+          lock.unlock(); // unlock before suspend
         }, token);
   }
 
@@ -143,7 +205,9 @@ class yield_waiter<void> {
   {
     auto s = std::move(*state);
     state.reset();
-    boost::asio::dispatch(boost::asio::append(std::move(s.handler), ec));
+    boost::asio::dispatch(
+        boost::asio::append(
+            detail::lock_handler{std::move(s.handler), s.lock}, ec));
   }
 
   /// Destroy the completion handler.
@@ -161,10 +225,10 @@ class yield_waiter<void> {
   struct handler_state {
     handler_type handler;
     work_guard work;
+    std::unique_lock<std::mutex>* lock = nullptr;
 
-    explicit handler_state(handler_type&& h)
-      : handler(std::move(h)),
-        work(make_work_guard(handler))
+    handler_state(handler_type&& h, std::unique_lock<std::mutex>* lock)
+      : handler(std::move(h)), work(make_work_guard(handler)), lock(lock)
     {}
   };
   std::optional<handler_state> state;
@@ -189,3 +253,23 @@ class yield_waiter<void> {
 };
 
 } // namespace ceph::async
+
+namespace boost::asio {
+
+// forward the handler's associated executor, allocator, cancellation slot, etc
+template <template <typename, typename> class Associator,
+          typename Handler, typename BasicLockable, typename DefaultCandidate>
+struct associator<Associator,
+    ceph::async::detail::lock_handler<Handler, BasicLockable>, DefaultCandidate>
+  : Associator<Handler, DefaultCandidate>
+{
+  static auto get(const ceph::async::detail::lock_handler<Handler, BasicLockable>& h) noexcept {
+    return Associator<Handler, DefaultCandidate>::get(h.handler);
+  }
+  static auto get(const ceph::async::detail::lock_handler<Handler, BasicLockable>& h,
+                  const DefaultCandidate& c) noexcept {
+    return Associator<Handler, DefaultCandidate>::get(h.handler, c);
+  }
+};
+
+} // namespace boost::asio
