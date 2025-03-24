@@ -1,0 +1,14 @@
+tasks:
+- parallel:
+    - io_workload
+    - op_workload
+io_workload:
+  sequential:
+    - qemu:
+        client.0:
+          clone: true
+          type: block
+          disks: 3
+          time_wait: 120
+          test: qa/run_xfstests_qemu.sh
+exclude_arch: armv7l
