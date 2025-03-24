@@ -955,6 +955,8 @@ WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
 
 using rgw_bucket_dir_stats = std::map<RGWObjCategory, rgw_bucket_category_stats>;
 
+void encode_json(const char *name, const rgw_bucket_dir_stats& stats, ceph::Formatter *f);
+
 struct rgw_bucket_dir_header {
   rgw_bucket_dir_stats stats;
   uint64_t tag_timeout;
@@ -964,12 +966,14 @@ struct rgw_bucket_dir_header {
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
   uint32_t reshardlog_entries;
+  rgw_bucket_snap_id max_snap_id;
+  std::optional<rgw_bucket_dir_stats> max_snap_stats;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
                             reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 2, bl);
+    ENCODE_START(9, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -978,10 +982,12 @@ struct rgw_bucket_dir_header {
     encode(new_instance, bl);
     encode(syncstopped,bl);
     encode(reshardlog_entries, bl);
+    encode(max_snap_id, bl);
+    encode(max_snap_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -1010,6 +1016,10 @@ struct rgw_bucket_dir_header {
     } else {
       reshardlog_entries = 0;
     }
+    if (struct_v >= 9) {
+      decode(max_snap_id, bl);
+      decode(max_snap_stats, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -1029,6 +1039,55 @@ struct rgw_bucket_dir_header {
 
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
+
+struct rgw_bucket_dir_snap_stats {
+  rgw_bucket_snap_id snap_id;
+  rgw_bucket_dir_stats total_stats;  /* the aggregated total storage when the snapshot was taken */
+  rgw_bucket_dir_stats snap_stats;   /* total storage used by the specific snapshot */
+
+  rgw_bucket_dir_snap_stats() {}
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(snap_id, bl);
+    encode(total_stats, bl);
+    encode(snap_stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(snap_id, bl);
+    decode(total_stats, bl);
+    decode(snap_stats, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_bucket_dir_snap_stats*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_dir_snap_stats)
+
+struct rgw_bucket_dir_snap_header {
+  uint64_t ver{0};
+  rgw_bucket_dir_snap_stats stats;  /* the aggregated total storage when the snapshot was taken */
+
+  rgw_bucket_dir_snap_header() {}
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(ver, bl);
+    encode(stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(ver, bl);
+    decode(stats, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_bucket_dir_snap_header*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_dir_snap_header)
 
 struct rgw_bucket_dir {
   rgw_bucket_dir_header header;

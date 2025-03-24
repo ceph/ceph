@@ -718,20 +718,66 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
   o.push_back(new rgw_bucket_dir_header);
 }
 
+void encode_json(const char *name, const rgw_bucket_dir_stats& stats, ceph::Formatter *f)
+{
+  Formatter::ArraySection as(*f, name);
+  for (const auto& e : stats) {
+    encode_json("category", int32_t(e.first), f);
+    encode_json("category_stats", e.second, f);
+  }
+}
+
 void rgw_bucket_dir_header::dump(Formatter *f) const
 {
   f->dump_int("ver", ver);
   f->dump_int("master_ver", master_ver);
-  f->open_array_section("stats");
-  for (auto iter = stats.begin(); iter != stats.end(); ++iter) {
-    f->dump_int("category", int(iter->first));
-    f->open_object_section("category_stats");
-    iter->second.dump(f);
-    f->close_section();
-  }
+  encode_json("stats", stats, f);
   f->close_section();
   ::encode_json("new_instance", new_instance, f);
   f->dump_int("reshardlog_entries", reshardlog_entries);
+  ::encode_json("max_snap_id", max_snap_id, f);
+  if (max_snap_stats) {
+    encode_json("max_snap_stats", *max_snap_stats, f);
+  }
+}
+
+void rgw_bucket_dir_snap_stats::generate_test_instances(list<rgw_bucket_dir_snap_stats*>& o)
+{
+  list<rgw_bucket_category_stats *> l;
+  rgw_bucket_category_stats::generate_test_instances(l);
+
+  uint8_t i = 0;
+  for (auto iter = l.begin(); iter != l.end(); ++iter, ++i) {
+    RGWObjCategory c = static_cast<RGWObjCategory>(i);
+    rgw_bucket_dir_snap_stats *h = new rgw_bucket_dir_snap_stats;
+    rgw_bucket_category_stats *s = *iter;
+    h->total_stats[c] = *s;
+    h->snap_stats[c] = *s;
+
+    o.push_back(h);
+
+    delete s;
+  }
+
+  o.push_back(new rgw_bucket_dir_snap_stats);
+}
+
+void rgw_bucket_dir_snap_stats::dump(Formatter *f) const
+{
+  encode_json("snap_id", snap_id, f);
+  encode_json("total_stats", total_stats, f);
+  encode_json("snap_stats", snap_stats, f);
+}
+
+void rgw_bucket_dir_snap_header::generate_test_instances(list<rgw_bucket_dir_snap_header*>& o)
+{
+  o.push_back(new rgw_bucket_dir_snap_header);
+}
+
+void rgw_bucket_dir_snap_header::dump(Formatter *f) const
+{
+  encode_json("ver", ver, f);
+  encode_json("stats", stats, f);
 }
 
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
