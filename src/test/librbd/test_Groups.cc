@@ -907,7 +907,7 @@ TEST_F(TestGroup, mirrorPP)
   ASSERT_EQ(0U, group_snaps.size());
 
   ASSERT_EQ(0, m_rbd.mirror_group_enable(m_ioctx, group_name,
-                                         RBD_MIRROR_IMAGE_MODE_SNAPSHOT, 0));
+                                         RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
 
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
@@ -936,7 +936,7 @@ TEST_F(TestGroup, mirrorPP)
                                      sizeof(librbd::group_snap_info_t)));
   ASSERT_EQ(2U, group_snaps.size());
 
-  ASSERT_EQ(0, m_rbd.mirror_group_demote(m_ioctx, group_name, 0));
+  ASSERT_EQ(0, m_rbd.mirror_group_demote(m_ioctx, group_name));
 
   librbd::mirror_image_info_t mirror_info;
   ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
@@ -944,7 +944,7 @@ TEST_F(TestGroup, mirrorPP)
 
   ASSERT_EQ(0, m_rbd.mirror_group_resync(m_ioctx, group_name));
 
-  ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, 0, false));
+  ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, false));
   ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
   ASSERT_TRUE(mirror_info.primary);
 
