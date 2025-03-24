@@ -359,7 +359,7 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     }
   }
 
-  return 0;
+  return read_request.shard_reads.empty()?1:0;
 }
 
 void ECCommon::ReadPipeline::start_read_op(
@@ -395,10 +395,12 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   const ceph_tid_t tid = rop.tid;
 
   dout(10) << __func__ << ": starting read " << rop << dendl;
+  ceph_assert(!rop.to_read.empty());
 
   map<pg_shard_t, ECSubRead> messages;
   for (auto &&[hoid, read_request]: rop.to_read) {
     bool need_attrs = read_request.want_attrs;
+    ceph_assert(!read_request.shard_reads.empty());
 
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
@@ -415,13 +417,9 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       rop.source_to_obj[shard_read.pg_shard].insert(hoid);
     }
     for (auto &[_, shard_read]: read_request.shard_reads) {
-      bool empty = true;
-      if (!shard_read.extents.empty()) {
-        rop.debug_log.emplace_back(ECUtil::READ_REQUEST, shard_read.pg_shard,
+      ceph_assert(!shard_read.extents.empty());
+      rop.debug_log.emplace_back(ECUtil::READ_REQUEST, shard_read.pg_shard,
                                    shard_read.extents);
-        empty = false;
-      }
-      ceph_assert(!empty);
       for (auto &[start, len]: shard_read.extents) {
         messages[shard_read.pg_shard].to_read[hoid].push_back(
           boost::make_tuple(start, len, read_request.flags));

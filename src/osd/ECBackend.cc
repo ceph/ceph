@@ -1288,9 +1288,9 @@ void ECBackend::handle_sub_read_reply(
       rop.to_read.at(oid).shard_want_to_read.
           populate_shard_id_set(want_to_read);
 
-      int err;
-      if ((err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
-                                            nullptr)) < 0) {
+      int err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
+                                            nullptr);
+      if (err) {
         dout(20) << __func__ << " minimum_to_decode failed" << dendl;
         if (rop.in_progress.empty()) {
           // If we don't have enough copies, try other pg_shard_ts if available.
@@ -1300,12 +1300,17 @@ void ECBackend::handle_sub_read_reply(
             rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
             int r = read_pipeline.send_all_remaining_reads(oid, rop);
             if (r == 0) {
-              // We changed the rop's to_read and not incrementing is_complete
+              // We found that new reads are required to do a decode.
               need_resend = true;
               continue;
+            } else if (r >  0) {
+              // No new reads were requested. This means that some parity
+              // shards can be assumed to be zeros.
+              err = 0;
             }
-            // Couldn't read any additional shards so handle as completed with errors
+            // else insufficient shards are available, keep the errors.
           }
+          // Couldn't read any additional shards so handle as completed with errors
           // We don't want to confuse clients / RBD with objectstore error
           // values in particular ENOENT.  We may have different error returns
           // from different shards, so we'll return minimum_to_decode() error
@@ -1314,13 +1319,14 @@ void ECBackend::handle_sub_read_reply(
           rop.complete.at(oid).r = err;
           ++is_complete;
         }
-      } else {
+      }
+
+      if (!err) {
         ceph_assert(rop.complete.at(oid).r == 0);
         if (!rop.complete.at(oid).errors.empty()) {
           if (cct->_conf->osd_read_ec_check_for_errors) {
             rop.debug_log.emplace_back(ECUtil::COMPLETE_ERROR, op.from);
-            dout(10) << __func__ << ": Not ignoring errors, use one shard err="
- << err << dendl;
+            dout(10) << __func__ << ": Not ignoring errors, use one shard" << dendl;
             err = rop.complete.at(oid).errors.begin()->second;
             rop.complete.at(oid).r = err;
           } else {
