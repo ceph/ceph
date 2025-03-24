@@ -101,6 +101,71 @@ TEST(YieldWaiterVoid, wait_error)
   }
 }
 
+TEST(YieldWaiterVoid, wait_locked_complete)
+{
+  asio::io_context ctx;
+  yield_waiter<void> waiter;
+  std::optional<std::exception_ptr> eptr;
+
+  std::mutex mutex;
+  auto lock = std::unique_lock{mutex};
+
+  asio::spawn(ctx, [&waiter, &lock] (asio::yield_context yield) {
+        ASSERT_TRUE(lock.owns_lock());
+        waiter.async_wait(lock, yield);
+        EXPECT_TRUE(lock.owns_lock());
+      }, capture(eptr));
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+
+  ASSERT_FALSE(lock.owns_lock()); // unlocked while suspended
+  ASSERT_TRUE(waiter);
+  waiter.complete(error_code{});
+  EXPECT_FALSE(waiter);
+
+  ctx.poll();
+  ASSERT_TRUE(ctx.stopped());
+  ASSERT_TRUE(lock.owns_lock());
+}
+
+TEST(YieldWaiterVoid, wait_locked_error)
+{
+  asio::io_context ctx;
+  yield_waiter<void> waiter;
+  std::optional<std::exception_ptr> eptr;
+
+  std::mutex mutex;
+  auto lock = std::unique_lock{mutex};
+
+  asio::spawn(ctx, [&waiter, &lock] (asio::yield_context yield) {
+        ASSERT_TRUE(lock.owns_lock());
+        waiter.async_wait(lock, yield);
+        EXPECT_TRUE(lock.owns_lock());
+      }, capture(eptr));
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+
+  ASSERT_FALSE(lock.owns_lock()); // unlocked while suspended
+  ASSERT_TRUE(waiter);
+  waiter.complete(make_error_code(asio::error::operation_aborted));
+  EXPECT_FALSE(waiter);
+
+  ctx.poll();
+  ASSERT_TRUE(ctx.stopped());
+  ASSERT_TRUE(lock.owns_lock());
+  ASSERT_TRUE(eptr);
+  ASSERT_TRUE(*eptr);
+  try {
+    std::rethrow_exception(*eptr);
+  } catch (const boost::system::system_error& e) {
+    EXPECT_EQ(e.code(), asio::error::operation_aborted);
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, boost::system::system_error);
+  }
+}
+
 
 TEST(YieldWaiterInt, wait_shutdown)
 {
@@ -229,6 +294,76 @@ TEST(YieldWaiterPtr, wait_error)
 
   ctx.poll();
   ASSERT_TRUE(ctx.stopped());
+  EXPECT_FALSE(result);
+  ASSERT_TRUE(eptr);
+  ASSERT_TRUE(*eptr);
+  try {
+    std::rethrow_exception(*eptr);
+  } catch (const boost::system::system_error& e) {
+    EXPECT_EQ(e.code(), std::errc::no_such_file_or_directory);
+  } catch (const std::exception&) {
+    EXPECT_THROW(throw, boost::system::system_error);
+  }
+}
+
+TEST(YieldWaiterPtr, wait_locked_complete)
+{
+  asio::io_context ctx;
+  yield_waiter<std::unique_ptr<int>> waiter;
+  std::optional<std::unique_ptr<int>> result;
+
+  std::mutex mutex;
+  auto lock = std::unique_lock{mutex};
+
+  asio::spawn(ctx, [&waiter, &lock, &result] (asio::yield_context yield) {
+        ASSERT_TRUE(lock.owns_lock());
+        result = waiter.async_wait(lock, yield);
+        EXPECT_TRUE(lock.owns_lock());
+      }, rethrow);
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+  ASSERT_FALSE(lock.owns_lock()); // unlocked while suspended
+
+  ASSERT_TRUE(waiter);
+  waiter.complete(error_code{}, std::make_unique<int>(42));
+  EXPECT_FALSE(waiter);
+
+  ctx.poll();
+  EXPECT_TRUE(ctx.stopped());
+  ASSERT_TRUE(lock.owns_lock());
+  ASSERT_TRUE(result);
+  ASSERT_TRUE(*result);
+  EXPECT_EQ(42, **result);
+}
+
+TEST(YieldWaiterPtr, wait_locked_error)
+{
+  asio::io_context ctx;
+  yield_waiter<std::unique_ptr<int>> waiter;
+  std::optional<std::unique_ptr<int>> result;
+  std::optional<std::exception_ptr> eptr;
+
+  std::mutex mutex;
+  auto lock = std::unique_lock{mutex};
+
+  asio::spawn(ctx, [&waiter, &lock, &result] (asio::yield_context yield) {
+        ASSERT_TRUE(lock.owns_lock());
+        result = waiter.async_wait(lock, yield);
+        EXPECT_TRUE(lock.owns_lock());
+      }, capture(eptr));
+
+  ctx.poll();
+  ASSERT_FALSE(ctx.stopped());
+  EXPECT_FALSE(lock.owns_lock()); // unlocked while suspended
+
+  ASSERT_TRUE(waiter);
+  waiter.complete(make_error_code(std::errc::no_such_file_or_directory), nullptr);
+  EXPECT_FALSE(waiter);
+
+  ctx.poll();
+  ASSERT_TRUE(ctx.stopped());
+  ASSERT_TRUE(lock.owns_lock());
   EXPECT_FALSE(result);
   ASSERT_TRUE(eptr);
   ASSERT_TRUE(*eptr);
