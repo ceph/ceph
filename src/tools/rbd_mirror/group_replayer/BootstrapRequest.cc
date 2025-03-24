@@ -124,18 +124,6 @@ void BootstrapRequest<I>::cancel() {
 }
 
 template <typename I>
-std::string BootstrapRequest<I>::prepare_non_primary_mirror_snap_name(
-    const std::string &global_group_id,
-    const std::string &snap_id) {
-  dout(5) << "global_group_id: " << global_group_id
-          << ", snap_id: " << snap_id << dendl;
-  std::stringstream ind_snap_name_stream;
-  ind_snap_name_stream << ".mirror.non-primary."
-                       << global_group_id << "." << snap_id;
-  return ind_snap_name_stream.str();
-}
-
-template <typename I>
 bool BootstrapRequest<I>::has_remote_image(
   int64_t local_pool_id, const std::string &global_image_id) const {
 
