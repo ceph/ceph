@@ -243,7 +243,6 @@ public:
       if (encrypted) {
         client->unmount();
         client->shutdown();
-        delete client;
       }
       return encrypted;
     }
