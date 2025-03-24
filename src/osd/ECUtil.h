@@ -15,14 +15,12 @@
 #pragma once
 
 #include <ostream>
-#include <span>
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/interval_map.h"
-#include "common/Formatter.h"
 #include "common/mini_flat_map.h"
 
 #include "osd_types.h"
@@ -258,7 +256,9 @@ namespace ECUtil {
     }
 
     void align(uint64_t a) {
-      for (auto &&[_, e]: map) e.align(a);
+      for (auto &&[_, e]: map) {
+        e.align(a);
+      }
     }
 
     size_t get_max_shards() const { return map.max_size(); }
@@ -822,8 +822,8 @@ public:
   void append_zeros_to_ro_offset( uint64_t ro_offset );
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(ErasureCodeInterfaceRef& ec_impl, const HashInfoRef &hinfo, uint64_t before_ro_size);
-  int encode_parity_delta(ErasureCodeInterfaceRef& ec_impl, shard_extent_map_t &old_sem);
+  int encode(const ErasureCodeInterfaceRef& ec_impl, const HashInfoRef &hinfo, uint64_t before_ro_size);
+  int encode_parity_delta(const ErasureCodeInterfaceRef& ec_impl, shard_extent_map_t &old_sem);
   int decode(ErasureCodeInterfaceRef& ec_impl, ECUtil::shard_extent_set_t want);
   int _decode(ErasureCodeInterfaceRef& ec_impl, const shard_id_set &want_set, const shard_id_set &need_set);
   void get_buffer(shard_id_t shard, uint64_t offset, uint64_t length, buffer::list &append_to) const;
@@ -852,6 +852,10 @@ public:
   uint64_t get_start_offset() const { return start_offset; }
   uint64_t get_end_offset() const { return end_offset; }
   void deep_copy(shard_extent_map_t const &other);
+  void swap() {
+
+  }
+
 
   void assert_buffer_contents_equal(shard_extent_map_t other) const
   {

@@ -468,7 +468,7 @@ namespace ECUtil {
   /* Encode parity chunks, using the encode_chunks interface into the
    * erasure coding. This generates all parity using full stripe writes.
    */
-  int shard_extent_map_t::encode(ErasureCodeInterfaceRef& ec_impl,
+  int shard_extent_map_t::encode(const ErasureCodeInterfaceRef& ec_impl,
                                  const HashInfoRef &hinfo,
                                  uint64_t before_ro_size)
   {
@@ -514,7 +514,7 @@ namespace ECUtil {
   /* Encode parity chunks, using the parity delta write interfaces on plugins
    * that support them.
    */
-  int shard_extent_map_t::encode_parity_delta(ErasureCodeInterfaceRef& ec_impl,
+  int shard_extent_map_t::encode_parity_delta(const ErasureCodeInterfaceRef& ec_impl,
                                               shard_extent_map_t &old_sem)
   {
     shard_id_set out_set;
