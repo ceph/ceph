@@ -3158,13 +3158,14 @@ void RGWStatBucket::pre_exec()
 
 // read the bucket's stats for RGWObjCategory::Main
 static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
-                             rgw::sal::Bucket& bucket, RGWStorageStats& stats)
+                             rgw::sal::Bucket& bucket, const rgw_bucket_snap_range& snap_range,
+                             RGWStorageStats& stats)
 {
   const auto& index = bucket.get_info().layout.current_index;
   std::string bver, mver; // ignored
   std::map<RGWObjCategory, RGWStorageStats> categories;
 
-  int r = bucket.read_stats(dpp, y, index, -1, &bver, &mver, categories);
+  int r = bucket.read_stats(dpp, y, index, snap_range, -1, &bver, &mver, categories);
   if (r < 0) {
     return r;
   }
@@ -3185,7 +3186,7 @@ void RGWStatBucket::execute(optional_yield y)
   }
 
   if (report_stats) {
-    op_ret = load_bucket_stats(this, y, *s->bucket, stats);
+    op_ret = load_bucket_stats(this, y, *s->bucket, snap_range, stats);
   }
 }
 
@@ -3257,7 +3258,7 @@ void RGWListBucket::execute(optional_yield y)
 
   if (need_container_stats()) {
     stats.emplace();
-    if (int ret = load_bucket_stats(this, y, *s->bucket, *stats); ret < 0) {
+    if (int ret = load_bucket_stats(this, y, *s->bucket, snap_range, *stats); ret < 0) {
       stats = std::nullopt; // just don't return stats
     }
   }

@@ -501,7 +501,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
 
   const auto& index = info.get_current_index();
-  ret = read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  ret = read_stats(dpp, y, index, rgw_bucket_snap_range(), RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -647,11 +647,12 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
 int RadosBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			    const bucket_index_layout_generation& idx_layout,
-			    int shard_id, std::string* bucket_ver, std::string* master_ver,
+			    rgw_bucket_snap_range snap_range, int shard_id,
+                            std::string* bucket_ver, std::string* master_ver,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(dpp, y, info, idx_layout, snap_range, shard_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,

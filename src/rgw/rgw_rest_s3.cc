@@ -1856,20 +1856,30 @@ static int parse_snap_range(const string& s, rgw_bucket_snap_range *result, stri
   return 0;
 }
 
-int RGWListBucket_ObjStore_S3::get_common_params()
+static int get_snap_range_param(const DoutPrefixProvider *dpp, req_state *s, rgw_bucket_snap_range *psnap_range)
 {
-  list_versions = s->info.args.exists("versions");
   const char *snap_range_header = s->info.env->get("HTTP_X_RGW_SNAP_RANGE");
   if (snap_range_header) {
     string snap_range_str(snap_range_header);
     string err;
-    op_ret = parse_snap_range(snap_range_str, &snap_range, err);
-    if (op_ret < 0) {
-      ldpp_dout(this, 5) << "failed to parse snap_range (snap_range_str=" << snap_range_str << "): " + err << dendl;
-      return op_ret;
+    int r = parse_snap_range(snap_range_str, psnap_range, err);
+    if (r < 0) {
+      ldpp_dout(dpp, 5) << "failed to parse snap_range (snap_range_str=" << snap_range_str << "): " + err << dendl;
+      return r;
     }
   }
+  return 0;
+}
+
+int RGWListBucket_ObjStore_S3::get_common_params()
+{
+  list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
+
+  op_ret = get_snap_range_param(this, s, &snap_range);
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   // non-standard
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
@@ -2550,6 +2560,11 @@ static void dump_bucket_metadata(req_state *s,
 int RGWStatBucket_ObjStore_S3::get_params(optional_yield y)
 {
   report_stats = s->info.args.exists("read-stats");
+
+  op_ret = get_snap_range_param(this, s, &snap_range);
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   return 0;
 }
@@ -5491,6 +5506,23 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
+static std::optional<rgw_bucket_snap_id> get_snap_id_param(req_state *s)
+{
+  const char *snap_param = s->info.env->get("HTTP_X_RGW_SNAP_ID");
+  if (!snap_param) {
+    return nullopt;
+  }
+
+  std::optional<rgw_bucket_snap_id> opt_snap_id;
+  string err;
+  auto sid = strict_strtol(snap_param, 10, &err);
+  if (err.empty()) {
+    opt_snap_id = rgw_bucket_snap_id((uint64_t)sid);
+  }
+
+  return opt_snap_id;
+}
+
 int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
 					 req_state* s,
 					 RGWFormat default_formatter,
@@ -5532,15 +5564,8 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::Driver* driver,
     first = req;
   }
 
-  std::optional<rgw_bucket_snap_id> opt_snap_id;
-  const char *snap_param = s->info.env->get("HTTP_X_RGW_SNAP_ID");
-  if (snap_param) {
-    string err;
-    auto sid = strict_strtol(snap_param, 10, &err);
-    if (err.empty()) {
-      opt_snap_id = rgw_bucket_snap_id((uint64_t)sid);
-    }
-  }
+  std::optional<rgw_bucket_snap_id> opt_snap_id = get_snap_id_param(s);
+
   /*
    * XXX The intent of the check for empty is apparently to let the bucket
    * name from DNS to be set ahead. However, we currently take the DNS

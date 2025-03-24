@@ -846,12 +846,12 @@ int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 
 int FilterBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     const bucket_index_layout_generation& idx_layout,
-			     int shard_id, std::string* bucket_ver,
+			     rgw_bucket_snap_range snap_range, int shard_id, std::string* bucket_ver,
 			     std::string* master_ver,
 			     std::map<RGWObjCategory, RGWStorageStats>& stats,
 			     std::string* max_marker, bool* syncstopped)
 {
-  return next->read_stats(dpp, y, idx_layout, shard_id, bucket_ver, master_ver,
+  return next->read_stats(dpp, y, idx_layout, snap_range, shard_id, bucket_ver, master_ver,
 			  stats, max_marker, syncstopped);
 }
 

@@ -9743,14 +9743,15 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
 int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       RGWBucketInfo& bucket_info,
 			       const rgw::bucket_index_layout_generation& idx_layout,
-			       int shard_id, string *bucket_ver, string *master_ver,
+                               const rgw_bucket_snap_range& snap_range, int shard_id,
+                               string *bucket_ver, string *master_ver,
 			       map<RGWObjCategory, RGWStorageStats>& stats,
 			       string *max_marker, bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout, shard_id,
-                                        &headers, &bucket_instance_ids, y);
+  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout,
+                                        shard_id, &headers, &bucket_instance_ids, y);
   if (r < 0) {
     return r;
   }

@@ -222,6 +222,7 @@ struct RGWBucketAdminOpState {
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;
+  rgw_bucket_snap_range snap_range;
   std::string object_name;
   std::string new_bucket_name;
   std::string marker;
@@ -263,6 +264,9 @@ struct RGWBucketAdminOpState {
   void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
+  void set_snap_range(const rgw_bucket_snap_range& _snap_range) {
+    snap_range = _snap_range;
+  }
   void set_object(std::string& object_str) {
     object_name = object_str;
   }
@@ -283,6 +287,7 @@ struct RGWBucketAdminOpState {
   rgw_account_id& get_account_id() { return account_id; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
+  const rgw_bucket_snap_range& get_snap_range() { return snap_range; }
   std::string& get_object_name() { return object_name; }
   std::string& get_tenant() { return uid.tenant; }
 

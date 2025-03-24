@@ -1571,7 +1571,9 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 
 static int bucket_stats(rgw::sal::Driver* driver,
                         const std::string& tenant_name,
-                        const std::string& bucket_name, Formatter* formatter,
+                        const std::string& bucket_name,
+                        const rgw_bucket_snap_range& snap_range,
+                        Formatter* formatter,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -1593,7 +1595,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
 
   std::string bucket_ver, master_ver;
   std::string max_marker;
-  ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  ret = bucket->read_stats(dpp, y, index, snap_range, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
     return ret;
@@ -1707,7 +1709,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	/* need stats for num_entries */
 	string bucket_ver, master_ver;
 	std::map<RGWObjCategory, RGWStorageStats> stats;
-	ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
+	ret = bucket->read_stats(dpp, y, index, rgw_bucket_snap_range(), RGW_NO_SHARD, &bucket_ver, &master_ver, stats, nullptr);
 
 	if (ret < 0)
 	  continue;
@@ -1789,7 +1791,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 
     for (const auto& ent : listing.buckets) {
       if (show_stats) {
-        bucket_stats(driver, tenant, ent.bucket.name, formatter, dpp, y);
+        bucket_stats(driver, tenant, ent.bucket.name, rgw_bucket_snap_range(), formatter, dpp, y);
       } else {
         formatter->dump_string("bucket", ent.bucket.name);
       }
@@ -1824,8 +1826,9 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
+  rgw_bucket_snap_range snap_range = op_state.get_snap_range();
   if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+    ret = bucket_stats(driver, user_id.tenant, bucket_name, snap_range, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -1880,7 +1883,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 						   &truncated);
       for (auto& bucket_name : buckets) {
         if (show_stats) {
-          bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
+          bucket_stats(driver, user_id.tenant, bucket_name, snap_range, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}
