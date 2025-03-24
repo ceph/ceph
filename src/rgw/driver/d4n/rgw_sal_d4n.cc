@@ -487,11 +487,12 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
         entry.meta.storage_class = "CACHE";
         entry.meta.size = block.cacheObj.size;
         entry.meta.accounted_size = block.cacheObj.size;
-        struct std::tm tm;
-        std::istringstream ss(block.cacheObj.creationTime);
-        ss >> std::get_time(&tm, "%H:%M:%S");
-        std::time_t creationTime = mktime(&tm);
-        entry.meta.mtime = ceph::real_clock::from_time_t(creationTime);
+        try {
+          double time = std::stod(block.cacheObj.creationTime);
+          entry.meta.mtime = ceph::real_clock::from_double(time);
+        } catch (const std::exception& e) {
+          ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " Invalid value of time: " << block.cacheObj.creationTime << dendl;
+        }
         entry.meta.etag = block.cacheObj.etag;
         entry.meta.owner = block.cacheObj.user_id;
         entry.meta.owner_display_name = block.cacheObj.display_name;
@@ -749,7 +750,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
     } else {
       dest_mtime = real_clock::now();
     }
-    creationTime = ceph::real_clock::to_time_t(dest_mtime);
+    creationTime = ceph::real_clock::to_double(dest_mtime);
     dest_object->set_mtime(dest_mtime);
     dest_object->set_obj_size(this->get_size());
     dest_object->set_accounted_size(this->get_accounted_size());
@@ -1071,7 +1072,7 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
         ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
         return ret;
       }
-      auto creationTime = ceph::real_clock::to_time_t(this->get_mtime());
+      auto creationTime = ceph::real_clock::to_double(this->get_mtime());
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): key=" << key << dendl;
       std::string objEtag = "";
       driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, true, this->get_accounted_size(), creationTime, std::get<rgw_user>(this->get_bucket()->get_owner()), objEtag, this->get_bucket()->get_name(), this->get_bucket()->get_bucket_id(), this->get_key(), rgw::d4n::RefCount::NOOP, y);
@@ -1138,7 +1139,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
     rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
       .objName = objName,
       .bucketName = this->get_bucket()->get_bucket_id(),
-      .creationTime = std::to_string(ceph::real_clock::to_time_t(this->get_mtime())),
+      .creationTime = std::to_string(ceph::real_clock::to_double(this->get_mtime())),
       .dirty = dirty,
       .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address },
       .etag = etag,
@@ -1183,8 +1184,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
         object_version = this->get_object_version();
       }
       auto mtime = this->get_mtime();
-      auto score = ceph::real_clock::to_time_t(mtime);
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << std::setprecision(std::numeric_limits<double>::max_digits10) << score << ret << dendl;
+      auto score = ceph::real_clock::to_double(mtime);
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << score << ret << dendl;
       rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
       ret = objDir->zadd(dpp, &object, score, object_version, y);
       if (ret < 0) {
@@ -1262,7 +1263,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
     rgw::d4n::CacheObj version_object = rgw::d4n::CacheObj{
     .objName = objName,
     .bucketName = this->get_bucket()->get_bucket_id(),
-    .creationTime = std::to_string(ceph::real_clock::to_time_t(this->get_mtime())),
+    .creationTime = std::to_string(ceph::real_clock::to_double(this->get_mtime())),
     .dirty = dirty,
     .etag = etag,
     .size = this->get_accounted_size(),
@@ -2257,7 +2258,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_bucket_id();
     std::stringstream s;
-    block.cacheObj.creationTime = std::to_string(ceph::real_clock::to_time_t(source->get_mtime()));
+    block.cacheObj.creationTime = std::to_string(ceph::real_clock::to_double(source->get_mtime()));
     bool dirty = block.cacheObj.dirty = false; //Reading from the backend, data is clean
     block.version = version;
 
@@ -2979,7 +2980,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
         return ret;
       }
       if (dirty) {
-        auto creationTime = ceph::real_clock::to_time_t(object->get_mtime());
+        auto creationTime = ceph::real_clock::to_double(object->get_mtime());
         ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): key=" << key << dendl;
         ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): obj->get_key()=" << obj->get_key() << dendl;
         driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, key, version, false, accounted_size, creationTime, std::get<rgw_user>(obj->get_bucket()->get_owner()), objEtag, obj->get_bucket()->get_name(), obj->get_bucket()->get_bucket_id(), obj->get_key(), rgw::d4n::RefCount::NOOP, y);

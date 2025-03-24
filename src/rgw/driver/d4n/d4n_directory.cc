@@ -508,7 +508,7 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
       return -EINVAL;
     }
   } else if (ret == -ENOENT) {
-    ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): Object does not exist." << dendl;
+    ldpp_dout(dpp, 10) << "ObjectDirectory::" << __func__ << "(): Object does not exist." << dendl;
   } else {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): ERROR: ret=" << ret << dendl;
   }
