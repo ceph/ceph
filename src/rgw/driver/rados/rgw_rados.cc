@@ -9424,13 +9424,14 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
 int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp,
 			       RGWBucketInfo& bucket_info,
 			       const rgw::bucket_index_layout_generation& idx_layout,
-			       int shard_id, string *bucket_ver, string *master_ver,
+                               const rgw_bucket_snap_range& snap_range, int shard_id,
+                               string *bucket_ver, string *master_ver,
 			       map<RGWObjCategory, RGWStorageStats>& stats,
 			       string *max_marker, bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = cls_bucket_head(dpp, bucket_info, idx_layout, shard_id, headers, &bucket_instance_ids);
+  int r = cls_bucket_head(dpp, bucket_info, idx_layout, snap_range, shard_id, headers, &bucket_instance_ids);
   if (r < 0) {
     return r;
   }
@@ -11035,7 +11036,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   return 0;
 } // RGWRados::check_disk_state
 
-int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
+int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+                              const rgw::bucket_index_layout_generation& idx_layout,
+                              const rgw_bucket_snap_range& snap_range, int shard_id,
+                              vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
 {
   librados::IoCtx index_pool;
   map<int, string> oids;
@@ -11048,7 +11052,7 @@ int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo
   }
 
   maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueGetDirHeader(index_pool, oids, snap_range, list_results, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
     ldpp_dout(dpp, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "
                    << r << dendl;

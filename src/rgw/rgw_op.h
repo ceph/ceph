@@ -1091,6 +1091,7 @@ class RGWStatBucket : public RGWOp {
 protected:
   RGWStorageStats stats;
   bool report_stats{true};
+  rgw_bucket_snap_range snap_range;
 
 public:
   int verify_permission(optional_yield y) override;

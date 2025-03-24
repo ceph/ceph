@@ -578,13 +578,16 @@ public:
 };
 
 class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO {
+  rgw_bucket_snap_range snap_range;
   std::map<int, rgw_cls_list_ret>& result;
 protected:
   int issue_op(int shard_id, const std::string& oid) override;
 public:
-  CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, std::map<int, std::string>& oids, std::map<int, rgw_cls_list_ret>& dir_headers,
+  CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, std::map<int, std::string>& oids,
+                          const rgw_bucket_snap_range snap_range,
+                          std::map<int, rgw_cls_list_ret>& dir_headers,
                           uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
+    CLSRGWConcurrentIO(io_ctx, oids, max_aio), snap_range(snap_range), result(dir_headers) {}
   virtual ~CLSRGWIssueGetDirHeader() override {}
 };
 

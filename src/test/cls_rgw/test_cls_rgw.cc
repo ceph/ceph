@@ -57,7 +57,7 @@ void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory catego
   map<int, struct rgw_cls_list_ret> results;
   map<int, string> oids;
   oids[0] = oid;
-  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
+  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, rgw_bucket_snap_range(), results, 8)());
 
   uint64_t entries = 0;
   uint64_t size = 0;
@@ -1433,7 +1433,7 @@ void reshardlog_entries(librados::IoCtx& ioctx, const std::string& oid, uint32_t
   map<int, struct rgw_cls_list_ret> results;
   map<int, string> oids;
   oids[0] = oid;
-  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
+  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, rgw_bucket_snap_range(), results, 8)());
 
   uint32_t entries = 0;
   map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();

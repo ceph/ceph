@@ -341,7 +341,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
   }
 
   maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results,
+  r = CLSRGWIssueGetDirHeader(index_pool, oids, rgw_bucket_snap_range(), list_results,
 			      cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
     return r;

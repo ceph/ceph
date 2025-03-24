@@ -112,7 +112,7 @@ void read_stats(librados::IoCtx& ioctx, const std::string& oid,
 {
   auto oids = std::map<int, std::string>{{0, oid}};
   std::map<int, rgw_cls_list_ret> results;
-  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
+  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, rgw_bucket_snap_range(), results, 8)());
   ASSERT_EQ(1, results.size());
   stats = std::move(results.begin()->second.dir.header.stats);
 }
