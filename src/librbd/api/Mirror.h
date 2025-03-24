@@ -143,14 +143,12 @@ struct Mirror {
 
   static int group_list(IoCtx &io_ctx, std::vector<std::string> *names);
   static int group_enable(IoCtx &group_ioctx, const char *group_name,
-                          mirror_image_mode_t group_image_mode,
-                          uint32_t flags);
+                          mirror_image_mode_t group_image_mode);
   static int group_disable(IoCtx &group_ioctx, const char *group_name,
                            bool force);
   static int group_promote(IoCtx &group_ioctx, const char *group_name,
-                           uint32_t flags, bool force);
-  static int group_demote(IoCtx &group_ioctx, const char *group_name,
-                          uint32_t flags);
+                           bool force);
+  static int group_demote(IoCtx &group_ioctx, const char *group_name);
   static int group_resync(IoCtx &group_ioctx, const char *group_name);
   static void group_snapshot_create(IoCtx& group_ioctx,
                                     const std::string& group_name,
