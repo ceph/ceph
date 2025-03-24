@@ -27,6 +27,7 @@ struct ECListener {
   virtual const OSDMapRef& pgb_get_osdmap() const = 0;
   virtual epoch_t pgb_get_osdmap_epoch() const = 0;
   virtual const pg_info_t &get_info() const = 0;
+  virtual uint64_t min_peer_features() const = 0;
   /**
    * Called when a pull on soid cannot be completed due to
    * down peers
