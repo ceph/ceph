@@ -441,8 +441,12 @@ private:
 
     ObjectStore::Transaction opt, localt;
     
-    RepModify() : committed(false), ackerosd(-1),
-		  epoch_started(0) {}
+    RepModify(uint64_t features)
+      : committed(false),
+        ackerosd(-1),
+        epoch_started(0),
+        localt(features) {
+    }
   };
   typedef std::shared_ptr<RepModify> RepModifyRef;
 

@@ -85,6 +85,8 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   std::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  bufferlist txn_payload;
+
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
@@ -97,6 +99,11 @@ public:
 
   int get_cost() const override {
     return data.length();
+  }
+
+  void set_txn_payload(bufferlist bl)
+  {
+    txn_payload = bl;
   }
 
   void decode_payload() override {
@@ -159,6 +166,8 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
+    bufferlist middle(txn_payload);
+    set_middle(middle);
   }
 
   MOSDRepOp()
