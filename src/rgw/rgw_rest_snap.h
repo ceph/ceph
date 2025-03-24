@@ -18,6 +18,24 @@ public:
   const char* name() const override { return "list_bucket_snapshots"; }
 };
 
+class RGWConfigureBucketSnapshots_ObjStore_S3 : public RGWRESTOp {
+  bool enabled{false};
+
+public:
+  RGWConfigureBucketSnapshots_ObjStore_S3() {}
+
+  RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_SNAPSHOTS; }
+
+  int verify_permission(optional_yield y) override;
+  void pre_exec() override;
+
+  int get_params(optional_yield y);
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "config_bucket_snapshot"; }
+};
+
 class RGWCreateBucketSnapshot_ObjStore_S3 : public RGWRESTOp {
   std::string snap_name;
   std::string desc;

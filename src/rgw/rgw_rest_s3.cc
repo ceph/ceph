@@ -5329,6 +5329,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return RGWHandler_REST_BucketLogging_S3::create_put_op();
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
+  if (s->info.args.sub_resource_exists("snapshots"))
+    return new RGWConfigureBucketSnapshots_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
@@ -6584,6 +6586,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
         case RGW_STS_GET_SESSION_TOKEN:
         case RGW_STS_ASSUME_ROLE:
+        case RGW_OP_CONFIG_BUCKET_SNAPSHOTS:
         case RGW_OP_CREATE_BUCKET_SNAPSHOT:
         case RGW_OP_DEL_BUCKET_SNAPSHOT:
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
