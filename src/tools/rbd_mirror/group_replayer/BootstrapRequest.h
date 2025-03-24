@@ -83,8 +83,6 @@ public:
 
   void send() override;
   void cancel() override;
-  std::string prepare_non_primary_mirror_snap_name(
-      const std::string &global_group_id, const std::string &snap_id);
 
 private:
   /**
