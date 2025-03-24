@@ -40,6 +40,11 @@ class Transaction {
       ticks += a;
       count++;
     }
+    void reset()
+    {
+      ticks = 0;
+      count = 0;
+    }
   };
   static Tick write_ticks, setattr_ticks, omap_setkeys_ticks, omap_rmkey_ticks;
   static Tick encode_ticks, decode_ticks, iterate_ticks;
@@ -70,16 +75,18 @@ class Transaction {
     omap_rmkey_ticks.add(Cycles::rdtsc() - start_time);
   }
 
-  void apply_encode_decode() {
-    bufferlist bl;
+  void apply_encode_decode(bool new_format) {
+    bufferlist p_bl;
+    bufferlist d_bl;
     ObjectStore::Transaction d;
     uint64_t start_time = Cycles::rdtsc();
-    t.encode(bl);
+    t.encode(p_bl, new_format ? d_bl : p_bl);
     encode_ticks.add(Cycles::rdtsc() - start_time);
 
-    auto bliter = bl.cbegin();
+    auto p_bliter = p_bl.cbegin();
+    auto d_bliter = d_bl.cbegin();
     start_time = Cycles::rdtsc();
-    d.decode(bliter);
+    d.decode(p_bliter, new_format ? d_bliter : p_bliter);
     decode_ticks.add(Cycles::rdtsc() - start_time);
   }
 
@@ -135,6 +142,15 @@ class Transaction {
     cerr << " decode op: " << Cycles::to_microseconds(Transaction::decode_ticks.ticks) << "us count: " << Transaction::decode_ticks.count << std::endl;
     cerr << " iterate op: " << Cycles::to_microseconds(Transaction::iterate_ticks.ticks) << "us count: " << Transaction::iterate_ticks.count << std::endl;
   }
+  static void reset_stat() {
+    write_ticks.reset();
+    setattr_ticks.reset();
+    omap_setkeys_ticks.reset();
+    omap_rmkey_ticks.reset();
+    encode_ticks.reset();
+    decode_ticks.reset();
+    iterate_ticks.reset();
+  }
 };
 
 class PerfCase {
@@ -187,7 +203,7 @@ class PerfCase {
     data[info_info_attr] = generate_random(560, 1);
   }
 
-  uint64_t rados_write_4k(int times) {
+  uint64_t rados_write_4k(int times,bool new_format) {
     uint64_t ticks = 0;
     uint64_t len = Kib *4;
     for (int i = 0; i < times; i++) {
@@ -199,7 +215,7 @@ class PerfCase {
         t.write(cid, oid, 0, len, data["4k"]);
         t.setattr(cid, oid, attr, data[attr]);
         t.setattr(cid, oid, snapset_attr, data[snapset_attr]);
-        t.apply_encode_decode();
+        t.apply_encode_decode(new_format);
         t.apply_iterate();
         ticks += Cycles::rdtsc() - start_time;
       }
@@ -214,7 +230,7 @@ class PerfCase {
         t.omap_setkeys(meta_cid, pglog_oid, pglog_attrset);
         t.omap_setkeys(meta_cid, info_oid, info_attrset);
         t.omap_rmkey(meta_cid, pglog_oid, pglog_attr);
-        t.apply_encode_decode();
+        t.apply_encode_decode(new_format);
         t.apply_iterate();
         ticks += Cycles::rdtsc() - start_time;
       }
@@ -258,9 +274,15 @@ int main(int argc, char **argv)
 
   uint64_t times = atoi(args[0]);
   PerfCase c;
-  uint64_t ticks = c.rados_write_4k(times);
+  uint64_t ticks1 = c.rados_write_4k(times, false);
   Transaction::dump_stat();
-  cerr << " Total rados op " << times << " run time " << Cycles::to_microseconds(ticks) << "us." << std::endl;
+  cerr << " Old format total rados op " << times << " run time " << Cycles::to_microseconds(ticks1) << "us." << std::endl;
+
+  Transaction::reset_stat();
+
+  uint64_t ticks2 = c.rados_write_4k(times, true);
+  Transaction::dump_stat();
+  cerr << " New format total rados op " << times << " run time " << Cycles::to_microseconds(ticks2) << "us." << std::endl;
 
   return 0;
 }

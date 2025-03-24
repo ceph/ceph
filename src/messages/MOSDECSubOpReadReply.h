@@ -48,9 +48,10 @@ public:
   void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
+    auto d = data.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
-    decode(op, p);
+    op.decode(p, d);
     if (header.version >= 2) {
       decode(min_epoch, p);
       decode_trace(p);
@@ -63,7 +64,7 @@ public:
     using ceph::encode;
     encode(pgid, payload);
     encode(map_epoch, payload);
-    encode(op, payload);
+    op.encode(payload, data, features);
     encode(min_epoch, payload);
     encode_trace(payload, features);
   }

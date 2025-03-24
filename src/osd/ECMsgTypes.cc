@@ -26,53 +26,73 @@ using namespace std::literals;
 
 void ECSubWrite::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 1, bl);
-  encode(from, bl);
-  encode(tid, bl);
-  encode(reqid, bl);
-  encode(soid, bl);
-  encode(stats, bl);
-  encode(t, bl);
-  encode(at_version, bl);
-  encode(trim_to, bl);
-  encode(log_entries, bl);
-  encode(temp_added, bl);
-  encode(temp_removed, bl);
-  encode(updated_hit_set_history, bl);
-  encode(pg_committed_to, bl);
-  encode(backfill_or_async_recovery, bl);
-  ENCODE_FINISH(bl);
+  encode(bl, bl);
+}
+
+void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) const
+{
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 5 : 4;
+  ENCODE_START(ver, 1, p_bl);
+  encode(from, p_bl);
+  encode(tid, p_bl);
+  encode(reqid, p_bl);
+  encode(soid, p_bl);
+  encode(stats, p_bl);
+  if (ver >= 5) {
+    t.encode(p_bl, d_bl, features);
+  } else {
+    t.encode(p_bl, p_bl, features);
+  }
+  encode(at_version, p_bl);
+  encode(trim_to, p_bl);
+  encode(log_entries, p_bl);
+  encode(temp_added, p_bl);
+  encode(temp_removed, p_bl);
+  encode(updated_hit_set_history, p_bl);
+  encode(pg_committed_to, p_bl);
+  encode(backfill_or_async_recovery, p_bl);
+  ENCODE_FINISH(p_bl);
 }
 
 void ECSubWrite::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(4, bl);
-  decode(from, bl);
-  decode(tid, bl);
-  decode(reqid, bl);
-  decode(soid, bl);
-  decode(stats, bl);
-  decode(t, bl);
-  decode(at_version, bl);
-  decode(trim_to, bl);
-  decode(log_entries, bl);
-  decode(temp_added, bl);
-  decode(temp_removed, bl);
+  decode(bl, bl);
+}
+
+void ECSubWrite::decode(bufferlist::const_iterator &p_bl,
+			bufferlist::const_iterator &d_bl)
+{
+  DECODE_START(5, p_bl);
+  decode(from, p_bl);
+  decode(tid, p_bl);
+  decode(reqid, p_bl);
+  decode(soid, p_bl);
+  decode(stats, p_bl);
+  if (struct_v >= 5) {
+    t.decode(p_bl, d_bl);
+  } else {
+    t.decode(p_bl, p_bl);
+  }
+  decode(at_version, p_bl);
+  decode(trim_to, p_bl);
+  decode(log_entries, p_bl);
+  decode(temp_added, p_bl);
+  decode(temp_removed, p_bl);
   if (struct_v >= 2) {
-    decode(updated_hit_set_history, bl);
+    decode(updated_hit_set_history, p_bl);
   }
   if (struct_v >= 3) {
-    decode(pg_committed_to, bl);
+    decode(pg_committed_to, p_bl);
   } else {
     pg_committed_to = trim_to;
   }
   if (struct_v >= 4) {
-    decode(backfill_or_async_recovery, bl);
+    decode(backfill_or_async_recovery, p_bl);
   } else {
     // The old protocol used an empty transaction to indicate backfill or async_recovery
     backfill_or_async_recovery = t.empty();
   }
-  DECODE_FINISH(bl);
+  DECODE_FINISH(p_bl);
 }
 
 std::ostream &operator<<(
@@ -290,24 +310,82 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
 
 void ECSubReadReply::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
-  encode(from, bl);
-  encode(tid, bl);
-  encode(buffers_read, bl);
-  encode(attrs_read, bl);
-  encode(errors, bl);
-  ENCODE_FINISH(bl);
+  encode(bl, bl);
+}
+
+void ECSubReadReply::encode(bufferlist &p_bl,
+			    bufferlist &d_bl,
+			    uint64_t features) const
+{
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 2 : 1;
+  ENCODE_START(ver, ver, p_bl);
+  encode(from, p_bl);
+  encode(tid, p_bl);
+  if (ver >= 2) {
+    // Manual encode of std::map<hobject_t, std::list<std::pair<uint64_t,
+    //   ceph::buffer::list> >> buffers_read;
+    // data is encoded into d_bl to keep it aligned
+    __u32 nmap = (__u32)(buffers_read.size());
+    encode(nmap, p_bl);
+    for (auto [oid, datalist] : buffers_read) {
+      encode(oid, p_bl);
+      __u32 nlist = (__u32)(datalist.size());
+      encode(nlist, p_bl);
+      for (auto [result,bl] : datalist) {
+	encode(result, p_bl);
+	encode(bl.length(), p_bl);
+	encode_nohead(bl, d_bl);
+      }
+    }
+  } else {
+    encode(buffers_read, p_bl);
+  }
+  encode(attrs_read, p_bl);
+  encode(errors, p_bl);
+  ENCODE_FINISH(p_bl);
 }
 
 void ECSubReadReply::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(1, bl);
-  decode(from, bl);
-  decode(tid, bl);
-  decode(buffers_read, bl);
-  decode(attrs_read, bl);
-  decode(errors, bl);
-  DECODE_FINISH(bl);
+  decode(bl, bl);
+}
+
+void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
+			    bufferlist::const_iterator &d_bl)
+{
+  DECODE_START(2, p_bl);
+  decode(from, p_bl);
+  decode(tid, p_bl);
+  if (struct_v < 2) {
+    decode(buffers_read, p_bl);
+  } else {
+    // Manual decode of std::map<hobject_t, std::list<std::pair<uint64_t,
+    //   ceph::buffer::list> >> buffers_read;
+    // data is decoded from d_bl to keep it aligned
+    __u32 nmap;
+    decode(nmap, p_bl);
+    buffers_read.clear();
+    while (nmap--) {
+      hobject_t oid;
+      decode(oid, p_bl);
+      std::list<std::pair<uint64_t,ceph::buffer::list>> datalist;
+      __u32 nlist;
+      decode(nlist, p_bl);
+      while (nlist--) {
+	uint64_t result;
+	decode(result, p_bl);
+	ceph::buffer::list bl;
+	__u32 length;
+	decode(length, p_bl);
+	decode_nohead(length, bl, d_bl);
+	datalist.emplace_back(make_pair(result, bl));
+      }
+      buffers_read[oid] = datalist;
+    }
+  }
+  decode(attrs_read, p_bl);
+  decode(errors, p_bl);
+  DECODE_FINISH(p_bl);
 }
 
 std::ostream &operator<<(

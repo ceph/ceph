@@ -441,6 +441,7 @@ public:
       byte_throttler->take(middle.length());
   }
   ceph::buffer::list& get_middle() { return middle; }
+  const ceph::buffer::list& get_middle() const { return middle; }
 
   void set_data(const ceph::buffer::list &bl) {
     if (byte_throttler)

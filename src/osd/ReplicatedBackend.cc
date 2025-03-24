@@ -899,7 +899,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   op->mark_started();
 
   vector<PushReplyOp> replies;
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   if (get_parent()->check_failsafe_full()) {
     dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
     ceph_abort();
@@ -984,7 +984,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     ceph_abort();
   }
 
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction t{get_parent()->min_peer_features()};
   list<pull_complete_info> to_continue;
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
@@ -1090,8 +1090,15 @@ Message * ReplicatedBackend::generate_subop(
     ObjectStore::Transaction t;
     encode(t, wr->get_data());
   } else {
-    encode(op_t, wr->get_data());
-    wr->get_header().data_off = op_t.get_data_alignment();
+    bufferlist p, d;
+    op_t.encode(p, d, get_parent()->min_peer_features());
+    if (d.length() != 0) {
+      wr->set_txn_payload(p);
+      wr->set_data(d);
+    } else {
+      // Pre-tentacle format - everything in data
+      wr->set_data(p);
+    }
   }
 
   wr->logbl = log_entries;
@@ -1195,7 +1202,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   op->mark_started();
 
-  RepModifyRef rm(std::make_shared<RepModify>());
+  RepModifyRef rm(std::make_shared<RepModify>(get_parent()->min_peer_features()));
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
@@ -1205,8 +1212,9 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // shipped transaction and log entries
   vector<pg_log_entry_t> log;
 
-  auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
-  decode(rm->opt, p);
+  auto p = const_cast<bufferlist&>(m->get_middle()).cbegin();
+  auto d = const_cast<bufferlist&>(m->get_data()).cbegin();
+  rm->opt.decode(m->get_middle().length() != 0 ?  p : d, d);
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
