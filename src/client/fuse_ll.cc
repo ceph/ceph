@@ -961,9 +961,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
     break;
     case FS_IOC_GET_ENCRYPTION_POLICY_EX_RESTRICTED:
     case FS_IOC_GET_ENCRYPTION_POLICY_EX: {
-      auto arg = (fscrypt_get_policy_ex_arg *)in_buf;
-
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << " FS_IOC_GET_ENCRYPTION_POLICY_EX buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << " FS_IOC_GET_ENCRYPTION_POLICY_EX buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
 
       struct fscrypt_get_policy_ex_arg out_arg;
       if (out_bufsz < sizeof(out_arg.policy)) {
@@ -995,16 +993,12 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 
       auto arg = (fscrypt_add_key_arg *)in_buf;
 
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << dendl;
 
       if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
         fuse_reply_err(req, ENOTSUP);
         break;
       }
-
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": key_spec.type=" << arg->key_spec.type << " key_spec buffer:\n" << fscrypt_hex_str(&arg->key_spec, sizeof(arg->key_spec)) << dendl;
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": raw_size=" << arg->raw_size << " key_id=" << arg->key_id << dendl;
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": raw:\n" << fscrypt_hex_str(arg->raw, arg->raw_size) << dendl;
 
       if (arg->key_id == 0 &&
           in_bufsz < sizeof(*arg) + arg->raw_size) {
@@ -1033,7 +1027,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_REMOVE_ENCRYPTION_KEY ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": FS_IOC_REMOVE_ENCRYPTION_KEY ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
 
       auto arg = (fscrypt_remove_key_arg *)in_buf;
       if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
@@ -1059,14 +1053,14 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
     }
     case FS_IOC_SET_ENCRYPTION_POLICY:
     case FS_IOC_SET_ENCRYPTION_POLICY_RESTRICTED: {
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_SET_ENCRYPTION_POLICY arg=" << (void *)_arg << " in_buf=" << (void *)in_buf << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": FS_IOC_SET_ENCRYPTION_POLICY arg=" << (void *)_arg << " in_buf=" << (void *)in_buf << dendl;
       if (!in_buf) {
         generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
         fuse_reply_err(req, EINVAL);
         break;
       }
 
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
 
       auto arg = (fscrypt_policy_arg *)in_buf;
       if (in_bufsz < sizeof(arg->policy)) {
@@ -1088,7 +1082,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 
       Fh *fh = (Fh*)fi->fh;
       Inode *in = fh->inode.get();
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": XXXX ioctl ino=" << in->ino << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": XXXX ioctl ino=" << in->ino << dendl;
 
       int r = cfuse->client->ll_set_fscrypt_policy_v2(in, policy);
       if (r < 0) {
@@ -1096,7 +1090,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": set fscrypt policy: success" << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": set fscrypt policy: success" << dendl;
 
       fuse_reply_ioctl(req, 0, nullptr, 0);
       break;
@@ -1105,12 +1099,12 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
     case FS_IOC_GET_ENCRYPTION_KEY_STATUS: {
       if (!in_buf ||
         in_bufsz != sizeof(fscrypt_get_key_status_arg)) {
-        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
+        generic_dout(10) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
         fuse_reply_err(req, EINVAL);
         break;
       }
 
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS ioctl buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
 
       auto arg = (fscrypt_get_key_status_arg *)in_buf;
       if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
@@ -1119,12 +1113,15 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       }
 
       int r = cfuse->client->get_fscrypt_key_status(arg);
+      if (r < 0) {
+        fuse_reply_err(req, get_sys_errno(-r));
+      }
 
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
     }
     break;
     case FS_IOC_GETFLAGS: {
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GETFLAGS ioctl" << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GETFLAGS ioctl" << dendl;
 
       int file_attr = 0;
       if (out_bufsz < sizeof(file_attr)) {
@@ -1477,7 +1474,7 @@ static void do_init(void *data, fuse_conn_info *conn)
   fuse_apply_conn_info_opts(cfuse->conn_opts, conn);
 #endif
 
-  generic_dout(0) << __FILE__ << ":" << __LINE__ << ": conn proto ver " << conn->proto_major << ":" << conn->proto_minor << dendl;
+  generic_dout(10) << __FILE__ << ":" << __LINE__ << ": conn proto ver " << conn->proto_major << ":" << conn->proto_minor << dendl;
 
   if(conn->capable & FUSE_CAP_SPLICE_MOVE)
     conn->want |= FUSE_CAP_SPLICE_MOVE;
