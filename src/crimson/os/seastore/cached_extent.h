@@ -549,12 +549,12 @@ public:
   }
 
   bool is_stable_writting() const {
-    // MUTATION_PENDING and under-io extents are already stable and visible,
-    // see prepare_record().
+    // MUTATION_PENDING/INITIAL_WRITE_PENDING and under-io extents are already
+    // stable and visible, see prepare_record().
     //
-    // XXX: It might be good to mark this case as DIRTY from the definition,
+    // XXX: It might be good to mark this case as DIRTY/CLEAN from the definition,
     // which probably can make things simpler.
-    return is_mutation_pending() && is_pending_io();
+    return (is_mutation_pending() || is_initial_pending()) && is_pending_io();
   }
 
   /// Returns true if extent is stable and shared among transactions
