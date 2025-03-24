@@ -1397,6 +1397,7 @@ record_t Cache::prepare_record(
 
     bufferlist bl;
     i->prepare_write();
+    i->set_io_wait();
     i->prepare_commit();
     bl.append(i->get_bptr());
     if (is_root_type(i->get_type())) {
@@ -1451,6 +1452,7 @@ record_t Cache::prepare_record(
     assert(!i->is_inline());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
+    i->set_io_wait();
     i->prepare_commit();
     if (is_backref_mapped_type(i->get_type())) {
       laddr_t alloc_laddr;
@@ -1760,6 +1762,7 @@ void Cache::complete_commit(
     assert(!i->is_dirty());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
+    i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place
