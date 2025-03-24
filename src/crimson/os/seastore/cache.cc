@@ -1492,6 +1492,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
+    i->set_io_wait();
     // Note, paddr is known until complete_commit(),
     // so add_extent() later.
   }
@@ -1517,6 +1518,7 @@ record_t Cache::prepare_record(
 	  i->get_length(),
 	  i->get_type()));
     }
+    i->set_io_wait();
     // Note, paddr is (can be) known until complete_commit(),
     // so add_extent() later.
   }
@@ -1815,6 +1817,7 @@ void Cache::complete_commit(
     assert(!i->has_delta());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
+    i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place
