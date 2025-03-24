@@ -495,6 +495,12 @@
                     "documentation":"<p>Read additional usage statistics for <code>ObjectCount</code> and <code>BytesUsed</code> in the response.</p> <note> <p>This request parameter is a Ceph RGW extension.</p> </note>",
                     "location":"querystring",
                     "locationName":"read-stats"
+                },
+                "SnapRange": {
+                    "shape":"SnapRange",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-range"
                 }
             }
         },
