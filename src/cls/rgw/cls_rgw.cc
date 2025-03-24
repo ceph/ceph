@@ -55,7 +55,8 @@ constexpr unsigned char BI_PREFIX_CHAR = 0x80;
 #define BI_BUCKET_OBJ_INSTANCE_INDEX  2
 #define BI_BUCKET_OLH_DATA_INDEX      3
 #define BI_BUCKET_RESHARD_LOG_INDEX   4
-#define BI_BUCKET_SNAP_INDEX          5
+#define BI_BUCKET_SNAP_HEADER_INDEX   5
+#define BI_BUCKET_SNAP_INDEX          6
 
 #define BI_BUCKET_LAST_INDEX          6
 
@@ -64,6 +65,7 @@ static std::string bucket_index_prefixes[] = { "", /* special handling for the o
 					       "1000_",  /* obj instance index */
 					       "1001_",  /* olh data index */
 					       "2001_",   /* reshard log index */
+					       "3000_",   /* snapshot headers */
 					       "3001_",   /* snapshot data index */
 
 					       /* this must be the last index */
@@ -430,6 +432,15 @@ static void encode_olh_data_key(const cls_rgw_obj_key& key, string *index_key)
   index_key->append(key.name);
 }
 
+static void encode_snap_header_index_key(rgw_bucket_snap_id snap_id, string *index_key)
+{
+  *index_key = BI_PREFIX_CHAR;
+  index_key->append(bucket_index_prefixes[BI_BUCKET_SNAP_HEADER_INDEX]);
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld", (long long)snap_id.snap_id);
+  index_key->append(buf);
+}
+
 static void encode_snap_index_key(const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id, string *index_key)
 {
   *index_key = BI_PREFIX_CHAR;
@@ -568,6 +579,7 @@ static int read_bucket_header(cls_method_context_t hctx,
 
   if (bl.length() == 0) {
       *header = rgw_bucket_dir_header();
+      CLS_LOG(20, "%s: (empty header) header.ver=%d header.max_snap_id=%d", __func__, (int)header->ver, (int)header->max_snap_id.snap_id);
       return 0;
   }
   auto iter = bl.cbegin();
@@ -577,6 +589,90 @@ static int read_bucket_header(cls_method_context_t hctx,
     CLS_LOG(1, "ERROR: read_bucket_header(): failed to decode header\n");
     return -EIO;
   }
+  CLS_LOG(20, "%s: header.ver=%d header.max_snap_id=%d", __func__, (int)header->ver, (int)header->max_snap_id.snap_id);
+
+  return 0;
+}
+
+template <class T>
+static string to_json(const string& s, const T& t)
+{
+  std::stringstream ss;
+  JSONFormatter f;
+  encode_json(s.c_str(), t, &f);
+  f.flush(ss);
+  return ss.str();
+}
+
+static int read_bucket_snap_header(cls_method_context_t hctx,
+                                   rgw_bucket_snap_id snap_id,
+                                   string *pindex_key,
+                                   rgw_bucket_dir_snap_header *header)
+{
+  encode_snap_header_index_key(snap_id, pindex_key);
+  bufferlist bl;
+  int rc = cls_cxx_map_get_val(hctx, *pindex_key, &bl);
+  CLS_LOG(20, "%s(): index_key=%s rc=%d bl.len=%d", __func__, pindex_key->c_str(), rc, (int)bl.length()); 
+  if (rc < 0 && rc != -ENOENT)
+    return rc;
+
+  if (bl.length() == 0) {
+    *header = rgw_bucket_dir_snap_header();
+    return 0;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(*header, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: read_bucket_snap_header(): failed to decode header\n");
+    return -EIO;
+  }
+  CLS_LOG(20, "%s(): index_key=%s header=%s", __func__, pindex_key->c_str(), to_json("header", *header).c_str());
+
+  return 0;
+}
+
+static int read_snap_stats(cls_method_context_t hctx,
+                           rgw_bucket_dir_header& header,
+                           rgw_bucket_snap_id snap_id,
+                           rgw_bucket_dir_snap_stats *snap_stats)
+{
+  if (header.max_snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN) == snap_id) {
+    CLS_LOG(20, "%s(): header.max_snap_id=%d", __func__, (int)header.max_snap_id.snap_id);
+    snap_stats->snap_id = snap_id;
+    CLS_LOG(20, "%s(): snap_id=%d", __func__, (int)snap_id.snap_id);
+    snap_stats->total_stats = header.stats;
+    if (!header.max_snap_stats) {
+      snap_stats->snap_stats = header.stats;
+    } else {
+      snap_stats->snap_stats = *header.max_snap_stats;
+    }
+    CLS_LOG(20, "%s(): snap_header.stats (from header stats): snap_stats=%s", __func__, to_json("snap_stats", *snap_stats).c_str());
+    return 0;
+  }
+
+  if (!header.max_snap_id.is_set() ||
+      header.max_snap_id < snap_id) {
+    CLS_LOG(20, "%s(): header.max_snap_id < snap_id", __func__);
+
+    /* snapshot doen't exist (in this shard at least) */
+    *snap_stats = rgw_bucket_dir_snap_stats();
+    snap_stats->total_stats = header.stats;
+    return 0;
+  }
+
+  string index_key;
+  rgw_bucket_dir_snap_header snap_header;
+  int r = read_bucket_snap_header(hctx, snap_id, &index_key, &snap_header);
+  if (r < 0) {
+    CLS_LOG(0, "%s(): ERROR: read_bucket_snap_header for index_key=%s returned %d", __func__, escape_str(index_key).c_str(), r);
+    return r;
+  }
+
+  *snap_stats = snap_header.stats;
+
+  CLS_LOG(20, "%s(): snap_header.stats: snap_stats=%s", __func__, to_json("snap_stats", *snap_stats).c_str());
 
   return 0;
 }
@@ -612,9 +708,33 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return rc;
   }
 
+  CLS_LOG(20, "%s(): snap_range start=%d end=%d", __func__, (int)op.snap_range.start.snap_id, (int)op.snap_range.end.snap_id);
+  if (op.snap_range.end.is_set()) {
+    rgw_bucket_dir_snap_stats snap_stats;
+    int r = read_snap_stats(hctx, new_dir.header,
+                            op.snap_range.end,
+                            &snap_stats);
+    if (r < 0 && r != -ENOENT) {
+      CLS_LOG(1, "ERROR: %s: failed to read snap stats for snap=%lld: r=%d", __func__, (long long)op.snap_range.end.snap_id, r);
+      return r;
+    }
+    if (op.snap_range.start.is_set() &&
+        (op.snap_range.end.snap_id == rgw_bucket_snap_id::SNAP_MIN ||
+         op.snap_range.start.snap_id == op.snap_range.end.snap_id - 1)) {
+      /* asked specifically about that snapshot, will only return this snapshot's stats
+       * and not the aggregate
+       */
+
+      ret.dir.header.stats = snap_stats.snap_stats;
+    } else {
+      ret.dir.header.stats = snap_stats.total_stats;
+    }
+  }
+
   // some calls just want the header and request 0 entries
   if (op.num_entries <= 0) {
     ret.is_truncated = false;
+    CLS_LOG(20, "%s(): snap_id=%d returning stats=%s", __func__, (int)op.snap_range.end.snap_id, to_json("stats", ret.dir.header.stats).c_str());
     encode(ret, *out);
     return 0;
   }
@@ -820,6 +940,16 @@ static int write_bucket_header(cls_method_context_t hctx, rgw_bucket_dir_header 
   bufferlist header_bl;
   encode(*header, header_bl);
   return cls_cxx_map_write_header(hctx, &header_bl);
+}
+
+static int write_bucket_snap_header(cls_method_context_t hctx, const string& index_key, rgw_bucket_dir_snap_header *header)
+{
+  header->ver++;
+
+  CLS_LOG(20, "%s(): index_key=%s header=%s", __func__, index_key.c_str(), to_json("header", *header).c_str());
+  bufferlist header_bl;
+  encode(*header, header_bl);
+  return cls_cxx_map_set_val(hctx, index_key, &header_bl);
 }
 
 template <class T>
@@ -1099,17 +1229,131 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 } // rgw_bucket_prepare_op
 
-static void unaccount_entry(rgw_bucket_dir_header& header,
-			    rgw_bucket_dir_entry& entry)
+static void _account_entry(rgw_bucket_category_stats& stats,
+                           const rgw_bucket_dir_entry_meta& meta)
 {
-  if (entry.exists) {
-    rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-    stats.num_entries--;
-    stats.total_size -= entry.meta.accounted_size;
-    stats.total_size_rounded -=
-      cls_rgw_get_rounded_size(entry.meta.accounted_size);
-    stats.actual_size -= entry.meta.size;
+  stats.num_entries++;
+  stats.total_size += meta.accounted_size;
+  stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+  stats.actual_size += meta.size;
+}
+
+static void _unaccount_entry(rgw_bucket_category_stats& stats,
+                             const rgw_bucket_dir_entry_meta& meta)
+{
+  stats.num_entries--;
+  stats.total_size -= meta.accounted_size;
+  stats.total_size_rounded -=
+    cls_rgw_get_rounded_size(meta.accounted_size);
+  stats.actual_size -= meta.size;
+}
+
+static int _xaccount_entry(cls_method_context_t hctx,
+                           rgw_bucket_dir_header& header,
+                           const rgw_bucket_dir_entry_meta& meta,
+                           void (*account_func)(rgw_bucket_category_stats&, const rgw_bucket_dir_entry_meta&))
+{
+  rgw_bucket_category_stats& stats = header.stats[meta.category];
+  CLS_LOG(20, "%s(): header.max_snap_id=%d meta.snap_id=%d", __func__, (int)header.max_snap_id.snap_id, (int)meta.snap_id.snap_id);
+
+  if (meta.snap_id.snap_id == rgw_bucket_snap_id::SNAP_MIN &&
+      !header.max_snap_id.is_set()) {
+    CLS_LOG(20, "%s(): write to base snap, done", __func__);
+    account_func(stats, meta);
+    /* write to base snap, not updating any other stats */
+    return 0;
   }
+
+  if (!header.max_snap_id.is_set()) {
+    CLS_LOG(20, "%s(): first time new snapshot", __func__);
+    header.max_snap_id = rgw_bucket_snap_id::SNAP_MIN;
+    header.max_snap_stats = header.stats;
+  }
+  CLS_LOG(20, "%s(): (after) header.max_snap_id=%d", __func__, (int)header.max_snap_id.snap_id);
+
+  /* now header.max_snap_id is set */
+
+  if (meta.snap_id > header.max_snap_id) {
+    CLS_LOG(20, "%s(): meta.snap_id > header.max_snap_id", __func__);
+    /* a new snap, let's flush current stats to their snap stats index */
+    rgw_bucket_dir_snap_header snap_header;
+    snap_header.stats.snap_id = header.max_snap_id;
+    snap_header.stats.total_stats = header.stats;
+    snap_header.stats.snap_stats = *header.max_snap_stats;
+
+    string index_key;
+    encode_snap_header_index_key(header.max_snap_id, &index_key);
+    int r = write_bucket_snap_header(hctx, index_key, &snap_header);
+    if (r < 0) {
+      CLS_LOG(0, "%s(): ERROR: write_bucket_snap_header for index_key=%s returned %d", __func__, escape_str(index_key).c_str(), r);
+      return r;
+    }
+
+    /* now update the header to point at new snap */
+    header.max_snap_id = meta.snap_id;
+    header.max_snap_stats = rgw_bucket_dir_stats();
+  }
+
+  if (meta.snap_id < header.max_snap_id) {
+    CLS_LOG(20, "%s(): meta.snap_id < header.max_snap_id", __func__);
+    /* out of order, a write to an old snap, let's fetch its stats and write them
+     * but not keep it
+     */
+    string index_key;
+    rgw_bucket_dir_snap_header snap_header;
+    int r = read_bucket_snap_header(hctx, meta.snap_id, &index_key, &snap_header);
+    if (r < 0) {
+      CLS_LOG(0, "%s(): ERROR: read_bucket_snap_header for index_key=%s returned %d", __func__, escape_str(index_key).c_str(), r);
+      return r;
+    }
+
+    auto& total_stats = snap_header.stats.total_stats[meta.category];
+    account_func(total_stats, meta);
+    auto& snap_stats = snap_header.stats.snap_stats[meta.category];
+    account_func(snap_stats, meta);
+
+    r = write_bucket_snap_header(hctx, index_key, &snap_header);
+    if (r < 0) {
+      CLS_LOG(0, "%s(): ERROR: write_bucket_snap_header for index_key=%s returned %d", __func__, escape_str(index_key).c_str(), r);
+      return r;
+    }
+
+    account_func(stats, meta);
+
+    return 0;
+  }
+
+  account_func(stats, meta);
+
+  /* meta.snap_id == header.max_snap_id */
+
+  auto& snap_stats = (*header.max_snap_stats)[meta.category];
+  account_func(snap_stats, meta);
+
+  /* not flushing it now, caller will flush the header.
+   * max_snap_id stats will be written to their own index once
+   * a snap is encountered
+   */
+
+  return 0;
+}
+
+static int account_entry(cls_method_context_t hctx,
+                         rgw_bucket_dir_header& header,
+                         const rgw_bucket_dir_entry_meta& meta)
+{
+  return _xaccount_entry(hctx, header, meta, _account_entry);
+}
+
+static int unaccount_entry(cls_method_context_t hctx,
+                           rgw_bucket_dir_header& header,
+                           const rgw_bucket_dir_entry& entry)
+{
+  if (!entry.exists) {
+    return 0;
+  }
+
+  return _xaccount_entry(hctx, header, entry.meta, _unaccount_entry);
 }
 
 static void log_entry(const char *func, const char *str, rgw_bucket_dir_entry *entry)
@@ -1221,7 +1465,11 @@ static int complete_remove_obj(cls_method_context_t hctx,
   CLS_LOG(10, "%s: read entry name=%s instance=%s category=%d", __func__,
           entry.key.name.c_str(), entry.key.instance.c_str(),
           int(entry.meta.category));
-  unaccount_entry(header, entry);
+  ret = unaccount_entry(hctx, header, entry);
+  if (ret < 0) {
+    CLS_LOG(1, "%s: ERROR: unaccount_entry() failed with %d", __func__, ret);
+    return ret;
+  }
 
   ret = remove_entry(hctx, idx, key, header);
   if (ret < 0) {
@@ -1358,7 +1606,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } // CLS_RGW_OP_CANCEL
   else if (op.op == CLS_RGW_OP_DEL) {
     // unaccount deleted entry
-    unaccount_entry(header, entry);
+    rc = unaccount_entry(hctx, header, entry);
+    if (rc < 0) {
+      CLS_LOG_BITX(bitx_inst, 0,
+		   "ERROR: %s: key=%s, unaccount_entry failed with %d",
+                   __func__, escape_str(idx).c_str(), rc);
+      return rc;
+    }
 
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: delete op, key=%s",
@@ -1400,20 +1654,24 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: add op, key=%s",
 		 __func__, escape_str(idx).c_str());
-    // unaccount overwritten entry
-    unaccount_entry(header, entry);
+    // unaccount overwritten entry if the old entry belongs to the same snapshot
+    if (entry.meta.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN) == op.meta.snap_id) {
+      unaccount_entry(hctx, header, entry);
+    }
 
     rgw_bucket_dir_entry_meta& meta = op.meta;
-    rgw_bucket_category_stats& stats = header.stats[meta.category];
     entry.meta = meta;
     entry.key = op.key;
     entry.exists = true;
     entry.tag = op.tag;
     // account for new entry
-    stats.num_entries++;
-    stats.total_size += meta.accounted_size;
-    stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
-    stats.actual_size += meta.size;
+    rc = account_entry(hctx, header, meta);
+    if (rc < 0) {
+      CLS_LOG_BITX(bitx_inst, 1,
+                   "ERROR: %s: unable to account entry stats at key=%s, rc=%d",
+                   __func__, op.key.to_string().c_str(), rc);
+      return rc;
+    }
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: setting map entry at key=%s",
 		 __func__, escape_str(idx).c_str());
@@ -2866,10 +3124,13 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 		     __func__, escape_str(cur_change.key.to_string()).c_str(),
 		     stats.num_entries, stats.num_entries + 1);
 
-        stats.num_entries++;
-        stats.total_size += cur_change.meta.accounted_size;
-        stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
-        stats.actual_size += cur_change.meta.size;
+        ret = account_entry(hctx, header, cur_change.meta);
+        if (ret < 0) {
+          CLS_LOG_BITX(bitx_inst, 20,
+                       "INFO: %s: ERROR: account_entry() failed on key=%s (ret=%d)",
+                       __func__, escape_str(cur_change.key.to_string()).c_str(), ret);
+          return ret;
+        }
         header_changed = true;
         cur_change.index_ver = header.ver;
 
