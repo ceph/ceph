@@ -13,7 +13,6 @@
 #include "journal/ReplayHandler.h"
 #include "journal/Settings.h"
 #include <list>
-#include <boost/variant.hpp>
 
 void register_test_journal_entries() {
 }
@@ -147,7 +146,7 @@ TEST_F(TestJournalEntries, AioWrite) {
             event_entry.get_event_type());
 
   librbd::journal::AioWriteEvent aio_write_event =
-    boost::get<librbd::journal::AioWriteEvent>(event_entry.event);
+    std::get<librbd::journal::AioWriteEvent>(event_entry.event);
   ASSERT_EQ(123U, aio_write_event.offset);
   ASSERT_EQ(buffer.size(), aio_write_event.length);
 
@@ -191,7 +190,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
             event_entry.get_event_type());
 
   librbd::journal::AioDiscardEvent aio_discard_event =
-    boost::get<librbd::journal::AioDiscardEvent>(event_entry.event);
+    std::get<librbd::journal::AioDiscardEvent>(event_entry.event);
   ASSERT_EQ(123U, aio_discard_event.offset);
   ASSERT_EQ(234U, aio_discard_event.length);
 }
@@ -251,7 +250,7 @@ TEST_F(TestJournalEntries, AioDiscardWithPrune) {
               event_entry.get_event_type());
 
     librbd::journal::AioDiscardEvent aio_discard_event =
-      boost::get<librbd::journal::AioDiscardEvent>(event_entry.event);
+      std::get<librbd::journal::AioDiscardEvent>(event_entry.event);
     ASSERT_EQ(offset, aio_discard_event.offset);
     ASSERT_EQ(size, aio_discard_event.length);
 
