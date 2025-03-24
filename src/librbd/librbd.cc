@@ -1706,10 +1706,9 @@ namespace librbd {
   }
 
   int RBD::mirror_group_enable(IoCtx& group_ioctx, const char *group_name,
-                               mirror_image_mode_t mirror_image_mode,
-                               uint32_t flags) {
+                               mirror_image_mode_t mirror_image_mode) {
     return librbd::api::Mirror<>::group_enable(group_ioctx, group_name,
-                                               mirror_image_mode, flags);
+                                               mirror_image_mode);
   }
 
   int RBD::mirror_group_disable(IoCtx& group_ioctx, const char *group_name,
@@ -1718,14 +1717,12 @@ namespace librbd {
   }
 
   int RBD::mirror_group_promote(IoCtx& group_ioctx, const char *group_name,
-                                uint32_t flags, bool force) {
-    return librbd::api::Mirror<>::group_promote(group_ioctx, group_name,
-                                                flags, force);
+                                bool force) {
+    return librbd::api::Mirror<>::group_promote(group_ioctx, group_name, force);
   }
 
-  int RBD::mirror_group_demote(IoCtx& group_ioctx, const char *group_name,
-                               uint32_t flags) {
-    return librbd::api::Mirror<>::group_demote(group_ioctx, group_name, flags);
+  int RBD::mirror_group_demote(IoCtx& group_ioctx, const char *group_name) {
+    return librbd::api::Mirror<>::group_demote(group_ioctx, group_name);
   }
 
   int RBD::mirror_group_resync(IoCtx& group_ioctx, const char *group_name) {
@@ -8046,14 +8043,13 @@ extern "C" int rbd_mirror_group_list(rados_ioctx_t p, char *names,
 
 extern "C" int rbd_mirror_group_enable(rados_ioctx_t group_p,
                                        const char *group_name,
-                                       rbd_mirror_image_mode_t mirror_image_mode,
-                                       uint32_t flags)
+                                       rbd_mirror_image_mode_t mirror_image_mode)
 {
   librados::IoCtx group_ioctx;
   librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
 
   return librbd::api::Mirror<>::group_enable(group_ioctx, group_name,
-                                             mirror_image_mode, flags);
+                                             mirror_image_mode);
 }
 
 extern "C" int rbd_mirror_group_disable(rados_ioctx_t group_p,
@@ -8067,24 +8063,21 @@ extern "C" int rbd_mirror_group_disable(rados_ioctx_t group_p,
 
 extern "C" int rbd_mirror_group_promote(rados_ioctx_t group_p,
                                         const char *group_name,
-                                        uint32_t flags,
                                         bool force)
 {
   librados::IoCtx group_ioctx;
   librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
 
-  return librbd::api::Mirror<>::group_promote(group_ioctx, group_name,
-                                              flags, force);
+  return librbd::api::Mirror<>::group_promote(group_ioctx, group_name, force);
 }
 
 extern "C" int rbd_mirror_group_demote(rados_ioctx_t group_p,
-                                       const char *group_name,
-                                       uint32_t flags)
+                                       const char *group_name)
 {
   librados::IoCtx group_ioctx;
   librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
 
-  return librbd::api::Mirror<>::group_demote(group_ioctx, group_name, flags);
+  return librbd::api::Mirror<>::group_demote(group_ioctx, group_name);
 }
 
 extern "C" int rbd_mirror_group_resync(rados_ioctx_t group_p,
