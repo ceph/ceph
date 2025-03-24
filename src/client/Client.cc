@@ -7887,11 +7887,13 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
     /* Get extra requested caps on the last component */
     if (i == (path.depth() - 1)) {
       caps |= extra_options.mask;
+      #if 0
       if (diri->is_fscrypt_enabled()) {
         if (extra_options.mask & CEPH_FILE_MODE_WR) {
           caps |= CEPH_FILE_MODE_RD;
         }
       }
+      #endif
     }
 
     int r = _lookup(diri, dname, alternate_name, caps, &next, perms, extra_options.is_rename);
@@ -18254,7 +18256,7 @@ int Client::is_encrypted(int fd, UserPerm& perms, char* enctag)
       enctag = nullptr;
     }
 
-    return 0;
+    return 1;
   }
   enctag = nullptr;
   return -EINVAL;
@@ -18689,6 +18691,8 @@ SubvolumeMetricTracker::aggregate(bool clean) {
 // --- subvolume metrics tracking --- //
 
 int  Client::get_inode_flags(const Inode* in, int* file_attr_out) {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   if (!file_attr_out)
     return -EINVAL;
 
@@ -18703,6 +18707,8 @@ int  Client::get_inode_flags(const Inode* in, int* file_attr_out) {
 }
 
 int Client::get_inode_flags(int fd, int* file_attr_out) {
+  std::scoped_lock l{client_lock};
+
   Fh *fh = get_filehandle(fd);
   if (!fh) {
     return -EBADF;
