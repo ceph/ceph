@@ -23,7 +23,10 @@ enum NotifyOp {
   NOTIFY_OP_IMAGE_RELEASE      = 1,
   NOTIFY_OP_PEER_IMAGE_REMOVED = 2,
   NOTIFY_OP_SYNC_REQUEST       = 3,
-  NOTIFY_OP_SYNC_START         = 4
+  NOTIFY_OP_SYNC_START         = 4,
+  NOTIFY_OP_GROUP_ACQUIRE      = 5,
+  NOTIFY_OP_GROUP_RELEASE      = 6,
+  NOTIFY_OP_PEER_GROUP_REMOVED = 7,
 };
 
 struct PayloadBase {
@@ -132,6 +135,61 @@ struct SyncStartPayload : public SyncPayloadBase {
   }
 };
 
+struct GroupPayloadBase : public PayloadBase {
+  std::string global_group_id;
+
+  GroupPayloadBase() : PayloadBase() {
+  }
+
+  GroupPayloadBase(uint64_t request_id, const std::string &global_group_id)
+    : PayloadBase(request_id), global_group_id(global_group_id) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::const_iterator &iter);
+  void dump(Formatter *f) const;
+};
+
+struct GroupAcquirePayload : public GroupPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_GROUP_ACQUIRE;
+
+  GroupAcquirePayload() {
+  }
+  GroupAcquirePayload(uint64_t request_id, const std::string &global_group_id)
+    : GroupPayloadBase(request_id, global_group_id) {
+  }
+};
+
+struct GroupReleasePayload : public GroupPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_GROUP_RELEASE;
+
+  GroupReleasePayload() {
+  }
+  GroupReleasePayload(uint64_t request_id, const std::string &global_group_id)
+    : GroupPayloadBase(request_id, global_group_id) {
+  }
+};
+
+struct PeerGroupRemovedPayload : public PayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_PEER_GROUP_REMOVED;
+
+  std::string global_group_id;
+  std::string peer_mirror_uuid;
+
+  PeerGroupRemovedPayload() {
+  }
+  PeerGroupRemovedPayload(uint64_t request_id,
+                          const std::string& global_group_id,
+                          const std::string& peer_mirror_uuid)
+    : PayloadBase(request_id),
+      global_group_id(global_group_id), peer_mirror_uuid(peer_mirror_uuid) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::const_iterator &iter);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
 
@@ -148,6 +206,9 @@ typedef boost::variant<ImageAcquirePayload,
                        PeerImageRemovedPayload,
                        SyncRequestPayload,
                        SyncStartPayload,
+                       GroupAcquirePayload,
+                       GroupReleasePayload,
+                       PeerGroupRemovedPayload,
                        UnknownPayload> Payload;
 
 struct NotifyMessage {

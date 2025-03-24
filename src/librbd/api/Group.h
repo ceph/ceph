@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_API_GROUP_H
 #define CEPH_LIBRBD_API_GROUP_H
 
+#include "cls/rbd/cls_rbd_client.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rados/librados_fwd.hpp"
 #include <string>
@@ -23,13 +24,17 @@ struct Group {
   static int list(librados::IoCtx& io_ctx, std::vector<std::string> *names);
   static int get_id(librados::IoCtx& io_ctx, const char *group_name,
                     std::string *group_id);
+  static int get_name(librados::IoCtx& io_ctx, const char *group_id,
+                      std::string *group_name);
+  static int list(librados::IoCtx& io_ctx,
+                  std::map<std::string, std::string> *name_to_id_map);
   static int rename(librados::IoCtx& io_ctx, const char *src_group_name,
                     const char *dest_group_name);
 
   static int image_add(librados::IoCtx& group_ioctx, const char *group_name,
-		       librados::IoCtx& image_ioctx, const char *image_name);
+                       librados::IoCtx& image_ioctx, const char *image_name);
   static int image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-		          librados::IoCtx& image_ioctx, const char *image_name);
+                          librados::IoCtx& image_ioctx, const char *image_name);
   static int image_remove_by_id(librados::IoCtx& group_ioctx,
                                 const char *group_name,
                                 librados::IoCtx& image_ioctx,
@@ -55,6 +60,14 @@ struct Group {
   static int snap_rollback(librados::IoCtx& group_ioctx,
                            const char *group_name, const char *snap_name,
                            ProgressContext& pctx);
+
+  static int group_image_list_by_id(librados::IoCtx& group_ioctx,
+                                    const std::string &group_id,
+                                    std::vector<cls::rbd::GroupImageStatus> *images);
+  static int group_image_remove(librados::IoCtx& group_ioctx,
+                                std::string group_id,
+                                librados::IoCtx& image_ioctx,
+                                std::string image_id);
 
 };
 
