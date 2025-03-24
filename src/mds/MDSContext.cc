@@ -21,13 +21,12 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-void MDSContext::complete(int r) {
+void MDSContext::finish(int r) {
   MDSRank *mds = get_mds();
   ceph_assert(mds != nullptr);
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
-  dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
+  dout(10) << "MDSContext::finish: " << typeid(*this).name() << dendl;
   mds->heartbeat_reset();
-  return Context::complete(r);
 }
 
 void MDSInternalContextWrapper::finish(int r)
