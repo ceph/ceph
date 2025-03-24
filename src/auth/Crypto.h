@@ -141,7 +141,7 @@ public:
     *this = CryptoKey();
   }
 
-  int get_type() const { return type; }
+  unsigned get_type() const { return type; }
   utime_t get_created() const { return created; }
   void print(std::ostream& out) const;
 
