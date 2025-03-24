@@ -115,6 +115,7 @@ enum {
   s3GetBucketEncryption,
   s3PutBucketEncryption,
   s3ListBucketSnapshots,
+  s3PutBucketSnapshotsConfiguration,
   s3CreateBucketSnapshot,
   s3DeleteBucketSnapshot,
   s3DescribeJob,
@@ -276,8 +277,6 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectRetention:
   case s3PutObjectLegalHold:
   case s3BypassGovernanceRetention:
-  case s3CreateBucketSnapshot:
-  case s3DeleteBucketSnapshot:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -323,6 +322,9 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutReplicationConfiguration:
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
+  case s3PutBucketSnapshotsConfiguration:
+  case s3CreateBucketSnapshot:
+  case s3DeleteBucketSnapshot:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:

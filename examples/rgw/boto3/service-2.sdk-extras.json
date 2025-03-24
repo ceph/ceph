@@ -47,6 +47,21 @@
             "documentationUrl":"https://docs.ceph.com",
             "documentation":"<p>Get the list of snapshots for a bucket</p>"
         },
+        "PutBucketSnapshotsConfiguration":{
+            "name":"PutBucketSnapshotsConfiguration",
+            "http":{
+                "method":"PUT",
+                "requestUri":"/{Bucket}?snapshots",
+                "responseCode":200
+            },
+            "input":{"shape":"PutBucketSnapshotsConfigurationRequest"},
+            "documentationUrl":"https://docs.ceph.com",
+            "documentation":"<p>Enable/disable bucket snapshots on a specific bucket</p>",
+            "httpChecksum":{
+                "requestAlgorithmMember":"ChecksumAlgorithm",
+                "requestChecksumRequired":true
+            }
+        },
         "CreateBucketSnapshot":{
             "name":"CreateBucketSnapshot",
             "http":{
@@ -666,6 +681,43 @@
         "SnapName": {"type":"string"},
         "SnapDescription": {"type":"string"},
         "SnapCreationTime": {"type":"timestamp"},
+        "PutBucketSnapshotsConfigurationRequest":{
+            "type":"structure",
+            "required":[ "Bucket", "BucketSnapsConf" ],
+            "members":{
+                "Bucket":{
+                    "shape":"BucketName",
+                    "contextParam":{"name":"Bucket"},
+                    "location":"uri",
+                    "locationName":"Bucket"
+                },
+                "BucketSnapsConf": {
+                    "shape":"BucketSnapshotsConfiguration",
+                    "contextParam":{"name":"BucketSnapsConf"},
+                    "locationName":"SnapshotsConfiguration",
+                    "xmlNamespace":{"uri":"http://s3.amazonaws.com/doc/2006-03-01/"}
+                },
+                "ChecksumSHA256":{
+                        "shape":"ChecksumSHA256",
+                        "documentation":"<p>The Base64 encoded, 256-bit <code>SHA256</code> digest of the object. This will only be present if the object was uploaded with the object. When you use an API operation on an object that was uploaded using  multipart uploads, this value may not be a direct checksum value of the full object. Instead, it's a calculation based on the checksum values of each individual part. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p>"
+                }
+
+            },
+            "payload":"BucketSnapsConf"
+        },
+        "BucketSnapshotsConfiguration":{
+            "type":"structure",
+            "required":[ "Enabled" ],
+            "members":{
+                "Enabled": {
+                    "shape":"BucketSnapsEnabled",
+                    "contextParam":{"name":"Enabled"},
+                    "documentation": "<p/>",
+                    "location":"Name"
+                }
+            }
+        },
+        "BucketSnapsEnabled": {"type":"boolean"},
         "CreateBucketSnapshotRequest":{
             "type":"structure",
             "required":[ "Bucket", "SnapConf" ],

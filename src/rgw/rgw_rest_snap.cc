@@ -52,6 +52,123 @@ void RGWListBucketSnapshots_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWConfigureBucketSnapshots_ObjStore_S3::verify_permission(optional_yield y)
+{
+  auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
+  if (has_s3_resource_tag)
+    rgw_iam_add_buckettags(this, s);
+
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketSnapshotsConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWConfigureBucketSnapshots_ObjStore_S3::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+struct RGWConfigureBucketSnapshots_S3
+{
+  bool enabled{false};
+
+  void decode_xml(XMLObj *obj) {
+    RGWXMLDecoder::decode_xml("Enabled", enabled, obj, true);
+  }
+};
+
+int RGWConfigureBucketSnapshots_ObjStore_S3::get_params(optional_yield y)
+{
+  RGWXMLParser parser;
+
+  if (!parser.init()){
+    return -EINVAL;
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = 0;
+  bufferlist data;
+
+  std::tie(r, data) = read_all_input(s, max_size, false);
+
+  if (r < 0)
+    return r;
+
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWConfigureBucketSnapshots_S3 conf;
+  try {
+    RGWXMLDecoder::decode_xml("SnapshotsConfiguration", conf, &parser);
+  } catch (RGWXMLDecoder::err& err) {
+
+    ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
+    return -ERR_MALFORMED_XML;
+  }
+
+  enabled = conf.enabled;
+
+  return 0;
+}
+
+void RGWConfigureBucketSnapshots_ObjStore_S3::execute(optional_yield y)
+{
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
+  op_ret = get_params(y);
+  if (op_ret < 0) {
+    return;
+  }
+
+  auto& snap_mgr = s->bucket->get_info().local.snap_mgr;
+
+  if (snap_mgr.is_enabled()) {
+    if (enabled) {
+      /* already enabled, nothing to do */
+      return;
+    }
+
+    /* for now don't allow disabling/suspending already-enabled snapshots,
+     * need to validate that things work correctly
+     */
+    op_ret = -EINVAL;
+    s->err.message = "Bucket already has snapshots enabled, cannot disable";
+    return;
+  }
+  snap_mgr.set_enabled(enabled);
+
+  auto& bucket_info = s->bucket->get_info();
+  if ((bucket_info.flags & BUCKET_VERSIONED) == 0) {
+    /* need to enable bucket versioning for snapshotsi,
+     * we're setting it to suspended, which means that the
+     * objects will be handled as versioned object but version IDs
+     * will not be generated for them
+     */
+
+    bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+  }
+
+  op_ret = s->bucket->put_info(this, false, real_time(), y);
+  if (op_ret < 0) {
+    s->err.message = "Error";
+  }
+}
+
+void RGWConfigureBucketSnapshots_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format));
+  dump_start(s);
+}
+
 int RGWCreateBucketSnapshot_ObjStore_S3::verify_permission(optional_yield y)
 {
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
