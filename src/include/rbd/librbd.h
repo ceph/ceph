@@ -1646,17 +1646,14 @@ CEPH_RBD_API int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
 CEPH_RBD_API int rbd_mirror_group_list(rados_ioctx_t p, char *names,
                                        size_t *size);
 CEPH_RBD_API int rbd_mirror_group_enable(rados_ioctx_t p, const char *name,
-                                         rbd_mirror_image_mode_t mirror_image_mode,
-                                         uint32_t flags);
+                                         rbd_mirror_image_mode_t mirror_image_mode);
 CEPH_RBD_API int rbd_mirror_group_disable(rados_ioctx_t p, const char *name,
                                           bool force);
 CEPH_RBD_API int rbd_mirror_group_promote(rados_ioctx_t p,
                                           const char *name,
-                                          uint32_t flags,
                                           bool force);
 CEPH_RBD_API int rbd_mirror_group_demote(rados_ioctx_t p,
-                                         const char *name,
-                                         uint32_t flags);
+                                         const char *name);
 CEPH_RBD_API int rbd_mirror_group_resync(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_mirror_group_create_snapshot(rados_ioctx_t p,
                                                   const char *name,

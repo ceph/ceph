@@ -523,13 +523,10 @@ public:
   // RBD group mirroring support functions
   int mirror_group_list(IoCtx& io_ctx, std::vector<std::string> *names);
   int mirror_group_enable(IoCtx& io_ctx, const char *group_name,
-                          mirror_image_mode_t mirror_image_mode,
-                          uint32_t flags);
+                          mirror_image_mode_t mirror_image_mode);
   int mirror_group_disable(IoCtx& io_ctx, const char *group_name, bool force);
-  int mirror_group_promote(IoCtx& io_ctx, const char *group_name,
-                           uint32_t flags, bool force);
-  int mirror_group_demote(IoCtx& io_ctx, const char *group_name,
-                          uint32_t flags);
+  int mirror_group_promote(IoCtx& io_ctx, const char *group_name, bool force);
+  int mirror_group_demote(IoCtx& io_ctx, const char *group_name);
   int mirror_group_resync(IoCtx& io_ctx, const char *group_name);
   int mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
                                    uint32_t flags, std::string *snap_id);
