@@ -578,6 +578,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     },
   timeSeriesPanel(
     title='',
+    description='',
     datasource=null,
     gridPosition={},
     colorMode='palette-classic',
@@ -615,6 +616,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
   )::
     timeSeries.new(
       title=title,
+      description=description,
       gridPos=gridPosition,
       datasource=datasource,
       colorMode=colorMode,
