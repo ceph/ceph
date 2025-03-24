@@ -1365,6 +1365,7 @@ record_t Cache::prepare_record(
     // retiering extents, this is because logical linked tree
     // nodes needs to access their prior instances in this
     // phase if they are rewritten.
+    e->set_io_wait();
     e->prepare_commit();
   });
 
@@ -1796,6 +1797,7 @@ void Cache::complete_commit(
     assert(!i->is_dirty());
     const auto t_src = t.get_src();
     touch_extent(*i, &t_src, t.get_cache_hint());
+    i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
     // Note: commit extents and backref allocations in the same place
