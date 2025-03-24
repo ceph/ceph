@@ -25,7 +25,7 @@
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/deferred.hpp>
 #include <boost/asio/dispatch.hpp>
-#include <boost/asio/experimental/co_composed.hpp> // experimental until 1.86.0
+#include <boost/asio/co_composed.hpp>
 #include <boost/intrusive/list.hpp>
 #include <boost/system/error_code.hpp>
 
@@ -331,7 +331,7 @@ auto async_writes(RevertibleWriter& writer,
                   CompletionToken&& token)
 {
   return boost::asio::async_initiate<CompletionToken, void(error_code)>(
-      boost::asio::experimental::co_composed<void(error_code)>(
+      boost::asio::co_composed<void(error_code)>(
           [] (auto state, RevertibleWriter& writer,
               const std::map<int, std::string>& objects,
               size_t max_concurrent) -> void
@@ -459,7 +459,7 @@ auto async_writes(Writer& writer,
                   CompletionToken&& token)
 {
   return boost::asio::async_initiate<CompletionToken, void(error_code)>(
-      boost::asio::experimental::co_composed<void(error_code)>(
+      boost::asio::co_composed<void(error_code)>(
           [] (auto state, Writer& writer,
               const std::map<int, std::string>& objects,
               size_t max_concurrent) -> void
@@ -582,7 +582,7 @@ auto async_reads(Reader& reader,
                  CompletionToken&& token)
 {
   return boost::asio::async_initiate<CompletionToken, void(error_code)>(
-      boost::asio::experimental::co_composed<void(error_code)>(
+      boost::asio::co_composed<void(error_code)>(
           [] (auto state, Reader& reader,
               const std::map<int, std::string>& objects,
               size_t max_concurrent) -> void
