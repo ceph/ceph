@@ -2467,21 +2467,14 @@ int prepare_group_images(IoCtx& group_ioctx,
                          std::vector<uint64_t> &quiesce_requests,
                          cls::rbd::MirrorSnapshotState state,
                          std::set<std::string> *mirror_peer_uuids,
-                         uint32_t flags) {
+                         uint64_t internal_flags) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << dendl;
-
-  uint64_t internal_flags = 0;
-  int r = librbd::util::snap_create_flags_api_to_internal(cct, flags,
-                                                          &internal_flags);
-  if (r < 0) {
-    return r;
-  }
 
   auto ns = group_ioctx.get_namespace();
   group_ioctx.set_namespace("");
   std::vector<cls::rbd::MirrorPeer> peers;
-  r = cls_client::mirror_peer_list(&group_ioctx, &peers);
+  int r = cls_client::mirror_peer_list(&group_ioctx, &peers);
   if (r < 0) {
     lderr(cct) << "error reading mirror peers: " << cpp_strerror(r) << dendl;
     return r;
@@ -2725,8 +2718,7 @@ int Mirror<I>::group_list(IoCtx& io_ctx, std::vector<std::string> *names) {
 
 template <typename I>
 int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
-                            mirror_image_mode_t mirror_image_mode,
-                            uint32_t flags) {
+                            mirror_image_mode_t mirror_image_mode) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << ", group_name=" << group_name
@@ -2734,11 +2726,22 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
 		 << ", mirror_image_mode=" << mirror_image_mode << dendl;
 
   if (mirror_image_mode != RBD_MIRROR_IMAGE_MODE_SNAPSHOT) {
+     lderr(cct) << "cannot enable group mirroring, only snapshot mode is supported"
+                << dendl;
     return -EOPNOTSUPP;
   }
 
+  uint64_t internal_flags;
+  int r = librbd::util::snap_create_flags_api_to_internal(
+      cct, librbd::util::get_default_snap_create_flags(group_ioctx),
+      &internal_flags);
+  if (r < 0) {
+    lderr(cct) << "error getting flags: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   std::string group_id;
-  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
+  r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
   if (r < 0) {
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
@@ -2748,13 +2751,14 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
   cls::rbd::MirrorMode mirror_mode;
   r = cls_client::mirror_mode_get(&group_ioctx, &mirror_mode);
   if (r < 0) {
-    lderr(cct) << "cannot enable mirroring: failed to retrieve mirror mode: "
+    lderr(cct) << "cannot enable mirroring, failed to retrieve mirror mode: "
                << cpp_strerror(r) << dendl;
     return r;
   }
 
   if (mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
-    lderr(cct) << "cannot enable mirroring, as it is not in the image mirror mode" << dendl;
+    lderr(cct) << "cannot enable mirroring, as it is not in the image mirror mode"
+               << dendl;
     return -EINVAL;
   }
 
@@ -2807,7 +2811,7 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
                            &mirror_peer_uuids,
-                           flags);
+                           internal_flags);
   if (r != 0) {
     return r;
   }
@@ -3047,7 +3051,7 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
-                             uint32_t flags, bool force) {
+                             bool force) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << ", group_name=" << group_name
@@ -3250,7 +3254,8 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
-                           &mirror_peer_uuids, flags);
+                           &mirror_peer_uuids,
+                           SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
   if (r != 0) {
     return r;
   }
@@ -3297,7 +3302,8 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                              &group_snap, quiesce_requests,
                              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                             &mirror_peer_uuids, flags);
+                             &mirror_peer_uuids,
+                             SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
     if (r != 0) {
       return r;
     }
@@ -3351,8 +3357,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Mirror<I>::group_demote(IoCtx& group_ioctx,
-                            const char *group_name,
-                            uint32_t flags) {
+                            const char *group_name) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << ", group_name=" << group_name << dendl;
@@ -3412,7 +3417,8 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
   r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                            &group_snap, quiesce_requests,
                            cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                           &mirror_peer_uuids, flags);
+                           &mirror_peer_uuids,
+                           SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
   if (r != 0) {
     return r;
   }
@@ -3460,7 +3466,8 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                              &group_snap, quiesce_requests,
                              cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                             &mirror_peer_uuids, flags);
+                             &mirror_peer_uuids,
+                             SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE);
     if (r != 0) {
       return r;
     }
