@@ -40,11 +40,11 @@ class MgmtGatewayService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
-    def get_mgmt_gw_ips(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> List[str]:
-        mgmt_gw_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+    def get_mgmt_gw_ip(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> str:
         if svc_spec.virtual_ip is not None:
-            mgmt_gw_ips.append(svc_spec.virtual_ip)
-        return mgmt_gw_ips
+            return svc_spec.virtual_ip
+        else:
+            return self.mgr.inventory.get_addr(daemon_spec.host)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
@@ -63,9 +63,12 @@ class MgmtGatewayService(CephadmService):
                 key = svc_spec.ssl_certificate_key
             else:
                 # not provided on the spec, let's generate self-sigend certificates
-                ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
-                host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
+                ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
+                # we don't include the host_fqdn in case of using a virtual_ip
+                # because we may have several instances of the mgmt-gateway running
+                # on different hosts
+                host_fqdn = [] if svc_spec.virtual_ip else [self.mgr.get_fqdn(daemon_spec.host)]
+                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
             # save certificates
             if cert and key:
                 self.mgr.cert_mgr.save_cert('mgmt_gw_cert', cert, user_made=user_made)
@@ -75,9 +78,9 @@ class MgmtGatewayService(CephadmService):
         return cert, key
 
     def get_internal_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
+        ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        return self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
+        return self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
 
     def get_service_discovery_endpoints(self) -> List[str]:
         sd_endpoints = []
