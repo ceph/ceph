@@ -19,6 +19,7 @@ import { MdsDashboardSummaryPipe } from './mds-dashboard-summary.pipe';
 import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
+import { IconModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -31,10 +32,10 @@ import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
     FormsModule,
     ReactiveFormsModule,
     DashboardV3Module,
-    BaseChartDirective
+    BaseChartDirective,
+    IconModule
   ],
   declarations: [
-    HealthComponent,
     DashboardComponent,
     MonSummaryPipe,
     osdDashboardSummaryPipe,
@@ -43,7 +44,8 @@ import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
     HealthPieComponent,
     InfoCardComponent,
     InfoGroupComponent,
-    FeedbackComponent
+    FeedbackComponent,
+    HealthComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })

@@ -13,7 +13,8 @@ import {
   InputModule,
   ModalModule,
   TreeviewModule,
-  ListModule
+  ListModule,
+  IconModule
 } from 'carbon-components-angular';
 
 import {
@@ -108,10 +109,10 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ButtonModule,
     InputModule,
     ModalModule,
-    ListModule
+    ListModule,
+    IconModule
   ],
   declarations: [
-    HostsComponent,
     MonitorComponent,
     ConfigurationComponent,
     OsdListComponent,
