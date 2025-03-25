@@ -6,11 +6,6 @@
 #include "include/encoding.h"
 #include "ECUtil.h"
 
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_osd
-#undef dout_prefix
-#define dout_prefix _prefix(_dout)
-
 using namespace std;
 using ceph::bufferlist;
 using ceph::ErasureCodeInterfaceRef;
@@ -473,7 +468,7 @@ namespace ECUtil {
                                  uint64_t before_ro_size)
   {
     bool rebuild_req = false;
-    shard_id_set out_set = sinfo->get_data_shards();
+    shard_id_set out_set = sinfo->get_parity_shards();
 
     for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
       if (!iter.is_page_aligned()) {

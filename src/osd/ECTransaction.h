@@ -31,7 +31,7 @@ class WritePlanObj {
   const uint64_t orig_size;
   uint64_t projected_size;
   bool invalidates_cache;
-  bool do_parity_delta_write;
+  bool do_parity_delta_write = false;
 
   WritePlanObj(
       const hobject_t &hoid,
