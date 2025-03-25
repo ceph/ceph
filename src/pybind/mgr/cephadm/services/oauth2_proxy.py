@@ -73,4 +73,4 @@ class OAuth2ProxyService(CephadmService):
             }
         }
 
-        return daemon_config, []
+        return daemon_config, super().get_dependencies(self.mgr, svc_spec)
