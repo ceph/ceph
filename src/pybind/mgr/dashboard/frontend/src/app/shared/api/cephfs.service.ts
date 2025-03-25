@@ -79,10 +79,15 @@ export class CephfsService {
     });
   }
 
-  create(name: string, serviceSpec: object) {
+  create(name: string, serviceSpec: object, dataPool = '', metadataPool = '') {
     return this.http.post(
       this.baseURL,
-      { name: name, service_spec: serviceSpec },
+      {
+        name: name,
+        service_spec: serviceSpec,
+        data_pool: dataPool,
+        metadata_pool: metadataPool
+      },
       {
         observe: 'response'
       }
@@ -116,5 +121,9 @@ export class CephfsService {
       caps: caps,
       root_squash: rootSquash
     });
+  }
+
+  getUsedPools(): Observable<number[]> {
+    return this.http.get<number[]>(`${this.baseUiURL}/used-pools`);
   }
 }
