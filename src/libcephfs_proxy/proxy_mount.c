@@ -470,7 +470,7 @@ int32_t proxy_path_resolve(proxy_mount_t *mount, const char *path,
 	}
 
 	if (err >= 0) {
-		err = proxy_path_lookup(proxy_cmount(mount), iter.base, ".",
+		err = proxy_path_lookup(proxy_cmount(mount), iter.base, "",
 					inode, stx, want, flags, iter.perms);
 	}
 
