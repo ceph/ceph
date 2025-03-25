@@ -1,4 +1,7 @@
 import { PageHelper } from '../page-helper.po';
+import { BucketsPageHelper } from './buckets.po';
+
+const buckets = new BucketsPageHelper();
 
 export class ConfigurationPageHelper extends PageHelper {
   pages = {
@@ -45,5 +48,10 @@ export class ConfigurationPageHelper extends PageHelper {
 
   private selectSecretEngine(secret_engine: string) {
     return this.selectOption('secret_engine', secret_engine);
+  }
+
+  checkBucketEncryption() {
+    buckets.navigateTo('create');
+    cy.get('input[name=encryption_enabled]').should('be.enabled');
   }
 }
