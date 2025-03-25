@@ -2,6 +2,7 @@ import fnmatch
 import os
 import re
 import enum
+from enum import Enum
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
@@ -23,6 +24,8 @@ from typing import (
 )
 
 import yaml
+import json
+import hashlib
 
 from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
@@ -32,6 +35,19 @@ from ceph.utils import is_hex
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
+
+
+class CertificateSource(Enum):
+    """
+    Describes the source of the certificate used by cephadm:
+
+    - INLINE: Certificate is embedded inline in the spec.
+    - REFEFRENCE: Certificate is provided by the user through an external reference (certmgr by default).
+    - FROM_CEPHADM: Certificate is generated and signed by cephadm (via certmgr).
+    """
+    INLINE = "inline"
+    REFEFRENCE = "reference"
+    CEPHADM_SIGNED = "cephadm-signed"
 
 
 def handle_type_error(method: FuncT) -> FuncT:
@@ -865,6 +881,8 @@ class ServiceSpec(object):
                  placement: Optional[PlacementSpec] = None,
                  count: Optional[int] = None,
                  config: Optional[Dict[str, str]] = None,
+                 ssl: Optional[bool] = False,
+                 certificate_source: Optional[str] = CertificateSource.INLINE.value,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
@@ -888,6 +906,9 @@ class ServiceSpec(object):
         #: The name of the service. Required for ``iscsi``, ``nvmeof``, ``mds``, ``nfs``, ``osd``,
         #: ``rgw``, ``container``, ``ingress``
         self.service_id = None
+
+        self.certificate_source = certificate_source
+        self.ssl = ssl
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
             self.service_id = service_id
@@ -1120,6 +1141,14 @@ class ServiceSpec(object):
                 and
                 self.__dict__ == other.__dict__)
 
+    def spec_hash(self, length: int = 12) -> str:
+        """
+        Return a short stable SHA-256 hex digest of the full service-spec JSON.
+        """
+        json_repr = json.dumps(self.to_json(), sort_keys=True)
+        full_hash = hashlib.sha256(json_repr.encode('utf-8')).hexdigest()
+        return full_hash[:length]
+
     def one_line_str(self) -> str:
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
 
@@ -1217,6 +1246,7 @@ class RGWSpec(ServiceSpec):
                  rgw_frontend_extra_args: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
+                 certificate_source: Optional[str] = CertificateSource.INLINE.value,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
@@ -1243,6 +1273,8 @@ class RGWSpec(ServiceSpec):
 
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
+            ssl=ssl,
+            certificate_source=certificate_source,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
@@ -1675,6 +1707,7 @@ class IscsiServiceSpec(ServiceSpec):
                  api_user: Optional[str] = 'admin',
                  api_password: Optional[str] = 'admin',
                  api_secure: Optional[bool] = None,
+                 ssl: Optional[bool] = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
@@ -1689,6 +1722,7 @@ class IscsiServiceSpec(ServiceSpec):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
+                                               ssl=ssl,
                                                preview_only=preview_only,
                                                config=config, networks=networks,
                                                extra_container_args=extra_container_args,
@@ -1775,6 +1809,7 @@ class IngressSpec(ServiceSpec):
             'ingress', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            ssl=ssl,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
@@ -1854,6 +1889,8 @@ class MgmtGatewaySpec(ServiceSpec):
                  disable_https: Optional[bool] = False,
                  enable_auth: Optional[bool] = False,
                  port: Optional[int] = None,
+                 ssl: Optional[bool] = True,
+                 certificate_source: str = CertificateSource.CEPHADM_SIGNED.value,
                  ssl_certificate: Optional[str] = None,
                  ssl_certificate_key: Optional[str] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
@@ -1879,6 +1916,8 @@ class MgmtGatewaySpec(ServiceSpec):
             'mgmt-gateway', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            ssl=ssl,
+            certificate_source=certificate_source,
             preview_only=preview_only,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -1995,7 +2034,9 @@ class OAuth2ProxySpec(ServiceSpec):
                  oidc_issuer_url: Optional[str] = None,
                  redirect_url: Optional[str] = None,
                  cookie_secret: Optional[str] = None,
+                 ssl: Optional[bool] = True,
                  ssl_certificate: Optional[str] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
                  ssl_certificate_key: Optional[str] = None,
                  allowlist_domains: Optional[List[str]] = None,
                  unmanaged: bool = False,
@@ -2009,6 +2050,8 @@ class OAuth2ProxySpec(ServiceSpec):
             'oauth2-proxy', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            ssl=ssl,
+            certificate_source=certificate_source,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
@@ -2323,6 +2366,8 @@ class MonitoringSpec(ServiceSpec):
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
+            ssl=True,
+            certificate_source=CertificateSource.CEPHADM_SIGNED.value,
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
