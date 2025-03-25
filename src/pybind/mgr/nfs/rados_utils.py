@@ -28,7 +28,11 @@ class NFSRados:
     def _create_url_block(self, obj_name: str) -> RawBlock:
         return RawBlock('%url', values={'value': self._make_rados_url(obj_name)})
 
-    def write_obj(self, conf_block: str, obj: str, config_obj: str = '') -> None:
+    def write_obj(self,
+                  conf_block: str,
+                  obj: str,
+                  config_obj: str = '',
+                  should_notify: Optional[bool] = True) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             ioctx.write_full(obj, conf_block.encode('utf-8'))
@@ -41,7 +45,8 @@ class NFSRados:
             # Add created obj url to common config obj
             ioctx.append(config_obj, format_block(
                          self._create_url_block(obj)).encode('utf-8'))
-            _check_rados_notify(ioctx, config_obj)
+            if should_notify:
+                _check_rados_notify(ioctx, config_obj)
             log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
@@ -63,7 +68,7 @@ class NFSRados:
                 _check_rados_notify(ioctx, config_obj)
             log.debug("Update export %s in %s", obj, config_obj)
 
-    def remove_obj(self, obj: str, config_obj: str) -> None:
+    def remove_obj(self, obj: str, config_obj: str, should_notify: Optional[bool] = True) -> None:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
             export_urls = ioctx.read(config_obj)
@@ -71,7 +76,8 @@ class NFSRados:
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
             ioctx.remove_object(obj)
             ioctx.write_full(config_obj, export_urls)
-            _check_rados_notify(ioctx, config_obj)
+            if should_notify:
+                _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
 
     def remove_all_obj(self) -> None:
