@@ -1260,17 +1260,15 @@ public:
                      const DoutPrefixProvider *dpp,
                      optional_yield y,
                      bool log_op = true);
-int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
+  int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& dest_bucket_info,
                              const rgw_obj& dest_obj,
-                             rgw_placement_rule& dest_placement,
                              RGWObjTier& tier_config,
-                             uint64_t olh_epoch,
                              std::optional<uint64_t> days,
+			     bool& in_progress,
                              const DoutPrefixProvider *dpp,
-                             optional_yield y,
-                             bool log_op = true);
+                             optional_yield y);
 
   int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
 

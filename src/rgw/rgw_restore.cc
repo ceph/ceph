@@ -169,40 +169,13 @@ int RGWRestore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
 }
 
 int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket, rgw::sal::Object* pobj,
-	          	 	       RGWObjTier& tier_config, bool restore_op,
+				       rgw::sal::PlacementTier* tier,
 				       std::optional<uint64_t> days, optional_yield y)
 {
    int ret = 0;
    if (!pbucket || !pobj) {
       ldpp_dout(this, -1) << "ERROR: Invalid bucket/object. Restore failed" << dendl;
       return -EINVAL;
-   }
-
-   auto& attrs = pobj->get_attrs();
-
-   std::unique_ptr<rgw::sal::PlacementTier> tier;
-   rgw_placement_rule target_placement;
-
-   target_placement.inherit_from(pbucket->get_placement_rule());
-
-   auto attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
-   if (attr_iter != attrs.end()) {
-      target_placement.storage_class = attr_iter->second.to_str();
-   }
-   ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
-
-   if (ret < 0) {
-      ldpp_dout(this, -1) << "failed to fetch tier placement handle, ret = " << ret << dendl;
-      return ret;
-   } else {
-      ldpp_dout(this, 20) << "getting tier placement handle cloud tier for " <<
-                       " storage class " << target_placement.storage_class << dendl;
-   }
-
-   if (!tier->is_tier_type_s3()) {
-     ldpp_dout(this, -1) << "ERROR: not s3 tier type - " << tier->get_tier_type() << 
-                       " for storage class " << target_placement.storage_class << dendl;
-     return -EINVAL;
    }
 
    // set restore_status as RESTORE_ALREADY_IN_PROGRESS
@@ -213,27 +186,25 @@ int RGWRestore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket, rgw::sal::Obje
    }
 
    // now go ahead with restoring object
-   rgw_bucket_dir_entry ent;
-   ent.key.name = pobj->get_key().name;
-   ent.key.instance = pobj->get_key().instance;
-   ent.meta.accounted_size = ent.meta.size = pobj->get_size();
-   ent.meta.etag = "" ;
-   uint64_t epoch = 0; //pobj->get_epoch();
-   if (!ent.key.instance.empty()) { // non-current versioned object
-      ent.flags |= rgw_bucket_dir_entry::FLAG_VER;
-   }
-   ret = pobj->restore_obj_from_cloud(pbucket, tier.get(), target_placement,
-   				 ent, cct, tier_config, epoch,
-				 days, this, y, pbucket->get_info().flags);
+   bool in_progress = false;
+   ret = pobj->restore_obj_from_cloud(pbucket, tier, cct, days, in_progress,
+		  		      this, y);
    if (ret < 0) {
-      ldpp_dout(this, 0) << "object " << ent.key.name << " fetching failed" << ret << dendl;
+      ldpp_dout(this, -1) << "Restore of object(" << pobj->get_key() << ") failed" << ret << dendl;
 
       auto reset_ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreFailed);
+
+      if (reset_ret < 0) {
+        ldpp_dout(this, -1) << "Setting restore status ad RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;
+      }
       return ret;
    }
 
    ldpp_dout(this, 20) << "Restore of object " << pobj->get_key() << " succeeded" << dendl;
 
-   return ret;
+   if (in_progress) {
+     // add restore entry to the list
+   }
 
+   return ret;
 }

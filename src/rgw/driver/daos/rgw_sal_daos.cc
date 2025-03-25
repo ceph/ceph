@@ -1028,15 +1028,11 @@ int DaosObject::transition_to_cloud(
 
 int DaosObject::restore_obj_from_cloud(Bucket* bucket,
           rgw::sal::PlacementTier* tier,
-          rgw_placement_rule& placement_rule,
-          rgw_bucket_dir_entry& o,
 	  CephContext* cct,
-          RGWObjTier& tier_config,
-          uint64_t olh_epoch,
           std::optional<uint64_t> days,
+	  bool& in_progress,
           const DoutPrefixProvider* dpp, 
-          optional_yield y,
-          uint32_t flags)
+          optional_yield y)
 {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }

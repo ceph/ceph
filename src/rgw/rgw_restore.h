@@ -94,6 +94,6 @@ public:
   int set_cloud_restore_status(const DoutPrefixProvider* dpp, rgw::sal::Object* pobj,
 		  	   optional_yield y, rgw::sal::RGWRestoreStatus restore_status);
   int restore_obj_from_cloud(rgw::sal::Bucket* pbucket, rgw::sal::Object* pobj,
-         	 	     RGWObjTier& tier_config, bool restore_op,
+         	 	     rgw::sal::PlacementTier* tier,
 			     std::optional<uint64_t> days, optional_yield y);
 };

@@ -990,6 +990,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
       return op_ret;
     }
+
     attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
     rgw::sal::RGWRestoreStatus restore_status = rgw::sal::RGWRestoreStatus::None;
     if (attr_iter != attrs.end()) {
@@ -1010,8 +1011,42 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       return 2; // corresponds to CLOUD_RESTORED
     } else { // first time restore or previous restore failed.
 	     // Restore the object.
-      op_ret = driver->get_rgwrestore()->restore_obj_from_cloud(s->bucket.get(), s->object.get(),
-		     			tier_config, restore_op, days, y);
+      std::unique_ptr<rgw::sal::PlacementTier> tier;
+      rgw_placement_rule target_placement;
+
+      target_placement.inherit_from(s->bucket->get_placement_rule());
+
+      auto attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+      if (attr_iter != attrs.end()) {
+        target_placement.storage_class = attr_iter->second.to_str();
+      }
+      op_ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
+
+      if (op_ret < 0) {
+        ldpp_dout(dpp, -1) << "failed to fetch tier placement handle, ret = " << op_ret << dendl;
+        return op_ret;
+      } else {
+        ldpp_dout(dpp, 20) << "getting tier placement handle cloud tier for " <<
+                         " storage class " << target_placement.storage_class << dendl;
+      }
+
+      if (!tier->is_tier_type_s3()) {
+        ldpp_dout(dpp, -1) << "ERROR: not s3 tier type - " << tier->get_tier_type() << 
+                       " for storage class " << target_placement.storage_class << dendl;
+        return -EINVAL;
+      }
+
+      if (!restore_op) {
+        if (tier->allow_read_through()) {
+          days = tier->get_read_through_restore_days();
+        } else { //read-through is not enabled
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          s->err.message = "Read through is not enabled for this config";
+          return op_ret;
+        }
+      }
+      op_ret = driver->get_rgwrestore()->restore_obj_from_cloud(s->bucket.get(),
+		      s->object.get(), tier.get(), days, y);
       if (op_ret < 0) {
         ldpp_dout(dpp, 0) << "Restore of object " << s->object->get_key() << " failed" << op_ret << dendl;
         s->err.message = "failed to restore object";
