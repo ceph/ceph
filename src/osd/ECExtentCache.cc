@@ -2,17 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "ECExtentCache.h"
-
 #include "ECUtil.h"
+
+#include <ranges>
 
 using namespace std;
 using namespace ECUtil;
 
-#define dout_context cct
-#define dout_subsys ceph_subsys_osd
-
-void ECExtentCache::Object::request(OpRef &op)
-{
+void ECExtentCache::Object::request(OpRef &op) {
   /* After a cache invalidation, we allow through a single cache-invalidating
    * IO.
    */
@@ -27,7 +24,7 @@ void ECExtentCache::Object::request(OpRef &op)
 
   extent_set eset = op->get_pin_eset(line_size);
 
-  for (auto &&[start, len]: eset ) {
+  for (auto &&[start, len] : eset) {
     for (uint64_t to_pin = start; to_pin < start + len; to_pin += line_size) {
       LineRef l;
       if (!lines.contains(to_pin)) {
@@ -51,7 +48,7 @@ void ECExtentCache::Object::request(OpRef &op)
    * post-invalidate ops are honoured.
    */
   if (op->reads && !cache_invalidate_expected) {
-    for (auto &&[shard, eset]: *(op->reads)) {
+    for (auto &&[shard, eset] : *(op->reads)) {
       extent_set request = eset;
       if (do_not_read.contains(shard)) {
         request.subtract(do_not_read.at(shard));
@@ -98,8 +95,7 @@ void ECExtentCache::Object::request(OpRef &op)
   else op->read_done = true;
 }
 
-void ECExtentCache::Object::send_reads()
-{
+void ECExtentCache::Object::send_reads() {
   if (reading || requesting.empty())
     return; // Read busy
 
@@ -109,10 +105,9 @@ void ECExtentCache::Object::send_reads()
   reading = true;
 }
 
-void ECExtentCache::Object::read_done(shard_extent_map_t const &buffers)
-{
+void ECExtentCache::Object::read_done(shard_extent_map_t const &buffers) {
   reading = false;
-  for (auto && op : reading_ops) {
+  for (auto &&op : reading_ops) {
     op->read_done = true;
   }
   reading_ops.clear();
@@ -120,13 +115,11 @@ void ECExtentCache::Object::read_done(shard_extent_map_t const &buffers)
   send_reads();
 }
 
-uint64_t ECExtentCache::Object::line_align(uint64_t x) const
-{
+uint64_t ECExtentCache::Object::line_align(uint64_t x) const {
   return x - (x % line_size);
 }
 
-void ECExtentCache::Object::insert(shard_extent_map_t const &buffers)
-{
+void ECExtentCache::Object::insert(shard_extent_map_t const &buffers) const {
   if (buffers.empty()) return;
 
   /* The following gets quite inefficient for writes which write to the start
@@ -150,13 +143,14 @@ void ECExtentCache::Object::insert(shard_extent_map_t const &buffers)
   }
 }
 
-void ECExtentCache::Object::write_done(shard_extent_map_t const &buffers, uint64_t new_size)
-{
+void ECExtentCache::Object::write_done(shard_extent_map_t const &buffers,
+                                       uint64_t new_size
+  ) {
   insert(buffers);
   current_size = new_size;
 }
 
-void ECExtentCache::Object::unpin(Op &op) {
+void ECExtentCache::Object::unpin(Op &op) const {
   op.lines.clear();
   delete_maybe();
 }
@@ -167,8 +161,8 @@ void ECExtentCache::Object::delete_maybe() const {
   }
 }
 
-void check_seset_empty_for_range(shard_extent_set_t s, uint64_t off, uint64_t len)
-{
+void check_seset_empty_for_range(shard_extent_set_t s, uint64_t off,
+                                 uint64_t len) {
   for (auto &[shard, eset] : s) {
     ceph_assert(!eset.intersects(off, len));
   }
@@ -181,9 +175,8 @@ void ECExtentCache::Object::erase_line(uint64_t offset) {
   delete_maybe();
 }
 
-void ECExtentCache::Object::invalidate(OpRef &invalidating_op)
-{
-  for (auto &[_, l] : lines ) {
+void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
+  for (auto &l : std::views::values(lines)) {
     l.lock()->cache->clear();
   }
 
@@ -214,9 +207,7 @@ void ECExtentCache::Object::invalidate(OpRef &invalidating_op)
   }
 }
 
-void ECExtentCache::cache_maybe_ready()
-{
-
+void ECExtentCache::cache_maybe_ready() {
   while (!waiting_ops.empty()) {
     OpRef op = waiting_ops.front();
     if (op->invalidates_cache) {
@@ -244,32 +235,32 @@ void ECExtentCache::cache_maybe_ready()
   }
 }
 
-ECExtentCache::OpRef ECExtentCache::prepare(GenContextURef<OpRef &> && ctx,
-  hobject_t const &oid,
-  std::optional<shard_extent_set_t> const &to_read,
-  shard_extent_set_t const &write,
-  uint64_t orig_size,
-  uint64_t projected_size,
-  bool invalidates_cache)
-{
-
+ECExtentCache::OpRef ECExtentCache::prepare(GenContextURef<OpRef&> &&ctx,
+                                            hobject_t const &oid,
+                                            std::optional<shard_extent_set_t>
+                                            const &to_read,
+                                            shard_extent_set_t const &write,
+                                            uint64_t orig_size,
+                                            uint64_t projected_size,
+                                            bool invalidates_cache) {
   if (!objects.contains(oid)) {
     objects.emplace(oid, Object(*this, oid, orig_size));
   }
   OpRef op = std::make_shared<Op>(
-    std::move(ctx), objects.at(oid), to_read, write, projected_size, invalidates_cache);
+    std::move(ctx), objects.at(oid), to_read, write, projected_size,
+    invalidates_cache);
 
   return op;
 }
 
-void ECExtentCache::read_done(hobject_t const& oid, shard_extent_map_t const&& update)
-{
+void ECExtentCache::read_done(hobject_t const &oid,
+                              shard_extent_map_t const &&update) {
   objects.at(oid).read_done(update);
   cache_maybe_ready();
 }
 
-void ECExtentCache::write_done(OpRef const &op, shard_extent_map_t const && update)
-{
+void ECExtentCache::write_done(OpRef const &op,
+                               shard_extent_map_t const &&update) {
   op->write_done(std::move(update));
 }
 
@@ -291,19 +282,18 @@ ECExtentCache::Op::~Op() {
 }
 
 void ECExtentCache::on_change() {
-  for (auto && [_, o] : objects) {
+  for (auto &&o : std::views::values(objects)) {
     o.reading_ops.clear();
     o.requesting_ops.clear();
     o.requesting.clear();
   }
-  for (auto && op : waiting_ops) {
+  for (auto &&op : waiting_ops) {
     op->cancel();
   }
   waiting_ops.clear();
 }
 
-void ECExtentCache::on_change2()
-{
+void ECExtentCache::on_change2() const {
   lru.discard();
   /* If this assert fires in a unit test, make sure that all ops have completed
    * and cleared any extent cache ops they contain */
@@ -321,25 +311,22 @@ void ECExtentCache::execute(list<OpRef> &op_list) {
   cache_maybe_ready();
 }
 
-bool ECExtentCache::idle() const
-{
+bool ECExtentCache::idle() const {
   return active_ios == 0;
 }
 
-int ECExtentCache::get_and_reset_counter()
-{
+int ECExtentCache::get_and_reset_counter() {
   int ret = counter;
   counter = 0;
   return ret;
 }
 
-void ECExtentCache::LRU::erase(Key &k)
-{
+void ECExtentCache::LRU::erase(const Key &k) {
   erase(map.at(k).first, true);
 }
 
 list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(
-    list<Key>::iterator &it,
+    const list<Key>::iterator &it,
     bool do_update_mempool) {
   uint64_t size_change = map.at(*it).second->size();
   if (do_update_mempool) {
@@ -350,7 +337,7 @@ list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(
   return lru.erase(it);
 }
 
-void ECExtentCache::LRU::add(Line &line) {
+void ECExtentCache::LRU::add(const Line &line) {
   if (line.size == 0) {
     update_mempool(-1, 0);
     return;
@@ -370,8 +357,8 @@ void ECExtentCache::LRU::add(Line &line) {
   mutex.unlock();
 }
 
-shared_ptr<shard_extent_map_t> ECExtentCache::LRU::find(hobject_t &oid, uint64_t offset)
-{
+shared_ptr<shard_extent_map_t> ECExtentCache::LRU::find(
+    const hobject_t &oid, uint64_t offset) {
   Key k(offset, oid);
   shared_ptr<shard_extent_map_t> cache = nullptr;
   mutex.lock();
@@ -384,10 +371,9 @@ shared_ptr<shard_extent_map_t> ECExtentCache::LRU::find(hobject_t &oid, uint64_t
   return cache;
 }
 
-void ECExtentCache::LRU::remove_object(hobject_t &oid)
-{
+void ECExtentCache::LRU::remove_object(const hobject_t &oid) {
   mutex.lock();
-  for (auto it = lru.begin(); it != lru.end(); ) {
+  for (auto it = lru.begin(); it != lru.end();) {
     if (it->oid == oid) it = erase(it, true);
     else ++it;
   }
@@ -419,41 +405,40 @@ extent_set ECExtentCache::Op::get_pin_eset(uint64_t alignment) const {
   return eset;
 }
 
-ECExtentCache::Op::Op(GenContextURef<OpRef &> &&cache_ready_cb,
-  Object &object,
-  std::optional<shard_extent_set_t> const &to_read,
-  shard_extent_set_t const &write,
-  uint64_t projected_size,
-  bool invalidates_cache) :
+ECExtentCache::Op::Op(GenContextURef<OpRef&> &&cache_ready_cb,
+                      Object &object,
+                      std::optional<shard_extent_set_t> const &to_read,
+                      shard_extent_set_t const &write,
+                      uint64_t projected_size,
+                      bool invalidates_cache) :
   object(object),
   reads(to_read),
   writes(write),
   result(&object.sinfo),
   invalidates_cache(invalidates_cache),
   projected_size(projected_size),
-  cache_ready_cb(std::move(cache_ready_cb))
-{
+  cache_ready_cb(std::move(cache_ready_cb)) {
   object.active_ios++;
   object.pg.active_ios++;
 }
 
-shard_extent_map_t ECExtentCache::Object::get_cache(std::optional<shard_extent_set_t> const &set) const
-{
+shard_extent_map_t ECExtentCache::Object::get_cache(
+    std::optional<shard_extent_set_t> const &set) const {
   if (!set) return shard_extent_map_t(&sinfo);
 
   shard_id_map<extent_map> res(sinfo.get_k_plus_m());
-  for (auto && [shard, eset] : *set) {
-    for ( auto [off, len] : eset) {
+  for (auto &&[shard, eset] : *set) {
+    for (auto [off, len] : eset) {
       for (uint64_t slice_start = line_align(off);
            slice_start < off + len;
-           slice_start += line_size)
-      {
+           slice_start += line_size) {
         uint64_t offset = max(slice_start, off);
-        uint64_t length = min(slice_start + line_size, off  + len) - offset;
+        uint64_t length = min(slice_start + line_size, off + len) - offset;
         // This line must exist, as it was created when the op was created.
         LineRef l = lines.at(slice_start).lock();
         if (l->cache->contains_shard(shard)) {
-          extent_map m = l->cache->get_extent_map(shard).intersect(offset, length);
+          extent_map m = l->cache->get_extent_map(shard).intersect(
+            offset, length);
           if (!m.empty()) {
             if (!res.contains(shard)) res.emplace(shard, std::move(m));
             else res.at(shard).insert(m);
