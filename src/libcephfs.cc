@@ -2298,7 +2298,9 @@ extern "C" void ceph_ll_readv_writev_release(void *release_data)
 extern "C" int64_t ceph_ll_readv_writev(class ceph_mount_info *cmount,
 				     struct ceph_ll_io_info *io_info)
 {
-  ceph_ll_readv_writev_buffer *buf = new ceph_ll_readv_writev_buffer;
+  // buffer needed only for reads, no need to allocate for writes
+  ceph_ll_readv_writev_buffer *buf =
+    io_info->write ? nullptr : new ceph_ll_readv_writev_buffer;
 
   // a zero copy read MUST provide a length 1 iovec,
   // where the buffer is a nullptr and the length is the requested read length
@@ -2308,7 +2310,7 @@ extern "C" int64_t ceph_ll_readv_writev(class ceph_mount_info *cmount,
 
   io_info->result = (cmount->get_client()->ll_preadv_pwritev(
 			io_info->fh, io_info->iov, io_info->iovcnt,
-			io_info->off, io_info->write, nullptr, &buf->bl,
+			io_info->off, io_info->write, nullptr, buf ? &buf->bl : nullptr,
 			io_info->fsync, io_info->syncdataonly, io_info->zerocopy));
 
   if (!io_info->write && io_info->result > 0) {

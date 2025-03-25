@@ -11515,16 +11515,18 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     if (fh->flags & O_PATH)
         return -EBADF;
 #endif
-    // negative iovcount is invalid,
-    // for ZC read - we must use provided buffer, it will contain the data after the read
-    // for ZC write - we must have iovec AND we will enforce that CEPH buffer is not passed
-    if (iovcnt < 0 || (zerocopy && ((!blp && !write) || (!iov && write)))) {
+    // negative iovcnt is not allowed
+    // for ZC read - we must have buffer AND iovec with len=1
+    // for ZC write - we don't use buffer and must have iovec with len>0
+    // for backward compatability, we assume that iovcnt maybe 0 so we check it explicitly for ZC, where
+    // it can't be 0
+    if (iovcnt < 0 || (zerocopy && (iovcnt < 1 || !iov || (!write && !blp && iovcnt != 1)))) {
       return -EINVAL;
     }
     loff_t totallen = 0;
     for (int i = 0; i < iovcnt; i++) {
-        // NOTE: zero copy read has passed in an iov that is just used to
-        //       communicate the length.
+        // NOTE: zero copy read has passed in an iov of len 1 that is just used to
+        // communicate the length.
         totallen += iov[i].iov_len;
     }
 
@@ -11545,7 +11547,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     } else {
         bufferlist bl;
         // if zerocopy, blp can't be null due to the check above
-        // the read will be into Ceph buffers which are returned to the caller.
+        // the read will be into Ceph buffers which are returned to the caller
         int64_t r = _read(fh, offset, totallen, blp ? blp : &bl,
                           onfinish);
         ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
