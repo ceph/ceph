@@ -484,6 +484,46 @@ std::shared_ptr<rocksdb::Cache> RocksDBStore::create_block_cache(
   return cache;
 }
 
+void get_mutableCFOptions(std::vector<std::string>& cf_options)
+{
+    cf_options.push_back("write_buffer_size");
+    cf_options.push_back("max_write_buffer_number");
+    cf_options.push_back("arena_block_size");
+    cf_options.push_back("memtable_prefix_bloom_size_ratio");
+    cf_options.push_back("memtable_whole_key_filtering");
+    cf_options.push_back("memtable_huge_page_size");
+    cf_options.push_back("max_successive_merges");
+    cf_options.push_back("inplace_update_num_locks");
+    cf_options.push_back("prefix_extractor");
+    cf_options.push_back("disable_auto_compactions");
+    cf_options.push_back("soft_pending_compaction_bytes_limit");
+    cf_options.push_back("hard_pending_compaction_bytes_limit");
+    cf_options.push_back("level0_file_num_compaction_trigger");
+    cf_options.push_back("level0_slowdown_writes_trigger");
+    cf_options.push_back("level0_stop_writes_trigger");
+    cf_options.push_back("max_compaction_bytes");
+    cf_options.push_back("target_file_size_base");
+    cf_options.push_back("target_file_size_multiplier");
+    cf_options.push_back("max_bytes_for_level_base");
+    cf_options.push_back("max_bytes_for_level_multiplier");
+    cf_options.push_back("ttl");
+    cf_options.push_back("periodic_compaction_seconds");
+    cf_options.push_back("compaction_options_fifo");
+    cf_options.push_back("enable_blob_files");
+    cf_options.push_back("min_blob_size");
+    cf_options.push_back("blob_file_size");
+    cf_options.push_back("blob_compression_type");
+    cf_options.push_back("enable_blob_garbage_collection");
+    cf_options.push_back("blob_garbage_collection_age_cutoff");
+    cf_options.push_back("max_sequential_skip_in_iterations");
+    cf_options.push_back("check_flush_compaction_key_order");
+    cf_options.push_back("paranoid_file_checks");
+    cf_options.push_back("report_bg_io_stats");
+    cf_options.push_back("compression");
+    cf_options.push_back("bottommost_compression");
+    cf_options.push_back("sample_for_compression"); 
+}
+
 int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt)
 {
   rocksdb::Status status;
