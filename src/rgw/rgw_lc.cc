@@ -363,7 +363,7 @@ public:
   LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
       driver(_driver), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
-    list_params.allow_unordered = true; // XXX can be unconditionally true, so long as all versions of one object are assured to be on one shard and always ordered on that shard (true today in RADOS)
+    list_params.allow_unordered = !(driver->ctx()->_conf.get_val<bool>("rgw_lc_allow_ordered_list"));
     delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   }
 
@@ -377,7 +377,9 @@ public:
   }
 
   int fetch(const DoutPrefixProvider *dpp) {
-    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield);
+    CephContext* cct = dpp->get_cct();
+    uint32_t cnt = int32_t(cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt"));
+    int ret = bucket->list(dpp, list_params, cnt, list_results, null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -902,8 +904,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   params.list_versions = false;
   /* lifecycle processing does not depend on total order, so can
    * take advantage of unordered listing optimizations--such as
-   * operating on one shard at a time */
-  params.allow_unordered = true;
+   * operating on one shard at a time. default true */
+  params.allow_unordered = !(cct->_conf.get_val<bool>("rgw_lc_allow_ordered_list"));
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = MultipartMetaFilter;
 

@@ -462,6 +462,26 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lc_allow_ordered_list
+  type: bool
+  level: dev
+  desc: The lc processing to do ordered listing for the bucket.
+  long_desc: Enabling this for RGW LifeCycle, will cause the lc process to do ordered
+    listing from the bucket. This might increase CPU and memory usage on RGW.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_list_cnt
+  type: uint
+  level: dev
+  desc: The count of number of objects in per listing of lc processing from each bucket.
+  long_desc: Number of objects that will be requested when performing a listing request
+    of a bucket for lifecycle processing.
+  default: 1000
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_restore_debug_interval
   type: int
   level: dev
