@@ -58,6 +58,11 @@
 * RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
   existing versioning-enabled bucket that was not created with Object Lock enabled.
 
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
+
+
 >=19.0.0
 
 * ceph: a new --daemon-output-file switch is available for `ceph tell` commands
