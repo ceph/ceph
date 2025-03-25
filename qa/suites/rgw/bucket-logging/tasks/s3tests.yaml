@@ -1,0 +1,6 @@
+tasks:
+- s3tests:
+    client.0:
+      boto3_extensions: True
+      rgw_server: client.0
+      extra_attrs: ["bucket_logging"]

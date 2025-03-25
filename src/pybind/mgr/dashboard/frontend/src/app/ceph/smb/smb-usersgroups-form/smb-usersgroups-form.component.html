@@ -1,0 +1,238 @@
+<div
+  cdsCol
+  [columnNumbers]="{ md: 4 }"
+>
+  <form name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div
+      i18n="form title"
+      class="form-header"
+    >
+      {{ action | titlecase }} {{ resource | upperFirst }}
+    </div>
+
+    <!-- Users Groups Id -->
+    <div class="form-item">
+      <cds-text-label
+        for="usersGroupsId"
+        i18n
+        helperText="Unique identifier"
+        i18n-helperText
+        [invalid]="form.controls.usersGroupsId.invalid && form.controls.usersGroupsId.dirty"
+        [invalidText]="usersgroupsError"
+      >Users and groups access resource name
+        <input
+          cdsText
+          type="text"
+          id="usersGroupsId"
+          name="usersGroupsId"
+          formControlName="usersGroupsId"
+        />
+      </cds-text-label>
+      <ng-template #usersgroupsError>
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('usersGroupsId', form, 'required')"
+          i18n
+          >This field is required.</span
+        >
+      </ng-template>
+    </div>
+
+    <!-- LinkedToCluster -->
+    <div
+      *ngIf="smbClusters$ | async as clusters"
+      class="form-item"
+    >
+      <cds-select
+        label="Linked to cluster"
+        i18n-label
+        formControlName="linkedToCluster"
+        name="linkedToCluster"
+        helperText="This resource may only be used with the linked cluster and will automatically be removed when the linked cluster is removed."
+        i18n-helperText
+        cdOptionalField="Linked to cluster"
+      >
+        <option
+          [value]="null"
+          i18n
+        >-- List of clusters --
+        </option>
+        <option
+          *ngFor="let cluster of clusters"
+          [value]="cluster.cluster_id">{{ cluster.cluster_id }}
+        </option>
+      </cds-select>
+    </div>
+
+    <!-- Users -->
+    <ng-container
+      formArrayName="users"
+      *ngFor="let _ of users.controls; index as i"
+    >
+      <ng-container [formGroupName]="i">
+        <div
+          cdsRow
+          class="form-item form-item-append"
+        >
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 7 }"
+          >
+            <cds-text-label
+              for="name"
+              i18n
+              [invalid]="form.controls['users'].controls[i].controls.name.invalid &&
+                          form.controls['users'].controls[i].controls.name.dirty"
+              [invalidText]="usersNameError"
+            >Username
+              <input
+                cdsText
+                type="text"
+                formControlName="name"
+                [invalid]="form.controls['users'].controls[i].controls.name.invalid &&
+                          form.controls['users'].controls[i].controls.name.dirty"
+              />
+            </cds-text-label>
+            <ng-template #usersNameError>
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            </ng-template>
+          </div>
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 7 }"
+          >
+            <cds-password-label
+              for="password"
+              i18n
+              [invalid]="form.controls['users'].controls[i].controls.password.invalid &&
+                          form.controls['users'].controls[i].controls.password.dirty"
+              [invalidText]="usersPasswordError"
+            >Password
+            <input
+              cdsPassword
+              type="password"
+              label="Password"
+              formControlName="password"
+              [invalid]="form.controls['users'].controls[i].controls.password.invalid &&
+                          form.controls['users'].controls[i].controls.password.dirty"
+            >
+          </cds-password-label>
+          <ng-template #usersPasswordError>
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+          </div>
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 1 }"
+            class="item-action-btn spacing"
+          >
+            <cds-icon-button
+              kind="danger"
+              *ngIf="i > 0"
+              size="sm"
+              (click)="removeUser(i)"
+            >
+            <svg
+              cdsIcon="trash-can"
+              size="32"
+              class="cds--btn__icon">
+            </svg>
+          </cds-icon-button>
+        </div>
+        </div>
+      </ng-container>
+    </ng-container>
+
+    <div class="form-item">
+      <button
+        cdsButton="tertiary"
+        type="button"
+        (click)="addUser()"
+        i18n
+      >Add User
+        <svg
+          cdsIcon="add"
+          size="32"
+          class="cds--btn__icon"
+          icon>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Groups -->
+    <ng-container
+      formArrayName="groups"
+      *ngFor="let _ of groups.controls; index as i"
+    >
+      <ng-container [formGroupName]="i">
+        <div
+          cdsRow
+          class="form-item form-item-append"
+        >
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 14 }"
+          >
+          <cds-text-label
+            for="name"
+            i18n
+          >Group
+            <input
+              cdsText
+              type="text"
+              formControlName="name"
+            />
+          </cds-text-label>
+          </div>
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 1 }"
+            class="item-action-btn spacing">
+            <cds-icon-button
+              kind="danger"
+              size="sm"
+              (click)="removeGroup(i)"
+            >
+            <svg
+              cdsIcon="trash-can"
+              size="32"
+              class="cds--btn__icon">
+            </svg>
+          </cds-icon-button>
+          </div>
+        </div>
+      </ng-container>
+    </ng-container>
+
+    <div class="form-item">
+      <button cdsButton="tertiary"
+              type="button"
+              (click)="addGroup()"
+              i18n>
+        Add Group
+        <svg
+          cdsIcon="add"
+          size="32"
+          class="cds--btn__icon"
+          icon></svg>
+      </button>
+    </div>
+
+    <cd-form-button-panel
+      (submitActionEvent)="submit()"
+      [form]="form"
+      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+      wrappingClass="text-right"></cd-form-button-panel>
+    </form>
+  </div>

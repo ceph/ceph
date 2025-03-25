@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+tasks:
+- install:
+- cephadm:
+    conf:
+      mgr:
+        debug ms: 1
+        debug mgr: 20
