@@ -30,6 +30,7 @@ import { PerformanceCounterComponent } from './ceph/performance-counter/performa
 import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { UserPasswordFormComponent } from './core/auth/user-password-form/user-password-form.component';
+import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { ErrorComponent } from './core/error/error.component';
 import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.component';
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
@@ -56,6 +57,7 @@ import { SmbShareFormComponent } from './ceph/smb/smb-share-form/smb-share-form.
 import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join-auth-form.component';
 import { SmbUsersgroupsFormComponent } from './ceph/smb/smb-usersgroups-form/smb-usersgroups-form.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
+import { UnsavedChangesGuard } from './shared/services/unsaved-changes.guard';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -529,6 +531,11 @@ const routes: Routes = [
             data: { breadcrumbs: ActionLabels.EDIT }
           }
         ]
+      },
+      {
+        path: 'user-form',
+        component: UserFormComponent,
+        canDeactivate: [UnsavedChangesGuard]
       }
     ]
   },
