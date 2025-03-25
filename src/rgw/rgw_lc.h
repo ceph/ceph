@@ -295,7 +295,7 @@ public:
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(prefix, bl);
     if (struct_v >= 2) {
       decode(obj_tags, bl);
