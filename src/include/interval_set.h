@@ -25,6 +25,14 @@
 
 #include "encoding.h"
 
+/* strict_mode_assert is a standard ceph_assert() in product code. Some tests
+ * (specifically test_interval_set.cc) can override this macro with an
+ * exception.
+ */
+#ifndef strict_mode_assert
+#define strict_mode_assert(expr) ceph_assert(expr)
+#endif
+
 /*
  * *** NOTE ***
  *
@@ -362,7 +370,7 @@ class interval_set {
 
       auto start = std::max<T>(ps->first, pl->first);
       auto en = std::min<T>(ps->first + ps->second, offset);
-      ceph_assert(en > start);
+      strict_mode_assert(en > start);
       mi = m.emplace_hint(mi, start, en - start);
       _size += mi->second;
       if (ps->first + ps->second <= offset) {
@@ -556,7 +564,7 @@ class interval_set {
 
         if (p->first + p->second != start) {
           //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
-          ceph_abort();
+          strict_mode_assert(false);
         }
 
         p->second += len;               // append to end
@@ -572,7 +580,7 @@ class interval_set {
 	    *plen = p->second;
           m.erase(n);
         } else {
-          ceph_assert(n == m.end() || start + len < n->first);
+          strict_mode_assert(n == m.end() || start + len < n->first);
 	  if (plen)
 	    *plen = p->second;
 	}
@@ -586,7 +594,7 @@ class interval_set {
           m.erase(p);
           m[start] = len + psecond;  // append to front
         } else {
-          ceph_assert(p->first > start+len);
+          strict_mode_assert(p->first > start+len);
 	  if (pstart)
 	    *pstart = start;
 	  if (plen)
@@ -677,11 +685,11 @@ class interval_set {
 
     _size -= len;
 
-    ceph_assert(p != m.end());
-    ceph_assert(p->first <= start);
+    strict_mode_assert(p != m.end());
+    strict_mode_assert(p->first <= start);
 
     T before = start - p->first;
-    ceph_assert(p->second >= before+len);
+    strict_mode_assert(p->second >= before+len);
     T after = p->second - before - len;
     if (before) {
       if (claim && claim(p->first, before)) {
@@ -999,4 +1007,5 @@ public:
 template<typename T, template<typename, typename, typename ...> class C, bool strict>
 struct fmt::is_range<interval_set<T, C, strict>, char> : std::false_type {};
 
+#undef strict_mode_assert
 #endif
