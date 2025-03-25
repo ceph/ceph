@@ -10,6 +10,14 @@ And('enter {string} {string}', (field: string, value: string) => {
 });
 
 /**
+ * Ticks a checkbox in the form
+ * @param field name of the field that needs to be filled out.
+ */
+And('checks {string}', (field: string) => {
+  cy.get('cds-checkbox span').contains(field).click();
+});
+
+/**
  * Fills in the given field using the value provided
  * @param field ID of the field that needs to be filled out.
  * @param value Value that should be filled in the field.
@@ -95,6 +103,6 @@ Then('I should see an error in {string} field', (field: string) => {
 });
 
 And('select {string} {string}', (selectionName: string, option: string) => {
-  cy.get(`select[name=${selectionName}]`).select(option);
-  cy.get(`select[name=${selectionName}] option:checked`).contains(option);
+  cy.get(`select[id=${selectionName}]`).select(option);
+  cy.get(`select[id=${selectionName}] option:checked`).contains(option);
 });
