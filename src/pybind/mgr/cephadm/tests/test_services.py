@@ -4037,7 +4037,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4286,7 +4286,7 @@ class TestMgmtGateway:
                                          http {
 
                                              #access_log /dev/stdout;
-                                             error_log /dev/stderr info;
+                                             error_log /dev/stderr warn;
                                              client_header_buffer_size 32K;
                                              large_client_header_buffers 4 32k;
                                              proxy_busy_buffers_size 512k;
@@ -4608,14 +4608,17 @@ class TestMgmtGateway:
                                        enable_auth=True,
                                        virtual_ip=virtual_ip)
 
+        allowed_domain = '192.168.100.1:8080'
         oauth2_spec = OAuth2ProxySpec(provider_display_name='my_idp_provider',
                                       client_id='my_client_id',
                                       client_secret='my_client_secret',
                                       oidc_issuer_url='http://192.168.10.10:8888/dex',
                                       cookie_secret='kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ=',
                                       ssl_certificate=ceph_generated_cert,
-                                      ssl_certificate_key=ceph_generated_key)
+                                      ssl_certificate_key=ceph_generated_key,
+                                      allowlist_domains=[allowed_domain])
 
+        whitelist_domains = f"{allowed_domain},1::4,ceph-node" if virtual_ip is None else f"{allowed_domain},{virtual_ip},1::4,ceph-node"
         redirect_url = f"https://{virtual_ip if virtual_ip else 'host_fqdn'}:5555/oauth2/callback"
         expected = {
             "fsid": "fsid",
@@ -4669,7 +4672,7 @@ class TestMgmtGateway:
                                          # Secret value for encrypting cookies.
                                          cookie_secret= "kbAEM9opAmuHskQvt0AW8oeJRaOM2BYy5Loba0kZ0SQ="
                                          email_domains= "*"
-                                         whitelist_domains= "1::4,ceph-node\""""),
+                                         whitelist_domains= "{whitelist_domains}\""""),
                     "oauth2-proxy.crt": f"{ceph_generated_cert}",
                     "oauth2-proxy.key": f"{ceph_generated_key}",
                 }
