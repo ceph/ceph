@@ -5117,9 +5117,12 @@ void RGWDeleteObj::execute(optional_yield y)
   if (!rgw::sal::Object::empty(s->object.get())) {
     uint64_t obj_size = 0;
     std::string etag;
+    bool null_verid;
     {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
+      null_verid = (s->object->get_instance() == "null");
+
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5217,6 +5220,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
+      del_op->params.null_verid = null_verid;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
