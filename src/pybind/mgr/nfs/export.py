@@ -876,13 +876,13 @@ class ExportMgr:
                           enable_qos: bool,
                           bw_obj: Optional[QOSBandwidthControl] = None,
                           ops_obj: Optional[QOSOpsControl] = None) -> None:
-        """Update Export QOS block"""
+        """Update Export QoS block"""
         # if qos_block does not exists in export create one else update existing block
         if not export_obj.qos_block:
-            log.debug(f"Creating new QOS block for export {pseudo_path} of cluster {cluster_id}")
+            log.debug(f"Creating new QoS block for export {pseudo_path} of cluster {cluster_id}")
             export_obj.qos_block = QOS(enable_qos=enable_qos, bw_obj=bw_obj, ops_obj=ops_obj)
         else:
-            log.debug(f"Updating existing QOS block of export {pseudo_path} of cluster {cluster_id}")
+            log.debug(f"Updating existing QoS block of export {pseudo_path} of cluster {cluster_id}")
             export_obj.qos_block.enable_qos = enable_qos
             if bw_obj:
                 export_obj.qos_block.bw_obj = bw_obj
@@ -891,7 +891,7 @@ class ExportMgr:
 
         self.exports[cluster_id].remove(export_obj)
         self._update_export(cluster_id, export_obj, False)
-        log.debug(f"Successfully updated QOS control config for export {pseudo_path} of cluster {cluster_id}")
+        log.debug(f"Successfully updated QoS control config for export {pseudo_path} of cluster {cluster_id}")
 
     def get_export_obj(self, cluster_id: str, pseudo_path: str) -> Export:
         self._validate_cluster_id(cluster_id)
@@ -921,9 +921,9 @@ class ExportMgr:
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
             export_qos_bw_checks(cluster_id, self.mgr, bw_obj=bw_obj)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, True, bw_obj=bw_obj)
-            log.debug(f"Successfully enabled QOS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
+            log.debug(f"Successfully enabled QoS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
         except Exception as e:
-            log.exception(f"Setting NFS-Ganesha QOS bandwidth control failed for {pseudo_path} of {cluster_id}")
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control failed for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
 
     def get_export_qos(self, cluster_id: str, pseudo_path: str, ret_bw_in_bytes: bool = False) -> Dict[str, int]:
@@ -944,7 +944,7 @@ class ExportMgr:
                 return qos_block
             return {}
         except Exception as e:
-            log.exception(f"Failed to get QOS configuration for {pseudo_path} of {cluster_id}")
+            log.exception(f"Failed to get QoS configuration for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
 
     def disable_export_qos_bw(self, cluster_id: str, pseudo_path: str) -> None:
@@ -953,9 +953,9 @@ class ExportMgr:
             if export_obj.qos_block:
                 status = export_obj.qos_block.get_enable_qos_val(disable_bw=True)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, status, bw_obj=QOSBandwidthControl())
-            log.debug(f"Successfully disabled QOS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
+            log.debug(f"Successfully disabled QoS bandwidth control for export {pseudo_path} of cluster {cluster_id}")
         except Exception as e:
-            log.exception(f"Setting NFS-Ganesha QOS bandwidth control failed for {pseudo_path} of {cluster_id}")
+            log.exception(f"Setting NFS-Ganesha QoS bandwidth control failed for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
 
     def enable_export_qos_ops(self, cluster_id: str, pseudo_path: str, ops_obj: QOSOpsControl) -> None:
@@ -963,9 +963,9 @@ class ExportMgr:
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
             export_qos_ops_checks(cluster_id, self.mgr, ops_obj=ops_obj)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, True, ops_obj=ops_obj)
-            log.debug(f"Successfully enabled QOS IOPS control for export {pseudo_path} of cluster {cluster_id}")
+            log.debug(f"Successfully enabled QoS IOPS control for export {pseudo_path} of cluster {cluster_id}")
         except Exception as e:
-            log.exception(f"Setting NFS-Ganesha QOS IOPS control failed for {pseudo_path} of {cluster_id}")
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control failed for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
 
     def disable_export_qos_ops(self, cluster_id: str, pseudo_path: str) -> None:
@@ -976,9 +976,9 @@ class ExportMgr:
             if export_obj.qos_block:
                 status = export_obj.qos_block.get_enable_qos_val(disable_ops=True)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, status, ops_obj=QOSOpsControl())
-            log.debug(f"Successfully updated QOS IOPS control for export {pseudo_path} of cluster {cluster_id}")
+            log.debug(f"Successfully updated QoS IOPS control for export {pseudo_path} of cluster {cluster_id}")
         except Exception as e:
-            log.exception(f"Setting NFS-Ganesha QOS IOPS control failed for {pseudo_path} of {cluster_id}")
+            log.exception(f"Setting NFS-Ganesha QoS IOPS control failed for {pseudo_path} of {cluster_id}")
             raise ErrorResponse.wrap(e)
 
 
