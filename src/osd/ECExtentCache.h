@@ -78,6 +78,10 @@ public:
     virtual ~BackendRead() = default;
   };
 
+  static void update_mempool(int items, int64_t bytes) {
+    mempool::get_pool(mempool::pool_index_t(mempool::mempool_ec_extent_cache)).
+      adjust_count(items, bytes);}
+
   class LRU {
   public:
     class Key
@@ -124,7 +128,7 @@ public:
     void discard();
     void add(Line &line);
     void erase(Key &k);
-    std::list<Key>::iterator erase(std::list<Key>::iterator &it);
+    std::list<Key>::iterator erase(std::list<Key>::iterator &it, bool update_mempool);
     std::shared_ptr<ECUtil::shard_extent_map_t> find(hobject_t &oid, uint64_t offset);
     void remove_object(hobject_t &oid);
   public:
@@ -250,6 +254,7 @@ private:
   {
   public:
     uint64_t offset;
+    uint64_t size;
     std::shared_ptr<ECUtil::shard_extent_map_t> cache;
     Object &object;
 
@@ -262,8 +267,12 @@ private:
 
       if (c == nullptr) {
         cache = std::make_shared<ECUtil::shard_extent_map_t>(&object.sinfo);
+        size = 0;
+        /* We are creating an empty cache line */
+        update_mempool(1, 0);
       } else {
         cache = c;
+        size = c->size();
       }
     }
 

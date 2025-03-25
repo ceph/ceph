@@ -195,7 +195,7 @@ namespace ECUtil {
 
       // If the result is empty, delete the extent map.
       if (extent_maps[shard].empty()) {
-          extent_maps.erase(shard);
+        extent_maps.erase(shard);
       }
     }
 
@@ -298,7 +298,9 @@ namespace ECUtil {
     uint64_t size = 0;
     for (auto &i : extent_maps)
     {
-      for (auto &j : i.second ) size += j.get_len();
+      for (auto &j : i.second ) {
+        size += j.get_len();
+      }
     }
 
     return size;
@@ -932,8 +934,9 @@ void shard_extent_set_t::intersection_of(const shard_extent_set_t &other) {
   }
 
   void shard_extent_set_t::insert(const shard_extent_set_t &other) {
-    for (auto && [shard, eset] : other)
+    for (auto && [shard, eset] : other) {
       map[shard].union_of(other.at(shard));
+    }
   }
 
 }

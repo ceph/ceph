@@ -142,6 +142,10 @@ void ECExtentCache::Object::insert(shard_extent_map_t const &buffers)
       LineRef l = lines.at(slice_start).lock();
       /* The line should have been created already! */
       l->cache->insert(slice);
+      uint64_t old_size = l->size;
+      l->size = l->cache->size();
+      ceph_assert(l->size >= old_size);
+      update_mempool(0, l->size - old_size);
     }
   }
 }
@@ -331,20 +335,26 @@ int ECExtentCache::get_and_reset_counter()
 
 void ECExtentCache::LRU::erase(Key &k)
 {
-  erase(map.at(k).first);
+  erase(map.at(k).first, true);
 }
 
-list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(list<Key>::iterator &it)
-{
-  size -= map.at(*it).second->size();
+list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(
+    list<Key>::iterator &it,
+    bool do_update_mempool) {
+  uint64_t size_change = map.at(*it).second->size();
+  if (do_update_mempool) {
+    update_mempool(-1, 0 - size_change);
+  }
+  size -= size_change;
   map.erase(*it);
   return lru.erase(it);
 }
 
-void ECExtentCache::LRU::add(Line &line)
-{
-  uint64_t _size = line.cache->size();
-  if (_size == 0) return;
+void ECExtentCache::LRU::add(Line &line) {
+  if (line.size == 0) {
+    update_mempool(-1, 0);
+    return;
+  }
 
   const Key k(line.offset, line.object.oid);
 
@@ -355,7 +365,7 @@ void ECExtentCache::LRU::add(Line &line)
   auto i = lru.insert(lru.end(), k);
   auto j = make_pair(std::move(i), std::move(cache));
   map.insert(std::pair(std::move(k), std::move(j)));
-  size += _size;
+  size += line.size; // This is already accounted for in mempool.
   free_maybe();
   mutex.unlock();
 }
@@ -368,7 +378,7 @@ shared_ptr<shard_extent_map_t> ECExtentCache::LRU::find(hobject_t &oid, uint64_t
   if (map.contains(k)) {
     auto &&[lru_iter, c] = map.at(k);
     cache = c;
-    erase(lru_iter);
+    erase(lru_iter, false);
   }
   mutex.unlock();
   return cache;
@@ -378,7 +388,7 @@ void ECExtentCache::LRU::remove_object(hobject_t &oid)
 {
   mutex.lock();
   for (auto it = lru.begin(); it != lru.end(); ) {
-    if (it->oid == oid) it = erase(it);
+    if (it->oid == oid) it = erase(it, true);
     else ++it;
   }
   mutex.unlock();
@@ -393,6 +403,7 @@ void ECExtentCache::LRU::free_maybe() {
 void ECExtentCache::LRU::discard() {
   mutex.lock();
   lru.clear();
+  update_mempool(0 - map.size(), 0 - size);
   map.clear();
   size = 0;
   mutex.unlock();
