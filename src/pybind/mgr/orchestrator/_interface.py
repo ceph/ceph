@@ -242,6 +242,7 @@ def raise_if_exception(c: OrchResult[T]) -> T:
             raise Exception(c.exception_str)
         raise e
     assert c.result is not None, 'OrchResult should either have an exception or a result'
+    logger.info(f"raise_if_exception received: {c.result}")
     return c.result
 
 
@@ -489,7 +490,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def host_ok_to_stop(self, hostname: str) -> OrchResult:
+    def host_ok_to_stop(self, hostname: str) -> OrchResult[Tuple[int, str]]:
         """
         Check if the specified host can be safely stopped without reducing availability
 
@@ -497,13 +498,13 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult[Tuple[int, str]]:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target
         """
         raise NotImplementedError()
 
-    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult:
+    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult[Tuple[int, str]]:
         """
         Return a host from maintenance, restarting the clusters systemd target
         """
@@ -696,7 +697,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_daemons(self, names: List[str]) -> OrchResult[List[str]]:
+    def remove_daemons(self, names: List[str]) -> OrchResult[Tuple[int, str]]:
         """
         Remove specific daemon(s).
 
