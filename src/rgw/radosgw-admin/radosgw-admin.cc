@@ -1254,6 +1254,7 @@ class StoreDestructor {
 public:
   explicit StoreDestructor(rgw::sal::Driver* _s) : driver(_s) {}
   ~StoreDestructor() {
+    driver->shutdown();
     DriverManager::close_storage(driver);
     rgw_http_client_cleanup();
   }
