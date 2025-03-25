@@ -38,7 +38,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   nsForm: CdFormGroup;
   subsystemNQN: string;
   rbdPools: Array<Pool> = null;
-  units: Array<string> = ['KiB', 'MiB', 'GiB', 'TiB'];
+  units: Array<string> = ['MiB', 'GiB', 'TiB'];
   nsid: string;
   currentBytes: number;
   invalidSizeError: boolean;
@@ -121,7 +121,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         validators: [Validators.required]
       }),
       image_size: new UntypedFormControl(1, [CdValidators.number(false), Validators.min(1)]),
-      unit: new UntypedFormControl(this.units[2]),
+      unit: new UntypedFormControl(this.units[1]),
       nsCount: new UntypedFormControl(this.MAX_NAMESPACE_CREATE, [
         Validators.required,
         Validators.max(this.MAX_NAMESPACE_CREATE),
