@@ -68,7 +68,7 @@ def export_dict_qos_bw_ops_checks(cluster_id: str,
     """Validate the qos block of dict passed to apply_export method"""
     qos_enable = qos_dict.get('enable_qos')
     if qos_enable is None:
-        raise Exception('The QOS block requires at least the enable_qos parameter')
+        raise Exception('The QoS block requires at least the enable_qos parameter')
     if not isinstance(qos_enable, bool):
         raise Exception('Invalid value for the enable_qos parameter')
     # if cluster level bandwidth or ops control is disabled or qos type changed to PerClient
