@@ -4098,3 +4098,47 @@ TEST(LibCephFS, SubdirLookupAfterReaddir_ll) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, UmountHangAfterLlLookup) {
+  struct ceph_statx stx;
+  struct ceph_mount_info *cmount;
+  UserPerm *perms;
+  Inode *root, *file, *tmp;
+  Fh *fh;
+
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_umounthangafterlookup%u", mypid);
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  perms = ceph_userperm_new(0, 0, 0, NULL);
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+  
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0777,
+                 O_CREAT | O_TRUNC | O_RDWR, &file, &fh, &stx,
+                 CEPH_STATX_INO, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
+
+  ASSERT_EQ(ceph_ll_lookup(cmount, file, ".", &tmp, &stx, CEPH_STATX_INO,
+            0 , perms), 0);
+  ceph_ll_put(cmount, tmp);
+
+  ASSERT_EQ(ceph_ll_unlink(cmount, root, filename, perms), 0);
+
+  ceph_ll_put(cmount, file);
+  ceph_ll_put(cmount, root);
+
+  ceph_userperm_destroy(perms);
+
+  printf("Before ceph_unmount()\n");
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  printf("After ceph_unount()\n");
+
+  ceph_release(cmount);
+}
