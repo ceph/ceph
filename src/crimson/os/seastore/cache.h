@@ -153,7 +153,7 @@ public:
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     LOG_PREFIX(Cache::retire_extent);
     SUBDEBUGT(seastore_cache, "retire extent -- {}", t, *ref);
-    t.add_to_retired_set(ref);
+    t.add_present_to_retired_set(ref);
   }
 
   /// Declare paddr retired in t
@@ -665,9 +665,10 @@ private:
           "{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
           T::TYPE, offset, length, partial_off, partial_len, *ret);
       add_extent(ret);
-      // touch_extent() should be included in on_cache
-      on_cache(*ret);
       extent_init_func(*ret);
+      // touch_extent() should be included in on_cache,
+      // required by add_extent()
+      on_cache(*ret);
       return read_extent<T>(
 	std::move(ret), partial_off, partial_len, p_src);
     }
@@ -685,16 +686,16 @@ private:
           "{} {}~0x{:x} is absent(placeholder), add extent and reading range 0x{:x}~0x{:x} ... -- {}",
           T::TYPE, offset, length, partial_off, partial_len, *ret);
       extents_index.replace(*ret, *cached);
-      on_cache(*ret);
 
       // replace placeholder in transactions
-      while (!cached->transactions.empty()) {
-        auto t = cached->transactions.begin()->t;
+      while (!cached->read_transactions.empty()) {
+        auto t = cached->read_transactions.begin()->t;
         t->replace_placeholder(*cached, *ret);
       }
 
       cached->state = CachedExtent::extent_state_t::INVALID;
       extent_init_func(*ret);
+      on_cache(*ret);
       return read_extent<T>(
 	std::move(ret), partial_off, partial_len, p_src);
     }
