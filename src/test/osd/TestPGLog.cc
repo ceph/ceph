@@ -233,6 +233,9 @@ public:
     }
     void trim(
       const pg_log_entry_t &entry) override {}
+    void partial_write(
+      pg_info_t *info,
+      const pg_log_entry_t &entry) override {}
   };
 
   template <typename missing_t>
@@ -355,6 +358,9 @@ struct TestHandler : public PGLog::LogEntryHandler {
     // lost/unfound cases are not tested yet
   }
   void trim(
+    const pg_log_entry_t &entry) override {}
+  void partial_write(
+    pg_info_t *info,
     const pg_log_entry_t &entry) override {}
 };
 
@@ -530,11 +536,11 @@ TEST_F(PGLogTest, rewind_divergent_log) {
       add(e);
     }
     TestHandler h(remove_snap);
-    roll_forward_to(eversion_t(1, 6), &h);
+    roll_forward_to(eversion_t(1, 6), &info, &h);
     rewind_divergent_log(eversion_t(1, 5), info, &h,
 			 dirty_info, dirty_big_info);
     pg_log_t log;
-    reset_backfill_claim_log(log, &h);
+    reset_backfill_claim_log(log, &info, &h);
   }
 }
 

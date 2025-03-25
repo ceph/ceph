@@ -3012,7 +3012,7 @@ void PeeringState::activate(
   }
   if (acting_set_writeable()) {
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-    pg_log.roll_forward(rollbacker.get());
+    pg_log.roll_forward(&info, rollbacker.get());
   }
 }
 
@@ -3398,7 +3398,7 @@ void PeeringState::merge_from(
   }
 
   PGLog::LogEntryHandlerRef handler{pl->get_log_handler(rctx.transaction)};
-  pg_log.roll_forward(handler.get());
+  pg_log.roll_forward(&info, handler.get());
 
   info.last_complete = info.last_update;  // to fake out trim()
   pg_log.reset_recovery_pointers();
@@ -3437,7 +3437,7 @@ void PeeringState::merge_from(
     // prepare log
     PGLog::LogEntryHandlerRef handler{
       source->pl->get_log_handler(rctx.transaction)};
-    source->pg_log.roll_forward(handler.get());
+    source->pg_log.roll_forward(&info, handler.get());
     source->info.last_complete = source->info.last_update;  // to fake out trim()
     source->pg_log.reset_recovery_pointers();
     source->pg_log.trim(source->info.last_update, source->info);
@@ -4116,10 +4116,10 @@ bool PeeringState::append_log_entries_update_missing(
       rollbacker.get());
 
   if (pg_committed_to && entries.rbegin()->soid > info.last_backfill) {
-    pg_log.roll_forward(rollbacker.get());
+    pg_log.roll_forward(&info, rollbacker.get());
   }
   if (pg_committed_to && *pg_committed_to > pg_log.get_can_rollback_to()) {
-    pg_log.roll_forward_to(*pg_committed_to, rollbacker.get());
+    pg_log.roll_forward_to(*pg_committed_to, &info, rollbacker.get());
     last_rollback_info_trimmed_to_applied = *pg_committed_to;
   }
 
@@ -4247,7 +4247,7 @@ void PeeringState::append_log(
       * from the backend and we do not end up in a situation, where the
       * object is deleted before we can _merge_object_divergent_entries().
       */
-    pg_log.skip_rollforward();
+    pg_log.skip_rollforward(&info, handler.get());
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
@@ -4258,12 +4258,13 @@ void PeeringState::append_log(
      * above */
     if (transaction_applied &&
 	p->soid > info.last_backfill) {
-      pg_log.roll_forward(handler.get());
+      pg_log.roll_forward(&info, handler.get());
     }
   }
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
     pg_log.roll_forward_to(
       roll_forward_to,
+      &info,
       handler.get());
     last_rollback_info_trimmed_to_applied = roll_forward_to;
   }
@@ -4299,7 +4300,7 @@ void PeeringState::recover_got(
      * to roll it back anyway (and we'll be rolled forward shortly
      * anyway) */
     PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
-    pg_log.roll_forward_to(v, handler.get());
+    pg_log.roll_forward_to(v, &info, handler.get());
   }
 
   psdout(10) << "got missing " << oid << " v " << v << dendl;
@@ -6645,7 +6646,7 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
     ps->dirty_big_info = true;  // maybe.
 
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-    ps->pg_log.reset_backfill_claim_log(msg->log, rollbacker.get());
+    ps->pg_log.reset_backfill_claim_log(msg->log, &ps->info, rollbacker.get());
 
     ps->pg_log.reset_backfill();
   } else {
@@ -6794,7 +6795,7 @@ PeeringState::Deleting::Deleting(my_context ctx)
 
   // clear log
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-  ps->pg_log.roll_forward(rollbacker.get());
+  ps->pg_log.roll_forward(&ps->info, rollbacker.get());
 
   // adjust info to backfill
   ps->info.set_last_backfill(hobject_t());

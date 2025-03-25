@@ -465,7 +465,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     for (auto &&oe: divergent) {
       dout(10) << "merge_log divergent " << oe << dendl;
     }
-    log.roll_forward_to(log.head, rollbacker);
+    log.roll_forward_to(log.head, &info, rollbacker);
 
     mempool::osd_pglog::list<pg_log_entry_t> new_entries;
     new_entries.splice(new_entries.end(), olog.log, from, to);
