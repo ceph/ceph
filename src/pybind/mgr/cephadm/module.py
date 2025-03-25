@@ -2401,7 +2401,7 @@ Then run the following:
             else:
                 size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
-            sm[nm] = orchestrator.ServiceDescription(
+            svc_desc = orchestrator.ServiceDescription(
                 spec=spec,
                 size=size,
                 running=0,
@@ -2412,11 +2412,21 @@ Then run the following:
                 ports=spec.get_port_start(),
             )
 
+            if spec.service_type == 'rgw':
+                try:
+                    rgw_service = RgwService(self)
+                    ports = rgw_service.get_active_ports(spec.service_name())
+                    if ports:
+                        svc_desc.ports = ports
+                except Exception as e:
+                    logger.warning(f"Failed to get the RGW ports for {spec.service_id}: {e}")
+
             if spec.service_type == 'ingress':
                 # ingress has 2 daemons running per host
                 # but only if it's the full ingress service, not for keepalive-only
                 if not cast(IngressSpec, spec).keepalive_only:
-                    sm[nm].size *= 2
+                    svc_desc.size *= 2
+            sm[nm] = svc_desc
 
         # factor daemons into status
         for h, dm in self.cache.get_daemons_with_volatile_status():

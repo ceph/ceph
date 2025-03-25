@@ -1301,6 +1301,39 @@ class RgwService(CephService):
         rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
         return config, rgw_deps
 
+    def get_active_ports(self, service_name: str) -> List[int]:
+        """
+        Fetch active RGW frontend ports by parsing config entries for a given service.
+        """
+        ports = set()
+        daemons = self.mgr.cache.get_daemons_by_service(service_name)
+        for d in daemons:
+            who = f"client.{d.name()}"
+            try:
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'config get',
+                    'who': who,
+                    'name': 'rgw_frontends'
+                })
+
+                if ret == 0 and out:
+                    logger.debug(f"who: {who}, out: {out}")
+                    ports.update(self._extract_ports_from_frontend(out.strip()))
+            except Exception as e:
+                logger.warning(f"Failed to get the config details for {who}: {e}")
+                continue
+
+        return sorted(ports)
+
+    def _extract_ports_from_frontend(self, frontend_str: str) -> set[int]:
+
+        ports = set()
+        for val in frontend_str.split():
+            if val.startswith("port="):
+                ports.add(int(val.split("=")[1]))
+
+        return ports
+
 
 @register_cephadm_service
 class RbdMirrorService(CephService):
