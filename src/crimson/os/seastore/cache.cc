@@ -1752,7 +1752,26 @@ void Cache::complete_commit(
     bool is_inline = false;
     if (i->is_inline()) {
       is_inline = true;
-      i->set_paddr(final_block_start.add_relative(i->get_paddr()));
+      auto new_paddr = final_block_start.add_relative(i->get_paddr());
+      // With the bottom-up lba iterator construction in place, chances are
+      // that a transaction may hit an initial_pending lba node committed
+      // by another transaction, we need to adjust the hitting transaction's
+      // read_set in this case in the segment device scenario as the previous
+      // initial_pending nodes' paddrs have been changed
+      //
+      // TODO: may need to figure out a more elegant way.
+      std::vector<read_extent_set_t<Transaction>::node_type> node_vec;
+      for (auto &item : i->read_transactions) {
+	if (item.t->get_trans_id() == t.get_trans_id()) {
+	  continue;
+	}
+	node_vec.emplace_back(item.t->read_set.extract(item));
+      }
+      i->set_paddr(new_paddr);
+      for (auto &node : node_vec) {
+	auto pt = node.value().t;
+	pt->read_set.insert(std::move(node));
+      }
     }
 #ifndef NDEBUG
     if (i->get_paddr().is_root() || epm.get_checksum_needed(i->get_paddr())) {
