@@ -20,6 +20,7 @@
 #include <optional>
 #include <boost/asio/append.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
+#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/spawn.hpp>
@@ -64,6 +65,18 @@ class yield_waiter {
 
   /// Returns true if there's a handler awaiting completion.
   operator bool() const { return state.has_value(); }
+
+  /// Returns false if there's a handler awaiting completion.
+  bool empty() const { return !state.has_value(); }
+
+  /// Returns the captured completion handler's executor.
+  /// Precondition: !empty()
+  using executor_type = boost::asio::any_io_executor;
+  executor_type get_executor() const
+  {
+    return boost::asio::get_associated_executor(
+        state->handler, state->work.get_executor());
+  }
 
   /// Suspends the given yield_context until the captured handler is invoked
   /// via complete() or cancel().
@@ -166,6 +179,18 @@ class yield_waiter<void> {
 
   /// Returns true if there's a handler awaiting completion.
   operator bool() const { return state.has_value(); }
+
+  /// Returns false if there's a handler awaiting completion.
+  bool empty() const { return !state.has_value(); }
+
+  /// Returns the captured completion handler's executor.
+  /// Precondition: !empty()
+  using executor_type = boost::asio::any_io_executor;
+  executor_type get_executor() const
+  {
+    return boost::asio::get_associated_executor(
+        state->handler, state->work.get_executor());
+  }
 
   /// Suspends the given yield_context until the captured handler is invoked
   /// via complete() or cancel().
