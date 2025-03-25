@@ -58,6 +58,12 @@
 * RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
   existing versioning-enabled bucket that was not created with Object Lock enabled.
 
+* RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
+  users to clear all pg-upmap-primary mappings in the osdmap when desired.
+  Related trackers:
+   - https://tracker.ceph.com/issues/67179
+   - https://tracker.ceph.com/issues/66867
+
 >=19.0.0
 
 * ceph: a new --daemon-output-file switch is available for `ceph tell` commands
