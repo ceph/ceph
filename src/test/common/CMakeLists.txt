@@ -446,3 +446,39 @@ if(WITH_SYSTEMD)
   target_link_libraries(unittest_journald_logger ceph-common)
   add_ceph_unittest(unittest_journald_logger)
 endif()
+
+# Validation of the DECODE_START's struct_v compile-time checker.
+# First, ensure buildability of the test program itself. This is
+# useful to avoid false positives coming from other-than-the-assert
+# build failures.
+add_executable(unittest_decode_start_v_checker
+  test_decode_start_v_checker.cpp)
+target_link_libraries(unittest_decode_start_v_checker global)
+set_target_properties(unittest_decode_start_v_checker
+  PROPERTIES
+  EXCLUDE_FROM_ALL TRUE
+  EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+add_test(
+  NAME unittest_decode_start_v_checker
+  COMMAND ${CMAKE_COMMAND} --build . --target unittest_decode_start_v_checker --config $<CONFIGURATION>
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+# Second, ensure that adding a single, wrongly versioned comparison
+# fails the build.
+add_executable(unittest_decode_start_v_checker_expect_failure
+  test_decode_start_v_checker.cpp)
+target_link_libraries(unittest_decode_start_v_checker_expect_failure global)
+target_compile_definitions(unittest_decode_start_v_checker_expect_failure
+  PRIVATE SHOULD_FAIL)
+set_target_properties(
+  unittest_decode_start_v_checker_expect_failure
+  PROPERTIES
+  EXCLUDE_FROM_ALL TRUE
+  EXCLUDE_FROM_DEFAULT_BUILD TRUE)
+# Add the test bypassing the macros from AddCephTest.cmake. The idea is to
+# invoke "cmake --build ..." as the actual test and check whether it fails.
+add_test(NAME unittest_decode_start_v_checker_expect_failure
+         COMMAND ${CMAKE_COMMAND} --build . --target unittest_decode_start_v_checker_expect_failure --config $<CONFIGURATION>
+         WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+set_tests_properties(unittest_decode_start_v_checker_expect_failure
+  PROPERTIES WILL_FAIL TRUE)
