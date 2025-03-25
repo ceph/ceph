@@ -158,6 +158,7 @@ class ExportMgr:
         self.mgr = mgr
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
+        self.skip_notify_nfs_server = False
 
     @property
     def exports(self) -> Dict[str, List[Export]]:
@@ -278,7 +279,8 @@ class ExportMgr:
         self._rados(cluster_id).write_obj(
             format_block(export.to_export_block()),
             export_obj_name(export.export_id),
-            conf_obj_name(export.cluster_id)
+            conf_obj_name(export.cluster_id),
+            (not self.skip_notify_nfs_server)
         )
 
     def _delete_export(
@@ -303,7 +305,8 @@ class ExportMgr:
                         self._delete_export_user(export)
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
-                        export_obj_name(export.export_id), conf_obj_name(cluster_id))
+                        export_obj_name(export.export_id), conf_obj_name(cluster_id),
+                        (not self.skip_notify_nfs_server))
                 self.exports[cluster_id].remove(export)
                 if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
                     self._delete_export_user(export)
@@ -337,7 +340,7 @@ class ExportMgr:
         self._rados(cluster_id).update_obj(
             format_block(export.to_export_block()),
             export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
-            should_notify=not need_nfs_service_restart)
+            should_notify=(not need_nfs_service_restart and not self.skip_notify_nfs_server))
         if need_nfs_service_restart:
             restart_nfs_service(self.mgr, export.cluster_id)
 
