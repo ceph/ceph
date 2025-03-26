@@ -6727,3 +6727,11 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: ec_extent_cache_size
+  type: uint
+  level: advanced
+  desc: Size of per-shard extent cache
+  default: 10485760
+  with_legacy: true
+  services:
+  - osd

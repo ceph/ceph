@@ -11065,7 +11065,7 @@ OSDShard::OSDShard(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
       osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc)),
     context_queue(sdata_wait_lock, sdata_cond),
-    ec_extent_cache_lru(10*1024*1024)
+    ec_extent_cache_lru(cct->_conf->ec_extent_cache_size)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
 }
