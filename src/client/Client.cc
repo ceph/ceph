@@ -17483,6 +17483,10 @@ void Client::set_cap_epoch_barrier(epoch_t e)
   cap_epoch_barrier = e;
 }
 
+void Client::get_perf_counters(struct perf_counters *pc) {
+  logger->get_unlabeled_perf_counters(pc);
+}
+
 std::vector<std::string> Client::get_tracked_keys() const noexcept
 {
   static constexpr auto as_sv = std::to_array<std::string_view>({
