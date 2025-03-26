@@ -963,7 +963,8 @@ public:
 
   void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from) const;
+			pg_missing_t& omissing, pg_shard_t from,
+			bool ec_optimizations_enabled) const;
 
   void set_missing_may_contain_deletes() {
     missing.may_include_deletes = true;
@@ -1013,6 +1014,7 @@ protected:
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input InedexedLog
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
+    bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
@@ -1053,7 +1055,13 @@ protected:
 	// in increasing order of version
 	ceph_assert(i->version > last);
 	// prior_version correct (unless it is an ERROR entry)
-	ceph_assert(i->prior_version == last || i->is_error());
+	if (ec_optimizations_enabled) {
+	  // With partial writes prior_verson may be > last because of
+	  // skipped log entries
+	  ceph_assert(i->prior_version >= last || i->is_error());
+	} else {
+	  ceph_assert(i->prior_version == last || i->is_error());
+	}
       }
       if (i->is_error()) {
 	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
@@ -1094,8 +1102,15 @@ protected:
       // ensure missing has been updated appropriately
       if (objiter->second->is_update() ||
 	  (missing.may_include_deletes && objiter->second->is_delete())) {
-	ceph_assert(missing.is_missing(hoid) &&
-	       missing.get_items().at(hoid).need == objiter->second->version);
+	if (ec_optimizations_enabled) {
+	  // relax the assert for partial writes - missing may be newer than the
+	  // most recent log entry
+	  ceph_assert(missing.is_missing(hoid) &&
+		      missing.get_items().at(hoid).need >= objiter->second->version);
+	} else {
+	  ceph_assert(missing.is_missing(hoid) &&
+		      missing.get_items().at(hoid).need == objiter->second->version);
+	}
       } else {
 	ceph_assert(!missing.is_missing(hoid));
       }
@@ -1226,6 +1241,7 @@ protected:
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input IndexedLog
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
+    bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     std::map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t> > split;
@@ -1239,6 +1255,7 @@ protected:
 	olog_can_rollback_to,
 	omissing,
 	rollbacker,
+	ec_optimizations_enabled,
 	dpp);
     }
   }
@@ -1262,6 +1279,7 @@ protected:
       log.get_can_rollback_to(),
       missing,
       rollbacker,
+      false, // not allow_ec_optimizations pool
       this);
   }
 
@@ -1273,7 +1291,8 @@ public:
                             pg_info_t &info,
                             LogEntryHandler *rollbacker,
                             bool &dirty_info,
-                            bool &dirty_big_info);
+                            bool &dirty_big_info,
+			    bool ec_optimizations_enabled);
 
   void merge_log(pg_info_t &oinfo,
 		 pg_log_t&& olog,
@@ -1304,7 +1323,11 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-	log->add(*p);
+        // Skip the log entry if it is a partial write that did not involve
+        // this shard
+        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
+	  log->add(*p);
+	}
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
