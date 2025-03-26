@@ -190,4 +190,114 @@ struct __attribute__((packed)) backref_map_val_le_t {
 
 } // namespace backerf
 
+using btreenode_pos_t = uint16_t;
+
+template <typename key_t, typename val_t>
+struct BtreeCursor {
+  BtreeCursor(
+    op_context_t &ctx,
+    CachedExtentRef parent,
+    uint64_t modifications,
+    key_t key,
+    val_t val,
+    btreenode_pos_t pos)
+      : ctx(ctx),
+	parent(std::move(parent)),
+	modifications(modifications),
+	key(key),
+	val(val),
+	pos(pos)
+  {
+    if constexpr (std::is_same_v<key_t, laddr_t>) {
+      static_assert(std::is_same_v<val_t, lba_manager::btree::lba_map_val_t>,
+        "the value type of laddr_t for BtreeCursor shoould be lba_map_val_t");
+    } else {
+      static_assert(std::is_same_v<key_t, paddr_t>,
+        "the key type of BtreeCursor should be either laddr_t or paddr_t");
+      static_assert(std::is_same_v<val_t, backref::backref_map_val_t>,
+        "the value type should be either lba_map_val_t or backref_map_val_t");
+    }
+  }
+
+  op_context_t ctx;
+  CachedExtentRef parent;
+  uint64_t modifications;
+  key_t key;
+  val_t val;
+  btreenode_pos_t pos;
+
+  bool is_valid() const;
+
+  extent_len_t get_length() const {
+    return val.len;
+  }
+};
+
+struct LBACursor : BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t> {
+  using Base = BtreeCursor<laddr_t, lba_manager::btree::lba_map_val_t>;
+  using Base::BtreeCursor;
+  bool is_indirect() const {
+    return val.pladdr.is_laddr();
+  }
+  laddr_t get_laddr() const {
+    return key;
+  }
+  paddr_t get_paddr() const {
+    assert(!is_indirect());
+    return val.pladdr.get_paddr();
+  }
+  laddr_t get_intermediate_key() const {
+    assert(is_indirect());
+    return val.pladdr.get_laddr();
+  }
+  uint32_t get_checksum() const {
+    return val.checksum;
+  }
+  uint32_t get_refcount() const {
+    return val.refcount;
+  }
+  std::unique_ptr<LBACursor> duplicate() const {
+    return std::make_unique<LBACursor>(*this);
+  }
+};
+using LBACursorRef = std::unique_ptr<LBACursor>;
+
+struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
+  using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
+  using Base::BtreeCursor;
+  paddr_t get_paddr() const {
+    return key;
+  }
+  laddr_t get_laddr() const {
+    return val.laddr;
+  }
+  extent_types_t get_type() const {
+    return val.type;
+  }
+};
+using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+
+template <typename key_t, typename val_t>
+std::ostream &operator<<(
+  std::ostream &out, const BtreeCursor<key_t, val_t> &iter)
+{
+  if constexpr (std::is_same_v<key_t, laddr_t>) {
+    out << "LBACursor(";
+  } else {
+    out << "BackrefCursor(";
+  }
+  out << (void*)iter.parent.get()
+      << "@" << iter.pos
+      << "#" << iter.modifications
+      << "," << iter.key
+      << "~" << iter.val
+      << ")";
+  return out;
+}
+
 } // namespace crimson::os::seastore
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::LBACursor> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::BackrefCursor> : fmt::ostream_formatter {};
+#endif
