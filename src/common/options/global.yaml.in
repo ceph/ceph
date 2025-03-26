@@ -2145,6 +2145,13 @@ options:
    each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
   with_legacy: true
+- name: auth_exit_on_failure
+  type: int
+  level: dev
+  desc: call _exit with given error code when auth fails when non-negative
+  default: -1
+  flags:
+  - runtime
 # required by daemons of clients
 - name: auth_service_required
   type: str
