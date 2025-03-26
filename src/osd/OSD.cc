@@ -4705,6 +4705,9 @@ int OSD::shutdown()
     osd_op_tp.drain();
     osd_op_tp.stop();
 
+    dout(10) << "stopping agent" << dendl;
+    service.agent_stop();
+
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
     service.fast_shutdown();
