@@ -241,7 +241,7 @@ struct shard_extent_set_t {
     map.emplace(shard, std::move(set));
   }
 
-  int shard_count() const { return map.size(); }
+  size_t shard_count() const { return map.size(); }
   extent_set &at(shard_id_t shard) { return map.at(shard); }
   const extent_set &at(shard_id_t shard) const { return map.at(shard); }
 
