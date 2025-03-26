@@ -861,11 +861,6 @@ void ECTransaction::Generate::attr_updates() {
         ghobject_t(oid, ghobject_t::NO_GEN, st.first),
         OI_ATTR,
         to_set[OI_ATTR]);
-      st.second.setattr(
-        coll_t(spg_t(pgid, st.first)),
-        ghobject_t(oid, ghobject_t::NO_GEN, st.first),
-        SS_ATTR,
-        to_set[SS_ATTR]);
     } // Else: Unwritten shard - Don't update any attributes
   }
   ceph_assert(!xattr_rollback.empty());
