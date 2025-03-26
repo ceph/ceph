@@ -170,6 +170,7 @@ public:
       return false;
     }
 
+    assert(ref->is_stable());
     auto [exists, it] = lookup_read_set(ref);
     if (exists) {
       return false;
@@ -187,6 +188,7 @@ public:
       return;
     }
 
+    assert(ref->is_stable());
     auto [exists, it] = lookup_read_set(ref);
     assert(!exists);
 
