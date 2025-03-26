@@ -1,4 +1,12 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  computed,
+  effect,
+  OnInit,
+  Signal,
+  OnDestroy
+} from '@angular/core';
 import { FormArray, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -19,20 +27,24 @@ import { USERSGROUPS_URL } from '../smb-usersgroups-list/smb-usersgroups-list.co
   templateUrl: './smb-usersgroups-form.component.html',
   styleUrls: ['./smb-usersgroups-form.component.scss']
 })
-export class SmbUsersgroupsFormComponent extends CdForm implements OnInit {
+export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDestroy {
   form: CdFormGroup;
   action: string;
   resource: string;
   editing: boolean;
   icons = Icons;
+  hideUploader: boolean = false;
 
   smbClusters$: Observable<SMBCluster[]>;
+  uploadedData: Signal<SMBUsersGroups> = computed(() => {
+    return this.smbService.dataUploader() as SMBUsersGroups;
+  });
 
   constructor(
     private actionLabels: ActionLabelsI18n,
     private taskWrapperService: TaskWrapperService,
     private formBuilder: CdFormBuilder,
-    private smbService: SmbService,
+    public smbService: SmbService,
     private router: Router,
     private cd: ChangeDetectorRef,
     private route: ActivatedRoute,
@@ -41,13 +53,19 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit {
     super();
     this.editing = this.router.url.startsWith(`${USERSGROUPS_URL}/${URLVerbs.EDIT}`);
     this.resource = $localize`users and groups access resource`;
+    effect(() => {
+      const formData = this.uploadedData();
+      if (formData) {
+        this.fillForm(formData);
+        this.hideUploader = true;
+      }
+    });
   }
 
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.smbClusters$ = this.smbService.listClusters();
     this.createForm();
-
     if (this.editing) {
       this.action = this.actionLabels.UPDATE;
       let editingUsersGroupId: string;
@@ -57,20 +75,43 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit {
       this.smbService
         .getUsersGroups(editingUsersGroupId)
         .subscribe((usersGroups: SMBUsersGroups) => {
-          this.form.get('usersGroupsId').setValue(usersGroups.users_groups_id);
-          this.form.get('linkedToCluster').setValue(usersGroups.linked_to_cluster);
-
-          usersGroups.values.users.forEach((user: User) => {
-            this.addUser(user);
-          });
-
-          usersGroups.values.groups.forEach((group: Group) => {
-            this.addGroup(group);
-          });
+          this.fillForm(usersGroups);
         });
     } else {
       this.addUser();
     }
+  }
+
+  ngOnDestroy() {
+    this.smbService.setDataUploaded(null);
+  }
+
+  fillForm(usersGroups: SMBUsersGroups) {
+    this.form.get('usersGroupsId').setValue(usersGroups.users_groups_id);
+    this.form.get('linkedToCluster').setValue(usersGroups.linked_to_cluster);
+    this.users.controls.forEach((userField: CdFormGroup) => {
+      if (!userField.controls.name.value && userField.controls.password) {
+        userField.patchValue({
+          name: usersGroups.values.users[0].name,
+          password: usersGroups.values.users[0].password
+        });
+        usersGroups.values.users.shift();
+      }
+    });
+    this.groups.controls.forEach((groupField: CdFormGroup) => {
+      if (!groupField.controls.name.value) {
+        groupField.patchValue({
+          name: usersGroups.values.users[0].name
+        });
+        usersGroups.values.groups.shift();
+      }
+    });
+    usersGroups.values.users.forEach((user: User) => {
+      this.addUser(user);
+    });
+    usersGroups.values.groups.forEach((group: Group) => {
+      this.addGroup(group);
+    });
   }
 
   createForm() {
