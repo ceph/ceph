@@ -67,7 +67,7 @@ int main(int argc, const char **argv)
   map<string,bufferlist> caps;
   std::string fn;
 
-  int key_type = CryptoManager::get_key_type("recommended");
+  int key_type = -1;
 
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
@@ -175,6 +175,12 @@ int main(int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
   EntityName ename(g_conf()->name);
+
+  if (key_type < 0) {
+    auto cephx_preferred_cipher = g_conf().get_val<std::string>("cephx_preferred_cipher");
+    cerr << "using key type: " << cephx_preferred_cipher << std::endl;
+    key_type = CryptoManager::get_key_type(cephx_preferred_cipher);
+  }
 
   // Enforce the use of gen-key or add-key when creating to avoid ending up
   // with an "empty" key (key = AAAAAAAAAAAAAAAA)
