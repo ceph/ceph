@@ -79,9 +79,13 @@ public:
 
   bool is_valid() const {
     assert(!is_null());
-    return is_indirect()
-      ? indirect_cursor->is_valid()
-      : direct_cursor->is_valid();
+    if (is_complete_indirect()) {
+      return indirect_cursor->is_valid() && direct_cursor->is_valid();
+    }
+    if (is_indirect()) {
+      return indirect_cursor->is_valid();
+    }
+    return direct_cursor->is_valid();
   }
 
   // For reserved mappings, the return values are

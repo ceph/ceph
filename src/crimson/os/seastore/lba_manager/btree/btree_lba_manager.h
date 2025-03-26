@@ -141,44 +141,20 @@ public:
     });
   }
 
-  alloc_extent_ret clone_mapping(
+  clone_mapping_ret clone_mapping(
     Transaction &t,
+    LBAMapping pos,
+    LBAMapping mapping,
     laddr_t laddr,
-    extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) final
-  {
-    std::vector<alloc_mapping_info_t> alloc_infos = {
-      alloc_mapping_info_t::create_indirect(
-	laddr, len, intermediate_key)};
-    return alloc_cloned_mappings(
-      t,
-      laddr,
-      std::move(alloc_infos)
-    ).si_then([&t, this, intermediate_base](auto imappings) {
-      ceph_assert(imappings.size() == 1);
-      LBAMapping &indirect = imappings.front();
-      ceph_assert(indirect.indirect_cursor);
-      ceph_assert(!indirect.direct_cursor);
-      return update_refcount(t, intermediate_base, 1, false
-      ).si_then([indirect=std::move(indirect)](auto p) mutable {
-	LBAMapping direct = std::move(p.mapping);
-	ceph_assert(!direct.indirect_cursor);
-	ceph_assert(direct.direct_cursor);
-	ceph_assert(direct.is_stable());
-	direct.make_indirect(std::move(indirect.indirect_cursor));
-	return seastar::make_ready_future<
-	  LBAMapping>(std::move(direct));
-      });
-    }).handle_error_interruptible(
-      crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpect enoent"}
-    );
-  }
+    bool updateref) final;
 
   next_mapping_ret next_mapping(
     Transaction &t,
     const LBAMapping mapping) final;
+
+#ifdef UNIT_TESTS_BUILT
+  get_end_mapping_ret get_end_mapping(Transaction &t) final;
+#endif
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
