@@ -153,9 +153,10 @@ seastar::future<> Connection::renew_tickets()
 
 seastar::future<> Connection::renew_rotating_keyring()
 {
+  auto&& conf = crimson::common::local_conf();
+  auto const service_ticket_ttl = conf.get_val<double>("auth_service_ticket_ttl");
+  auto ttl = std::chrono::seconds{static_cast<long>(service_ticket_ttl)};
   auto now = clock_t::now();
-  auto ttl = std::chrono::seconds{
-    static_cast<long>(crimson::common::local_conf()->auth_service_ticket_ttl)};
   auto cutoff = utime_t{now - std::min(std::chrono::seconds{30}, ttl / 4)};
   if (!rotating_keyring->need_new_secrets(cutoff)) {
     logger().debug("renew_rotating_keyring secrets are up-to-date "
