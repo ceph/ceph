@@ -131,7 +131,8 @@ ECTransaction::WritePlanObj::WritePlanObj(
     const std::optional<object_info_t> &oi,
     const std::optional<object_info_t> &soi,
     const ECUtil::HashInfoRef &&hinfo,
-    const ECUtil::HashInfoRef &&shinfo
+    const ECUtil::HashInfoRef &&shinfo,
+    const unsigned pdw_write_mode
   ) :
   hoid(hoid),
   will_write(sinfo.get_k_plus_m()),
@@ -234,7 +235,9 @@ ECTransaction::WritePlanObj::WritePlanObj(
       shard_id_set read_shards = reads.get_shard_id_set();
       shard_id_set pdw_read_shards = pdw_reads.get_shard_id_set();
 
-      if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
+      if (pdw_write_mode != 0) {
+        do_parity_delta_write = (pdw_write_mode == 2);
+      } else if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
         // Some kind of reconstruct would be needed for PDW, so don't bother.
         do_parity_delta_write = false;
       } else if (!shard_id_set::difference(read_shards, readable_shards).empty()) {

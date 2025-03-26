@@ -552,7 +552,7 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
               op.hoid, false, attrs, size);
           } else {
             derr << __func__ << ": can't stat-or-getattr on " << op.hoid <<
- dendl;
+          dendl;
           }
           if (!op.hinfo) {
             derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
@@ -1584,7 +1584,8 @@ void ECBackend::submit_transaction(
                                        writable_shards,
                                        object_in_cache, old_object_size,
                                        oi, soi, std::move(hinfo),
-                                       std::move(shinfo));
+                                       std::move(shinfo),
+                                       cct->_conf->ec_pdw_write_mode);
 
       if (plan.to_read) plans.want_read = true;
       plans.plans.emplace_back(std::move(plan));

@@ -44,7 +44,8 @@ class WritePlanObj {
       const std::optional<object_info_t> &oi,
       const std::optional<object_info_t> &soi,
       const ECUtil::HashInfoRef &&hinfo,
-      const ECUtil::HashInfoRef &&shinfo);
+      const ECUtil::HashInfoRef &&shinfo,
+      const unsigned pdw_write_mode);
 
   void print(std::ostream &os) const {
     os << "to_read: " << to_read
