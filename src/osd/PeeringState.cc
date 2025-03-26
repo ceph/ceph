@@ -778,6 +778,7 @@ void PeeringState::start_peering_interval(
 
   peer_purged.clear();
   acting_recovery_backfill.clear();
+  acting_recovery_backfill_shard_id_set.clear();
 
   // reset primary/replica state?
   if (was_old_primary || is_primary()) {
@@ -969,6 +970,7 @@ void PeeringState::clear_recovery_state()
 {
   async_recovery_targets.clear();
   backfill_targets.clear();
+  backfill_target_shard_id_set.clear();
 }
 
 void PeeringState::clear_primary_state()
@@ -2556,6 +2558,12 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     return true;
   want_acting.clear();
   acting_recovery_backfill = want_acting_backfill;
+  acting_recovery_backfill_shard_id_set.clear();
+  for (auto &ps : acting_recovery_backfill) {
+    if (ps.shard != shard_id_t::NO_SHARD) {
+      acting_recovery_backfill_shard_id_set.insert(ps.shard);
+    }
+  }
   psdout(10) << "acting_recovery_backfill is "
 	     << acting_recovery_backfill << dendl;
   ceph_assert(
@@ -2564,6 +2572,12 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   if (backfill_targets.empty()) {
     // Caller is GetInfo
     backfill_targets = want_backfill;
+    backfill_target_shard_id_set.clear();
+    for (auto &&i : want_backfill) {
+      if (i.shard != shard_id_t::NO_SHARD) {
+        backfill_target_shard_id_set.insert(i.shard);
+      }
+    }
   }
   // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
   ceph_assert(
