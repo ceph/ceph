@@ -246,7 +246,7 @@ template <typename I>
 ImageReplayer<I>::~ImageReplayer()
 {
   unregister_admin_socket_hook();
-  //ceph_assert(m_state_builder == nullptr);
+  ceph_assert(m_state_builder == nullptr);
   ceph_assert(m_on_start_finish == nullptr);
   ceph_assert(m_on_stop_contexts.empty());
   ceph_assert(m_bootstrap_request == nullptr);
