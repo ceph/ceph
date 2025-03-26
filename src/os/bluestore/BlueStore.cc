@@ -14253,7 +14253,8 @@ uint64_t BlueStore::_assign_blobid(TransContext *txc)
 
 void BlueStore::get_db_statistics(Formatter *f)
 {
-  db->get_statistics(f);
+  if(db)
+    db->get_statistics(f);
 }
 
 BlueStore::TransContext *BlueStore::_txc_create(
