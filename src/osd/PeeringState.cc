@@ -6691,7 +6691,35 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
 {
   DECLARE_LOCALS;
   psdout(10) << "received log from " << logevt.from << dendl;
+  MOSDPGLog *msg = logevt.msg.get();
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
+  if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
+    // Check if last_complete and last_update can be advanced based on
+    // knowledge of partial_writes
+    const auto & [fromversion, toversion] =
+      msg->info.partial_writes_last_complete[ps->pg_whoami.shard];
+    if (toversion > ps->info.last_complete) {
+      if (fromversion <= ps->info.last_complete) {
+	psdout(10) << "last_complete " << ps->info.last_complete
+		   << " but pwlc from " << logevt.from
+		   << " is at " << toversion << dendl;
+	ps->info.last_complete = toversion;
+	if (toversion > ps->info.last_update) {
+	  ps->info.last_update = toversion;
+	}
+	// Advance head to avoid an assert in merge log
+	if (msg->log.tail > ps->pg_log.get_head()) {
+	  psdout(10) << "pwlc advancing log head from "
+		    << ps->pg_log.get_head() << " to " << toversion << dendl;
+	  ps->pg_log.set_head(toversion);
+	}
+      } else {
+	psdout(10) << "last_complete " << ps->info.last_complete
+		   << " cannot apply pwlc from "
+		   << fromversion << " to " << toversion << dendl;
+      }
+    }
+  }
   ps->merge_log(t, logevt.msg->info, std::move(logevt.msg->log), logevt.from);
   ps->update_peer_info(logevt.from, logevt.msg->info);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
@@ -6806,6 +6834,34 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
 
     ps->pg_log.reset_backfill();
   } else {
+    if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
+      // Check if last_complete and last_update can be advanced based on
+      // knowledge of partial_writes
+      const auto & [fromversion, toversion] =
+	msg->info.partial_writes_last_complete[ps->pg_whoami.shard];
+      if (toversion > ps->info.last_complete) {
+	if (fromversion <= ps->info.last_complete) {
+	  psdout(10) << "last_complete " << ps->info.last_complete
+		     << " but pwlc from " << logevt.from
+		     << " is at " << toversion << dendl;
+	  ps->info.last_complete = toversion;
+	  if (toversion > ps->info.last_update) {
+	    ps->info.last_update = toversion;
+	  }
+	  // Need to do this to avoid an assert in merge log
+	  if (msg->log.tail > ps->pg_log.get_head()) {
+	    psdout(10) << "pwlc advancing log head from "
+		       << ps->pg_log.get_head() << " to " << toversion
+		       << dendl;
+	    ps->pg_log.set_head(toversion);
+	  }
+	} else {
+	  psdout(10) << "last_complete " << ps->info.last_complete
+		     << " cannot apply pwlc from "
+		     << fromversion << " to " << toversion << dendl;
+	}
+      }
+    }
     ps->merge_log(t, msg->info, std::move(msg->log), logevt.from);
     ps->update_peer_info(logevt.from, msg->info);
   }
@@ -6836,7 +6892,34 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
     ps->proc_lease(*infoevt.lease);
   }
 
-  ceph_assert(infoevt.info.last_update == ps->info.last_update);
+  if (infoevt.info.last_update > ps->info.last_update) {
+    // Log is missing entries, this is only allowed if the
+    // missing entries are all partial writes that did not
+    // update this shard
+
+    // Must be a non-primary shard (which implies it is an EC pool
+    // with ec_optimizations_main set)
+    ceph_assert(ps->pool.info.is_nonprimary_shard(ps->pg_whoami.shard));
+    // There must be a partial write last_complete entry for this shard
+    ceph_assert(infoevt.info.partial_writes_last_complete.contains(
+						   ps->pg_whoami.shard));
+    auto pwlc = infoevt.info.partial_writes_last_complete.at(
+						   ps->pg_whoami.shard);
+    psdout(20) << "info from osd." << infoevt.from
+	       << " last_update=" << infoevt.info.last_update
+	       << " last_complete=" << infoevt.info.last_complete
+	       << " pwlc=" << pwlc
+	       << " our last_update=" << ps->info.last_update << dendl;
+    // Our last update must be in the range described by partial write
+    // last_complete
+    ceph_assert(ps->info.last_update >= pwlc.first);
+    // Last complete must match the partial write last_update
+    ceph_assert(pwlc.second == infoevt.info.last_update);
+  } else {
+    // Log must match after any divergent entries were rewound
+    ceph_assert(infoevt.info.last_update == ps->info.last_update);
+  }
+  // Log must be consistent with info
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
   // Update pwlc
   ps->update_peer_info(infoevt.from, infoevt.info);
