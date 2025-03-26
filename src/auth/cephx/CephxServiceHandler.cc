@@ -45,9 +45,11 @@ CephxServiceHandler::CephxServiceHandler(CephContext *cct_, KeyServer *ks)
 
 std::vector<std::string> CephxServiceHandler::get_tracked_keys() const noexcept
 {
-  return {
-    "cephx_allowed_ciphers"s
-  };
+  static constexpr auto as_sv = std::to_array<std::string_view>({
+    "cephx_allowed_ciphers",
+  });
+  static_assert(std::is_sorted(as_sv.begin(), as_sv.end()), "keys are not sorted!");
+  return {as_sv.begin(), as_sv.end()};
 }
 
 void CephxServiceHandler::init_conf(const ConfigProxy& conf) {
