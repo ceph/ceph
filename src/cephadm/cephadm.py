@@ -1219,6 +1219,17 @@ def deploy_daemon_units(
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'reset-failed', unit_name],
          verbosity=CallVerbosity.DEBUG)
+
+    # TODO: this should happen automatically some day
+    sd_path_info = systemd_unit.sidecars_from_dropin(
+        systemd_unit.PathInfo(ctx.unit_dir, ident), missing_ok=True
+    )
+    for sc_unit in sd_path_info.sidecar_unit_files.values():
+        call(ctx, ['systemctl', 'stop', sc_unit.name],
+             verbosity=CallVerbosity.DEBUG)
+        call(ctx, ['systemctl', 'reset-failed', sc_unit.name],
+             verbosity=CallVerbosity.DEBUG)
+
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
