@@ -2285,6 +2285,83 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  * @param snap_info snapshot info struct (fetched via call to ceph_get_snap_info()).
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
+
+/**
+ * perf counters via libcephfs API.
+ */
+
+struct ceph_perf_desc {
+  char name[256];
+  char description[4096];
+  int prio;
+};
+
+struct ceph_perf_type_value {
+  struct ceph_perf_desc desc;
+  uint64_t value;
+};
+
+struct ceph_perf_type_time {
+  struct ceph_perf_desc desc;
+  double value;
+};
+
+struct ceph_perf_type_longrun_average {
+  struct ceph_perf_desc desc;
+  uint64_t avgcount;
+  uint64_t sum;
+};
+
+struct ceph_perf_type_longrun_time_average {
+  struct ceph_perf_desc desc;
+  uint64_t avgcount;
+  double sum;
+  double avgtime;
+};
+
+struct ceph_perf_type_histogram {
+  struct ceph_perf_desc desc;
+  // TODO - implement this.
+};
+
+struct ceph_perf_counters {
+  int num_values;
+  struct ceph_perf_type_value *values;
+
+  int num_times;
+  struct ceph_perf_type_time *times;
+
+  int num_averages;
+  struct ceph_perf_type_longrun_average *averages;
+
+  int num_time_averages;
+  struct ceph_perf_type_longrun_time_average *time_averages;
+
+  int num_histograms;
+  struct ceph_perf_type_histogram *histograms;
+
+  // for internal use
+  void *__ptr;
+};
+
+/**
+ * Get array of performance counters
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param perf pointer to perf_counters structure
+ *
+ * Returns 0 success with the performance counters populated in the
+ * passed in perf_counters structure. -ve errno otherwise.
+ */
+int ceph_get_perf_counters(struct ceph_mount_info *cmount, struct ceph_perf_counters *perf);
+
+/**
+ * free allocated perf counter buffer
+ *
+ * @param perf pointer to perf_counters structure
+ */
+void ceph_free_perf_counters(struct ceph_perf_counters *perf);
+
 #ifdef __cplusplus
 }
 #endif
