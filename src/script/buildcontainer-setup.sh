@@ -2,6 +2,9 @@
 
 install_container_deps() {
     source ./src/script/run-make.sh
+    # set JENKINS_HOME in order to have the build container look as much
+    # like an existing jenkins build environment as possible
+    export JENKINS_HOME=/ceph
     prepare
 }
 
@@ -39,7 +42,7 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     ;;
     *~*ubuntu*)
         apt-get update
-        apt-get install -y wget reprepro curl
+        apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
         install_container_deps
     ;;
     *)
