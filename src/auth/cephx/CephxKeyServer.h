@@ -263,7 +263,7 @@ public:
     }
   }
 
-  bool prepare_rotating_update(ceph::buffer::list& rotating_bl);
+  bool prepare_rotating_update(ceph::buffer::list& rotating_bl, bool wipe);
 
   bool get_rotating_encrypted(const EntityName& name, ceph::buffer::list& enc_bl) const;
 
