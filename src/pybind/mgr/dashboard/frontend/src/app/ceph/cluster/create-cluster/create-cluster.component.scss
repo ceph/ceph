@@ -1,0 +1,22 @@
+.container-fluid {
+  align-items: flex-start;
+  display: flex;
+  padding-left: 0;
+  width: 100%;
+}
+
+cd-hosts {
+  ::ng-deep .nav {
+    display: none;
+  }
+}
+
+cd-osd-form {
+  ::ng-deep .card {
+    border: 0;
+  }
+
+  ::ng-deep .accordion {
+    margin-left: -1.5rem;
+  }
+}

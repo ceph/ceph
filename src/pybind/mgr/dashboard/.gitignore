@@ -1,0 +1,16 @@
+.coverage*
+htmlcov
+.tox
+coverage.xml
+junit*xml
+.cache
+ceph.conf
+ceph_image.tar
+
+# IDE
+.vscode
+*.egg
+.env
+
+# virtualenv
+venv

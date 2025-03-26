@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    spec:
+      mon:
+        allowMultiplePerNode: false
+      network:
+        provider: host
