@@ -7503,7 +7503,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
        i != ps->acting_recovery_backfill.end();
        ++i) {
     if (*i == ps->get_primary()) continue;
-    const pg_info_t& pi = ps->peer_info[*i];
+    pg_info_t& pi = ps->peer_info[*i];
     // reset this so to make sure the pg_missing_t is initialized and
     // has the correct semantics even if we don't need to get a
     // missing set from a shard. This way later additions due to
@@ -7522,6 +7522,56 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       psdout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
       ps->peer_missing[*i].clear();
       continue;
+    }
+
+    // Partial writes - if the peer log is only divergent because of partial writes then
+    // roll forward the peer to cover writes it was not involved in.
+    if (pi.last_update < ps->info.last_update) {
+      psdout(0) << "BILL_GET_MISSING: osd." << *i << " has version " << pi.last_update << " which is behind authorative log " << ps->info.last_update << dendl;
+      // Search backwards through log looking for a match with peer's head entry
+      mempool::osd_pglog::list<pg_log_entry_t>::const_iterator p = ps->pg_log.get_log().log.end();
+      while (p != ps->pg_log.get_log().log.begin()) {
+	--p;
+	if (p->version.version <= pi.last_update.version) {
+	  break;
+	}
+      }
+      if (pi.last_update == pi.last_complete &&
+	  p->version == pi.last_update) {
+	// Matched peer's head entry - see if we can advance last_update because of partial written shards
+	eversion_t old_last_update = pi.last_update;
+	if (ps->info.partial_writes_last_complete.contains(i->shard) &&
+	    ps->info.partial_writes_last_complete[i->shard].first < old_last_update) {
+	  old_last_update = ps->info.partial_writes_last_complete[i->shard].first;
+	}
+	++p;
+	while (p != ps->pg_log.get_log().log.end()) {
+	  psdout(0) << "BILL_GET_MISSING: log entry " << p->version << " has written_shards=" << p->written_shards << dendl;
+	  if (!p->is_written_shard(i->shard)) {
+	    psdout(0) << "BILL_GET_MISSING: log entry advancing last_update because of partial write" << dendl;
+	    pi.last_update = p->version;
+	    pi.last_complete = p->version;
+	    // Update partial_writes_last_complete, this can be used by proc_replica_info to avoid repeating this work
+	    // and will explain to PeeringState::Stray::react(const MInfoRec& infoevt) why last_update and complete
+	    // have been advanced
+	    if (ps->info.partial_writes_last_complete.contains(i->shard)) {
+	      // Existing pwlc entry - only update if p->version is newer
+	      if (ps->info.partial_writes_last_complete[i->shard].second < p->version) {
+		ps->info.partial_writes_last_complete[i->shard] = std::pair(old_last_update, p->version);
+	      }
+	    } else {
+	      // No existing pwlc entry - create one
+	      ps->info.partial_writes_last_complete[i->shard] = std::pair(old_last_update, p->version);
+	    }
+	    psdout(0) << "BILL_GET_MISSING2: " << i->shard << " pwlc=" << ps->info.partial_writes_last_complete.at(i->shard) << dendl;
+	  } else {
+	    psdout(0) << "BILL_GET_MISSING: log entry is divergent - rewinding one entry" << dendl;
+	    break;
+	  }
+	  ++p;
+	}
+      }
+      psdout(0) << "BILL_GET_MISSING: " << ps->info.last_complete << " " << pi.last_update << dendl;
     }
 
     if (pi.last_update == pi.last_complete &&  // peer has no missing
