@@ -78,6 +78,12 @@ public:
     Transaction &t,
     const LBAMapping mapping) = 0;
 
+#ifdef UNIT_TESTS_BUILT
+  using get_end_mapping_iertr = base_iertr;
+  using get_end_mapping_ret = get_end_mapping_iertr::future<LBAMapping>;
+  virtual get_end_mapping_ret get_end_mapping(Transaction &t) = 0;
+#endif
+
   /**
    * Allocates a new mapping referenced by LBARef
    *
@@ -105,12 +111,18 @@ public:
     LBAMapping mapping,
     std::vector<LogicalChildNodeRef> ext) = 0;
 
-  virtual alloc_extent_ret clone_mapping(
+  struct clone_mapping_ret_t {
+    LBAMapping cloned_mapping;
+    LBAMapping orig_mapping;
+  };
+  using clone_mapping_iertr = alloc_extent_iertr;
+  using clone_mapping_ret = clone_mapping_iertr::future<clone_mapping_ret_t>;
+  virtual clone_mapping_ret clone_mapping(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) = 0;
+    LBAMapping pos,
+    LBAMapping mapping,
+    laddr_t laddr,
+    bool updateref) = 0;
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,

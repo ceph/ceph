@@ -67,9 +67,13 @@ public:
 
   bool is_viewable() const {
     assert(!is_null());
-    return is_indirect()
-      ? indirect_cursor->is_viewable()
-      : direct_cursor->is_viewable();
+    if (is_complete_indirect()) {
+      return indirect_cursor->is_viewable() && direct_cursor->is_viewable();
+    }
+    if (is_indirect()) {
+      return indirect_cursor->is_viewable();
+    }
+    return direct_cursor->is_viewable();
   }
 
   // For reserved mappings, the return values are
