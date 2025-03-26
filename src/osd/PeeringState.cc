@@ -3194,6 +3194,24 @@ void PeeringState::proc_primary_info(
   }
 }
 
+void PeeringState::consider_rollback_pwlc(eversion_t last_complete)
+{
+  for (const auto & [shard, versionrange] : info.partial_writes_last_complete) {
+    auto [fromversion, toversion] = versionrange;
+    if (last_complete < fromversion) {
+      // It is possible that we need to rollback pwlc, this can happen if we attempt peering with an OSD missing
+      // but do not manage to activate (typically because of a wait upthru) before the missing OSD returns
+      info.partial_writes_last_complete[shard] = std::pair(last_complete,last_complete);
+      // Assign the current epoch to the version number so that this is recognised as the newest pwlc update
+      info.partial_writes_last_complete[shard].second.epoch = get_osdmap_epoch();
+      psdout(10) << "BILLPROCMASTERLOG shard " << shard << " pwlc rolled back to " << info.partial_writes_last_complete[shard] << dendl;
+    } else if (last_complete < toversion) {
+      info.partial_writes_last_complete[shard].second = last_complete;
+      psdout(10) << "BILLPROCMASTERLOG shard " << shard << " pwlc rolled back to " << info.partial_writes_last_complete[shard] << dendl;
+    }
+  }
+}
+
 void PeeringState::proc_master_log(
   ObjectStore::Transaction& t, pg_info_t &oinfo,
   pg_log_t&& olog, pg_missing_t&& omissing, pg_shard_t from)
@@ -3202,6 +3220,82 @@ void PeeringState::proc_master_log(
 	     << olog << " " << omissing << dendl;
   ceph_assert(!is_peered() && is_primary());
 
+  if (info.partial_writes_last_complete.contains(from.shard)) {
+    // Check if last_complete and last_update can be advanced based on knowledge of partial_writes
+    const auto & [fromversion, toversion] = info.partial_writes_last_complete[from.shard];
+    if (toversion > oinfo.last_complete) {
+      if (fromversion <= oinfo.last_complete) {
+	psdout(0) << "BILLPROCMASTERLOG osd." << from << " has last_complete " << oinfo.last_complete << " but pwlc says its at " << toversion << dendl;
+	oinfo.last_complete = toversion;
+	if (toversion > oinfo.last_update) {
+	  oinfo.last_update = toversion;
+	}
+	if (toversion > olog.head) {
+	  olog.head = toversion;
+	}
+      } else {
+	psdout(0) << "BILLPROCMASTERLOG osd." << from << " has last_complete " << oinfo.last_complete << " cannot apply pwlc from " << fromversion << " to " << toversion << dendl;
+      }
+    }
+  }
+  // For partial writes we may be able to keep some of the divergent entries
+  if (olog.head < pg_log.get_head()) {
+    // Iterate backwards to divergence
+    auto p = pg_log.get_log().log.end();
+    while (true) {
+      if (p == pg_log.get_log().log.begin()) {
+	break;
+      }
+      --p;
+      if (p->version.version <= olog.head.version) {
+	break;
+      }
+    }
+    psdout(0) << "BILLPROCMASTERLOG checking entries after " << p->version << " olog head is " << olog.head << dendl;
+    // See if we can wind forward partially written entries
+
+    map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
+    all_info[pg_whoami] = info;
+    while (p->version == olog.head) {
+      ++p;
+      if (p == pg_log.get_log().log.end()) {
+	break;
+      }
+      if (p->is_written_shard(from.shard)) {
+        psdout(0) << "BILLPROCMASTERLOG entry " << p->version << " has written shards " << p->written_shards << " so is divergent" << dendl;
+	// This entry was meant to be written on from, this is the first
+	// divergent entry
+	break;
+      } else {
+	// Might be able to keep this entry
+	shard_id_set keepme;
+	shard_id_set missme;
+        for (auto&& [pg_shard, pi] : all_info) {
+	  psdout(20) << "BILLPROCMASTERLOG: version " << p->version << " testing osd" << pg_shard.osd << "(" << pg_shard.shard << ")" << "written=" << p->written_shards << " present=" << p->present_shards << dendl;
+	  if (p->is_present_shard(pg_shard.shard) && p->is_written_shard(pg_shard.shard)) {
+	    if (pi.last_update < p->version) {
+	      psdout(20) << "BILLPROCMASTERLOG: osd " << pg_shard.osd << "(" << pg_shard.shard << ") is missing the update for " << p->version << dendl;
+	      if (!keepme.contains(pg_shard.shard)) {
+		missme.insert(pg_shard.shard);
+	      }
+	    } else {
+	      keepme.insert(pg_shard.shard);
+	      missme.erase(pg_shard.shard);
+	    }
+	  }
+	}
+	psdout(20) << "BILLPROCMASTERLOG: keepme=" << keepme << " missme=" << missme << dendl;
+	if (missme.empty()) {
+	  // This entry can be kept, only shards that didn't participate in this partial write missed the update
+          psdout(20) << "BILLPROCMASTERLOG: keeping entry " << p->version << dendl;
+	  olog.head = p->version;
+	} else {
+	  // A shard is missing this write - this is the first divergent entry
+	  break;
+	}
+      }
+    }
+  }
   // merge log into our own log to build master log.  no need to
   // make any adjustments to their missing map; we are taking their
   // log to be authoritative (i.e., their entries are by definitely
@@ -3212,6 +3306,10 @@ void PeeringState::proc_master_log(
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
   might_have_unfound.insert(from);
+
+  // our log is now authoritative - update pwlc information based
+  // on the log head
+  consider_rollback_pwlc(pg_log.get_head());
 
   // See doc/dev/osd_internals/last_epoch_started
   if (oinfo.last_epoch_started > info.last_epoch_started) {
