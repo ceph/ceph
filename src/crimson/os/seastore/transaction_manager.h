@@ -786,34 +786,100 @@ public:
    * for the definition of "indirect lba mapping" and "direct lba mapping".
    * Note that the cloned extent must be stable
    */
-  using clone_extent_iertr = alloc_extent_iertr;
-  using clone_extent_ret = clone_extent_iertr::future<LBAMapping>;
+  using clone_extent_iertr = LBAManager::clone_mapping_iertr;
+  using clone_extent_ret = LBAManager::clone_mapping_ret;
   clone_extent_ret clone_pin(
     Transaction &t,
+    LBAMapping pos,
+    LBAMapping mapping,
     laddr_t hint,
-    const LBAMapping &mapping) {
+    bool updateref) {
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "{} clone to hint {} ...", t, mapping, hint);
-    return lba_manager->refresh_lba_mapping(t, std::move(mapping)
-    ).si_then([FNAME, this, &pos, &t, hint, updateref](auto mapping) {
-      auto intermediate_key =
-	mapping.is_indirect()
-	  ? mapping.get_intermediate_key()
-	  : mapping.get_key();
-      auto intermediate_base =
-	mapping.is_indirect()
-	  ? mapping.get_intermediate_base()
-	  : mapping.get_key();
+    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
+      t, mapping, hint, pos, updateref);
+    return seastar::do_with(
+      std::move(pos),
+      std::move(mapping),
+      [FNAME, this, &t, hint, updateref](auto &pos, auto &mapping) {
+      return lba_manager->refresh_lba_mapping(t, std::move(pos)
+      ).si_then([this, &t, &pos, &mapping](auto m) {
+	pos = std::move(m);
+	return lba_manager->refresh_lba_mapping(t, std::move(mapping));
+      }).si_then([FNAME, this, &pos, &t, hint, updateref](auto mapping) {
+	return lba_manager->clone_mapping(
+	  t,
+	  std::move(pos),
+	  std::move(mapping),
+	  hint,
+	  updateref
+	).si_then([FNAME, &t](auto ret) {
+	  SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
+	  return ret;
+	});
+      });
+    });
+  }
 
-      return lba_manager->clone_mapping(
-	t,
-	hint,
-	mapping.get_length(),
-	intermediate_key,
-	intermediate_base
-      ).si_then([FNAME, &t](auto pin) {
-	SUBDEBUGT(seastore_tm, "cloned as {}", t, pin);
-	return pin;
+  using clone_iertr = base_iertr;
+  using clone_ret = clone_iertr::future<>;
+  clone_ret clone_mappings(
+    Transaction &t,
+    laddr_t base,
+    extent_len_t len,
+    LBAMapping pos,
+    LBAMapping mapping,
+    bool updateref)
+  {
+    LOG_PREFIX(TransactionManager::clone_mappings);
+    SUBDEBUGT(seastore_tm, "object_data={}~{} mapping={} updateref={}",
+      t, base, len, mapping, updateref);
+    return seastar::do_with(
+      std::move(pos),
+      std::move(mapping),
+      0,
+      [&t, this, updateref, base, len](auto &pos, auto &mapping, auto &offset) {
+      return trans_intr::repeat(
+	[&t, this, &pos, &mapping, &offset, updateref, base, len]()
+	-> clone_iertr::future<seastar::stop_iteration> {
+	if (offset >= len) {
+	  return clone_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	if (!mapping.is_indirect() && mapping.get_val().is_zero()) {
+	  return reserve_region(
+	    t,
+	    std::move(pos),
+	    (base + offset).checked_to_laddr(),
+	    mapping.get_length()
+	  ).si_then([base, &t, this, &offset](auto r) {
+	    assert((base + offset).checked_to_laddr() == r.get_key());
+	    offset += r.get_length();
+	    return next_mapping(t, std::move(r));
+	  }).si_then([&pos, &t, this, &mapping](auto r) {
+	    pos = std::move(r);
+	    return next_mapping(t, std::move(mapping));
+	  }).si_then([&mapping](auto p) {
+	    mapping = std::move(p);
+	    return seastar::stop_iteration::no;
+	  }).handle_error_interruptible(
+	    clone_iertr::pass_further{},
+	    crimson::ct_error::assert_all{"unexpected error"}
+	  );
+	}
+	return clone_pin(
+	  t, std::move(pos), std::move(mapping),
+	  (base + offset).checked_to_laddr(), updateref
+	).si_then([&t, this, &offset, &pos, &mapping](auto ret) {
+	  offset += ret.cloned_mapping.get_length();
+	  return next_mapping(t, std::move(ret.cloned_mapping)
+	  ).si_then([this, &t, &pos, ret=std::move(ret)](auto p) mutable {
+	    pos = std::move(p);
+	    return next_mapping(t, std::move(ret.orig_mapping));
+	  }).si_then([&mapping](auto p) {
+	    mapping = std::move(p);
+	    return seastar::stop_iteration::no;
+	  });
+	});
       });
     });
   }
