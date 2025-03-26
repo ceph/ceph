@@ -552,6 +552,7 @@ public:
   TrivialEvent(MakeStray)
   TrivialEvent(NeedActingChange)
   TrivialEvent(IsIncomplete)
+  TrivialEvent(RepeatGetLog)
   TrivialEvent(IsDown)
 
   TrivialEvent(AllReplicasRecovered)
@@ -1306,6 +1307,7 @@ public:
 
   struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
     pg_shard_t auth_log_shard;
+    bool repeat_getlog = false;
     boost::intrusive_ptr<MOSDPGLog> msg;
 
     explicit GetLog(my_context ctx);
@@ -1318,7 +1320,8 @@ public:
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::transition< NeedActingChange, WaitActingChange >,
-      boost::statechart::transition< IsIncomplete, Incomplete >
+      boost::statechart::transition< IsIncomplete, Incomplete >,
+      boost::statechart::transition< RepeatGetLog, GetLog>
       > reactions;
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const QueryState& q);
@@ -1662,6 +1665,7 @@ private:
   std::map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const std::map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
+    bool exclude_nonprimary_shards,
     bool *history_les_bound) const;
 
   static void calc_ec_acting(
@@ -1734,6 +1738,7 @@ private:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound,
+		     bool *repeat_getlog,
 		     bool request_pg_temp_change_only = false);
 
   bool search_for_missing(
