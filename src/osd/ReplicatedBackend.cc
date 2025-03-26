@@ -830,16 +830,15 @@ int ReplicatedBackend::be_deep_scrub(
     },
     [&pos, max=cct->_conf->osd_deep_scrub_keys]
     (std::string_view key, std::string_view value) mutable {
+      if (--max == 0) {
+        pos.omap_pos = key;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
       pos.omap_bytes += value.length();
       ++pos.omap_keys;
       pos.omap_hash = crc32_netstring(pos.omap_hash, key);
       pos.omap_hash = crc32_netstring(pos.omap_hash, value);
-      if (--max == 0) {
-        pos.omap_pos = key;
-        return ObjectStore::omap_iter_ret_t::STOP;
-      } else {
-        return ObjectStore::omap_iter_ret_t::NEXT;
-      }
+      return ObjectStore::omap_iter_ret_t::NEXT;
     });
   if (result < 0) {
     return -EIO;
