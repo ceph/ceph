@@ -59,6 +59,18 @@
 #include "auth/RotatingKeyRing.h"
 
 #define dout_subsys ceph_subsys_monc
+
+/* Used by both MonClient and MonConnection. */
+static int handle_auth_failure(CephContext* cct)
+{
+  int ecode = cct->_conf.get_val<int64_t>("auth_exit_on_failure");
+  if (ecode >= 0) {
+    lderr(cct) << __func__ << " exiting with " << ecode << " due to auth failure" << dendl;
+    _exit(ecode);
+  }
+  return -EACCES;
+}
+
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (_hunting() ? "(hunting)":"") << ": "
 
@@ -743,6 +755,8 @@ void MonClient::_finish_auth(int auth_err)
                   << " auth returned EAGAIN, reopening the session to try again"
                   << dendl;
     _reopen_session();
+  } else {
+    [[maybe_unused]] int rc = handle_auth_failure(cct);
   }
   auth_cond.notify_all();
 }
@@ -1653,7 +1667,7 @@ int MonClient::handle_auth_bad_method(
 		  << " result " << cpp_strerror(result)
 		  << " and auth is " << (auth ? auth->get_protocol() : 0)
 		  << dendl;
-    return -EACCES;
+    return handle_auth_failure(cct);
   }
 }
 
@@ -1680,12 +1694,12 @@ int MonClient::handle_auth_request(
         return 1;
       }
     }
-    return -EACCES;
+    return handle_auth_failure(cct);
   }
   auth_meta->auth_mode = payload[0];
   if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
       auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
-    return -EACCES;
+    return handle_auth_failure(cct);
   }
   AuthAuthorizeHandler *ah = get_auth_authorize_handler(con->get_peer_type(),
 							auth_method);
@@ -1718,7 +1732,7 @@ int MonClient::handle_auth_request(
     if (handle_authentication_dispatcher->ms_handle_fast_authentication(con)) {
       return 1;
     }
-    return -EACCES;
+    return handle_auth_failure(cct);
   }
   if (!more && !was_challenge && auth_meta->authorizer_challenge) {
     ldout(cct,10) << __func__ << " added challenge on " << con << dendl;
@@ -1727,7 +1741,7 @@ int MonClient::handle_auth_request(
   ldout(cct,10) << __func__ << " bad authorizer on " << con << dendl;
   // discard old challenge
   auth_meta->authorizer_challenge.reset();
-  return -EACCES;
+  return handle_auth_failure(cct);
 }
 
 AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
@@ -1812,7 +1826,7 @@ int MonConnection::get_auth_request(
     std::vector<uint32_t> as;
     auth_registry->get_supported_methods(con->get_peer_type(), &as);
     if (as.empty()) {
-      return -EACCES;
+      return handle_auth_failure(cct);
     }
     auth_method = as.front();
   }
@@ -1822,7 +1836,7 @@ int MonConnection::get_auth_request(
   ldout(cct,10) << __func__ << " method " << *method
 		<< " preferred_modes " << *preferred_modes << dendl;
   if (preferred_modes->empty()) {
-    return -EACCES;
+    return handle_auth_failure(cct);
   }
 
   int r = _init_auth(*method, entity_name, want_keys, keyring, true);
@@ -1914,7 +1928,7 @@ int MonConnection::handle_auth_bad_method(
   if (p == auth_supported.end()) {
     lderr(cct) << __func__ << " server allowed_methods " << allowed_methods
 	       << " but i only support " << auth_supported << dendl;
-    return -EACCES;
+    return handle_auth_failure(cct);
   }
   auth_method = *p;
   ldout(cct,10) << __func__ << " will try " << auth_method << " next" << dendl;
