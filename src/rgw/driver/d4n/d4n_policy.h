@@ -187,6 +187,12 @@ class LFUDAPolicy : public CachePolicy {
       blockDir = new BlockDirectory{conn};
       objDir = new ObjectDirectory{conn};
       bucketDir = new BucketDirectory{conn};
+      //all objects share the same transaction
+      auto d4n_trx = new rgw::d4n::D4NTransaction();
+      d4n_trx->start_trx();
+      objDir->set_d4n_trx(d4n_trx);
+      blockDir->set_d4n_trx(d4n_trx);
+      bucketDir->set_d4n_trx(d4n_trx);
     }
     ~LFUDAPolicy() {
       rthread_stop();
