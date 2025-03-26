@@ -1098,11 +1098,13 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
+  double auth_service_ticket_ttl = cct->_conf.get_val<double>("auth_service_ticket_ttl");
+
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
-  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  cutoff -= std::min(30.0, auth_service_ticket_ttl / 4.0);
   utime_t issued_at_lower_bound = now;
-  issued_at_lower_bound -= cct->_conf->auth_service_ticket_ttl;
+  issued_at_lower_bound -= auth_service_ticket_ttl;
   if (!rotating_secrets->need_new_secrets(cutoff)) {
     ldout(cct, 10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();
@@ -1144,9 +1146,11 @@ int MonClient::wait_auth_rotating(double timeout)
   if (!rotating_secrets)
     return 0;
 
+  double auth_service_ticket_ttl = cct->_conf.get_val<double>("auth_service_ticket_ttl");
+
   ldout(cct, 10) << __func__ << " waiting for " << timeout << dendl;
   utime_t cutoff = ceph_clock_now();
-  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  cutoff -= std::min(30.0, auth_service_ticket_ttl / 4.0);
   if (auth_cond.wait_for(l, ceph::make_timespan(timeout), [this, cutoff] {
     return (!auth_principal_needs_rotating_keys(entity_name) ||
 	    !rotating_secrets->need_new_secrets(cutoff));

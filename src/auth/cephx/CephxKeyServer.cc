@@ -53,11 +53,13 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   secret_id = riter->first;
   secret = riter->second.key;
 
+  double const auth_mon_ticket_ttl = cct->_conf.get_val<double>("auth_mon_ticket_ttl");
+  double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
+
   // ttl may have just been increased by the user
   // cap it by expiration of "next" key to prevent handing out a ticket
   // with a bogus, possibly way into the future, validity
-  ttl = service_id == CEPH_ENTITY_TYPE_AUTH ?
-      cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
+  ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? auth_mon_ticket_ttl : auth_service_ticket_ttl;
   ttl = std::min(ttl, static_cast<double>(
 		     secrets.secrets.rbegin()->second.expiration - now));
 
@@ -178,17 +180,29 @@ int KeyServer::_rotate_secret(uint32_t service_id, KeyServerData &pending_data)
   RotatingSecrets& r = pending_data.rotating_secrets[service_id];
   int added = 0;
   utime_t now = ceph_clock_now();
-  double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
+
+  double const auth_mon_ticket_ttl = cct->_conf.get_val<double>("auth_mon_ticket_ttl");
+  double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
+  auto const auth_service_cipher = cct->_conf.get_val<string>("auth_service_cipher");
+  const int auth_service_cipher_key_type = CryptoManager::get_key_type(auth_service_cipher);
+
+  ldout(cct, 10) << __func__
+          << ": auth_mon_ticket_ttl=" << auth_mon_ticket_ttl
+          << ", auth_service_ticket_ttl=" << auth_service_ticket_ttl
+          << ", auth_service_cipher=" << auth_service_cipher
+          << ", service_id=" << service_id
+          << dendl;;
+
+  double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? auth_mon_ticket_ttl : auth_service_ticket_ttl;
 
   while (r.need_new_secrets(now)) {
     ExpiringCryptoKey ek;
-    auto s = cct->_conf.get_val<string>("auth_service_cipher");
 
-    int key_type = CryptoManager::get_key_type(s);
+    int key_type = auth_service_cipher_key_type;
     if (key_type < 0 || key_type == CEPH_CRYPTO_NONE) {
       key_type = CEPH_CRYPTO_AES256KRB5;
     }
-    
+
     generate_secret(ek.key, key_type);
     if (r.empty()) {
       ek.expiration = now;
@@ -271,6 +285,8 @@ bool KeyServer::generate_secret(CryptoKey& secret, std::optional<int> key_type)
   auto crypto = cct->get_crypto_manager()->get_handler(type);
   if (!crypto)
     return false;
+
+  ldout(cct, 20) << __func__ << ": generating key type " << type << dendl;
 
   if (crypto->create(cct->random(), bp) < 0)
     return false;
@@ -482,7 +498,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
   info.secret_id = secret_id;
 
   std::scoped_lock l{lock};
-  return _build_session_auth_info(service_id, parent_ticket, key_type, info,
-				  cct->_conf->auth_service_ticket_ttl);
+  double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
+  return _build_session_auth_info(service_id, parent_ticket, key_type, info, auth_service_ticket_ttl);
 }
 
