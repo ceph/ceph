@@ -13,32 +13,9 @@ std::string period_info_oid_prefix = "periods.";
 
 #define FIRST_EPOCH 1
 
-const string& RGWPeriod::get_latest_epoch_oid() const
-{
-  if (cct->_conf->rgw_period_latest_epoch_info_oid.empty()) {
-    return period_latest_epoch_info_oid;
-  }
-  return cct->_conf->rgw_period_latest_epoch_info_oid;
-}
-
 const string& RGWPeriod::get_info_oid_prefix() const
 {
   return period_info_oid_prefix;
-}
-
-const string RGWPeriod::get_period_oid_prefix() const
-{
-  return get_info_oid_prefix() + id;
-}
-
-const string RGWPeriod::get_period_oid() const
-{
-  std::ostringstream oss;
-  oss << get_period_oid_prefix();
-  // skip the epoch for the staging period
-  if (id != get_staging_id(realm_id))
-    oss << "." << epoch;
-  return oss.str();
 }
 
 bool RGWPeriod::find_zone(const DoutPrefixProvider *dpp,
@@ -91,67 +68,5 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("period_config", period_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
-}
-
-int RGWPeriod::update_latest_epoch(const DoutPrefixProvider *dpp, epoch_t epoch, optional_yield y)
-{
-  static constexpr int MAX_RETRIES = 20;
-
-  for (int i = 0; i < MAX_RETRIES; i++) {
-    RGWPeriodLatestEpochInfo info;
-    RGWObjVersionTracker objv;
-    bool exclusive = false;
-
-    // read existing epoch
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-    int r = cfgstore->read_latest_epoch(dpp, y, id, info.epoch, &objv, *this);
-    if (r == -ENOENT) {
-      // use an exclusive create to set the epoch atomically
-      exclusive = true;
-      ldpp_dout(dpp, 20) << "creating initial latest_epoch=" << epoch
-          << " for period=" << id << dendl;
-    } else if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to read latest_epoch" << dendl;
-      return r;
-    } else if (epoch <= info.epoch) {
-      r = -EEXIST; // fail with EEXIST if epoch is not newer
-      ldpp_dout(dpp, 10) << "found existing latest_epoch " << info.epoch
-          << " >= given epoch " << epoch << ", returning r=" << r << dendl;
-      return r;
-    } else {
-      ldpp_dout(dpp, 20) << "updating latest_epoch from " << info.epoch
-          << " -> " << epoch << " on period=" << id << dendl;
-    }
-
-    r = cfgstore->write_latest_epoch(dpp, y, exclusive, id, epoch, &objv, *this);
-    if (r == -EEXIST) {
-      continue; // exclusive create raced with another update, retry
-    } else if (r == -ECANCELED) {
-      continue; // write raced with a conflicting version, retry
-    }
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to write latest_epoch" << dendl;
-      return r;
-    }
-    return 0; // return success
-  }
-
-  return -ECANCELED; // fail after max retries
-}
-
-int RGWPeriod::use_latest_epoch(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  RGWPeriodLatestEpochInfo info;
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-  int ret = cfgstore->read_latest_epoch(dpp, y, id, info.epoch, nullptr, *this);
-  if (ret < 0) {
-    return ret;
-  }
-
-  epoch = info.epoch;
-
-  return 0;
 }
 

@@ -638,23 +638,6 @@ void RGWPeriodConfig::dump(Formatter *f) const
   encode_json("anonymous_ratelimit", anon_ratelimit, f);
 }
 
-std::string RGWPeriodConfig::get_oid(const std::string& realm_id)
-{
-  if (realm_id.empty()) {
-    return "period_config.default";
-  }
-  return "period_config." + realm_id;
-}
-
-rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
-{
-  const auto& pool_name = cct->_conf->rgw_period_root_pool;
-  if (pool_name.empty()) {
-    return {RGW_DEFAULT_PERIOD_ROOT_POOL};
-  }
-  return {pool_name};
-}
-
 int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
 {
   rgw_pool pool(get_pool(cct));

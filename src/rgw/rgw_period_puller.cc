@@ -67,14 +67,12 @@ int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::str
 } // anonymous namespace
 
 int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& period_id, RGWPeriod& period,
-			  optional_yield y)
+			  optional_yield y, rgw::sal::ConfigStore* cfgstore)
 {
   // try to read the period from rados
   constexpr auto zero_epoch = 0;
   period.set_id(period_id);
   period.set_epoch(zero_epoch);
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
   int r = cfgstore->read_period(dpp, y, period_id, zero_epoch, period);
   if (r < 0) {
     if (svc.zone->is_meta_master()) {
@@ -104,7 +102,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
       return r;
     }
     // update latest epoch
-    r = period.update_latest_epoch(dpp, period.get_epoch(), y);
+    r = cfgstore->update_latest_epoch(dpp, y, period.get_id(), period.get_epoch());
     if (r == -EEXIST) {
       // already have this epoch (or a more recent one)
       return 0;
@@ -116,7 +114,7 @@ int RGWPeriodPuller::pull(const DoutPrefixProvider *dpp, const std::string& peri
     }
     // reflect period objects if this is the latest version
     if (svc.zone->get_realm().get_current_period() == period_id) {
-      r = rgw::reflect_period(dpp, y, cfgstore.get(), period);
+      r = rgw::reflect_period(dpp, y, cfgstore, period);
       if (r < 0) {
         return r;
       }

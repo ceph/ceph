@@ -3,6 +3,7 @@
 #include "rgw_rest_ratelimit.h"
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
+#include "rgw_process_env.h"
 
 class RGWOp_Ratelimit_Info : public RGWRESTOp {
 int check_caps(const RGWUserCaps& caps) override {
@@ -105,7 +106,7 @@ void RGWOp_Ratelimit_Info::execute(optional_yield y)
     std::string realm_id = driver->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;
     auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(this, config_store_type);
+    auto cfgstore = s->penv.cfgstore;
     op_ret = cfgstore->read_period_config(this, y, realm_id, period_config);
     if (op_ret && op_ret != -ENOENT) {
       ldpp_dout(this, 0) << "Error on period config read" << dendl;
@@ -309,7 +310,7 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
   }
 
   auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(s, config_store_type);
+  auto cfgstore = s->penv.cfgstore;
   if (global) {
     std::string realm_id = driver->get_zone()->get_realm_id();
     RGWPeriodConfig period_config;

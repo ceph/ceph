@@ -88,6 +88,7 @@ int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
                                        RGWPeriod *pperiod,
                                        RGWZoneGroup *pzonegroup,
                                        bool *pfound,
+                                       rgw::sal::ConfigStore* cfgstore,
                                        optional_yield y)
 {
   auto& found = *pfound;
@@ -104,16 +105,14 @@ int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
   for (auto& realm_name : realms) {
     string realm_id;
     RGWRealm realm(realm_id, realm_name);
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-    r = rgw::read_realm(dpp, y, cfgstore.get(), realm_id, realm_name, realm);
+    r = rgw::read_realm(dpp, y, cfgstore, realm_id, realm_name, realm);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "WARNING: can't open realm " << realm_name << ": " << cpp_strerror(-r) << " ... skipping" << dendl;
       continue;
     }
 
     r = realm.find_zone(dpp, zid, pperiod,
-                        pzonegroup, &found, y);
+                        pzonegroup, &found, cfgstore, y);
     if (r < 0) {
       ldpp_dout(dpp, 20) << __func__ << "(): ERROR: realm.find_zone() returned r=" << r<< dendl;
       return r;
@@ -138,9 +137,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-  ret = rgw::read_realm(dpp, y, cfgstore.get(), realm->get_id(), realm->get_name(), *realm);
+  ret = rgw::read_realm(dpp, y, cfgstore, realm->get_id(), realm->get_name(), *realm);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -192,6 +189,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
                                  current_period,
                                  zonegroup,
                                  &found_period_conf,
+                                 cfgstore,
                                  y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: search_realm_conf() failed: ret="<< ret << dendl;
@@ -427,7 +425,7 @@ int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, list<string>& zones)
 
 int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, list<string>& realms)
 {
-  RGWRealm realm(cct);
+  RGWRealm realm;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
   return syspool.list_prefixed_objs(dpp, realm_names_oid_prefix, &realms);
@@ -462,8 +460,6 @@ int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, const string& curren
   string period_id = current_period;
   while(!period_id.empty()) {
     RGWPeriod period(period_id);
-    auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-    auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
     ret = cfgstore->read_period(dpp, y, period_id, std::nullopt, period);
     if (ret < 0) {
       return ret;
