@@ -35,7 +35,7 @@ private:
   rgw_pool control_pool;
 
   int num_watchers{0};
-  RGWWatcher **watchers{nullptr};
+  std::vector<RGWWatcher> watchers;
   std::set<int> watchers_set;
   std::vector<rgw_rados_ref> notify_objs;
 
@@ -84,7 +84,7 @@ private:
 
   void schedule_context(Context *c);
 public:
-  RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_Notify(CephContext *cct);
 
   virtual ~RGWSI_Notify() override;
 

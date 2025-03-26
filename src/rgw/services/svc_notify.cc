@@ -18,6 +18,7 @@ using namespace std;
 
 static string notify_oid_prefix = "notify";
 
+RGWSI_Notify::RGWSI_Notify(CephContext *cct) : RGWServiceInstance(cct) {}
 RGWSI_Notify::~RGWSI_Notify()
 {
   shutdown();
@@ -205,11 +206,11 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
   if (num_watchers <= 0)
     num_watchers = 1;
 
-  watchers = new RGWWatcher *[num_watchers];
-
   int error = 0;
 
   notify_objs.resize(num_watchers);
+
+  watchers.reserve(num_watchers);
 
   for (int i=0; i < num_watchers; i++) {
     string notify_oid;
@@ -237,10 +238,9 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
       return r;
     }
 
-    RGWWatcher *watcher = new RGWWatcher(cct, this, i, notify_obj);
-    watchers[i] = watcher;
+    auto& watcher = watchers.emplace_back(cct, this, i, notify_obj);
 
-    r = watcher->register_watch_async();
+    r = watcher.register_watch_async();
     if (r < 0) {
       ldpp_dout(dpp, 0) << "WARNING: register_watch_aio() returned " << r << dendl;
       error = r;
@@ -248,8 +248,8 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
     }
   }
 
-  for (int i = 0; i < num_watchers; ++i) {
-    int r = watchers[i]->register_watch_finish();
+  for (auto& watcher : watchers) {
+    int r = watcher.register_watch_finish();
     if (r < 0) {
       ldpp_dout(dpp, 0) << "WARNING: async watch returned " << r << dendl;
       error = r;
@@ -266,13 +266,10 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
 void RGWSI_Notify::finalize_watch()
 {
   for (int i = 0; i < num_watchers; i++) {
-    RGWWatcher *watcher = watchers[i];
     if (watchers_set.find(i) != watchers_set.end())
-      watcher->unregister_watch();
-    delete watcher;
+      watchers[i].unregister_watch();
   }
-
-  delete[] watchers;
+  watchers.clear();
 }
 
 int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
