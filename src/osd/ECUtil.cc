@@ -481,8 +481,8 @@ slice_iterator<shard_id_t, extent_map> shard_extent_map_t::begin_slice_iterator(
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl,
-    const shard_id_set &out_set) {
+int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
+  shard_id_set out_set = sinfo->get_parity_shards();
   bool rebuild_req = false;
 
   for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
@@ -501,7 +501,7 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl,
 
   if (rebuild_req) {
     pad_and_rebuild_to_page_align();
-    return _encode(ec_impl, out_set);
+    return _encode(ec_impl);
   }
 
   return 0;
@@ -513,8 +513,7 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl,
 int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
                                const HashInfoRef &hinfo,
                                uint64_t before_ro_size) {
-  shard_id_set out_set = sinfo->get_parity_shards();
-  int r = _encode(ec_impl, out_set);
+  int r = _encode(ec_impl);
 
   if (!r && hinfo && ro_start >= before_ro_size) {
     /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
@@ -595,26 +594,39 @@ int shard_extent_map_t::decode(ErasureCodeInterfaceRef &ec_impl,
 
   shard_id_set need_set = shard_id_set::difference(want_set, have_set);
 
+
   /* Optimise the no-op */
   if (need_set.empty()) {
     return 0;
   }
+  shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo->get_data_shards());
+  shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
 
-  for (auto &shard : need_set) {
-    for (auto &[off, length] : want[shard]) {
-      bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
-      insert_in_shard(shard, off, bl);
+  if (encode_set.empty()) {
+    extent_set extra_decode = want.get_extent_superset();
+
+    for (auto &shard : need_set) {
+      for (auto &[off, length] : want[shard]) {
+        bufferlist bl;
+        bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+        insert_in_shard(shard, off, bl);
+      }
+    }
+  } else {
+    extent_set decode = want.get_extent_superset();
+    for (auto &shard : need_set) {
+      for (auto &[off, length] : decode) {
+        bufferlist bl;
+        bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+        insert_in_shard(shard, off, bl);
+      }
     }
   }
-
-  shard_id_set decode_set = shard_id_set::difference(need_set, sinfo->get_parity_shards());
-  shard_id_set encode_set = shard_id_set::difference(need_set, sinfo->get_data_shards());
 
   int r = _decode(ec_impl, want_set, decode_set);
 
   if (!r && !encode_set.empty()) {
-    r = _encode(ec_impl, encode_set);
+    r = _encode(ec_impl);
   }
 
   compute_ro_range();

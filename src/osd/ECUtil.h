@@ -898,7 +898,7 @@ public:
   extent_set get_extent_superset() const;
   int encode(const ErasureCodeInterfaceRef &ec_impl, const HashInfoRef &hinfo,
              uint64_t before_ro_size);
-  int _encode(const ErasureCodeInterfaceRef &ec_impl, const shard_id_set &out_set);
+  int _encode(const ErasureCodeInterfaceRef &ec_impl);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
                           shard_extent_map_t &old_sem);
   int decode(ErasureCodeInterfaceRef &ec_impl, ECUtil::shard_extent_set_t want);
