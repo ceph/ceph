@@ -488,8 +488,7 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
   void finish_single_request(
       const hobject_t &hoid,
       ECCommon::read_result_t &&res,
-      ECCommon::read_request_t &req
-    ) override {
+      ECCommon::read_request_t &req) override {
     auto *cct = read_pipeline.cct;
     dout(20) << __func__ << " completing hoid=" << hoid
              << " res=" << res << " req=" << req << dendl;
