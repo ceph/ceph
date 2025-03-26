@@ -898,6 +898,7 @@ public:
   extent_set get_extent_superset() const;
   int encode(const ErasureCodeInterfaceRef &ec_impl, const HashInfoRef &hinfo,
              uint64_t before_ro_size);
+  int _encode(const ErasureCodeInterfaceRef &ec_impl, const shard_id_set &out_set);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
                           shard_extent_map_t &old_sem);
   int decode(ErasureCodeInterfaceRef &ec_impl, ECUtil::shard_extent_set_t want);
@@ -933,6 +934,7 @@ public:
   uint64_t get_end_offset() const { return end_offset; }
   void deep_copy(shard_extent_map_t const &other);
   void swap() {}
+  size_t shard_count() { return extent_maps.size(); }
 
 
   void assert_buffer_contents_equal(shard_extent_map_t other) const {

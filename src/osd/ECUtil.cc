@@ -481,9 +481,8 @@ slice_iterator<shard_id_t, extent_map> shard_extent_map_t::begin_slice_iterator(
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
-                               const HashInfoRef &hinfo,
-                               uint64_t before_ro_size) {
+int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl,
+    const shard_id_set &out_set) {
   bool rebuild_req = false;
   shard_id_set out_set = sinfo->get_parity_shards();
 
@@ -503,10 +502,22 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
 
   if (rebuild_req) {
     pad_and_rebuild_to_page_align();
-    return encode(ec_impl, hinfo, before_ro_size);
+    return _encode(ec_impl, out_set);
   }
 
-  if (hinfo && ro_start >= before_ro_size) {
+  return 0;
+}
+
+/* Encode parity chunks, using the encode_chunks interface into the
+ * erasure coding. This generates all parity using full stripe writes.
+ */
+int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
+                               const HashInfoRef &hinfo,
+                               uint64_t before_ro_size) {
+  shard_id_set out_set = sinfo->get_parity_shards();
+  int r = _encode(ec_impl, out_set);
+
+  if (!r && hinfo && ro_start >= before_ro_size) {
     /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
      *                 currently considering ALL the buffers, including the
      *                 parity buffers.  Is this really right?
@@ -521,7 +532,7 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
     }
   }
 
-  return 0;
+  return r;
 }
 
 /* Encode parity chunks, using the parity delta write interfaces on plugins
@@ -598,7 +609,14 @@ int shard_extent_map_t::decode(ErasureCodeInterfaceRef &ec_impl,
     }
   }
 
-  int r = _decode(ec_impl, want_set, need_set);
+  shard_id_set decode_set = shard_id_set::difference(need_set, sinfo->get_parity_shards());
+  shard_id_set encode_set = shard_id_set::difference(need_set, sinfo->get_data_shards());
+
+  int r = _decode(ec_impl, want_set, decode_set);
+
+  if (!r && !encode_set.empty()) {
+    r = _encode(ec_impl, encode_set);
+  }
 
   compute_ro_range();
 

@@ -371,11 +371,8 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
 
   int r = op.returned_data->decode(ec_impl, shard_want_to_read);
-  ceph_assert(r == 0);
-  // We are never appending here, so we never need hinfo.
-  op.returned_data->insert_parity_buffers();
-  r = op.returned_data->encode(ec_impl, NULL, 0);
   ceph_assert(r==0);
+  ceph_assert(op.returned_data->shard_count() == read_mask.shard_count());
 
   // Finally, we don't want to write any padding, so truncate the buffer
   // to remove it.
