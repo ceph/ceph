@@ -1011,10 +1011,13 @@ void Mirror<I>::image_demote(I *ictx,
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto on_cleanup = new LambdaContext([ictx, on_finish](int r) {
-      ictx->image_lock.lock();
-      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
-      ictx->image_lock.unlock();
+  auto on_cleanup = new LambdaContext([ictx, group_snap_id, on_finish](int r) {
+      // for images part of the group do it as part of the group demote.
+      if (group_snap_id.empty()) {
+        ictx->image_lock.lock();
+        ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+        ictx->image_lock.unlock();
+      }
 
       ictx->state->handle_update_notification();
 
@@ -3526,6 +3529,12 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
         group_ioctx, group_id, &mirror_peer_uuids, &image_ctxs, &cond);
     req->send();
     cond.wait();
+  }
+  for (size_t i = 0; i < image_ctxs.size(); ++i) {
+    ImageCtx *ictx = image_ctxs[i];
+    ictx->image_lock.lock();
+    ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+    ictx->image_lock.unlock();
   }
   close_images(&image_ctxs);
 
