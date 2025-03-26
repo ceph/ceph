@@ -47,7 +47,8 @@ function run() {
     fi
     local aiomax="$((65536 * procs))"
     if [ "$(/sbin/sysctl -n fs.aio-max-nr )" -lt "${aiomax}" ]; then
-        $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr="${aiomax}"
+        wrap_sudo
+        $DRY_RUN $SUDO /sbin/sysctl -q -w fs.aio-max-nr="${aiomax}" || true
     fi
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
