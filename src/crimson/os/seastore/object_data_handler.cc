@@ -1377,69 +1377,6 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
     });
 }
 
-ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
-  context_t ctx,
-  object_data_t &object_data,
-  lba_mapping_list_t &pins,
-  laddr_t data_base)
-{
-  LOG_PREFIX(ObjectDataHandler::clone_extents);
-  TRACET("object_data: {}~0x{:x}, data_base: 0x{:x}",
-    ctx.t,
-    object_data.get_reserved_data_base(),
-    object_data.get_reserved_data_len(),
-    data_base);
-  return ctx.tm.remove(
-    ctx.t,
-    object_data.get_reserved_data_base()
-  ).si_then(
-    [&pins, &object_data, ctx, data_base](auto) mutable {
-      return seastar::do_with(
-	(extent_len_t)0,
-	[&object_data, ctx, data_base, &pins](auto &last_pos) {
-	return trans_intr::do_for_each(
-	  pins,
-	  [&last_pos, &object_data, ctx, data_base](auto &pin) {
-	  auto offset = pin.get_key().template get_byte_distance<
-	    extent_len_t>(data_base);
-	  ceph_assert(offset == last_pos);
-	  laddr_t addr = (object_data.get_reserved_data_base() + offset)
-	      .checked_to_laddr();
-	  return seastar::futurize_invoke([ctx, addr, &pin] {
-	    if (pin.get_val().is_zero()) {
-	      return ctx.tm.reserve_region(ctx.t, addr, pin.get_length());
-	    } else {
-	      return ctx.tm.clone_pin(ctx.t, addr, pin.duplicate());
-	    }
-	  }).si_then(
-	    [&pin, &last_pos, offset](auto) {
-	    last_pos = offset + pin.get_length();
-	    return seastar::now();
-	  }).handle_error_interruptible(
-	    crimson::ct_error::input_output_error::pass_further(),
-	    crimson::ct_error::assert_all("not possible")
-	  );
-	}).si_then([&last_pos, &object_data, ctx] {
-	  if (last_pos != object_data.get_reserved_data_len()) {
-	    return ctx.tm.reserve_region(
-	      ctx.t,
-	      (object_data.get_reserved_data_base() + last_pos).checked_to_laddr(),
-	      object_data.get_reserved_data_len() - last_pos
-	    ).si_then([](auto) {
-	      return seastar::now();
-	    });
-	  }
-	  return TransactionManager::reserve_extent_iertr::now();
-	});
-      });
-    }
-  ).handle_error_interruptible(
-    ObjectDataHandler::write_iertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "object_data_handler::clone invalid error"
-  });
-}
-
 ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   context_t ctx)
 {
@@ -1458,45 +1395,52 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
     if (object_data.is_null()) {
       return clone_iertr::now();
     }
-    return prepare_data_reservation(
-      ctx,
-      d_object_data,
-      object_data.get_reserved_data_len()
-    ).si_then([&object_data, &d_object_data, ctx, this](auto) {
-      assert(!object_data.is_null());
-      auto base = object_data.get_reserved_data_base();
-      auto len = object_data.get_reserved_data_len();
-      object_data.clear();
-      LOG_PREFIX(ObjectDataHandler::clone);
-      DEBUGT("cloned obj reserve_data_base: {}, len 0x{:x}",
-	ctx.t,
-	d_object_data.get_reserved_data_base(),
-	d_object_data.get_reserved_data_len());
+    return ctx.tm.get_pin(ctx.t, object_data.get_reserved_data_base()
+    ).si_then([this, &object_data, &d_object_data, ctx](auto mapping) {
       return prepare_data_reservation(
 	ctx,
-	object_data,
-	d_object_data.get_reserved_data_len()
-      ).si_then([&d_object_data, ctx, &object_data, base, len, this](auto) {
-	LOG_PREFIX("ObjectDataHandler::clone");
-	DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
+	d_object_data,
+	object_data.get_reserved_data_len()
+      ).si_then([&object_data, &d_object_data, ctx](auto mapping) {
+	assert(!object_data.is_null());
+	assert(mapping);
+	LOG_PREFIX(ObjectDataHandler::clone);
+	DEBUGT("cloned obj reserve_data_base: {}, len 0x{:x}",
 	  ctx.t,
-	  object_data.get_reserved_data_base(),
-	  object_data.get_reserved_data_len());
-	return ctx.tm.get_pins(ctx.t, base, len
-	).si_then([ctx, &object_data, &d_object_data, base, this](auto pins) {
-	  return seastar::do_with(
-	    std::move(pins),
-	    [ctx, &object_data, &d_object_data, base, this](auto &pins) {
-	    return clone_extents(ctx, object_data, pins, base
-	    ).si_then([ctx, &d_object_data, base, &pins, this] {
-	      return clone_extents(ctx, d_object_data, pins, base);
-	    }).si_then([&pins, ctx] {
-	      return do_removals(ctx, pins);
-	    });
-	  });
+	  d_object_data.get_reserved_data_base(),
+	  d_object_data.get_reserved_data_len());
+	return ctx.tm.remove(ctx.t, std::move(*mapping));
+      }).si_then([mapping=mapping.duplicate(),
+		  &d_object_data, ctx](auto pos) mutable {
+	auto base = d_object_data.get_reserved_data_base();
+	auto len = d_object_data.get_reserved_data_len();
+	return ctx.tm.clone_range(
+	  ctx.t, base, len, std::move(pos), std::move(mapping), true);
+      }).si_then([ctx, &object_data, &d_object_data, this] {
+	object_data.clear();
+	return prepare_data_reservation(
+	  ctx,
+	  object_data,
+	  d_object_data.get_reserved_data_len()
+	).si_then([ctx, &object_data](auto mapping) {
+	  LOG_PREFIX("ObjectDataHandler::clone");
+	  DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
+	    ctx.t,
+	    object_data.get_reserved_data_base(),
+	    object_data.get_reserved_data_len());
+	  return ctx.tm.remove(ctx.t, std::move(*mapping));
 	});
+      }).si_then([ctx, &object_data,
+		  mapping=std::move(mapping)](auto pos) mutable {
+	auto base = object_data.get_reserved_data_base();
+	auto len = object_data.get_reserved_data_len();
+	return ctx.tm.clone_range(
+	  ctx.t, base, len, std::move(pos), std::move(mapping), false);
       });
-    });
+    }).handle_error_interruptible(
+      clone_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
   });
 }
 
