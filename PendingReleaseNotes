@@ -13,6 +13,8 @@
   kernel, then the mapping is retried using the legacy ioctl interface.
 * RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
   existing versioning-enabled bucket that was not created with Object Lock enabled.
+* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject and CompleteMultipartUpload responses.
 
 * RADOS: A new command, `ceph osd rm-pg-upmap-primary-all`, has been added that allows
   users to clear all pg-upmap-primary mappings in the osdmap when desired.
