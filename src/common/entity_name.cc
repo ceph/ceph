@@ -14,6 +14,7 @@
 
 #include "common/entity_name.h"
 #include "common/ceph_strings.h"
+#include "common/Formatter.h"
 
 #include <sstream>
 
@@ -116,6 +117,12 @@ std::string_view EntityName::
 get_type_name() const
 {
   return ceph_entity_type_name(type);
+}
+
+void EntityName::dump(ceph::Formatter *f) const {
+  f->dump_int("type", type);
+  f->dump_string("type_str", get_type_name());
+  f->dump_string("id", id);
 }
 
 const std::string &EntityName::

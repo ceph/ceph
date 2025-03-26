@@ -14,6 +14,7 @@
 
 #include "common/config.h"
 #include "CephxKeyServer.h"
+#include "common/Formatter.h"
 #include "common/dout.h"
 #include <sstream>
 
@@ -154,9 +155,36 @@ int KeyServer::start_server()
   return 0;
 }
 
+void KeyServerData::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("rotating_version", rotating_ver);
+  f->open_array_section("secrets");
+  for (auto const& [name, auth] : secrets) {
+    f->open_object_section("secret");
+    f->dump_object("entity", name);
+    f->dump_object("auth", auth);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("rotating_secrets");
+  for (auto const& [entity_type, secrets] : rotating_secrets) {
+    f->open_object_section("rotating_secret");
+    auto name = EntityName(entity_type);
+    f->dump_object("entity", name);
+    f->dump_object("secrets", secrets);
+    f->close_section();
+  }
+  f->close_section();
+}
+
 void KeyServer::dump()
 {
   _dump_rotating_secrets();
+}
+
+void KeyServer::dump(ceph::Formatter *f) const
+{
+  f->dump_object("data", data);
 }
 
 void KeyServer::_dump_rotating_secrets()
@@ -369,7 +397,7 @@ void KeyServer::encode_plaintext(bufferlist &bl)
   bl.append(os.str());
 }
 
-bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl)
+bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl, bool wipe)
 {
   std::scoped_lock l{lock};
   ldout(cct, 20) << __func__ << " before: data.rotating_ver=" << data.rotating_ver
@@ -377,7 +405,19 @@ bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl)
 
   KeyServerData pending_data(nullptr);
   pending_data.rotating_ver = data.rotating_ver + 1;
-  pending_data.rotating_secrets = data.rotating_secrets;
+  if (wipe) {
+    /* Always keep CEPH_ENTITY_TYPE_AUTH: existing auth service keys are needed
+     * to renew tickets by daemons/clients and the only information in an old
+     * ticket used is the global_id. Forging tickets is not a significant
+     * concern. A stolen auth service key is not worthwhile since you would
+     * be incaapable of generating useful service tickets with the associated
+     * service key (e.g. "osd").
+     */
+    RotatingSecrets& r = data.rotating_secrets[CEPH_ENTITY_TYPE_AUTH];
+    pending_data.rotating_secrets[CEPH_ENTITY_TYPE_AUTH] = r;
+  } else {
+    pending_data.rotating_secrets = data.rotating_secrets;
+  }
 
   int added = 0;
   added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH, pending_data);

@@ -21,6 +21,8 @@
 
 #include "msg/msg_types.h"
 
+namespace ceph { class Formatter; }
+
 /* Represents a Ceph entity name.
  *
  * For example, mds.0 is the name of the first metadata server.
@@ -28,6 +30,9 @@
  */
 struct EntityName
 {
+  EntityName() = default;
+  explicit EntityName(uint32_t t) : type(t), id("*") {}
+
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(type, bl);
@@ -41,6 +46,7 @@ struct EntityName
     decode(id_, bl);
     set(type_, id_);
   }
+  void dump(ceph::Formatter *f) const;
 
   const std::string& to_str() const;
   const char *to_cstr() const;

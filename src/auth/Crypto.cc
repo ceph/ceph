@@ -991,6 +991,13 @@ void CryptoKey::decode(bufferlist::const_iterator& bl)
     throw ceph::buffer::malformed_input("malformed secret");
 }
 
+void CryptoKey::dump(Formatter *f) const
+{
+  f->dump_int("type", type);
+  f->dump_stream("created") << created;
+  f->dump_int("secret.length", secret.length());
+}
+
 int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
 {
   int r = _set_secret(type, s);

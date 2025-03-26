@@ -70,6 +70,7 @@ struct KeyServerData {
     decode(rotating_ver, iter);
     decode(rotating_secrets, iter);
   }
+  void dump(ceph::Formatter *f) const;
 
   bool contains(const EntityName& name) const {
     return (secrets.find(name) != secrets.end());
@@ -222,7 +223,8 @@ public:
   void rotate_timeout(double timeout);
 
   void dump();
-  
+  void dump(ceph::Formatter *f) const;
+
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
                               std::optional<int> key_type,
@@ -305,7 +307,7 @@ public:
     }
   }
 
-  bool prepare_rotating_update(ceph::buffer::list& rotating_bl);
+  bool prepare_rotating_update(ceph::buffer::list& rotating_bl, bool wipe);
 
   bool get_rotating_encrypted(const EntityName& name, ceph::buffer::list& enc_bl) const;
 

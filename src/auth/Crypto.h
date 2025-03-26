@@ -136,6 +136,7 @@ public:
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
 
   void clear() {
     *this = CryptoKey();

@@ -69,6 +69,18 @@ struct EntityAuth {
       decode(pending_key, bl);
     }
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("key", key);
+    f->dump_object("pending_key", pending_key);
+    f->open_array_section("caps");
+    for (auto const& [entity, cap] : caps) {
+      f->open_object_section("cap");
+      f->dump_string("service_name", entity);
+      f->dump_string("access_spec", cap.to_str());
+      f->close_section();
+    }
+    f->close_section();
+  }
 };
 WRITE_CLASS_ENCODER(EntityAuth)
 
@@ -241,6 +253,10 @@ struct ExpiringCryptoKey {
     decode(key, bl);
     decode(expiration, bl);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("key", key);
+    f->dump_stream("expiration") << expiration;
+  }
 };
 WRITE_CLASS_ENCODER(ExpiringCryptoKey)
 
@@ -308,6 +324,17 @@ struct RotatingSecrets {
   }
 
   void dump();
+  void dump(ceph::Formatter *f) const {
+    f->dump_int("max_ver", max_ver);
+    f->open_array_section("keys");
+    for (const auto& [id, key] : secrets) {
+      f->open_object_section("secret");
+      f->dump_int("id", id);
+      f->dump_object("expiring_key", key);
+      f->close_section();
+    }
+    f->close_section();
+  }
 };
 WRITE_CLASS_ENCODER(RotatingSecrets)
 
