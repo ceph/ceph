@@ -85,7 +85,7 @@ bool AuthMonitor::check_rotate()
 {
   KeyServerData::Incremental rot_inc;
   rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
-  if (mon.key_server.prepare_rotating_update(rot_inc.rotating_bl)) {
+  if (mon.key_server.prepare_rotating_update(rot_inc.rotating_bl, false)) {
     dout(10) << __func__ << " updating rotating" << dendl;
     push_cephx_inc(rot_inc);
     return true;
@@ -871,6 +871,8 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
       prefix == "auth rotate" ||
+      prefix == "auth dump-keys" ||
+      prefix == "auth wipe-rotating-service-keys" ||
       prefix == "auth del" ||
       prefix == "auth rm" ||
       prefix == "auth get-or-create" ||
@@ -1922,6 +1924,30 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     push_cephx_inc(auth_inc);
 
     _encode_auth(entity, entity_auth, rdata, f.get());
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
+                                              get_last_committed() + 1));
+    return true;
+  } else if (prefix == "auth dump-keys") {
+    if (f) {
+      f->open_object_section("keys");
+      mon.key_server.dump(f.get());
+      f->close_section();
+      f->flush(ds);
+      err = 0;
+    } else {
+      err = -EINVAL;
+    }
+    goto done;
+  } else if (prefix == "auth wipe-rotating-service-keys") {
+    /* N.B.: doing this requires all service daemons to restart to get new service keys. */
+    /* is this true?? */
+    KeyServerData::Incremental rot_inc;
+    rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
+    bool modified = mon.key_server.prepare_rotating_update(rot_inc.rotating_bl, true);
+    ceph_assert(modified);
+    rs = "wiped rotating service keys!";
+    dout(5) << __func__ << " wiped rotating service keys!" << dendl;
+    push_cephx_inc(rot_inc);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
                                               get_last_committed() + 1));
     return true;
