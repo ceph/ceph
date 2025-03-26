@@ -2282,15 +2282,25 @@ options:
   type: float
   level: advanced
   default: 72_hr
-  with_legacy: true
+  desc: The time-to-live for tickets with the auth subsystem of the Monitors.
+  long_desc: >
+    The time-to-live for tickets with the auth subsystem of the Monitors.
+    These tickets are used to reclaim the global ID associated with the
+    running client.
+  flags:
+  - runtime
 - name: auth_service_ticket_ttl
   type: float
   level: advanced
   default: 1_hr
-  fmt_desc: When the Ceph Storage Cluster sends a Ceph Client a ticket for
-   authentication, the Ceph Storage Cluster assigns the ticket a
-   time to live.
-  with_legacy: true
+  desc: The time-to-live for non-auth service tickets issued by the Monitors.
+  fmt_desc: >
+   The time-to-live for non-auth service tickets issued by the Monitors. These
+   tickets would include services like the OSD or MDS. This allows the client
+   to authenticate independently with the service for the given timeframe
+   before having to refresh its tickets with the Monitors again.
+  flags:
+  - runtime
 - name: auth_allow_insecure_global_id_reclaim
   type: bool
   level: advanced
