@@ -3387,6 +3387,8 @@ void PeeringState::split_into(
 
   child->info.last_user_version = info.last_user_version;
 
+  child->info.partial_writes_last_complete = info.partial_writes_last_complete;
+
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
 
@@ -3544,6 +3546,15 @@ void PeeringState::merge_from(
     if (past_intervals.empty() && !source->past_intervals.empty()) {
       psdout(10) << "taking source's past_intervals" << dendl;
       past_intervals = source->past_intervals;
+    }
+
+    // merge pwlc
+    if (!info.partial_writes_last_complete.empty()) {
+      psdout(10) << "before pwlc=" << info.partial_writes_last_complete << dendl;
+    }
+    update_peer_info(pg_whoami, source->info);
+    if (!info.partial_writes_last_complete.empty()) {
+      psdout(10) << "after pwlc=" << info.partial_writes_last_complete << dendl;
     }
   }
 
