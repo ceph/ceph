@@ -58,7 +58,8 @@ TEST(ectransaction, two_writes_separated_append)
     std::nullopt,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -95,7 +96,8 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -134,7 +136,8 @@ TEST(ectransaction, partial_write)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -175,7 +178,8 @@ TEST(ectransaction, overlapping_write_non_aligned)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -217,7 +221,8 @@ TEST(ectransaction, test_appending_write_non_aligned)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -259,7 +264,8 @@ TEST(ectransaction, append_with_large_hole)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -301,7 +307,8 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
@@ -345,7 +352,8 @@ TEST(ectransaction, test_overwrite_with_missing)
     oi,
     std::nullopt,
     ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr);
+    nullptr,
+    0);
 
   generic_derr << "plan " << plan << dendl;
 
