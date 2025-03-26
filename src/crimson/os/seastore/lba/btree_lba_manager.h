@@ -100,38 +100,16 @@ public:
     });
   }
 
-  alloc_extent_ret clone_mapping(
+  clone_mapping_ret clone_mapping(
     Transaction &t,
+    LBAMapping pos,
+    LBAMapping mapping,
     laddr_t laddr,
-    extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) final
-  {
-    std::vector<alloc_mapping_info_t> alloc_infos = {
-      alloc_mapping_info_t::create_indirect(
-	laddr, len, intermediate_key)};
-    return seastar::do_with(
-      std::move(alloc_infos),
-      [this, &t, laddr, intermediate_base](auto &infos) {
-	return alloc_sparse_mappings(
-	  t, laddr, infos, alloc_policy_t::deterministic
-	).si_then([this, &t, intermediate_base](auto cursors) {
-	  ceph_assert(cursors.size() == 1);
-	  ceph_assert(cursors.front()->is_indirect());
-	  return update_refcount(t, intermediate_base, 1, false
-	  ).si_then([cursors=std::move(cursors)](auto p) mutable {
-	    assert(p.is_alive_mapping());
-	    auto mapping = LBAMapping::create_indirect(
-	      p.take_cursor(), std::move(cursors.front()));
-	    ceph_assert(mapping.is_stable());
-	    return alloc_extent_iertr::make_ready_future<
-	      LBAMapping>(std::move(mapping));
-	  });
-	});
-      }).handle_error_interruptible(
-	crimson::ct_error::input_output_error::pass_further{},
-	crimson::ct_error::assert_all{"unexpect enoent"});
-  }
+    bool updateref) final;
+
+#ifdef UNIT_TESTS_BUILT
+  get_end_mapping_ret get_end_mapping(Transaction &t) final;
+#endif
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
@@ -436,7 +414,7 @@ private:
 	      val.refcount,
 	      val.pladdr,
 	      val.len,
-	      (!v.next->is_end() && v.next->is_indirect())
+	      v.next->is_indirect()
 		? LBAMapping::create_indirect(nullptr, std::move(v.next))
 		: LBAMapping::create_direct(std::move(v.next))};
     } else {

@@ -703,18 +703,29 @@ struct transaction_manager_test_t :
 
   LBAMapping clone_pin(
     test_transaction_t &t,
-    laddr_t offset,
-    LBAMapping mapping) {
-    auto pin = with_trans_intr(
-      *(t.t),
-      [this, offset, mapping=std::move(mapping)](auto &trans) mutable {
-      return tm->clone_pin(trans, offset, std::move(mapping));
-    }).unsafe_get();
+    LBAMapping pos,
+    LBAMapping mapping,
+    laddr_t offset) {
+    auto key = mapping.get_key();
+    auto pin = with_trans_intr(*(t.t), [&](auto &trans) {
+      return tm->clone_pin(
+	trans,
+	std::move(pos),
+	std::move(mapping),
+	offset,
+	true);
+    }).unsafe_get().cloned_mapping;
     EXPECT_EQ(offset, pin.get_key());
-    EXPECT_EQ(mapping.get_key(), pin.get_intermediate_key());
-    EXPECT_EQ(mapping.get_key(), pin.get_intermediate_base());
+    EXPECT_EQ(key, pin.get_intermediate_key());
+    EXPECT_EQ(key, pin.get_intermediate_base());
     test_mappings.inc_ref(pin.get_intermediate_key(), t.mapping_delta);
     return pin;
+  }
+
+  LBAMapping get_end(test_transaction_t &t) {
+    return with_trans_intr(*(t.t), [&](auto &trans) {
+      return lba_manager->get_end_mapping(trans);
+    }).unsafe_get();
   }
 
   std::optional<LBAMapping> try_get_pin(
@@ -1462,9 +1473,9 @@ struct transaction_manager_test_t :
       {
 	auto t = create_transaction();
         auto lpin = get_pin(t, l_offset);
-        auto rpin = get_pin(t, r_offset);
-	auto l_clone_pin = clone_pin(t, l_clone_offset, std::move(lpin));
-	auto r_clone_pin = clone_pin(t, r_clone_offset, std::move(rpin));
+	auto l_clone_pos = get_end(t);
+	auto l_clone_pin = clone_pin(
+	  t, std::move(l_clone_pos), std::move(lpin), l_clone_offset);
         //split left
 	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
@@ -1476,6 +1487,10 @@ struct transaction_manager_test_t :
         auto lext = read_pin(t, std::move(*pin3));
         EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
 
+        auto rpin = get_pin(t, r_offset);
+	auto r_clone_pos = get_end(t);
+	auto r_clone_pin = clone_pin(
+	  t, std::move(r_clone_pos), std::move(rpin), r_clone_offset);
         //split right
 	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
