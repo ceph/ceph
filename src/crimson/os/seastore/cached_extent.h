@@ -789,6 +789,17 @@ public:
     return is_pending() && pending_for_transaction == id;
   }
 
+  enum class viewable_state_t {
+    stable,                // viewable
+    pending,               // viewable
+    invalid,               // unviewable
+    stable_become_retired, // unviewable
+    stable_become_pending, // unviewable
+  };
+
+  std::pair<bool, viewable_state_t>
+  is_viewable_by_trans(Transaction &t) const;
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -1099,6 +1110,7 @@ protected:
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
+std::ostream &operator<<(std::ostream &, CachedExtent::viewable_state_t);
 std::ostream &operator<<(std::ostream &, const CachedExtent&);
 
 /// Compare extents by paddr
@@ -1465,5 +1477,6 @@ using lextent_list_t = addr_extent_list_base_t<
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 #endif
