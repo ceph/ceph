@@ -54,8 +54,11 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   }
 
 public:
-  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, rgw_rados_ref& o)
-    : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
+  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, rgw_rados_ref o)
+    : cct(_cct), svc(s), index(i), obj(std::move(o)), watch_handle(0) {}
+
+  rgw_rados_ref& get_obj() { return obj; }
+
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -196,7 +199,7 @@ rgw_rados_ref RGWSI_Notify::pick_control_obj(const string& key)
   uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
 
   int i = r % num_watchers;
-  return notify_objs[i];
+  return watchers[i].get_obj();
 }
 
 int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
@@ -210,8 +213,6 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
 
   int error = 0;
 
-  notify_objs.resize(num_watchers);
-
   watchers.reserve(num_watchers);
 
   for (int i=0; i < num_watchers; i++) {
@@ -223,13 +224,13 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
       notify_oid = notify_oid_prefix;
     }
 
+    rgw_rados_ref notify_obj;
     int r = rgw_get_rados_ref(dpp, rados, { control_pool, notify_oid },
-			      &notify_objs[i]);
+			      &notify_obj);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
       return r;
     }
-    auto& notify_obj = notify_objs[i];
 
     librados::ObjectWriteOperation op;
     op.create(false);
@@ -240,7 +241,7 @@ int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
       return r;
     }
 
-    auto& watcher = watchers.emplace_back(cct, this, i, notify_obj);
+    auto& watcher = watchers.emplace_back(cct, this, i, std::move(notify_obj));
 
     r = watcher.register_watch_async();
     if (r < 0) {

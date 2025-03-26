@@ -37,7 +37,6 @@ private:
   int num_watchers{0};
   std::vector<RGWWatcher> watchers;
   std::set<int> watchers_set;
-  std::vector<rgw_rados_ref> notify_objs;
 
   bool enabled{false};
 
