@@ -929,7 +929,7 @@ public:
     ceph_assert(log.get_can_rollback_to() >= v);
   }
 
-  void reset_complete_to(pg_info_t *info) {
+  void reset_complete_to(pg_info_t *info, bool ec_optimizations_enabled) {
     if (log.log.empty()) // caller is split_into()
       return;
     log.complete_to = log.log.begin();
@@ -938,13 +938,26 @@ public:
     if (oldest_need != eversion_t()) {
       while (log.complete_to->version < oldest_need) {
         ++log.complete_to;
+	// partial writes allow a shard which did not participate in a write to
+	// have a missing version that is newer that the most recent log entry
+	if (ec_optimizations_enabled && (log.complete_to == log.log.end())) {
+	  break;
+	}
         ceph_assert(log.complete_to != log.log.end());
       }
     }
     if (!info)
       return;
     if (log.complete_to == log.log.begin()) {
-      info->last_complete = eversion_t();
+      // partial writes use last complete to track shards that did not
+      // participate in a write - do not reset it unnecessarily
+      if (!ec_optimizations_enabled) {
+	info->last_complete = eversion_t();
+      } else if ((oldest_need != eversion_t()) &&
+		 info->last_complete >= oldest_need) {
+	info->last_complete = eversion_t(oldest_need.epoch,
+					 oldest_need.version - 1);
+      }
     } else {
       --log.complete_to;
       info->last_complete = log.complete_to->version;
@@ -952,8 +965,8 @@ public:
     }
   }
 
-  void activate_not_complete(pg_info_t &info) {
-    reset_complete_to(&info);
+  void activate_not_complete(pg_info_t &info, bool ec_optimizations_enabled) {
+    reset_complete_to(&info, ec_optimizations_enabled);
     log.last_requested = 0;
   }
 
@@ -1322,7 +1335,8 @@ public:
   bool append_new_log_entries(
     const hobject_t &last_backfill,
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    LogEntryHandler *rollbacker) {
+    LogEntryHandler *rollbacker,
+    bool ec_optimizations_enabled) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
       entries,
@@ -1342,7 +1356,7 @@ public:
 	// always in a std::list of solely lost_delete entries, so it is
 	// sufficient to check whether the first entry is a
 	// lost_delete
-	reset_complete_to(nullptr);
+	reset_complete_to(nullptr, ec_optimizations_enabled);
       }
     }
     return invalidate_stats;

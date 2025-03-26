@@ -2837,7 +2837,7 @@ void PeeringState::activate(
   } else {
     psdout(10) << "activate - not complete, " << missing << dendl;
     info.stats.stats.sum.num_objects_missing = missing.num_missing();
-    pg_log.activate_not_complete(info);
+    pg_log.activate_not_complete(info, pool.info.allows_ecoptimizations());
   }
 
   log_weirdness();
@@ -3389,6 +3389,8 @@ void PeeringState::try_mark_clean()
 void PeeringState::split_into(
   pg_t child_pgid, PeeringState *child, unsigned split_bits)
 {
+  bool ec_optimizations_enabled = pool.info.allows_ecoptimizations();
+
   child->update_osdmap_ref(get_osdmap());
   child->pool = pool;
 
@@ -3407,8 +3409,8 @@ void PeeringState::split_into(
   child->info.log_tail = child->pg_log.get_tail();
 
   // reset last_complete, we might have modified pg_log & missing above
-  pg_log.reset_complete_to(&info);
-  child->pg_log.reset_complete_to(&child->info);
+  pg_log.reset_complete_to(&info, ec_optimizations_enabled);
+  child->pg_log.reset_complete_to(&child->info, ec_optimizations_enabled);
 
   // Info
   child->info.history = info.history;
@@ -4227,7 +4229,8 @@ bool PeeringState::append_log_entries_update_missing(
     pg_log.append_new_log_entries(
       info.last_backfill,
       entries,
-      rollbacker.get());
+      rollbacker.get(),
+      pool.info.allows_ecoptimizations());
 
   if (pg_committed_to && entries.rbegin()->soid > info.last_backfill) {
     pg_log.roll_forward(&info, rollbacker.get());
@@ -4502,7 +4505,7 @@ void PeeringState::force_object_missing(
       peer_missing[peer].add(soid, version, eversion_t(), false);
     } else {
       pg_log.missing_add(soid, version, eversion_t());
-      pg_log.reset_complete_to(&info);
+      pg_log.reset_complete_to(&info, pool.info.allows_ecoptimizations());
       pg_log.set_last_requested(0);
     }
   }
