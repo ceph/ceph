@@ -495,7 +495,7 @@ class mini_flat_map {
   }
 
   std::string fmt_print() const
-  requires has_formatter<KeyT> && has_formatter<ValueT> {
+  requires fmt::formattable<KeyT> && fmt::formattable<ValueT> {
     int c = (int)_size;
     std::string s = "{";
     for (auto&& [k, v] : *this) {
