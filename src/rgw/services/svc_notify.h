@@ -30,6 +30,7 @@ private:
   RGWSI_Zone *zone_svc{nullptr};
   librados::Rados *rados{nullptr};
   RGWSI_Finisher *finisher_svc{nullptr};
+  rgw::sal::ConfigStore *cfgstore{nullptr};
 
   ceph::shared_mutex watchers_lock = ceph::make_shared_mutex("watchers_lock");
   rgw_pool control_pool;

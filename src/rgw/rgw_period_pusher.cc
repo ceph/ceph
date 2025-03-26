@@ -165,7 +165,7 @@ class RGWPeriodPusher::CRThread : public DoutPrefixProvider {
 
 
 RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-				 optional_yield y)
+				 rgw::sal::ConfigStore* cfgstore, optional_yield y)
   : cct(driver->ctx()), driver(driver)
 {
   rgw::sal::Zone* zone = driver->get_zone();
@@ -175,9 +175,7 @@ RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver
 
   // always send out the current period on startup
   RGWPeriod period;
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-  int r = cfgstore->read_period(dpp, y, zone->get_current_period_id(), std::nullopt, period);
+  auto r = cfgstore->read_period(dpp, y, zone->get_current_period_id(), std::nullopt, period);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to load period for realm " << realm_id << dendl;
     return;
