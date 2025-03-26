@@ -3186,7 +3186,8 @@ void PeeringState::rewind_divergent_log(
 {
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.rewind_divergent_log(
-    newhead, info, rollbacker.get(), dirty_info, dirty_big_info);
+    newhead, info, rollbacker.get(), dirty_info, dirty_big_info,
+    pool.info.allows_ecoptimizations());
 }
 
 
@@ -3257,7 +3258,7 @@ void PeeringState::proc_replica_log(
   psdout(10) << "proc_replica_log for osd." << from << ": "
 	     << oinfo << " " << olog << " " << omissing << dendl;
 
-  pg_log.proc_replica_log(oinfo, olog, omissing, from);
+  pg_log.proc_replica_log(oinfo, olog, omissing, from, pool.info.allows_ecoptimizations());
 
   peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
