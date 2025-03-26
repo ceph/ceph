@@ -33,19 +33,9 @@ std::string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 using namespace std;
 using namespace rgw_zone_defaults;
 
-RGWRealm::~RGWRealm() {}
-
 RGWRemoteMetaLog::~RGWRemoteMetaLog()
 {
   delete error_logger;
-}
-
-string RGWRealm::get_predefined_id(CephContext *cct) const {
-  return cct->_conf.get_val<string>("rgw_realm_id");
-}
-
-const string& RGWRealm::get_predefined_name(CephContext *cct) const {
-  return cct->_conf->rgw_realm;
 }
 
 rgw_pool RGWRealm::get_pool(CephContext *cct) const
@@ -56,63 +46,9 @@ rgw_pool RGWRealm::get_pool(CephContext *cct) const
   return rgw_pool(cct->_conf->rgw_realm_root_pool);
 }
 
-const string RGWRealm::get_default_oid(bool old_format) const
-{
-  if (cct->_conf->rgw_default_realm_info_oid.empty()) {
-    return default_realm_info_oid;
-  }
-  return cct->_conf->rgw_default_realm_info_oid;
-}
-
-const string& RGWRealm::get_names_oid_prefix() const
-{
-  return realm_names_oid_prefix;
-}
-
 const string& RGWRealm::get_info_oid_prefix(bool old_format) const
 {
   return realm_info_oid_prefix;
-}
-
-int RGWRealm::set_current_period(const DoutPrefixProvider *dpp, RGWPeriod& period, optional_yield y)
-{
-  // update realm epoch to match the period's
-  if (epoch > period.get_realm_epoch()) {
-    ldpp_dout(dpp, 0) << "ERROR: set_current_period with old realm epoch "
-        << period.get_realm_epoch() << ", current epoch=" << epoch << dendl;
-    return -EINVAL;
-  }
-  if (epoch == period.get_realm_epoch() && current_period != period.get_id()) {
-    ldpp_dout(dpp, 0) << "ERROR: set_current_period with same realm epoch "
-        << period.get_realm_epoch() << ", but different period id "
-        << period.get_id() << " != " << current_period << dendl;
-    return -EINVAL;
-  }
-
-  epoch = period.get_realm_epoch();
-  current_period = period.get_id();
-
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
-  std::unique_ptr<rgw::sal::RealmWriter> writer;
-  int ret = cfgstore->create_realm(dpp, y, false, *this, &writer);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: realm create: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  ret = rgw::realm_set_current_period(dpp, y, cfgstore.get(), *writer, *this, period);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: period update: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  ret = rgw::reflect_period(dpp, y, cfgstore.get(), period);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return 0;
 }
 
 string RGWRealm::get_control_oid() const
@@ -126,6 +62,7 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
                         RGWPeriod *pperiod,
                         RGWZoneGroup *pzonegroup,
                         bool *pfound,
+                        rgw::sal::ConfigStore* cfgstore,
                         optional_yield y) const
 {
   auto& found = *pfound;
@@ -136,8 +73,6 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   epoch_t epoch = 0;
 
   RGWPeriod period(period_id, epoch);
-  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
-  auto cfgstore = DriverManager::create_config_store(dpp, config_store_type);
   int r = cfgstore->read_period(dpp, y, period_id, epoch, period);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "WARNING: period init failed: " << cpp_strerror(-r) << " ... skipping" << dendl;

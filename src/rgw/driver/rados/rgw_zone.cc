@@ -708,10 +708,12 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
 {
   ldpp_dout(dpp, 20) << __func__ << " realm " << realm.id
       << " period " << current_period.id << dendl;
+  auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone; // XXX
+
   // gateway must be in the master zone to commit
-  if (driver->get_zone()->get_zonegroup().is_master_zonegroup()) {
+  if (info.master_zone != zone_svc->get_zone_params().id) {
     error_stream << "Cannot commit period on zone "
-        << driver->get_zone()->get_id() << ", it must be sent to "
+        << zone_svc->get_zone_params().id << ", it must be sent to "
         "the period's master zone " << info.master_zone << '.' << std::endl;
     return -EINVAL;
   }

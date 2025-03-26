@@ -516,9 +516,6 @@ struct RGWPeriodConfig
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-
-  static std::string get_oid(const std::string& realm_id);
-  static rgw_pool get_pool(CephContext *cct);
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
@@ -531,16 +528,12 @@ public:
   std::string id;
   std::string name;
 
-  CephContext *cct{nullptr};
-
   std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
 public:
   RGWRealm() {}
   RGWRealm(const std::string& _id, const std::string& _name = "") : id(_id), name(_name) {}
-  RGWRealm(CephContext *_cct): cct(_cct) {}
-  RGWRealm(const std::string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): name(_name), cct(_cct){}
 
   const std::string& get_name() const { return name; }
   const std::string& get_id() const { return id; }
@@ -549,12 +542,16 @@ public:
   void set_id(const std::string& _id) { id = _id;}
   void clear_id() { id.clear(); }
 
-  virtual ~RGWRealm();
-
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(id, bl);
-    encode(name, bl);
+    {
+      // these used to be wrapped by RGWSystemMetaObj::encode(),
+      // so the extra ENCODE_START/ENCODE_FINISH are preserved
+      ENCODE_START(1, 1, bl);
+      encode(id, bl);
+      encode(name, bl);
+      ENCODE_FINISH(bl);
+    }
     encode(current_period, bl);
     encode(epoch, bl);
     ENCODE_FINISH(bl);
@@ -562,19 +559,23 @@ public:
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(id, bl);
-    decode(name, bl);
+    {
+      // these used to be wrapped by RGWSystemMetaObj::decode(),
+      // so the extra DECODE_START/DECODE_FINISH are preserved
+      DECODE_START(1, bl);
+      decode(id, bl);
+      decode(name, bl);
+      DECODE_FINISH(bl);
+    }
     decode(current_period, bl);
     decode(epoch, bl);
     DECODE_FINISH(bl);
   }
 
+  // TODO: use ConfigStore for watch/notify,
+  // After refactoring RGWRealmWatcher and RGWRealmReloader, get_pool and get_info_oid_prefix will be removed.
   rgw_pool get_pool(CephContext *cct) const;
-  const std::string get_default_oid(bool old_format = false) const;
-  const std::string& get_names_oid_prefix() const;
   const std::string& get_info_oid_prefix(bool old_format = false) const;
-  std::string get_predefined_id(CephContext *cct) const;
-  const std::string& get_predefined_name(CephContext *cct) const;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -583,7 +584,6 @@ public:
   const std::string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(const DoutPrefixProvider *dpp, RGWPeriod& period, optional_yield y);
   void clear_current_period_and_epoch() {
     current_period.clear();
     epoch = 0;
@@ -597,6 +597,7 @@ public:
                 RGWPeriod *pperiod,
                 RGWZoneGroup *pzonegroup,
                 bool *pfound,
+                rgw::sal::ConfigStore* cfgstore,
                 optional_yield y) const;
 };
 WRITE_CLASS_ENCODER(RGWRealm)
@@ -658,13 +659,6 @@ public:
   std::string realm_id;
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
-  CephContext *cct{nullptr};
-  int use_latest_epoch(const DoutPrefixProvider *dpp, optional_yield y);
-  int use_current_period();
-
-  const std::string get_period_oid() const;
-  const std::string get_period_oid_prefix() const;
-
   // gather the metadata sync status for each shard; only for use on master zone
   int update_sync_status(const DoutPrefixProvider *dpp, 
                          rgw::sal::Driver* driver,
@@ -689,7 +683,6 @@ public:
   const RGWPeriodConfig& get_config() const { return period_config; }
   const std::vector<std::string>& get_sync_status() const { return sync_status; }
   rgw_pool get_pool(CephContext *cct) const;
-  const std::string& get_latest_epoch_oid() const;
   const std::string& get_info_oid_prefix() const;
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
@@ -744,19 +737,6 @@ public:
                 const rgw_zone_id& zid,
                 RGWZoneGroup *pzonegroup,
                 optional_yield y) const;
-
-  int get_latest_epoch(const DoutPrefixProvider *dpp, epoch_t& epoch, optional_yield y);
-  // update latest_epoch if the given epoch is higher, else return -EEXIST
-  int update_latest_epoch(const DoutPrefixProvider *dpp, epoch_t epoch, optional_yield y);
-
-  void fork();
-
-  // commit a staging period; only for use on master zone
-  int commit(const DoutPrefixProvider *dpp,
-	     rgw::sal::Driver* driver,
-             RGWRealm& realm, const RGWPeriod &current_period,
-             std::ostream& error_stream, optional_yield y,
-	     bool force_if_stale = false);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
