@@ -2267,6 +2267,13 @@ options:
   fmt_desc: If the Ceph version supports message signing, Ceph will sign
    all messages so they are more difficult to spoof.
   with_legacy: true
+- name: cephx_preferred_cipher
+  type: str
+  level: dev
+  desc: preferred cipher to use for new authentication keys
+  default: recommended
+  flags:
+  - runtime
 - name: cephx_allowed_ciphers
   type: str
   level: advanced
