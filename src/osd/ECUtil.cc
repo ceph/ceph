@@ -484,7 +484,6 @@ slice_iterator<shard_id_t, extent_map> shard_extent_map_t::begin_slice_iterator(
 int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl,
     const shard_id_set &out_set) {
   bool rebuild_req = false;
-  shard_id_set out_set = sinfo->get_parity_shards();
 
   for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
