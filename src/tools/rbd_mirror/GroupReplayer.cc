@@ -636,8 +636,8 @@ void GroupReplayer<I>::create_group_replayer() {
 
   m_replayer = group_replayer::Replayer<I>::create(
     m_threads, m_local_io_ctx, m_remote_group_peer.io_ctx, m_global_group_id,
-    m_local_mirror_uuid, m_remote_group_peer.uuid, m_pool_meta_cache,
-    m_local_group_id, m_remote_group_id, &m_local_group_ctx, &m_image_replayers);
+    m_local_mirror_uuid, m_pool_meta_cache, m_local_group_id, m_remote_group_id,
+    &m_local_group_ctx, &m_image_replayers);
 
   m_replayer->init(ctx);
 }

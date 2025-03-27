@@ -40,7 +40,6 @@ Replayer<I>::Replayer(
     librados::IoCtx &remote_io_ctx,
     const std::string &global_group_id,
     const std::string& local_mirror_uuid,
-    const std::string& remote_mirror_uuid,
     PoolMetaCache* pool_meta_cache,
     std::string local_group_id,
     std::string remote_group_id,
@@ -51,7 +50,6 @@ Replayer<I>::Replayer(
     m_remote_io_ctx(remote_io_ctx),
     m_global_group_id(global_group_id),
     m_local_mirror_uuid(local_mirror_uuid),
-    m_remote_mirror_uuid(remote_mirror_uuid),
     m_pool_meta_cache(pool_meta_cache),
     m_local_group_id(local_group_id),
     m_remote_group_id(remote_group_id),
@@ -247,8 +245,10 @@ void Replayer<I>::init(Context* on_finish) {
     return;
   }
 
+  m_remote_mirror_uuid = remote_pool_meta.mirror_uuid;
   m_remote_mirror_peer_uuid = remote_pool_meta.mirror_peer_uuid;
-  dout(10) << "remote_mirror_peer_uuid=" << m_remote_mirror_peer_uuid << dendl;
+  dout(10) << "remote_mirror_uuid=" << m_remote_mirror_uuid
+           << ", remote_mirror_peer_uuid=" << m_remote_mirror_peer_uuid << dendl;
 
   on_finish->complete(0);
   load_local_group_snapshots();
