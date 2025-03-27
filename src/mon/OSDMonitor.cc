@@ -8226,12 +8226,12 @@ int OSDMonitor::prepare_new_pool(string& name,
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->create_time = ceph_clock_now();
   pi->type = pool_type;
-  pi->fast_read = fread; 
+  pi->fast_read = fread;
   pi->flags = g_conf()->osd_pool_default_flags;
   if (bulk) {
     pi->set_flag(pg_pool_t::FLAG_BULK);
   } else if (g_conf()->osd_pool_default_flag_bulk) {
-      pi->set_flag(pg_pool_t::FLAG_BULK);
+    pi->set_flag(pg_pool_t::FLAG_BULK);
   }
   if (g_conf()->osd_pool_default_flag_hashpspool)
     pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
@@ -8331,6 +8331,11 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
 
+  if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+    // This will fail if the pool cannot support ec optimizations.
+    enable_pool_ec_optimizations(*pi, nullptr, true);
+  }
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -8359,6 +8364,70 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
+}
+
+int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
+    stringstream *ss, bool enable) {
+  if (!p.is_erasure()) {
+    if (ss) {
+      *ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
+    }
+    return -EINVAL;
+  }
+  if (osdmap.require_osd_release < ceph_release_t::tentacle) {
+    if (ss) {
+      *ss << "All OSDs must be upgraded to tentacle or "
+           << "later before setting allow_ec_optimizations";
+    }
+    return -EINVAL;
+  }
+  if (enable) {
+    ErasureCodeInterfaceRef erasure_code;
+    unsigned int k, m;
+    stringstream tmp;
+    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+    if (err == 0) {
+      k = erasure_code->get_data_chunk_count();
+      m = erasure_code->get_coding_chunk_count();
+    } else {
+      if (ss) {
+        *ss << "get_erasure_code failed: " << tmp.str();
+      }
+      return -EINVAL;
+    }
+    if ((erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+      if (ss) {
+        *ss << "ec optimizations not currently supported for pool profile.";
+      }
+      return -EINVAL;
+    }
+    // Restrict the set of shards that can be a primary to the 1st data
+    // raw_shard (raw_shard 0) and the coding parity raw_shards because§
+    // the other shards (including local parity for LRC) may not have
+    // up to date copies of xattrs including OI
+    p.nonprimary_shards.clear();
+    for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+      if (raw_shard > 0 && raw_shard < k) {
+	shard_id_t shard;
+	if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
+	  shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
+	} else {
+	  shard = shard_id_t(int(raw_shard));
+	}
+        p.nonprimary_shards.insert(shard);
+      }
+    }
+    p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+  } else {
+    if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
+      if (ss) {
+        *ss << "allow_ec_optimizations cannot be disabled once enabled";
+      }
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
@@ -8828,25 +8897,33 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
   } else if (var == "allow_ec_optimizations") {
-    if (!p.is_erasure()) {
-      ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
-      return -EINVAL;
-    }
-    if (osdmap.require_osd_release < ceph_release_t::tentacle) {
-      ss << "All OSDs must be upgraded to tentacle or "
-           << "later before setting allow_ec_optimizations";
-        return -EINVAL;
-      }
+    bool enable = false;
     if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+      enable = true;
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
-	ss << "allow_ec_optimizations cannot be disabled once enabled";
-	return -EINVAL;
-      }
+      enable = false;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
+    }
+    bool was_enabled = p.allows_ecoptimizations();
+    int r = enable_pool_ec_optimizations(p, nullptr, enable);
+    if (r != 0) {
+      return r;
+    }
+    if (!was_enabled && p.allows_ecoptimizations()) {
+      // Pools with allow_ec_optimizations set store pg_temp in a different
+      // order to change the primary selection algorithm without breaking
+      // old clients. Modify any existing pg_temp for the pool now.
+      // This is only needed when switching on optimisations after creation.
+      for (auto pg_temp = osdmap.pg_temp->begin();
+           pg_temp != osdmap.pg_temp->end();
+           ++pg_temp) {
+        if (pg_temp->first.pool() == pool) {
+          std::vector<int> new_pg_temp = osdmap.pgtemp_primaryfirst(p, pg_temp->second);
+          pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
+        }
+      }
     }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
