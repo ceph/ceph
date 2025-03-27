@@ -114,7 +114,7 @@ export class SmbJoinAuthListComponent implements OnInit {
       itemNames: [authId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('smb/ad/remove', {
+          task: new FinishedTask('smb/ad/delete', {
             authId: authId
           }),
           call: this.smbService.deleteJoinAuth(authId)

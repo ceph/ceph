@@ -90,7 +90,7 @@ export class SmbShareListComponent implements OnInit {
     ];
     this.tableActions = [
       {
-        name: `${this.actionLabels.CREATE}`,
+        name: `${this.actionLabels.CREATE} share`,
         permission: 'create',
         icon: Icons.add,
         routerLink: () => ['/cephfs/smb/share/create', this.clusterId],
