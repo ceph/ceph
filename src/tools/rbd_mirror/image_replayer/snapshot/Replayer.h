@@ -120,6 +120,11 @@ public:
     return m_remote_group_image_snap_id;
   }
 
+  uint64_t get_last_snapshot_bytes() const override {
+    std::unique_lock locker(m_lock);
+    return m_last_snapshot_bytes;
+  }
+
 private:
   /**
    * @verbatim
