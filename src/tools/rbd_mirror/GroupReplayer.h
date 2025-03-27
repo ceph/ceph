@@ -223,6 +223,7 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
   Context* m_replayer_check_task = nullptr;
+  Context* m_update_status_task = nullptr;
 
   group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
   group_replayer::Replayer<ImageCtxT> *m_replayer = nullptr;
@@ -287,6 +288,12 @@ private:
 
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
+
+  void schedule_update_mirror_group_replay_status();
+  void handle_update_mirror_group_replay_status(int r);
+  void cancel_update_mirror_group_replay_status();
+  void update_mirror_group_replay_status();
+
   void wait_for_ops();
   void handle_wait_for_ops(int r);
 
