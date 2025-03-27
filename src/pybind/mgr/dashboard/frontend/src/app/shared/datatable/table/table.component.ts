@@ -89,6 +89,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
 
+  @Input()
+  headerTitle: string;
+  @Input()
+  headerDescription: string;
   // This is the array with the items to be shown.
   @Input()
   data: any[];
