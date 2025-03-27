@@ -354,7 +354,8 @@ ClientRequest::process_op(
     }
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
-    if (!snaps.empty()) {
+    if (!snaps.empty() &&
+        pg->is_missing_head_and_clones(m->get_hobj().get_head())) {
       co_await recover_missing_snaps(pg, snaps);
     }
   }
