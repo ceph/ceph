@@ -1,6 +1,17 @@
 <cds-table-container [cdsLayer]="layer"
                      [cdsTheme]="theme"
                      class="content-theme">
+  <cds-table-header *ngIf="headerTitle">
+    <h4 cdsTableHeaderTitle
+        i18n>
+      {{headerTitle}}
+    </h4>
+    <p cdsTableHeaderDescription
+       i18n
+       *ngIf="headerDescription">
+      {{headerDescription}}
+    </p>
+  </cds-table-header>
   <cds-table-toolbar #toolbar
                      *ngIf="toolHeader"
                      (cancel)="onBatchActionsCancel()"
