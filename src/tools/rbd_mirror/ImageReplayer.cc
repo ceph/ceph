@@ -306,6 +306,15 @@ uint64_t ImageReplayer<I>::get_remote_snap_id_end_limit() {
 }
 
 template <typename I>
+uint64_t ImageReplayer<I>::get_last_snapshot_bytes() const {
+  std::unique_lock locker(m_lock);
+  if (m_replayer != nullptr) {
+    return m_replayer->get_last_snapshot_bytes();
+  }
+  return 0;
+}
+
+template <typename I>
 void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
   dout(10) << "r=" << r << ", desc=" << desc << dendl;
 
