@@ -30,6 +30,7 @@
 class MMgrMap;
 class Mgr;
 class PyModuleConfig;
+class MgrHook;
 
 class MgrStandby : public Dispatcher,
 		   public md_config_obs_t {
@@ -38,6 +39,7 @@ public:
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override;
+  int asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Formatter* f, std::ostream& errss);
 
 protected:
   ceph::async::io_context_pool poolctx;
@@ -57,6 +59,7 @@ protected:
 
   PyModuleRegistry py_module_registry;
   std::shared_ptr<Mgr> active_mgr;
+  std::unique_ptr<MgrHook> asok_hook;
 
   int orig_argc;
   const char **orig_argv;
