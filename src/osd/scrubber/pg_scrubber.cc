@@ -2795,7 +2795,7 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
 
 // ///////////////////// preemption_data_t //////////////////////////////////
 
-PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg},
+PgScrubber::preemption_data_t::preemption_data_t(PG* pg) :
   osd_scrub_max_preemptions{pg->cct->_conf, "osd_scrub_max_preemptions"}
 {
   m_left = *osd_scrub_max_preemptions;
