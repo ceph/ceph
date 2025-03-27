@@ -242,7 +242,9 @@ public:
         SUBDEBUGT(seastore_cache,
           "{} {}~0x{:x} is present on t without fully loaded -- {}",
           t, type, paddr, len, *ret);
-        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+        return trans_intr::make_interruptible(
+          do_read_extent_maybe_partial<CachedExtent>(
+            ret->cast<CachedExtent>(), 0, ret->get_length(), &t_src));
       }
 
       SUBTRACET(seastore_cache,
@@ -288,20 +290,21 @@ public:
     }
 
     ceph_assert(ret->get_type() == type);
+    t.add_to_read_set(ret);
+    touch_extent(*ret, &t_src, t.get_cache_hint());
     if (!ret->is_fully_loaded()) {
-      // ignore non-full extent
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is present without fully loaded in cache -- {}",
         t, type, paddr, len, *ret);
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      return trans_intr::make_interruptible(
+        do_read_extent_maybe_partial<CachedExtent>(
+          ret->cast<CachedExtent>(), 0, ret->get_length(), &t_src));
     }
 
     // present in cache(fully loaded) and is not a retired_placeholder
     SUBDEBUGT(seastore_cache,
       "{} {}~0x{:x} is present in cache -- {}",
       t, type, paddr, len, *ret);
-    t.add_to_read_set(ret);
-    touch_extent(*ret, &t_src, t.get_cache_hint());
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
