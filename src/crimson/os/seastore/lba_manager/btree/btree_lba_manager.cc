@@ -536,6 +536,84 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
+BtreeLBAManager::refresh_lba_mapping_ret
+BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
+{
+  assert(mapping.is_linked_direct());
+  if (mapping.is_valid()) {
+    return refresh_lba_mapping_iertr::make_ready_future<
+      LBAMapping>(std::move(mapping));
+  }
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, LBAMapping>(
+    cache,
+    c,
+    std::move(mapping),
+    [c, this](LBABtree &btree, LBAMapping &mapping) mutable {
+      return refresh_lba_cursor(
+	c, btree, mapping.direct_cursor
+      ).si_then([c, this, &btree, &mapping] {
+	return refresh_lba_cursor(c, btree, mapping.indirect_cursor);
+      }).si_then([&mapping] {
+	assert(mapping.is_valid());
+      });
+    });
+}
+
+BtreeLBAManager::refresh_lba_cursor_ret
+BtreeLBAManager::refresh_lba_cursor(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursorRef &cursor)
+{
+  LOG_PREFIX(BtreeLBAManager::refresh_lba_cursor);
+  if (!cursor) {
+    return refresh_lba_cursor_iertr::now();
+  }
+
+  if (!cursor->parent->is_valid()) {
+    TRACET("cursor {} parent is invalid, re-search from scratch",
+	   c.trans, *cursor);
+    return btree.lower_bound(c, cursor->key
+    ).si_then([&cursor](LBABtree::iterator iter) {
+      assert(!iter.is_end());
+      assert(iter.get_key() == cursor->key);
+      auto node = iter.get_leaf_node();
+      cursor->parent = node;
+      cursor->modifications = node->modifications;
+      cursor->pos = iter.get_leaf_pos();
+      cursor->key = iter.get_key();
+      cursor->val = iter.get_val();
+      assert(cursor->is_valid());
+    });
+  }
+
+  auto [viewable, state] = cursor->parent->is_viewable_by_trans(c.trans);
+  auto leaf = cursor->parent->cast<LBALeafNode>();
+
+  TRACET("cursor: {} viewable: {} state: {}",
+	 c.trans, *cursor, viewable, state);
+
+  if (!viewable) {
+    leaf = leaf->find_pending_version(c.trans, cursor->key);
+    cursor->parent = leaf;
+  }
+
+  if (!viewable ||
+      leaf->modified_since(cursor->modifications)) {
+    auto i = leaf->lower_bound(cursor->key);
+    cursor->pos = i.get_offset();
+    cursor->modifications = leaf->modifications;
+    cursor->val = i.get_val();
+  }
+
+  auto iter = LBALeafNode::iterator(leaf.get(), cursor->pos);
+  ceph_assert(iter.get_key() == cursor->key);
+  ceph_assert(iter.get_val() == cursor->val);
+  assert(cursor->is_valid());
+  return refresh_lba_cursor_iertr::make_ready_future();
+}
+
 void BtreeLBAManager::register_metrics()
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
