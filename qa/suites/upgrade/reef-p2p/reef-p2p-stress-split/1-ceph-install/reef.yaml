@@ -1,13 +1,13 @@
 meta:
 - desc: |
-   install ceph/reef v18.2.0
+   install ceph/reef v18.2.5
    Overall upgrade path is - reef-latest.point -1 => reef-latest
 tasks:
 - install:
-    tag: v18.2.0
+    tag: v18.2.5
     exclude_packages: ['librados3']
     extra_packages: ['librados2']
-- print: "**** done install reef v18.2.0"
+- print: "**** done install reef v18.2.5"
 - ceph:
 - exec:
     osd.0:
