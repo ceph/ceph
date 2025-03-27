@@ -197,9 +197,16 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     }
 
     pg.get_perf_logger().inc(l_osd_replica_read);
-    if (pg.is_unreadable_object(m->get_hobj())) {
-      DEBUGDPP("{}.{}: {} missing on replica, bouncing to primary",
+    if (pg.is_unreadable_object(m->get_hobj().get_head())) {
+      DEBUGDPP("{}.{}: {} missing head on replica, bouncing to primary",
 	       pg, *this, this_instance_id, m->get_hobj());
+      pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
+      co_await reply_op_error(pgref, -EAGAIN);
+      co_return;
+    } else if (pg.is_missing_head_and_clones(m->get_hobj().get_head())) {
+      DEBUGDPP("{}.{}: {} missing possible clone object on replica,"
+               " bouncing to primary",
+               pg, *this, this_instance_id, m->get_hobj());
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
