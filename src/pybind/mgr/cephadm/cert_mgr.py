@@ -226,6 +226,10 @@ class CertMgr:
     ) -> Tuple[str, str]:
         return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
 
+    def is_cert_editable(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
+        return cert_obj.editable if cert_obj else True
+
     def get_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
         cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
         return cert_obj.cert if cert_obj else None
@@ -242,11 +246,11 @@ class CertMgr:
         key = key_obj.key if key_obj else None
         return cert, key
 
-    def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
-        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made)
+    def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
+        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable)
 
-    def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
-        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made)
+    def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
+        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
 
     def save_self_signed_cert_key_pair(self, service_name: str, cert: str, key: str, host: str) -> None:
         logger.info(f"redo: saving cert/key for {service_name} for host '{host}'.")
