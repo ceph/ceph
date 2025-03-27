@@ -1372,7 +1372,6 @@ options:
   default: 0
   min: 0
   max: 1
-  with_legacy: false
 - name: ms_dump_corrupt_message_level
   type: int
   level: advanced

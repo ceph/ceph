@@ -113,7 +113,6 @@ class MonMap {
      There should only be one at a time, but leave support
      for arbitrary numbers just to be safe. */
   std::set<unsigned> removed_ranks;
-  std::set<int> quorum;
 
   /**
    * Persistent Features are all those features that once set on a
@@ -203,10 +202,6 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
   void set_epoch(epoch_t e) { epoch = e; }
-
-  // set and get quorum
-  void set_quorum(const std::set<int>& q) { quorum = q; }
-  const std::set<int>& get_quorum() const { return quorum; }
 
   /**
    * Obtain list of public facing addresses
