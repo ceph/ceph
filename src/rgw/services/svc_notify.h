@@ -66,7 +66,8 @@ private:
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int unwatch(rgw_rados_ref& obj, uint64_t watch_handle);
+  int unwatch(const DoutPrefixProvider* dpp, rgw_rados_ref& obj,
+              uint64_t handle, optional_yield y);
   void add_watcher(int i);
   void remove_watcher(int i);
 
