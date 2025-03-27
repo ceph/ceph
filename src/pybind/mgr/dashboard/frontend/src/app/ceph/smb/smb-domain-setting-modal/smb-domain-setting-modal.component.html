@@ -1,6 +1,5 @@
 <cds-modal size="md"
            [open]="open"
-           [hasScrollingContent]="true"
            (overlaySelected)="closeModal()">
   <cds-modal-header (closeSelect)="closeModal()">
     <h3 cdsModalHeaderHeading
@@ -11,7 +10,8 @@
           #formDir="ngForm"
           [formGroup]="domainSettingsForm"
           novalidate>
-      <div cdsModalContent>
+      <div cdsModalContent
+           class="scrollable">
         <div class="form-item">
           <cds-text-label
             label="realm"

@@ -3,3 +3,8 @@
 .spacing {
   margin-top: layout.$spacing-06;
 }
+
+.scrollable {
+  max-height: 50vh;
+  overflow-y: auto;
+}
