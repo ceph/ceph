@@ -412,16 +412,11 @@ void MonClient::handle_quorum_peon(MMonMap *m) {
   auto con_addrs = m->get_source_addrs();
   auto mon_name = monmap.get_name(con_addrs);
 
-  //MonMap peon_map;
-  const auto old_epoch = monmap.get_epoch();
-  if (old_epoch == 0 || old_epoch < m->monmap_epoch) {
-    auto p = m->monmapbl.cbegin();
-    decode(monmap, p);
-  }
-  ldout(cct, 10) << __func__ << " handle_monmap - quorum is "
-    << m->quorum << " from mon."
-    << mon_name << dendl;
-  quorum.add_quorum(con_addrs, monmap.epoch, m->quorum);
+  MonMap peon_map;
+  auto p = m->monmapbl.cbegin();
+  decode(peon_map, p);
+  ldout(cct, 10) << __func__ << " quorum is " << m->quorum << " from mon." << mon_name << dendl;
+  quorum.add_quorum(con_addrs, peon_map.epoch, m->quorum);
 }
 
 /* Unlike all the other message-handling functions, we don't put away a reference
@@ -436,10 +431,10 @@ void MonClient::handle_monmap(MMonMap *m)
   auto p = m->monmapbl.cbegin();
   decode(monmap, p);
 
-  ldout(cct, 10) << " got monmap " << monmap.epoch
+  ldout(cct, 10) << __func__ << " got monmap " << monmap.epoch
 		 << " from mon." << old_name
 		 << " (according to old e" << monmap.get_epoch() << ")"
-                 << " quorum is " << monmap.quorum
+                 << " quorum is " << m->quorum
                  << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
@@ -471,7 +466,7 @@ void MonClient::handle_monmap(MMonMap *m)
   cct->set_mon_addrs(monmap);
   auto mon_name = monmap.get_name(con_addrs);
   // set quorum
-  quorum.add_quorum(monmap.get_addrs(mon_name), monmap.epoch, monmap.quorum);
+  quorum.add_quorum(monmap.get_addrs(mon_name), monmap.epoch, m->quorum);
   sub.got("monmap", monmap.get_epoch());
   map_cond.notify_all();
   want_monmap = false;
