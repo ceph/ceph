@@ -31,7 +31,7 @@ namespace crimson::os::seastore::lba_manager::btree {
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE>;
+  LBALeafNode, LBACursor, LBA_BLOCK_SIZE>;
 
 /**
  * BtreeLBAManager
