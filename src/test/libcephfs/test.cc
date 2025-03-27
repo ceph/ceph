@@ -4142,3 +4142,51 @@ TEST(LibCephFS, UmountHangAfterLlLookup) {
 
   ceph_release(cmount);
 }
+
+TEST(LibCephFS, OpenatFilePathUnmountCheck) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  char c_rel_dir[64];
+  char c_dir[128];
+  sprintf(c_rel_dir, "open_test_%d", mypid);
+  sprintf(c_dir, "/%s", c_rel_dir);
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_dir, 0777));
+
+  int root_fd = ceph_open(cmount, "/", O_DIRECTORY, 0777);
+  ASSERT_LE(0, root_fd);
+
+  int dir_fd = ceph_openat(cmount, root_fd, c_rel_dir, O_DIRECTORY, 0777);
+  ASSERT_LE(0, dir_fd);
+
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_statxat(cmount, root_fd, c_rel_dir, &stx, 0, 0), 0);
+  ASSERT_EQ(stx.stx_mode & S_IFMT, S_IFDIR);
+
+  char c_rel_path[64];
+  char c_path[256];
+  sprintf(c_rel_path, "created_file_%d", mypid);
+  sprintf(c_path, "%s/%s", c_dir, c_rel_path);
+  int file_fd = ceph_openat(cmount, dir_fd, c_rel_path, O_RDONLY | O_CREAT, 0777);
+  ASSERT_LE(0, file_fd);
+  int fd = ceph_openat(cmount, file_fd, ".", O_RDONLY, 0777);
+  ASSERT_LE(0, fd);
+
+  ASSERT_EQ(0, ceph_close(cmount, file_fd));
+  ASSERT_EQ(0, ceph_close(cmount, dir_fd));
+  ASSERT_EQ(0, ceph_close(cmount, root_fd));
+
+  ASSERT_EQ(0, ceph_unlink(cmount, c_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, c_dir));
+
+  
+  printf("Before ceph_unmount()\n");
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  printf("After ceph_unmount()\n");
+
+  ASSERT_EQ(0, ceph_release(cmount));
+}
