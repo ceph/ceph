@@ -1133,7 +1133,23 @@ options:
   default: 8
   services:
   - rgw
+  see_also:
+  - rgw_cache_enabled
+  - rgw_max_control_aio
   with_legacy: true
+- name: rgw_max_control_aio
+  type: int
+  level: advanced
+  desc: Maximum number of concurrent operations over control objects.
+  long_desc: When metadata caching is enabled, a watch operation is sent to each
+    control object on startup, with a corresponding unwatch on shutdown. To
+    accelerate startup/shutdown, allow several concurrent operations to be sent
+    at once.
+  default: 8
+  services:
+  - rgw
+  see_also:
+  - rgw_num_control_oids
 - name: rgw_verify_ssl
   type: bool
   level: advanced
