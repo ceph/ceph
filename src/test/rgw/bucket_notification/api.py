@@ -247,13 +247,13 @@ def delete_all_topics(conn, tenant, cluster):
     if tenant == '':
         topics_result = admin(['topic', 'list'], cluster)
         topics_json = json.loads(topics_result[0])
-        for topic in topics_json['topics']:
+        for topic in topics_json:
             rm_result = admin(['topic', 'rm', '--topic', topic['name']], cluster)
             print(rm_result)
     else:
         topics_result = admin(['topic', 'list', '--tenant', tenant], cluster)
         topics_json = json.loads(topics_result[0])
-        for topic in topics_json['topics']:
+        for topic in topics_json:
             rm_result = admin(['topic', 'rm', '--tenant', tenant, '--topic', topic['name']], cluster)
             print(rm_result)
 
