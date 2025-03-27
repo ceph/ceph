@@ -94,9 +94,9 @@ class TLSObjectStore():
         else:
             return self.known_entities.get(entity, {}).get(target)
 
-    def save_tlsobject(self, entity: str, tlsobject: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
+    def save_tlsobject(self, entity: str, tlsobject: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
         self._validate_tlsobject_entity(entity, service_name, host)
-        tlsobject = self.tlsobject_class(tlsobject, user_made)
+        tlsobject = self.tlsobject_class(tlsobject, user_made, editable)
         scope, target = self.get_tlsobject_scope_and_target(entity, service_name, host)
         j: Union[str, Dict[Any, Any], None] = None
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
