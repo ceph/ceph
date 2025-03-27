@@ -148,6 +148,7 @@ public:
   void prune_snapshot(uint64_t snap_id);
   void set_remote_snap_id_end_limit(uint64_t snap_id);
   uint64_t get_remote_snap_id_end_limit();
+  uint64_t get_last_snapshot_bytes() const;
 
 protected:
   /**
