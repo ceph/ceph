@@ -1,33 +1,3 @@
-<legend
-  *ngIf="selectedTab == Tabs.clusters"
-  i18n
->
-  Clusters
-  <cd-help-text>
-    Logical management units that may map to one or more managed Samba service
-  </cd-help-text>
-</legend>
-
-<legend
-  *ngIf="selectedTab == Tabs.joinAuths"
-  i18n
->
-  Active directory access resources
-  <cd-help-text>
-    Logical management units for authorization on active directory (AD) servers
-  </cd-help-text>
-</legend>
-
-<legend
-  *ngIf="selectedTab == Tabs.usersgroups"
-  i18n
->
-  Standalone access resources
-  <cd-help-text>
-    Logical management units for authorization on Standalone servers
-  </cd-help-text>
-</legend>
-
 <cds-tabs
   type="contained"
   followFocus="true"
