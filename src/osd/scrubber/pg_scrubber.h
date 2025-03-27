@@ -1005,7 +1005,6 @@ class PgScrubber : public ScrubPgIF,
     }
 
    private:
-    PG* m_pg;
     mutable ceph::mutex m_preemption_lock = ceph::make_mutex("preemption_lock");
     bool m_preemptable{false};
     bool m_preempted{false};
