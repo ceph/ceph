@@ -10,11 +10,6 @@
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/dout.h"
-#include "common/split.h"
-#include "common/strtol.h" // for strict_iecstrtoll()
-#include "common/ceph_json.h"
-#include "common/Formatter.h"
-
 #include "common/io_exerciser/DataGenerator.h"
 #include "common/io_exerciser/EcIoSequence.h"
 #include "common/io_exerciser/IoOp.h"
