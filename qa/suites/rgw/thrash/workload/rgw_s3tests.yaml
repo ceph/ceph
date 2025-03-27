@@ -1,0 +1,18 @@
+tasks:
+- tox: [client.0]
+- s3tests:
+    client.0:
+      rgw_server: client.0
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl: false
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
+  s3tests:
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

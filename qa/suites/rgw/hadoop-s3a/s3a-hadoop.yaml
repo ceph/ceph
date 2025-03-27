@@ -1,0 +1,11 @@
+tasks:
+- install:
+- ceph:
+- ssh-keys:
+- dnsmasq:
+    client.0: [s3.]
+- rgw:
+    client.0:
+      dns-name: s3.
+- s3a-hadoop:
+    role: client.0

@@ -1,0 +1,13 @@
+overrides:
+  install:
+    ceph:
+      flavor: crimson
+tasks:
+- install:
+- ceph:
+    wait-for-scrub: false
+    conf:
+      osd:
+        debug monc: 20
+    flavor: crimson
+- ssh_keys:
