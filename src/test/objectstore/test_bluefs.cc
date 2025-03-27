@@ -1145,8 +1145,8 @@ TEST(BlueFS, test_wal_migrate) {
 
   BlueFS::FileReader *reader;
   ASSERT_EQ(0, fs.open_for_read(dir_db, wal_file, &reader));
-  ASSERT_EQ(reader->file->fnode.type, bluefs_node_type::REGULAR);
-  ASSERT_EQ(reader->file->is_new_wal(), false);
+  ASSERT_EQ(reader->file->fnode.encoding, bluefs_node_encoding::PLAIN);
+  ASSERT_EQ(reader->file->envelope_mode(), false);
 
   bufferlist read_bl;
   fs.read(reader, 0, 70000, &read_bl, NULL);
@@ -1160,7 +1160,7 @@ TEST_F(BlueFS_wal, wal_v2_check)
 {
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
@@ -1181,7 +1181,7 @@ TEST_F(BlueFS_wal, wal_v2_check_feature)
   SKIP_JENKINS();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
@@ -1202,14 +1202,14 @@ TEST_F(BlueFS_wal, wal_v2_check_feature)
     t1 = mono_clock::now();
     d_w2 = std::chrono::duration<double>(t1 - t0).count();
   } while (d_w2 < 1.0);
-  cout << "time wal_v2=" << d_w2 << std::endl;
+  cout << "time wal envelope_mode=" << d_w2 << std::endl;
 
   t0 = mono_clock::now();
   content.clear();
   many_small_writes("db.wal", "not-wal.xxx", content, cnt, 1, 1, 1);
   t1 = mono_clock::now();
   d_w1 = std::chrono::duration<double>(t1 - t0).count();
-  cout << "time wal_v1=" << d_w1 << std::endl;
+  cout << "time wal basic=" << d_w1 << std::endl;
   fs.umount();
   //if not 20% faster, its not working
   EXPECT_LT(d_w2 * 1.2, d_w1);
@@ -1219,7 +1219,7 @@ TEST_F(BlueFS_wal, wal_v2_truncate)
 {
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
@@ -1252,7 +1252,7 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
 {
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
@@ -1279,7 +1279,7 @@ TEST_F(BlueFS_wal, support_wal_v2_and_v1)
 {
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   std::string dir = "dir";
@@ -1295,7 +1295,7 @@ TEST_F(BlueFS_wal, support_wal_v2_and_v1)
   many_small_writes(dir, file_v2, content_v2, 100);
   fs.umount();
   // switch to v1
-  g_ceph_context->_conf.set_val("bluefs_wal_v2", "false");
+  g_ceph_context->_conf.set_val("bluefs_wal_envelope_mode", "false");
   ASSERT_EQ(0, fs.mount());
   r = fs.mkdir(dir);
   ASSERT_TRUE(r == 0 || r == -EEXIST);
@@ -1308,14 +1308,14 @@ TEST_F(BlueFS_wal, support_wal_v2_and_v1)
   many_small_reads(dir, file_v2, read_content, 100);
   EXPECT_EQ(content_v2, read_content);
   ASSERT_EQ(0, fs.open_for_read(dir, file_v2, &reader));
-  EXPECT_EQ(reader->file->is_new_wal(), true);
+  EXPECT_EQ(reader->file->envelope_mode(), true);
   delete reader;
   reader = nullptr;
 
   many_small_reads(dir, file_v1, read_content, 100);
   EXPECT_EQ(content_v1, read_content);
   ASSERT_EQ(0, fs.open_for_read(dir, file_v1, &reader));
-  EXPECT_EQ(reader->file->is_new_wal(), false);
+  EXPECT_EQ(reader->file->envelope_mode(), false);
   delete reader;
 
   fs.umount();
@@ -1325,7 +1325,7 @@ TEST_F(BlueFS_wal, wal_v2_read_after_write)
 {
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
@@ -1362,7 +1362,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
 
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
-  conf.SetVal("bluefs_wal_v2", "true");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
   conf.ApplyChanges();
 
   BlueFS fs(g_ceph_context);
@@ -1380,7 +1380,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
   string wal_file = "wal1.log";
   BlueFS::FileWriter *writer;
   ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
-  ASSERT_EQ(writer->file->fnode.type, WAL_V2);
+  ASSERT_EQ(writer->file->fnode.encoding, bluefs_node_encoding::ENVELOPE);
   ASSERT_NE(nullptr, writer);
 
   bufferlist bl1;
@@ -1393,7 +1393,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
   fs.append_try_flush(writer, bl1.c_str(), bl1.length());
   fs.fsync(writer);
 
-  g_ceph_context->_conf.set_val("bluefs_wal_v2", "false");
+  g_ceph_context->_conf.set_val("bluefs_wal_envelope_mode", "false");
   fs.umount();
   fs.mount();
 
@@ -1410,7 +1410,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
     BlueFS::FileWriter *writer;
     ASSERT_EQ(0, fs.open_for_write(dir_db, wal_file, &writer, false));
     ASSERT_NE(nullptr, writer);
-    ASSERT_EQ(writer->file->fnode.type, REGULAR);
+    ASSERT_EQ(writer->file->fnode.encoding, bluefs_node_encoding::PLAIN);
   }
   fs.umount();
 }
