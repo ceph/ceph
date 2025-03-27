@@ -144,8 +144,7 @@ void ECExtentCache::Object::insert(shard_extent_map_t const &buffers) const {
 }
 
 void ECExtentCache::Object::write_done(shard_extent_map_t const &buffers,
-                                       uint64_t new_size
-  ) {
+                                       uint64_t new_size) {
   insert(buffers);
   current_size = new_size;
 }
@@ -177,7 +176,10 @@ void ECExtentCache::Object::erase_line(uint64_t offset) {
 
 void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
   for (auto &l : std::views::values(lines)) {
-    l.lock()->cache->clear();
+    auto line = l.lock();
+    line->cache->clear();
+    update_mempool(0, -line->size);
+    line->size = 0;
   }
 
   /* Remove all entries from the LRU */
