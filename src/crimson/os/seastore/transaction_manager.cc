@@ -697,12 +697,13 @@ TransactionManager::get_extents_if_live(
   // as parallel transactions may split the extent at the same time.
   ceph_assert(paddr.get_addr_type() == paddr_types_t::SEGMENT);
 
-  return cache->get_extent_if_cached(t, paddr, type
+  return cache->get_extent_if_cached(t, paddr, len, type
   ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
 	    -> get_extents_if_live_ret {
-    if (extent && extent->get_length() == len) {
+    if (extent) {
       DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
              t, type, laddr, len, paddr, *extent);
+      assert(extent->get_length() == len);
       std::list<CachedExtentRef> res;
       res.emplace_back(std::move(extent));
       return get_extents_if_live_ret(

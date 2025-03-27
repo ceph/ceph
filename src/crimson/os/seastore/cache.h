@@ -201,20 +201,21 @@ public:
     get_extent_if_cached_iertr::future<CachedExtentRef>;
   get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
-    paddr_t offset,
+    paddr_t paddr,
+    extent_len_t len,
     extent_types_t type) {
-    CachedExtentRef ret;
     LOG_PREFIX(Cache::get_extent_if_cached);
-    auto result = t.get_extent(offset, &ret);
     const auto t_src = t.get_src();
+    CachedExtentRef ret;
+    auto result = t.get_extent(paddr, &ret);
     extent_access_stats_t& access_stats = get_by_ext(
       get_by_src(stats.access_by_src_ext, t_src),
       type);
     if (result == Transaction::get_extent_ret::RETIRED) {
-      SUBDEBUGT(seastore_cache, "{} {} is retired on t -- {}",
-                t, type, offset, *ret);
-      return get_extent_if_cached_iertr::make_ready_future<
-        CachedExtentRef>(ret);
+      SUBDEBUGT(seastore_cache,
+        "{} {}~0x{:x} is retired on t",
+        t, type, paddr, len);
+      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     } else if (result == Transaction::get_extent_ret::PRESENT) {
       if (ret->is_stable()) {
         if (ret->is_dirty()) {
@@ -229,32 +230,44 @@ public:
         ++stats.access.s.trans_pending;
       }
 
-      if (ret->is_fully_loaded()) {
-        SUBTRACET(seastore_cache, "{} {} is present on t -- {}",
-                  t, type, offset, *ret);
-        return ret->wait_io().then([ret] {
-	  return get_extent_if_cached_iertr::make_ready_future<
-	    CachedExtentRef>(ret);
-        });
-      } else {
+      if (ret->get_length() != len) {
         SUBDEBUGT(seastore_cache,
-            "{} {} is present on t -- {} without fully loaded",
-            t, type, offset, *ret);
-        return get_extent_if_cached_iertr::make_ready_future<
-          CachedExtentRef>();
+          "{} {}~0x{:x} is present on t with inconsistent length 0x{:x} -- {}",
+          t, type, paddr, len, ret->get_length(), *ret);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
       }
+
+      ceph_assert(ret->get_type() == type);
+      if (!ret->is_fully_loaded()) {
+        SUBDEBUGT(seastore_cache,
+          "{} {}~0x{:x} is present on t without fully loaded -- {}",
+          t, type, paddr, len, *ret);
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      }
+
+      SUBTRACET(seastore_cache,
+        "{} {}~0x{:x} is present on t -- {}",
+        t, type, paddr, len, *ret);
+      return ret->wait_io().then([ret] {
+        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>(ret);
+      });
     }
 
     // get_extent_ret::ABSENT from transaction
-    ret = query_cache(offset);
+    ret = query_cache(paddr);
     if (!ret) {
-      SUBDEBUGT(seastore_cache, "{} {} is absent", t, type, offset);
+      SUBDEBUGT(seastore_cache,
+        "{} {}~0x{:x} is absent in cache",
+        t, type, paddr, len);
       account_absent_access(t_src);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
-    } else if (is_retired_placeholder_type(ret->get_type())) {
+    }
+
+    if (is_retired_placeholder_type(ret->get_type())) {
       // retired_placeholder is not really cached yet
-      SUBDEBUGT(seastore_cache, "{} {} is absent(placeholder)",
-                t, type, offset);
+      SUBDEBUGT(seastore_cache,
+        "{} {}~0x{:x} ~0x{:x} is absent(placeholder) in cache",
+        t, type, paddr, len, ret->get_length());
       account_absent_access(t_src);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
@@ -267,16 +280,26 @@ public:
       ++stats.access.s.cache_lru;
     }
 
+    if (ret->get_length() != len) {
+      SUBDEBUGT(seastore_cache,
+        "{} {}~0x{:x} is present in cache with inconsistent length 0x{:x} -- {}",
+        t, type, paddr, len, ret->get_length(), *ret);
+      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+    }
+
+    ceph_assert(ret->get_type() == type);
     if (!ret->is_fully_loaded()) {
       // ignore non-full extent
       SUBDEBUGT(seastore_cache,
-          "{} {} is present without fully loaded", t, type, offset);
+        "{} {}~0x{:x} is present without fully loaded in cache -- {}",
+        t, type, paddr, len, *ret);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     }
 
     // present in cache(fully loaded) and is not a retired_placeholder
-    SUBDEBUGT(seastore_cache, "{} {} is present in cache -- {}",
-              t, type, offset, *ret);
+    SUBDEBUGT(seastore_cache,
+      "{} {}~0x{:x} is present in cache -- {}",
+      t, type, paddr, len, *ret);
     t.add_to_read_set(ret);
     touch_extent(*ret, &t_src, t.get_cache_hint());
     return ret->wait_io().then([ret] {
