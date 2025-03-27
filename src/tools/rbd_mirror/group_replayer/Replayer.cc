@@ -33,6 +33,48 @@ using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
+namespace {
+
+const cls::rbd::GroupSnapshot* get_latest_mirror_group_snapshot(
+    const std::vector<cls::rbd::GroupSnapshot>& gp_snaps) {
+  for (auto it = gp_snaps.rbegin(); it != gp_snaps.rend(); ++it) {
+    if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE &&
+        (cls::rbd::get_group_snap_namespace_type(it->snapshot_namespace) ==
+         cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR)) {
+	  return &*it;
+    }
+  }
+  return nullptr;
+}
+
+int get_group_snapshot_timestamp(librados::IoCtx& group_ioctx,
+                                 const cls::rbd::GroupSnapshot& group_snap,
+                                 utime_t* timestamp) {
+  // Set timestamp for an empty group snapshot as zero
+  if (group_snap.snaps.empty()) {
+    *timestamp = utime_t(0, 0);
+    return 0;
+  }
+
+  cls::rbd::SnapshotInfo image_snap_info;
+  std::vector<utime_t> timestamps;
+  for (const auto& image_snap : group_snap.snaps) {
+    // TODO: Fetch the member image's snapshot info using the member image's
+    // IoCtx. Below assumes that the member images are in the group's pool.
+    int r = librbd::cls_client::snapshot_get(
+      &group_ioctx, librbd::util::header_name(image_snap.image_id),
+      image_snap.snap_id, &image_snap_info);
+    if (r < 0) {
+      return r;
+    }
+    timestamps.push_back(image_snap_info.timestamp);
+  }
+  *timestamp = *std::min_element(timestamps.begin(), timestamps.end());
+  return 0;
+}
+
+} // anonymous namespace
+
 template <typename I>
 Replayer<I>::Replayer(
     Threads<I>* threads,
@@ -423,6 +465,15 @@ void Replayer<I>::validate_image_snaps_sync_complete(
   }
   dout(10) << "group snap_id: " << group_snap_id << dendl;
 
+  if (m_snapshot_start.is_zero()) {
+    // The mirror group snapshot's start time being zero and the group snapshot
+    // being incomplete indicate that the mirror daemon was restarted. So reset
+    // the mirror group snap's start time that is used to calculate the total
+    // time taken to complete the syncing of the mirror group snap as best as
+    // we can.
+    m_snapshot_start = ceph_clock_now();
+  }
+
   auto itr = std::find_if(
       m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
@@ -682,6 +733,10 @@ void Replayer<I>::try_create_group_snapshot(cls::rbd::GroupSnapshot snap,
   }
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
+  if (m_snapshot_start.is_zero()) {
+    m_snapshot_start = ceph_clock_now();
+  }
+
   auto snap_type = cls::rbd::get_group_snap_namespace_type(
       snap.snapshot_namespace);
   if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
@@ -898,7 +953,24 @@ void Replayer<I>::handle_mirror_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish) {
   dout(10) << group_snap_id << ", r=" << r << dendl;
 
-  on_finish->complete(r);
+  if (r < 0) {
+    on_finish->complete(r);
+    return;
+  }
+
+  utime_t duration = ceph_clock_now() - m_snapshot_start;
+  m_last_snapshot_complete_seconds = duration.sec();
+  m_snapshot_start = utime_t(0, 0);
+
+  uint64_t last_snapshot_bytes = 0;
+  for (const auto& ir : *m_image_replayers) {
+    if (ir.second != nullptr) {
+      last_snapshot_bytes += ir.second->get_last_snapshot_bytes();
+    }
+  }
+  m_last_snapshot_bytes = last_snapshot_bytes;
+
+  on_finish->complete(0);
 }
 
 template <typename I>
@@ -1329,6 +1401,68 @@ void Replayer<I>::finish_shut_down() {
   if (on_finish) {
     on_finish->complete(0);
   }
+}
+
+template <typename I>
+bool Replayer<I>::get_replay_status(std::string* description) {
+  dout(10) << dendl;
+
+  std::unique_lock locker{m_lock};
+  if (m_state != STATE_REPLAYING) {
+    derr << "replay not running" << dendl;
+    return false;
+  }
+
+  json_spirit::mObject root_obj;
+  root_obj["last_snapshot_complete_seconds"] =
+    m_last_snapshot_complete_seconds;
+  root_obj["last_snapshot_bytes"] = m_last_snapshot_bytes;
+
+  auto remote_gp_snap_ptr = get_latest_mirror_group_snapshot(
+    m_remote_group_snaps);
+  if (remote_gp_snap_ptr != nullptr) {
+    utime_t timestamp;
+    int r = get_group_snapshot_timestamp(m_remote_io_ctx, *remote_gp_snap_ptr,
+                                         &timestamp);
+    if (r < 0) {
+      derr << "error getting timestamp of remote group snapshot ID: "
+           << remote_gp_snap_ptr->id << ", r=" << cpp_strerror(r) << dendl;
+      return false;
+    }
+    root_obj["remote_snapshot_timestamp"] = timestamp.sec();
+  } else {
+    return false;
+  }
+
+  auto latest_local_gp_snap_ptr = get_latest_mirror_group_snapshot(
+    m_local_group_snaps);
+  if (latest_local_gp_snap_ptr != nullptr) {
+    // find remote group snap with ID matching that of the latest local
+    // group snap
+    remote_gp_snap_ptr = nullptr;
+    for (const auto& remote_group_snap: m_remote_group_snaps) {
+      if (remote_group_snap.id == latest_local_gp_snap_ptr->id) {
+	remote_gp_snap_ptr = &remote_group_snap;
+	break;
+      }
+    }
+    if (remote_gp_snap_ptr != nullptr) {
+      utime_t timestamp;
+      int r = get_group_snapshot_timestamp(m_remote_io_ctx,
+                                           *remote_gp_snap_ptr,
+                                           &timestamp);
+      if (r < 0) {
+	derr << "error getting timestamp of matching remote group snapshot ID: "
+             << remote_gp_snap_ptr->id << ", r=" << cpp_strerror(r) << dendl;
+      } else {
+	root_obj["local_snapshot_timestamp"] = timestamp.sec();
+      }
+    }
+  }
+
+  *description = json_spirit::write(root_obj,
+                                    json_spirit::remove_trailing_zeros);
+  return true;
 }
 
 } // namespace group_replayer

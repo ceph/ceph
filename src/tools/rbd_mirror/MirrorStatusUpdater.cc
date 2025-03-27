@@ -264,13 +264,26 @@ template <typename I>
 void MirrorStatusUpdater<I>::set_mirror_group_status(
     const std::string& global_group_id,
     const cls::rbd::MirrorGroupSiteStatus& mirror_group_site_status,
-    bool immediate_update) {
+    bool immediate_update,
+    bool skip_image_statuses_update) {
   dout(15) << "global_group_id=" << global_group_id << ", "
-           << "mirror_group_site_status=" << mirror_group_site_status << dendl;
+           << "mirror_group_site_status=" << mirror_group_site_status << ", "
+           << "immediate_update=" << immediate_update << ", "
+           << "skip_image_statuses_update=" << skip_image_statuses_update << dendl;
 
   std::unique_lock locker(m_lock);
 
-  m_global_group_status[global_group_id] = mirror_group_site_status;
+  if (skip_image_statuses_update) {
+    auto it = m_global_group_status.find(global_group_id);
+    ceph_assert(it != m_global_group_status.end());
+    // update only group status fields
+    it->second.description = mirror_group_site_status.description;
+    it->second.state = mirror_group_site_status.state;
+    it->second.up = mirror_group_site_status.up;
+  } else {
+    m_global_group_status[global_group_id] = mirror_group_site_status;
+  }
+
   if (immediate_update) {
     m_update_global_group_ids.insert(global_group_id);
     queue_update_task(std::move(locker));
