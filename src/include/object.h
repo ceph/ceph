@@ -117,6 +117,7 @@ struct snapid_t {
   constexpr snapid_t(uint64_t v=0) : val(v) {}
   snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
   snapid_t operator++() { ++val; return *this; }
+  snapid_t operator++(int) { val++; return *this; }
   constexpr operator uint64_t() const { return val; }
 };
 
