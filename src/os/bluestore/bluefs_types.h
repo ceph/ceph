@@ -34,11 +34,12 @@ public:
 };
 WRITE_CLASS_DENC(bluefs_extent_t)
 
-enum bluefs_node_type {
-  REGULAR = 0,
-  WAL_V2 = 1,     // WAL_V2 that is open for write
-  WAL_V2_FIN = 2, // WAL_V2 that we are done writing to; there is no data in [onode.size ... allocated)
-  NODE_TYPE_END = 0x100,
+enum bluefs_node_encoding {
+  PLAIN = 0,        ///< Normal; legacy mode.
+  ENVELOPE = 1,     ///< Data flushed to file is wrapped in envelope - no size update needed.
+                    ///  Without shutdown, range [fnode.size ... fnode.allocated) may contain envelopes.
+  ENVELOPE_FIN = 2, ///< Same as envelope but file orderly closed. Fnode.size reflects actual end.
+  ENCODING_MAX = 3
 };
 
 std::ostream& operator<<(std::ostream& out, const bluefs_extent_t& e);
@@ -82,9 +83,9 @@ struct bluefs_fnode_delta_t {
                    // Equal to 'allocated' when created.
                    // Used for consistency checking.
 
-  // only relevant in case of wal node
-  uint8_t type = REGULAR;
-  uint64_t wal_size; // The size of payload in the file; size = wal_size + n * envelope_size
+  uint8_t encoding = PLAIN;
+  // For envelope mode only.
+  uint64_t content_size; // The size of payload in the file; size = wal_size + n * envelope_size
 
   mempool::bluefs::vector<bluefs_extent_t> extents;
 
@@ -92,7 +93,7 @@ struct bluefs_fnode_delta_t {
 
   void bound_encode(size_t& p) const {
     uint8_t version = 1, compat = 1;
-    if (type == WAL_V2  || type == WAL_V2_FIN) {
+    if (encoding == ENVELOPE  || encoding == ENVELOPE_FIN) {
       version = 2;
       compat = 2;
     }
@@ -103,7 +104,7 @@ struct bluefs_fnode_delta_t {
   void encode(ceph::buffer::list::contiguous_appender& p) const {
     DENC_DUMP_PRE(bluefs_fnode_t);
     uint8_t version = 1, compat = 1;
-    if (type == WAL_V2  || type == WAL_V2_FIN) {
+    if (encoding == ENVELOPE  || encoding == ENVELOPE_FIN) {
       version = 2;
       compat = 2;
     }
@@ -126,8 +127,8 @@ struct bluefs_fnode_delta_t {
     denc(v.offset, p);
     denc(v.extents, p);
     if (struct_v >= 2) {
-      denc_varint(v.type, p);
-      denc_varint(v.wal_size, p);
+      denc_varint(v.encoding, p);
+      denc_varint(v.content_size, p);
     }
   }
 };
@@ -148,18 +149,19 @@ struct bluefs_fnode_t {
 
   uint64_t allocated;
   uint64_t allocated_commited;
-  uint8_t type = REGULAR;
-  uint64_t wal_size; // Amount of payload bytes in WAL(not including envelope data), there could be more on power off instances, in range of fnode.size~wal_limit
-
-  bluefs_fnode_t() : ino(0), size(0), allocated(0), allocated_commited(0), wal_size(0) {}
+  uint8_t encoding = PLAIN;
+  // envelope mode only
+  uint64_t content_size; ///< Payload bytes inside envelopes.
+                         ///  When encoding == ENVELOPE indexing might update the value.
+  bluefs_fnode_t() : ino(0), size(0), allocated(0), allocated_commited(0), content_size(0) {}
   bluefs_fnode_t(uint64_t _ino, uint64_t _size, utime_t _mtime) :
-    ino(_ino), size(_size), mtime(_mtime), allocated(0), allocated_commited(0), wal_size(0) {}
+    ino(_ino), size(_size), mtime(_mtime), allocated(0), allocated_commited(0), content_size(0) {}
   bluefs_fnode_t(const bluefs_fnode_t& other) :
     ino(other.ino), size(other.size), mtime(other.mtime),
     allocated(other.allocated),
     allocated_commited(other.allocated_commited),
-    type(other.type),
-    wal_size(other.wal_size) {
+    encoding(other.encoding),
+    content_size(other.content_size) {
     clone_extents(other);
   }
 
@@ -181,7 +183,7 @@ struct bluefs_fnode_t {
   DENC_HELPERS
   void bound_encode(size_t& p) const {
     uint8_t version = 1, compat = 1;
-    if (type == WAL_V2 || type == WAL_V2_FIN) {
+    if (encoding == ENVELOPE || encoding == ENVELOPE_FIN) {
       version = 2;
       compat = 2;
     }
@@ -192,7 +194,7 @@ struct bluefs_fnode_t {
   void encode(ceph::buffer::list::contiguous_appender& p) const {
     DENC_DUMP_PRE(bluefs_fnode_t);
     uint8_t version = 1, compat = 1;
-    if (type == WAL_V2 || type == WAL_V2_FIN) {
+    if (encoding == ENVELOPE || encoding == ENVELOPE_FIN) {
       version = 2;
       compat = 2;
     }
@@ -217,8 +219,8 @@ struct bluefs_fnode_t {
     denc(v.__unused__, p);
     denc(v.extents, p);
     if (struct_v >= 2) {
-      denc_varint(v.type, p);
-      denc_varint(v.wal_size, p);
+      denc_varint(v.encoding, p);
+      denc_varint(v.content_size, p);
     }
   }
   void reset_delta() {
@@ -312,6 +314,11 @@ struct bluefs_layout_t {
 WRITE_CLASS_ENCODER(bluefs_layout_t)
 
 struct bluefs_super_t {
+  static constexpr uint8_t BASELINE = 2;
+  static constexpr uint8_t ENVELOPE_MODE_ENABLED = 3;
+
+  uint8_t _version = BASELINE; ///< usually we hide encoding version,
+                               ///  but we need to tie features to it
   uuid_d uuid;      ///< unique to this bluefs instance
   uuid_d osd_uuid;  ///< matches the osd that owns us
   uint64_t seq;     ///< sequence counter

@@ -173,16 +173,15 @@ void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
 }
 
 // bluefs_super_t
-bluefs_super_t::bluefs_super_t() : seq(0), block_size(4096), wal_version(1) {
+bluefs_super_t::bluefs_super_t() : seq(0), block_size(4096) {
 }
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
-  __u8 _version = 2;
+  ceph_assert(_version >= BASELINE);
   __u8 _compat = 1;
-  if (wal_version >= 2) {
-    _version = 3;
-    _compat = 3;
+  if (_version == ENVELOPE_MODE_ENABLED) {
+    _compat = ENVELOPE_MODE_ENABLED;
   }
   ENCODE_START(_version, _compat, bl);
   encode(uuid, bl);
@@ -281,8 +280,8 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
   delta->offset = allocated_commited;
   delta->extents.clear();
 
-  delta->type = type;
-  delta->wal_size = wal_size;
+  delta->encoding = encoding;
+  delta->content_size = content_size;
   if (allocated_commited < allocated) {
     uint64_t x_off = 0;
     auto p = seek(allocated_commited, &x_off);
@@ -320,7 +319,7 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
   ls.back()->mtime = utime_t(123,45);
   ls.back()->extents.push_back(bluefs_extent_t(0, 1048576, 4096));
   ls.back()->__unused__ = 1;
-  ls.back()->type = 0;
+  ls.back()->encoding = 0;
 }
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
@@ -331,12 +330,12 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
 	     << " extents " << file.extents;
-  if (file.type == WAL_V2 || file.type == WAL_V2_FIN) {
-    out << " wal_size 0x" << std::hex << file.wal_size << std::dec << std::hex;
-    if (file.type == WAL_V2)
-      out << " type WAL_V2 " << std::dec;
-    if (file.type == WAL_V2_FIN)
-      out << " type WAL_V2_FIN " << std::dec;
+  if (file.encoding == ENVELOPE || file.encoding == ENVELOPE_FIN) {
+    out << " content-size 0x" << std::hex << file.content_size << std::dec << std::hex;
+    if (file.encoding == ENVELOPE)
+      out << " ENVELOPE " << std::dec;
+    if (file.encoding == ENVELOPE_FIN)
+      out << " ENVELOPE-FIN " << std::dec;
   }
   out << ")";
   return out;
@@ -351,12 +350,12 @@ std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
     << " mtime " << delta.mtime
     << " offset " << std::hex << delta.offset << std::dec
     << " extents " << delta.extents;
-  if (delta.type == WAL_V2 || delta.type == WAL_V2_FIN) {
-    out << " wal_size 0x" << std::hex << delta.wal_size << std::dec << std::hex;
-    if (delta.type == WAL_V2)
-      out << " type WAL_V2" << std::dec;
-    if (delta.type == WAL_V2_FIN)
-      out << " type WAL_V2_FIN" << std::dec;
+  if (delta.encoding == ENVELOPE || delta.encoding == ENVELOPE_FIN) {
+    out << " content-size 0x" << std::hex << delta.content_size << std::dec << std::hex;
+    if (delta.encoding == ENVELOPE)
+      out << " ENVELOPE" << std::dec;
+    if (delta.encoding == ENVELOPE_FIN)
+      out << " ENVELOPE-FIN" << std::dec;
   }
   out << ")";
   return out;
