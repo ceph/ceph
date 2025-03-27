@@ -443,7 +443,7 @@ public:
     ScrubMapBuilder &pos,
     ScrubMap::object &o);
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const {
+  uint64_t be_get_ondisk_size(uint64_t logical_size, shard_id_t ignored) const {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };

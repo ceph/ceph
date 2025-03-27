@@ -599,8 +599,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ScrubMap &map,
      ScrubMapBuilder &pos);
 
-   virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) const = 0;
+   virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
+                                       shard_id_t shard_id) const = 0;
 
    virtual int be_deep_scrub(
      const hobject_t &oid,
