@@ -392,6 +392,9 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const override {
+    return PG::get_acting_recovery_backfill_shard_id_set();
+  }
   const std::set<pg_shard_t> &get_acting_shards() const override {
     return recovery_state.get_actingset();
   }
