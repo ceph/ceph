@@ -291,10 +291,11 @@ public:
     return legacy.auto_repair_supported();
   }
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final
-  {
-    if (is_optimized()) {
-      return optimized.be_get_ondisk_size(logical_size);
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t shard_id) const final {
+    if (is_optimized())
+    {
+      return optimized.be_get_ondisk_size(logical_size, shard_id);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }
