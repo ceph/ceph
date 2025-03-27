@@ -40,7 +40,7 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.editing = this.router.url.startsWith(`${USERSGROUPS_URL}/${URLVerbs.EDIT}`);
-    this.resource = $localize`users and groups access resource`;
+    this.resource = $localize`standalone access resource`;
   }
 
   ngOnInit() {
