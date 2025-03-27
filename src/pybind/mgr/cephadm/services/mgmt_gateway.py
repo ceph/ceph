@@ -128,8 +128,8 @@ class MgmtGatewayService(CephadmService):
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
-        ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
-        cert, key = self.get_certificates(svc_spec, daemon_spec, ips)
+        ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
+        cert, key = self.get_certificates(svc_spec, daemon_spec, [ip])
         internal_cert, internal_pkey = self.get_internal_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
