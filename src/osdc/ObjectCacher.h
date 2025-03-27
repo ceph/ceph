@@ -59,6 +59,8 @@ class ObjectCacher {
   struct ObjectSet;
   class C_ReadFinish;
 
+  using ObjHole = std::pair<uint64_t, uint64_t>;
+
   typedef void (*flush_set_callback_t) (void *p, ObjectSet *oset);
 
   // read scatter/gather
@@ -565,7 +567,8 @@ class ObjectCacher {
   ceph::condition_variable read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call, ZTracer::Trace *trace);
+	     bool external_call, ZTracer::Trace *trace,
+             std::vector<ObjHole> *holes);
   void retry_waiting_reads();
 
  public:
@@ -617,7 +620,8 @@ class ObjectCacher {
    * the return value is total bytes read
    */
   int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	    ZTracer::Trace *parent_trace = nullptr);
+	    ZTracer::Trace *parent_trace = nullptr,
+            std::vector<ObjHole> *holes = nullptr);
   int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 	     ZTracer::Trace *parent_trace,
 	     bool block_writes_upfront);
@@ -705,6 +709,16 @@ public:
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, rd->extents);
     return readx(rd, oset, onfinish);
+  }
+
+  int file_read_ex(ObjectSet *oset, file_layout_t *layout, snapid_t snapid,
+                   loff_t offset, uint64_t len, ceph::buffer::list *bl, int flags,
+                   std::vector<ObjHole> *holes,
+                   Context *onfinish) {
+    OSDRead *rd = prepare_read(snapid, bl, flags);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len,
+			     oset->truncate_size, rd->extents);
+    return readx(rd, oset, onfinish, nullptr, holes);
   }
 
   int file_write(ObjectSet *oset, file_layout_t *layout,

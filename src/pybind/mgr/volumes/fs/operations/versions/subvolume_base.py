@@ -20,6 +20,7 @@ from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
 
 from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
+from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 
 log = logging.getLogger(__name__)
 
@@ -203,6 +204,14 @@ class SubvolumeBase(object):
         except EarmarkException:
             attrs["earmark"] = ''
 
+        try:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, pathname)
+            attrs["enctag"] = fs_enctag.get_tag()
+        except cephfs.NoData:
+            attrs["enctag"] = ''
+        except EncryptionTagException:
+            attrs["enctag"] = ''
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -293,6 +302,12 @@ class SubvolumeBase(object):
         if earmark is not None:
             fs_earmark = CephFSVolumeEarmarking(self.fs, path)
             fs_earmark.set_earmark(earmark)
+
+        # set encryption tag string identifier
+        enctag = attrs.get("enctag", None)
+        if enctag is not None:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, path)
+            fs_enctag.set_tag(enctag)
 
     def _resize(self, path, newsize, noshrink):
         try:
@@ -452,6 +467,14 @@ class SubvolumeBase(object):
         except EarmarkException:
             earmark = ''
 
+        try:
+            fs_enctag = CephFSVolumeEncryptionTag(self.fs, subvolpath)
+            enctag = fs_enctag.get_tag()
+        except cephfs.NoData:
+            enctag = ''
+        except EncryptionTagException:
+            enctag = ''
+
         return {'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
@@ -470,7 +493,8 @@ class SubvolumeBase(object):
                 'pool_namespace': pool_namespace,
                 'features': self.features,
                 'state': self.state.value,
-                'earmark': earmark}
+                'earmark': earmark,
+                'enctag': enctag}
 
     def set_user_metadata(self, keyname, value):
         try:
