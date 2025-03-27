@@ -211,7 +211,7 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
     return lhs << "?";
   if (rhs.shard == shard_id_t::NO_SHARD)
     return lhs << rhs.get_osd();
-  return lhs << rhs.get_osd() << '(' << (unsigned)(rhs.shard) << ')';
+  return lhs << rhs.get_osd() << '(' << int(rhs.shard) << ')';
 }
 
 void dump(Formatter* f, const osd_alerts_t& alerts)
@@ -3689,7 +3689,7 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 void pg_info_t::dump(Formatter *f) const
 {
   f->dump_stream("pgid") << pgid;
-  f->dump_stream("shared") << pgid.shard;
+  f->dump_stream("shard") << pgid.shard;
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
@@ -3820,8 +3820,8 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
       << " " << notify.info;
   if (notify.from != shard_id_t::NO_SHARD ||
       notify.to != shard_id_t::NO_SHARD)
-    lhs << " " << (unsigned)notify.from
-	<< "->" << (unsigned)notify.to;
+    lhs << " " << int(notify.from)
+	<< "->" << int(notify.to);
   lhs << " " << notify.past_intervals;
   return lhs << ")";
 }
