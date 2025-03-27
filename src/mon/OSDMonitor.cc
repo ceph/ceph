@@ -8215,6 +8215,30 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
   }
 
+  bool allow_ec_optimizations = false;
+  if (g_conf()->osd_pool_default_flag_ec_optimizations) {
+    // Try and enable ec_optimizations, fail silently
+    // 1) pool type must be erasure coded
+    // 2) require_osd_release must be tentacle or newer
+    // 3) clay is not supported
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (osdmap.require_osd_release >= ceph_release_t::tentacle) {
+	ErasureCodeInterfaceRef erasure_code;
+        stringstream tmp;
+        int err = get_erasure_code(erasure_code_profile, &erasure_code, &tmp);
+        if (err == 0) {
+          if (!(erasure_code->get_supported_optimizations() &
+              ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS)) {
+	    allow_ec_optimizations = true;
+	  }
+	} else {
+	  *ss << "get_erasure_code failed: " << tmp.str();
+	  return -EINVAL;
+        }
+      }
+    }
+  }
+
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -8244,6 +8268,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf()->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  if (allow_ec_optimizations) {
+    pi->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    pi->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  }
   pi->set_flag(pg_pool_t::FLAG_CREATING);
   if (g_conf()->osd_pool_use_gmt_hitset)
     pi->use_gmt_hitset = true;
@@ -8841,6 +8869,49 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         return -EINVAL;
       }
     if (val == "true" || (interr.empty() && n == 1)) {
+      ErasureCodeInterfaceRef erasure_code;
+      unsigned int k, m;
+      stringstream tmp;
+      int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        k = erasure_code->get_data_chunk_count();
+        m = erasure_code->get_coding_chunk_count();
+      } else {
+        ss << "get_erasure_code failed: " << tmp.str();
+        return -EINVAL;
+      }
+      if ((erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS)) {
+        ss << "ec optimizations not currently supported on clay plugin.";
+        return -EINVAL;
+      }
+      // Restrict the set of shards that can be a primary to the 1st data
+      // raw_shard (raw_shard 0) and the coding parity raw_shards because
+      // the other shards (including local parity for LRC) may not have
+      // up to date copies of xattrs including OI
+      p.nonprimary_shards.clear();
+      for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+        if (raw_shard > 0 && raw_shard < k) {
+	  shard_id_t shard;
+	  if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
+	    shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
+	  } else {
+	    shard = shard_id_t(int(raw_shard));
+	  }
+          p.nonprimary_shards.insert(shard);
+	}
+      }
+      // Pools with allow_ec_optimizations set store pg_temp in a different
+      // order to change the primary selection algorithm without breaking
+      // old clients. Modify any existing pg_temp for the pool now
+      for (auto pg_temp = osdmap.pg_temp->begin();
+	   pg_temp != osdmap.pg_temp->end();
+	   ++pg_temp) {
+	if (pg_temp->first.pool() == pool) {
+	  std::vector<int> new_pg_temp = osdmap.pgtemp_primaryfirst(p, pg_temp->second);
+	  pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
+	}
+      }
       p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
