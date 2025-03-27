@@ -520,6 +520,7 @@ void GroupReplayer<I>::on_stop_replay(int r, const std::string &desc)
     m_state_desc = "";
   }
 
+  cancel_update_mirror_group_replay_status();
   cancel_image_replayers_check();
   shut_down(r);
 }
@@ -670,6 +671,7 @@ void GroupReplayer<I>::handle_create_group_replayer(int r) {
 
     std::unique_lock timer_locker{m_threads->timer_lock};
     schedule_image_replayers_check();
+    schedule_update_mirror_group_replay_status();
   }
 
   set_mirror_group_status_update(
@@ -1066,6 +1068,62 @@ void GroupReplayer<I>::remove_group_status_remote(bool force, Context *on_finish
 }
 
 template <typename I>
+void GroupReplayer<I>::schedule_update_mirror_group_replay_status() {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+  if (m_state != STATE_REPLAYING) {
+    return;
+  }
+
+  dout(10) << dendl;
+
+  // periodically update the replaying status even if nothing changes
+  // so that we can adjust our performance stats
+  ceph_assert(m_update_status_task == nullptr);
+  m_update_status_task = create_context_callback<
+    GroupReplayer<I>,
+    &GroupReplayer<I>::handle_update_mirror_group_replay_status>(this);
+  m_threads->timer->add_event_after(10, m_update_status_task);
+}
+
+template <typename I>
+void GroupReplayer<I>::handle_update_mirror_group_replay_status(int r) {
+  dout(10) << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(m_threads->timer_lock));
+
+  ceph_assert(m_update_status_task != nullptr);
+  m_update_status_task = nullptr;
+
+  auto ctx = new LambdaContext([this](int) {
+      update_mirror_group_replay_status();
+
+      {
+	std::unique_lock locker{m_lock};
+	std::unique_lock timer_locker{m_threads->timer_lock};
+
+	schedule_update_mirror_group_replay_status();
+      }
+      m_in_flight_op_tracker.finish_op();
+    });
+
+  m_in_flight_op_tracker.start_op();
+  m_threads->work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+void GroupReplayer<I>::cancel_update_mirror_group_replay_status() {
+  std::unique_lock timer_locker{m_threads->timer_lock};
+  if (m_update_status_task != nullptr) {
+    dout(10) << dendl;
+
+    if (m_threads->timer->cancel_event(m_update_status_task)) {
+      m_update_status_task = nullptr;
+    }
+  }
+}
+
+template <typename I>
 void GroupReplayer<I>::set_mirror_group_status_update(
     cls::rbd::MirrorGroupStatusState state, const std::string &desc) {
   dout(20) << "state=" << state << ", description=" << desc << dendl;
@@ -1125,16 +1183,52 @@ void GroupReplayer<I>::set_mirror_group_status_update(
   }
 
   m_local_status_updater->set_mirror_group_status(m_global_group_id,
-                                                  local_status, true);
+                                                  local_status, true, false);
   if (m_remote_group_peer.mirror_status_updater != nullptr) {
     m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
-        m_global_group_id, remote_status, true);
+        m_global_group_id, remote_status, true, false);
   }
 
   {
     std::lock_guard locker{m_lock};
     m_status_state = local_status.state;
     m_state_desc = local_status.description;
+  }
+}
+
+template <typename I>
+void GroupReplayer<I>::update_mirror_group_replay_status() {
+  dout(10) << dendl;
+
+  reregister_admin_socket_hook();
+
+  cls::rbd::MirrorGroupStatusState status_state;
+
+  if (is_replaying()) {
+    status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING;
+  } else {
+    dout(10) << "not replaying: ignoring update" << dendl;
+    return;
+  }
+
+  ceph_assert(m_replayer != nullptr);
+  std::string replay_desc;
+  if (!m_replayer->get_replay_status(&replay_desc)) {
+    dout(15) << "waiting for replay status" << dendl;
+    return;
+  }
+
+  cls::rbd::MirrorGroupSiteStatus site_status;
+  site_status.state = status_state;
+  site_status.up = true;
+  site_status.description = "replaying, " + replay_desc;
+
+  m_local_status_updater->set_mirror_group_status(m_global_group_id,
+                                                  site_status, false,
+                                                  true);
+  if (m_remote_group_peer.mirror_status_updater != nullptr) {
+    m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
+        m_global_group_id, site_status, false, true);
   }
 }
 

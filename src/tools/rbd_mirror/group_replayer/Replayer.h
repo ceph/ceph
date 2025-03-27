@@ -69,6 +69,8 @@ public:
     return (m_state == STATE_REPLAYING || m_state == STATE_IDLE);
   }
 
+  bool get_replay_status(std::string* description);
+
 private:
   enum State {
     STATE_INIT,
@@ -104,6 +106,11 @@ private:
 
   bool m_stop_requested = false;
   bool m_retry_validate_snap = false;
+
+  utime_t m_snapshot_start;
+  uint64_t m_last_snapshot_complete_seconds = 0;
+
+  uint64_t m_last_snapshot_bytes = 0;
 
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* locker);
