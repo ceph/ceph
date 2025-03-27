@@ -187,15 +187,13 @@
         </legend>
         <!-- Object Locking enable -->
         <cds-checkbox name="lock_enabled"
-                      formControlName="lock_enabled"
-                      id="lock_enabled"
-                      [disabled]="editing"
-                      i18n>Enable
-
-          <cd-help-text>
-            <span>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
-          </cd-help-text>
-        </cds-checkbox>
+              formControlName="lock_enabled"
+              id="lock_enabled"
+              i18n>Enable
+  <cd-help-text>
+    <span>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
+  </cd-help-text>
+</cds-checkbox>
       </div>
 
       <!-- Object Locking mode -->
@@ -263,73 +261,65 @@
     <!-- Encryption -->
     <fieldset>
       <div class="form-item">
-        <legend class="cd-header"
-                i18n>Encryption</legend>
-        <cds-checkbox name="encryption_enabled"
-                      formControlName="encryption_enabled"
-                      id="encryption_enabled"
-                      [disabled]="!kmsConfigured && !s3Configured"
-                      i18n>Enable
+        <legend class="cd-header" i18n>Encryption</legend>
+        <cds-checkbox name="encryption_enabled" formControlName="encryption_enabled" id="encryption_enabled" i18n>Enable
           <cd-help-text aria-label="encryption helper">
             <span>Enables encryption for the objects in the bucket.
-                To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
-                To set the configuration values <a href="#/rgw/configuration"
-                                                   i18n-aria-label="click here">Click here</a></span>
+              To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
+              To set the configuration values <a href="#/rgw/configuration" i18n-aria-label="click here">Click
+                here</a></span>
           </cd-help-text>
         </cds-checkbox>
       </div>
-
+    
       <div *ngIf="bucketForm.getValue('encryption_enabled')">
         <div class="form-item">
           <cds-radio-group formControlName="encryption_type">
-          <cds-radio value="AES256"
-                     [disabled]="!s3Configured">SSE-S3</cds-radio>
-          <cds-radio value="aws:kms"
-                     [disabled]="!kmsConfigured">Connect to an external key management service</cds-radio>
+            <cds-radio value="AES256" [ngClass]="{'disabled-radio': !isS3RadioEnabled}"
+              (click)="!isS3RadioEnabled && $event.preventDefault()">SSE-S3
+              <cds-tooltip *ngIf="!isS3RadioEnabled"
+                [description]="'SSE-S3 is not configured. Please configure it in the RGW settings.'" [highContrast]="true"
+                [caret]="true">
+                <svg cdsIcon="info" size="16" class="cds--radio__info"></svg>
+              </cds-tooltip>
+            </cds-radio>
+            <cds-radio value="aws:kms" [ngClass]="{'disabled-radio': !isKmsRadioEnabled}"
+              (click)="!isKmsRadioEnabled && $event.preventDefault()">Connect to an external key management service
+              <cds-tooltip *ngIf="!isKmsRadioEnabled"
+                [description]="'SSE-KMS is not configured. Please configure it in the RGW settings.'" [highContrast]="true"
+                [caret]="true">
+                <svg cdsIcon="info" size="16" class="cds--radio__info"></svg>
+              </cds-tooltip>
+            </cds-radio>
           </cds-radio-group>
         </div>
-
+    
         <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
           <div class="form-item">
-            <cds-select label="KMS Provider"
-                        for="kms_provider"
-                        formControlName="kms_provider"
-                        name="kms_provider"
-                        id="kms_provider"
-                        [invalidText]="kmsProviderError"
-                        [invalid]="!bucketForm.controls.kms_provider.valid && (bucketForm.controls.kms_provider.dirty)"
-                        cdRequiredField="KMS Provider"
-                        i18n>KMS Provider
-              <option *ngIf="kmsProviders === null"
-                      [ngValue]="null">Loading...</option>
-              <option *ngIf="kmsProviders !== null"
-                      [ngValue]="null">-- Select a provider --</option>
-              <option *ngFor="let provider of kmsProviders"
-                      [value]="provider">{{ provider }}</option>
+            <cds-select label="KMS Provider" for="kms_provider" formControlName="kms_provider" name="kms_provider"
+              id="kms_provider" [invalidText]="kmsProviderError"
+              [invalid]="!bucketForm.controls.kms_provider.valid && (bucketForm.controls.kms_provider.dirty)"
+              cdRequiredField="KMS Provider" i18n>KMS Provider
+              <option *ngIf="kmsProviders === null" [ngValue]="null">Loading...</option>
+              <option *ngIf="kmsProviders !== null" [ngValue]="null">-- Select a provider --</option>
+              <option *ngFor="let provider of kmsProviders" [value]="provider">{{ provider }}</option>
             </cds-select>
             <ng-template #kmsProviderError>
-              <span class="invalid-feedback"
-                    *ngIf="bucketForm.showError('kms_provider', frm, 'required')"
-                    i18n>This field is required.</span>
+              <span class="invalid-feedback" *ngIf="bucketForm.showError('kms_provider', frm, 'required')" i18n>This field
+                is required.</span>
             </ng-template>
           </div>
-
+    
           <div class="form-item">
-            <cds-text-label for="keyId"
-                            cdRequiredField="Key Id"
-                            [invalid]="!bucketForm.controls.keyId.valid && (bucketForm.controls.keyId.dirty)"
-                            [invalidText]="keyIdError"
-                            i18n>Key Id
-              <input cdsText
-                     id="keyId"
-                     name="keyId"
-                     formControlName="keyId"
-                     [invalid]="!bucketForm.controls.keyId.valid && (bucketForm.controls.keyId.dirty)">
+            <cds-text-label for="keyId" cdRequiredField="Key Id"
+              [invalid]="!bucketForm.controls.keyId.valid && (bucketForm.controls.keyId.dirty)" [invalidText]="keyIdError"
+              i18n>Key Id
+              <input cdsText id="keyId" name="keyId" formControlName="keyId"
+                [invalid]="!bucketForm.controls.keyId.valid && (bucketForm.controls.keyId.dirty)">
             </cds-text-label>
             <ng-template #keyIdError>
-              <span class="invalid-feedback"
-                    *ngIf="bucketForm.showError('keyId', frm, 'required')"
-                    i18n>This field is required.</span>
+              <span class="invalid-feedback" *ngIf="bucketForm.showError('keyId', frm, 'required')" i18n>This field is
+                required.</span>
             </ng-template>
           </div>
         </div>
@@ -343,13 +333,12 @@
                 i18n>Replication</legend>
         <ng-container *ngIf="{status: multisiteStatus$, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
           <cds-checkbox name="replication"
-                        formControlName="replication"
-                        id="replication"
-                        [disabled]="!multisiteStatus.isDefaultZg && !multisiteStatus.status.available"
-                        i18n-helperText
-                        i18n>Enable
-            <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
-          </cds-checkbox>
+              formControlName="replication"
+              id="replication"
+              i18n-helperText
+              i18n>Enable
+  <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
+</cds-checkbox>
 
           <cd-alert-panel type="info"
                           class="me-1"

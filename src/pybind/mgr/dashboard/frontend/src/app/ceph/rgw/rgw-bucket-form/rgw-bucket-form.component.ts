@@ -10,7 +10,7 @@ import { AbstractControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { Observable, forkJoin } from 'rxjs';
+import { Observable, forkJoin, combineLatest } from 'rxjs';
 import * as xml2js from 'xml2js';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -66,6 +66,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   icons = Icons;
   kmsConfigured = false;
   s3Configured = false;
+  isS3RadioEnabled = false;
+isKmsRadioEnabled = false;
   tags: Record<string, string>[] = [];
   dirtyTags = false;
   tagConfig = [
@@ -145,9 +147,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       'mfa-token-serial': [''],
       'mfa-token-pin': [''],
       lock_enabled: [{ value: false, disabled: this.editing }],
-      encryption_enabled: [null],
+      encryption_enabled: [{ value: null, disabled: !this.kmsConfigured && !this.s3Configured }], 
       encryption_type: [
-        null,
+        null ,
         [
           CdValidators.requiredIf({
             encryption_enabled: true
@@ -169,7 +171,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]],
-      replication: [false]
+      replication: [{ value: false, disabled: true }]
     });
   }
 
@@ -196,6 +198,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       if (data['SSE_S3']?.length > 0) {
         this.s3Configured = true;
       }
+      this.toggleEncryption();
       // Set the encryption type based on the configurations
       if (this.kmsConfigured && this.s3Configured) {
         this.bucketForm.get('encryption_type').setValue('');
@@ -273,9 +276,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           }
           this.bucketForm.setValue(value);
           if (this.editing) {
-            // temporary fix until the s3 account management is implemented in
+            // Temporary fix until the s3 account management is implemented in
             // the frontend. Disable changing the owner of the bucket in case
-            // its owned by the account.
+            // it's owned by the account.
             // @TODO: Introduce account selection for a bucket.
             if (!this.owners.includes(value['owner'])) {
               this.owners.push(value['owner']);
@@ -303,17 +306,40 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             this.filterAclPermissions();
           }
         }
+
+        combineLatest([this.multisiteStatus$, this.isDefaultZoneGroup$]).subscribe(
+          ([status, isDefaultZg]) => {
+            if (!isDefaultZg && !status.available) {
+              this.bucketForm.get('replication')?.disable();
+            } else {
+              this.bucketForm.get('replication')?.enable();
+            }
+          }
+        );
+
         this.loadingReady();
       });
     });
   }
 
+  toggleEncryption() {
+    if (!this.kmsConfigured && !this.s3Configured) {
+      this.bucketForm.get('encryption_enabled')?.disable();
+    } else {
+      this.bucketForm.get('encryption_enabled')?.enable();
+    }
+    this.isS3RadioEnabled = this.s3Configured;
+  this.isKmsRadioEnabled = this.kmsConfigured;
+  }
+
   goToListView() {
     this.router.navigate(['/rgw/bucket']);
   }
+
   rateLimitFormInit(rateLimitForm: FormGroup) {
     this.bucketForm.addControl('rateLimit', rateLimitForm);
   }
+
   submit() {
     // Exit immediately if the form isn't dirty.
     if (this.bucketForm.pristine && this.rateLimitComponent.form.pristine) {
@@ -341,8 +367,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       // Edit
       const versioning = this.getVersioningStatus();
       const mfaDelete = this.getMfaDeleteStatus();
-      // make the owner empty if the field is disabled.
-      // this ensures the bucket doesn't gets updated with owner when
+      // Make the owner empty if the field is disabled.
+      // This ensures the bucket doesn't get updated with owner when
       // the bucket is owned by the account.
       const owner = this.bucketForm.get('owner').disabled === true ? '' : values['owner'];
       this.rgwBucketService
@@ -590,7 +616,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   /*
    Set the selector's options to the available options depending
-   on the selected Grantee and reset it's value
+   on the selected Grantee and reset its value
    */
   onSelectionFilter() {
     this.filterAclPermissions();
