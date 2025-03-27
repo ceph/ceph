@@ -24,11 +24,12 @@
 class MMonMap final : public Message {
 public:
   ceph::buffer::list monmapbl;
-  entity_addrvec_t peer_addrs;
+  std::set<int> quorum;
 
   MMonMap() : Message{CEPH_MSG_MON_MAP} { }
-  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
+  explicit MMonMap(ceph::buffer::list &bl, std::set<int> q) : Message{CEPH_MSG_MON_MAP} {
     monmapbl = std::move(bl);
+    quorum = std::move(q);
   }
 private:
   ~MMonMap() final {}
@@ -49,11 +50,13 @@ public:
 
     using ceph::encode;
     encode(monmapbl, payload);
+    encode(quorum, payload);
   }
   void decode_payload() override { 
     using ceph::decode;
     auto p = payload.cbegin();
     decode(monmapbl, p);
+    decode(quorum, p);
   }
 private:
   template<class T, typename... Args>
