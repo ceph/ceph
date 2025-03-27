@@ -270,39 +270,38 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     /*
-     * WAL v2 files in bluefs have a different format from normal ones. In order to not flush metadata 
+     * Envelope mode files in bluefs have a different format from normal ones. In order to not flush metadata 
      * for every write we make to data extents, we create a package/envelope around the real data 
-     * that includes length of the data we want to flush and a marker that identifies the flush.
+     * that includes length of the data we want to flush and a unique stamp.
      *
      * The format on disk is:
-     * legend: l = length of flush, d = data, m = marker; each character represents one byte
+     * legend: l = length of envelope, d = data, s = stamp
      *
      * flush 0 l==24                                     flush 1 l==4             flush 2 l==12
      * v                                                 v                        v
-     * llll llll dddd dddd dddd dddd dddd dddd mmmm mmmm llll llll dddd mmmm mmmm llll llll dddd dddd dddd mmmm mmmm
-     *
+     * llll llll dddd dddd dddd dddd dddd dddd ssss ssss llll llll dddd ssss ssss llll llll dddd dddd dddd ssss ssss
      */
-    struct wal_flush_t {
-      typedef struct wal_marker_t {
+    struct envelope_t {
+      typedef struct stamp_t {
         uint8_t v[8] = {0};
-      } wal_marker_t;
-      typedef uint64_t wal_length_t;
+      } stamp_t;
+      typedef uint64_t envelope_len_t;
       uint64_t file_offset = 0;
-      uint64_t wal_offset = 0; // offset of start of flush, it should be length offset
-      uint32_t header_len = 0;
-      uint32_t tailer_len = 0;
-      uint64_t wal_length = 0;
+      uint64_t content_offset = 0; // offset of start of flush, it should be length offset
+      uint32_t head_len = 0;
+      uint32_t tail_len = 0;
+      uint64_t content_length = 0;
 
-      static constexpr size_t header_size() {
-        return sizeof(wal_length_t);
+      static constexpr size_t head_size() {
+        return sizeof(envelope_len_t);
       }
 
       static constexpr size_t tail_size() {
-        return sizeof(wal_marker_t);
+        return sizeof(stamp_t);
       }
 
-      static wal_marker_t generate_hashed_marker(uuid_d uuid, uint64_t ino) {
-        wal_marker_t m;
+      static stamp_t generate_stamp(uuid_d uuid, uint64_t ino) {
+        stamp_t m;
         const char* uuid_bytes = uuid.bytes();
         uint64_t hashed_ino = ino;
         hashed_ino ^= hashed_ino << 5;
@@ -339,13 +338,11 @@ public:
        _replay, device_migrate_to_existing, device_migrate_to_new */
     ceph::mutex lock = ceph::make_mutex("BlueFS::File::lock");
 
-    bool is_wal_read_loaded; // Before reading from WALv2 all flush envelopes must be located.
-                             // The flag indicates whether `wal_flushes` is initialized.
-    std::vector<wal_flush_t> wal_flushes; // to keep track of the amount of flushes we performed on a WAL file
-                                       // so that we can easily recalculate real data offsets.
-                                       // On "replay" this should be refilled in order to append data
-                                       // correctly. Nevertheless, replayed wal file most probably won't be reused
-    wal_flush_t::wal_marker_t wal_marker;
+    bool envelopes_indexed; // Before reading from enveloped file all envelopes must be located.
+                             // The flag indicates whether `envelopes` is initialized.
+    std::vector<envelope_t> envelopes; // Reading from enveloped file requires having indexed envelopes.
+                                       // Its filled either on _replay() or when file is opened for read.
+    envelope_t::stamp_t stamp;
 
   private:
     FRIEND_MAKE_REF(File);
@@ -360,7 +357,7 @@ public:
 	num_writers(0),
 	num_reading(0),
         vselector_hint(nullptr),
-        is_wal_read_loaded(false)
+        envelopes_indexed(false)
       {}
     ~File() override {
       ceph_assert(num_readers.load() == 0);
@@ -370,9 +367,8 @@ public:
     }
 
   public:
-    bool is_new_wal() {
-      // checks for both WAL_V2 and WAL_V2_FIN
-      return (fnode.type == WAL_V2 || fnode.type == WAL_V2_FIN);
+    bool envelope_mode() {
+      return (fnode.encoding == ENVELOPE || fnode.encoding == ENVELOPE_FIN);
     }
 
   };
@@ -414,7 +410,7 @@ public:
       const unsigned length,
       const bluefs_super_t& super);
     ceph::buffer::list::page_aligned_appender buffer_appender;  //< for const char* only
-    bufferlist::contiguous_filler wal_header_filler;
+    bufferlist::contiguous_filler envelope_head_filler;
   public:
     int writer_type = 0;    ///< WRITER_*
     int write_hint = WRITE_LIFE_NOT_SET;
@@ -426,7 +422,7 @@ public:
     FileWriter(FileRef f)
       : file(std::move(f)),
        buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), wal_header_filler() {
+                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -561,14 +557,14 @@ private:
 
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
-  bool selected_wal_v2 = false; ///< conf "bluefs_wal_v2" at mount
+  bool conf_wal_envelope_mode = false; ///< conf "bluefs_wal_envelope_mode" at mount
 
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
     uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
     FileWriter *writer = 0;
     bluefs_transaction_t t;
-    bool use_wal_v2 = false; //version of log currently in force
+    bool uses_envelope_mode = false; // true if any file is in envelope mode
   } log;
 
   struct {
@@ -660,7 +656,7 @@ private:
   int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
-  int _flush_wal_F(FileWriter *h);
+  int _flush_envelope_F(FileWriter *h);
   int _fsync(FileWriter *h, bool force_dirty);
   uint64_t _flush_special(FileWriter *h);
 
@@ -715,23 +711,23 @@ private:
   void _flush_bdev();  // this is safe to call without a lock
   void _flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
-  int64_t _read_wal(
+  int64_t _read_envmode(
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     ceph::buffer::list *outbl,   ///< [out] optional: reference the result here
     char *out);      ///< [out] optional: or copy it here
-  void _wal_index_file(
+  void _envmode_index_file(
     FileRef file);
-  int _wal_seek_to(
+  int _envmode_seek_to(
     FileReader *h,         ///< [in] wal-file to read
     uint64_t off,          ///< [in] offset in wal datastream
-    File::wal_flush_t* fl);///< [out] set wal envelope params
-  bool _read_wal_flush(
+    File::envelope_t* fl);///< [out] set wal envelope params
+  bool _read_envelope(
     FileReader *h,         ///< [in] wal-file to read
     uint64_t file_ofs,     ///< [in] offset to expect envelope
-    uint64_t wal_ofs,      ///< [in] respective offset in wal datastream
-    File::wal_flush_t* fl);///< [out] set wal envelope params
+    uint64_t env_ofs,      ///< [in] respective offset in wal datastream
+    File::envelope_t* fl);///< [out] set wal envelope params
   int64_t _read(
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
@@ -888,8 +884,8 @@ public:
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
-    if (h->file->is_new_wal()) {
-      return _read_wal(h, offset, len, outbl, out);
+    if (h->file->envelope_mode()) {
+      return _read_envmode(h, offset, len, outbl, out);
     }
     return _read(h, offset, len, outbl, out);
   }
