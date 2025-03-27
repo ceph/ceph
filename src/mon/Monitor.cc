@@ -212,7 +212,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   admin_hook(NULL),
   routed_request_tid(0),
   op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1),
-  ms_inject_drop_mon_forward_msgs(cct, "mon_inject_drop_mon_forward_msgs", 0)
+  ms_inject_drop_mon_forward_msgs(cct->_conf , "ms_inject_drop_mon_forward_msgs")
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
@@ -4165,8 +4165,8 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else if (!session->closed) {
     // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
     // if positive drop random percentage of mon forward messages
-    if (ms_inject_drop_mon_forward_msgs > 0.0 &&
-      rand() % 10000 < 10000 * ms_inject_drop_mon_forward_msgs) {
+    if (*ms_inject_drop_mon_forward_msgs > 0.0 &&
+      rand() % 10000 < 10000 * *ms_inject_drop_mon_forward_msgs) {
       dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
       req->put();
       return;
@@ -4416,8 +4416,8 @@ void Monitor::resend_routed_requests()
 	(PaxosServiceMessage *)decode_message(cct, 0, q);
       // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
       // if positive drop random percentage of mon forward messages
-      if (ms_inject_drop_mon_forward_msgs > 0.0 &&
-        rand() % 10000 < 10000 * ms_inject_drop_mon_forward_msgs) {
+      if (*ms_inject_drop_mon_forward_msgs > 0.0 &&
+        rand() % 10000 < 10000 * *ms_inject_drop_mon_forward_msgs) {
         dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
         req->put();
         continue;
@@ -5550,9 +5550,8 @@ void Monitor::send_latest_monmap(Connection *con)
     << " id:" << con->get_peer_id()
     << " quorum: " << get_quorum()
     << dendl;
-  monmap->set_quorum(get_quorum());
   monmap->encode(bl, con->get_features());
-  con->send_message(new MMonMap(bl));
+  con->send_message(new MMonMap(bl, get_quorum()));
 }
 
 void Monitor::check_quorum_subs_and_send_updates()

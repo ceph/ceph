@@ -22,13 +22,19 @@
 #include "mon/MonMap.h"
 
 class MMonMap final : public Message {
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 0;
 public:
   ceph::buffer::list monmapbl;
-  entity_addrvec_t peer_addrs;
+  std::set<int> quorum;
 
-  MMonMap() : Message{CEPH_MSG_MON_MAP} { }
-  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
+  MMonMap() :
+    Message{CEPH_MSG_MON_MAP, HEAD_VERSION, COMPAT_VERSION} { }
+  explicit MMonMap(ceph::buffer::list &bl, std::set<int> q) :
+    Message{CEPH_MSG_MON_MAP, HEAD_VERSION, COMPAT_VERSION} {
     monmapbl = std::move(bl);
+    quorum = std::move(q);
   }
 private:
   ~MMonMap() final {}
@@ -49,11 +55,13 @@ public:
 
     using ceph::encode;
     encode(monmapbl, payload);
+    encode(quorum, payload);
   }
   void decode_payload() override { 
     using ceph::decode;
     auto p = payload.cbegin();
     decode(monmapbl, p);
+    decode(quorum, p);
   }
 private:
   template<class T, typename... Args>
