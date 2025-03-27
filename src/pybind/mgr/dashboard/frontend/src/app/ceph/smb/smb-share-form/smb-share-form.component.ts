@@ -52,7 +52,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute
   ) {
     super();
-    this.resource = $localize`Share`;
+    this.resource = $localize`share`;
     this.isEdit = this.router.url.startsWith(`/${SHARE_PATH}/${URLVerbs.EDIT}`);
     this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }

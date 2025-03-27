@@ -8,7 +8,10 @@
         novalidate>
     <div i18n="form title"
          class="form-header">
-      {{ action | titlecase }} {{ resource | upperFirst }}
+      {{ action | titlecase }} {{ resource }}
+      <cd-help-text>
+        Create a user for authorization against Active Directory (AD) servers
+      </cd-help-text>
     </div>
 
     <!-- Auth Id -->
@@ -120,7 +123,7 @@
     <cd-form-button-panel
         (submitActionEvent)="submit()"
         [form]="form"
-        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-        wrappingClass="text-right"></cd-form-button-panel>
+        [submitText]="(action | titlecase) + ' ' + resource"
+        wrappingClass="align-right-stretch"></cd-form-button-panel>
   </form>
 </div>

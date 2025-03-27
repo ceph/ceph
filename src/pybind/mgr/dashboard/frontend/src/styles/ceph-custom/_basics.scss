@@ -118,3 +118,13 @@ ol,
 ul {
   padding-left: 0;
 }
+
+.align-right-stretch {
+  align-items: stretch;
+  display: flex;
+  justify-content: flex-end;
+
+  > cd-back-button {
+    display: flex;
+  }
+}

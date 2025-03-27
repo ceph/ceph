@@ -51,8 +51,8 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/${USERSGROUPS_PATH}/${URLVerbs.EDIT}`);
-    this.resource = $localize`users and groups access resource`;
+    this.editing = this.router.url.startsWith(`${USERSGROUPS_PATH}/${URLVerbs.EDIT}`);
+    this.resource = $localize`standalone access resource`;
     effect(() => {
       const formData = this.uploadedData();
       if (formData) {

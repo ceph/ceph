@@ -126,7 +126,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
     const usersGroupsId = this.selection.first().users_groups_id;
 
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Users and groups access resource`,
+      itemDescription: $localize`Standalone access resource`,
       itemNames: [usersGroupsId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({

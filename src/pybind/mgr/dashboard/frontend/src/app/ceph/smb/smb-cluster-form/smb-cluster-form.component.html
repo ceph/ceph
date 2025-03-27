@@ -8,7 +8,10 @@
           novalidate>
       <div i18n="form title"
            class="form-header">
-        {{ action | titlecase }} {{ resource | upperFirst }}
+        {{ action | titlecase }} {{ resource }}
+        <cd-help-text>
+          Logical unit for Samba services management
+        </cd-help-text>
       </div>
 
       <!-- Cluster Id -->
@@ -52,7 +55,7 @@
           [invalidText]="authModeError"
           (change)="onAuthModeChange()"
           [disabled]="isEdit"
-          helperText="Active-directory authentication for domain member servers and User authentication for
+          helperText="Active Directory (AD) authentication for domain member servers and User authentication for
           Stand-alone servers configuration."
           i18n-helperText
         >
@@ -86,6 +89,8 @@
                 type="text"
                 id="domain_settings"
                 formControlName="domain_settings"
+                placeholder="-- Set realm name and AD access resources --"
+                i18n-placeholder
                 [value]="domainSettingsObject?.realm"
                 (click)="editDomainSettingsModal()"
                 [invalid]="
@@ -147,7 +152,7 @@
               <option
                 [value]="null"
                 i18n
-              >-- List of users and groups access resources --
+              >-- List of standalone access resources --
               </option>
               <option *ngFor="let ug of usersGroups"
                       [value]="ug.users_groups_id">{{ ug.users_groups_id }}</option>
@@ -449,8 +454,8 @@
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"
         [form]="smbForm"
-        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-        wrappingClass="text-right"
+        [submitText]="(action | titlecase) + ' ' + resource"
+        wrappingClass="align-right-stretch"
       ></cd-form-button-panel>
     </form>
   </ng-container>
