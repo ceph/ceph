@@ -927,10 +927,7 @@ private:
       ).si_then([pin=std::move(pin)](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
-        auto pin_laddr = pin.get_key();
-        if (pin.is_indirect()) {
-          pin_laddr = pin.get_intermediate_base();
-        }
+        auto pin_laddr = pin.get_intermediate_base();
         assert(lextent->get_laddr() == pin_laddr);
 #endif
 	return extent->template cast<T>();
@@ -997,9 +994,7 @@ private:
     extent_len_t partial_len) {
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
-    auto direct_length = pin.is_indirect() ?
-      pin.get_intermediate_length() :
-      pin.get_length();
+    auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
       direct_partial_off = 0;
       partial_len = direct_length;
@@ -1013,14 +1008,13 @@ private:
       direct_length,
       direct_partial_off,
       partial_len,
-      [pin=pin.duplicate(), child_pos=std::move(child_pos)]
+      [laddr=pin.get_intermediate_base(), child_pos=std::move(child_pos)]
       (T &extent) mutable {
 	assert(extent.is_logical());
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
-	assert(pin.is_valid());
 	child_pos.link_child(&extent);
-	extent.maybe_set_intermediate_laddr(pin);
+	extent.set_laddr(laddr);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
@@ -1074,29 +1068,21 @@ private:
     SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
               t, pin, type);
     assert(is_logical_type(type));
-    laddr_t direct_key;
-    extent_len_t direct_length;
-    if (pin.is_indirect()) {
-      direct_key = pin.get_intermediate_base();
-      direct_length = pin.get_intermediate_length();
-    } else {
-      direct_key = pin.get_key();
-      direct_length = pin.get_length();
-    }
+    laddr_t direct_key = pin.get_intermediate_base();
+    extent_len_t direct_length = pin.get_intermediate_length();
     return cache->get_absent_extent_by_type(
       t,
       type,
       pin.get_val(),
       direct_key,
       direct_length,
-      [pin=pin.duplicate(), child_pos=std::move(child_pos)](CachedExtent &extent) mutable {
+      [direct_key, child_pos=std::move(child_pos)](CachedExtent &extent) mutable {
 	assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
-	assert(pin.is_valid());
 	child_pos.link_child(&lextent);
-	lextent.maybe_set_intermediate_laddr(pin);
+	lextent.set_laddr(direct_key);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
       auto crc = ref->calc_crc32c();
