@@ -3,6 +3,7 @@ tasks:
       fail_on_skip: false
       modules:
         - tasks.cephfs.test_volumes.TestVolumes
+        - tasks.cephfs.test_volumes.TestVolumeCreate
         - tasks.cephfs.test_volumes.TestSubvolumeGroups
         - tasks.cephfs.test_volumes.TestSubvolumes
         - tasks.cephfs.test_subvolume
