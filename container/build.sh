@@ -75,8 +75,22 @@ if [[ ${NO_PUSH} != "true" ]] ; then
 fi
 if [[ ${CI_CONTAINER} != "true" ]] ; then : "${VERSION:?}"; fi
 
+echo "CI_CONTAINER: $CI_CONTAINER"
+echo "FLAVOR: $FLAVOR"
+echo "BRANCH: $BRANCH"
+echo "CEPH_SHA1: $CEPH_SHA1"
+echo "ARCH: $ARCH"
+echo "CONTAINER_REPO_HOSTNAME: $CONTAINER_REPO_HOSTNAME"
+echo "CONTAINER_REPO_ORGANIZATION: $CONTAINER_REPO_ORGANIZATION"
+echo "CONTAINER_REPO: $CONTAINER_REPO"
+echo "VERSION: $VERSION"
+
 # check for valid repo auth (if pushing)
 repopath=${CONTAINER_REPO_HOSTNAME}/${CONTAINER_REPO_ORGANIZATION}/${CONTAINER_REPO}
+
+echo "repopath: ${repopath}"
+exit 0
+
 MINIMAL_IMAGE=${repopath}:minimal-test
 if [[ ${NO_PUSH} != "true" ]] ; then
     podman rmi ${MINIMAL_IMAGE} || true
