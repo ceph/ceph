@@ -411,6 +411,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       total_len = 0;
     }
 
+    dump_header(s, "Rgwx-Perm-Checked", "true");
+
     // check for GetObject(Version)Tagging permission to include tags in response
     auto action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
     // since we are already under s->system_request, if the request is not impersonating,
