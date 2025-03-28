@@ -10836,13 +10836,13 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   return _fsck_on_open(depth, repair);
 }
 
-int BlueStore::downgrade_wal_to_v1() {
+int BlueStore::revert_wal_to_plain() {
   int r = cold_open();
   if (r != 0) {
     dout(1) << __func__ << "failed to open db / allocator" << dendl;
     goto out;
   }
-  bluefs->downgrade_wal_to_v1();
+  bluefs->revert_wal_to_plain();
   cold_close();
   out:
   return r;

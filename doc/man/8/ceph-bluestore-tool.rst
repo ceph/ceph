@@ -34,7 +34,7 @@ Synopsis
 | **ceph-bluestore-tool** show-sharding --path *osd path*
 | **ceph-bluestore-tool** trim --path *osd path*
 | **ceph-bluestore-tool** zap-device --dev *dev path*
-| **ceph-bluestore-tool** downgrade-wal-to-v1 --path *osd path*
+| **ceph-bluestore-tool** revert-wal-to-plain --path *osd path*
 
 
 Description
@@ -166,10 +166,10 @@ Commands
 
    Zeros all device label locations. This effectively makes device appear empty.
 
-:command: `downgrade-wal-to-v1` --path *osd path*
+:command: `revert-wal-to-plain` --path *osd path*
 
-   Changes WAL disk format from the new version to the legacy one. Useful for downgrades, or if you
-   might want to disable this new feature (bluefs_wal_v2).
+   Changes WAL files from envelope mode to the legacy plain mode.
+   Useful for downgrades, or if you might want to disable this new feature (bluefs_wal_envelope_mode).
 
 Options
 =======

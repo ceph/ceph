@@ -2215,7 +2215,7 @@ int BlueFS::device_migrate_to_new(
   return 0;
 }
 
-int BlueFS::downgrade_wal_to_v1(
+int BlueFS::revert_wal_to_plain(
     const std::string& dir,
     const std::string& name)
 {
@@ -2225,7 +2225,7 @@ int BlueFS::downgrade_wal_to_v1(
   FileReader* reader = nullptr;
   // we use dir for wals and name like wal; should get proper hint
   r = open_for_write(dir, tmp_name, &writer, false);
-  // use normal v1 write path by marking node type to legacy
+  // use normal legacy write path by marking node type to plain
   writer->file->fnode.encoding = bluefs_node_encoding::PLAIN;
   ceph_assert(r == 0);
   r = open_for_read(dir, name, &reader);
@@ -2250,7 +2250,7 @@ int BlueFS::downgrade_wal_to_v1(
   return 0;
 }
 
-int BlueFS::downgrade_wal_to_v1()
+int BlueFS::revert_wal_to_plain()
 {
   string wal_dir("db.wal");
   auto dir_it = nodes.dir_map.find(wal_dir);
@@ -2263,11 +2263,11 @@ int BlueFS::downgrade_wal_to_v1()
   auto dir_copy = dir_it->second->file_map;
   for (const auto& [file_name, file] : dir_copy) {
     if(file->envelope_mode()) {
-      downgrade_wal_to_v1(wal_dir, file_name);
+      revert_wal_to_plain(wal_dir, file_name);
       sync_metadata(true);
-      dout(10) << __func__ << fmt::format(" {} v2=>v1", file_name) << dendl;
+      dout(10) << __func__ << fmt::format(" {} envelope mode=>plain mode", file_name) << dendl;
     } else {
-      dout(10) << __func__ << fmt::format(" {} in v1", file_name) << dendl;
+      dout(10) << __func__ << fmt::format(" {} in plain mode", file_name) << dendl;
     }
   }
 
