@@ -4891,7 +4891,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     // that only one thread tries to suspend that coroutine
     const req_context rctx{dpp, null_yield, nullptr};
     const rgw_owner remote_user_owner(remote_user);
-    return fetch_remote_obj(dest_obj_ctx, &remote_user_owner, nullptr, info, source_zone,
+    return fetch_remote_obj(dest_obj_ctx, &remote_user_owner, &remote_user, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
