@@ -13560,6 +13560,12 @@ bool Client::_ll_forget(Inode *in, uint64_t count)
   return last;
 }
 
+void Client::ll_get(Inode *in)
+{
+  std::scoped_lock lock(client_lock);
+  _ll_get(in);
+}
+
 bool Client::ll_forget(Inode *in, uint64_t count)
 {
   std::scoped_lock lock(client_lock);

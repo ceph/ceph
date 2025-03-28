@@ -2042,6 +2042,11 @@ extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
 					    flags, *perms);
 }
 
+extern "C" void ceph_ll_get(class ceph_mount_info *cmount, Inode *in)
+{
+  cmount->get_client()->ll_get(in);
+}
+
 extern "C" int ceph_ll_put(class ceph_mount_info *cmount, Inode *in)
 {
   return (cmount->get_client()->ll_put(in));
