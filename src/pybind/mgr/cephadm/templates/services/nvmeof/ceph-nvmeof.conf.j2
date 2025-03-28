@@ -66,7 +66,15 @@ tgt_path = {{ spec.tgt_path }}
 rpc_socket_dir = {{ spec.rpc_socket_dir }}
 rpc_socket_name = {{ spec.rpc_socket_name }}
 timeout = {{ spec.spdk_timeout }}
+{% if spec.bdevs_per_cluster %}
 bdevs_per_cluster = {{ spec.bdevs_per_cluster }}
+{% endif %}
+{% if spec.flat_bdevs_per_cluster %}
+flat_bdevs_per_cluster = {{ spec.flat_bdevs_per_cluster }}
+{% endif %}
+{% if spec.cluster_connections %}
+cluster_connections = {{ spec.cluster_connections }}
+{% endif %}
 {% if spec.spdk_log_level %}
 log_level = {{ spec.spdk_log_level }}
 {% endif %}
