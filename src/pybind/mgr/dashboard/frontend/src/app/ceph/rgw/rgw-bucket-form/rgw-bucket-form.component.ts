@@ -190,12 +190,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
     this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
-      if (data['SSE_KMS']?.length > 0) {
-        this.kmsConfigured = true;
-      }
-      if (data['SSE_S3']?.length > 0) {
-        this.s3Configured = true;
-      }
+      this.s3Configured = data.s3 && Object.keys(data.s3).length > 0;
+      this.kmsConfigured = data.kms && Object.keys(data.kms).length > 0;
       // Set the encryption type based on the configurations
       if (this.kmsConfigured && this.s3Configured) {
         this.bucketForm.get('encryption_type').setValue('');
