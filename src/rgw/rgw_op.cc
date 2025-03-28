@@ -6815,12 +6815,12 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
      * "-<num-parts>.  See
      * https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums
      */
-    (*cksum_combiner)->append(*part_cksum, part.second->get_size());
+    cksum_combiner->append(*part_cksum, part.second->get_size());
 
   } /* all-parts */
 
   /* we cannot verify this checksum, only compute it */
-  out_cksum = (*cksum_combiner)->final();
+  out_cksum = cksum_combiner->final();
 
   armored_cksum = [&]() -> std::string {
     std::string armor = out_cksum->to_armor();

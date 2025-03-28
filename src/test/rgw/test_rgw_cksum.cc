@@ -806,15 +806,15 @@ TEST(RGWCksum, Combiner1)
   auto cmbnr = rgw::cksum::CombinerFactory(t, flags);
 
   ASSERT_TRUE(cmbnr);
-  ASSERT_EQ(t, (*cmbnr)->get_type());
+  ASSERT_EQ(t, cmbnr->get_type());
 
-  (*cmbnr)->append(get<0>(cksums), dolor.length());
-  (*cmbnr)->append(get<1>(cksums), lorem.length());
+  cmbnr->append(get<0>(cksums), dolor.length());
+  cmbnr->append(get<1>(cksums), lorem.length());
 
   /* depending on the checksum type and flags, cksum4 is
    * either equivalent to cksum3, or, a composite digest
    * of cksum1 and cksum2 */
-  auto cksum4 = (*cmbnr)->final();
+  auto cksum4 = cmbnr->final();
 
   /* if cksums(0) is !composite, then cksums(2) is
    * == cksums(0) + cksums(1) and also == cksum4 */
@@ -927,7 +927,7 @@ TEST_F(CksumCombinerFixture, Test1) {
     auto cmbnr = rgw::cksum::CombinerFactory(t, flags);
 
     ASSERT_TRUE(cmbnr);
-    ASSERT_EQ(t, (*cmbnr)->get_type());
+    ASSERT_EQ(t, cmbnr->get_type());
 
     auto lena = CksumCombinerFixture::long_a.length();
     auto lenb = CksumCombinerFixture::long_b.length();
@@ -937,14 +937,14 @@ TEST_F(CksumCombinerFixture, Test1) {
     ASSERT_EQ(lenb, lenc);
     ASSERT_EQ(lenc, (5*1024*1024));
 
-    (*cmbnr)->append(get<0>(cksums), lena);
-    (*cmbnr)->append(get<1>(cksums), lena);
-    (*cmbnr)->append(get<2>(cksums), lena);
+    cmbnr->append(get<0>(cksums), lena);
+    cmbnr->append(get<1>(cksums), lena);
+    cmbnr->append(get<2>(cksums), lena);
 
     /* depending on the checksum type and flags, cksum4 is
      * either equivalent to cksum3, or, a composite digest
      * of cksum1 and cksum2 */
-    auto cksum4 = (*cmbnr)->final();
+    auto cksum4 = cmbnr->final();
 
     /* if cksums(0) is !composite, then cksums(3) is
      * == SUM(cksums(0)..cksums(2)) and also == cksum4 */

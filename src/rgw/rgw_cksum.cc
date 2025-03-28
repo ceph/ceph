@@ -142,15 +142,15 @@ namespace rgw::cksum {
     }
   }; /* CRCCombine */
 
-  std::unique_ptr<Combiner*> CombinerFactory(cksum::Type t, uint16_t flags)
+  std::unique_ptr<Combiner> CombinerFactory(cksum::Type t, uint16_t flags)
   {
     switch(t) {
     case cksum::Type::crc32:
     case cksum::Type::crc32c:
     case cksum::Type::crc64nvme:
-      return std::make_unique<Combiner*>(new CRCCombiner(t));
+      return std::unique_ptr<Combiner>(new CRCCombiner(t));
     default:
-      return std::make_unique<Combiner*>(new DigestCombiner(t));
+      return std::unique_ptr<Combiner>(new DigestCombiner(t));
     };
   }
 

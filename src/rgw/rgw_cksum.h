@@ -374,7 +374,7 @@ namespace rgw { namespace cksum {
   }; /* abstract Combiner */
 
   /* choose type-correct Combiner */
-  std::unique_ptr<Combiner*>
+  std::unique_ptr<Combiner>
   CombinerFactory(cksum::Type t, uint16_t flags);
 
   using ChecksumTypeResult = std::tuple<uint16_t, const char*>;
