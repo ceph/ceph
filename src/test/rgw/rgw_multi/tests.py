@@ -5764,7 +5764,7 @@ def test_bucket_replication_source_forbidden_getobjecttagging():
             'Version': '2012-10-17',
             'Statement': [{
                 'Effect': 'Deny',
-                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{non_account_user.id}"]},
                 'Action': 's3:GetObjectTagging',
                 'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
             }]
@@ -5821,7 +5821,7 @@ def test_bucket_replication_source_forbidden_getobjectversiontagging():
             'Version': '2012-10-17',
             'Statement': [{
                 'Effect': 'Deny',
-                'Principal': {'AWS': [f"arn:aws:iam:::user/{user.id}"]},
+                'Principal': {'AWS': [f"arn:aws:iam:::user/{non_account_user.id}"]},
                 'Action': 's3:GetObjectVersionTagging',
                 'Resource': f'arn:aws:s3:::{source_bucket.name}/*',
             }]
@@ -5838,3 +5838,30 @@ def test_bucket_replication_source_forbidden_getobjectversiontagging():
     res = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
     assert_equal(res['Body'].read().decode('utf-8'), 'foo')
     assert 'TagCount' not in res
+
+@run_per_zonegroup
+def test_copy_obj_perm_check_between_zonegroups(zonegroup):
+    if len(realm.current_period.zonegroups) < 2:
+        raise SkipTest('need at least 2 zonegroups to run this test')
+
+    source_zone = ZonegroupConns(zonegroup).rw_zones[0]
+    source_bucket = source_zone.create_bucket(gen_bucket_name())
+
+    objname = 'dummy'
+    k = new_key(source_zone, source_bucket.name, objname)
+    k.set_contents_from_string('foo')
+
+    for zg in realm.current_period.zonegroups:
+        if zg.name == zonegroup.name:
+            continue
+
+        dest_zone = ZonegroupConns(zg).non_account_alt_rw_zones[0]
+        dest_bucket = dest_zone.create_bucket(gen_bucket_name())
+        realm_meta_checkpoint(realm)
+
+        # copy object returns 403
+        e = assert_raises(ClientError, dest_zone.s3_client.copy_object,
+                          Bucket=dest_bucket.name,
+                          CopySource={'Bucket': source_bucket.name, 'Key': objname},
+                          Key=objname)
+        assert e.response['Error']['Code'] == 'AccessDenied'
