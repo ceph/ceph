@@ -84,6 +84,7 @@ Main Scrubber interfaces:
 #include "osd_scrub_sched.h"
 #include "scrub_backend.h"
 #include "scrub_machine_lstnr.h"
+#include "scrub_machine_if.h"
 #include "scrub_reservations.h"
 
 namespace Scrub {
@@ -693,7 +694,7 @@ class PgScrubber : public ScrubPgIF,
 			    hobject_t end,
 			    bool deep);
 
-  std::unique_ptr<Scrub::ScrubMachine> m_fsm;
+  std::unique_ptr<Scrub::ScrubFsmIf> m_fsm;
   /// the FSM state, as a string for logging
   const char* m_fsm_state_name{nullptr};
   const spg_t m_pg_id;	///< a local copy of m_pg->pg_id
