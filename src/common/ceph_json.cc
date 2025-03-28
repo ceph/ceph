@@ -29,6 +29,7 @@
 #include <memory>
 #include <string>
 #include <fstream>
+#include <exception>
 
 using std::ifstream;
 using std::ostream;
@@ -146,10 +147,13 @@ bool JSONParser::parse(std::string_view json_string_view)
   return false; 
 }
 
-// parse a supplied ifstream:
-bool JSONParser::parse(const char *file_name)
+bool JSONParser::parse_file(const std::filesystem::path file_name)
 {
  ifstream is(file_name);
+
+ if (!is.is_open()) {
+  throw std::runtime_error(fmt::format("unable to open \"{}\"", file_name.string()));
+ }
 
  std::error_code ec;
  data = boost::json::parse(is, ec);

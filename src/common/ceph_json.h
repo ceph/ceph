@@ -24,6 +24,7 @@
 #include <string>
 
 #include <iostream>
+#include <filesystem>
 
 #include <ranges>
 #include <concepts>
@@ -296,8 +297,7 @@ public:
 	       : false;
   }
 
-  // operate on a data file:
-  bool parse(const char *file_name);
+  [[deprecated("this may not be reliable")]] bool parse_file(const std::filesystem::path file_name); 
 
 public:
   const char *get_json() const noexcept{ return json_buffer.c_str(); }
