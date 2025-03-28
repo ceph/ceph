@@ -3472,7 +3472,9 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   const DoutPrefixProvider *dpp;
   CephContext* cct;
-  rgw_obj obj;
+  optional_yield y;
+  rgw::sal::Driver *driver;
+  const rgw_obj& src_obj;
   rgw::sal::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
   bool try_etag_verify;
@@ -3491,18 +3493,36 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
   std::function<int(map<string, bufferlist>&)> attrs_handler;
+  /*
+    This UID, if provided, serves as a fallback mechanism to validate the
+    source bucket's ACL before initiating the fetch operation. It ensures
+    backward compatibility with legacy implementations where the `rgwx-perm-uid`
+    arg might not be honored, and the destination zone does not return the
+    `x-rgw-perm-checked` header, which confirms that the source object's
+    permissions were validated against the specified `rgwx-perm-uid`.
+
+    @todo drop me in T+2 release.
+  */
+ const rgw_user* perm_check_uid{nullptr};
 
 public:
   RGWRadosPutObj(const DoutPrefixProvider *dpp,
                  CephContext* cct,
+                 optional_yield y,
+                 rgw::sal::Driver* driver,
+                 const rgw_obj& src_obj,
                  CompressorRef& plugin,
                  boost::optional<RGWPutObj_Compress>& compressor,
                  rgw::sal::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data,
-                 std::function<int(map<string, bufferlist>&)> _attrs_handler) :
+                 std::function<int(map<string, bufferlist>&)> _attrs_handler,
+                 const rgw_user *_perm_check_uid = nullptr) :
                        dpp(dpp),
                        cct(cct),
+                       y(y),
+                       driver(driver),
+                       src_obj(src_obj),
                        filter(p),
                        compressor(compressor),
                        try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
@@ -3510,7 +3530,8 @@ public:
                        processor(p),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
-                       attrs_handler(_attrs_handler) {}
+                       attrs_handler(_attrs_handler),
+                       perm_check_uid(_perm_check_uid) {}
 
 
   int process_attrs(void) {
@@ -3692,6 +3713,41 @@ public:
     } else {
       return "";
     }
+  }
+
+  int handle_headers(const map<string, string>& headers, int http_status) override {
+    if (perm_check_uid && http_status != 403 && http_status != 401) {
+      auto iter = headers.find("RGWX_PERM_CHECKED");
+      // if the header is not present, we need to check the ACL
+      // of the source bucket against the fallback UID
+      if (iter == headers.end()) {
+        std::unique_ptr<rgw::sal::Bucket> bucket;
+        int ret = driver->load_bucket(dpp, src_obj.bucket, &bucket, y);
+        if (ret < 0) {
+          return ret;
+        }
+
+        RGWUserPermHandler user_perms(dpp, driver, cct, *perm_check_uid);
+        ret = user_perms.init();
+        if (ret < 0) {
+          return ret;
+        }
+
+        RGWUserPermHandler::Bucket bucket_perms;
+        ret = user_perms.init_bucket(bucket->get_info(), bucket->get_attrs(), &bucket_perms);
+        if (ret < 0) {
+          return ret;
+        }
+
+        // old ACL should still win s3:ReplicateObject
+        if (!bucket_perms.verify_bucket_permission(src_obj.key, rgw::IAM::s3ReplicateObject)) {
+          ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): fallback permission check denied" << dendl;
+          return CURLM_ABORTED_BY_CALLBACK;
+        }
+      }
+    }
+
+    return 0;
   }
 };
 
@@ -4344,7 +4400,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
 
   std::optional<rgw_user> override_owner;
 
-  RGWRadosPutObj cb(rctx.dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+  RGWRadosPutObj cb(rctx.dpp, cct, rctx.y, driver, src_obj, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](map<string, bufferlist>& obj_attrs) {
                       const rgw_placement_rule *ptail_rule;
 
@@ -4377,7 +4433,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                         return ret;
                       }
                       return 0;
-                    });
+                    }, perm_check_uid);
 
   string etag;
   real_time set_mtime;
@@ -5295,7 +5351,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   dest_placement.storage_class = tier_ctx.restore_storage_class;
-  RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+  RGWRadosPutObj cb(dpp, cct, y, driver, dest_obj, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](map<string, bufferlist> obj_attrs) {
                       // XXX: do we need filter() like in fetch_remote_obj() cb
                       dest_placement.inherit_from(dest_bucket_info.placement_rule);
