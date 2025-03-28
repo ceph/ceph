@@ -670,7 +670,7 @@ void Client::_finish_init()
     plb.add_u64(l_c_rd_ops, "rdops", "Total read IO operations");
     plb.add_time(l_c_wr_avg, "writeavg", "Average latency for processing write requests");
     plb.add_u64(l_c_wr_sqsum, "writesqsum", "Sum of squares ((to calculate variability/stdev) for write requests");
-    plb.add_u64(l_c_wr_ops, "rdops", "Total write IO operations");
+    plb.add_u64(l_c_wr_ops, "wrops", "Total write IO operations");
     logger.reset(plb.create_perf_counters());
     cct->get_perfcounters_collection()->add(logger.get());
   }
