@@ -413,6 +413,10 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
     /* JSON encode object metadata */
 
+    if (s->auth.identity->evals_passed_uid_perm()) {
+      dump_header(s, "Rgwx-Perm-Checked", "true");
+    }
+
     // check for GetObject(Version)Tagging permission to include tags in response
     auto action = s->object->get_instance().empty() ? rgw::IAM::s3GetObjectTagging : rgw::IAM::s3GetObjectVersionTagging;
     // we are already under s->system_request, so if it's not evaluating the passed uid, we can assume it's not a user-mode replication
