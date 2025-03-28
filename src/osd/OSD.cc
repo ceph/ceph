@@ -2134,6 +2134,7 @@ void OSD::write_superblock(CephContext* cct, OSDSuperblock& sb, ObjectStore::Tra
 
   bufferlist bl;
   encode(sb, bl);
+  t.truncate(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
   std::map<std::string, ceph::buffer::list> attrs;
   attrs.emplace(OSD_SUPERBLOCK_OMAP_KEY, bl);
