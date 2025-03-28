@@ -10,8 +10,7 @@
 #include "include/rados/librados.hpp"
 #include "librbd/mirror/snapshot/Types.h"
 #include "tools/rbd_mirror/Types.h"
-#include "tools/rbd_mirror/image_replayer/Replayer.h"
-#include "tools/rbd_mirror/image_replayer/Types.h"
+#include "tools/rbd_mirror/group_replayer/Types.h"
 #include <string>
 
 class Context;
