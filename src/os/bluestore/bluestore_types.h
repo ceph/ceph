@@ -1262,7 +1262,7 @@ struct bluestore_onode_t {
     if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
       struct_v_to_use = 2;
     }
-    DENC_START(struct_v_to_use, 1, p);
+    DENC_START_UNCHECKED(struct_v_to_use, 1, p);
     _denc_friend(*this, p, struct_v_to_use);
     DENC_FINISH(p);
   }
@@ -1271,13 +1271,13 @@ struct bluestore_onode_t {
     if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
       struct_v_to_use = 2;
     }
-    DENC_START(struct_v_to_use, 1, p);
+    DENC_START_UNCHECKED(struct_v_to_use, 1, p);
     DENC_DUMP_PRE(Type);
     _denc_friend(*this, p, struct_v_to_use);
     DENC_FINISH(p);
   }
   void decode(::ceph::buffer::ptr::const_iterator& p, uint64_t features = 0) {
-    DENC_START(3, 1, p);
+    DENC_START_UNCHECKED(3, 1, p);
     _denc_friend(*this, p, struct_v); //decode what is
     if ((features & FLAG_DEBUG_FORCE_V2) != 0) {
       this->segment_size = 0;
