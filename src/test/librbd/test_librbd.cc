@@ -20,6 +20,7 @@
 #include "include/event_type.h"
 #include "include/err.h"
 #include "include/intarith.h" // for round_up_to()
+#include "include/rados.h" // for EBLOCKLISTED
 #include "common/ceph_mutex.h"
 #include "json_spirit/json_spirit.h"
 #include "test/librados/crimson_utils.h"

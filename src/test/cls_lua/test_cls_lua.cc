@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <lua.hpp>
+#include "include/encoding.h"
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 #include "gtest/gtest.h"
