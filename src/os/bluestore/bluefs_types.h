@@ -220,7 +220,8 @@ struct bluefs_super_t {
 
   std::optional<bluefs_layout_t> memorized_layout;
 
-  std::vector<uint64_t> bluefs_max_alloc_size;
+  std::vector<uint64_t> required_alloc_size; ///< allocation sizes for devices
+                                             ///< empty means we need to initialize
 
   bluefs_super_t();
 
@@ -232,6 +233,7 @@ struct bluefs_super_t {
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluefs_super_t*>& ls);
+  std::string to_string();
 };
 WRITE_CLASS_ENCODER(bluefs_super_t)
 
