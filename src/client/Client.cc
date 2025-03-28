@@ -7888,15 +7888,15 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
       caps = CEPH_CAP_AUTH_SHARED;
     }
 
+    if (dname.size() > NAME_MAX) {
+      rc = -ENAMETOOLONG;
+      goto out;
+    }
+
     // N.B.: we don't validate alternate_name we generate during wrapping
     // matches the dentry. We probably should!
     if (!_wrap_name(*diri, dname, alternate_name)) {
       rc = -EACCES;
-      goto out;
-    }
-
-    if (dname.size() > NAME_MAX) {
-      rc = -ENAMETOOLONG;
       goto out;
     }
 
