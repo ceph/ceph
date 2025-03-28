@@ -12041,6 +12041,7 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   }
   (*pm)["bluestore_min_alloc_size"] = stringify(min_alloc_size);
   (*pm)["bluestore_allocation_from_file"] = stringify(fm && fm->is_null_manager());
+  (*pm)["bluestore_allocator"] = alloc ? alloc->get_type() : "null";
 }
 
 int BlueStore::get_numa_node(
@@ -12151,7 +12152,7 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
     buf->internally_reserved = 0;
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
-      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
+      buf->total += bluefs->get_block_device_size(BlueFS::BDEV_DB);
     }
     // call any non-omap bluefs space "internal metadata"
     buf->internal_metadata =
@@ -19174,7 +19175,7 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     bluefs->get_used(BlueFS::BDEV_SLOW) : 0;
   if (used > 0) {
       auto db_used = bluefs->get_used(BlueFS::BDEV_DB);
-      auto db_total = bluefs->get_total(BlueFS::BDEV_DB);
+      auto db_total = bluefs->get_block_device_size(BlueFS::BDEV_DB);
       ostringstream ss;
       ss << "spilled over " << byte_u_t(used)
          << " metadata from 'db' device (" << byte_u_t(db_used)
