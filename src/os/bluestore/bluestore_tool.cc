@@ -369,7 +369,7 @@ int main(int argc, char **argv)
         "show-sharding, "
         "trim, "
         "zap-device, "
-        "downgrade-wal-to-v1"
+        "revert-wal-to-plain"
     );
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -486,7 +486,10 @@ int main(int argc, char **argv)
     }
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "allocmap" || action == "qfsck" || action == "restore_cfb" || action == "migrate-wal-to-v1") {
+  if (action == "fsck" || action == "repair" ||
+      action == "quick-fix" || action == "allocmap" ||
+      action == "qfsck" || action == "restore_cfb" ||
+      action == "revert-wal-to-plain") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -702,7 +705,7 @@ int main(int argc, char **argv)
   else if (action == "fsck" ||
       action == "repair" ||
       action == "quick-fix" ||
-      action == "downgrade-wal-to-v1") {
+      action == "revert-wal-to-plain") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r;
@@ -710,8 +713,8 @@ int main(int argc, char **argv)
       r = bluestore.fsck(fsck_deep);
     } else if (action == "repair") {
       r = bluestore.repair(fsck_deep);
-    } else if (action == "downgrade-wal-to-v1") {
-      r = bluestore.downgrade_wal_to_v1();
+    } else if (action == "revert-wal-to-plain") {
+      r = bluestore.revert_wal_to_plain();
     } else {
       r = bluestore.quick_fix();
     }

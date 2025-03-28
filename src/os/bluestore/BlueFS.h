@@ -801,7 +801,7 @@ public:
     const std::set<int>& devs_source,
     int dev_target,
     const bluefs_layout_t& layout);
-  int downgrade_wal_to_v1();
+  int revert_wal_to_plain();
 
   uint64_t get_used();
   uint64_t get_block_device_size(unsigned id);
@@ -930,7 +930,7 @@ private:
 			       size_t read_len,
 			       bufferlist* bl);
   void _check_vselector_LNF();
-  int downgrade_wal_to_v1(
+  int revert_wal_to_plain(
     const std::string& dir,
     const std::string& name
   );
