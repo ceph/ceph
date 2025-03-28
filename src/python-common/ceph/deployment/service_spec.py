@@ -819,6 +819,25 @@ class ServiceSpec(object):
         'smb',
     ]
 
+    # list of all service type that can admint user-provided certifiactes
+    REQUIRES_CERTIFICATES = [
+        'rgw',
+        'ingress',
+        'mgmt-gateway',
+        'oauth2-proxy',
+        'iscsi',
+        'grafana',
+        'agent',
+        'prometheus',
+        'alertmanager',
+        'ceph-exporter',
+        'node-exporter',
+        #'nvmeof',
+        #'loki',
+        #'promtail',
+        #'jaeger-agent',
+    ]
+
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -880,7 +899,7 @@ class ServiceSpec(object):
                  count: Optional[int] = None,
                  config: Optional[Dict[str, str]] = None,
                  ssl: Optional[bool] = False,
-                 certificate_source: Optional[str] = CertificateSource.INLINE.value,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
@@ -905,8 +924,9 @@ class ServiceSpec(object):
         #: ``rgw``, ``container``, ``ingress``
         self.service_id = None
 
-        self.certificate_source = certificate_source
-        self.ssl = ssl
+        if self.service_type in self.REQUIRES_CERTIFICATES:
+            self.certificate_source = certificate_source
+            self.ssl = ssl
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
             self.service_id = service_id
@@ -1236,7 +1256,7 @@ class RGWSpec(ServiceSpec):
                  rgw_frontend_extra_args: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
-                 certificate_source: Optional[str] = CertificateSource.INLINE.value,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
@@ -1702,6 +1722,7 @@ class IscsiServiceSpec(ServiceSpec):
                  ssl: Optional[bool] = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1715,6 +1736,7 @@ class IscsiServiceSpec(ServiceSpec):
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
                                                ssl=ssl,
+                                               certificate_source=certificate_source,
                                                preview_only=preview_only,
                                                config=config, networks=networks,
                                                extra_container_args=extra_container_args,
@@ -1788,6 +1810,7 @@ class IngressSpec(ServiceSpec):
                  first_virtual_router_id: Optional[int] = 50,
                  unmanaged: bool = False,
                  ssl: bool = False,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
                  keepalive_only: bool = False,
                  enable_haproxy_protocol: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -1802,6 +1825,7 @@ class IngressSpec(ServiceSpec):
             placement=placement, config=config,
             networks=networks,
             ssl=ssl,
+            certificate_source=certificate_source,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
@@ -1882,7 +1906,7 @@ class MgmtGatewaySpec(ServiceSpec):
                  enable_auth: Optional[bool] = False,
                  port: Optional[int] = None,
                  ssl: Optional[bool] = True,
-                 certificate_source: str = CertificateSource.CEPHADM_SIGNED.value,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
                  ssl_certificate: Optional[str] = None,
                  ssl_certificate_key: Optional[str] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
@@ -2348,6 +2372,8 @@ class MonitoringSpec(ServiceSpec):
                  service_type: str,
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 ssl: Optional[bool] = True,
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
@@ -2364,8 +2390,8 @@ class MonitoringSpec(ServiceSpec):
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
-            ssl=True,
-            certificate_source=CertificateSource.CEPHADM_SIGNED.value,
+            certificate_source=certificate_source,
+            ssl=ssl,
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -2453,6 +2479,8 @@ class GrafanaSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'grafana',
                  service_id: Optional[str] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 ssl: Optional[bool] = False,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -2470,6 +2498,8 @@ class GrafanaSpec(MonitoringSpec):
         assert service_type == 'grafana'
         super(GrafanaSpec, self).__init__(
             'grafana', service_id=service_id,
+            ssl=True,
+            certificate_source=certificate_source,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks, port=port,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
@@ -2925,6 +2955,8 @@ class CephExporterSpec(ServiceSpec):
                  prio_limit: Optional[int] = 5,
                  stats_period: Optional[int] = 5,
                  placement: Optional[PlacementSpec] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 ssl: Optional[bool] = True,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -2934,6 +2966,8 @@ class CephExporterSpec(ServiceSpec):
 
         super(CephExporterSpec, self).__init__(
             service_type,
+            ssl=ssl,
+            certificate_source=certificate_source,
             placement=placement,
             unmanaged=unmanaged,
             preview_only=preview_only,
