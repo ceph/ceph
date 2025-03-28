@@ -292,9 +292,16 @@ void GroupReplayer<I>::sync_group_names() {
 }
 
 template <typename I>
-image_replayer::HealthState GroupReplayer<I>::get_health_state() const {
-  // TODO: Implement something like m_mirror_image_status_state for group
-  return image_replayer::HEALTH_STATE_OK;
+group_replayer::HealthState GroupReplayer<I>::get_health_state() const {
+  std::lock_guard locker{m_lock};
+
+  if (!m_status_state) {
+    return group_replayer::HEALTH_STATE_OK;
+  } else if (*m_status_state ==
+               cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN) {
+    return group_replayer::HEALTH_STATE_WARNING;
+  }
+  return group_replayer::HEALTH_STATE_ERROR;
 }
 
 template <typename I>
@@ -868,7 +875,7 @@ void GroupReplayer<I>::shut_down(int r) {
   // chain the shut down sequence (reverse order)
   Context *ctx = new LambdaContext(
     [this, r](int _r) {
-      set_mirror_group_status_update(m_status_state, m_state_desc);
+      set_mirror_group_status_update(*m_status_state, m_state_desc);
       handle_shut_down(r);
     });
 
@@ -1123,6 +1130,8 @@ void GroupReplayer<I>::set_mirror_group_status_update(
     m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
         m_global_group_id, remote_status, true);
   }
+  m_status_state = local_status.state;
+  m_state_desc = local_status.description;
 }
 
 } // namespace mirror
