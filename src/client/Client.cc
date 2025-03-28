@@ -1161,7 +1161,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     in->layout = st->layout;
     uint64_t size = st->size;
-    if (in->fscrypt_ctx) {
+    if (in->fscrypt_auth.size()) {
       if (st->fscrypt_file.size() >= sizeof(uint64_t)) {
         size = *(ceph_le64 *)st->fscrypt_file.data();
       }
@@ -8503,8 +8503,12 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (mask & CEPH_SETATTR_SIZE) {
     auto stx_size = stx->stx_size;
 
+    if (paux && !(mask & CEPH_SETATTR_FSCRYPT_FILE)) {
+      mask |= CEPH_SETATTR_FSCRYPT_FILE;
+    }
+
     if (in->fscrypt_ctx &&
-        (!(mask & CEPH_SETATTR_FSCRYPT_FILE))) {
+	(!(mask & CEPH_SETATTR_FSCRYPT_FILE))) {
       ldout(cct,10) << "fscrypt: set file size: orig stx_size=" << stx->stx_size <<" new stx_size=" << stx_size << dendl;
 
       alt_aux.resize(sizeof(stx->stx_size));
@@ -15271,10 +15275,10 @@ int Client::_vxattrcb_fscrypt_file_set(Inode *in, const void *val, size_t size,
   struct ceph_statx stx = { 0 };
   std::vector<uint8_t>	aux;
 
-  aux.resize(size);
+  aux.resize(sizeof(uint64_t));
   memcpy(aux.data(), val, size);
 
-  return _do_setattr(in, &stx, CEPH_SETATTR_FSCRYPT_FILE, perms, nullptr, &aux);
+  return _do_setattr(in, &stx, CEPH_SETATTR_SIZE, perms, nullptr, &aux);
 }
 
 bool Client::_vxattrcb_quota_exists(Inode *in)
