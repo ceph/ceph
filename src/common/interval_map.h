@@ -209,8 +209,8 @@ public:
     }
     return ret;
   }
-  template<bool strict = true>
-  void to_interval_set(interval_set<K, C, strict> &set) const {
+  template<template<typename, typename, typename ...> class ISC = std::map, bool strict = true>
+  void to_interval_set(interval_set<K, ISC, strict> &set) const {
     for (auto &&i: *this) {
       set.insert(i.get_off(), i.get_len());
     }
