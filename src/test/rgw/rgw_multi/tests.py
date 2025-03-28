@@ -4247,7 +4247,7 @@ def test_bucket_replication_reject_versioning_identical():
     assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
 @allow_bucket_replication
-def test_bucket_replicaion_reject_objectlock_identical():
+def test_bucket_replication_reject_objectlock_identical():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
 
