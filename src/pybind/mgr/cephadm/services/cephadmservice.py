@@ -320,7 +320,7 @@ class CephadmService(metaclass=ABCMeta):
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns)
         else:
-            logger.info(f'redo: invalid cert_source is {cert_source}')
+            logger.error(f'redo: invalid cert_source is {cert_source}')
             return '', ''
 
     def _get_certificates_from_spec(self,
@@ -341,7 +341,7 @@ class CephadmService(metaclass=ABCMeta):
             self.mgr.cert_mgr.save_key(self.key_name, key, svc_spec.service_name(), daemon_spec.host, True)
             return cert, key
         else:
-            pass  # TODO log error
+            logger.error(f'redo: Cannot get cert/key {self.cert_name}/{self.key_name} for service {svc_spec.service_name()} in the spec.')
             return '', ''
 
     def _get_certificates_from_certmgr_store(self, svc_spec: ServiceSpec) -> Tuple[str, str]:
@@ -351,7 +351,7 @@ class CephadmService(metaclass=ABCMeta):
         if cert and key:
             return cert, key
         else:
-            pass  # TODO log error
+            logger.error(f'redo: Failed to get cert/key {self.cert_name} for service {svc_spec.service_name()} from the certmgr store.')
             return '', ''
 
     def _get_cephadm_signed_certificates(self,
