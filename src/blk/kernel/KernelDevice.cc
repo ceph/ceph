@@ -97,6 +97,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_blk_kernel_device_discard_op, "discard_op",
             "Number of discard ops issued to kernel device");
+  b.add_u64_counter(l_blk_kernel_discard_threads, "discard_threads",
+            "Number of discard threads running");
 
   logger.reset(b.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
@@ -602,6 +604,7 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
       t->join();
     }
   }
+  logger->set(l_blk_kernel_discard_threads, discard_threads.size());
 }
 
 void KernelDevice::_discard_stop()

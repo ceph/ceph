@@ -32,6 +32,7 @@
 enum {
   l_blk_kernel_device_first = 1000,
   l_blk_kernel_device_discard_op,
+  l_blk_kernel_discard_threads,
   l_blk_kernel_device_last,
 };
 
