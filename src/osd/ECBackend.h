@@ -429,7 +429,8 @@ public:
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
     uint64_t stripe_width,
-    ECSwitch *s);
+    ECSwitch *s,
+    ECExtentCache::LRU &ignored);
 
   int objects_get_attrs(
     const hobject_t &hoid,
