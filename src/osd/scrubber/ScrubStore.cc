@@ -8,7 +8,6 @@
 
 #include "pg_scrubber.h"
 
-using std::ostringstream;
 using std::string;
 using std::vector;
 
