@@ -4,6 +4,7 @@
 
 #include "mds/mdstypes.h"
 #include "include/buffer.h"
+#include "include/intarith.h" // for cbits()
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
