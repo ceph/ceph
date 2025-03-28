@@ -69,19 +69,21 @@ void MgrStatMonitor::create_initial()
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
+  auto pool_avail_end = pool_availability.end();
   for (const auto& i : digest.pool_pg_unavailable_map) {
     const auto& poolid = i.first;
-    if (pool_availability.find(poolid) == pool_availability.end()){
+    if (pool_availability.find(poolid) == pool_avail_end){
       // New Pool so we add.
       pool_availability.insert({poolid, PoolAvailability()});
       dout(20) << __func__ << "Adding pool: " << poolid << dendl;
     }
   }
   utime_t now(ceph_clock_now());
+  auto pool_unavail_end = digest.pool_pg_unavailable_map.end();
   for (const auto& i : pool_availability) {
     const auto& poolid = i.first;
     if (digest.pool_pg_unavailable_map.find(poolid) ==
-      digest.pool_pg_unavailable_map.end()) {
+      pool_unavail_end) {
       // delete none exist pool
       pool_availability.erase(poolid);
       dout(20) << __func__ << "Deleting pool: " << poolid << dendl;
@@ -93,8 +95,8 @@ void MgrStatMonitor::calc_pool_availability()
     } else {
       pool_availability.erase(poolid);
       dout(20) << __func__ << "pool: " 
-	       << poolid << " no longer exists in osdmap!" << dendl;
-      dout(20) << __func__ << "Deleting pool: " << poolid << dendl;
+	       << poolid << " no longer exists in osdmap! Deleting pool: " 
+         << poolid << dendl;
       continue;
     }
     if (pool_availability[poolid].is_avail){
