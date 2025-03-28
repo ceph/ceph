@@ -500,8 +500,9 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
 #endif
       /* Decode any missing buffers */
       ceph_assert(
-        0 == res.buffers_read.decode(read_pipeline.ec_impl, req.
-          shard_want_to_read));
+        0 == res.buffers_read.decode(read_pipeline.ec_impl,
+                                  req.shard_want_to_read,
+                                  req.object_size));
 
 #if DEBUG_EC_BUFFERS
       dout(20) << __func__ << ": after decode: " << res.buffers_read.debug_string(2048, 8) << dendl;

@@ -916,7 +916,7 @@ public:
   int _encode(const ErasureCodeInterfaceRef &ec_impl);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
                           shard_extent_map_t &old_sem);
-  int decode(ErasureCodeInterfaceRef &ec_impl, ECUtil::shard_extent_set_t want);
+  int decode(ErasureCodeInterfaceRef &ec_impl, ECUtil::shard_extent_set_t want, uint64_t object_size);
   int _decode(ErasureCodeInterfaceRef &ec_impl, const shard_id_set &want_set,
               const shard_id_set &need_set);
   void get_buffer(shard_id_t shard, uint64_t offset, uint64_t length,
@@ -961,6 +961,31 @@ public:
         ceph_assert(bl.contents_equal(otherbl));
       }
     }
+  }
+
+  bool add_zero_padding_for_decode(uint64_t object_size, shard_id_set &exclude_set) {
+    shard_extent_set_t zeros(sinfo->get_k_plus_m());
+    sinfo->ro_size_to_zero_mask(object_size, zeros);
+    extent_set superset = get_extent_superset();
+    bool changed = false;
+    for (auto &&[shard, z] : zeros) {
+      if (exclude_set.contains(shard)) {
+        continue;
+      }
+      z.intersection_of(superset);
+      for (auto [off, len] : z) {
+        changed = true;
+        bufferlist bl;
+        bl.append_zero(len);
+        extent_maps[shard].insert(off, len, bl);
+      }
+    }
+
+    if (changed) {
+      compute_ro_range();
+    }
+
+    return changed;
   }
 
   friend std::ostream &operator<<(std::ostream &lhs,

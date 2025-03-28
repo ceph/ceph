@@ -273,7 +273,7 @@ int do_decode(const std::vector<const char*> &args) {
   sinfo->ro_range_to_shard_extent_set(encoded_data.get_ro_start(),
     encoded_data.get_ro_end() - encoded_data.get_ro_start(), wanted);
 
-  r = encoded_data.decode(ec_impl, wanted);
+  r = encoded_data.decode(ec_impl, wanted, encoded_data.get_ro_end());
   if (r < 0) {
     std::cerr << "failed to decode: " << cpp_strerror(r) << std::endl;
     return 1;

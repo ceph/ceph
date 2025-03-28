@@ -210,8 +210,41 @@ public:
   }
 
   int encode_chunks(const shard_id_map<bufferptr> &in, shard_id_map<bufferptr> &out) override {
-    return 0;
+  char *chunks[chunk_count]; //TODO don't use variable length arrays
+  memset(chunks, 0, sizeof(char*) * (chunk_count));
+  uint64_t size = 0;
+
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
   }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = ptr.c_str();
+  }
+
+  char *zeros = nullptr;
+
+  for (shard_id_t i; i < chunk_count; ++i) {
+    if (in.contains(i) || out.contains(i)) continue;
+
+    if (zeros == nullptr) {
+      zeros = (char*)malloc(size);
+      memset(zeros, 0, size);
+    }
+
+    chunks[static_cast<int>(i)] = zeros;
+  }
+
+  //isa_encode(&chunks[0], &chunks[k], size);
+
+  if (zeros != nullptr) free(zeros);
+
+  return 0;
+}
 
   int decode(const shard_id_set &want_to_read, const shard_id_map<bufferlist> &chunks, shard_id_map<bufferlist> *decoded,
 	     int chunk_size) override {
@@ -1265,6 +1298,35 @@ TEST(ECCommon, encode)
   semap.encode(ec_impl, nullptr, 0);
 }
 
+TEST(ECCommon, encode2)
+{
+  const uint64_t page_size = CEPH_PAGE_SIZE;
+  const uint64_t swidth = 5*page_size;
+  const unsigned int k = 5;
+  const unsigned int m = 3;
+
+  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECListenerStub listenerStub;
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+  ASSERT_EQ(s.get_chunk_size(), swidth/k);
+
+  const std::vector<int> chunk_mapping = {}; // no remapping
+  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  ecode->data_chunk_count = k;
+  ecode->chunk_count = k + m;
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  ECUtil::shard_extent_map_t semap(&s);
+
+  for (shard_id_t i; i<k+m; ++i) {
+    bufferlist bl;
+    bl.append_zero(page_size);
+    semap.insert_in_shard(i, 0, bl);
+  }
+  semap.encode(ec_impl, nullptr, 0);
+}
+
 TEST(ECCommon, decode)
 {
   const uint64_t page_size = CEPH_PAGE_SIZE;
@@ -1303,6 +1365,43 @@ TEST(ECCommon, decode)
   want[shard_id_t(0)].insert(634880, 12288);
   want[shard_id_t(4)].insert(516096, 8192);
   want[shard_id_t(4)].insert(634880, 12288);
+
+  ceph_assert(0 == semap.decode(ec_impl, want));
+}
+
+TEST(ECCommon, decode2)
+{
+  const uint64_t page_size = CEPH_PAGE_SIZE;
+  const uint64_t swidth = 5*page_size;
+  const unsigned int k = 5;
+  const unsigned int m = 3;
+
+  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECListenerStub listenerStub;
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+  ASSERT_EQ(s.get_chunk_size(), swidth/k);
+
+  const std::vector<int> chunk_mapping = {}; // no remapping
+  ErasureCodeDummyImpl *ecode = new ErasureCodeDummyImpl();
+  ecode->data_chunk_count = k;
+  ecode->chunk_count = k + m;
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  ECUtil::shard_extent_map_t semap(&s);
+  bufferlist bl4k;
+  bl4k.append_zero(4096);
+  semap.insert_in_shard(shard_id_t(0), 0, bl4k);
+  semap.insert_in_shard(shard_id_t(1), 0, bl4k);
+  semap.insert_in_shard(shard_id_t(3), 0, bl4k);
+  semap.insert_in_shard(shard_id_t(5), 0, bl4k);
+  semap.insert_in_shard(shard_id_t(6), 0, bl4k);
+
+  ECUtil::shard_extent_set_t want(k+m);
+
+  want[shard_id_t(0)].insert(0, 4096);
+  want[shard_id_t(1)].insert(0, 4096);
+  want[shard_id_t(2)].insert(0, 4096);
 
   ceph_assert(0 == semap.decode(ec_impl, want));
 }

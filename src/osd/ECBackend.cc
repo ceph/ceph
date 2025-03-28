@@ -369,7 +369,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
 
   uint64_t aligned_size = ECUtil::align_page_next(op.obc->obs.oi.size);
 
-  int r = op.returned_data->decode(ec_impl, shard_want_to_read);
+  int r = op.returned_data->decode(ec_impl, shard_want_to_read, aligned_size);
   ceph_assert(r == 0);
   // We are never appending here, so we never need hinfo.
   op.returned_data->insert_parity_buffers();
