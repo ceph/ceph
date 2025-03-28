@@ -5103,7 +5103,7 @@ options:
   type: bool
   level: advanced
   desc: Random selection of write path mode
-  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected.
+  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected on each mount.
   default: false
   see_also:
   - bluestore_write_v2
@@ -6688,6 +6688,37 @@ options:
   desc: How long cleaner should sleep before re-checking utilization
   default: 5
   with_legacy: true
+- name: bluestore_onode_segment_size
+  type: size
+  level: advanced
+  desc: Size of segment for onode.
+  long_desc: When object size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). When multiple blobs overlap each other
+    some of them might belong to more than one shard. The encoding for such case
+    is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
+    specific separation lines, preventing spanning blobs altogether.
+    The smaller values give better split on onode shards.
+    The larger values minimize space loss for padding in compression.
+    Recommended values 256K, 512K, 1024K. Value 0 disables segmentation.
+    Actual segment size cannot be smaller than "compression_max_blob_size" pool option, if set.
+  default: 0
+  see_also:
+  - bluestore_extent_map_shard_max_size
+  - bluestore_extent_map_shard_target_size
+  - bluestore_debug_onode_segmentation_random
+  with_legacy: false
+- name: bluestore_debug_onode_segmentation_random
+  type: bool
+  level: dev
+  desc: Random selection of onode segmentation
+  long_desc: For testing purposes. On each mount 50% roll decides whether to use
+    bluestore_onode_segment_size or set it to 0 (disable).
+  default: false
+  see_also:
+  - bluestore_onode_segment_size
+  flags:
+  - startup
+  with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
   level: advanced
