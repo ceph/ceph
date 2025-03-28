@@ -709,9 +709,9 @@ void InstanceReplayer<I>::start_group_replayers(int r) {
 
     ++group_count;
     auto health_state = current_it->second->get_health_state();
-    if (health_state == image_replayer::HEALTH_STATE_WARNING) {
+    if (health_state == group_replayer::HEALTH_STATE_WARNING) {
       ++warning_count;
-    } else if (health_state == image_replayer::HEALTH_STATE_ERROR) {
+    } else if (health_state == group_replayer::HEALTH_STATE_ERROR) {
       ++error_count;
     }
 

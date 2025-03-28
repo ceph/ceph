@@ -10,7 +10,7 @@
 #include "include/rados/librados.hpp"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/group_replayer/Replayer.h"
-#include "tools/rbd_mirror/image_replayer/Types.h"
+#include "tools/rbd_mirror/group_replayer/Types.h"
 #include <boost/optional.hpp>
 #include <string>
 #include <list>
@@ -100,7 +100,7 @@ public:
 
   void sync_group_names();
 
-  image_replayer::HealthState get_health_state() const;
+  group_replayer::HealthState get_health_state() const;
 
   void add_peer(const Peer<ImageCtxT>& peer);
 
@@ -178,6 +178,9 @@ private:
     }
   };
 
+  typedef boost::optional<cls::rbd::MirrorGroupStatusState>
+      OptionalMirrorGroupStatusState;
+
   librados::IoCtx &m_local_io_ctx;
   std::string m_local_mirror_uuid;
   std::string m_global_group_id;
@@ -200,7 +203,8 @@ private:
   mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
-  cls::rbd::MirrorGroupStatusState m_status_state;
+  OptionalMirrorGroupStatusState m_status_state =
+    boost::make_optional(false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
   int m_last_r = 0;
 
   Context *m_on_start_finish = nullptr;
