@@ -41,6 +41,27 @@ using std::map;
 using std::string;
 using std::vector;
 
+class MgrHook : public AdminSocketHook {
+  MgrStandby* mgr;
+public:
+  explicit MgrHook(MgrStandby *m) : mgr(m) {}
+  int call(std::string_view admin_command,
+           const cmdmap_t& cmdmap,
+           const bufferlist& inbl,
+           Formatter *f,
+           std::ostream& errss,
+           bufferlist& outbl) override {
+    int r = 0;
+    try {
+      r = mgr->asok_command(admin_command, cmdmap, f, errss);
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
+      errss << e.what();
+      r = -EINVAL;
+    }
+    return r;
+  }
+};
+
 MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
   monc{g_ceph_context, poolctx},
@@ -66,7 +87,12 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 {
 }
 
-MgrStandby::~MgrStandby() = default;
+MgrStandby::~MgrStandby() {
+  if (asok_hook) {
+    g_ceph_context->get_admin_socket()->unregister_commands(asok_hook.get());
+    asok_hook.reset();
+  }
+}
 
 const char** MgrStandby::get_tracked_conf_keys() const
 {
@@ -115,6 +141,18 @@ void MgrStandby::handle_conf_change(
   }
 }
 
+int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Formatter* f, std::ostream& errss)
+{
+  dout(10) << __func__ << ": " << cmd << dendl;
+  if (cmd == "status") {
+    f->open_object_section("status");
+    f->close_section();
+    return 0;
+  } else {
+    return -ENOSYS;
+  }
+}
+
 int MgrStandby::init()
 {
   init_async_signal_handler();
@@ -131,6 +169,13 @@ int MgrStandby::init()
   client_messenger->add_dispatcher_tail(this);
   client_messenger->add_dispatcher_head(&objecter);
   client_messenger->start();
+
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  asok_hook.reset(new MgrHook(this));
+  {
+    int r = admin_socket->register_command("status", asok_hook.get(), "show status");
+    ceph_assert(r == 0);
+  }
 
   poolctx.start(2);
 
