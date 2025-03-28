@@ -3656,7 +3656,17 @@ void BlueStore::ExtentMap::reshard(
 	   << ", slop " << slop << dendl;
 
   uint32_t next_boundary = segment_size;
-  uint32_t encoded_segment_estimate = bytes * segment_size / (data_reshard_end - needs_reshard_begin);
+  uint32_t encoded_segment_estimate = 0;
+  if (segment_size != 0) {
+    if (data_reshard_end != needs_reshard_begin) {
+      encoded_segment_estimate = bytes * segment_size / (data_reshard_end - needs_reshard_begin);
+    } else {
+      derr << __func__ << " 0 reshard-range doing 0x" << std::hex << needs_reshard_begin
+        << "-0x" << needs_reshard_end << std::dec << " on"
+        << pretty_binary_string(onode->oid.hobj.to_str()) << dendl;
+      encoded_segment_estimate = 500; // just something, instead div0 ....
+    }
+  }
 
   // reshard
   unsigned estimate = 0;
@@ -3678,9 +3688,7 @@ void BlueStore::ExtentMap::reshard(
         // beginning of the extent is a place that might be a shard boundary
         // we want to decide whether to continue streaming to the current shard
         // or move to the next one
-	if ((estimate >= target /*we have enough already*/) ||
-	    (estimate + encoded_segment_estimate >= (target * 3 / 2))
-	    /*we will be too large if we wait for next segment*/) {
+	if (estimate + encoded_segment_estimate/2 >= target /*it is better to go undersize*/) {
 	  make_shard_here = true;
 	}
 	next_boundary = p2roundup(extent->blob_end(), segment_size);
@@ -4865,7 +4873,9 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
   } else {
     // init segment_size
     uint32_t segment_size = c->store->segment_size.load();
-    if (c->comp_max_blob_size.has_value() && segment_size < c->comp_max_blob_size.value()) {
+    if (segment_size != 0 &&
+        c->comp_max_blob_size.has_value() &&
+        segment_size < c->comp_max_blob_size.value()) {
       segment_size = c->comp_max_blob_size.value(); // compression larger than global segment_size, use it
     }
     on->onode.segment_size = segment_size;
