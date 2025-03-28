@@ -4,6 +4,7 @@
 #include "test/librados_test_stub/TestClassHandler.h"
 #include "test/librados_test_stub/TestIoCtxImpl.h"
 #include <boost/algorithm/string/predicate.hpp>
+#include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>

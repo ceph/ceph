@@ -11,7 +11,9 @@
 
 #include "gtest/gtest.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "include/encoding.h"
 #include "include/err.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
