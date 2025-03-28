@@ -420,6 +420,10 @@ public:
     return backfill_shards;
   }
 
+  const shard_id_set &get_backfill_shard_id_set() const override {
+    return backfill_shard_id_set;
+  }
+
   const map<hobject_t, std::set<pg_shard_t>> &get_missing_loc_shards() const override {
     return missing_loc_shards;
   }

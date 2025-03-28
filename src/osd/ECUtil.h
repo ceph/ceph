@@ -276,6 +276,21 @@ struct shard_extent_set_t {
     return eset;
   }
 
+  /* Return the extent set which is common across all populated shards. */
+  extent_set get_extent_common_set() const {
+    extent_set eset;
+    bool first = true;
+    for (auto &&[_, e] : map) {
+      if (first) {
+        eset.insert(e);
+        first = false;
+      } else {
+        eset.intersection_of(e);
+      }
+    }
+    return eset;
+  }
+
   void align(uint64_t a) {
     for (auto &&[_, e] : map) {
       e.align(a);
