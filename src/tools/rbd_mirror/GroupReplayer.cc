@@ -1099,6 +1099,24 @@ void GroupReplayer<I>::set_mirror_group_status_update(
     }
   }
 
+  auto images_status = local_status.mirror_images;
+  // catch and bubble-up all the image level errors to group status
+  if (!images_status.empty() &&
+      ((m_local_group_ctx.primary && state == cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED) ||
+      (!m_local_group_ctx.primary && state == cls::rbd::MIRROR_GROUP_STATUS_STATE_REPLAYING))) {
+    for (auto &image_site_status : images_status) {
+      if (image_site_status.second.state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR) {
+        dout(10) << "ImageReplayer with global image id: " << image_site_status.first.global_image_id
+            << " in error state, with description: " << image_site_status.second.description
+            << " marking group replayer to error state with global group id: " << m_global_group_id
+            << dendl;
+        local_status.state = cls::rbd::MIRROR_GROUP_STATUS_STATE_ERROR;
+        local_status.description = "image in error state";
+        break;
+      }
+    }
+  }
+
   m_local_status_updater->set_mirror_group_status(m_global_group_id,
                                                   local_status, true);
   if (m_remote_group_peer.mirror_status_updater != nullptr) {
