@@ -40,6 +40,7 @@
 #include <boost/container/small_vector.hpp>
 #include <boost/optional.hpp>
 
+#include "include/ceph_features.h"
 #include "include/cpp_lib_backport.h"
 #include "include/compat.h"
 #include "include/int_types.h"
@@ -819,6 +820,84 @@ struct denc_traits<ceph::buffer::ptr> {
   }
 };
 
+
+#define CEPH_FEATURE_DEZEROIZE_BL CEPH_FEATURE_SERVER_TENTACLE
+
+class bufferlist_layout_t {
+  using offset_size_t = std::pair<unsigned, unsigned>;
+  std::vector<offset_size_t> zero_regions_in_orig_bl;
+
+public:
+  static std::pair<ceph::buffer::list,
+		   bufferlist_layout_t> dezeroize(const ceph::buffer::list& v);
+
+  ceph::buffer::list rezeroize(const buffer::ptr& bp);
+  ceph::buffer::list rezeroize(const buffer::list& bl);
+
+  static void bound_encode(unsigned num_elems, size_t& p, uint64_t f = 0);
+  void bound_encode(size_t& p, uint64_t f = 0);
+  void encode(ceph::buffer::list::contiguous_appender& p, uint64_t f);
+  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t f=0);
+  void decode(ceph::buffer::list::const_iterator& p, uint64_t f=0);
+};
+
+inline std::pair<ceph::buffer::list, bufferlist_layout_t>
+bufferlist_layout_t::dezeroize(const ceph::buffer::list& v)
+{
+  ceph::buffer::list new_v;
+  bufferlist_layout_t layout;
+  unsigned off = 0;
+  for (const auto& node : v.buffers()) {
+    if (node.is_zero_fast()) {
+      layout.zero_regions_in_orig_bl.emplace_back(off, node.length());
+    } else {
+      new_v.append(node);
+    }
+    off += node.length();
+  }
+  return { new_v, layout };
+}
+
+inline ceph::buffer::list bufferlist_layout_t::rezeroize(const buffer::ptr& bp)
+{
+  ceph::buffer::list ret;
+  unsigned bp_off = 0;
+  unsigned orig_bl_off = 0;
+  for (const auto& [zero_off, zero_len] : zero_regions_in_orig_bl) {
+    const auto prev_non_zero_len = zero_off - orig_bl_off;
+    if (prev_non_zero_len) {
+      ret.append(bp, bp_off, prev_non_zero_len);
+    }
+    ret.append_zero(zero_len);
+    bp_off += prev_non_zero_len;
+    orig_bl_off += prev_non_zero_len + zero_len;
+  }
+  if (const auto last_len = bp.length() - bp_off; last_len) {
+    ret.append(bp, bp_off, last_len);
+  }
+  return ret;
+}
+
+inline ceph::buffer::list bufferlist_layout_t::rezeroize(const buffer::list& bl)
+{
+  ceph::buffer::list ret;
+  auto src_bl_it = bl.cbegin();
+  unsigned orig_bl_off = 0;
+  for (const auto& [zero_off, zero_len] : zero_regions_in_orig_bl) {
+    const auto prev_non_zero_len = zero_off - orig_bl_off;
+    if (prev_non_zero_len) {
+      src_bl_it.copy(prev_non_zero_len, ret);
+    }
+    ret.append_zero(zero_len);
+    orig_bl_off += prev_non_zero_len + zero_len;
+  }
+  if (const auto last_len = src_bl_it.get_remaining(); last_len) {
+    src_bl_it.copy(last_len, ret);
+  }
+  assert(src_bl_it == bl.end());
+  return ret;
+}
+
 //
 // ceph::buffer::list
 //
@@ -837,6 +916,7 @@ struct denc_traits<ceph::buffer::list> {
     p.append(v);
   }
   static void decode(ceph::buffer::list& v, ceph::buffer::ptr::const_iterator& p, uint64_t f=0) {
+    //buffer::ptr my_ptr = p.get_ptr(len);
     uint32_t len = 0;
     denc(len, p);
     v.clear();
@@ -856,7 +936,7 @@ struct denc_traits<ceph::buffer::list> {
 			    ceph::buffer::ptr::const_iterator& p) {
     v.clear();
     if (len) {
-      v.append(p.get_ptr(len));
+      v.push_back(p.get_ptr(len));
     }
   }
   static void decode_nohead(size_t len, ceph::buffer::list& v,
@@ -1703,9 +1783,8 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
     // ceph::buffer::list.  we don't really know how much we'll need here,
     // unfortunately.  hopefully it is already contiguous and we're just
     // bumping the raw ref and initializing the ptr tmp fields.
-    ceph::buffer::ptr tmp;
     auto t = p;
-    t.copy_shallow(remaining, tmp);
+    ceph::buffer::ptr tmp = t.copy_shallow(remaining);
     auto cp = std::cbegin(tmp);
     traits::decode(o, cp);
     p += cp.get_offset();
@@ -1724,9 +1803,8 @@ inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
   // ceph::buffer::list.  we don't really know how much we'll need here,
   // unfortunately.  hopefully it is already contiguous and we're just
   // bumping the raw ref and initializing the ptr tmp fields.
-  ceph::buffer::ptr tmp;
   auto t = p;
-  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+  ceph::buffer::ptr tmp = t.copy_shallow(p.get_bl().length() - p.get_off());
   auto cp = std::cbegin(tmp);
   traits::decode(o, cp);
   p += cp.get_offset();
@@ -1762,9 +1840,9 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
       size_t element_size = 0;
       typename T::value_type v;
       denc_traits<typename T::value_type>::bound_encode(v, element_size);
-      t.copy_shallow(num * element_size, tmp);
+      tmp = t.copy_shallow(num * element_size);
     } else {
-      t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+      tmp = t.copy_shallow(p.get_bl().length() - p.get_off());
     }
     auto cp = std::cbegin(tmp);
     traits::decode_nohead(num, o, cp);
@@ -1966,5 +2044,23 @@ struct StructVChecker
   friend std::enable_if_t<std::is_same_v<T, Type> ||			\
 			  std::is_same_v<T, const Type>>			\
   _denc_friend(T& v, P& p, uint64_t f)
+
+
+inline void bufferlist_layout_t::bound_encode(unsigned num_elems, size_t& p, uint64_t f) {
+  denc(num_elems, p);
+  denc(offset_size_t{}, p);
+}
+inline void bufferlist_layout_t::bound_encode(size_t& p, uint64_t f) {
+  denc(zero_regions_in_orig_bl, p);
+}
+inline void bufferlist_layout_t::encode(ceph::buffer::list::contiguous_appender& p, uint64_t f) {
+  denc(zero_regions_in_orig_bl, p);
+}
+inline void bufferlist_layout_t::decode(ceph::buffer::ptr::const_iterator& p, uint64_t f) {
+  denc(zero_regions_in_orig_bl, p);
+}
+inline void bufferlist_layout_t::decode(ceph::buffer::list::const_iterator& p, uint64_t f) {
+  denc(zero_regions_in_orig_bl, p);
+}
 
 #endif

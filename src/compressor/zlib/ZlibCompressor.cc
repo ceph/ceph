@@ -39,7 +39,7 @@
 using std::ostream;
 
 using ceph::bufferlist;
-using ceph::bufferptr;
+using ceph::bufferptr_rw;
 
 static ostream&
 _prefix(std::ostream* _dout)
@@ -115,12 +115,13 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::op
 
     strm.next_in = c_in;
     do {
-      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
-      strm.next_out = (unsigned char*)ptr.c_str() + begin;
+      auto ptr = ceph::buffer::ptr_node::create(
+        ceph::buffer::create_page_aligned(MAX_LEN));
+      strm.next_out = (unsigned char*)ptr->c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
         // put a compressor variation mark in front of compressed stream, not used at the moment
-        ptr.c_str()[0] = 0;
+        ptr->c_str()[0] = 0;
         begin = 0;
       }
       ret = deflate(&strm, flush);    /* no bad return value */
@@ -131,7 +132,8 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::op
          return -1;
       }
       have = MAX_LEN - strm.avail_out;
-      out.append(ptr, 0, have);
+      ptr->set_length(have);
+      out.push_back(std::move(ptr));
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
       dout(10) << "Compression error: unused input" << dendl;
@@ -172,7 +174,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out, std::op
     strm.next_in = c_in;
 
     do {
-      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
+      bufferptr_rw ptr = ceph::buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
@@ -267,7 +269,7 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
 
     do {
       strm.avail_out = MAX_LEN;
-      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
+      bufferptr_rw ptr = ceph::buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str();
       ret = inflate(&strm, Z_NO_FLUSH);
       if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {

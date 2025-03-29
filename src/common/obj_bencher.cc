@@ -545,7 +545,7 @@ int ObjBencher::write_bench(int secondsToRun,
     //create new contents and name on the heap, and fill them
     newName = generate_object_name_fast(data.started / writes_per_object);
     newContents = contents[slot].get();
-    snprintf(newContents->c_str(), data.op_size, "I'm the %16dth op!", data.started);
+    snprintf(newContents->data(), data.op_size, "I'm the %16dth op!", data.started);
     // we wrote to buffer, going around internal crc cache, so invalidate it now.
     newContents->invalidate_crc();
 

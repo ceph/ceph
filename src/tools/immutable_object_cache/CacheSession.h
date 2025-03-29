@@ -45,7 +45,7 @@ class CacheSession : public std::enable_shared_from_this<CacheSession> {
 
   std::string m_client_version;
 
-  bufferptr m_bp_header;
+  bufferptr_rw m_bp_header;
 };
 
 typedef std::shared_ptr<CacheSession> CacheSessionPtr;

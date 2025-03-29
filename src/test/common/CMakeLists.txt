@@ -439,7 +439,7 @@ add_ceph_unittest(unittest_allocate_unique)
 
 add_executable(unittest_versioned_variant test_versioned_variant.cc)
 add_ceph_unittest(unittest_versioned_variant)
-target_link_libraries(unittest_versioned_variant common)
+target_link_libraries(unittest_versioned_variant ceph-common)
 
 if(WITH_SYSTEMD)
   add_executable(unittest_journald_logger test_journald_logger.cc)

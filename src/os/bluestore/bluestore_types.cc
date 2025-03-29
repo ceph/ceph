@@ -1324,10 +1324,10 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     ceph_assert(blob_offset % csum_order == 0);
     size_t pos = (blob_offset / csum_order) * get_csum_value_size();
     // deep copy csum data
-    bufferptr old;
+    bufferptr_rw old;
     old.swap(csum_data);
-    rb.csum_data = bufferptr(old.c_str() + pos, old.length() - pos);
-    csum_data = bufferptr(old.c_str(), pos);
+    rb.csum_data = bufferptr_rw(old.c_str() + pos, old.length() - pos);
+    csum_data = bufferptr_rw(old.c_str(), pos);
   }
 }
 
@@ -1341,10 +1341,10 @@ void bluestore_blob_t::dup(const bluestore_blob_t& from)
   csum_type = from.csum_type;
   csum_chunk_order = from.csum_chunk_order;
   if (from.csum_data.length()) {
-    csum_data = ceph::buffer::ptr(from.csum_data.c_str(), from.csum_data.length());
+    csum_data = ceph::buffer::ptr_rw(from.csum_data.c_str(), from.csum_data.length());
     csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
   } else {
-    csum_data = ceph::buffer::ptr();
+    csum_data = ceph::buffer::ptr_rw();
   }
 }
 
@@ -1427,7 +1427,7 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   onode1->expected_write_size = 7890;
   onode1->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP);
 
-  ceph::buffer::ptr buf1 = ceph::buffer::create(50);
+  ceph::buffer::ptr_rw buf1 = ceph::buffer::create(50);
   memset(buf1.c_str(), 0x42, 50);
   onode1->attrs["chaos_attr1"] = buf1;
 
@@ -1442,7 +1442,7 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   onode2->expected_write_size = 4321;
   onode2->set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
 
-  ceph::buffer::ptr buf2 = ceph::buffer::create(30);
+  ceph::buffer::ptr_rw buf2 = ceph::buffer::create(30);
   memset(buf2.c_str(), 0xAB, 30);
   onode2->attrs["glitch_attr"] = buf2;
 
@@ -1457,7 +1457,7 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   onode3->expected_write_size = 1;
   onode3->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
 
-  ceph::buffer::ptr buf3 = ceph::buffer::create(100);
+  ceph::buffer::ptr_rw buf3 = ceph::buffer::create(100);
   memset(buf3.c_str(), 0xFF, 100);
   onode3->attrs["maxed_out"] = buf3;
 

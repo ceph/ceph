@@ -259,8 +259,13 @@ void AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
   }
 
   // we need to ensure the tag is stored in continuous memory.
+  //
+  // casting to non-const solely for the sake of the limited interface:
+  //
+  //   "When decrypting, this call sets the expected tag to "taglen" bytes
+  //   from "tag". "taglen" must be between 1 and 16 inclusive."
   if (1 != EVP_CIPHER_CTX_ctrl(ectx.get(), EVP_CTRL_GCM_SET_TAG,
-	AESGCM_TAG_LEN, auth_tag.c_str())) {
+	AESGCM_TAG_LEN, const_cast<char*>(auth_tag.c_str()))) {
     throw std::runtime_error("EVP_CIPHER_CTX_ctrl failed");
   }
 

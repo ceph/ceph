@@ -551,9 +551,10 @@ public:
     //we use additional ceph::buffer::list to avoid this problem
     ceph::buffer::list other_op_bl;
     {
-      ceph::buffer::ptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.begin().copy(other.op_bl.length(), other_op_bl_ptr.c_str());
-      other_op_bl.append(std::move(other_op_bl_ptr));
+      auto other_op_bl_ptr = buffer::ptr_node::create(
+        buffer::create(other.op_bl.length()));
+      other.op_bl.begin().copy(other.op_bl.length(), other_op_bl_ptr->c_str());
+      other_op_bl.push_back(std::move(other_op_bl_ptr));
     }
 
     //update other_op_bl with cm & om
@@ -656,7 +657,7 @@ public:
     Transaction *t;
 
     uint64_t ops;
-    char* op_buffer_p;
+    const char* op_buffer_p;
 
     ceph::buffer::list::const_iterator data_bl_p;
 
@@ -696,10 +697,10 @@ public:
     bool have_op() {
       return ops > 0;
     }
-    Op* decode_op() {
+    const Op* decode_op() {
       ceph_assert(ops > 0);
 
-      Op* op = reinterpret_cast<Op*>(op_buffer_p);
+      const Op* op = reinterpret_cast<const Op*>(op_buffer_p);
       op_buffer_p += sizeof(Op);
       ops--;
 

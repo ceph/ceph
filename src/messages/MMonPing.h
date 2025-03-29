@@ -86,11 +86,13 @@ public:
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};
       while (s > sizeof(zeros)) {
-        payload.append(buffer::create_static(sizeof(zeros), zeros));
+        payload.push_back(
+          buffer::ptr_node::create(buffer::create_static(sizeof(zeros), zeros)));
         s -= sizeof(zeros);
       }
       if (s) {
-        payload.append(buffer::create_static(s, zeros));
+        payload.push_back(
+          buffer::ptr_node::create(buffer::create_static(s, zeros)));
       }
     }
   }
