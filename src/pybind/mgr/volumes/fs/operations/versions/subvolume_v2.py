@@ -92,7 +92,7 @@ class SubvolumeV2(SubvolumeV1):
             else:
                 raise VolumeException(-e.args[0], e.args[1])
 
-    def mark_subvolume(self):
+    def set_subvol_xattr(self):
         # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
         # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
         try:
@@ -169,7 +169,7 @@ class SubvolumeV2(SubvolumeV1):
             # create group directory with default mode(0o755) if it doesn't exist.
             create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
             self.fs.mkdirs(subvol_path, mode)
-            self.mark_subvolume()
+            self.set_subvol_xattr()
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -236,7 +236,7 @@ class SubvolumeV2(SubvolumeV1):
 
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
-            self.mark_subvolume()
+            self.set_subvol_xattr()
             self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
@@ -304,7 +304,7 @@ class SubvolumeV2(SubvolumeV1):
         try:
             self.metadata_mgr.refresh()
             # unconditionally mark as subvolume, to handle pre-existing subvolumes without the mark
-            self.mark_subvolume()
+            self.set_subvol_xattr()
 
             etype = self.subvol_type
             if op_type not in self.allowed_ops_by_type(etype):
