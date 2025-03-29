@@ -247,3 +247,9 @@ class SubvolumeV3(SubvolumeV2):
             MetadataManager.GLOBAL_META_KEY_STATE,
             SubvolumeStates.STATE_RETAINED.value)
         self.metadata_mgr.flush()
+
+    # Following methods help clone operation -
+
+
+    def snapshot_data_path(self, snapname):
+        return join(self.snapshot_path(snapname), b'mnt')
