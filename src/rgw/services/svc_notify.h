@@ -35,9 +35,8 @@ private:
   rgw_pool control_pool;
 
   int num_watchers{0};
-  RGWWatcher **watchers{nullptr};
+  std::vector<RGWWatcher> watchers;
   std::set<int> watchers_set;
-  std::vector<rgw_rados_ref> notify_objs;
 
   bool enabled{false};
 
@@ -67,7 +66,8 @@ private:
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int unwatch(rgw_rados_ref& obj, uint64_t watch_handle);
+  int unwatch(const DoutPrefixProvider* dpp, rgw_rados_ref& obj,
+              uint64_t handle, optional_yield y);
   void add_watcher(int i);
   void remove_watcher(int i);
 
@@ -84,7 +84,7 @@ private:
 
   void schedule_context(Context *c);
 public:
-  RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_Notify(CephContext *cct);
 
   virtual ~RGWSI_Notify() override;
 
