@@ -321,19 +321,25 @@ static int get_obj_vals(cls_method_context_t hctx,
  */
 static void decreasing_str(uint64_t num, string *str)
 {
+  // This buffer must be big enough to hold the string representation of
+  // the largest unsigned 64-bit integer value (+ 1 more char).
   char buf[32];
   if (num < 0x10) { /* 16 */
-    snprintf(buf, sizeof(buf), "9%02lld", 15 - (long long)num);
+    snprintf(buf, sizeof(buf), "9%02" PRIu64, 0xF - num);
   } else if (num < 0x100) { /* 256 */
-    snprintf(buf, sizeof(buf), "8%03lld", 255 - (long long)num);
+    snprintf(buf, sizeof(buf), "8%03" PRIu64, 0xFF - num);
   } else if (num < 0x1000) /* 4096 */ {
-    snprintf(buf, sizeof(buf), "7%04lld", 4095 - (long long)num);
+    snprintf(buf, sizeof(buf), "7%04" PRIu64, 0xFFF - num);
   } else if (num < 0x10000) /* 65536 */ {
-    snprintf(buf, sizeof(buf), "6%05lld", 65535 - (long long)num);
+    snprintf(buf, sizeof(buf), "6%05" PRIu64, 0xFFFF - num);
   } else if (num < 0x100000000) /* 4G */ {
-    snprintf(buf, sizeof(buf), "5%010lld", 0xFFFFFFFF - (long long)num);
+    snprintf(buf, sizeof(buf), "5%010" PRIu64, 0xFFFFFFFF - num);
+  } else if (num < 0x10000000000) /* 1T */ {
+    snprintf(buf, sizeof(buf), "4%015" PRIu64, 0xFFFFFFFFFF - num);
+  } else if (num < 0x1000000000000) /* 281T */ {
+    snprintf(buf, sizeof(buf), "3%018" PRIu64, 0xFFFFFFFFFFFF - num);
   } else {
-    snprintf(buf, sizeof(buf), "4%020lld",  (long long)-num);
+    snprintf(buf, sizeof(buf), "2%020" PRIu64,  std::numeric_limits<uint64_t>::max() - num);
   }
 
   *str = buf;
@@ -490,9 +496,14 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     if (val[0] == 'i') {
       key->instance = val.substr(1);
     } else if (val[0] == 'v') {
+      // what we are dealing here with is the string representation of the versioned epoch (as converted to by
+      // decreasing_str() func); the first char is always 'v' to indicate that it is the versioned epoch; the
+      // second char is a digit in [9-2] range that is used to separate value ranges - in order to make
+      // string representation sort in the opposite direction and to decrease string length - to speed up
+      // the lexicographical comparison; hence +2 (1 for the value indicator and one for the range prefix);
       string err;
-      const char *s = val.c_str() + 1;
-      *ver = strict_strtoll(s, 10, &err);
+      const char *s = val.c_str() + 2;
+      *ver = strict_strtoull(s, 10, &err);
       if (!err.empty()) {
         CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
         return -EIO;
@@ -1610,18 +1621,32 @@ public:
     return 0;
   }
 
-  bool start_modify(uint64_t candidate_epoch) {
+
+  /**
+   * This is called when a new instance of an object (in a versioned bucket) is added (via PUT) or an existing instance is removed.
+   * A part of that process is to update the OLH entry (in the bucket index) with the correct modification timestamp (epoch).
+   * This timestamp is then used later on to guard against OLH updates for add/remove instance ops that happened *before*
+   * the latest op that updated the OLH entry.
+   * @param candidate_epoch - this is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+   * @param mtime - modification time for the latest object instance that will serve as the new epoch.
+   *    Naturally, this will only be available during the link op (as we are getting the mtime from the newly created
+   *    object instance).
+   */
+  bool start_modify(uint64_t candidate_epoch, ceph::real_time const *mtime=nullptr) {
+    using namespace std::chrono;
     if (candidate_epoch) {
       if (candidate_epoch < olh_data_entry.epoch) {
         return false; /* olh cannot be modified, old epoch */
       }
       olh_data_entry.epoch = candidate_epoch;
     } else {
-      if (olh_data_entry.epoch == 0) {
-        olh_data_entry.epoch = 2; /* versioned epoch should start with 2, 1 is reserved to converted plain entries */
-      } else {
-        olh_data_entry.epoch++;
-      }
+      ceph::real_time t = mtime ? *mtime : real_clock::now();
+      uint64_t new_epoch = duration_cast<nanoseconds>(t.time_since_epoch()).count();
+      // specifically handle the situation when multiple RGWs in the same zone receive a modification (PUT/POST/DELETE)
+      // request at exactly the same time (however unlikely that might be at the nanosecond resolution);
+      if (olh_data_entry.epoch >= new_epoch)
+        new_epoch = olh_data_entry.epoch + 1;
+      olh_data_entry.epoch = new_epoch;
     }
     return true;
   }
@@ -1872,7 +1897,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   const uint64_t prev_epoch = olh.get_epoch();
 
-  if (!olh.start_modify(op.olh_epoch)) {
+  auto mtime=obj.mtime();
+  if (!olh.start_modify(op.olh_epoch, &mtime)) {
     ret = obj.write(op.olh_epoch, false, header);
     if (ret < 0) {
       return ret;
@@ -1888,6 +1914,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   const bool promote = (olh.get_epoch() > prev_epoch) ||
       (olh.get_epoch() == prev_epoch &&
        olh.get_entry().key.instance >= op.key.instance);
+  const bool epoch_collision = olh.get_epoch() == prev_epoch;
 
   if (olh_found) {
     const string& olh_tag = olh.get_tag();
@@ -1898,6 +1925,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       }
       /* if pending removal, this is a new olh instance */
       olh.set_tag(op.olh_tag);
+    }
+    if (epoch_collision) {
+      auto const &s_key = op.key.to_string();
+      CLS_LOG(1, "NOTICE: versioned epoch collision (%lu) for object %s", prev_epoch, s_key.c_str());
     }
     if (promote && olh.exists()) {
       rgw_bucket_olh_entry& olh_entry = olh.get_entry();
