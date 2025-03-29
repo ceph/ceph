@@ -107,12 +107,22 @@ public:
     ceph_assert(is_head());
     obs = std::move(_obs);
     ssc = std::move(_ssc);
+    // ObjectContextLoader::load_and_lock* rely on this to determine whether to
+    // start loading from disk.  As this method fills in the metadata, such
+    // loading will not be necessary in the future. loading_started will already
+    // be set if this is invoked from ObjectContextLoader::load_and_lock*
+    loading_started = true;
     fully_loaded = true;
   }
 
   void set_clone_state(ObjectState &&_obs) {
     ceph_assert(!is_head());
     obs = std::move(_obs);
+    // ObjectContextLoader::load_and_lock* rely on this to determine whether to
+    // start loading from disk.  As this method fills in the metadata, such
+    // loading will not be necessary in the future. loading_started will already
+    // be set if this is invoked from ObjectContextLoader::load_and_lock*
+    loading_started = true;
     fully_loaded = true;
   }
 
