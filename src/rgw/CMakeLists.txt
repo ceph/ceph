@@ -30,6 +30,8 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
+CHECK_CXX_COMPILER_FLAG("-Werror=vla" COMPILER_SUPPORTS_VLA)
+
 set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_bi_rados.cc
@@ -273,6 +275,12 @@ if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
 endif()
 
+if(COMPILER_SUPPORTS_VLA)
+  # Will be picked up by anyone including rgw_common
+  target_compile_options(rgw_common PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
+
 target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
@@ -454,12 +462,15 @@ set(rgw_schedulers_srcs
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock Boost::context)
+if(COMPILER_SUPPORTS_VLA)
+  target_compile_options(rgw_schedulers PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 
 set(radosgw_srcs
   rgw_main.cc)
 
 add_executable(radosgw ${radosgw_srcs})
-
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
   target_compile_definitions(rgw_common PUBLIC WITH_ARROW_FLIGHT)
@@ -534,6 +545,9 @@ target_link_libraries(radosgw-token
   legacy-option-headers
   librados
   global)
+if(COMPILER_SUPPORTS_VLA)
+  target_compile_options(radosgw-token PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+endif()
 install(TARGETS radosgw-token DESTINATION bin)
 
 set(radosgw_object_expirer_srcs

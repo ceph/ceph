@@ -866,9 +866,9 @@ public:
 		        store(_store), op(_op), num_shards(_num_shards) {
     shards.reserve(num_shards);
     for (int i = 0; i < num_shards; ++i) {
-      char buf[oid_prefix.size() + 16];
-      snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
-      RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, rgw_raw_obj(pool, buf));
+      RGWOmapAppend *shard = new RGWOmapAppend(
+	async_rados, store, rgw_raw_obj(pool,
+					fmt::format("{}.{}", oid_prefix, i)));
       shard->get();
       shards.push_back(shard);
       op->spawn(shard, false);
