@@ -234,7 +234,7 @@ public:
   void export_caps(CInode *in);
 
   void decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
-			   mds_rank_t oldauth, LogSegment *ls,
+			   mds_rank_t oldauth, LogSegmentRef ls,
 			   std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
 			   std::list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
@@ -247,7 +247,7 @@ public:
 			mds_rank_t oldauth,
 			CDir *import_root,
 			EImportStart *le, 
-			LogSegment *ls,
+			LogSegmentRef ls,
 			std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
 			std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
 
