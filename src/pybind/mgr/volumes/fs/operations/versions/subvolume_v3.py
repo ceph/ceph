@@ -5,10 +5,12 @@ from logging import getLogger
 from cephfs import Error
 
 from .subvolume_v2 import SubvolumeV2
+from .subvolume_attrs import SubvolumeStates
 from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
 from ..trash import create_trashcan, open_trashcan
-from ...exception import VolumeException
+from ...fs_util import listdir
+from ...exception import VolumeException, MetadataMgrException
 
 
 log = getLogger(__name__)
@@ -26,6 +28,9 @@ class PreV3Helper:
     @property
     def config_path(self):
         return self.meta_path
+
+    def snapshot_base_path(self):
+        return self.get_incar_snap_base_path()
 
 
 class SubvolumeV3(SubvolumeV2):
@@ -123,11 +128,13 @@ class SubvolumeV3(SubvolumeV2):
 
 
     def set_subvol_xattr(self):
+        subvol_xattr = 'ceph.dir.subvolume'
+
         try:
             # MDS treats this as a noop for already marked subvolume
-            self.fs.setxattr(self.get_incar_path(), 'ceph.dir.subvolume', b'1', 0)
+            self.fs.setxattr(self.get_incar_path(), subvol_xattr, b'1', 0)
         except InvalidValue:
-            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
+            raise VolumeException(EINVAL, f'invalid value for {subvol_xattr}')
         except Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
@@ -187,3 +194,34 @@ class SubvolumeV3(SubvolumeV2):
     @property
     def has_pending_purges(self):
         return False
+
+
+    # following are methods that help or do snapshot creation
+
+
+    def remove_but_retain_snaps(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        try:
+            self.update_meta_file_after_retain()
+            self.trash_incarnation_dir()
+
+            self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.name,
+                                                               self.name)
+        except MetadataMgrException as e:
+            log.error(f"failed to write config: {e}")
+            raise VolumeException(e.args[0], e.args[1])
+
+    # in subvol v3, self.mnt_dir (AKA data dir) is renamed to ".unlinked" if
+    # subvol is deleted but snapshots are retained.
+    def trash_incarnation_dir(self):
+        self.fs.rename(self.mnt_dir, self.unlinked_dir)
+
+    def update_meta_file_after_retain(self):
+        self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
+
+        self.metadata_mgr.update_global_section('key', self.unlinked_path)
+        self.metadata_mgr.update_global_section('key',
+                                                SubvolumeStates.STATE_RETAINED.value)
+
+        self.metadata_mgr.flush()
