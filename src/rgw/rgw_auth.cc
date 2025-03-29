@@ -368,13 +368,6 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
 }
 
 
-static inline const std::string make_spec_item(const std::string& tenant,
-                                               const std::string& id)
-{
-  return tenant + ":" + id;
-}
-
-
 static inline std::pair<bool, rgw::auth::Engine::result_t>
 strategy_handle_rejected(rgw::auth::Engine::result_t&& engine_result,
                          const rgw::auth::Strategy::Control policy,

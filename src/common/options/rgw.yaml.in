@@ -1025,6 +1025,7 @@ options:
   level: advanced
   desc: Path prefix to be used for accessing RGW RESTful admin API.
   fmt_desc: The entry point for an admin request URL.
+  long_desc: Note that multisite use `admin` hardcoded so this shouldn't be changed in multisite configurations.
   default: admin
   services:
   - rgw
