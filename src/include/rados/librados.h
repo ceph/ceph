@@ -4129,6 +4129,88 @@ CEPH_RADOS_API int rados_service_update_status(
   rados_t cluster,
   const char *status_dict);
 
+/**
+ * @typedef rados_qos_profile_t
+ *
+ * This is not a doxygen comment leadin, because doxygen breaks on
+ * the typedef declaration, and I can't figure out how to fix it.
+ *
+ * An opaque pointer to an object containing a qos profile, consisting of
+ * at least a reservation value, weight value and a limit value. The weight
+ * is a scalar, and the reservation and limit are in the unit of cost_units
+ * per second.
+ */
+typedef void* rados_qos_profile_t;
+
+/**
+ * @name QoS Operations
+ *
+ * @{
+ */
+
+/**
+ * Create a QoS profile.
+ *
+ * Create a QoS profile with at least the reservation, weight and limit
+ * specified.
+ *
+ * @param reservation the minimum resource allocation for the client
+ * @param weight the resource share for the client over reservation
+ * @param limit the maximum resource allocation for the client over reservation
+ * @param profile reference to the QoS profile created
+ * @returns 0 after profile creation.
+ */
+CEPH_RADOS_API int rados_qos_profile_create(uint64_t reservation,
+                                            uint64_t weight,
+                                            uint64_t limit,
+                                            rados_qos_profile_t* profile);
+
+/**
+ * Associate the QoS profile with an ioctx.
+ *
+ * Associate the specified QoS profile with the specified ioctx. If the profile
+ * is NULL, the ioctx will use a default profile.
+ *
+ * @param io pool ioctx$
+ * @param profile the QoS profile
+ */
+CEPH_RADOS_API void rados_ioctx_set_qos_profile(rados_ioctx_t io,
+                                                rados_qos_profile_t profile);
+
+/**
+ * Associate write op to the specified profile
+ *
+ * Set the specified write op to the specified QoS profile.
+ *
+ * @param write_op the write op
+ * @param profile the QoS profile
+ */
+CEPH_RADOS_API void rados_write_op_set_qos_profile(rados_write_op_t write_op,
+                                                   rados_qos_profile_t profile);
+
+/**
+ * Release the specified QoS profile
+ *
+ * Erase the specified profile from the list of existing profiles.
+ *
+ * @param profile the QoS profile
+ * @returns 0 if the profile is released, ENOENT if no such profile exists.
+ */
+CEPH_RADOS_API int rados_qos_profile_release(rados_qos_profile_t profile);
+
+/**
+ * Return index to a QoS profile
+ *
+ * Return an internal index to the specified QoS profile. Useful for debugging
+ * but not for clients in general.
+ *
+ * @param profile the QoS profile
+ * @returns the profile id identifying the QoS profile
+ */
+CEPH_RADOS_API uint64_t rados_qos_profile_get_id(rados_qos_profile_t profile);
+
+/** @} QoS Operations */
+
 /** @} Mon/OSD/PG commands */
 
 /*

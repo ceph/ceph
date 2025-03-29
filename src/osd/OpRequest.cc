@@ -35,7 +35,9 @@ OpRequest::OpRequest(Message* req, OpTracker* tracker)
       request(req),
       hit_flag_points(0),
       latest_flag_point(0),
-      hitset_inserted(false) {
+      hitset_inserted(false),
+      qos_cost(0u),
+      qos_phase(dmc::PhaseType::reservation) {
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
