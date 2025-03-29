@@ -197,16 +197,17 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     }
 
     pg.get_perf_logger().inc(l_osd_replica_read);
-    if (pg.is_unreadable_object(m->get_hobj())) {
-      DEBUGDPP("{}.{}: {} missing on replica, bouncing to primary",
+    if (pg.is_unreadable_object(m->get_hobj().get_head())) {
+      DEBUGDPP("{}.{}: {} missing head on replica, bouncing to primary",
 	       pg, *this, this_instance_id, m->get_hobj());
       pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
-    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
-      DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
-	       pg, *this, this_instance_id);
-      pg.get_perf_logger().inc(l_osd_replica_read_redirect_conflict);
+    } else if (pg.is_missing_head_and_clones(m->get_hobj().get_head())) {
+      DEBUGDPP("{}.{}: {} missing possible clone object on replica,"
+               " bouncing to primary",
+               pg, *this, this_instance_id, m->get_hobj());
+      pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
     } else {
@@ -353,7 +354,8 @@ ClientRequest::process_op(
     }
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
-    if (!snaps.empty()) {
+    if (!snaps.empty() &&
+        pg->is_missing_head_and_clones(m->get_hobj().get_head())) {
       co_await recover_missing_snaps(pg, snaps);
     }
   }
@@ -400,6 +402,16 @@ ClientRequest::process_op(
 	     *pg, *this, this_instance_id, load_err);
     co_await reply_op_error(pg, load_err);
     co_return;
+  }
+
+  // obc is obtained, check if we can serve a replicated read on the resolved object
+  if (!pg->is_primary() &&
+      !pg->get_peering_state().can_serve_replica_read(obc_manager.get_obc()->get_oid())) {
+      DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
+               *pg, *this, this_instance_id);
+      pg->get_perf_logger().inc(l_osd_replica_read_redirect_conflict);
+      co_await reply_op_error(pg, -EAGAIN);
+      co_return;
   }
 
   DEBUGDPP("{}.{}: obc {} loaded and locked, calling do_process",

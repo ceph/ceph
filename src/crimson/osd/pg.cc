@@ -1510,6 +1510,20 @@ void PG::context_registry_on_change() {
   }
 }
 
+bool PG::is_missing_head_and_clones(const hobject_t &hoid) {
+  assert(hoid.is_head());
+  snapid_t object_snap = hoid.snap;
+  // resolved object snap couldn't be later than object_snap
+  for (snapid_t snap_iter = 0; snap_iter < object_snap; snap_iter++) {
+    auto possible_clone_obj = hoid;
+    possible_clone_obj.snap = snap_iter;
+    if (is_missing_object(possible_clone_obj)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool PG::can_discard_op(const MOSDOp& m) const {
   if (m.get_map_epoch() <
       peering_state.get_info().history.same_primary_since) {
