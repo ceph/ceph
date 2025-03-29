@@ -2340,11 +2340,7 @@ fi
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
 fi
-%if 0%{?sysctl_apply}
-    %sysctl_apply 90-ceph-osd.conf
-%else
-    /usr/lib/systemd/systemd-sysctl %{_sysctldir}/90-ceph-osd.conf > /dev/null 2>&1 || :
-%endif
+%sysctl_apply 90-ceph-osd.conf
 
 %preun osd
 %if 0%{?suse_version}
