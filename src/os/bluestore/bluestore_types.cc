@@ -1294,8 +1294,7 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
       if (p->is_valid()) {
 	rb.extents.emplace_back(bluestore_pextent_t(p->offset + left,
 	  p->length - left));
-      }
-      else {
+      } else {
 	rb.extents.emplace_back(bluestore_pextent_t(
 	  bluestore_pextent_t::INVALID_OFFSET,
 	  p->length - left));
