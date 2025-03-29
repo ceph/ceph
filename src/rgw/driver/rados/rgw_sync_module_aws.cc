@@ -987,10 +987,8 @@ public:
   }
 
   void handle_headers(const map<string, string>& headers) {
-    for (auto h : headers) {
-      if (h.first == "ETAG") {
-        etag = h.second;
-      }
+    if (headers.find("ETAG") != headers.end()) {
+      etag = headers.find("ETAG")->second;
     }
   }
 
