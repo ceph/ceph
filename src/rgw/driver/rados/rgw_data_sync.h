@@ -58,6 +58,10 @@ struct rgw_bucket_sync_pair_info {
   RGWBucketSyncFlowManager::pipe_handler handler; /* responsible for sync filters */
   rgw_bucket_shard source_bs;
   rgw_bucket dest_bucket;
+
+  bool is_symmetric_pair() const {
+    return source_bs.bucket.match(dest_bucket);
+  }
 };
 
 inline std::ostream& operator<<(std::ostream& out, const rgw_bucket_sync_pair_info& p) {
@@ -858,7 +862,7 @@ public:
   RGWDefaultSyncModule() {}
   bool supports_writes() override { return true; }
   bool supports_data_export() override { return true; }
-  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance) override;
 };
 
 class RGWArchiveSyncModule : public RGWDefaultSyncModule {
@@ -866,5 +870,5 @@ public:
   RGWArchiveSyncModule() {}
   bool supports_writes() override { return true; }
   bool supports_data_export() override { return false; }
-  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, const RGWZoneGroup& zonegroup, RGWSyncModuleInstanceRef *instance) override;
 };
