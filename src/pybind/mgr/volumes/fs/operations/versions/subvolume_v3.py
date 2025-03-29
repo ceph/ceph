@@ -159,7 +159,7 @@ class SubvolumeV3(SubvolumeV2):
                                                                self.name)
 
 
-    # methods for subvol deletion
+    # ----- methods for subvol deletion -----
 
 
     @property
@@ -196,8 +196,51 @@ class SubvolumeV3(SubvolumeV2):
         return False
 
 
-    # following are methods that help or do snapshot creation
+    # ----- methods for snapshot creation -----
 
+
+    def snapshot_path(self, snap_name, uuid=None):
+        '''
+        Path to a specific snapshot named 'snap_name'.
+        '''
+        self.get_snap_path()
+
+    def get_incar_uuid_for_snap(self, snap_name):
+        '''
+        Return incarnation's UUID in which the snapshot name is present.
+        When multiple incarnations for a subvolume exists, check if a snap
+        exists in one of the incarnations.
+        '''
+        # list of all incarnations/UUID dirs of this subvolume.
+        incars = listdir(self.fs, self.roots_dir)
+
+        for incar_uuid in incars:
+            # construct path to ".snap" directory for given UUID.
+            snap_dir = join(self.roots_dir, incar_uuid,
+                            self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
+            all_snap_names = listdir(self.fs, snap_dir)
+            # encode since listdir() call above returns list of bytes and list
+            # of str
+            if snap_name.encode('utf-8') in all_snap_names:
+                return incar_uuid
+
+        return None
+
+    def create_snapshot(self, snap_name):
+        if self.get_incar_uuid_for_snap(snap_name) != None:
+            raise VolumeException(errno.EEXIST,
+                                  f'subvolume \'{snap_name}\' already exists')
+
+        super(SubvolumeV3, self).create_snapshot(snap_name)
+
+    def remove_snapshot(self, snap_name, force):
+        # XXX: UUID can be none if snap is absent but don't raise any exception
+        # in this case since command's behaviour is expected to be idempotent.
+        uuid = self.get_incar_uuid_for_snap(snap_name)
+        snap_path = self.snapshot_path(snap_name, uuid=uuid)
+
+        super(SubvolumeV3, self).remove_snapshot(snap_name, force=force,
+                                                 snap_path=snap_path)
 
     def remove_but_retain_snaps(self):
         assert self.state != SubvolumeStates.STATE_RETAINED
@@ -211,7 +254,6 @@ class SubvolumeV3(SubvolumeV2):
         except MetadataMgrException as e:
             log.error(f"failed to write config: {e}")
             raise VolumeException(e.args[0], e.args[1])
-
     # in subvol v3, self.mnt_dir (AKA data dir) is renamed to ".unlinked" if
     # subvol is deleted but snapshots are retained.
     def trash_incarnation_dir(self):
@@ -225,3 +267,29 @@ class SubvolumeV3(SubvolumeV2):
                                                 SubvolumeStates.STATE_RETAINED.value)
 
         self.metadata_mgr.flush()
+
+
+    # ----- methods for clone operations -----
+
+
+    def snapshot_data_path(self, snap_name):
+        snap_path = join(self.snapshot_path(snap_name), b'mnt')
+
+        # v2 raises exception if the snapshot path do not exist so do the same
+        # to prevent any bugs due to difference in behaviour.
+        #
+        # not raising exception indeed leads to a bug: the volumes plugin fails
+        # when exception is not raised by this method when it is called by
+        # do_clone() method of async_cloner.py. this is made to happen by a
+        # test by deleting snapshot after running the snapshot clone command
+        # but before the clone operation actually begins. this is done by
+        # adding a delay using mgr/volumes/snapshot_clone_delay config option.
+        try:
+            self.fs.stat(snap_path)
+        except cephfs.Error as e:
+            if e.errno == errno.ENOENT:
+                raise VolumeException(-errno.ENOENT,
+                                      f'snapshot \'{snap_name}\' does not exist')
+            raise VolumeException(-e.args[0], e.args[1])
+
+        return snap_path
