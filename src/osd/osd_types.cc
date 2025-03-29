@@ -1636,6 +1636,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
+  f->dump_stream("nonprimary_shards") << nonprimary_shards;
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
@@ -1955,7 +1956,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 31;
+  uint8_t v = 32;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
@@ -2074,12 +2075,15 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     auto maybe_peering_crush_data1 = maybe_peering_crush_data();
     encode(maybe_peering_crush_data1, bl);
   }
+  if (v >= 32) {
+    encode(nonprimary_shards, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(31, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(32, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2270,6 +2274,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
                  peering_crush_mandatory_member) = *peering_crush_data;
     }
   }
+  if (struct_v >= 32) {
+    decode(nonprimary_shards, bl);
+  } else {
+    nonprimary_shards.clear();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2371,6 +2380,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.nonprimary_shards.clear();
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 
@@ -3611,7 +3621,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(32, 26, bl);
+  ENCODE_START(33, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3627,12 +3637,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_backfill, bl);
   encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
+  encode(partial_writes_last_complete, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(32, bl);
+  DECODE_START(33, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3661,6 +3672,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     last_interval_started = last_epoch_started;
   }
+  if (struct_v >= 33) {
+    decode(partial_writes_last_complete, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3675,6 +3689,16 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
+  f->open_array_section("partial_writes_last_complete");
+  for (const auto & [shard, versionrange] : partial_writes_last_complete) {
+    auto & [from, to] = versionrange;
+    f->open_object_section("shard");
+    f->dump_int("id", int(shard));
+    f->dump_stream("from") << from;
+    f->dump_stream("to") << to;
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
@@ -4920,7 +4944,7 @@ void pg_log_entry_t::decode_with_checksum(ceph::buffer::list::const_iterator& p)
 
 void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(14, 4, bl);
+  ENCODE_START(15, 4, bl);
   encode(op, bl);
   encode(soid, bl);
   encode(version, bl);
@@ -4953,12 +4977,14 @@ void pg_log_entry_t::encode(ceph::buffer::list &bl) const
   if (op != ERROR)
     encode(return_code, bl);
   encode(op_returns, bl);
+  encode(written_shards, bl);
+  encode(present_shards, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -5024,6 +5050,10 @@ void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
     }
     decode(op_returns, bl);
   }
+  if (struct_v >= 15) {
+    decode(written_shards, bl);
+    decode(present_shards, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5073,6 +5103,8 @@ void pg_log_entry_t::dump(Formatter *f) const
       f->dump_unsigned("snap", *p);
     f->close_section();
   }
+  f->dump_stream("written_shards") << written_shards;
+  f->dump_stream("present_shards") << present_shards;
   {
     f->open_object_section("mod_desc");
     mod_desc.dump(f);
@@ -6424,7 +6456,7 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(17, 8, bl);
+  ENCODE_START(18, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6458,13 +6490,14 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (has_manifest()) {
     encode(manifest, bl);
   }
+  encode(shard_versions, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   decode(soid, bl);
   decode(myoloc, bl);
@@ -6550,6 +6583,9 @@ void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
       decode(manifest, bl);
     }
   }
+  if (struct_v >= 18) {
+    decode(shard_versions, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6586,6 +6622,14 @@ void object_info_t::dump(Formatter *f) const
     *css << p->first.second;
     f->open_object_section(css->strv());
     p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("shard_versions");
+  for (auto p = shard_versions.cbegin(); p != shard_versions.cend(); ++p) {
+    f->open_object_section("shard");
+    f->dump_int("id", int(p->first));
+    f->dump_stream("version") << p->second;
     f->close_section();
   }
   f->close_section();
