@@ -32,15 +32,15 @@ ARCH=$(uname -m)
 
 
 function munge_ceph_spec_in {
-    local with_seastar=$1
+    local with_crimson=$1
     shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if $with_seastar; then
-        sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
+    if $with_crimson; then
+        sed -i -e 's/%bcond_with crimson/%bcond_without crimson/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -372,7 +372,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         sysutils/fusefs-libs \
     exit
 else
-    [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
+    [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
@@ -435,7 +435,7 @@ else
         if $for_make_check; then
             build_profiles+=",pkg.ceph.check"
         fi
-        if $with_seastar; then
+        if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
         fi
         if $with_pmem; then
@@ -443,7 +443,7 @@ else
         fi
 
         ci_debug "for_make_check=$for_make_check"
-        ci_debug "with_seastar=$with_seastar"
+        ci_debug "with_crimson=$with_crimson"
         ci_debug "with_jaeger=$with_jaeger"
         ci_debug "build_profiles=$build_profiles"
         ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
@@ -502,7 +502,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_crimson $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
@@ -520,7 +520,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_crimson $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)

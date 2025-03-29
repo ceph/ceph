@@ -31,7 +31,7 @@ AuthSessionHandler *get_auth_session_handler(
 {
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << dendl;
 #endif
   switch (protocol) {

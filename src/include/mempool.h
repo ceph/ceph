@@ -26,7 +26,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR)
+#if defined(_GNU_SOURCE) && defined(WITH_CRIMSON)
 #  include <sched.h>
 #endif
 
@@ -206,7 +206,7 @@ enum {
 };
 
 static size_t pick_a_shard_int() {
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR)
+#if defined(_GNU_SOURCE) && defined(WITH_CRIMSON)
   // a thread local storage is actually just an approximation;
   // what we truly want is a _cpu local storage_.
   //
@@ -262,7 +262,7 @@ const char *get_pool_name(pool_index_t ix);
 struct type_t {
   const char *type_name;
   size_t item_size;
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   struct type_shard_t {
     ceph::atomic<ssize_t> items = {0}; // signed
     char __padding[128 - sizeof(ceph::atomic<ssize_t>)];
@@ -366,7 +366,7 @@ public:
     shard.bytes += total;
     shard.items += n;
     if (type) {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       type->shards[shid].items += n;
 #else
       type->items += n;
@@ -383,7 +383,7 @@ public:
     shard.bytes -= total;
     shard.items -= n;
     if (type) {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       type->shards[shid].items -= n;
 #else
       type->items -= n;
@@ -399,7 +399,7 @@ public:
     shard.bytes += total;
     shard.items += n;
     if (type) {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       type->shards[shid].items += n;
 #else
       type->items += n;
@@ -420,7 +420,7 @@ public:
     shard.bytes -= total;
     shard.items -= n;
     if (type) {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       type->shards[shid].items -= n;
 #else
       type->items -= n;

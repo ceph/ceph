@@ -17,7 +17,7 @@
 
 #include <map>
 #include <list>
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #else
 #include <memory>
@@ -31,7 +31,7 @@
 template <class K, class V>
 class SharedLRU {
   CephContext *cct;
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   using VPtr = boost::local_shared_ptr<V>;
   using WeakVPtr = boost::weak_ptr<V>;
 #else

@@ -20,7 +20,7 @@
 #include "common/debug.h"
 #include "common/StackStringStream.h"
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
 #else
 #include "common/config_proxy.h"

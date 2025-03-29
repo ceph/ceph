@@ -119,8 +119,8 @@ EOM
     cmake_opts+=" -DWITH_GRAFANA=ON"
     cmake_opts+=" -DWITH_SPDK=ON"
     cmake_opts+=" -DWITH_RBD_MIRROR=ON"
-    if [ $WITH_SEASTAR ]; then
-        cmake_opts+=" -DWITH_SEASTAR=ON"
+    if [ $WITH_CRIMSON ]; then
+        cmake_opts+=" -DWITH_CRIMSON=ON"
     fi
     if [ $WITH_RBD_RWL ]; then
         cmake_opts+=" -DWITH_RBD_RWL=ON"
