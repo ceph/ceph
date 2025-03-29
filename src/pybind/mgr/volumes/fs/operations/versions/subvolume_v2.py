@@ -42,7 +42,6 @@ class SubvolumeV2(SubvolumeV1):
     def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
         super(SubvolumeV2, self).__init__(mgr, fs, vol_spec, group, subvolname)
 
-        # in v2 context, mnt_path is same as uuid_dir.
         self.mnt_path = safe_join(self.base_path, gen_uuid())
 
     @staticmethod
@@ -148,7 +147,7 @@ class SubvolumeV2(SubvolumeV1):
     def _remove_data_dir_on_failure(self, retained):
         if retained:
             log.info('cleaning up subvolume incarnation with path: '
-                     f'{self.mnt_path.decode("utf-8")}')
+                     f'{self.mnt_path}')
             try:
                 self.fs.rmdir(self.mnt_path)
             except cephfs.Error as e:
@@ -172,12 +171,11 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
         # persist subvolume metadata
-        qpath = self.mnt_path.decode('utf-8')
         if self.retained:
-            self._set_incarnation_metadata(subvol_type, qpath, initial_state)
+            self._set_incarnation_metadata(subvol_type, self.mnt_path, initial_state)
             self.metadata_mgr.flush()
         else:
-            self.init_config(self.VERSION, subvol_type, qpath, initial_state)
+            self.init_config(self.VERSION, subvol_type, self.mnt_path, initial_state)
 
     def _create(self, mode, attrs, subvol_type, auth=True):
         # create group directory with default mode(0o755) if it doesn't exist.
@@ -380,19 +378,21 @@ class SubvolumeV2(SubvolumeV1):
             return False
         return True
 
+    def update_meta_file_after_retain(self):
+        self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
+        self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
+        self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
+        self.metadata_mgr.flush()
+
     def remove_but_retain_snaps(self):
         assert self.state != SubvolumeStates.STATE_RETAINED
 
+        # save subvol path for later use(renaming subvolume to trash)
+        # before deleting path section from .meta
+        subvol_path = self.path
+
         try:
-            # save subvol path for later use(renaming subvolume to trash)
-            # before deleting path section from .meta
-            subvol_path = self.path
-
-            self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
-            self.metadata_mgr.flush()
-
+            self.update_meta_file_after_retain()
             self.trash_incarnation_dir(subvol_path)
 
             # Delete the volume meta file, if it's not already deleted
