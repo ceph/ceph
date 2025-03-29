@@ -1771,11 +1771,12 @@ void PrimaryLogPG::release_object_locks(
 
 PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 			   const PGPool &_pool,
-			   const map<string,string>& ec_profile, spg_t p) :
+			   const map<string,string>& ec_profile, spg_t p,
+			   ECExtentCache::LRU &ec_extent_cache_lru) :
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct)),
+      _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct, ec_extent_cache_lru)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
   new_backfill(false),
   temp_seq(0),

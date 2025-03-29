@@ -2703,6 +2703,15 @@ options:
   services:
   - mon
   with_legacy: true
+- name: osd_pool_default_flag_ec_optimizations
+  type: bool
+  level: advanced
+  desc: enable performance optimizations for erasure coded pools
+  fmt_desc: Set the ``allow_ec_optimizations`` flag on new erasure coded pools.
+  default: false
+  services:
+  - mon
+  with_legacy: true
 - name: osd_pool_default_hit_set_bloom_fpp
   type: float
   level: advanced
@@ -6718,3 +6727,17 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: ec_extent_cache_size
+  type: uint
+  level: advanced
+  desc: Size of per-shard extent cache
+  default: 10485760
+  with_legacy: true
+  services:
+  - osd
+- name: ec_pdw_write_mode
+  type: uint
+  level: dev
+  default: 0
+  desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible
+  with_legacy: true

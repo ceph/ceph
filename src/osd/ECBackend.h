@@ -26,6 +26,11 @@
 #include "ExtentCache.h"
 #include "ECListener.h"
 
+/* This file is soon going to be replaced (before next release), so we are going
+ * to simply ignore all deprecated warnings.
+ * */
+IGNORE_DEPRECATED
+
 //forward declaration
 struct ECSubWrite;
 struct ECSubWriteReply;
@@ -369,6 +374,7 @@ public:
 	have.insert(static_cast<int>(i->shard));
       }
       std::map<int, std::vector<std::pair<int, int>>> min;
+
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
@@ -382,7 +388,11 @@ public:
   int get_ec_stripe_chunk_size() const {
     return sinfo.get_chunk_size();
   }
-  uint64_t object_size_to_shard_size(const uint64_t size, int shard) const {
+  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
+    ) const {
+    if (size == std::numeric_limits<uint64_t>::max()) {
+      return size;
+    }
     return sinfo.logical_to_next_chunk_offset(size);
   }
   /**
@@ -423,7 +433,8 @@ public:
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
     uint64_t stripe_width,
-    ECSwitch *s);
+    ECSwitch *s,
+    ECExtentCache::LRU &ignored);
 
   int objects_get_attrs(
     const hobject_t &hoid,
@@ -437,8 +448,10 @@ public:
     ScrubMapBuilder &pos,
     ScrubMap::object &o);
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const {
+  uint64_t be_get_ondisk_size(uint64_t logical_size, shard_id_t ignored) const {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
 ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
+
+END_IGNORE_DEPRECATED
