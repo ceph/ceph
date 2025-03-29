@@ -13,10 +13,12 @@
  *
  */
 
+#include <cstdint>
 #include <errno.h>
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <utility>
 
 #include "gtest/gtest.h"
 
@@ -28,6 +30,13 @@
 #include <openssl/sha.h>
 #include "rgw/rgw_hex.h"
 
+extern "C" {
+#include "madler/crc64nvme.h"
+#include "madler/crc32iso_hdlc.h"
+#include "madler/crc32iscsi.h"
+#include "spdk/crc64.h"
+} // extern "C"
+
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
@@ -36,6 +45,7 @@ namespace {
   using namespace rgw::cksum;
 
   bool verbose = false;
+  bool gen_test_data = false;
 
   cksum::Type t1 = cksum::Type::blake3;
   cksum::Type t2 = cksum::Type::sha1;
@@ -51,6 +61,37 @@ namespace {
   std::string dolor =
     R"(Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.)";
 
+std::string lacrimae = dolor + dolor;
+std::string dolorem = dolor + lorem;
+
+TEST(RGWCksum, Output)
+{
+  if (gen_test_data) {
+    auto o_mode = std::ios::out|std::ios::trunc;
+    std::ofstream of;
+
+    std::cout << "writing lorem text to /tmp/lorem " << std::endl;
+    of.open("/tmp/lorem", o_mode);
+    of << lorem;
+    of.close();
+
+    std::cout << "writing dolor text to /tmp/dolor " << std::endl;
+    of.open("/tmp/dolor", o_mode);
+    of << dolor;
+    of.close();
+
+    std::cout << "writing lacrimae text to /tmp/lacrimae " << std::endl;
+    of.open("/tmp/lacrimae", o_mode);
+    of << lacrimae;
+    of.close();
+
+    std::cout << "writing dolorem text to /tmp/dolorem " << std::endl;
+    of.open("/tmp/dolorem", o_mode);
+    of << dolorem;
+    of.close();
+  }
+}
+ 
 TEST(RGWCksum, Ctor)
 {
   cksum::Cksum ck1;
@@ -284,8 +325,6 @@ TEST(RGWCksum, DigestSTR)
 
 TEST(RGWCksum, DigestBL)
 {
-  std::string lacrimae = dolor + dolor;
-
   ceph::buffer::list dolor_bl;
   for ([[maybe_unused]] const auto& ix : {1, 2}) {
     dolor_bl.push_back(
@@ -328,10 +367,369 @@ TEST(RGWCksum, DigestBL)
   } /* for t1, ... */
 }
 
+TEST(RGWCksum, CRC64NVME1)
+{
+  /* from SPDK crc64_ut.c */
+  unsigned int buf_size = 4096;
+  char buf[buf_size];
+  uint64_t crc;
+  unsigned int i, j;
 
+  /* All the expected CRC values are compliant with
+   * the NVM Command Set Specification 1.0c */
 
+  /* Input buffer = 0s */
+  memset(buf, 0, buf_size);
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0x6482D367EB22B64E);
 
-  //foop
+  /* Input buffer = 1s */
+  memset(buf, 0xFF, buf_size);
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0xC0DDBA7302ECA3AC);
+
+  /* Input buffer = 0x00, 0x01, 0x02, ... */
+  memset(buf, 0, buf_size);
+  j = 0;
+  for (i = 0; i < buf_size; i++) {
+    buf[i] = (char)j;
+    if (j == 0xFF) {
+      j = 0;
+    } else {
+      j++;
+    }
+  }
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0x3E729F5F6750449C);
+
+  /* Input buffer = 0xFF, 0xFE, 0xFD, ... */
+  memset(buf, 0, buf_size);
+  j = 0xFF;
+  for (i = 0; i < buf_size ; i++) {
+		buf[i] = (char)j;
+		if (j == 0) {
+		  j = 0xFF;
+		} else {
+		  j--;
+		}
+  }
+  crc = spdk_crc64_nvme(buf, buf_size, 0);
+  ASSERT_TRUE(crc == 0x9A2DF64B8E9E517E);
+}
+
+TEST(RGWCksum, CRC64NVME_UNDIGEST)
+{
+  auto t = cksum::Type::crc64nvme;
+
+  /* digest 1 */
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest *digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  digest1->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
+
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint64_t crc1 = rgw::digest::byteswap(std::get<uint64_t>(*cksum1.get_crc()));
+
+  uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
+				  lacrimae.length(), 0ULL);
+  ASSERT_EQ(crc1, crc2);
+}
+
+TEST(RGWCksum, CRC64NVME2)
+{
+  auto t = cksum::Type::crc64nvme;
+
+  /* digest 1 */
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest *digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  /* the armored value produced by awscliv2 2.24.5 */
+  ASSERT_EQ(cksum1.to_armor(), "wiBA+PSv41M=");
+
+  /* digest 2 */
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  digest2->Update((const unsigned char *)lacrimae.c_str(), lacrimae.length());
+
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  /* the armored value produced by awscliv2 2.24.5 */
+  ASSERT_EQ(cksum2.to_armor(), "oa2U66pdPLk=");
+}
+
+TEST(RGWCksum, CRC64NVME_COMBINE1)
+{
+  /* do crc64nvme and combining by hand */
+
+  uint64_t crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
+				  dolor.length(), 0ULL);
+
+  uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lacrimae.c_str(),
+				  lacrimae.length(), 0ULL);
+
+  uint64_t crc4 =  crc64nvme_comb(crc1, crc1, dolor.length());
+
+  ASSERT_EQ(crc2, crc4);
+}
+
+TEST(RGWCksum, CRC64NVME_COMBINE2)
+{
+  /* do crc64nvme and combining by hand, non-uniform strings */
+
+  uint64_t crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
+				  dolor.length(), 0ULL);
+  
+  uint64_t crc2 = spdk_crc64_nvme((const unsigned char *)lorem.c_str(),
+				  lorem.length(), 0ULL);
+
+  uint64_t crc3 = spdk_crc64_nvme((const unsigned char *)dolorem.c_str(),
+				  dolorem.length(), 0ULL);
+  
+  uint64_t crc4 = crc64nvme_comb(crc1, crc2, lorem.length());
+
+  if (verbose) {
+    std::cout << "\ncrc1/dolor: " << crc1
+	      << "\ncrc2/lorem: " << crc2
+	      << "\ncrc3/dolorem: " << crc3
+	      << "\ncrc4/crc1+crc2: " << crc4
+	      << std::endl;
+  }
+
+  ASSERT_EQ(crc3, crc4);
+}
+
+TEST(RGWCksum, CRC64NVME_COMBINE3)
+{
+  auto t = cksum::Type::crc64nvme;
+
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  DigestVariant dv3 = rgw::cksum::digest_factory(t);
+  Digest* digest3 = get_digest(dv3);
+  ASSERT_NE(digest3, nullptr);
+
+  /* dolor */
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint64_t spdk_crc1 = spdk_crc64_nvme((const unsigned char *)dolor.c_str(),
+				       dolor.length(), 0ULL);
+  auto cksum_crc1 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum1.get_crc()));
+
+  ASSERT_EQ(cksum_crc1, spdk_crc1);
+
+  /* lorem */
+  digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  uint64_t spdk_crc2 = spdk_crc64_nvme((const unsigned char *)lorem.c_str(),
+				       lorem.length(), 0ULL);
+  auto cksum_crc2 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum2.get_crc()));
+
+  ASSERT_EQ(cksum_crc2, spdk_crc2);
+
+  /* dolorem */
+  digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
+  auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
+
+  uint64_t spdk_crc3 = spdk_crc64_nvme((const unsigned char *)dolorem.c_str(),
+				       dolorem.length(), 0ULL);
+  auto cksum_crc3 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum3.get_crc()));
+
+  ASSERT_EQ(cksum_crc3, spdk_crc3);
+
+  /* API combine check */
+  auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
+  ASSERT_TRUE(cksum4);
+
+  auto cksum_crc4 =
+    rgw::digest::byteswap(std::get<uint64_t>(*cksum4->get_crc()));
+
+  auto armor3 = cksum3.to_armor();
+  auto armor4 = cksum4->to_armor();
+
+  if (verbose) {
+    std::cout << "\ncrc1/dolor spdk: " << spdk_crc1
+	      << " cksum_crc1: " << cksum_crc1
+	      << "\ncrc2/lorem spdk: " << spdk_crc2
+	      << " cksum_crc2: " << cksum_crc2
+	      << "\ncrc3/dolorem spdk: " << spdk_crc3
+	      << " cksum_crc3: " << cksum_crc3
+	      << " cksum_crc3 armored: " << armor3
+	      << "\ncrc4/crc1+crc2: " << cksum_crc4
+	      << " crc4 armored: " << armor4
+	      << std::endl;
+  }
+
+  /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
+  ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
+} /* crc64nvme */
+
+TEST(RGWCksum, CRC32_COMBINE3)
+{
+  auto t = cksum::Type::crc32;
+
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  DigestVariant dv3 = rgw::cksum::digest_factory(t);
+  Digest* digest3 = get_digest(dv3);
+  ASSERT_NE(digest3, nullptr);
+
+  /* dolor */
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint32_t madler_crc1 =
+    crc32iso_hdlc_word(0U, (const unsigned char *)dolor.c_str(),
+		       dolor.length());
+
+  auto cksum_crc1 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum1.get_crc()));
+
+  ASSERT_EQ(cksum_crc1, madler_crc1);
+
+  /* lorem */
+  digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  uint32_t madler_crc2 =
+    crc32iso_hdlc_word(0U, (const unsigned char *)lorem.c_str(),
+		       lorem.length());
+  auto cksum_crc2 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum2.get_crc()));
+
+  ASSERT_EQ(cksum_crc2, madler_crc2);
+
+  /* dolorem */
+  digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
+  auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
+
+  uint32_t madler_crc3 =
+    crc32iso_hdlc_word(0U, (const unsigned char *)dolorem.c_str(),
+		       dolorem.length());
+  auto cksum_crc3 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum3.get_crc()));
+
+  ASSERT_EQ(cksum_crc3, madler_crc3);
+
+  /* API combine check */
+  auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
+  ASSERT_TRUE(cksum4);
+
+  auto cksum_crc4 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum4->get_crc()));
+
+  if (verbose) {
+    std::cout << "\ncrc1/dolor spdk: " << madler_crc1
+	      << " cksum_crc1: " << cksum_crc1
+	      << "\ncrc2/lorem spdk: " << madler_crc2
+      	      << " cksum_crc2: " << cksum_crc2
+	      << "\ncrc3/dolorem spdk: " << madler_crc3
+      	      << " cksum_crc3: " << cksum_crc3
+	      << "\ncrc4/crc1+crc2: " << cksum_crc4
+	      << std::endl;
+  }
+
+  /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
+  ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
+} /* crc32 */
+
+TEST(RGWCksum, CRC32C_COMBINE3)
+{
+  auto t = cksum::Type::crc32c;
+
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
+  ASSERT_NE(digest1, nullptr);
+
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+  ASSERT_NE(digest2, nullptr);
+
+  DigestVariant dv3 = rgw::cksum::digest_factory(t);
+  Digest* digest3 = get_digest(dv3);
+  ASSERT_NE(digest3, nullptr);
+
+  /* dolor */
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  uint32_t madler_crc1 = crc32iscsi_word(0U, (const unsigned char *)dolor.c_str(),
+				       dolor.length());
+
+  auto cksum_crc1 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum1.get_crc()));
+
+  ASSERT_EQ(cksum_crc1, madler_crc1);
+
+  /* lorem */
+  digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  uint32_t madler_crc2 = crc32iscsi_word(0U, (const unsigned char *)lorem.c_str(),
+					 lorem.length());
+  auto cksum_crc2 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum2.get_crc()));
+
+  ASSERT_EQ(cksum_crc2, madler_crc2);
+
+  /* dolorem */
+  digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
+  auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
+
+  uint32_t madler_crc3 = crc32iscsi_word(0U, (const unsigned char *)dolorem.c_str(),
+					 dolorem.length());
+  auto cksum_crc3 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum3.get_crc()));
+
+  ASSERT_EQ(cksum_crc3, madler_crc3);
+
+  /* API combine check */
+  auto cksum4 = rgw::cksum::combine_crc_cksum(cksum1, cksum2, lorem.length());
+  ASSERT_TRUE(cksum4);
+
+  auto cksum_crc4 =
+    rgw::digest::byteswap(std::get<uint32_t>(*cksum4->get_crc()));
+
+  if (verbose) {
+    std::cout << "\ncrc1/dolor spdk: " << madler_crc1
+	      << " cksum_crc1: " << cksum_crc1
+	      << "\ncrc2/lorem spdk: " << madler_crc2
+      	      << " cksum_crc2: " << cksum_crc2
+	      << "\ncrc3/dolorem spdk: " << madler_crc3
+      	      << " cksum_crc3: " << cksum_crc3
+	      << "\ncrc4/crc1+crc2: " << cksum_crc4
+	      << std::endl;
+  }
+
+  /* the CRC of dolor+lorem == gf combination of cksum1 and cksum2 */
+  ASSERT_EQ(cksum3.to_armor(), cksum4->to_armor());
+} /* crc32c */
+
 TEST(RGWCksum, CtorUnarmor)
 {
   auto t = cksum::Type::sha256;
@@ -345,23 +743,245 @@ TEST(RGWCksum, CtorUnarmor)
 
   auto cksum1 = rgw::cksum::finalize_digest(digest, t);
   auto armored_text1 = cksum1.to_armor();
-  auto cksum2 = rgw::cksum::Cksum(cksum1.type, armored_text1.c_str());
+  auto cksum2 = rgw::cksum::Cksum(cksum1.type, armored_text1.c_str(),
+				  rgw::cksum::Cksum::CtorStyle::from_armored);
 
   ASSERT_EQ(armored_text1, cksum2.to_armor());
 }
 
 } /* namespace */
 
+using cksum_3tuple
+    = std::tuple<rgw::cksum::Cksum, rgw::cksum::Cksum, rgw::cksum::Cksum>;
+
+cksum_3tuple
+mpu_checksum_helper(cksum::Type t, uint16_t flags)
+{
+  DigestVariant dv1 = rgw::cksum::digest_factory(t);
+  Digest* digest1 = get_digest(dv1);
+
+  DigestVariant dv2 = rgw::cksum::digest_factory(t);
+  Digest* digest2 = get_digest(dv2);
+
+  DigestVariant dv3 = rgw::cksum::digest_factory(t);
+  Digest* digest3 = get_digest(dv3);
+
+  /* dolor */
+  digest1->Update((const unsigned char *)dolor.c_str(), dolor.length());
+  auto cksum1 = rgw::cksum::finalize_digest(digest1, t);
+
+  /* lorem */
+  digest2->Update((const unsigned char *)lorem.c_str(), lorem.length());
+  auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
+
+  /* dolorem */
+  digest3->Update((const unsigned char *)dolorem.c_str(), dolorem.length());
+  auto cksum3 = rgw::cksum::finalize_digest(digest3, t);
+
+  return cksum_3tuple(cksum1, cksum2, cksum3);
+}
+
+TEST(RGWCksum, Combiner1)
+{
+  using std::get;
+
+  auto t = cksum::Type::crc64nvme;
+  uint16_t flags = rgw::cksum::Cksum::FLAG_CKSUM_NONE;
+
+  auto cksums = mpu_checksum_helper(t, flags);
+  auto& [cksum1, cksum2, cksum3] = cksums;
+
+  auto armor1 = cksum1.to_armor();
+  auto armor2 = cksum2.to_armor();
+  auto armor3 = cksum3.to_armor();
+
+  if (verbose) {
+    std::cout << "\ncksums: cksum type: " << to_string(t)
+	      << "\narmor1: " << armor1
+	      << "\narmor2: " << armor2
+	      << "\narmor3: " << armor3
+	      << std::endl;
+  }
+
+  auto cmbnr = rgw::cksum::CombinerFactory(t, flags);
+
+  ASSERT_TRUE(cmbnr);
+  ASSERT_EQ(t, cmbnr->get_type());
+
+  cmbnr->append(get<0>(cksums), dolor.length());
+  cmbnr->append(get<1>(cksums), lorem.length());
+
+  /* depending on the checksum type and flags, cksum4 is
+   * either equivalent to cksum3, or, a composite digest
+   * of cksum1 and cksum2 */
+  auto cksum4 = cmbnr->final();
+
+  /* if cksums(0) is !composite, then cksums(2) is
+   * == cksums(0) + cksums(1) and also == cksum4 */
+  bool crc = get<0>(cksums).crc();
+  if (crc) {
+    ASSERT_EQ(get<2>(cksums).to_armor(), cksum4.to_armor());
+  } else {
+    /* all we can do is assert match against an external
+     * reference */
+  }
+  if (verbose) {
+  /* pretty-print armored cksum */
+  std::string cksum_flags =
+    (! get<0>(cksums).crc()) ? "COMPOSITE" : "FULL_OBJECT";
+  std::cout << "\ncomposite cksum (delorem) "
+	    << "\n\tcksum-type " << to_string(t)
+	    << "\n\tflags "
+	    << cksum_flags
+	    << "\n\tarmored cksum " << cksum4.to_armor()
+	    << std::endl;
+  }
+} /* Combiner1 */
+
+using cksum_4tuple
+    = std::tuple<rgw::cksum::Cksum, rgw::cksum::Cksum, rgw::cksum::Cksum,
+		 rgw::cksum::Cksum>;
+
+class CksumCombinerFixture : public testing::Test
+{
+public:
+
+  static std::string long_a; // 5M string "AAAA...."
+  static std::string long_b;
+  static std::string long_c;
+
+  static std::vector<cksum::Type> cksum_types;
+
+  static void SetUpTestSuite() {
+
+    using std::get;
+    using ST = std::tuple<std::string&, std::string&>;
+
+
+    /* generate unique strings that match ones we use in
+     * a checksum test matrix in s3-tests */
+    std::string a{"A"};
+    std::string b{"B"};
+    std::string c{"C"};
+
+    for (const auto& elt : {ST(a, long_a),
+			    ST(b, long_b),
+			    ST(c, long_c)}) {
+
+      for (int ix = 0; ix < (5 * 1024 * 1024); ++ix) {
+	get<1>(elt) += get<0>(elt);
+      }
+    }
+
+    /* generate check types */
+    for (uint16_t ix = 1; ix <= uint16_t(cksum::Type::crc64nvme); ++ix) {
+      cksum_types.push_back(cksum::Type(ix));
+    }
+  } /* SetUpTestSuite */
+
+  static cksum_4tuple mpu_checksums(cksum::Type t) {
+
+    DigestVariant dva = rgw::cksum::digest_factory(t);
+    Digest *digesta = get_digest(dva);
+    digesta->Update((const unsigned char *)long_a.c_str(), long_a.length());
+    auto cksum1 = rgw::cksum::finalize_digest(digesta, t);
+
+    DigestVariant dvb = rgw::cksum::digest_factory(t);
+    Digest *digestb = get_digest(dvb);
+    digestb->Update((const unsigned char *)long_b.c_str(), long_b.length());
+    auto cksum2 = rgw::cksum::finalize_digest(digestb, t);
+
+    DigestVariant dvc = rgw::cksum::digest_factory(t);
+    Digest *digestc = get_digest(dvc);
+    digestc->Update((const unsigned char *)long_c.c_str(), long_c.length());
+    auto cksum3 = rgw::cksum::finalize_digest(digestc, t);
+
+    std::string long_d = long_a + long_b + long_c;
+    DigestVariant dvd = rgw::cksum::digest_factory(t);
+    Digest *digestd = get_digest(dvd);
+    digestd->Update((const unsigned char *)long_d.c_str(), long_d.length());
+    auto cksum4 = rgw::cksum::finalize_digest(digestd, t);
+
+    return cksum_4tuple(cksum1, cksum2, cksum3, cksum4);
+  }
+
+  static void TearDownTestSuite() {
+  }
+}; /* CksumCombinerfixture */
+
+std::string CksumCombinerFixture::long_a;
+std::string CksumCombinerFixture::long_b;
+std::string CksumCombinerFixture::long_c;
+std::vector<cksum::Type> CksumCombinerFixture::cksum_types;
+
+/* TODO: multipart test matrix using fixture */
+TEST_F(CksumCombinerFixture, Test1) {
+
+  for (const auto t : CksumCombinerFixture::cksum_types) {
+    using std::get;
+
+    auto cksums = CksumCombinerFixture::mpu_checksums(t);
+
+    auto cksum1 = get<0>(cksums);
+    auto flags = cksum1.flags;
+    auto cmbnr = rgw::cksum::CombinerFactory(t, flags);
+
+    ASSERT_TRUE(cmbnr);
+    ASSERT_EQ(t, cmbnr->get_type());
+
+    auto lena = CksumCombinerFixture::long_a.length();
+    auto lenb = CksumCombinerFixture::long_b.length();
+    auto lenc = CksumCombinerFixture::long_c.length();
+
+    ASSERT_EQ(lena, lenb);
+    ASSERT_EQ(lenb, lenc);
+    ASSERT_EQ(lenc, (5*1024*1024));
+
+    cmbnr->append(get<0>(cksums), lena);
+    cmbnr->append(get<1>(cksums), lena);
+    cmbnr->append(get<2>(cksums), lena);
+
+    /* depending on the checksum type and flags, cksum4 is
+     * either equivalent to cksum3, or, a composite digest
+     * of cksum1 and cksum2 */
+    auto cksum4 = cmbnr->final();
+
+    /* if cksums(0) is !composite, then cksums(3) is
+     * == SUM(cksums(0)..cksums(2)) and also == cksum4 */
+    if (get<0>(cksums).crc()) {
+      ASSERT_EQ(get<3>(cksums).to_armor(), cksum4.to_armor());
+  } else {
+    /* all we can do is assert match against an external
+     * reference */
+  }
+  /* pretty-print armored cksum */
+  std::string cksum_flags =
+    (! get<0>(cksums).crc()) ? "COMPOSITE" : "FULL_OBJECT";
+  std::cout << "\ncomposite cksum (long_a+long_b+long_c) "
+	    << "\n\tcksum-type " << to_string(t)
+	    << "\n\tarmored cksum1 " << get<0>(cksums).to_armor()
+	    << "\n\tarmored cksum2 " << get<1>(cksums).to_armor()
+	    << "\n\tarmored cksum3 " << get<2>(cksums).to_armor()
+	    << "\n\tflags "
+	    << cksum_flags
+	    << "\n\tarmored cksum4 (composite) " << cksum4.to_armor()
+	    << std::endl;
+  }
+} /* CksumCombinerFixture, Test1 */
+
+
 int main(int argc, char *argv[])
 {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
 
-  std::string val;
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
      if (ceph_argparse_flag(args, arg_iter, "--verbose",
 			    (char*) nullptr)) {
        verbose = true;
+     } else if (ceph_argparse_flag(args, arg_iter, "--gen_test_data",
+				   (char*) nullptr)) {
+       gen_test_data = true;
      } else {
        ++arg_iter;
      }

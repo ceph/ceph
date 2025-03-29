@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include "include/crc32c.h"
 #include <boost/crc.hpp>
+#include "spdk/crc64.h"
 
 namespace rgw { namespace digest {
 
@@ -90,4 +91,33 @@ namespace rgw { namespace digest {
       memcpy((char*) digest, &crc, sizeof(crc));
     }
   }; /* Crc32c */
+
+  class Crc64Nvme {
+  private:
+    uint64_t crc;
+
+  public:
+    static constexpr uint16_t digest_size = 8;
+    static constexpr uint64_t initial_value = 0ULL;
+
+    Crc64Nvme() { Restart(); }
+
+    void Restart() { crc = initial_value; }
+
+    void Update(const unsigned char *data, uint64_t len) {
+      crc = spdk_crc64_nvme(data, len, crc);
+    }
+
+    void Final(unsigned char* digest) {
+      /* due to AWS (and other) convention, the at-rest
+       * digest is byteswapped (on LE?); */
+      /* XXX is this really endian specific? don't want
+       * break ARM */
+      if constexpr (std::endian::native != std::endian::big) {
+	crc = rgw::digest::byteswap(crc);
+      }
+      memcpy((char*) digest, &crc, sizeof(crc));
+    }
+  }; /* Crc64Nvme */
+
 }} /* namespace */
