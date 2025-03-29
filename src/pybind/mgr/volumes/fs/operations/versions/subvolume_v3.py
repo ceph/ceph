@@ -6,6 +6,7 @@ from uuid import uuid4
 import cephfs
 
 from .subvolume_v2 import SubvolumeV2
+from ..trash import create_trashcan, open_trashcan
 from ...exception import VolumeException
 from ...fs_util import listdir, create_base_dir
 
@@ -154,3 +155,53 @@ class SubvolumeV3(SubvolumeV2):
             # doesn't exist
             self.auth_mdata_mgr.create_subvolume_metadata_file(
                 self.group.groupname, self.subvolname)
+
+
+    # following are methods that help or do subvol deletion
+
+
+    @property
+    def trash_dir(self):
+        raise RuntimeError('method trash_dir() shouldn\'t be called in '
+                           'subvol v3 codebase, since it doesn\'t have a '
+                           'in-subvol trash dir (which is named ".trash" in'
+                           'subvol v2)')
+
+    def create_trashcan(self):
+        raise RuntimeError('method create_trashcan() shouldn\'t be called in '
+                           'subvol v3 codebase, since it doesn\'t have a '
+                           'in-subvol trash dir (which is named ".trash" in'
+                           'subvol v2)')
+
+    def is_mnt_dir_empty(self):
+        return not listdir(self.fs, self.mnt_dir)
+
+    def are_there_other_incarnations(self):
+        if len(listdir(self.fs, self.roots_dir)) > 1:
+            return True
+        elif len(listdir(self.fs, self.roots_dir)) == 1:
+            return False
+        else:
+            raise RuntimeError('self.roots_dir can\'t have zero or less than '
+                               'zero directories in it')
+
+    def trash_subvol_dir(self):
+        create_trashcan(self.fs, self.vol_spec)
+
+        if self.is_mnt_dir_empty() and not self.are_there_other_incarnations():
+            with open_trashcan(self.fs, self.vol_spec) as trashcan:
+                trashcan.dump(self.subvol_dir)
+
+    # TODO: base dir should be deleted in subvol v3 too when no snaps are
+    # retained on any incarnation, right?
+    def trash_base_dir(self):
+        # code under _trash_subvol_dir can be move here technically but this
+        # extra layer of call has been added to indicate that in subvol v3
+        # terms
+        self.trash_subvol_dir()
+
+    # since there is not in-subvol ".trash" dir in subvol v3, this method
+    # should always return False
+    @property
+    def has_pending_purges(self):
+        return False
