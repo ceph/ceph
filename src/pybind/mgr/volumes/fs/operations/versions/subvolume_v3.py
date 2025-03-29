@@ -5,6 +5,8 @@ from uuid import uuid4
 
 import cephfs
 
+from .metadata_manager import MetadataManager
+from .subvolume_attrs import SubvolumeStates
 from .subvolume_v2 import SubvolumeV2
 from ..trash import create_trashcan, open_trashcan
 from ...exception import VolumeException
@@ -89,6 +91,10 @@ class SubvolumeV3(SubvolumeV2):
 
         self.uuid_dir = f'{self.roots_dir}/{self.uuid}'
         self.mnt_dir = f'{self.uuid_dir}/mnt'
+        self.unlinked_dir = f'{self.uuid_dir}/.unlinked'
+
+        self.snap_dir = f'{self.uuid_dir}/{self.vol_spec.snapshot_dir_prefix}'
+        self.fscrypt_dir = f'{self.uuid_dir}/.fscrypt'
 
         self.subvol_dir = self.subvol_dir.encode('utf-8')
         self.roots_dir = self.roots_dir.encode('utf-8')
@@ -99,6 +105,10 @@ class SubvolumeV3(SubvolumeV2):
 
         self.uuid_dir = self.uuid_dir.encode('utf-8')
         self.mnt_dir = self.mnt_dir.encode('utf-8')
+        self.unlinked_dir = self.unlinked_dir.encode('utf-8')
+
+        self.snap_dir = self.snap_dir.encode('utf-8')
+        self.fscrypt_dir = self.fscrypt_dir.encode('utf-8')
 
     @staticmethod
     def version():
@@ -174,7 +184,14 @@ class SubvolumeV3(SubvolumeV2):
                            'subvol v2)')
 
     def is_mnt_dir_empty(self):
-        return not listdir(self.fs, self.mnt_dir)
+        if self.state == SubvolumeStates.STATE_RETAINED:
+            # "retained" state implies "subvol rm --retian-snapshots" was run
+            # and therefore it doesn't matter if it contains files or not, it
+            # will be considered empty. in fact, self.mnt_dir must be absent
+            # at this point.
+            return True
+        else:
+            return not listdir(self.fs, self.mnt_dir)
 
     def are_there_other_incarnations(self):
         if len(listdir(self.fs, self.roots_dir)) > 1:
@@ -205,3 +222,38 @@ class SubvolumeV3(SubvolumeV2):
     @property
     def has_pending_purges(self):
         return False
+
+
+    # following are methods that help or do snapshot creation
+
+
+    def snapshot_base_path(self):
+        return self.snap_dir
+
+    def remove_but_retain_snaps(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        try:
+            self.update_meta_file_after_retain()
+            self.trash_incarnation_dir()
+
+            # Delete the volume meta file, if it's not already deleted
+            self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
+        except MetadataMgrException as e:
+            log.error(f"failed to write config: {e}")
+            raise VolumeException(e.args[0], e.args[1])
+
+    # in subvol v3, self.mnt_dir (AKA data dir) is renamed to ".unlinked" if
+    # subvol is deleted but snapshots are retained.
+    def trash_incarnation_dir(self):
+        self.fs.rename(self.mnt_dir, self.unlinked_dir)
+
+    def update_meta_file_after_retain(self):
+        self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
+        self.metadata_mgr.update_section(MetadataManager.GLOBAL_SECTION,
+                                         MetadataManager.GLOBAL_META_KEY_PATH,
+                                         self.unlinked_dir.decode('utf-8'))
+        self.metadata_mgr.update_global_section(
+            MetadataManager.GLOBAL_META_KEY_STATE,
+            SubvolumeStates.STATE_RETAINED.value)
+        self.metadata_mgr.flush()

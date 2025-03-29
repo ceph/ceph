@@ -363,19 +363,21 @@ class SubvolumeV2(SubvolumeV1):
             return False
         return True
 
+    def update_meta_file_after_retain(self):
+        self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
+        self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
+        self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
+        self.metadata_mgr.flush()
+
     def remove_but_retain_snaps(self):
         assert self.state != SubvolumeStates.STATE_RETAINED
 
+        # save subvol path for later use(renaming subvolume to trash)
+        # before deleting path section from .meta
+        subvol_path = self.path
+
         try:
-            # save subvol path for later use(renaming subvolume to trash)
-            # before deleting path section from .meta
-            subvol_path = self.path
-
-            self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
-            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
-            self.metadata_mgr.flush()
-
+            self.update_meta_file_after_retain()
             self.trash_incarnation_dir(subvol_path)
 
             # Delete the volume meta file, if it's not already deleted
