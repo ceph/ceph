@@ -30,6 +30,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <memory>
 
 namespace rgw::d4n {
   class PolicyDriver;
@@ -43,8 +44,6 @@ class D4NFilterDriver : public FilterDriver {
   private:
     std::shared_ptr<connection> conn;
     rgw::cache::CacheDriver* cacheDriver;
-    rgw::d4n::ObjectDirectory* objDir;
-    rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::PolicyDriver* policyDriver;
     boost::asio::io_context& io_context;
 
@@ -56,7 +55,9 @@ class D4NFilterDriver : public FilterDriver {
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
-
+    virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
+    int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                  std::unique_ptr<Bucket>* bucket, optional_yield y) override;
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -65,9 +66,9 @@ class D4NFilterDriver : public FilterDriver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver; }
-    rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
-    rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
+
+    std::shared_ptr<connection> get_connection() { return conn; }
 };
 
 class D4NFilterUser : public FilterUser {
@@ -83,18 +84,61 @@ class D4NFilterUser : public FilterUser {
 
 class D4NFilterBucket : public FilterBucket {
   private:
+    struct rgw_bucket_list_entries{
+      rgw_obj_key key;
+      uint16_t flags;
+    };
     D4NFilterDriver* filter;
 
+    rgw::d4n::D4NTransaction* m_d4n_trx{nullptr};
+    rgw::d4n::ObjectDirectory* objDir{nullptr};
+    rgw::d4n::BlockDirectory* blockDir{nullptr};
+    rgw::d4n::BucketDirectory* bucketDir{nullptr};
+
   public:
+
+    
+    bool create_d4n_object(std::shared_ptr<connection> conn)
+    {
+      objDir = new rgw::d4n::ObjectDirectory(conn);
+      blockDir = new rgw::d4n::BlockDirectory(conn);
+      bucketDir = new rgw::d4n::BucketDirectory(conn);
+
+      //all objects share the same transaction
+      m_d4n_trx = new rgw::d4n::D4NTransaction();
+      m_d4n_trx->start_trx();
+      objDir->set_d4n_trx(m_d4n_trx);
+      blockDir->set_d4n_trx(m_d4n_trx);
+      bucketDir->set_d4n_trx(m_d4n_trx);
+
+      return true;
+    }
+
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
       FilterBucket(std::move(_next)),
-      filter(_filter) {}
-    virtual ~D4NFilterBucket() = default;
+      filter(_filter) {create_d4n_object(filter->get_connection());}
+
+    virtual ~D4NFilterBucket()
+    {
+      optional_yield y(null_yield);
+      //synchronous end-trx
+      objDir->m_d4n_trx->end_trx(nullptr,filter->get_connection(),y);
+      if(objDir) delete objDir;
+      if(blockDir) delete blockDir;
+      if(bucketDir) delete bucketDir;
+      if(m_d4n_trx) delete m_d4n_trx;
+    }
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
+    virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
+		   ListResults& results, optional_yield y) override;
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
                        optional_yield y) override;
+    virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const std::string& oid,
+				std::optional<std::string> upload_id=std::nullopt,
+				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
 };
 
 class D4NFilterObject : public FilterObject {
@@ -102,6 +146,18 @@ class D4NFilterObject : public FilterObject {
     D4NFilterDriver* driver;
     std::string version;
     std::string prefix;
+    rgw_obj obj;
+    rgw::sal::Object* dest_object{nullptr}; //for copy-object
+    rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
+    bool multipart{false};
+    bool delete_marker{false};
+    bool exists_in_cache{false};
+    bool load_from_store{false};
+
+    rgw::d4n::ObjectDirectory* objDir{nullptr};
+    rgw::d4n::BlockDirectory* blockDir{nullptr};
+    rgw::d4n::BucketDirectory* bucketDir{nullptr};
+    rgw::d4n::D4NTransaction* d4n_trx{nullptr};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -111,12 +167,14 @@ class D4NFilterObject : public FilterObject {
 	    D4NFilterDriver* filter;
 	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
-	    uint64_t ofs = 0, len = 0;
+	    int64_t ofs = 0, len = 0;
+      int64_t adjusted_start_ofs{0};
 	    bufferlist bl_rem;
 	    bool last_part{false};
 	    bool write_to_cache{true};
 	    const DoutPrefixProvider* dpp;
 	    optional_yield* y;
+      int part_count{0};
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, D4NFilterObject* _source) : filter(_filter),
@@ -129,6 +187,8 @@ class D4NFilterObject : public FilterObject {
               this->y = y;
             }
 	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+      void set_adjusted_start_ofs(uint64_t adjusted_start_ofs) { this->adjusted_start_ofs = adjusted_start_ofs; }
+      void set_part_num(uint64_t part_num) { this->part_count = part_num; }
 	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
@@ -144,7 +204,9 @@ class D4NFilterObject : public FilterObject {
 
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
-	  RGWGetDataCB* cb, optional_yield y) override;
+			     RGWGetDataCB* cb, optional_yield y) override;
+	virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
+			      bufferlist& dest, optional_yield y) override;
 
       private:
 	RGWGetDataCB* client_cb;
@@ -152,7 +214,7 @@ class D4NFilterObject : public FilterObject {
         std::unique_ptr<rgw::Aio> aio;
 	uint64_t offset = 0; // next offset to write to client
         rgw::AioResultList completed; // completed read results, sorted by offset
-      std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
+	std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
 
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
@@ -169,15 +231,72 @@ class D4NFilterObject : public FilterObject {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
     };
 
+    bool create_d4n_object(std::shared_ptr<connection> conn)
+    {
+      objDir = new rgw::d4n::ObjectDirectory(conn);
+      blockDir = new rgw::d4n::BlockDirectory(conn);
+      bucketDir = new rgw::d4n::BucketDirectory(conn);
+
+      //all objects share the same transaction
+      d4n_trx = new rgw::d4n::D4NTransaction();
+      d4n_trx->start_trx();
+      objDir->set_d4n_trx(d4n_trx);
+      blockDir->set_d4n_trx(d4n_trx);
+      bucketDir->set_d4n_trx(d4n_trx);
+
+      return true;
+    }
+
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
-									      driver(_driver) {}
+									      driver(_driver) {create_d4n_object(driver->get_connection());}
     D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterDriver* _driver) : FilterObject(std::move(_next), _bucket),
-											       driver(_driver) {}
+											       driver(_driver) {create_d4n_object(driver->get_connection());}
     D4NFilterObject(D4NFilterObject& _o, D4NFilterDriver* _driver) : FilterObject(_o),
-								    driver(_driver) {}
-    virtual ~D4NFilterObject() = default;
+								    driver(_driver) {create_d4n_object(driver->get_connection());}
+
+    virtual ~D4NFilterObject() 
+    {
+      optional_yield y(null_yield);
+      //synchronous end-trx
+      objDir->m_d4n_trx->end_trx(nullptr,driver->get_connection(),y); 
+      if(objDir) delete objDir; 
+      if(blockDir) delete blockDir; 
+      if(bucketDir) delete bucketDir; 
+      if(d4n_trx) delete d4n_trx;
+    }
+
+    virtual int copy_object(const ACLOwner& owner,
+                              const rgw_user& remote_user,
+                              req_info* info,
+                              const rgw_zone_id& source_zone,
+                              rgw::sal::Object* dest_object,
+                              rgw::sal::Bucket* dest_bucket,
+                              rgw::sal::Bucket* src_bucket,
+                              const rgw_placement_rule& dest_placement,
+                              ceph::real_time* src_mtime,
+                              ceph::real_time* mtime,
+                              const ceph::real_time* mod_ptr,
+                              const ceph::real_time* unmod_ptr,
+                              bool high_precision_time,
+                              const char* if_match,
+                              const char* if_nomatch,
+                              AttrsMod attrs_mod,
+                              bool copy_if_newer,
+                              Attrs& attrs,
+                              RGWObjCategory category,
+                              uint64_t olh_epoch,
+                              boost::optional<ceph::real_time> delete_at,
+                              std::string* version_id,
+                              std::string* tag,
+                              std::string* etag,
+                              void (*progress_cb)(off_t, void *),
+                              void* progress_data,
+                              const DoutPrefixProvider* dpp,
+                              optional_yield y) override;
 
     virtual const std::string &get_name() const override { return next->get_name(); }
+    virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
+                             bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -197,24 +316,44 @@ class D4NFilterObject : public FilterObject {
 
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
+    int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
+    void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
+    int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
+    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version = true, bool dirty = false);
+    int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
+    int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
+    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y);
+    rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
+    rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
+    bool is_multipart() { return multipart; }
+    int set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
+    int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y);
+    bool is_delete_marker() { return delete_marker; }
+    bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
+    bool load_obj_from_store() { return load_from_store; }
+    void set_load_obj_from_store(bool load_from_store) { this->load_from_store = load_from_store; }
 };
 
 class D4NFilterWriter : public FilterWriter {
   private:
     D4NFilterDriver* driver; 
-    const DoutPrefixProvider* save_dpp;
+    D4NFilterObject* object;
+    const DoutPrefixProvider* dpp;
     bool atomic;
     optional_yield y;
+    bool d4n_writecache;
+    std::string version;
+    std::string prev_oid_in_cache;
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
 	const DoutPrefixProvider* _dpp, optional_yield _y) : FilterWriter(std::move(_next), _obj),
 							     driver(_driver),
-							     save_dpp(_dpp), atomic(false), y(_y) {}
+							     dpp(_dpp), atomic(false), y(_y) { object = dynamic_cast<D4NFilterObject*>(obj); }
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
 	const DoutPrefixProvider* _dpp, bool _atomic, optional_yield _y) : FilterWriter(std::move(_next), _obj),
 									   driver(_driver),
-									   save_dpp(_dpp), atomic(_atomic), y(_y) {}
+									   dpp(_dpp), atomic(_atomic), y(_y) { object = dynamic_cast<D4NFilterObject*>(obj); }
     virtual ~D4NFilterWriter() = default;
 
     virtual int prepare(optional_yield y);
@@ -230,7 +369,29 @@ class D4NFilterWriter : public FilterWriter {
 			 const req_context& rctx,
 			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
-   const DoutPrefixProvider* dpp() { return save_dpp; } 
+   const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+};
+
+class D4NFilterMultipartUpload : public FilterMultipartUpload {
+private:
+  D4NFilterDriver* driver;
+public:
+  D4NFilterMultipartUpload(std::unique_ptr<MultipartUpload> _next, Bucket* _b, D4NFilterDriver* driver) :
+    FilterMultipartUpload(std::move(_next), _b),
+    driver(driver) {}
+  virtual ~D4NFilterMultipartUpload() = default;
+
+  virtual int complete(const DoutPrefixProvider *dpp,
+				    optional_yield y, CephContext* cct,
+				    std::map<int, std::string>& part_etags,
+				    std::list<rgw_obj_index_key>& remove_objs,
+				    uint64_t& accounted_size, bool& compressed,
+				    RGWCompressionInfo& cs_info, off_t& ofs,
+				    std::string& tag, ACLOwner& owner,
+				    uint64_t olh_epoch,
+				    rgw::sal::Object* target_obj,
+            prefix_map_t& processed_prefixes) override;
 };
 
 } } // namespace rgw::sal
+  
