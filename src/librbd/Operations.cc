@@ -330,6 +330,10 @@ struct C_InvokeAsyncRequest : public Context {
       send_refresh_image();
       return;
     } else if (r != -ETIMEDOUT && r != -ERESTART) {
+      // Except for ETIMEDOUT, ERESTART  all remote requests should be made to
+      // behave exactly the same as a local requests as far as error
+      // propagation goes; operation proxying must be completely transparent
+      // to the user.
       image_ctx.state->handle_update_notification();
 
       complete(r);
