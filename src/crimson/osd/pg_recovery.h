@@ -51,6 +51,8 @@ public:
     const hobject_t& obj,
     const eversion_t& v,
     const std::vector<pg_shard_t> &peers) final;
+  void release_throttle();
+  bool throttle_acquired;
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
