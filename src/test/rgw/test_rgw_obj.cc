@@ -159,7 +159,9 @@ static void test_obj_to_raw(test_rgw_env& env, const rgw_bucket& b,
   dump(f, "obj", obj);
 
   rgw_obj_select s(obj);
-  rgw_raw_obj raw_obj = s.get_raw_obj(env.zonegroup, env.zone_params);
+  // TODO: replace rgw_obj_select::get_raw_obj
+//  rgw_raw_obj raw_obj = s.get_raw_obj(env.zonegroup, env.zone_params);
+  rgw_raw_obj raw_obj;
   dump(f, "raw_obj", raw_obj);
 
   if (!placement_id.empty()) {

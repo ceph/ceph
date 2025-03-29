@@ -358,7 +358,10 @@ RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
                      const std::string& _tenant,
                      const rgw::SiteConfig& site)
     : driver(_driver), tenant(_tenant),
-      use_notification_v2(rgw::all_zonegroups_support(site, rgw::zone_features::notification_v2))
+      use_notification_v2( false
+          /*TODO: move all_zonegroups_support from rados
+           * rgw::all_zonegroups_support(site, rgw::zone_features::notification_v2)*/
+          )
 {
 }
 

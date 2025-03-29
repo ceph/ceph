@@ -80,7 +80,8 @@ class AppMain {
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
   std::unique_ptr<sal::ConfigStore> cfgstore;
-  SiteConfig site;
+  //TODO: rewrite without site
+  /*SiteConfig site;*/
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
   void need_context_pool();

@@ -226,7 +226,9 @@ protected:
     virtual const std::string& get_id() const override { return group->get_id(); };
     virtual const std::string& get_name() const override { return group->get_name(); };
     virtual int equals(const std::string& other_zonegroup) const override {
-      return group->equals(other_zonegroup);
+      //TODO: move RGWZoneGroup from rados
+//      return group->equals(other_zonegroup);
+        return -1;
     };
     virtual bool placement_target_exists(std::string& target) const override;
     virtual bool is_master_zonegroup() const override {
