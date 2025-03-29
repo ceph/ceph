@@ -138,7 +138,7 @@ class SubvolumeV2(SubvolumeV1):
 
         return os.path.join(snap_base_path, uuid_str)
 
-    def _remove_on_failure(self, subvol_path, retained):
+    def _remove_data_dir_on_failure(self, retained):
         if retained:
             log.info("cleaning up subvolume incarnation with path: {0}".format(subvol_path))
             try:
@@ -195,7 +195,7 @@ class SubvolumeV2(SubvolumeV1):
             self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, self.subvolname)
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
-                self._remove_on_failure(subvol_path, retained)
+                self._remove_data_dir_on_failure(retained)
             except VolumeException as ve:
                 log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
 
@@ -249,7 +249,7 @@ class SubvolumeV2(SubvolumeV1):
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
-                self._remove_on_failure(subvol_path, retained)
+                self._remove_data_dir_on_failure(retained)
             except VolumeException as ve:
                 log.info("failed to cleanup subvolume '{0}' ({1})".format(self.subvolname, ve))
 
