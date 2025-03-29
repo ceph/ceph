@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <map>
 #include <ostream>
+#include <set>
+#include <string>
+
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "include/ceph_assert.h"
