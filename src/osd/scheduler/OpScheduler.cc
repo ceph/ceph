@@ -43,7 +43,7 @@ OpSchedulerRef make_scheduler(
       mClockScheduler>(cct, whoami, num_shards, shard_id, is_rotational,
         op_queue_cut_off, monc);
   } else {
-    ceph_assert("Invalid choice of wq" == 0);
+    ceph_abort_msg("Invalid choice of wq");
   }
 }
 
