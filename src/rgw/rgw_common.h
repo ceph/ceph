@@ -266,6 +266,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define STATUS_NO_APPLY          1905
 #define STATUS_APPLIED           1906
 
+#define RGW_ERR_MIN              2000
 #define ERR_INVALID_BUCKET_NAME  2000
 #define ERR_INVALID_OBJECT_NAME  2001
 #define ERR_NO_SUCH_BUCKET       2002
