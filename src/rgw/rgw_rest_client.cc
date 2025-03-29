@@ -453,9 +453,9 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   url = new_url;
 
   int r = process(dpp, y);
-  if (r < 0){
-    if (r == -EINVAL){
-      // curl_easy has errored, generally means the service is not available
+  if (r < 0) {
+    if (http_status == 0) {
+      // no http status, generally means the service is not available
       r = -ERR_SERVICE_UNAVAILABLE;
     }
     return r;
