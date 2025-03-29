@@ -70,7 +70,8 @@ private:
   MURef<MOSDRepOp> new_repop_msg(
     const pg_shard_t &pg_shard,
     const hobject_t &hoid,
-    const bufferlist &encoded_txn,
+    bufferlist &encoded_txn_p_bl,
+    bufferlist &encoded_txn_d_bl,
     const osd_op_params_t &osd_op_p,
     epoch_t min_epoch,
     epoch_t map_epoch,
