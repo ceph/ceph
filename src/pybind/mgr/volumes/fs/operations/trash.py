@@ -76,15 +76,15 @@ class Trash(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-    def dump(self, path):
+    def dump(self, SRC_PATH):
         """
         move an filesystem entity to trash can.
 
-        :praram path: the filesystem path to be moved
+        :praram SRC_PATH: the filesystem SRC_PATH to be moved
         :return: None
         """
         try:
-            self.fs.rename(path, self.unique_trash_path)
+            self.fs.rename(SRC_PATH, self.unique_trash_path)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
