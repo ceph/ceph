@@ -362,16 +362,17 @@ class SubvolumeV2(SubvolumeV1):
             return False
         return True
 
-    def remove_but_retain_snaps(self):
-        assert self.state != SubvolumeStates.STATE_RETAINED
-
-        self.trash_incarnation_dir()
-
+    def update_meta_file_after_retain(self):
         self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
         self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
         self.metadata_mgr.flush()
 
+    def remove_but_retain_snaps(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        self.trash_incarnation_dir()
+        self.update_meta_file_after_retain()
         # Delete the volume meta file, if it's not already deleted
         self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
 
