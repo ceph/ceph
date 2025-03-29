@@ -439,7 +439,7 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    ObjectStore::Transaction opt, localt;
+    ObjectStore::Transaction localt;
     
     RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
@@ -458,7 +458,8 @@ private:
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t unused) const final {
     return logical_size;
   }
 };

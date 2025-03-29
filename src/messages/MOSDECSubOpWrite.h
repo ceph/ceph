@@ -20,7 +20,7 @@
 
 class MOSDECSubOpWrite : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -29,7 +29,7 @@ public:
   ECSubWrite op;
 
   int get_cost() const override {
-    return 0;
+    return data.length();
   }
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -52,9 +52,14 @@ public:
   void decode_payload() override {
     using ceph::decode;
     auto p = payload.cbegin();
+    auto d = data.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
-    decode(op, p);
+    if (header.version >= 3) {
+      decode(op, p, d);
+    } else {
+      decode(op, p);
+    }
     if (header.version >= 2) {
       decode(min_epoch, p);
       decode_trace(p);
@@ -67,7 +72,13 @@ public:
     using ceph::encode;
     encode(pgid, payload);
     encode(map_epoch, payload);
-    encode(op, payload);
+
+    if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+      header.version = 2;
+      encode(op, payload);
+    } else {
+      encode(op, payload, data);
+    }
     encode(min_epoch, payload);
     encode_trace(payload, features);
   }

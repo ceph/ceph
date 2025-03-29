@@ -178,6 +178,7 @@ namespace mempool {
   f(osdmap_mapping)		      \
   f(pgmap)			      \
   f(mds_co)			      \
+  f(ec_extent_cache)                  \
   f(unittest_1)			      \
   f(unittest_2)
 
