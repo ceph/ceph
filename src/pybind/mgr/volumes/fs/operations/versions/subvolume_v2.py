@@ -363,34 +363,48 @@ class SubvolumeV2(SubvolumeV1):
             return False
         return True
 
+    def remove_but_retain_snaps(self):
+        assert self.state != SubvolumeStates.STATE_RETAINED
+
+        try:
+            # save subvol path for later use(renaming subvolume to trash)
+            # before deleting path section from .meta
+            subvol_path = self.path
+
+            self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
+            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
+            self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
+            self.metadata_mgr.flush()
+
+            self.trash_incarnation_dir(subvol_path)
+
+            # Delete the volume meta file, if it's not already deleted
+            self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
+        except MetadataMgrException as e:
+            log.error(f"failed to write config: {e}")
+            raise VolumeException(e.args[0], e.args[1])
+
+    def remove_base_dir(self):
+        if not self.has_pending_purges:
+            self.trash_base_dir()
+
+            # Delete the volume meta file, if it's not already deleted
+            self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
+
     def remove(self, retainsnaps=False, internal_cleanup=False):
         if self.list_snapshots():
             if not retainsnaps:
                 raise VolumeException(-errno.ENOTEMPTY, "subvolume '{0}' has snapshots".format(self.subvolname))
+            else:
+                self.remove_but_retain_snaps()
+                return
         else:
             if not internal_cleanup and not self.safe_to_remove_subvolume_clone(self.state):
                 raise VolumeException(-errno.EAGAIN,
                                       "{0} clone in-progress -- please cancel the clone and retry".format(self.subvolname))
-            if not self.has_pending_purges:
-                self.trash_base_dir()
-                # Delete the volume meta file, if it's not already deleted
-                self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
+            else:
+                self.remove_base_dir()
                 return
-        if self.state != SubvolumeStates.STATE_RETAINED:
-            try:
-                # save subvol path for later use(renaming subvolume to trash) before deleting path section from .meta
-                subvol_path = self.path
-                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_PATH, "")
-                self.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_STATE, SubvolumeStates.STATE_RETAINED.value)
-                self.metadata_mgr.remove_section(MetadataManager.USER_METADATA_SECTION)
-                self.metadata_mgr.flush()
-                self.trash_incarnation_dir(subvol_path)
-                # Delete the volume meta file, if it's not already deleted
-                self.auth_mdata_mgr.delete_subvolume_metadata_file(self.group.groupname, self.subvolname)
-            except MetadataMgrException as e:
-                log.error(f"failed to write config: {e}")
-                raise VolumeException(e.args[0], e.args[1])
-
 
     def info(self):
         if self.state != SubvolumeStates.STATE_RETAINED:
