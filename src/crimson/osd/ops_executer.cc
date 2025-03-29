@@ -911,7 +911,6 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
      obc->ssc->snapset.seq = snapc.seq;
-     obc->ssc->snapset.snaps.clear();
   }
 
   pg_log_entry_t ret{

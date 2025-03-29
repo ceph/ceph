@@ -4907,15 +4907,6 @@ int PrimaryLogPG::trim_object(
     head_obc->obs.oi = object_info_t(head_oid);
     t->remove(head_oid);
   } else {
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      // filter SnapSet::snaps for the benefit of pre-octopus
-      // peers. This is perhaps overly conservative in that I'm not
-      // certain they need this, but let's be conservative here.
-      dout(10) << coid << " filtering snapset on " << head_oid << dendl;
-      snapset.filter(pool.info);
-    } else {
-      snapset.snaps.clear();
-    }
     dout(10) << coid << " writing updated snapset on " << head_oid
 	     << ", snapset is " << snapset << dendl;
     ctx->log.push_back(
@@ -8793,11 +8784,6 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   if (snapc.seq > ctx->new_snapset.seq) {
     // update snapset with latest snap context
     ctx->new_snapset.seq = snapc.seq;
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      ctx->new_snapset.snaps = snapc.snaps;
-    } else {
-      ctx->new_snapset.snaps.clear();
-    }
   }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
@@ -10222,11 +10208,6 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
     OpContextUPtr tctx = simple_opc_create(obc);
     tctx->at_version = get_next_version();
-    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
-      filter_snapc(tctx->new_snapset.snaps);
-    } else {
-      tctx->new_snapset.snaps.clear();
-    }
     vector<snapid_t> new_clones;
     map<snapid_t, vector<snapid_t>> new_clone_snaps;
     for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
@@ -10898,17 +10879,7 @@ int PrimaryLogPG::start_flush(
 	   << " " << (blocking ? "blocking" : "non-blocking/best-effort")
 	   << dendl;
 
-  bool preoctopus_compat =
-    get_osdmap()->require_osd_release < ceph_release_t::octopus;
-  SnapSet snapset;
-  if (preoctopus_compat) {
-    // for pre-octopus compatibility, filter SnapSet::snaps.  not
-    // certain we need this, but let's be conservative.
-    snapset = obc->ssc->snapset.get_filtered(pool.info);
-  } else {
-    // NOTE: change this to a const ref when we remove this compat code
-    snapset = obc->ssc->snapset;
-  }
+  const SnapSet& snapset = obc->ssc->snapset;
 
   if ((obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked())
       || force_dedup) {
@@ -10921,7 +10892,7 @@ int PrimaryLogPG::start_flush(
   // verify there are no (older) check for dirty clones
   {
     dout(20) << " snapset " << snapset << dendl;
-    vector<snapid_t>::reverse_iterator p = snapset.clones.rbegin();
+    vector<snapid_t>::const_reverse_iterator p = snapset.clones.rbegin();
     while (p != snapset.clones.rend() && *p >= soid.snap)
       ++p;
     if (p != snapset.clones.rend()) {
@@ -11032,7 +11003,7 @@ int PrimaryLogPG::start_flush(
     }
 
     snapid_t prev_snapc = 0;
-    for (vector<snapid_t>::reverse_iterator citer = snapset.clones.rbegin();
+    for (vector<snapid_t>::const_reverse_iterator citer = snapset.clones.rbegin();
 	 citer != snapset.clones.rend();
 	 ++citer) {
       if (*citer < soid.snap) {
