@@ -258,7 +258,7 @@ class OSD(Ceph):
     def get_sysctl_settings() -> List[str]:
         return [
             '# allow a large number of OSDs',
-            'fs.aio-max-nr = 1048576',
+            'fs.aio-max-nr = 2097152',
             'kernel.pid_max = 4194304',
         ]
 
