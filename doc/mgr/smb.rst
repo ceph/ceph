@@ -55,7 +55,7 @@ Create Cluster
 
 .. code:: bash
 
-    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>]
+    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
 Create a new logical cluster, identified by the cluster id value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -101,15 +101,39 @@ public_addrs
     Supported only when using Samba's clustering. Assign "virtual" IP
     addresses that will be managed by the clustering subsystem and may automatically
     move between nodes running Samba containers.
+password_filter
+    One of ``none`` or ``base64``. If the filter is ``none`` the password
+    values on the command line are assumed to be plain text. If the filter is
+    ``base64`` the password values are assumed to be obscured with
+    base64 encoding the string. If ``--password-filter-out`` is not specified
+    this filter will also be applied to the output.
+password_filter_out
+    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
+    password fields in the output are emitted as plain text. If the filter is
+    ``base64`` password fields will be obscured by base64 encoding the
+    string.  If the filter is ``hidden`` the password values will be replaced
+    by a invalid generic replacement string containing only asterisks.
 
 Remove Cluster
 ++++++++++++++
 
 .. code:: bash
 
-    $ ceph smb cluster rm <cluster_id>
+    $ ceph smb cluster rm <cluster_id> [--password-filter=<password_filter>]
 
 Remove a logical SMB cluster from the Ceph cluster.
+
+Options:
+
+cluster_id
+    A ``cluster_id`` value identifying a cluster resource.
+password_filter
+    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
+    password fields in the output are emitted as plain text. If the filter is
+    ``base64`` password fields will be obscured by base64 encoding the
+    string.  If the filter is ``hidden`` the password values will be replaced
+    by a invalid generic replacement string containing only asterisks.
+
 
 List Clusters
 ++++++++++++++
@@ -190,15 +214,68 @@ command, for example:
 
     $ ceph smb apply -i /path/to/resources.yaml
 
+In addition to the resource specification the ``apply`` sub-command accepts
+options that control how the input and output of the command behave:
+
+.. code:: bash
+
+    $ ceph smb apply [--format=<format>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>] -i <input>
+
+Options:
+
+format
+    One of ``json`` (the default) or ``yaml``. Output format can be
+    selected independent of the input format.
+password_filter
+    One of ``none`` or ``base64``. If the filter is ``none`` the password
+    fields in the input are assumed to be plain text. If the filter is
+    ``base64`` the password fields are assumed to be obscured with
+    base64 encoding the string. If ``--password-filter-out`` is not specified
+    this filter will also be applied to the output.
+password_filter_out
+    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
+    password fields in the output are emitted as plain text. If the filter is
+    ``base64`` password fields will be obscured by base64 encoding the
+    string.  If the filter is ``hidden`` the password values will be replaced
+    by a invalid generic replacement string containing only asterisks.
+input
+    A file name or ``-`` to use stdin.
+
+
 Resources that have already been applied to the Ceph cluster configuration can
 be viewed using the ``ceph smb show`` command. For example:
 
 .. code:: bash
 
-    $ ceph smb show [<resource_name>...]
+    $ ceph smb show ceph.smb.cluster.cluster1
 
-The ``show`` command can show all resources of a given type or specific
-resources by id. ``resource_name`` arguments can take the following forms:
+The ``show`` command can show all resources, resources of a given type, or specific
+resource items. Options can be provided that control the output of the command.
+
+.. code:: bash
+
+    $ ceph smb show [resource_name...] [--format=<format>] [--results=<results>] [--password-filter=<password_filter>]
+
+Options:
+
+resource_name
+    One or more strings specifying a resource or resource type. See description below.
+format
+    One of ``json`` (the default) or ``yaml``.
+results
+    One of ``collapsed`` (the default) or ``full``. When set to ``collapsed``
+    the output of the command will show only the resource JSON/YAML of
+    a single item if a single item is found. When set to ``full`` even if a
+    single item is found the output will always include a wrapper object like
+    (in pseudo-JSON): ``{"resources": [...Resource objects...]}``.
+password_filter
+    One of ``none``, ``base64``, or ``hidden``. If the filter is ``none`` the
+    password fields in the output are emitted as plain text. If the filter is
+    ``base64`` password fields will be obscured by base64 encoding the
+    string.  If the filter is ``hidden`` the password values will be replaced
+    by a invalid generic replacement string containing only asterisks.
+
+``resource_name`` arguments can take the following forms:
 
 - ``ceph.smb.cluster``: show all cluster resources
 - ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster id
