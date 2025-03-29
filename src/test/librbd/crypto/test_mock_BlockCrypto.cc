@@ -95,22 +95,59 @@ TEST_F(TestMockCryptoBlockCrypto, Encrypt) {
   data2.append(std::string(4096, '2'));
   ceph::bufferlist data3;
   data3.append(std::string(2048, '3'));
+  ceph::bufferlist data4;
+  data4.append(std::string(4096, '\0'));
 
   ceph::bufferlist data;
   data.claim_append(data1);
   data.claim_append(data2);
   data.claim_append(data3);
+  data.claim_append(data4);
 
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
   expect_init_context(std::string("\x30\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
   expect_update_context(std::string(2048, '1') + std::string(2048, '2'), 4096);
   expect_init_context(std::string("\x38\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
   expect_update_context(std::string(2048, '2') + std::string(2048, '3'), 4096);
+  expect_init_context(std::string("\x40\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
+  expect_update_context(std::string(4096, '\0'), 4096);
   expect_return_context(CipherMode::CIPHER_MODE_ENC);
 
   ASSERT_EQ(0, bc->encrypt(&data, image_offset));
 
-  ASSERT_EQ(data.length(), 8192);
+  ASSERT_EQ(data.length(), 12288);
+}
+
+TEST_F(TestMockCryptoBlockCrypto, Decrypt) {
+  uint32_t image_offset = 0x1230 * 512;
+
+  ceph::bufferlist data1;
+  data1.append(std::string(2048, '1'));
+  ceph::bufferlist data2;
+  data2.append(std::string(4096, '2'));
+  ceph::bufferlist data3;
+  data3.append(std::string(2048, '3'));
+  ceph::bufferlist data4;
+  data4.append(std::string(4096, '\0'));
+
+  ceph::bufferlist data;
+  data.claim_append(data1);
+  data.claim_append(data2);
+  data.claim_append(data3);
+  data.claim_append(data4);
+
+  expect_get_context(CipherMode::CIPHER_MODE_DEC);
+  expect_init_context(std::string("\x30\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
+  expect_update_context(std::string(2048, '1') + std::string(2048, '2'), 4096);
+  expect_init_context(std::string("\x38\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
+  expect_update_context(std::string(2048, '2') + std::string(2048, '3'), 4096);
+  expect_return_context(CipherMode::CIPHER_MODE_DEC);
+
+  ASSERT_EQ(0, bc->decrypt(&data, image_offset));
+
+  ASSERT_TRUE(mem_is_zero(data.c_str() + 8192, 4096));
+
+  ASSERT_EQ(data.length(), 12288);
 }
 
 TEST_F(TestMockCryptoBlockCrypto, UnalignedImageOffset) {
