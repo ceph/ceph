@@ -4,6 +4,8 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_set.h"
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "cls/journal/cls_journal_types.h"

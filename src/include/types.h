@@ -37,18 +37,11 @@ extern "C" {
 
 #include <string>
 #include <list>
-#include <set>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
-#include "boost/tuple/tuple.hpp"
-#include <map>
-#include <vector>
-#include <optional>
 #include <ostream>
-#include <iomanip>
-#include <unordered_set>
 
 #include "common/Formatter.h"
+#include "include/encoding_array.h"
+#include "include/encoding_string.h"
 
 #include "object.h"
 #include "intarith.h"
@@ -71,225 +64,6 @@ typedef off_t off64_t;
 #if defined(__sun) || defined(_AIX)
 typedef off_t loff_t;
 #endif
-
-
-// -- io helpers --
-
-// Forward declare all the I/O helpers so strict ADL can find them in
-// the case of containers of containers. I'm tempted to abstract this
-// stuff using template templates like I did for denc.
-
-namespace std {
-template<class A, class B>
-inline std::ostream& operator<<(std::ostream&out, const std::pair<A,B>& v);
-template<class A, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v);
-template<class A, std::size_t N, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const boost::container::small_vector<A,N,Alloc>& v);
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v);
-template<typename... Ts>
-inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t);
-template<typename T>
-inline std::ostream& operator<<(std::ostream& out, const std::optional<T> &t);
-template<class A, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ilist);
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::set<A, Comp, Alloc>& iset);
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::unordered_set<A, Comp, Alloc>& iset);
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Alloc>& iset);
-template<class A, class B, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m);
-template<class A, class B, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,Alloc>& m);
-}
-
-namespace boost {
-template<typename... Ts>
-inline std::ostream& operator<<(std::ostream& out, const boost::tuple<Ts...> &t);
-
-namespace container {
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset);
-template<class A, class B, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& iset);
-}
-}
-
-namespace std {
-template<class A, class B>
-inline std::ostream& operator<<(std::ostream& out, const std::pair<A,B>& v) {
-  return out << v.first << "," << v.second;
-}
-
-template<class A, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v) {
-  bool first = true;
-  out << "[";
-  for (const auto& p : v) {
-    if (!first) out << ",";
-    out << p;
-    first = false;
-  }
-  out << "]";
-  return out;
-}
-
-template<class A, std::size_t N, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const boost::container::small_vector<A,N,Alloc>& v) {
-  bool first = true;
-  out << "[";
-  for (const auto& p : v) {
-    if (!first) out << ",";
-    out << p;
-    first = false;
-  }
-  out << "]";
-  return out;
-}
-
-template<class A, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v) {
-  out << "<";
-  for (auto p = v.begin(); p != v.end(); ++p) {
-    if (p != v.begin()) out << ",";
-    out << *p;
-  }
-  out << ">";
-  return out;
-}
-
-template<typename... Ts>
-inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t) {
-  auto f = [n = sizeof...(Ts), i = 0U, &out](const auto& e) mutable {
-    out << e;
-    if (++i != n)
-      out << ",";
-  };
-  ceph::for_each(t, f);
-  return out;
-}
-
-// Mimics boost::optional
-template<typename T>
-inline std::ostream& operator<<(std::ostream& out, const std::optional<T> &t) {
-  if (!t)
-    out << "--" ;
-  else
-    out << ' ' << *t ;
-  return out;
-}
-
-template<class A, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ilist) {
-  for (auto it = ilist.begin();
-       it != ilist.end();
-       ++it) {
-    if (it != ilist.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::set<A, Comp, Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::unordered_set<A, Comp, Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A, class B, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m)
-{
-  out << "{";
-  for (auto it = m.begin();
-       it != m.end();
-       ++it) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  out << "}";
-  return out;
-}
-
-template<class A, class B, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,Alloc>& m)
-{
-  out << "{{";
-  for (auto it = m.begin();
-       it != m.end();
-       ++it) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  out << "}}";
-  return out;
-}
-
-} // namespace std
-
-namespace boost {
-namespace tuples {
-template<typename A, typename B, typename C>
-inline std::ostream& operator<<(std::ostream& out, const boost::tuples::tuple<A, B, C> &t) {
-  return out << boost::get<0>(t) << ","
-	     << boost::get<1>(t) << ","
-	     << boost::get<2>(t);
-}
-}
-namespace container {
-template<class A, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
-  return out;
-}
-
-template<class A, class B, class Comp, class Alloc>
-inline std::ostream& operator<<(std::ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& m) {
-  for (auto it = m.begin();
-       it != m.end();
-       ++it) {
-    if (it != m.begin()) out << ",";
-    out << it->first << "=" << it->second;
-  }
-  return out;
-}
-}
-} // namespace boost
-
 
 
 /*
@@ -377,14 +151,8 @@ struct client_t {
     using ceph::decode;
     decode(v, bl);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_int("id", v);
-  }
-  static void generate_test_instances(std::list<client_t*>& ls) {
-    ls.push_back(new client_t);
-    ls.push_back(new client_t(1));
-    ls.push_back(new client_t(123));
-  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<client_t*>& ls);
 };
 WRITE_CLASS_ENCODER(client_t)
 
@@ -398,45 +166,9 @@ static inline bool operator>=(const client_t& l, const client_t& r) { return l.v
 static inline bool operator>=(const client_t& l, int64_t o) { return l.v >= o; }
 static inline bool operator<(const client_t& l, int64_t o) { return l.v < o; }
 
-inline std::ostream& operator<<(std::ostream& out, const client_t& c) {
-  return out << c.v;
-}
-
-
+std::ostream& operator<<(std::ostream& out, const client_t& c);
 
 // --
-
-namespace {
-inline std::ostream& format_u(std::ostream& out, const uint64_t v, const uint64_t n,
-      const int index, const uint64_t mult, const char* u)
-  {
-    char buffer[32];
-
-    if (index == 0) {
-      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
-    } else if ((v % mult) == 0) {
-      // If this is an even multiple of the base, always display
-      // without any decimal fraction.
-      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
-    } else {
-      // We want to choose a precision that reflects the best choice
-      // for fitting in 5 characters.  This can get rather tricky when
-      // we have numbers that are very close to an order of magnitude.
-      // For example, when displaying 10239 (which is really 9.999K),
-      // we want only a single place of precision for 10.0K.  We could
-      // develop some complex heuristics for this, but it's much
-      // easier just to try each combination in turn.
-      int i;
-      for (i = 2; i >= 0; i--) {
-        if (snprintf(buffer, sizeof(buffer), "%.*f%s", i,
-          static_cast<double>(v) / mult, u) <= 7)
-          break;
-      }
-    }
-
-    return out << buffer;
-  }
-}
 
 /*
  * Use this struct to pretty print values that should be formatted with a
@@ -447,21 +179,7 @@ struct si_u_t {
   explicit si_u_t(uint64_t _v) : v(_v) {};
 };
 
-inline std::ostream& operator<<(std::ostream& out, const si_u_t& b)
-{
-  uint64_t n = b.v;
-  int index = 0;
-  uint64_t mult = 1;
-  const char* u[] = {"", "k", "M", "G", "T", "P", "E"};
-
-  while (n >= 1000 && index < 7) {
-    n /= 1000;
-    index++;
-    mult *= 1000;
-  }
-
-  return format_u(out, b.v, n, index, mult, u[index]);
-}
+std::ostream& operator<<(std::ostream& out, const si_u_t& b);
 
 /*
  * Use this struct to pretty print values that should be formatted with a
@@ -479,25 +197,8 @@ struct byte_u_t {
 template <> struct fmt::formatter<byte_u_t> : fmt::ostream_formatter {};
 #endif
 
-inline std::ostream& operator<<(std::ostream& out, const byte_u_t& b)
-{
-  uint64_t n = b.v;
-  int index = 0;
-  const char* u[] = {" B", " KiB", " MiB", " GiB", " TiB", " PiB", " EiB"};
-
-  while (n >= 1024 && index < 7) {
-    n /= 1024;
-    index++;
-  }
-
-  return format_u(out, b.v, n, index, 1ULL << (10 * index), u[index]);
-}
-
-inline std::ostream& operator<<(std::ostream& out, const ceph_mon_subscribe_item& i)
-{
-  return out << (long)i.start
-	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
-}
+std::ostream& operator<<(std::ostream& out, const byte_u_t& b);
+std::ostream& operator<<(std::ostream& out, const ceph_mon_subscribe_item& i);
 
 struct weightf_t {
   float v;
@@ -505,17 +206,7 @@ struct weightf_t {
   weightf_t(float _v) : v(_v) {}
 };
 
-inline std::ostream& operator<<(std::ostream& out, const weightf_t& w)
-{
-  if (w.v < -0.01F) {
-    return out << "-";
-  } else if (w.v < 0.000001F) {
-    return out << "0";
-  } else {
-    std::streamsize p = out.precision();
-    return out << std::fixed << std::setprecision(5) << w.v << std::setprecision(p);
-  }
-}
+std::ostream& operator<<(std::ostream& out, const weightf_t& w);
 
 struct shard_id_t {
   int8_t id;
@@ -538,13 +229,8 @@ struct shard_id_t {
     using ceph::decode;
     decode(id, bl);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_int("id", id);
-  }
-  static void generate_test_instances(std::list<shard_id_t*>& ls) {
-    ls.push_back(new shard_id_t(1));
-    ls.push_back(new shard_id_t(2));
-  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<shard_id_t*>& ls);
   shard_id_t& operator++() { ++id; return *this; }
   friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
                                                     const shard_id_t &rhs) {
@@ -616,13 +302,8 @@ struct errorcode32_t {
     decode(newcode, bl);
     set_wire_to_host(newcode);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_int("code", code);
-  }
-  static void generate_test_instances(std::list<errorcode32_t*>& ls) {
-    ls.push_back(new errorcode32_t(1));
-    ls.push_back(new errorcode32_t(2));
-  }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<errorcode32_t*>& ls);
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
 

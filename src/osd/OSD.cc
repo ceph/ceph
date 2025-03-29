@@ -13,10 +13,13 @@
  *
  */
 
+#include "OSD.h"
+
 #include "acconfig.h"
 
 #include <cctype>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 
@@ -45,7 +48,6 @@
 #include "include/random.h"
 #include "include/scope_guard.h"
 
-#include "OSD.h"
 #include "OSDMap.h"
 #include "Watch.h"
 #include "osdc/Objecter.h"
@@ -54,6 +56,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
 #include "common/pick_address.h"
@@ -124,6 +127,7 @@
 #include "global/pidfile.h"
 
 #include "include/color.h"
+#include "log/Log.h"
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 

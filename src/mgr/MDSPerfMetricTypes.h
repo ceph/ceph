@@ -8,7 +8,11 @@
 #include <vector>
 #include <iosfwd>
 
+#include "include/container_ios.h"
 #include "include/denc.h"
+#include "include/denc_map.h"
+#include "include/denc_set.h"
+#include "include/denc_vector.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 
