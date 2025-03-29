@@ -217,3 +217,30 @@ def create_base_dir(fs, path, mode):
             fs.mkdirs(path, mode)
         else:
             raise VolumeException(-e.args[0], e.args[1])
+
+
+def statx(fs, path, fields=None):
+    '''
+    Convenient wrapper around libcephfs's statx().
+
+    :param path: path to be statx'ed
+    :param fields: stat buffer fields to be fetched
+    :returns: bool or list. list if fields were passed, otherwise bool
+    '''
+    flags = 0
+    flags = flags | cephfs.AT_STATX_SYNC_AS_STAT
+
+    # sxb = statx buffer
+    sxb = fs.statx(path, 0, flags)
+
+
+def path_exists(fs, path):
+    try:
+        # prefer statx over stat has it passes much lesser data on n/w
+        statx(fs, path, None)
+    except cephfs.PermissionError:
+        raise
+    except:
+        return False
+    else:
+        return True
