@@ -5,6 +5,11 @@ import threading
 import functools
 import os
 import json
+import base64
+import warnings
+import time
+from typing import Optional, Dict, Union, Tuple, Type, Optional
+from functools import wraps
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
@@ -82,6 +87,24 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             default='local',
             desc='storage class name for LSO-discovered PVs',
         ),
+        Option(
+            'secure_monitoring_stack',
+            type='bool',
+            default=False,
+            desc='Enable TLS security for all the monitoring stack daemons'
+        ),
+        Option(
+            'prometheus_tls_secret_name',
+            type='str',
+            default='rook-ceph-prometheus-server-tls',
+            desc='name of tls secret in k8s for prometheus',
+        ),
+        Option(
+            'dashboard_tls_secret_name',
+            type='str',
+            default='rook-ceph-dashboard-server-tls',
+            desc='name of tls secret in k8s for dashboard',
+        )
     ]
 
     @staticmethod
@@ -567,7 +590,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         except Exception as e:
             logging.error(e)
             return OrchResult(None, Exception("Unable to zap device: " + str(e.with_traceback(None))))
-        return OrchResult(f'{path} on {host} zapped') 
+        return OrchResult(f'{path} on {host} zapped')
 
     @handle_orch_error
     def apply_mon(self, spec):
@@ -639,3 +662,59 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict[Any, Any]:
         return {}
+
+    def retry(
+        on_exception: Union[Type[Exception], Tuple[Type[Exception], ...]],
+        tries=3,
+        delay=1,
+        backoff=2,
+        max_delay=60,
+        logger: Optional[logging.Logger] = None,
+    ):
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                wait = delay
+                for i in range(tries):
+                    try:
+                        return func(*args, **kwargs)
+                    except on_exception as e:
+                        err = e
+                        if logger:
+                            logger.warning(f"Retry #{i+1}/{tries} after exception in '{func.__name__}': {e}")
+                        if i < tries - 1:
+                            time.sleep(min(wait, max_delay))
+                            wait *= backoff
+                raise err
+            return wrapper
+        return decorator
+
+    # Retry decorator for handling transient Kubernetes API failures
+    @retry(on_exception=ApiException, tries=7, delay=1, backoff=2, max_delay=60)
+    def fetch_k8s_secret(self, secret_name: str):
+        """Fetch Kubernetes secret with retries."""
+        return self._k8s_CoreV1_api.read_namespaced_secret(secret_name, self._rook_env.namespace)
+
+    @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        api_response = None
+        cert, key = "", ""
+        supported_modules = ['dashboard', 'prometheus']
+        if module_name not in supported_modules:
+            raise orchestrator.OrchestratorError(f'Unsupported module {module_name}. Supported module are: {supported_modules}')
+
+        secret_name = self.get_module_option(f'{module_name}_tls_secret_name')
+        try:
+            api_response = self.fetch_k8s_secret(secret_name)
+        except ApiException as e:
+            raise orchestrator.OrchestratorError(f'Unable to get certificates for {module_name}, error: {e}')
+
+        if api_response is None:
+            raise orchestrator.OrchestratorError(f'Unable to get certificates for {module_name}')
+        else:
+            cert = base64.b64decode(api_response.data.get('tls.crt','')).decode('utf-8')
+            key = base64.b64decode(api_response.data.get('tls.key', '')).decode('utf-8')
+            if cert == "" or key == "":
+                raise orchestrator.OrchestratorError(f'Unable to parse certificates for {module_name} module')
+
+        return {'cert': cert, 'key': key}

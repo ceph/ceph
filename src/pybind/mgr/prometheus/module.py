@@ -9,7 +9,7 @@ import threading
 import time
 import enum
 from collections import namedtuple
-import tempfile
+from tempfile import NamedTemporaryFile
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
@@ -1749,22 +1749,18 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_file_sd_config()
 
     def configure(self, server_addr: str, server_port: int) -> None:
-        # TODO(redo): this new check is hacky, we should provide an explit cmd
-        # from cephadm to get/check the security status
-
-        # if cephadm is configured with security then TLS must be used
-        cmd = {'prefix': 'orch prometheus get-credentials'}
-        ret, out, _ = self.mon_command(cmd)
-        if ret == 0 and out is not None:
-            access_info = json.loads(out)
-            if access_info:
-                try:
+        orch_backend = cast(str, self.get_module_option_ex('orchestrator', 'orchestrator'))
+        secure_monitoring_stack = cast(bool, self.get_module_option_ex(orch_backend, 'secure_monitoring_stack', False))
+        if secure_monitoring_stack:
+            try:
+                if orch_backend == 'cephadm':
                     self.setup_tls_using_cephadm(server_addr, server_port)
-                    return
-                except Exception as e:
-                    self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                       'Falling back to default configuration')
-
+                elif orch_backend == 'rook':
+                    self.setup_tls_config_using_rook(server_addr, server_port)
+                return
+            except Exception as e:
+                self.log.exception(f'Failed to setup orchestrator based secure monitoring stack: {e}\n',
+                                   'Falling back to default configuration')
         # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)
 
@@ -1795,10 +1791,10 @@ class Module(MgrModule, OrchestratorClientMixin):
             return
 
         cert_key = json.loads(out)
-        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file = NamedTemporaryFile()
         self.cert_file.write(cert_key['cert'].encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
-        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file = NamedTemporaryFile()
         self.key_file.write(cert_key['key'].encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
@@ -1812,6 +1808,38 @@ class Module(MgrModule, OrchestratorClientMixin):
             'server.ssl_module': 'builtin',
             'server.ssl_certificate': cert_file_path,
             'server.ssl_private_key': key_file_path,
+        })
+        # Publish the URI that others may use to access the service we're about to start serving
+        self.set_uri(build_url(scheme='https', host=self.get_server_addr(),
+                     port=server_port, path='/'))
+
+    def setup_tls_config_using_rook(self, server_addr: str, server_port: int) -> None:
+        cmd = {'prefix': 'orch certmgr generate-certificates',
+               'module_name': 'prometheus',
+               'format': 'json'}
+        ret, out, err = self.mon_command(cmd)
+        if ret != 0:
+            self.log.error(f'mon command to generate-certificates failed: {err}')
+            return
+        elif out is None:
+            self.log.error('mon command to generate-certificates failed to generate certificates')
+            return
+
+        cert_key = json.loads(out)
+        self.cert_file = NamedTemporaryFile()
+        self.cert_file.write(cert_key['cert'].encode('utf-8'))
+        self.cert_file.flush()  # cert_tmp must not be gc'ed
+        self.key_file = NamedTemporaryFile()
+        self.key_file.write(cert_key['key'].encode('utf-8'))
+        self.key_file.flush()  # pkey_tmp must not be gc'ed
+
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': server_port,
+            'engine.autoreload.on': False,
+            'server.ssl_module': 'builtin',
+            'server.ssl_certificate': self.cert_file.name,
+            'server.ssl_private_key': self.key_file.name,
         })
         # Publish the URI that others may use to access the service we're about to start serving
         self.set_uri(build_url(scheme='https', host=self.get_server_addr(),
