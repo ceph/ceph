@@ -211,7 +211,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   admin_hook(NULL),
   routed_request_tid(0),
-  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1)
+  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1),
+  ms_inject_drop_mon_forward_msgs(cct->_conf , "ms_inject_drop_mon_forward_msgs")
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
@@ -2419,6 +2420,8 @@ void Monitor::finish_election()
     authmon()->_set_mon_num_rank(monmap->size(), rank);
   }
 
+  check_quorum_subs_and_send_updates();
+
   // am i named and located properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
   const auto my_infop = monmap->mon_info.find(cur_name);
@@ -4157,6 +4160,14 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else if (session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
   } else if (!session->closed) {
+    // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
+    // if positive drop random percentage of mon forward messages
+    if (*ms_inject_drop_mon_forward_msgs > 0.0 &&
+      rand() % 10000 < 10000 * *ms_inject_drop_mon_forward_msgs) {
+      dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
+      req->put();
+      return;
+    }
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->con = req->get_connection();
@@ -4400,6 +4411,14 @@ void Monitor::resend_routed_requests()
       auto q = rr->request_bl.cbegin();
       PaxosServiceMessage *req =
 	(PaxosServiceMessage *)decode_message(cct, 0, q);
+      // ms_inject_drop_mon_forward_msgs - if negative drop any mon forward messages
+      // if positive drop random percentage of mon forward messages
+      if (*ms_inject_drop_mon_forward_msgs > 0.0 &&
+        rand() % 10000 < 10000 * *ms_inject_drop_mon_forward_msgs) {
+        dout(20) << __func__ << " inject drop mon forward request " << *req << dendl;
+        req->put();
+        continue;
+      }
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
 	       << dendl;
@@ -4611,7 +4630,7 @@ void Monitor::_ms_dispatch(Message *m)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
-
+  dout(20) << "dispatch_op: " << op << " " << *op->get_req() << dendl;
   MonSession *s = op->get_session();
   ceph_assert(s);
   if (s->closed) {
@@ -5352,6 +5371,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
+    dout(20) << __func__ << " " << p->first << " start " << p->second.start
+             << " flags " << p->second.flags << dendl;
     if (p->first == "monmap" || p->first == "config") {
       // these require no caps
     } else if (!s->is_capable("mon", MON_CAP_R)) {
@@ -5371,6 +5392,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
 	  std::lock_guard l(session_map_lock);
+          dout(20) << __func__ << " removing conflicting sub " << it->first << dendl;
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -5519,8 +5541,29 @@ bool Monitor::ms_handle_refused(Connection *con)
 void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
+  dout(10) << __func__ << " sending latest monmap and quorum to "
+    << con->get_peer_entity_name().get_type_name()
+    << " type:" << con->get_peer_type()
+    << " id:" << con->get_peer_id()
+    << " quorum: " << get_quorum()
+    << dendl;
   monmap->encode(bl, con->get_features());
-  con->send_message(new MMonMap(bl));
+  con->send_message(new MMonMap(bl, get_quorum()));
+}
+
+void Monitor::check_quorum_subs_and_send_updates()
+{
+  dout(10) << __func__ << dendl;
+  const string quorum_type = "monmap";
+  with_session_map([this, &quorum_type]
+    (const MonSessionMap& session_map) {
+      auto subs = session_map.subs.find(quorum_type);
+      if (subs != session_map.subs.end()) {
+        for (auto sub : *subs->second) {
+          send_latest_monmap(sub->session->con.get());
+        }
+      }
+    });
 }
 
 void Monitor::handle_mon_get_map(MonOpRequestRef op)
