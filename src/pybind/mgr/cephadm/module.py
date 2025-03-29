@@ -751,7 +751,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             endpoint_suffix = '/internal'
         else:
             mgmt_gw_port = dd.ports[0] if dd.ports else None
-            protocol = 'http' if mgmt_gw_spec.disable_https else 'https'
+            protocol = 'https' if mgmt_gw_spec.ssl else 'http'
             endpoint_suffix = ''
 
         mgmt_gw_endpoint = build_url(scheme=protocol, host=mgmt_gw_addr, port=mgmt_gw_port)
