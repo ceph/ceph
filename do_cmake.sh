@@ -2,6 +2,7 @@
 set -ex
 
 if [ -d .git ]; then
+    GIT=TRUE
     git submodule update --init --recursive --progress --recommend-shallow
 fi
 
@@ -105,13 +106,20 @@ EOF
 echo done.
 
 if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
-  cat <<EOF
-
+    if [[ -n "$GIT" ]]; then
+        printf "
 ****
-WARNING: do_cmake.sh now creates debug builds by default. Performance
-may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
+WARNING: do_cmake.sh now creates debug builds by default if .git exists.
+Performance may be severely affected. Please use -DCMAKE_BUILD_TYPE=RelWithDebInfo
 if a performance sensitive build is required.
 ****
-EOF
+"
+    else
+        printf "
+****
+WARNING: do_cmake.sh now creates RelWithDebInfo builds by default when .git is absent.
+****
+"
+    fi
 fi
 
