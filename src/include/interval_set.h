@@ -263,7 +263,7 @@ class interval_set {
   }
 
   std::string fmt_print() const
-  requires has_formatter<T> {
+  requires fmt::formattable<T> {
     std::string s = "[";
     bool first = true;
     for (const auto& [start, len] : *this) {
