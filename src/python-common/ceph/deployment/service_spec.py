@@ -1228,6 +1228,7 @@ class RGWSpec(ServiceSpec):
                  update_endpoints: Optional[bool] = False,
                  zone_endpoints: Optional[str] = None,  # comma separated endpoints list
                  zonegroup_hostnames: Optional[List[str]] = None,
+                 data_pool_attributes: Optional[Dict[str, str]] = None,
                  rgw_user_counters_cache: Optional[bool] = False,
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
@@ -1290,6 +1291,8 @@ class RGWSpec(ServiceSpec):
         #: Used to make RGW not do multisite replication so it can dedicate to IO
         self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
         self.wildcard_enabled = wildcard_enabled
+        #: Attributes for <zone-name>.rgw.buckets.data pool created in rgw realm bootstrap command
+        self.data_pool_attributes = data_pool_attributes
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
