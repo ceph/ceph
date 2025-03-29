@@ -265,8 +265,10 @@
              let-row="data.row"
              let-value="data.value">
   <div class="position-relative">
+  <div class="sparkline-css">
     <cd-sparkline [data]="value"
                   [isBinary]="row.cdIsBinary"></cd-sparkline>
+  </div>
   </div>
 </ng-template>
 
