@@ -34,6 +34,7 @@ Synopsis
 | **ceph-bluestore-tool** show-sharding --path *osd path*
 | **ceph-bluestore-tool** trim --path *osd path*
 | **ceph-bluestore-tool** zap-device --dev *dev path*
+| **ceph-bluestore-tool** revert-wal-to-plain --path *osd path*
 
 
 Description
@@ -164,6 +165,11 @@ Commands
 :command: `zap-device` --dev *dev path*
 
    Zeros all device label locations. This effectively makes device appear empty.
+
+:command: `revert-wal-to-plain` --path *osd path*
+
+   Changes WAL files from envelope mode to the legacy plain mode.
+   Useful for downgrades, or if you might want to disable this new feature (bluefs_wal_envelope_mode).
 
 Options
 =======
