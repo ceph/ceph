@@ -294,6 +294,7 @@ target_link_libraries(rgw_common
     ICU::uc
     OATH::OATH
     dmclock::dmclock
+    keyutils
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
