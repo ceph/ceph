@@ -1243,6 +1243,9 @@ COMMAND("osd pool stretch unset "
 		"name=min_size,type=CephInt,range=0 ",
 		"unset the stretch mode for the pool",
 		"osd", "rw")
+COMMAND("osd pool availability-status", \
+        "obtain availability stats from all pools", \
+        "osd", "r")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r")
