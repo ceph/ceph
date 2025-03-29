@@ -247,3 +247,27 @@ class SubvolumeV3(SubvolumeV2):
             MetadataManager.GLOBAL_META_KEY_STATE,
             SubvolumeStates.STATE_RETAINED.value)
         self.metadata_mgr.flush()
+
+    # Following methods help clone operation -
+
+
+    def snapshot_data_path(self, snapname):
+        snappath = join(self.snapshot_path(snapname), b'mnt')
+
+        # v2 raises exception if the snapshot path do not exist so do the same
+        # to prevent any bugs due to difference in behaviour.
+        #
+        # not raising exception indeed leads to a bug: the volumes plugin fails
+        # when exception is not raised by this method when it is called by
+        # do_clone() method of async_cloner.py. this is made to happen by a
+        # test by deleting snapshot after running the snapshot clone command
+        # but before the clone operation actually begins. this is done by
+        # adding a delay using mgr/volumes/snapshot_clone_delay config option.
+        try:
+            self.fs.stat(snappath)
+        except cephfs.Error as e:
+            if e.errno == errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "snapshot '{0}' does not exist".format(snapname))
+            raise VolumeException(-e.args[0], e.args[1])
+
+        return snappath
