@@ -1853,11 +1853,11 @@ class MgmtGatewaySpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
-                 disable_https: Optional[bool] = False,
+                 ssl: Optional[bool] = True,
                  enable_auth: Optional[bool] = False,
                  port: Optional[int] = None,
-                 ssl_certificate: Optional[str] = None,
-                 ssl_certificate_key: Optional[str] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
                  ssl_session_tickets: Optional[str] = None,
                  ssl_session_timeout: Optional[str] = None,
@@ -1886,16 +1886,16 @@ class MgmtGatewaySpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
         )
-        #: Is a flag to disable HTTPS. If True, the server will use unsecure HTTP
-        self.disable_https = disable_https
+        #: Is a flag to enable/disable HTTPS. By default set to True.
+        self.ssl = ssl
         #: Is a flag to enable SSO auth. Requires oauth2-proxy to be active for SSO authentication.
         self.enable_auth = enable_auth
         #: The port number on which the server will listen
         self.port = port
         #: A multi-line string that contains the SSL certificate
-        self.ssl_certificate = ssl_certificate
+        self.ssl_cert = ssl_cert
         #: A multi-line string that contains the SSL key
-        self.ssl_certificate_key = ssl_certificate_key
+        self.ssl_key = ssl_key
         #: Prefer server ciphers over client ciphers: on | off
         self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
         #: A multioption flag to control session tickets: on | off
@@ -1927,8 +1927,8 @@ class MgmtGatewaySpec(ServiceSpec):
     def validate(self) -> None:
         super(MgmtGatewaySpec, self).validate()
         self._validate_port(self.port)
-        self._validate_certificate(self.ssl_certificate, "ssl_certificate")
-        self._validate_private_key(self.ssl_certificate_key, "ssl_certificate_key")
+        self._validate_certificate(self.ssl_cert, "ssl_cert")
+        self._validate_private_key(self.ssl_key, "ssl_key")
         self._validate_boolean_switch(self.ssl_prefer_server_ciphers, "ssl_prefer_server_ciphers")
         self._validate_boolean_switch(self.ssl_session_tickets, "ssl_session_tickets")
         self._validate_session_timeout(self.ssl_session_timeout)
@@ -1997,8 +1997,8 @@ class OAuth2ProxySpec(ServiceSpec):
                  oidc_issuer_url: Optional[str] = None,
                  redirect_url: Optional[str] = None,
                  cookie_secret: Optional[str] = None,
-                 ssl_certificate: Optional[str] = None,
-                 ssl_certificate_key: Optional[str] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  allowlist_domains: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
@@ -2032,9 +2032,9 @@ class OAuth2ProxySpec(ServiceSpec):
         # 24, or 32 bytes to create an AES cipher.
         self.cookie_secret = cookie_secret or self.generate_random_secret()
         #: The multi-line SSL certificate for encrypting communications.
-        self.ssl_certificate = ssl_certificate
+        self.ssl_cert = ssl_cert
         #: The multi-line SSL certificate private key for decrypting communications.
-        self.ssl_certificate_key = ssl_certificate_key
+        self.ssl_key = ssl_key
         #: List of allowed domains for safe redirection after login or logout,
         # preventing unauthorized redirects.
         self.allowlist_domains = allowlist_domains
