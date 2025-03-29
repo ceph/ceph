@@ -1007,11 +1007,19 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     }
 
     // atomically reset the data IOContext to new version
+#ifdef __cpp_lib_atomic_shared_ptr
+    data_io_context.store(ctx);
+#else
     atomic_store(&data_io_context, ctx);
+#endif
   }
 
   IOContext ImageCtx::get_data_io_context() const {
+#ifdef __cpp_lib_atomic_shared_ptr
+    return data_io_context.load();
+#else
     return atomic_load(&data_io_context);
+#endif
   }
 
   IOContext ImageCtx::duplicate_data_io_context() const {
