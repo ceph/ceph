@@ -87,10 +87,12 @@ BackfillState::Initial::react(const BackfillState::Triggered& evt)
   ceph_assert(peering_state().is_backfilling());
   // initialize BackfillIntervals
   for (const auto& bt : peering_state().get_backfill_targets()) {
-    backfill_state().peer_backfill_info[bt].reset(
-      peering_state().get_peer_last_backfill(bt));
+    backfill_state().peer_backfill_info.emplace(
+      bt,
+      BackfillInterval(peering_state().get_peer_last_backfill(bt)));
   }
-  backfill_state().backfill_info.reset(backfill_state().last_backfill_started);
+  backfill_state().backfill_info =
+    BackfillInterval(backfill_state().last_backfill_started);
   if (Enqueuing::all_enqueued(peering_state(),
                               backfill_state().backfill_info,
                               backfill_state().peer_backfill_info)) {
@@ -128,27 +130,15 @@ void BackfillState::Enqueuing::maybe_update_range()
 	     pg().get_projected_last_update());
     auto func =
       [&](const pg_log_entry_t& e) {
-        DEBUGDPP("maybe_update_range(lambda): updating from version {}",
-	  pg(), e.version);
-        if (e.soid >= primary_bi.begin && e.soid <  primary_bi.end) {
-	  if (e.is_update()) {
-	    DEBUGDPP("maybe_update_range(lambda): {} updated to ver {}",
-	      pg(), e.soid, e.version);
-            primary_bi.objects.erase(e.soid);
-            primary_bi.objects.insert(std::make_pair(e.soid,
-                                                             e.version));
-	  } else if (e.is_delete()) {
-            DEBUGDPP("maybe_update_range(lambda): {} removed",
-	      pg(), e.soid);
-            primary_bi.objects.erase(e.soid);
-          }
-        }
+        DEBUGDPP("maybe_update_range(lambda): "
+                 "updating {} to version {}",
+                 pg(), e.soid, e.version);
+        primary_bi.update(e);
       };
     DEBUGDPP("{}: scanning pg log first", pg());
     peering_state().scan_log_after(primary_bi.version, func);
     DEBUGDPP("{}: scanning projected log", pg());
     pg().get_projected_log().scan_log_after(primary_bi.version, func);
-    primary_bi.version = pg().get_projected_last_update();
   } else {
     ceph_abort_msg(
       "scan_range should have raised primary_bi.version past log_tail");
@@ -158,7 +148,8 @@ void BackfillState::Enqueuing::maybe_update_range()
 void BackfillState::Enqueuing::trim_backfill_infos()
 {
   for (const auto& bt : peering_state().get_backfill_targets()) {
-    backfill_state().peer_backfill_info[bt].trim_to(
+    ceph_assert(backfill_state().peer_backfill_info.contains(bt));
+    backfill_state().peer_backfill_info.at(bt).trim_to(
       std::max(peering_state().get_peer_last_backfill(bt),
                backfill_state().last_backfill_started));
   }
@@ -317,7 +308,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
   auto& primary_bi = backfill_state().backfill_info;
 
   // update our local interval to cope with recent changes
-  primary_bi.begin = backfill_state().last_backfill_started;
+  primary_bi.trim_to(backfill_state().last_backfill_started);
   if (primary_bi.version < peering_state().get_log_tail()) {
     // it might be that the OSD is so flooded with modifying operations
     // that backfill will be spinning here over and over. For the sake
@@ -406,6 +397,7 @@ BackfillState::Enqueuing::Enqueuing(my_context ctx)
 BackfillState::PrimaryScanning::PrimaryScanning(my_context ctx)
   : my_base(ctx)
 {
+  // set BackfillInterval::version to the committed_to before the backfill scan
   backfill_state().backfill_info.version = peering_state().get_pg_committed_to();
   backfill_listener().request_primary_scan(
     backfill_state().backfill_info.begin);
@@ -504,7 +496,8 @@ BackfillState::ReplicasScanning::react(ReplicaScanned evt)
   // the machine to the state.
   ceph_assert(peering_state().is_backfill_target(evt.from));
   if (waiting_on_backfill.erase(evt.from)) {
-    backfill_state().peer_backfill_info[evt.from] = std::move(evt.result);
+    ceph_assert(backfill_state().peer_backfill_info.contains(evt.from));
+    backfill_state().peer_backfill_info.at(evt.from) = std::move(evt.result);
     if (waiting_on_backfill.empty()) {
       ceph_assert(backfill_state().peer_backfill_info.size() == \
                   peering_state().get_backfill_targets().size());
