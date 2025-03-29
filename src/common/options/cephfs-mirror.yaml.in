@@ -103,3 +103,23 @@ options:
   - cephfs-mirror
   min: 0
   max: 11
+- name: cephfs_mirror_max_concurrent_file_transfer
+  type: uint
+  level: advanced
+  desc: number of threads running for file transfers per peer
+  long_desc: number of threads running for file transfers per peer.
+    Each thread is responsible for transfering a single file.
+  default: 3
+  services:
+  - cephfs-mirror
+  min: 1
+- name: cephfs_mirror_max_number_of_threads
+  type: uint
+  level: advanced
+  desc: number of threads running for concurrent operations
+  long_desc: number of threads running for operations per peer.
+    Each thread is responsible for several libcephfs operations.
+  default: 3
+  services:
+  - cephfs-mirror
+  min: 1
