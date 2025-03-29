@@ -1496,7 +1496,7 @@ class RgwTopic(RESTController):
     def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
         rgw_topic_instance = RgwTopicmanagement()
         result = rgw_topic_instance.list_topics(uid, tenant)
-        return result
+        return result['topics']
 
     @EndpointDoc(
         "Get RGW Topic",
