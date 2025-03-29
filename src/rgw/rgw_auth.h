@@ -842,6 +842,67 @@ public:
   };
 };
 
+class ServiceIdentity : public Identity {
+  const std::string service_id;
+public:
+  ServiceIdentity(const std::string& s) : service_id(s) {}
+  virtual ~ServiceIdentity() = default;
+
+  ACLOwner get_aclowner() const override {
+    return {};
+  }
+
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
+    return RGW_PERM_NONE;
+  }
+
+  bool is_admin_of(const rgw_owner& o) const override {
+    return false;
+  }
+
+  bool is_owner_of(const rgw_owner& o) const override {
+    return false;
+  }
+
+  uint32_t get_perm_mask() const override {
+    return RGW_PERM_NONE;
+  }
+
+  virtual void to_str(std::ostream& out) const override {
+    out << "rgw::auth::ServiceIdentity(id=" << service_id << ")";
+  }
+
+  bool is_identity(const Principal& p) const override {
+    return p.is_service() && p.get_service() == service_id;
+  }
+
+  uint32_t get_identity_type() const override {
+    return TYPE_RGW;
+  }
+
+  std::string get_acct_name() const override {
+    return {};
+  }
+
+  std::string get_subuser() const override {
+    return {};
+  }
+
+  const std::string& get_tenant() const override {
+    static const std::string no_tenant;
+    return no_tenant;
+  }
+
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    static constexpr std::optional<RGWAccountInfo> no_account;
+    return no_account;
+  }
+
+  bool is_root() const override {
+    return false;
+  }
+};
+
 /* The anonymous abstract engine. */
 class AnonymousEngine : public Engine {
   CephContext* const cct;

@@ -88,6 +88,12 @@ std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp,
 
 int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s);
 
+int get_owner_quota_info(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                rgw::sal::Driver* driver,
+                                const rgw_owner& owner,
+                                RGWQuota& quotas);
+
 class RGWHandler {
 protected:
   rgw::sal::Driver* driver{nullptr};
