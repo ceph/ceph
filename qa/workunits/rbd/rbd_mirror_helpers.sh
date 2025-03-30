@@ -92,7 +92,6 @@ RBD_IMAGE_FEATURES=${RBD_IMAGE_FEATURES:-layering,exclusive-lock,journaling}
 MIRROR_USER_ID_PREFIX=${MIRROR_USER_ID_PREFIX:-${CEPH_ID}.}
 RBD_MIRROR_MODE=${RBD_MIRROR_MODE:-journal}
 MIRROR_POOL_MODE=${MIRROR_POOL_MODE:-pool}
-MIRROR_IMAGE_MODE=${MIRROR_IMAGE_MODE:-snapshot}
 if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   MIRROR_POOL_MODE=image
 fi
@@ -2279,20 +2278,11 @@ group_images_remove()
     done
 }
 
-mirror_group_internal()
-{
-    local cmd=$1
-    local group_spec=$2
-    local mode=${3:-${MIRROR_IMAGE_MODE}}
-
-    run_cmd "rbd --cluster=${cluster} mirror group enable ${group_spec} ${mode}"
-}
-
 mirror_group_enable()
 {
     local cluster=$1
     local group_spec=$2
-    local mode=${3:-${MIRROR_IMAGE_MODE}}
+    local mode=${3:-${RBD_MIRROR_MODE}}
     local runner=${4:-"run_cmd"}
 
     "$runner" "rbd --cluster=${cluster} mirror group enable ${group_spec} ${mode}"
@@ -2300,7 +2290,7 @@ mirror_group_enable()
 
 mirror_group_enable_try()
 {
-    local mode=${3:-${MIRROR_IMAGE_MODE}}
+    local mode=${3:-${RBD_MIRROR_MODE}}
     mirror_group_enable "$@" "${mode}" "try_cmd"
 }
 
@@ -2321,7 +2311,7 @@ create_group_and_enable_mirror()
 {
     local cluster=$1
     local group_spec=$2
-    local mode=${3:-${MIRROR_IMAGE_MODE}}
+    local mode=${3:-${RBD_MIRROR_MODE}}
 
     group_create ${cluster} ${group_spec}
     mirror_group_enable ${cluster} ${group_spec} ${mode}
@@ -2805,10 +2795,6 @@ mirror_group_snapshot_and_wait_for_sync_complete()
     local primary_cluster=$2
     local group_spec=$3
     local group_snap_id
-
-    if [ "${MIRROR_IMAGE_MODE}" != "snapshot" ]; then
-        return 1
-    fi
 
     mirror_group_snapshot "${primary_cluster}" "${group_spec}" group_snap_id
     wait_for_group_snap_present "${secondary_cluster}" "${group_spec}" "${group_snap_id}"
