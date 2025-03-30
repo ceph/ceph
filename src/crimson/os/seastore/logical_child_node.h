@@ -14,7 +14,7 @@ class LogicalChildNode : public LogicalCachedExtent,
 			 public ChildNode<lba_manager::btree::LBALeafNode,
 					  LogicalChildNode,
 					  laddr_t> {
-  using child_node_t = ChildNode<
+  using lba_child_node_t = ChildNode<
     lba_manager::btree::LBALeafNode, LogicalChildNode, laddr_t>;
 public:
   template <typename... T>
@@ -24,7 +24,7 @@ public:
     if (this->has_parent_tracker() &&
 	this->is_valid() &&
 	!this->is_pending()) {
-      child_node_t::destroy();
+      lba_child_node_t::destroy();
     }
   }
 
@@ -41,7 +41,7 @@ public:
   }
 protected:
   void on_replace_prior() final {
-    child_node_t::on_replace_prior();
+    lba_child_node_t::on_replace_prior();
     do_on_replace_prior();
   }
   virtual void do_on_replace_prior() {}
