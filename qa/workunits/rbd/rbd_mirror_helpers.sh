@@ -84,7 +84,7 @@ else
     exit 1
 fi
 
-RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
+RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-2}
 
 CLUSTER1=cluster1
 CLUSTER2=cluster2
@@ -348,6 +348,7 @@ setup_cluster()
     local cluster=$1
 
     CEPH_ARGS='' ${CEPH_SRC}/mstart.sh ${cluster} -n ${RBD_MIRROR_VARGS}
+
     cd ${CEPH_ROOT}
     rm -f ${TEMPDIR}/${cluster}.conf
     ln -s $(readlink -f run/${cluster}/ceph.conf) \
@@ -616,8 +617,8 @@ stop_mirror()
     pid=$(cat $(daemon_pid_file "${cluster}") 2>/dev/null) || :
     if [ -n "${pid}" ]
     then
+        kill ${sig} ${pid}
         for s in 1 2 4 8 16 32; do
-            kill ${sig} ${pid}
             sleep $s
             ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}' && break
         done
