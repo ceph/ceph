@@ -404,7 +404,7 @@ private:
 									       \
   private:                                                                     \
     boost::asio::awaitable<void> CoTestBody() override;                        \
-    static ::testing::TestInfo *const test_info_ GTEST_ATTRIBUTE_UNUSED_;      \
+    [[maybe_unused]] static ::testing::TestInfo *const test_info_;             \
   };                                                                           \
 									       \
   ::testing::TestInfo *const GTEST_TEST_CLASS_NAME_(test_suite_name,           \
