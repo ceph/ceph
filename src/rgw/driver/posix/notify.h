@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <limits>
 #include <cstdlib>
+#include <algorithm>
 #include "unordered_dense.h"
 #include <unistd.h>
 #include <poll.h>
@@ -23,6 +24,24 @@
 #include <sys/eventfd.h>
 #endif
 #include <fmt/format.h>
+
+#include "common/dout.h"
+#include <boost/redis/connection.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/strand.hpp>
+#if defined(BOOST_ASIO_HAS_CO_AWAIT)
+#include <boost/asio/consign.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
+using boost::asio::use_awaitable;
+using boost::asio::awaitable;
+using boost::asio::co_spawn;
+#endif
 
 namespace file::listing {
 
@@ -67,11 +86,13 @@ namespace file::listing {
       {}
 
     friend class Inotify;
+    friend class RedisNotify;
   public:
-    static std::unique_ptr<Notify> factory(Notifiable* n, const std::string& bucket_root);
+    static std::unique_ptr<Notify> factory(Notifiable* n, const std::string& bucket_root, const std::string& notification_option);
     
     virtual int add_watch(const std::string& dname, void* opaque) = 0;
     virtual int remove_watch(const std::string& dname) = 0;
+    virtual void send_event(const std::string& dname, const std::string& rex_attr) = 0;
     virtual ~Notify()
       {}
   }; /* Notify */
@@ -262,6 +283,8 @@ namespace file::listing {
       return r;
     }
 
+    virtual void send_event(const std::string& dname, const std::string& rex_attr) override {}
+
     virtual ~Inotify() {
       shutdown.store(true, std::memory_order_release);
       signal_shutdown();
@@ -269,7 +292,162 @@ namespace file::listing {
       close(wfd);
       close(efd);
     }
+
   };
-#endif /* linux */
+
+#endif /* linux */ 
+
+#if defined(BOOST_ASIO_HAS_CO_AWAIT)
+  class RedisNotify : public Notify
+  {
+    using event_callback_map_t = ankerl::unordered_dense::map<std::string, void*>;
+
+    std::thread thrd;
+    boost::asio::io_context io;
+    std::shared_ptr<boost::redis::connection> conn = std::make_shared<boost::redis::connection>(boost::asio::make_strand(io)); //if we move receiver inside then remove this too
+    event_callback_map_t event_callback_map;
+
+    /*Calling thread at the end as class members 
+     * gets initialised in the same order as they're declared */
+    std::thread thrd;
+
+    int initialize()
+    {
+      boost::redis::config cfg;
+      const auto& the_conf = g_conf().get_val<std::string>("rgw_standalone_redis");
+      cfg.addr.host = the_conf.substr(0, the_conf.find(":"));
+      cfg.addr.port = the_conf.substr(the_conf.find(":") + 1, the_conf.length());
+      cfg.clientname = "StandaloneDriver";
+
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+        return -EDESTADDRREQ;
+      }
+
+      std::cout << "The Redis Initialize is being called" << std::endl;
+      conn->async_run(cfg, {}, boost::asio::consign(boost::asio::detached, conn));
+
+      return 0;
+    }
+
+    auto receiver() ->awaitable<void>
+    {
+      boost::redis::generic_response resp;
+      conn->set_receive_response(resp);
+
+      // Loop while reconnection is enabled
+      while (conn->will_reconnect()) {
+        // Loop reading Redis push messages.
+        for (boost::system::error_code ec;;) {
+          co_await conn->async_receive(boost::asio::redirect_error(use_awaitable, ec));
+          if (ec)
+            break;  // Connection lost, break so we can reconnect to channels.
+
+          std::cout << resp.value().at(1).value << " " << resp.value().at(2).value << " "
+            << resp.value().at(3).value << std::endl;
+
+          auto which_bucket = resp.value().at(2).value;
+          auto which_event = resp.value().at(3).value;
+
+          auto event_prefix = which_event.substr(0, which_event.find("_"));
+          auto event_suffix = which_event.substr(which_event.find("_") + 1, which_event.length());
+
+          std::vector<Notifiable::Event> evec;
+
+          auto the_bucket = event_callback_map.find(which_bucket);
+          const auto& the_opaque = the_bucket->second;
+          if(event_suffix == "INVALID") {
+            evec.clear();
+            evec.emplace_back(Notifiable::Event(Notifiable::EventType::INVALIDATE, std::nullopt));
+            n->notify(which_bucket, the_opaque, evec);
+            continue;
+          }
+          else {
+            if(event_suffix == "ADD") {
+              evec.emplace_back(Notifiable::Event(Notifiable::EventType::ADD, event_prefix));
+            }
+            else if(event_suffix == "REMOVE") {
+              evec.emplace_back(Notifiable::Event(Notifiable::EventType::REMOVE, event_prefix));
+            }
+          }
+          if(evec.size()>0) {
+            n->notify(which_bucket, the_opaque, evec);
+          }
+          resp.value().clear();
+        }
+      }
+    }
+
+    using executor_type = boost::asio::any_io_executor;
+    template <class CompletionToken = boost::asio::default_completion_token_t<executor_type>>
+    auto publish(std::shared_ptr<boost::redis::connection> conn, const std::string& dname, const std::string& redis_values) 
+      -> awaitable<void>
+    {
+      boost::redis::request req;
+      boost::redis::generic_response resp;
+      CompletionToken token = CompletionToken{};
+      req.push("PUBLISH", dname, redis_values);
+      co_await conn->async_exec(req, resp, token);
+    }
+
+    template <class CompletionToken = boost::asio::default_completion_token_t<executor_type>>
+    auto subscribe(std::shared_ptr<boost::redis::connection> conn, const std::string& dname) 
+      -> awaitable<void>
+    {
+      boost::redis::request req;
+      boost::redis::generic_response resp;
+      CompletionToken token = CompletionToken{};
+      req.push("SUBSCRIBE", dname);
+      co_await conn->async_exec(req, resp, token);
+    }
+
+    auto co_subscribe(const std::string& dname) -> awaitable<void>
+    {
+      auto ex = co_await boost::asio::this_coro::executor;
+      auto conn = std::make_shared<boost::redis::connection>(ex);
+      co_spawn(ex, subscribe(conn, dname), boost::asio::detached);
+    }
+
+    auto co_publish(const std::string& dname, const std::string& redis_values) -> awaitable<void>
+    {
+      auto ex = co_await boost::asio::this_coro::executor;
+      auto conn = std::make_shared<boost::redis::connection>(ex);
+      co_spawn(ex, publish(conn, dname, redis_values), boost::asio::detached);
+    }
+
+    RedisNotify(Notifiable* n, const std::string& bucket_root)
+      : Notify(n, bucket_root),
+        thrd(&RedisNotify::receiver, this)
+        {
+        initialize();
+        }
+
+    void shutdown()
+    {
+      conn->cancel();
+    }
+
+    friend class Notify;
+  public:
+    
+    virtual int add_watch(const std::string& dname, void* opaque) override {
+      std::cout << "This has entered Redis subscribe" << std::endl;
+      event_callback_map.insert(event_callback_map_t::value_type(dname, opaque));
+      (void)co_subscribe(dname);
+      return 0;
+    }
+
+    virtual void send_event(const std::string& dname, const std::string& rex_attr) override {
+      std::cout << "This has entered Redis Publish" << std::endl;
+      (void)co_publish(dname, rex_attr);
+    }
+
+    virtual int remove_watch(const std::string& dname) override {return 0;}
+
+    virtual ~RedisNotify() {
+      shutdown();
+      thrd.join();
+    }
+  };
+#endif
 
 } // namespace file::listing
