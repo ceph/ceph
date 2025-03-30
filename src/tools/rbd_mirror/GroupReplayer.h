@@ -30,6 +30,7 @@ struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace group_replayer {
+  template <typename> class GroupStateBuilder;
   template <typename> class BootstrapRequest;
 }
 
@@ -114,7 +115,8 @@ public:
     return m_global_group_id;
   }
   inline const std::string& get_local_group_id() const {
-    return m_local_group_id;
+    ceph_assert(m_state_builder != nullptr);
+    return m_state_builder->local_group_id;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false,
@@ -166,6 +168,7 @@ private:
     STATE_STOPPING,
     STATE_STOPPED,
   };
+  typedef boost::optional<State> OptionalState;
 
   struct Listener : public GroupCtx::Listener {
     GroupReplayer *group_replayer;
@@ -173,8 +176,8 @@ private:
     Listener(GroupReplayer *group_replayer) : group_replayer(group_replayer) {
     }
 
-    void stop() {
-      group_replayer->stop(nullptr, false);
+    void handle_notification() {
+      group_replayer->handle_replayer_notification();
     }
   };
 
@@ -195,15 +198,18 @@ private:
   GroupCtx m_local_group_ctx;
   Peers m_peers;
   Peer<ImageCtxT> m_remote_group_peer;
+/*
   std::string m_local_group_id;
   std::string m_remote_group_id;
-
+*/
   bool m_destroy_replayers = false;
 
   mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
   OptionalMirrorGroupStatusState m_status_state =
+    boost::make_optional(false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
+  OptionalMirrorGroupStatusState m_mirror_group_status_state =
     boost::make_optional(false, cls::rbd::MIRROR_GROUP_STATUS_STATE_UNKNOWN);
   int m_last_r = 0;
 
@@ -224,15 +230,15 @@ private:
   AsyncOpTracker m_in_flight_op_tracker;
   Context* m_replayer_check_task = nullptr;
 
+  group_replayer::GroupStateBuilder<ImageCtxT> *m_state_builder = nullptr;
   group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
   group_replayer::Replayer<ImageCtxT> *m_replayer = nullptr;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> m_image_replayers;
 
   Listener m_listener = {this};
-  std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> m_image_replayer_index;
+
   std::map<std::string, cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::map<std::string, std::map<ImageReplayer<ImageCtxT> *, Context *>> m_create_snap_requests;
-  std::set<std::string> m_pending_snap_create;
 
   static std::string state_to_string(const State &state) {
     switch (state) {
@@ -285,10 +291,14 @@ private:
   void remove_group_status(bool force, Context *on_finish);
   void remove_group_status_remote(bool force, Context *on_finish);
 
-  void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
-                                      const std::string &desc);
+  void update_mirror_group_status(bool force, const OptionalState &opt_state);
+  void set_mirror_group_status_update(bool force,
+                                      const OptionalState &opt_state);
+
   void wait_for_ops();
   void handle_wait_for_ops(int r);
+
+  void handle_replayer_notification();
 
   void shut_down(int r);
   void handle_shut_down(int r);

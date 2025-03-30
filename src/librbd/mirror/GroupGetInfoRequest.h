@@ -24,21 +24,23 @@ class GroupGetInfoRequest {
 public:
   static GroupGetInfoRequest *create(librados::IoCtx& group_ioctx,
                                      const std::string& group_name,
+                                     const std::string& group_id,
                                      cls::rbd::MirrorGroup *mirror_group,
                                      PromotionState *promotion_state,
                                      Context *on_finish) {
-    return new GroupGetInfoRequest(group_ioctx, group_name, mirror_group,
-                                   promotion_state, on_finish);
+    return new GroupGetInfoRequest(group_ioctx, group_name, group_id,
+                                   mirror_group, promotion_state, on_finish);
   }
 
   GroupGetInfoRequest(librados::IoCtx& group_ioctx,
                       const std::string& group_name,
+                      const std::string& group_id,
                       cls::rbd::MirrorGroup *mirror_group,
                       PromotionState *promotion_state,
                       Context *on_finish)
     : m_group_ioctx(group_ioctx), m_group_name(group_name),
-      m_mirror_group(mirror_group), m_promotion_state(promotion_state),
-      m_on_finish(on_finish) {
+      m_group_id(group_id), m_mirror_group(mirror_group),
+      m_promotion_state(promotion_state), m_on_finish(on_finish) {
   }
 
   void send();

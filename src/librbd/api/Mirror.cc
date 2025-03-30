@@ -3598,7 +3598,7 @@ void Mirror<I>::group_snapshot_create(IoCtx& group_ioctx,
                                        on_finish);
 
   auto req = mirror::GroupGetInfoRequest<I>::create(
-    group_ioctx, group_name, &ctx->mirror_group, &ctx->promotion_state, ctx);
+    group_ioctx, group_name, "", &ctx->mirror_group, &ctx->promotion_state, ctx);
   req->send();
 }
 
@@ -3849,7 +3849,7 @@ void Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
   auto ctx = new C_GroupGetInfo(mirror_group_info, on_finish);
 
   auto req = mirror::GroupGetInfoRequest<I>::create(
-    io_ctx, group_name, &ctx->mirror_group, &ctx->promotion_state, ctx);
+    io_ctx, group_name, "", &ctx->mirror_group, &ctx->promotion_state, ctx);
   req->send();
 }
 
