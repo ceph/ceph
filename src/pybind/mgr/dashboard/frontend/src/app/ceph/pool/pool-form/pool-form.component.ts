@@ -15,7 +15,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import {
@@ -39,7 +38,7 @@ import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
-import { ComponentCanDeactivate } from '~/app/shared/services/unsaved-changes-guard.service';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -55,14 +54,13 @@ interface FormFieldDescription {
   templateUrl: './pool-form.component.html',
   styleUrls: ['./pool-form.component.scss']
 })
-export class PoolFormComponent extends CdForm implements OnInit, ComponentCanDeactivate {
+export class PoolFormComponent extends CdFormCanDeactivate implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
   @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
 
   permission: Permission;
-  form: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
   info: PoolFormInfo;
   routeParamsSubscribe: any;
@@ -114,10 +112,6 @@ export class PoolFormComponent extends CdForm implements OnInit, ComponentCanDea
     this.createForm();
   }
 
-  canDeactivate(): boolean | Observable<boolean> {
-    console.log('Component canDeactivate called');
-    return !this.form?.dirty || confirm('There are unsaved changes. Do you want to leave?');
-  }
 
   authenticate() {
     this.permission = this.authStorageService.getPermissions().pool;
