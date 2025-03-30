@@ -533,32 +533,34 @@ class MDCache {
    * to the MDSCache function
    */
   class C_MDS_DumpStrayDirCtx : public MDSInternalContext {
-    public:
-    void finish(int r) override {
-      ceph_assert(on_finish);
-      MDSContext::finish(r);
-      on_finish(r);
+  public:
+  void finish(int r) override {
+    ceph_assert(on_finish);
+    MDSContext::finish(r);
+    on_finish(r);
+  }
+  Formatter* get_formatter() const {
+    ceph_assert(dump_formatter);
+    return dump_formatter;
+  }
+  void begin_dump() {
+    if(!started) {
+      started = true;
+      get_formatter()->open_array_section("strays");
     }
-    Formatter* get_formatter() const {
-      ceph_assert(dump_formatter);
-      return dump_formatter;
-    }
-    void begin_dump() {
-      if(!started) {
-        started = true;
-        get_formatter()->open_array_section("strays");
-      }
-    }
-    void end_dump() {
+  }
+  void end_dump() {
+    if(started) {
       get_formatter()->close_section();
     }
-    C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
-     MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
-    private:
-    MDCache *cache;
-    Formatter* dump_formatter;
-    std::function<void(int)> on_finish;
-    bool started = false;
+  }
+  C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
+   MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
+  private:
+  MDCache *cache;
+  Formatter* dump_formatter;
+  std::function<void(int)> on_finish;
+  bool started = false;
   };
 
   MDRequestRef lock_path(filepath p, std::vector<std::string> locks);
