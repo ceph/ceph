@@ -40,7 +40,6 @@
 
 export RBD_MIRROR_NOCLEANUP=1
 export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
-export RBD_MIRROR_MODE=snapshot
 
 group0=test-group0
 group1=test-group1
@@ -100,6 +99,9 @@ echo "Repeat count: $repeat_count"
 echo "Scenario number: $scenario_number"
 echo "Test name: $test_name"
 echo "Features: $RBD_IMAGE_FEATURES"
+
+RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
+RBD_MIRROR_MODE=snapshot
 
 # save and clear the cli args (can't call rbd_mirror_helpers with these defined)
 args=("$@")
