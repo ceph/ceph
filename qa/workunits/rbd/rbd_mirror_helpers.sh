@@ -75,15 +75,6 @@
 #     ../qa/workunits/rbd/rbd_mirror_helpers.sh cleanup
 #
 
-if type xmlstarlet > /dev/null 2>&1; then
-    XMLSTARLET=xmlstarlet
-elif type xml > /dev/null 2>&1; then
-    XMLSTARLET=xml
-else
-    echo "Missing xmlstarlet binary!"
-    exit 1
-fi
-
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-2}
 
 CLUSTER1=cluster1
@@ -393,7 +384,7 @@ peer_add()
             # raced with a remote heartbeat ping -- remove and retry
             sleep $s
             peer_uuid=$(rbd mirror pool info --cluster ${cluster} --pool ${pool} --format xml | \
-                $XMLSTARLET sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
+                xmlstarlet sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
 
             CEPH_ARGS='' rbd --cluster ${cluster} --pool ${pool} mirror pool peer remove ${peer_uuid}
         else
@@ -849,7 +840,7 @@ test_image_replay_state()
     local current_state=stopped
 
     admin_daemons "${cluster}" rbd mirror status ${pool}/${image} --format xml-pretty || { fail; return 1; }
-    test "Replaying" = "$($XMLSTARLET sel -t -v "//image_replayer/state" < "$CMD_STDOUT" )" && current_state=started
+    test "Replaying" = "$(xmlstarlet sel -t -v "//image_replayer/state" < "$CMD_STDOUT" )" && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
@@ -994,7 +985,7 @@ test_snap_present()
     local expected_snap_count=$4
 
     run_cmd "rbd --cluster ${secondary_cluster} snap list -a ${image_spec} --format xml --pretty-format" 
-    test "${expected_snap_count}" = "$($XMLSTARLET sel -t -v "count(//snapshots/snapshot/namespace[primary_snap_id='${snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${expected_snap_count}" = "$(xmlstarlet sel -t -v "count(//snapshots/snapshot/namespace[primary_snap_id='${snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 test_snap_complete()
@@ -1005,7 +996,7 @@ test_snap_complete()
     local expected_complete=$4
 
     run_cmd "rbd --cluster ${secondary_cluster} snap list -a ${image_spec} --format xml --pretty-format" 
-    test "${expected_complete}" = "$($XMLSTARLET sel -t -v "//snapshots/snapshot/namespace[primary_snap_id='${snap_id}']/complete" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${expected_complete}" = "$(xmlstarlet sel -t -v "//snapshots/snapshot/namespace[primary_snap_id='${snap_id}']/complete" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 wait_for_test_snap_present()
@@ -1122,7 +1113,7 @@ count_fields_in_mirror_pool_status()
 
     local field result
     for field in "${fields[@]}"; do
-      result=$($XMLSTARLET sel -t -v "count($field)"  < "$CMD_STDOUT") 
+      result=$(xmlstarlet sel -t -v "count($field)"  < "$CMD_STDOUT")
       _pool_result_count_arr+=( "${result}" )
     done
 }
@@ -1138,7 +1129,7 @@ get_fields_from_mirror_pool_status()
 
     local field result
     for field in "${fields[@]}"; do
-      result=$($XMLSTARLET sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
+      result=$(xmlstarlet sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
       _pool_result_arr+=( "${result}" )
     done
 }
@@ -1154,7 +1145,7 @@ get_fields_from_mirror_group_status()
 
     local field result
     for field in "${fields[@]}"; do
-      result=$($XMLSTARLET sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
+      result=$(xmlstarlet sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
       _group_result_arr+=( "${result}" )
     done
 }
@@ -1170,7 +1161,7 @@ get_fields_from_group_info()
 
     local field result
     for field in "${fields[@]}"; do
-      result=$($XMLSTARLET sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
+      result=$(xmlstarlet sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
       _group_info_result_arr+=( "${result}" )
     done
 }
@@ -1215,7 +1206,7 @@ get_fields_from_mirror_image_status()
 
     local field result
     for field in "${fields[@]}"; do
-      result=$($XMLSTARLET sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
+      result=$(xmlstarlet sel -t -v "$field"  < "$CMD_STDOUT") || { fail "field not found: ${field}"; return; }
       _image_result_arr+=( "${result}" )
     done
 }
@@ -1620,9 +1611,9 @@ get_snap_count()
     
     run_cmd "rbd --cluster=${cluster} snap ls --all --format xml --pretty-format ${image_spec}"
     if [ "${snap}" = '*' ]; then
-        _snap_count="$($XMLSTARLET sel -t -v "count(//snapshots/snapshot)" < "$CMD_STDOUT")"
+        _snap_count="$(xmlstarlet sel -t -v "count(//snapshots/snapshot)" < "$CMD_STDOUT")"
     else
-        _snap_count="$($XMLSTARLET sel -t -v "count(//snapshots/snapshot[name='${snap}'])" < "$CMD_STDOUT")"
+        _snap_count="$(xmlstarlet sel -t -v "count(//snapshots/snapshot[name='${snap}'])" < "$CMD_STDOUT")"
     fi
 }
 
@@ -1985,7 +1976,7 @@ test_image_with_global_id_count()
     local test_image_count=$5
 
     run_cmd "rbd --cluster ${cluster} info ${pool}/${image} --format xml --pretty-format"
-    test "${test_image_count}" = "$($XMLSTARLET sel -t -v "count(//image/mirroring[global_id='${global_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${test_image_count}" = "$(xmlstarlet sel -t -v "count(//image/mirroring[global_id='${global_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 test_image_count()
@@ -1996,7 +1987,7 @@ test_image_count()
     local test_image_count=$4
 
     run_cmd "rbd --cluster ${cluster} ls ${pool} --format xml --pretty-format"
-    test "${test_image_count}" = "$($XMLSTARLET sel -t -v "count(//images[name='${image}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${test_image_count}" = "$(xmlstarlet sel -t -v "count(//images[name='${image}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 test_image_with_global_id_not_present()
@@ -2074,7 +2065,7 @@ get_image_id2()
     local -n _id=$3
 
     run_cmd "rbd --cluster ${cluster} info ${image_spec} --format xml --pretty-format"
-    _id=$($XMLSTARLET sel -t -v "//image/id" "$CMD_STDOUT") || { fail "no id!"; return; }
+    _id=$(xmlstarlet sel -t -v "//image/id" "$CMD_STDOUT") || { fail "no id!"; return; }
 }
 
 get_image_mirroring_global_id()
@@ -2084,7 +2075,7 @@ get_image_mirroring_global_id()
     local -n _global_id=$3
 
     run_cmd "rbd --cluster ${cluster} info ${image_spec} --format xml --pretty-format"
-    _global_id=$($XMLSTARLET sel -t -v "//image/mirroring/global_id" "$CMD_STDOUT") || { fail "not mirrored"; return; }
+    _global_id=$(xmlstarlet sel -t -v "//image/mirroring/global_id" "$CMD_STDOUT") || { fail "not mirrored"; return; }
 }
 
 image_resize()
@@ -2103,7 +2094,7 @@ get_image_size()
     local -n _size=$3
 
     run_cmd "rbd --cluster ${cluster} info ${image_spec} --format xml --pretty-format"
-    _size=$($XMLSTARLET sel -t -v "//image/size" "$CMD_STDOUT") || { fail "unable to determine size"; return; }
+    _size=$(xmlstarlet sel -t -v "//image/size" "$CMD_STDOUT") || { fail "unable to determine size"; return; }
 }
 
 test_image_size_matches()
@@ -2430,9 +2421,9 @@ get_group_snap_count()
     
     run_cmd "rbd --cluster=${cluster} group snap ls --format xml --pretty-format ${group_spec}"
     if [ "${snap}" = '*' ]; then
-        _group_snap_count="$($XMLSTARLET sel -t -v "count(//group_snaps/group_snap)" < "$CMD_STDOUT")"
+        _group_snap_count="$(xmlstarlet sel -t -v "count(//group_snaps/group_snap)" < "$CMD_STDOUT")"
     else
-        _group_snap_count="$($XMLSTARLET sel -t -v "count(//group_snaps/group_snap[snapshot='${snap}'])" < "$CMD_STDOUT")"
+        _group_snap_count="$(xmlstarlet sel -t -v "count(//group_snaps/group_snap[snapshot='${snap}'])" < "$CMD_STDOUT")"
     fi
 }
 
@@ -2444,7 +2435,7 @@ get_group_snap_name()
     local -n _group_snap_name=$4
 
     run_cmd "rbd --cluster=${cluster} group snap ls --format xml --pretty-format ${group_spec}"
-    _group_snap_name="$($XMLSTARLET sel -t -v "//group_snaps/group_snap[id='${snap_id}']/snapshot" < "$CMD_STDOUT")"
+    _group_snap_name="$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${snap_id}']/snapshot" < "$CMD_STDOUT")"
 }
 
 get_pool_count()
@@ -2455,9 +2446,9 @@ get_pool_count()
 
     run_cmd "ceph --cluster ${cluster} osd pool ls --format xml-pretty"
     if [ "${pool_name}" = '*' ]; then
-        _count="$($XMLSTARLET sel -t -v "count(//pools/pool_name)" < "$CMD_STDOUT")"
+        _count="$(xmlstarlet sel -t -v "count(//pools/pool_name)" < "$CMD_STDOUT")"
     else
-        _count="$($XMLSTARLET sel -t -v "count(//pools[pool_name='${pool_name}'])" < "$CMD_STDOUT")"
+        _count="$(xmlstarlet sel -t -v "count(//pools[pool_name='${pool_name}'])" < "$CMD_STDOUT")"
     fi
 }
 
@@ -2469,7 +2460,7 @@ get_pool_obj_count()
     local -n _count=$4
 
     run_cmd "rados --cluster ${cluster} -p ${pool} ls --format xml-pretty"
-    _count="$($XMLSTARLET sel -t -v "count(//objects/object[name='${obj_name}'])" < "$CMD_STDOUT")"
+    _count="$(xmlstarlet sel -t -v "count(//objects/object[name='${obj_name}'])" < "$CMD_STDOUT")"
 }
 
 get_image_snap_id_from_group_snap_info()
@@ -2482,7 +2473,7 @@ get_image_snap_id_from_group_snap_info()
     run_cmd "rbd --cluster=${cluster} group snap info --format xml --pretty-format ${snap_spec}"
     local image_name
     image_name=$(echo "${image_spec}" | awk -F'/' '{print $NF}')
-    _image_snap_id="$($XMLSTARLET sel -t -v "//group_snapshot/images/image[image_name='${image_name}']/snap_id" < "$CMD_STDOUT")"
+    _image_snap_id="$(xmlstarlet sel -t -v "//group_snapshot/images/image[image_name='${image_name}']/snap_id" < "$CMD_STDOUT")"
 }
 
 get_images_from_group_snap_info()
@@ -2493,7 +2484,7 @@ get_images_from_group_snap_info()
 
     run_cmd "rbd --cluster=${cluster} group snap info --format xml --pretty-format ${snap_spec}"
     # sed script removes extra path delimiter if namespace field is blank
-    _images="$($XMLSTARLET sel -t -m "//group_snapshot/images/image" -v "pool_name" -o "/" -v "namespace" -o "/" -v "image_name" -o " " < "$CMD_STDOUT" |  sed s/"\/\/"/"\/"/g )"
+    _images="$(xmlstarlet sel -t -m "//group_snapshot/images/image" -v "pool_name" -o "/" -v "namespace" -o "/" -v "image_name" -o " " < "$CMD_STDOUT" |  sed s/"\/\/"/"\/"/g )"
 }
 
 get_image_snap_complete()
@@ -2503,7 +2494,7 @@ get_image_snap_complete()
     local snap_id=$3
     local -n _is_complete=$4
     run_cmd "rbd --cluster=${cluster} snap list --all --format xml --pretty-format ${image_spec}"
-    _is_complete="$($XMLSTARLET sel -t -v "//snapshots/snapshot[id='${snap_id}']/namespace/complete" < "$CMD_STDOUT")"
+    _is_complete="$(xmlstarlet sel -t -v "//snapshots/snapshot[id='${snap_id}']/namespace/complete" < "$CMD_STDOUT")"
 }
 
 check_group_snap_doesnt_exist()
@@ -2546,7 +2537,7 @@ test_group_present()
     local current_image_count
 
     run_cmd "rbd --cluster ${cluster} group list ${pool} --format xml --pretty-format" || { fail; return 1; }
-    test "${test_group_count}" = "$($XMLSTARLET sel -t -v "count(//groups[name='${group}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${test_group_count}" = "$(xmlstarlet sel -t -v "count(//groups[name='${group}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 
     # if the group is not expected to be present in the list then don't bother checking for images
     test "${test_group_count}" = 0 && return 0
@@ -2605,7 +2596,7 @@ test_group_snap_present()
     # this should not happen, but if it does then retry as a temp workaround
     try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
 
-    test "${expected_snap_count}" = "$($XMLSTARLET sel -t -v "count(//group_snaps/group_snap[id='${group_snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${expected_snap_count}" = "$(xmlstarlet sel -t -v "count(//group_snaps/group_snap[id='${group_snap_id}'])" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 wait_for_test_group_snap_present()
@@ -2654,7 +2645,7 @@ test_group_snap_sync_state()
     # this should not happen, but if it does then retry as a temp workaround
     try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
 
-    test "${expected_state}" = "$($XMLSTARLET sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${expected_state}" = "$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 test_group_snap_sync_complete()
@@ -2712,12 +2703,12 @@ test_group_replay_state()
 
     # Query the state from the rbd-mirror daemon directly
     admin_daemons "${cluster}" rbd mirror group status "${group_spec}" --format xml-pretty || { fail; return 1; }
-    test "Replaying" = "$($XMLSTARLET sel -t -v "//group_replayer/state" < "$CMD_STDOUT" )" && current_state=started
+    test "Replaying" = "$(xmlstarlet sel -t -v "//group_replayer/state" < "$CMD_STDOUT" )" && current_state=started
     # from GroupReplayer.h, valid states are Starting, Replaying, Stopping, Stopped
     test "${test_state}" = "${current_state}" || { fail; return 1; }
     if [ -n "${image_count}" ]; then
-      actual_image_count=$($XMLSTARLET sel -t -v "count(//image_replayer/state)"  < "$CMD_STDOUT")
-      started_image_count=$($XMLSTARLET sel -t -v "count(//image_replayer[state='Replaying'])" < "$CMD_STDOUT")
+      actual_image_count=$(xmlstarlet sel -t -v "count(//image_replayer/state)"  < "$CMD_STDOUT")
+      started_image_count=$(xmlstarlet sel -t -v "count(//image_replayer[state='Replaying'])" < "$CMD_STDOUT")
       test "${image_count}" = "${actual_image_count}" ||  { fail; return 1; }
 
       # If the group is started then check that all images are started too
@@ -2738,11 +2729,11 @@ test_group_replay_state_cli()
 
     # need to use "try" here because the command can fail if the group is not yet present on the remote cluster
     try_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
-    $XMLSTARLET sel -Q -t -v "//group/state[contains(text(), ${test_state})]" "${CMD_STDOUT}" || { fail; return 1; }
+    xmlstarlet sel -Q -t -v "//group/state[contains(text(), ${test_state})]" "${CMD_STDOUT}" || { fail; return 1; }
 
     if [ -n "${image_count}" ]; then
-      actual_image_count=$($XMLSTARLET sel -t -v "count(//group/images/image)"  < "$CMD_STDOUT")
-      started_image_count=$($XMLSTARLET sel -t -v "count(//group/images/image/status[contains(text(), ${test_state})])" < "$CMD_STDOUT")
+      actual_image_count=$(xmlstarlet sel -t -v "count(//group/images/image)"  < "$CMD_STDOUT")
+      started_image_count=$(xmlstarlet sel -t -v "count(//group/images/image/status[contains(text(), ${test_state})])" < "$CMD_STDOUT")
       test "${image_count}" = "${actual_image_count}" ||  { fail; return 1; }
 
       # If the group is started then check that all images are started too
@@ -2763,10 +2754,10 @@ query_replayer_assignment()
     local image_replayers_count
 
     admin_daemon "${cluster}:${instance}" rbd mirror status --format xml-pretty || { fail; return 1; }
-    group_replayers=$($XMLSTARLET sel -t -v "//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/name" < "$CMD_STDOUT") || { group_replayers=''; }
-    image_replayers=$($XMLSTARLET sel -t -v "//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/image_replayers/image_replayer/name" < "$CMD_STDOUT") || { image_replayers=''; }
-    group_replayers_count=$($XMLSTARLET sel -t -v "count(//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/name)" < "$CMD_STDOUT") || { group_replayers_count='0'; }
-    image_replayers_count=$($XMLSTARLET sel -t -v "count(//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/image_replayers/image_replayer/name)" < "$CMD_STDOUT") || { image_replayers_count='0'; }
+    group_replayers=$(xmlstarlet sel -t -v "//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/name" < "$CMD_STDOUT") || { group_replayers=''; }
+    image_replayers=$(xmlstarlet sel -t -v "//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/image_replayers/image_replayer/name" < "$CMD_STDOUT") || { image_replayers=''; }
+    group_replayers_count=$(xmlstarlet sel -t -v "count(//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/name)" < "$CMD_STDOUT") || { group_replayers_count='0'; }
+    image_replayers_count=$(xmlstarlet sel -t -v "count(//mirror_status/pool_replayers/pool_replayer_status/group_replayers/group_replayer/image_replayers/image_replayer/name)" < "$CMD_STDOUT") || { image_replayers_count='0'; }
     _result=("${group_replayers}" "${image_replayers}" "${group_replayers_count}" "${image_replayers_count}")
 }
 
@@ -2912,19 +2903,19 @@ test_group_status_in_pool_dir()
     # error for now and the caller will retry the command.  TODO change back to run_admin_cmd.
     try_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
 
-    test -n "${state_pattern}" && { test "${state_pattern}" = $($XMLSTARLET sel -t -v "//group/state" < "${CMD_STDOUT}" ) || { fail; return 1; } }
-    test -n "${description_pattern}" && { test "${description_pattern}" = "$($XMLSTARLET sel -t -v "//group/description" "${CMD_STDOUT}" )" || { fail; return 1; } }
+    test -n "${state_pattern}" && { test "${state_pattern}" = $(xmlstarlet sel -t -v "//group/state" < "${CMD_STDOUT}" ) || { fail; return 1; } }
+    test -n "${description_pattern}" && { test "${description_pattern}" = "$(xmlstarlet sel -t -v "//group/description" "${CMD_STDOUT}" )" || { fail; return 1; } }
 
     if echo ${state_pattern} | grep '^up+' >/dev/null; then
-        $XMLSTARLET sel -Q -t -v "//group/daemon_service/daemon_id[contains(text(), ${MIRROR_USER_ID_PREFIX})]" "${CMD_STDOUT}" || { fail; return 1; }
+        xmlstarlet sel -Q -t -v "//group/daemon_service/daemon_id[contains(text(), ${MIRROR_USER_ID_PREFIX})]" "${CMD_STDOUT}" || { fail; return 1; }
     else
-        $XMLSTARLET sel -Q -t -v "//group/daemon_service/daemon_id" "${CMD_STDOUT}" && { fail; return 1; }
+        xmlstarlet sel -Q -t -v "//group/daemon_service/daemon_id" "${CMD_STDOUT}" && { fail; return 1; }
     fi
 
-    test "Replaying" = "$($XMLSTARLET sel -t -v "//group_replayer/state" < "$CMD_STDOUT" )" && current_state=started
+    test "Replaying" = "$(xmlstarlet sel -t -v "//group_replayer/state" < "$CMD_STDOUT" )" && current_state=started
     if [ -n "${image_count}" ]; then
-        actual_image_count=$($XMLSTARLET sel -t -v "count(/group/images/image/status)" "$CMD_STDOUT")
-        started_image_count=$($XMLSTARLET sel -t -v "count(/group/images/image/status[contains(text(), 'replaying')])" "$CMD_STDOUT")
+        actual_image_count=$(xmlstarlet sel -t -v "count(/group/images/image/status)" "$CMD_STDOUT")
+        started_image_count=$(xmlstarlet sel -t -v "count(/group/images/image/status[contains(text(), 'replaying')])" "$CMD_STDOUT")
 
         test "${image_count}" = "${actual_image_count}" || { fail; return 1; }
 
