@@ -105,7 +105,7 @@ OP_EV(ReplicaReserveReq);
 /// explicit release request from the Primary
 OP_EV(ReplicaRelease);
 
-template <typename T, has_formatter V>
+template <typename T, fmt::formattable V>
 struct value_event_t : sc::event<T> {
   const V value;
 

@@ -324,7 +324,7 @@ public:
   }
 
   std::string fmt_print() const
-  requires has_formatter<K> {
+  requires fmt::formattable<K> {
     std::string str = "{";
     bool first = true;
     for (auto &&i: *this) {

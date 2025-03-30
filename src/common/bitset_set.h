@@ -412,7 +412,7 @@ class bitset_set {
   }
 
   std::string fmt_print() const
-  requires has_formatter<KeyT> {
+  requires fmt::formattable<KeyT> {
     std::string s = "{";
     int c = (int)size();
     for (auto k : *this) {
