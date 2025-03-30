@@ -95,7 +95,6 @@ def process_type(file_path, type):
     return 0  # File passed the test
 
 def test_object_wrapper(type, vdir, arversion, current_ver):
-    global incompat_paths
     _numtests = 0
     _failed = 0
     unrecognized = ""
@@ -155,8 +154,6 @@ def should_skip_object(type, arversion, current_ver):
     Note: The function relies on two global variables, 'backward_compat' and 'fast_shouldnt_skip',
     which should be defined and updated appropriately in the calling code.
     """
-    global backward_compat
-    global fast_shouldnt_skip
 
     if type in fast_shouldnt_skip:
         debug_print(f"fast Type {type} does not exist in the backward compatibility structure.")
