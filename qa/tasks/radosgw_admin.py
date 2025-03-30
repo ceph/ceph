@@ -327,7 +327,6 @@ def task(ctx, config):
     """
     Test radosgw-admin functionality against a running rgw instance.
     """
-    global log
 
     assert ctx.rgw.config, \
         "radosgw_admin task needs a config passed from the rgw task"
