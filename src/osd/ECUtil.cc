@@ -585,8 +585,66 @@ int shard_extent_map_t::encode_parity_delta(
   return 0;
 }
 
-int shard_extent_map_t::decode(ErasureCodeInterfaceRef &ec_impl,
-                               shard_extent_set_t want,
+void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
+                                       const shard_id_set &shards) {
+  for (auto &shard : shards) {
+    if (!pad_to.contains(shard)) {
+      continue;
+    }
+    for (auto &[off, length] : pad_to.at(shard)) {
+      bufferlist bl;
+      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      insert_in_shard(shard, off, bl);
+    }
+  }
+}
+
+void shard_extent_map_t::pad_on_shards(const extent_set &pad_to,
+                                       const shard_id_set &shards) {
+  for (auto &shard : shards) {
+    for (auto &[off, length] : pad_to) {
+      bufferlist bl;
+      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      insert_in_shard(shard, off, bl);
+    }
+  }
+}
+
+/* Trim to the specified extent set. Note that this will panic if the shard
+ * extent set does not contain the extents described in trim_to.
+ */
+void shard_extent_map_t::trim(const shard_extent_set_t &trim_to) {
+
+  // Erase any shards missing from trim_to
+  for ( auto iter = extent_maps.begin(); iter != extent_maps.end();) {
+    auto && [shard, emap] = *iter;
+    if (!trim_to.contains(shard)) {
+      iter = extent_maps.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+  for (auto &&[shard, want_eset] : trim_to) {
+    extent_set tmp;
+    ceph_assert(extent_maps.contains(shard));
+    extent_map &emap = extent_maps.at(shard);
+    emap.to_interval_set(tmp);
+    ceph_assert(tmp.contains(want_eset));
+
+    // Now trim to what was requested.
+    if (tmp.size() != want_eset.size()) {
+      tmp.subtract(trim_to.at(shard));
+      for (auto [off, len] : tmp) {
+        emap.erase(off, len);
+      }
+    }
+  }
+
+  compute_ro_range();
+}
+
+int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
+                               const shard_extent_set_t &want,
                                uint64_t object_size) {
   shard_id_set want_set;
   shard_id_set have_set;
@@ -610,14 +668,7 @@ int shard_extent_map_t::decode(ErasureCodeInterfaceRef &ec_impl,
   shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
   int r = 0;
   if (!decode_set.empty()) {
-
-    for (auto &shard : decode_set) {
-      for (auto &[off, length] : want[shard]) {
-        bufferlist bl;
-        bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
-        insert_in_shard(shard, off, bl);
-      }
-    }
+    pad_on_shards(want, decode_set);
     /* If we are going to be encoding, we need to make sure all the necessary
      * shards are decoded. The get_min_available functions should have already
      * worked out what needs to be read for this.
@@ -626,23 +677,11 @@ int shard_extent_map_t::decode(ErasureCodeInterfaceRef &ec_impl,
     for (auto shard : encode_set) {
       decode_for_parity.insert(want.at(shard));
     }
-    for (auto &[off, length] : decode_for_parity) {
-      for (auto shard : decode_set) {
-        bufferlist bl;
-        bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
-        insert_in_shard(shard, off, bl);
-      }
-    }
+    pad_on_shards(decode_for_parity, decode_set);
     r = _decode(ec_impl, want_set, decode_set);
   }
   if (!r && !encode_set.empty()) {
-    for (auto && shard : encode_set) {
-      for (auto &[off, length] : want[shard]) {
-        bufferlist bl;
-        bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
-        insert_in_shard(shard, off, bl);
-      }
-    }
+    pad_on_shards(want, encode_set);
     r = _encode(ec_impl);
   }
 
@@ -655,37 +694,12 @@ int shard_extent_map_t::decode(ErasureCodeInterfaceRef &ec_impl,
    * they can invent buffers outside the want extent_set which are actually
    * invalid.  So here, we trim off those buffers.
    */
-
-  for ( auto iter = extent_maps.begin(); iter != extent_maps.end();) {
-    auto && [shard, emap] = *iter;
-    if (!want.contains(shard)) {
-      iter = extent_maps.erase(iter);
-    } else {
-      ++iter;
-    }
-  }
-  for (auto &&[shard, want_eset] : want) {
-    extent_set tmp;
-    ceph_assert(extent_maps.contains(shard));
-    extent_map &emap = extent_maps.at(shard);
-    emap.to_interval_set(tmp);
-    ceph_assert(tmp.contains(want_eset));
-
-    // Now trim to what was requested.
-    if (tmp.size() != want_eset.size()) {
-      tmp.subtract(want.at(shard));
-      for (auto [off, len] : tmp) {
-        emap.erase(off, len);
-      }
-    }
-  }
-
-  compute_ro_range();
+  trim(want);
 
   return 0;
 }
 
-int shard_extent_map_t::_decode(ErasureCodeInterfaceRef &ec_impl,
+int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
                                 const shard_id_set &want_set,
                                 const shard_id_set &need_set) {
   bool rebuild_req = false;

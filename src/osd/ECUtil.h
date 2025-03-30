@@ -916,8 +916,17 @@ public:
   int _encode(const ErasureCodeInterfaceRef &ec_impl);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
                           shard_extent_map_t &old_sem);
-  int decode(ErasureCodeInterfaceRef &ec_impl, ECUtil::shard_extent_set_t want, uint64_t object_size);
-  int _decode(ErasureCodeInterfaceRef &ec_impl, const shard_id_set &want_set,
+
+  void pad_on_shards(const shard_extent_set_t &pad_to,
+                     const shard_id_set &shards);
+  void pad_on_shards(const extent_set &pad_to,
+                     const shard_id_set &shards);
+  void trim(const shard_extent_set_t &trim_to);
+  int decode(const ErasureCodeInterfaceRef &ec_impl,
+             const shard_extent_set_t &want,
+             uint64_t object_size);
+  int _decode(const ErasureCodeInterfaceRef &ec_impl,
+              const shard_id_set &want_set,
               const shard_id_set &need_set);
   void get_buffer(shard_id_t shard, uint64_t offset, uint64_t length,
                   buffer::list &append_to) const;
