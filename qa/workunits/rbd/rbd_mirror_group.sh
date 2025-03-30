@@ -13,8 +13,8 @@ else
   set -ex
 fi  
 
-MIRROR_POOL_MODE=image
-MIRROR_IMAGE_MODE=snapshot
+RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
+RBD_MIRROR_MODE=snapshot
 
 . $(dirname $0)/rbd_mirror_helpers.sh
 
