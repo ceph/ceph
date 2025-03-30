@@ -8,19 +8,19 @@
 
 namespace file::listing {
 
-  std::unique_ptr<Notify> Notify::factory(Notifiable* n,
-					  const std::string& bucket_root,
-					  bool use_inotify)
+  std::unique_ptr<Notify> Notify::factory(Notifiable* n, const std::string& bucket_root, const std::string& notification_option)
   {
-    if (!use_inotify) {
-      return std::unique_ptr<Notify>(new NullNotify(n, bucket_root));
-    }
+    if(notification_option == "RedisNotify") {
+#if defined(BOOST_ASIO_HAS_CO_AWAIT)
+      return std::unique_ptr<Notify>(new RedisNotify(n, bucket_root));
+#endif
+    } else {
 #ifdef __linux__
-    return std::unique_ptr<Notify>(new Inotify(n, bucket_root));
+      return std::unique_ptr<Notify>(new Inotify(n, bucket_root));
 #else
 #error currently, rgw posix driver requires inotify
 #endif /* linux */
+    }
     return nullptr;
   } /* Notify::factory */
-
-} // namespace file::listing
+}

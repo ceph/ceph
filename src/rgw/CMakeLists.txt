@@ -368,6 +368,7 @@ if(WITH_RADOSGW_STANDALONE)
   list(APPEND librgw_driver_standalone_srcs
     ${librgw_posix_srcs}
     driver/posix/rgw_standalone.cc
+    rgw_redis_driver.cc
   )
 endif()
 

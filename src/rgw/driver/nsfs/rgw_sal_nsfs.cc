@@ -2171,6 +2171,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     new BucketCache(
       this, base_path,
       g_conf().get_val<std::string>("rgw_nsfs_database_root"),
+      g_conf().get_val<std::string>("rgw_standalone_notification_option"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_max_buckets"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_lanes"),
       g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),

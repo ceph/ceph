@@ -1116,6 +1116,7 @@ public:
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
+    std::string notif_option = "RedisNotify";
     root_dir =
         std::make_unique<posix::Directory>(base_path, nullptr, env->cct.get());
     int ret = root_dir->open(env->dpp);
@@ -1137,7 +1138,7 @@ public:
     quota_handler = RGWQuotaHandler::generate_handler(this, false);
     /* ordered listing cache */
     bucket_cache.reset(
-        new posix::BucketCache(this, base_path, cache_base, 100, 3, 3, 3));
+        new posix::BucketCache(this, base_path, cache_base, notif_option, 100, 3, 3, 3));
     multipart_cache.reset(new TestMultipartCache<cohort::lru::NullYieldPolicy>());
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
