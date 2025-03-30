@@ -367,7 +367,7 @@ class BucketTrimShardCollectCR : public RGWShardCollectCR {
   size_t i{0}; //< index of current shard marker
 
   int handle_result(int r) override {
-    if (r == -ENOENT) { // ENOENT is not a fatal error
+    if (r == -ENODATA) { // ENODATA is not a fatal error
       return 0;
     }
     if (r < 0) {
@@ -791,10 +791,6 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       set_status("trimming bilog shards");
       yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, totrim.layout.in_index,
 					      min_markers));
-      // ENODATA just means there were no keys to trim
-      if (retcode == -ENODATA) {
-	retcode = 0;
-      }
       if (retcode < 0) {
 	ldpp_dout(dpp, 4) << "failed to trim bilog shards: "
 			  << cpp_strerror(retcode) << dendl;
