@@ -17,7 +17,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { StorageClass, ZoneGroupDetails } from '../models/rgw-storage-class.model';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { Router } from '@angular/router';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Lifecycle, Rule, Tag } from '../models/rgw-bucket-lifecycle';
@@ -32,7 +32,7 @@ export interface Tags {
   templateUrl: './rgw-bucket-tiering-form.component.html',
   styleUrls: ['./rgw-bucket-tiering-form.component.scss']
 })
-export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
+export class RgwBucketTieringFormComponent extends CdFormCanDeactivate implements OnInit {
   tieringForm: CdFormGroup;
   tagsToRemove: Tags[] = [];
   storageClassList: StorageClass[] = null;
@@ -105,6 +105,10 @@ export class RgwBucketTieringFormComponent extends CdForm implements OnInit {
       days: [60, [Validators.required, CdValidators.number(false)]]
     });
     this.loadStorageClass();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.tieringForm;
   }
 
   checkIfRuleHasFilters(rule: Rule) {

@@ -64,9 +64,6 @@ export class FormButtonPanelComponent implements OnInit {
   }
 
   backAction() {
-    const shouldStay = this.form?.dirty &&
-      !confirm($localize`You have unsaved changes. Are you sure you want to leave?`);
-    if (shouldStay) return;
     if (this.backActionEvent.observers.length === 0) {
       if (this.modalForm && this.cdsModalService.hasOpenModals()) {
         this.cdsModalService.dismissAll();

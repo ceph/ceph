@@ -56,7 +56,7 @@ import { SmbShareFormComponent } from './ceph/smb/smb-share-form/smb-share-form.
 import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join-auth-form.component';
 import { SmbUsersgroupsFormComponent } from './ceph/smb/smb-usersgroups-form/smb-usersgroups-form.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
-import { UnsavedChangesGuard } from './shared/services/unsaved-changes-guard.service';
+
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -377,7 +377,7 @@ const routes: Routes = [
         path: 'pool',
         data: { breadcrumbs: 'Cluster/Pools' },
         loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule),
-        canDeactivate: [UnsavedChangesGuard]
+      
       },
       // Block
       {

@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -19,7 +19,7 @@ import { Location } from '@angular/common';
   templateUrl: './smb-join-auth-form.component.html',
   styleUrls: ['./smb-join-auth-form.component.scss']
 })
-export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
+export class SmbJoinAuthFormComponent extends CdFormCanDeactivate implements OnInit {
   form: CdFormGroup;
   action: string;
   resource: string;
@@ -61,6 +61,10 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
         this.form.get('linkedToCluster').setValue(joinAuth.linked_to_cluster);
       });
     }
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.form;
   }
 
   createForm() {

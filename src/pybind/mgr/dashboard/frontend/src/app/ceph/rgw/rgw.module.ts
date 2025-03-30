@@ -95,6 +95,7 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { UnsavedChangesGuard } from '~/app/shared/services/unsaved-changes-guard.service';
 
 @NgModule({
   imports: [
@@ -213,11 +214,13 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwUserFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:uid`,
         component: RgwUserFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -230,11 +233,13 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwUserAccountsFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:id`,
         component: RgwUserAccountsFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -267,6 +272,7 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: CrudFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: {
           breadcrumbs: ActionLabels.CREATE
         }
@@ -274,6 +280,7 @@ const routes: Routes = [
       {
         path: URLVerbs.EDIT,
         component: CrudFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: {
           breadcrumbs: ActionLabels.EDIT
         }
@@ -288,11 +295,13 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwBucketFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:bid`,
         component: RgwBucketFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -327,16 +336,19 @@ const routes: Routes = [
           {
             path: `${URLVerbs.CREATE}`,
             component: RgwMultisiteSyncPolicyFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           },
           {
             path: `${URLVerbs.EDIT}/:groupName`,
             component: RgwMultisiteSyncPolicyFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           },
           {
             path: `${URLVerbs.EDIT}/:groupName/:bucketName`,
             component: RgwMultisiteSyncPolicyFormComponent,
+            canDeactivate: [UnsavedChangesGuard],
             outlet: 'modal'
           }
         ]
@@ -351,11 +363,13 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: RgwStorageClassFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class`,
         component: RgwStorageClassFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -378,11 +392,13 @@ const routes: Routes = [
       {
         path: URLVerbs.CREATE,
         component: NfsFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
         path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
         component: NfsFormComponent,
+        canDeactivate: [UnsavedChangesGuard],
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
@@ -395,6 +411,8 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RgwModule, RouterModule.forChild(routes)]
+  imports: [RgwModule, RouterModule.forChild(routes)],
+  providers: [UnsavedChangesGuard]
+
 })
 export class RoutedRgwModule {}

@@ -29,7 +29,7 @@ import {
   SSL_PROTOCOLS,
   SSL_CIPHERS
 } from '~/app/shared/constants/app.constants';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -44,7 +44,7 @@ import { TimerService } from '~/app/shared/services/timer.service';
   templateUrl: './service-form.component.html',
   styleUrls: ['./service-form.component.scss']
 })
-export class ServiceFormComponent extends CdForm implements OnInit {
+export class ServiceFormComponent extends CdFormCanDeactivate implements OnInit {
   public sub = new Subscription();
 
   readonly MDS_SVC_ID_PATTERN = /^[a-zA-Z_.-][a-zA-Z0-9_.-]*$/;
@@ -136,6 +136,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       })
     };
     this.createForm();
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.serviceForm;
   }
 
   createForm() {

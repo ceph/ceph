@@ -8,7 +8,7 @@ import { forkJoin as observableForkJoin } from 'rxjs';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -19,7 +19,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './mgr-module-form.component.html',
   styleUrls: ['./mgr-module-form.component.scss']
 })
-export class MgrModuleFormComponent extends CdForm implements OnInit {
+export class MgrModuleFormComponent extends CdFormCanDeactivate implements OnInit {
   mgrModuleForm: CdFormGroup;
   moduleName = '';
   moduleOptions: any[] = [];
@@ -56,6 +56,10 @@ export class MgrModuleFormComponent extends CdForm implements OnInit {
         }
       );
     });
+  }
+
+  getFormGroup(): CdFormGroup {
+    return this.mgrModuleForm;
   }
 
   getValidators(moduleOption: any): ValidatorFn[] {

@@ -9,7 +9,7 @@ import { ConfigFormModel } from '~/app/shared/components/config-option/config-op
 import { ConfigOptionTypes } from '~/app/shared/components/config-option/config-option.types';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
@@ -23,7 +23,7 @@ const RGW = 'rgw';
   templateUrl: './configuration-form.component.html',
   styleUrls: ['./configuration-form.component.scss']
 })
-export class ConfigurationFormComponent extends CdForm implements OnInit {
+export class ConfigurationFormComponent extends CdFormCanDeactivate implements OnInit {
   configForm: CdFormGroup;
   response: ConfigFormModel;
   type: string;
@@ -73,6 +73,11 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
         this.loadingReady();
       });
     });
+  }
+
+
+  getFormGroup(): CdFormGroup {
+    return this.configForm;
   }
 
   getValidators(configOption: any): ValidatorFn[] {

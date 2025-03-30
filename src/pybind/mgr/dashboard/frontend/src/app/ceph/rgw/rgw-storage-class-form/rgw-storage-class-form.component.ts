@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormCanDeactivate } from '~/app/shared/forms/cd-form-can-deactivate';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import _ from 'lodash';
@@ -27,7 +27,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './rgw-storage-class-form.component.html',
   styleUrls: ['./rgw-storage-class-form.component.scss']
 })
-export class RgwStorageClassFormComponent extends CdForm implements OnInit {
+export class RgwStorageClassFormComponent extends CdFormCanDeactivate implements OnInit {
   storageClassForm: CdFormGroup;
   action: string;
   resource: string;
@@ -120,6 +120,11 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             .setValue(response.multipart_min_part_size || '');
         });
     }
+  }
+
+
+  getFormGroup(): CdFormGroup {
+    return this.storageClassForm;
   }
 
   createForm() {

@@ -61,6 +61,7 @@ export class PoolFormComponent extends CdFormCanDeactivate implements OnInit {
   @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
 
   permission: Permission;
+  form: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
   info: PoolFormInfo;
   routeParamsSubscribe: any;
@@ -112,6 +113,9 @@ export class PoolFormComponent extends CdFormCanDeactivate implements OnInit {
     this.createForm();
   }
 
+  getFormGroup(): CdFormGroup {
+    return this.form;
+  }
 
   authenticate() {
     this.permission = this.authStorageService.getPermissions().pool;
