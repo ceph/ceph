@@ -39,6 +39,7 @@ import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 import { PoolEditModeResponseModel } from '../../block/mirroring/pool-edit-mode-modal/pool-edit-mode-response.model';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ComponentCanDeactivate } from '~/app/shared/services/unsaved-changes-guard.service';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -54,7 +55,7 @@ interface FormFieldDescription {
   templateUrl: './pool-form.component.html',
   styleUrls: ['./pool-form.component.scss']
 })
-export class PoolFormComponent extends CdForm implements OnInit {
+export class PoolFormComponent extends CdForm implements OnInit, ComponentCanDeactivate {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
@@ -111,6 +112,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
     this.resource = $localize`pool`;
     this.authenticate();
     this.createForm();
+  }
+
+  canDeactivate(): boolean | Observable<boolean> {
+    console.log('Component canDeactivate called');
+    return !this.form?.dirty || confirm('There are unsaved changes. Do you want to leave?');
   }
 
   authenticate() {
