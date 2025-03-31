@@ -62,9 +62,6 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::OMAP_GET_VALUES:
       name = "omap_get_values";
       break;
-    case op_type_t::OMAP_GET_VALUES2:
-      name = "omap_get_values2";
-      break;
     case op_type_t::OMAP_ITERATE:
       name = "omap_iterate";
       break;
@@ -166,7 +163,6 @@ void SeaStore::Shard::register_metrics()
     {op_type_t::GET_ATTRS,        sm::label_instance("latency", "GET_ATTRS")},
     {op_type_t::STAT,             sm::label_instance("latency", "STAT")},
     {op_type_t::OMAP_GET_VALUES,  sm::label_instance("latency", "OMAP_GET_VALUES")},
-    {op_type_t::OMAP_GET_VALUES2, sm::label_instance("latency", "OMAP_GET_VALUES2")},
     {op_type_t::OMAP_ITERATE,     sm::label_instance("latency", "OMAP_ITERATE")},
   };
 
@@ -1424,34 +1420,6 @@ SeaStore::Shard::omap_get_values(
     auto root = select_log_omap_root(onode);
     return omaptree_get_values(
       t, std::move(root), keys);
-  }).finally([this] {
-    assert(shard_stats.pending_read_num);
-    --(shard_stats.pending_read_num);
-  });
-}
-
-SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
-SeaStore::Shard::omap_get_values(
-  CollectionRef ch,
-  const ghobject_t &oid,
-  const std::optional<std::string> &start,
-  uint32_t op_flags)
-{
-  ++(shard_stats.read_num);
-  ++(shard_stats.pending_read_num);
-
-  return repeat_with_onode<omap_values_paged_t>(
-    ch,
-    oid,
-    Transaction::src_t::READ,
-    "omap_get_values2",
-    op_type_t::OMAP_GET_VALUES2,
-    op_flags,
-    [this, start](auto &t, auto &onode)
-  {
-    auto root = select_log_omap_root(onode);
-    return omaptree_get_values(
-      t, std::move(root), start);
   }).finally([this] {
     assert(shard_stats.pending_read_num);
     --(shard_stats.pending_read_num);
