@@ -112,9 +112,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         this.clusterResponse = res;
 
         const customDnsList = this.clusterResponse.custom_dns;
-        const customDnsFormArray = this.smbForm.get('custom_dns') as FormArray;
         const joinSourcesArray = this.smbForm.get('joinSources') as FormArray;
-        const pubAddresses = this.clusterResponse.public_addrs;
+        const publicAddresses = this.clusterResponse.public_addrs;
         const publicAddrsFormArray = this.smbForm.get('public_addrs') as FormArray;
 
         if (this.clusterResponse.clustering) {
@@ -125,7 +124,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         }
         if (customDnsList?.length) {
           customDnsList.forEach((dns: string) => {
-            customDnsFormArray.push(new FormControl(dns));
+            this.addCustomDns(dns);
           });
         }
         if (this.clusterResponse.auth_mode == AUTHMODE.activeDirectory) {
@@ -150,14 +149,9 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         if (this.clusterResponse.placement.count) {
           this.smbForm.get('count').setValue(this.clusterResponse.placement.count);
         }
-        if (pubAddresses?.length) {
-          pubAddresses.forEach((pubAddress: PublicAddress) => {
-            publicAddrsFormArray.push(
-              this.formBuilder.group({
-                address: [pubAddress.address, Validators.required],
-                destination: [pubAddress.destination || '']
-              })
-            );
+        if (publicAddresses?.length) {
+          publicAddresses.forEach((publicAddress: PublicAddress) => {
+            publicAddrsFormArray.push(this.newPublicAddrs(publicAddress));
           });
         }
       });
@@ -182,7 +176,16 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   createForm() {
     this.smbForm = this.formBuilder.group({
       cluster_id: new FormControl('', {
-        validators: [Validators.required]
+        validators: [Validators.required],
+        asyncValidators: [
+          CdValidators.unique(
+            this.smbService.clusterExists,
+            this.smbService,
+            null,
+            null,
+            this.smbForm?.get('cluster_id')?.value
+          )
+        ]
       }),
       auth_mode: [
         AUTHMODE.activeDirectory,
@@ -202,12 +205,16 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         ]
       ],
       count: [1],
-      custom_dns: new FormArray([]),
+      custom_dns: new FormArray([], {
+        validators: CdValidators.ip(4)
+      }),
       joinSources: new FormArray([]),
       clustering: new UntypedFormControl(
         CLUSTERING.Default.charAt(0).toUpperCase() + CLUSTERING.Default.slice(1)
       ),
-      public_addrs: new FormArray([])
+      public_addrs: new FormArray([], {
+        validators: CdValidators.networkAddress()
+      })
     });
 
     this.orchService.status().subscribe((status) => {
@@ -442,17 +449,27 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     this.router.navigate([`${USERSGROUPS_URL}/${URLVerbs.CREATE}`]);
   }
 
-  addCustomDns() {
-    const control = new FormControl('', Validators.required);
+  addCustomDns(dns: string = '') {
+    const control = new FormControl(`${dns}`, {
+      validators: [CdValidators.ip(4)]
+    });
     this.custom_dns.push(control);
   }
 
-  addPublicAddrs() {
-    const control = this.formBuilder.group({
-      address: ['', Validators.required],
-      destination: ['']
+  newPublicAddrs(publicAddress: PublicAddress = { address: '', destination: '' }) {
+    return this.formBuilder.group({
+      address: [
+        `${publicAddress?.address}`,
+        {
+          validators: [Validators.required, CdValidators.networkAddress()]
+        }
+      ],
+      destination: [`${publicAddress?.destination}`]
     });
-    this.public_addrs.push(control);
+  }
+
+  addPublicAddrs() {
+    this.public_addrs.push(this.newPublicAddrs());
   }
 
   removeUserGroupSetting(index: number) {
