@@ -10,7 +10,7 @@ import { AbstractControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { Observable, forkJoin } from 'rxjs';
+import { Observable, forkJoin, combineLatest, BehaviorSubject } from 'rxjs';
 import * as xml2js from 'xml2js';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -80,6 +80,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   aclPermissions: AclPermissionsType[] = [aclPermission.FullControl];
   multisiteStatus$: Observable<any>;
   isDefaultZoneGroup$: Observable<boolean>;
+  multisiteData$ = new BehaviorSubject<{ status: any; isDefaultZg: boolean } | null>(null);
+  isMultisiteLoading = true;
 
   get isVersioningEnabled(): boolean {
     return this.bucketForm.getValue('versioning');
@@ -145,7 +147,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       'mfa-token-serial': [''],
       'mfa-token-pin': [''],
       lock_enabled: [{ value: false, disabled: this.editing }],
-      encryption_enabled: [null],
+      encryption_enabled: [{ value: null, disabled: !this.kmsConfigured && !this.s3Configured }], 
       encryption_type: [
         null,
         [
@@ -169,7 +171,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]],
-      replication: [false]
+      replication: [{ value: false, disabled: true }]
     });
   }
 
@@ -190,12 +192,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
     this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
-      if (data['SSE_KMS']?.length > 0) {
-        this.kmsConfigured = true;
-      }
-      if (data['SSE_S3']?.length > 0) {
-        this.s3Configured = true;
-      }
+      this.s3Configured = data.s3 && Object.keys(data.s3).length > 0;
+      this.kmsConfigured = data.kms && Object.keys(data.kms).length > 0;
+      this.toggleEncryption();
       // Set the encryption type based on the configurations
       if (this.kmsConfigured && this.s3Configured) {
         this.bucketForm.get('encryption_type').setValue('');
@@ -303,9 +302,38 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             this.filterAclPermissions();
           }
         }
+
+        combineLatest([this.multisiteStatus$, this.isDefaultZoneGroup$]).subscribe(
+          ([status, isDefaultZg]) => {
+            this.multisiteData$.next({ status, isDefaultZg });
+            this.isMultisiteLoading = false;
+
+            if (!isDefaultZg && !status.available) {
+              this.bucketForm.get('replication')?.disable();
+            } else {
+              this.bucketForm.get('replication')?.enable();
+            }
+            this.changeDetectorRef.detectChanges();
+          },
+          (error) => {
+            this.isMultisiteLoading = false;
+            this.notificationService.show(
+              NotificationType.error,
+              $localize`Failed to load multisite status: ${error.message}`
+            );
+          }
+        );
         this.loadingReady();
       });
     });
+  }
+
+  toggleEncryption() {
+    if (!this.kmsConfigured && !this.s3Configured) {
+      this.bucketForm.get('encryption_enabled')?.disable();
+    } else {
+      this.bucketForm.get('encryption_enabled')?.enable();
+    }
   }
 
   goToListView() {
@@ -590,7 +618,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   /*
    Set the selector's options to the available options depending
-   on the selected Grantee and reset it's value
+   on the selected Grantee and reset its value
    */
   onSelectionFilter() {
     this.filterAclPermissions();
