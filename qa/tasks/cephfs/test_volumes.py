@@ -5100,11 +5100,7 @@ class TestPausePurging(TestVolumesHelper):
         return sv_path
 
     def _assert_sv_is_absent_in_trash(self, sv, sv_path, sv_files):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-            strip()
-
-        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trash_sv_path = trash_sv_path.replace(sv, '')
+        trash_sv_path = sv_path.replace('_nogroup', '_deleting/')
 
         try:
             sv_files_new = self.mount_a.get_shell_stdout(
@@ -5119,11 +5115,7 @@ class TestPausePurging(TestVolumesHelper):
             self.assertNotIn(filename, sv_files_new)
 
     def _assert_trashed_sv_is_unpurged(self, sv, sv_path, sv_files):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-                    strip()
-
-        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trash_sv_path = trash_sv_path.replace(sv, '')
+        trash_sv_path = sv_path.replace('_nogroup', '_deleting/')
         sv_files_new = self.mount_a.get_shell_stdout(f'sudo ls {trash_sv_path}').\
             strip()
 
@@ -5187,11 +5179,7 @@ class TestPausePurging(TestVolumesHelper):
         self._wait_for_trash_empty()
 
     def _get_trashed_sv_path(self, sv, sv_path):
-        uuid = self.mount_a.get_shell_stdout('sudo ls volumes/_deleting').\
-            strip()
-
-        trashed_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
-        trashed_sv_path = trashed_sv_path.replace(sv, '')
+        trashed_sv_path = sv_path.replace('_nogroup', '_deleting/')
         return trashed_sv_path
 
     def _get_num_of_files_in_trashed_sv(self, trashed_sv_path):
