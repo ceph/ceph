@@ -88,7 +88,9 @@ function(do_build_boost root_dir version)
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-    set(toolset clang)
+  # A C++11 capable compiler is required for building the B2 engine.
+  # Toolset 'clang' does not support C++11.
+    set(toolset gcc)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
@@ -177,8 +179,8 @@ function(do_build_boost root_dir version)
   include(ExternalProject)
   ExternalProject_Add(Boost
     ${source_dir}
-    CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
-    BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
+    CONFIGURE_COMMAND ${configure_command}
+    BUILD_COMMAND ${build_command}
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${Boost_LIBRARIES}
     INSTALL_COMMAND ${install_command}
