@@ -440,6 +440,20 @@ public:
     return view->is_data_stable();
   }
 
+  template <typename T>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_parent_node(
+    Transaction &t,
+    BaseChildNode<T, typename T::key_type> &extent)
+  {
+    auto &parent = *extent.get_parent_node();
+    if (!parent.is_pending_in_trans(t.get_trans_id())) {
+      t.maybe_add_to_read_set(&parent);
+    }
+    return parent.wait_io().then([&parent] {
+      return TCachedExtentRef<T>(&parent);
+    });
+  }
+
   get_extent_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,

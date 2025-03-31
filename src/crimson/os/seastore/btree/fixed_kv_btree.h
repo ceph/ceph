@@ -440,6 +440,17 @@ public:
 
   iterator make_partial_iter(
     op_context_t c,
+    cursor_t &cursor)
+  {
+    return make_partial_iter(
+      c,
+      cursor.parent->template cast<leaf_node_t>(),
+      cursor.key,
+      cursor.pos);
+  }
+
+  iterator make_partial_iter(
+    op_context_t c,
     TCachedExtentRef<leaf_node_t> leaf,
     node_key_t key,
     uint16_t pos)

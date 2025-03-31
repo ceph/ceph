@@ -1416,6 +1416,7 @@ struct transaction_manager_test_t :
 	auto l_clone_pin = clone_pin(t, l_clone_offset, lpin);
 	auto r_clone_pin = clone_pin(t, r_clone_offset, rpin);
         //split left
+	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
         ASSERT_FALSE(pin1.is_null());
         auto pin2 = remap_pin(t, std::move(pin1), 0, 8 << 10);  
@@ -1426,6 +1427,7 @@ struct transaction_manager_test_t :
         EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
 
         //split right
+	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
         ASSERT_FALSE(pin4.is_null());
         auto pin5 = remap_pin(t, std::move(pin4), 8 << 10, 8 << 10);  
