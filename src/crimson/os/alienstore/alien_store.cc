@@ -424,47 +424,6 @@ auto AlienStore::omap_get_values(CollectionRef ch,
   });
 }
 
-auto AlienStore::omap_get_values(CollectionRef ch,
-                                 const ghobject_t &oid,
-                                 const std::optional<string> &start,
-				 uint32_t op_flags)
-  -> read_errorator::future<std::tuple<bool, omap_values_t>>
-{
-  logger().debug("{} with_start", __func__);
-  assert(tp);
-  return do_with_op_gate(omap_values_t{}, [=, this] (auto &values) {
-    return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, this, &values] {
-      auto c = static_cast<AlienCollection*>(ch.get());
-      return store->omap_iterate(
-        c->collection, oid,
-        ObjectStore::omap_iter_seek_t{
-          .seek_position = start.value_or(std::string{}),
-          // FIXME: classical OSDs begins iteration from LOWER_BOUND
-          // (or UPPER_BOUND if filter_prefix > start). However, these
-          // bits are not implemented yet
-          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
-        },
-        [&values]
-        (std::string_view key, std::string_view value) mutable {
-          values[std::string{key}].append(value);
-          // FIXME: there is limit on number of entries yet
-          return ObjectStore::omap_iter_ret_t::NEXT;
-        });
-    }).then([&values] (int r)
-      -> read_errorator::future<std::tuple<bool, omap_values_t>> {
-      if (r == -ENOENT) {
-        return crimson::ct_error::enoent::make();
-      } else if (r < 0){
-        logger().error("omap_get_values(start): {}", r);
-        return crimson::ct_error::input_output_error::make();
-      } else {
-        return read_errorator::make_ready_future<std::tuple<bool, omap_values_t>>(
-          true, std::move(values));
-      }
-    });
-  });
-}
-
 AlienStore::read_errorator::future<ObjectStore::omap_iter_ret_t>
 AlienStore::omap_iterate(CollectionRef ch,
                          const ghobject_t &oid,
