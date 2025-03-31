@@ -49,7 +49,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs volume create '
                    f'name=name,type=CephString,goodchars={goodchars} '
-                   'name=placement,type=CephString,req=false ',
+                   'name=placement,type=CephString,req=false '
+                  f'name=meta_pool,type=CephString,goodchars={goodchars},req=false '
+                  f'name=data_pool,type=CephString,goodchars={goodchars},req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -142,7 +144,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false '
                    'name=namespace_isolated,type=CephBool,req=false '
-                   'name=earmark,type=CephString,req=false ',
+                   'name=earmark,type=CephString,req=false '
+                   'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
+                   'name=case_insensitive,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -679,7 +683,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
         placement = cmd.get('placement', '')
-        return self.vc.create_fs_volume(vol_id, placement)
+        data_pool = cmd.get('data_pool', None)
+        meta_pool = cmd.get('meta_pool', None)
+        return self.vc.create_fs_volume(vol_id, placement, data_pool, meta_pool)
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_rm(self, inbuf, cmd):
@@ -755,7 +761,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         gid=cmd.get('gid', None),
                                         mode=cmd.get('mode', '755'),
                                         namespace_isolated=cmd.get('namespace_isolated', False),
-                                        earmark=cmd.get('earmark', None))
+                                        earmark=cmd.get('earmark', None),
+                                        normalization=cmd.get('normalization', None),
+                                        case_insensitive=cmd.get('case_insensitive', False))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):

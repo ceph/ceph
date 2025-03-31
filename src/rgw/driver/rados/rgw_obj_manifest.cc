@@ -347,7 +347,7 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("tail_placement", tail_placement, f);
   ::encode_json("tier_type", tier_type, f);
 
-  if (tier_type == "cloud-s3") {
+  if (RGWTierType::is_tier_type_supported(tier_type)) {
     ::encode_json("tier_config", tier_config, f);
   }
 

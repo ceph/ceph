@@ -24,6 +24,10 @@ describe('RGW users page', () => {
       users.getFirstTableCell(user_id).should('exist');
     });
 
+    it('should show user key details', () => {
+      users.checkUserKeys(user_name);
+    });
+
     it('should edit users full name, email and max buckets', () => {
       users.edit(user_name, 'Another Identity', 'changed@othersite.com', '1969');
     });

@@ -250,22 +250,24 @@ export class RgwBucketService extends ApiClient {
     });
   }
 
-  setLifecycle(bucket_name: string, lifecycle: string, owner: string) {
+  setLifecycle(bucket_name: string, lifecycle: string, owner: string, tenant: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
         bucket_name: bucket_name,
         lifecycle: lifecycle,
-        owner: owner
+        owner: owner,
+        tenant: tenant
       });
       return this.http.put(`${this.url}/lifecycle`, null, { params: params });
     });
   }
 
-  getLifecycle(bucket_name: string, owner: string) {
+  getLifecycle(bucket_name: string, owner: string, tenant: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
         bucket_name: bucket_name,
-        owner: owner
+        owner: owner,
+        tenant: tenant
       });
       return this.http.get(`${this.url}/lifecycle`, { params: params });
     });

@@ -150,8 +150,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
         }
       );
       this.nfsForm.get('cluster_id').disable();
+      this.nfsForm.get('fsal').disable();
       this.nfsForm.get('path').disable();
-      this.nfsForm.get('fsal.user_id').disable();
     } else {
       this.action = this.actionLabels.CREATE;
       this.route.params.subscribe(
@@ -491,7 +491,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   setBucket() {
     this.nfsForm.get('path').enable();
     this.nfsForm.get('fsal.user_id').setValue('');
-    this.nfsForm.get('fsal.user_id').disable();
+    this.nfsForm.get('fsal').disable();
 
     this.setPathValidation();
   }
@@ -617,12 +617,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   private buildRequest() {
     const requestModel: any = _.cloneDeep(this.nfsForm.value);
-
+    requestModel.fsal = this.nfsForm.get('fsal').value;
     if (this.isEdit) {
       requestModel.export_id = _.parseInt(this.export_id);
+      requestModel.path = this.nfsForm.get('path').value;
       if (requestModel.fsal.name === SUPPORTED_FSAL.RGW) {
         requestModel.fsal.user_id = this.nfsForm.getValue('fsal').user_id;
-        requestModel.path = this.nfsForm.getValue('path');
       }
     }
 

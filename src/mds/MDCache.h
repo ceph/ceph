@@ -26,6 +26,7 @@
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/elist.h"
+#include "include/rados/rados_types.hpp"
 
 #include "messages/MCacheExpire.h"
 #include "messages/MClientQuota.h"
@@ -641,6 +642,40 @@ private:
     bool ap_freeze = false;
   };
 
+  /**
+   * Helper wrapper, provides both context object with finish function
+   * and placeholder for formatter. Better alternative to passing formatter as another argument
+   * to the MDSCache function
+   */
+  class C_MDS_DumpStrayDirCtx : public MDSInternalContext {
+  public:
+  void finish(int r) override {
+    ceph_assert(on_finish);
+    MDSContext::finish(r);
+    on_finish(r);
+  }
+  Formatter* get_formatter() const {
+    ceph_assert(dump_formatter);
+    return dump_formatter;
+  }
+  void begin_dump() {
+    if(!started) {
+      started = true;
+      get_formatter()->open_array_section("strays");
+    }
+  }
+  void end_dump() {
+    get_formatter()->close_section();
+  }
+  C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
+   MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
+  private:
+  MDCache *cache;
+  Formatter* dump_formatter;
+  std::function<void(int)> on_finish;
+  bool started = false;
+  };
+
   MDRequestRef lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked = {});
 
   void clean_open_file_lists();
@@ -1072,6 +1107,7 @@ private:
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
+  int stray_status(std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
@@ -1159,6 +1195,17 @@ private:
   OpenFileTable open_file_table;
 
   double export_ephemeral_random_max = 0.0;
+
+  struct SnapSetContext { /* not to be confused with SnapContext */
+    int r;
+    uint64_t objectid;
+    librados::snap_set_t snaps;
+  };
+
+  void file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
+                      MDSContext *ctx);
+  void aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
+                           CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish);
 
  protected:
   // track leader requests whose peers haven't acknowledged commit
@@ -1271,7 +1318,7 @@ private:
   void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
   void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
 
-  void scan_stray_dir(dirfrag_t next=dirfrag_t());
+  int scan_stray_dir(dirfrag_t next=dirfrag_t(), std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx = nullptr);
   // -- replicas --
   void handle_discover(const cref_t<MDiscover> &dis);
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);

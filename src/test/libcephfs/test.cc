@@ -537,6 +537,7 @@ TEST(LibCephFS, ManyNestedDirs) {
     ASSERT_STREQ(dent->d_name, "..");
     if (component == "ManyNestedDirs"sv) {
       ASSERT_EQ(0, ceph_chdir(cmount, component.c_str()));
+      ASSERT_EQ(ceph_closedir(cmount, dirp), 0);
       continue;
     }
     dent = ceph_readdir(cmount, dirp);
@@ -586,6 +587,7 @@ TEST(LibCephFS, ManyNestedDirsCaseInsensitive) {
     ASSERT_STREQ(dent->d_name, "..");
     if (component == "ManyNestedDirsCaseInsensitive"sv) {
       ASSERT_EQ(0, ceph_chdir(cmount, component.c_str()));
+      ASSERT_EQ(ceph_closedir(cmount, dirp), 0);
       continue;
     }
     dent = ceph_readdir(cmount, dirp);

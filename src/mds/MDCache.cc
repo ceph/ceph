@@ -10374,13 +10374,21 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
 
 struct C_MDC_RetryScanStray : public MDCacheContext {
   dirfrag_t next;
-  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) : MDCacheContext(c), next(n) { }
+  std::unique_ptr<MDCache::C_MDS_DumpStrayDirCtx> cmd_ctx;
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n, std::unique_ptr<MDCache::C_MDS_DumpStrayDirCtx> ctx) :
+   MDCacheContext(c), next(n), cmd_ctx(std::move(ctx)) {}
   void finish(int r) override {
-    mdcache->scan_stray_dir(next);
+    mdcache->scan_stray_dir(next, std::move(cmd_ctx));
   }
 };
 
-void MDCache::scan_stray_dir(dirfrag_t next)
+/*
+ * If the cmd_ctx is not nullptr, the caller is asok command handler,
+ * which will block until the on_finish will be called.
+ * The cmd_ctx holds the formatter to dump stray dir content while scanning.
+ * The function can return EAGAIN, to make possible waiting semantics clear.
+*/
+int MDCache::scan_stray_dir(dirfrag_t next, std::unique_ptr<MDCache::C_MDS_DumpStrayDirCtx> cmd_ctx)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
@@ -10399,13 +10407,13 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 	continue;
 
       if (!dir->can_auth_pin()) {
-	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag()));
-	return;
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag(), std::move(cmd_ctx)));
+	return -EAGAIN;
       }
 
       if (!dir->is_complete()) {
-	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
-	return;
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag(), std::move(cmd_ctx)));
+	return -EAGAIN;
       }
 
       for (auto &p : dir->items) {
@@ -10414,14 +10422,32 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 	CDentry::linkage_t *dnl = dn->get_projected_linkage();
 	if (dnl->is_primary()) {
 	  CInode *in = dnl->get_inode();
+    // only if we came from asok cmd handler
+    if (cmd_ctx) {
+      cmd_ctx->begin_dump();
+      cmd_ctx->get_formatter()->open_object_section("stray_inode");
+      cmd_ctx->get_formatter()->dump_int("ino: ", in->ino());
+      cmd_ctx->get_formatter()->dump_string("stray_prior_path: ", in->get_inode()->stray_prior_path);
+      in->dump(cmd_ctx->get_formatter(), CInode::DUMP_CAPS);
+      cmd_ctx->get_formatter()->close_section();
+    }
 	  if (in->get_inode()->nlink == 0)
 	    in->state_set(CInode::STATE_ORPHAN);
-	  maybe_eval_stray(in);
+    // no need to evaluate stray when dumping the dir content
+    if (!cmd_ctx) {
+	    maybe_eval_stray(in);
+    }
 	}
       }
     }
     next.frag = frag_t();
   }
+  // only if we came from asok cmd handler
+  if (cmd_ctx) {
+    cmd_ctx->end_dump();
+    cmd_ctx->finish(0);
+  }
+  return 0;
 }
 
 void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin)
@@ -10432,9 +10458,10 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
     mds->logger->inc(l_mds_openino_backtrace_fetch);
 }
 
-
-
-
+int MDCache::stray_status(std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx)
+{
+  return scan_stray_dir(dirfrag_t(), std::move(ctx));
+}
 
 // ========================================================================================
 // DISCOVER
@@ -11187,7 +11214,7 @@ void MDCache::decode_replica_dir(CDir *&dir, bufferlist::const_iterator& p, CIno
 
 void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p, CDir *dir, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(3, p);
   string name;
   snapid_t last;
   decode(name, p);
@@ -11463,7 +11490,7 @@ void MDCache::encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl)
 
 void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   inodeno_t ino;
   __u8 d_type;
   decode(ino, p);
@@ -14707,4 +14734,203 @@ void MDCache::upkeep_main(void)
     dout(20) << "upkeep thread waiting interval " << interval << dendl;
     upkeep_cvar.wait_for(lock, interval);
   }
+}
+
+struct C_ListSnapsAggregator : public MDSIOContext {
+  C_ListSnapsAggregator(MDSRank *mds, CInode *in1, CInode *in2, BlockDiff *block_diff,
+			Context *on_finish)
+    : MDSIOContext(mds),
+      in1(in1),
+      in2(in2),
+      block_diff(block_diff),
+      on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    mds->mdcache->aggregate_snap_sets(snap_set_context, in1, in2,
+                                      block_diff, on_finish);
+  }
+
+  virtual void print(std::ostream& os) const {
+    os << "listsnaps";
+  }
+
+  void add_snap_set_context(std::unique_ptr<MDCache::SnapSetContext> ssc) {
+    snap_set_context.push_back(std::move(ssc));
+  }
+
+  CInode *in1;
+  CInode *in2;
+  BlockDiff *block_diff;
+  Context *on_finish;
+  std::vector<std::unique_ptr<MDCache::SnapSetContext>> snap_set_context;
+};
+
+void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
+			     MDSContext *ctx) {
+  ceph_assert(in1->last <= in2->last);
+
+  // I think this is not required since the MDS disallows setting
+  // layout when truncate_seq > 1.
+  if (in1->get_inode()->layout != in2->get_inode()->layout) {
+    dout(20) << __func__ << ": snaps have different layout: " << in1->get_inode()->layout
+	     << " vs " << in2->get_inode()->layout << dendl;
+    block_diff->blocks.union_insert(0, in2->get_inode()->size);
+    ctx->complete(0);
+    return;
+  }
+
+  uint64_t scan_idx = block_diff->scan_idx;
+  uint64_t num_objects1 = Striper::get_num_objects(in1->get_inode()->layout,
+						   in1->get_inode()->size);
+  uint64_t num_objects2 = Striper::get_num_objects(in2->get_inode()->layout,
+						   in2->get_inode()->size);
+  uint64_t num_objects_pending1 = num_objects1 - scan_idx;
+  uint64_t num_objects_pending2 = num_objects2 - scan_idx;
+
+  uint64_t scans = std::min(
+    std::min(num_objects_pending1, num_objects_pending2),
+    std::min((uint64_t)(g_conf().get_val<uint64_t>("mds_file_blockdiff_max_concurrent_object_scans")),
+	     max_objects));
+
+  dout(20) << __func__ << ": scanning " << scans << " objects" << dendl;
+  if (scans == 0) {
+    // we ran out of objects to scan - figure which ones
+    if (num_objects_pending1 == 0 && num_objects_pending2 == 0) {
+      // easy - both snaps have same number of objects
+      dout(20) << __func__ << ": equal extent" << dendl;
+      ctx->complete(0);
+    } else {
+      if (num_objects_pending1 == 0) {
+	// first snapshot has lesser number of objects - return
+	// an extent covering EOF.
+	dout(20) << __func__ << ": EOF extent" << dendl;
+	uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+						   scan_idx, 0);
+	block_diff->blocks.union_insert(offset, in2->get_inode()->size - offset);
+	ctx->complete(0);
+      } else {
+	// num_objects_pending2 == 0
+	dout(20) << __func__ << ": truncated extent" << dendl;
+	ctx->complete(0);
+      }
+    }
+
+    return;
+  }
+
+  C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
+  MDSGatherBuilder gather_ctx(g_ceph_context, on_finish);
+
+  while (scans > 0) {
+    ObjectOperation op;
+    std::unique_ptr<SnapSetContext> ssc(new SnapSetContext());
+    op.list_snaps(&ssc->snaps, &ssc->r);
+    ssc->objectid = scan_idx;
+
+    mds->objecter->read(file_object_t(in1->ino(), scan_idx),
+			OSDMap::file_to_object_locator(in2->get_inode()->layout),
+			op, LIBRADOS_SNAP_DIR, NULL, 0, gather_ctx.new_sub());
+    on_finish->add_snap_set_context(std::move(ssc));
+    ++scan_idx;
+    --scans;
+  }
+
+  gather_ctx.activate();
+}
+
+void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
+                                  CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish) {
+  dout(20) << __func__ << dendl;
+
+  // always signal to the client to request again since request
+  // completion is signalled in file_blockdiff().
+  int r = 1;
+  snapid_t snapid1 = in1->last;
+  snapid_t snapid2 = in2->last;
+  uint64_t scans = snap_set_ctx.size();
+
+  interval_set<uint64_t> extents;
+  for (auto &snap_set : snap_set_ctx) {
+    dout(20) << __func__ << ": objectid=" << snap_set->objectid << ", r=" << snap_set->r
+	     << dendl;
+    if (snap_set->r != 0 && snap_set->r != -ENOENT) {
+      derr << ": failed to get snap set for objectid=" << snap_set->objectid
+	   << ", r=" << snap_set->r << dendl;
+      r = snap_set->r;
+      break;
+    }
+
+    if (snap_set->r == 0) {
+      auto &clones = snap_set->snaps.clones;
+      auto it1 = std::find_if(clones.begin(), clones.end(),
+			      [snapid1](const librados::clone_info_t &clone)
+			      {
+				return snapid1 == clone.cloneid ||
+				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid1) != clone.snaps.end());
+			      });
+      // point to "head" if not found
+      if (it1 == clones.end()) {
+	it1 = std::prev(it1);
+      }
+      auto it2 = std::find_if(clones.begin(), clones.end(),
+			      [snapid2](const librados::clone_info_t &clone)
+			      {
+				return snapid2 == clone.cloneid ||
+				  (std::find(clone.snaps.begin(), clone.snaps.end(), snapid2) != clone.snaps.end());
+			      });
+      // point to "head" if not found
+      if (it2 == clones.end()) {
+	it2 = std::prev(it2);
+      }
+
+      if (it1 == it2) {
+	dout(10) << __func__ << ": both snaps in same clone" << dendl;
+	continue;
+      }
+
+      interval_set<uint64_t> extent;
+      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+						 snap_set->objectid, 0);
+
+      for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
+	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps
+		 << " overlap: " << it1->overlap << "]" << dendl;
+	auto next_it = it1 + 1;
+	dout(20) << __func__ << ": [next cloneid: " << next_it->cloneid << " snaps: " << next_it->snaps
+		 << " overlap: " << next_it->overlap << "]" << dendl;
+	auto sz = next_it->size;
+	if (sz == 0) {
+	  // this object is a hole in the file.
+	  // TODO: report holes in blockdiff strucuter. that way,
+	  // caller can optimize and punch holes rather than writing
+	  // zeros.
+	  dout(10) << __func__ << ": hole: [" << offset << "~" << it1->size << "]" << dendl;
+	  dout(10) << __func__ << ": adding whole extent - reader will read zeros" << dendl;
+	  sz = it1->size;
+	}
+
+	extent.clear();
+	extent.union_insert(offset, sz);
+	for (auto &overlap_region : it1->overlap) {
+	  uint64_t overlap_offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
+							     snap_set->objectid, overlap_region.first);
+	  extent.erase(overlap_offset, overlap_region.second);
+	}
+
+	dout(20) << __func__ << ": (non overlapping) extent=" << extent << dendl;
+	extents.union_of(extent);
+	dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
+	++it1;
+      }
+    }
+  }
+
+  block_diff->rval = r;
+  if (r >= 0) {
+    r = 0;
+    block_diff->scan_idx += scans;
+    block_diff->blocks = extents;
+  }
+  on_finish->complete(r);
 }

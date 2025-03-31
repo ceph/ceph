@@ -17,6 +17,7 @@ import { Observable, of } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { Lifecycle, Rule } from '../models/rgw-bucket-lifecycle';
 
 @Component({
   selector: 'cd-rgw-bucket-lifecycle-list',
@@ -94,9 +95,9 @@ export class RgwBucketLifecycleListComponent implements OnInit {
 
   loadLifecyclePolicies(context: CdTableFetchDataContext) {
     const allLifecycleRules$ = this.rgwBucketService
-      .getLifecycle(this.bucket.bucket, this.bucket.owner)
+      .getLifecycle(this.bucket.bucket, this.bucket.owner, this.bucket.tenant)
       .pipe(
-        tap((lifecycle) => {
+        tap((lifecycle: Lifecycle) => {
           this.lifecycleRuleList = lifecycle;
         }),
         catchError(() => {
@@ -108,7 +109,7 @@ export class RgwBucketLifecycleListComponent implements OnInit {
     this.filteredLifecycleRules$ = allLifecycleRules$.pipe(
       map(
         (lifecycle: any) =>
-          lifecycle?.LifecycleConfiguration?.Rules?.filter((rule: object) =>
+          lifecycle?.LifecycleConfiguration?.Rule?.filter((rule: Rule) =>
             rule.hasOwnProperty('Transition')
           ) || []
       )
@@ -130,10 +131,10 @@ export class RgwBucketLifecycleListComponent implements OnInit {
 
   deleteAction() {
     const ruleNames = this.selection.selected.map((rule) => rule.ID);
-    const filteredRules = this.lifecycleRuleList.LifecycleConfiguration.Rules.filter(
-      (rule: any) => !ruleNames.includes(rule.ID)
+    const filteredRules = this.lifecycleRuleList.LifecycleConfiguration.Rule.filter(
+      (rule: Rule) => !ruleNames.includes(rule.ID)
     );
-    const rules = filteredRules.length > 0 ? { Rules: filteredRules } : {};
+    const rules = filteredRules.length > 0 ? { Rule: filteredRules } : {};
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Rule`,
       itemNames: ruleNames,
@@ -144,7 +145,12 @@ export class RgwBucketLifecycleListComponent implements OnInit {
 
   submitLifecycleConfig(rules: any) {
     this.rgwBucketService
-      .setLifecycle(this.bucket.bucket, JSON.stringify(rules), this.bucket.owner)
+      .setLifecycle(
+        this.bucket.bucket,
+        JSON.stringify(rules),
+        this.bucket.owner,
+        this.bucket.tenant
+      )
       .subscribe({
         next: () => {
           this.notificationService.show(

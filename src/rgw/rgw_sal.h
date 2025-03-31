@@ -1719,10 +1719,16 @@ public:
 
   /** Get the type of this tier */
   virtual const std::string& get_tier_type() = 0;
+  /** Is the type of this tier cloud-s3/cloud-s3-glacier */
+  virtual bool is_tier_type_s3() = 0;
   /** Get the storage class of this tier */
   virtual const std::string& get_storage_class() = 0;
   /** Should we retain the head object when transitioning */
   virtual bool retain_head_object() = 0;
+  /** Is read_through allowed */
+  virtual bool allow_read_through() = 0;
+  /** Get read_through restore_days */
+  virtual uint64_t get_read_through_restore_days() = 0;
   /** Get the placement rule associated with this tier */
 };
 

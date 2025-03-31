@@ -28,8 +28,9 @@ of event types or for all "Removed" and "Created" event types (which is the defa
 notification may also filter out events based on matches of the prefixes and
 suffixes of (1) the keys, (2) the metadata attributes attached to the object,
 or (3) the object tags. Regular-expression matching can also be used on these
-to create filters. There can be multiple notifications for any specific topic,
-and the same topic can used for multiple notifications.
+to create filters. Notifications and topics have a many-to-many relationship.
+A topic can receive multiple notifications and a notification could be delivered
+to multiple topics.
 
 REST API has been defined so as to provide configuration and control interfaces
 for the bucket notification mechanism.

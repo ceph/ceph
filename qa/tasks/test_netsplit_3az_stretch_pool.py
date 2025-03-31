@@ -21,6 +21,7 @@ class TestNetSplit(CephTestCase):
     PEERING_CRUSH_BUCKET_BARRIER = 'datacenter'
     POOL = 'pool_stretch'
     CRUSH_RULE = 'replicated_rule_custom'
+    DEFAULT_CRUSH_RULE = 'replicated_rule'
     SIZE = 6
     MIN_SIZE = 3
     BUCKET_MAX = SIZE // PEERING_CRUSH_BUCKET_TARGET
@@ -273,6 +274,16 @@ class TestNetSplit(CephTestCase):
         # wait for the PGs to recover
         time.sleep(self.RECOVERY_PERIOD)
         # check if all PGs are active+clean
+        self.wait_until_true_and_hold(
+            lambda: self._pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
+        # Unset the pool back to replicated rule expects PGs to be 100% active+clean
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'stretch', 'unset',
+            self.POOL, self.DEFAULT_CRUSH_RULE,
+            str(self.SIZE), str(self.MIN_SIZE))
         self.wait_until_true_and_hold(
             lambda: self._pg_all_active_clean(),
             timeout=self.RECOVERY_PERIOD,

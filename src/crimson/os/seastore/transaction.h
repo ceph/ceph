@@ -98,6 +98,17 @@ struct rbm_pending_ool_t {
  * - seastore_cache logs
  */
 class Transaction {
+private:
+  auto lookup_read_set(CachedExtentRef ref) const {
+    assert(ref->is_valid());
+    assert(!is_weak());
+    auto it = ref->read_transactions.lower_bound(
+      this, read_set_item_t<Transaction>::trans_cmp_t());
+    bool exists =
+      (it != ref->read_transactions.end() && it->t == this);
+    return std::make_pair(exists, it);
+  }
+
 public:
   using Ref = std::unique_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
@@ -107,39 +118,29 @@ public:
     RETIRED
   };
   get_extent_ret get_extent(paddr_t addr, CachedExtentRef *out) {
-    LOG_PREFIX(Transaction::get_extent);
-    // it's possible that both write_set and retired_set contain
-    // this addr at the same time when addr is absolute and the
-    // corresponding extent is used to map existing extent on disk.
-    // So search write_set first.
-    if (auto iter = write_set.find_offset(addr);
-	iter != write_set.end()) {
-      if (out)
-	*out = CachedExtentRef(&*iter);
-      SUBTRACET(seastore_cache, "{} is present in write_set -- {}",
-                *this, addr, *iter);
-      assert(!out || (*out)->is_valid());
-      return get_extent_ret::PRESENT;
-    } else if (retired_set.count(addr)) {
-      return get_extent_ret::RETIRED;
-    } else if (
-      auto iter = read_set.find(addr);
-      iter != read_set.end()) {
-      // placeholder in read-set should be in the retired-set
-      // at the same time.
-      assert(!is_retired_placeholder_type(iter->ref->get_type()));
-      if (out)
-	*out = iter->ref;
-      SUBTRACET(seastore_cache, "{} is present in read_set -- {}",
-                *this, addr, *(iter->ref));
-      return get_extent_ret::PRESENT;
-    } else {
-      return get_extent_ret::ABSENT;
+    auto [result, ext] = do_get_extent(addr);
+    // placeholder in read-set must be in the retired-set
+    // at the same time, user should not see a placeholder.
+    assert(result != get_extent_ret::PRESENT ||
+           !is_retired_placeholder_type(ext->get_type()));
+    if (out && result == get_extent_ret::PRESENT) {
+      *out = ext;
     }
+    return result;
   }
 
-  void add_to_retired_set(CachedExtentRef ref) {
-    ceph_assert(!is_weak());
+  void add_absent_to_retired_set(CachedExtentRef ref) {
+    add_to_read_set(ref);
+    add_present_to_retired_set(ref);
+  }
+
+  void add_present_to_retired_set(CachedExtentRef ref) {
+    assert(!is_weak());
+#ifndef NDEBUG
+    auto [result, ext] = do_get_extent(ref->get_paddr());
+    assert(result == get_extent_ret::PRESENT);
+    assert(ext == ref);
+#endif
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
       existing_block_stats.dec(ref);
@@ -169,17 +170,14 @@ public:
       return false;
     }
 
-    assert(ref->is_valid());
-
-    auto it = ref->transactions.lower_bound(
-      this, read_set_item_t<Transaction>::trans_cmp_t());
-    if (it != ref->transactions.end() && it->t == this) {
+    auto [exists, it] = lookup_read_set(ref);
+    if (exists) {
       return false;
     }
 
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
-    ref->transactions.insert_before(
+    ref->read_transactions.insert_before(
       it, const_cast<read_set_item_t<Transaction>&>(*iter));
     return true;
   }
@@ -189,15 +187,12 @@ public:
       return;
     }
 
-    assert(ref->is_valid());
-
-    auto it = ref->transactions.lower_bound(
-      this, read_set_item_t<Transaction>::trans_cmp_t());
-    assert(it == ref->transactions.end() || it->t != this);
+    auto [exists, it] = lookup_read_set(ref);
+    assert(!exists);
 
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
-    ref->transactions.insert_before(
+    ref->read_transactions.insert_before(
       it, const_cast<read_set_item_t<Transaction>&>(*iter));
   }
 
@@ -306,7 +301,7 @@ public:
       assert(where->ref.get() == &placeholder);
       where = read_set.erase(where);
       auto it = read_set.emplace_hint(where, this, &extent);
-      extent.transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
+      extent.read_transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
     }
     {
       auto where = retired_set.find(&placeholder);
@@ -583,6 +578,33 @@ private:
   friend class Cache;
   friend Ref make_test_transaction();
 
+  std::pair<get_extent_ret, CachedExtentRef> do_get_extent(paddr_t addr) {
+    LOG_PREFIX(Transaction::do_get_extent);
+    // it's possible that both write_set and retired_set contain
+    // this addr at the same time when addr is absolute and the
+    // corresponding extent is used to map existing extent on disk.
+    // So search write_set first.
+    if (auto iter = write_set.find_offset(addr);
+	iter != write_set.end()) {
+      auto ret = CachedExtentRef(&*iter);
+      SUBTRACET(seastore_cache, "{} is present in write_set -- {}",
+                *this, addr, *ret);
+      assert(ret->is_valid());
+      return {get_extent_ret::PRESENT, ret};
+    } else if (retired_set.count(addr)) {
+      return {get_extent_ret::RETIRED, nullptr};
+    } else if (
+      auto iter = read_set.find(addr);
+      iter != read_set.end()) {
+      auto ret = iter->ref;
+      SUBTRACET(seastore_cache, "{} is present in read_set -- {}",
+                *this, addr, *ret);
+      return {get_extent_ret::PRESENT, ret};
+    } else {
+      return {get_extent_ret::ABSENT, nullptr};
+    }
+  }
+
   void set_backref_entries(backref_entry_refs_t&& entries) {
     assert(backref_entries.empty());
     backref_entries = std::move(entries);
@@ -610,7 +632,7 @@ private:
    * Submitting a transaction mutating any contained extent/addr will
    * invalidate *this.
    */
-  read_set_t<Transaction> read_set; ///< set of extents read by paddr
+  read_extent_set_t<Transaction> read_set; ///< set of extents read by paddr
 
   uint64_t fresh_backref_extents = 0; // counter of new backref extents
 
@@ -663,7 +685,7 @@ private:
    *
    * Set of extents retired by *this.
    */
-  pextent_set_t retired_set;
+  retired_extent_set_t retired_set;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;

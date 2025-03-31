@@ -1234,6 +1234,7 @@ class DaemonDescription(object):
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 pending_daemon_config: bool = False
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -1308,6 +1309,7 @@ class DaemonDescription(object):
         if extra_entrypoint_args:
             self.extra_entrypoint_args = ArgumentSpec.from_general_args(
                 extra_entrypoint_args)
+        self.pending_daemon_config = pending_daemon_config
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -1429,6 +1431,9 @@ class DaemonDescription(object):
             return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
         return daemon_type_to_service(self.daemon_type)
 
+    def update_pending_daemon_config(self, value: bool) -> None:
+        self.pending_daemon_config = value
+
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
@@ -1462,6 +1467,7 @@ class DaemonDescription(object):
         out['rank'] = self.rank
         out['rank_generation'] = self.rank_generation
         out['systemd_unit'] = self.systemd_unit
+        out['pending_daemon_config'] = self.pending_daemon_config
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1499,6 +1505,7 @@ class DaemonDescription(object):
         out['ports'] = self.ports
         out['ip'] = self.ip
         out['systemd_unit'] = self.systemd_unit
+        out['pending_daemon_config'] = self.pending_daemon_config
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:

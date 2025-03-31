@@ -115,6 +115,9 @@ endif()
 
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-depth-1024>)
 
+# Because Boost can't be bothered to not include its own deprecated headers
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_ALLOW_DEPRECATED_HEADERS>)
+
 CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
 if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wpessimizing-move>)

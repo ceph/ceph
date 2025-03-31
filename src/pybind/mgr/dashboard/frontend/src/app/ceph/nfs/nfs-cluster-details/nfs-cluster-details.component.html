@@ -1,0 +1,11 @@
+  <ng-container *ngIf="!!selection">
+  <legend
+  i18n
+  >
+  {{title | titlecase}}
+  <cd-help-text>
+    Lists exports for a cluster
+  </cd-help-text>
+  </legend>
+  <cd-nfs-list [clusterId]="selection.name"></cd-nfs-list>
+  </ng-container>

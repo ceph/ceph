@@ -1,0 +1,17 @@
+---
+name: "Check for missing .qa links"
+on: [pull_request]
+
+jobs:
+  pull_request:
+    name: "Check for missing .qa links"
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout ceph.git
+        uses: actions/checkout@v4
+        with:
+          path: ceph
+
+      - name: verify .qa links
+        run: ./src/script/verify-qa
+        working-directory: ceph

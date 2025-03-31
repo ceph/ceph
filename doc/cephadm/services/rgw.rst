@@ -173,6 +173,36 @@ Then apply this yaml document:
 Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
 indicated by a ``|`` character preserving newline characters.
 
+Setting up HTTPS with Wildcard SANs
+-----------------------------------
+
+To enable HTTPS for RGW services, apply a spec file following this scheme:
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: foo
+  placement:
+    label: rgw
+    count_per_host: 1
+  spec:
+    ssl: true
+    generate_cert: true  
+    rgw_frontend_port: 8080
+    wildcard_enabled: true  # Enables wildcard SANs in the certificate
+    zonegroup_hostnames:
+    - s3.cephlab.com
+
+Then apply this yaml document:
+
+.. prompt:: bash #
+
+  ceph orch apply -i myrgw.yaml
+
+The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in the self-signed certificate,
+allowing access to buckets in virtual host mode. By default, this flag is disabled.
+example: wildcard SAN - (*.s3.cephlab.com)
+
 Disabling multisite sync traffic
 --------------------------------
 

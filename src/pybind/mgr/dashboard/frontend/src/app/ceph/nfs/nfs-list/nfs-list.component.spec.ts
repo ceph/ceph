@@ -66,12 +66,6 @@ describe('NfsListComponent', () => {
       httpTesting.verify();
     });
 
-    it('should load exports on init', () => {
-      refresh(new Summary());
-      httpTesting.expectOne('api/nfs-ganesha/export');
-      expect(nfsService.list).toHaveBeenCalled();
-    });
-
     it('should not load images on init because no data', () => {
       refresh(undefined);
       expect(nfsService.list).not.toHaveBeenCalled();

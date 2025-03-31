@@ -37,7 +37,7 @@ export class UsersPageHelper extends PageHelper {
     this.navigateEdit(name, false, true, null);
 
     // Change the full name field
-    cy.get('input#display_name').click().clear({ force: true }).type(new_fullname, { force: true });
+    cy.get('input#display_name').click().clear().type(new_fullname);
 
     // Change the email field
     cy.get('#email').click().clear().type(new_email);
@@ -154,5 +154,16 @@ export class UsersPageHelper extends PageHelper {
 
     this.navigateTo();
     this.delete(tenant + '$' + uname, null, null, true, false, false, true);
+  }
+
+  checkUserKeys(user_name: string) {
+    this.getExpandCollapseElement(user_name).should('be.visible').click();
+    cy.get('cd-table').contains('td', user_name).click();
+    cy.get('cd-rgw-user-details cd-table').eq(0).first().click();
+    cy.get("[aria-label='Show']").should('exist').click();
+    cy.get('input#user').should('exist');
+    cy.get('input#access_key').should('exist');
+    cy.get('input#secret_key').should('exist');
+    cy.get('cds-modal').should('exist');
   }
 }

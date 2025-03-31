@@ -37,6 +37,7 @@ import { SmbJoinAuthListComponent } from './smb-join-auth-list/smb-join-auth-lis
 import { SmbUsersgroupsDetailsComponent } from './smb-usersgroups-details/smb-usersgroups-details.component';
 import { SmbJoinAuthFormComponent } from './smb-join-auth-form/smb-join-auth-form.component';
 import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form/smb-usersgroups-form.component';
+import { SmbOverviewComponent } from './smb-overview/smb-overview.component';
 
 @NgModule({
   imports: [
@@ -79,7 +80,8 @@ import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form/smb-usersgro
     SmbUsersgroupsDetailsComponent,
     SmbJoinAuthFormComponent,
     SmbUsersgroupsFormComponent,
-    SmbShareFormComponent
+    SmbShareFormComponent,
+    SmbOverviewComponent
   ]
 })
 export class SmbModule {

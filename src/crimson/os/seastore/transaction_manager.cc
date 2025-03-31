@@ -198,45 +198,13 @@ TransactionManager::close() {
   });
 }
 
-#ifdef UNIT_TESTS_BUILT
-TransactionManager::ref_ret TransactionManager::inc_ref(
-  Transaction &t,
-  LogicalChildNodeRef &ref)
-{
-  LOG_PREFIX(TransactionManager::inc_ref);
-  TRACET("{}", t, *ref);
-  return lba_manager->incref_extent(t, ref->get_laddr()
-  ).si_then([FNAME, ref, &t](auto result) {
-    DEBUGT("extent refcount is incremented to {} -- {}",
-           t, result.refcount, *ref);
-    return result.refcount;
-  }).handle_error_interruptible(
-    ref_iertr::pass_further{},
-    ct_error::assert_all{"unhandled error, TODO"});
-}
-
-TransactionManager::ref_ret TransactionManager::inc_ref(
-  Transaction &t,
-  laddr_t offset)
-{
-  LOG_PREFIX(TransactionManager::inc_ref);
-  TRACET("{}", t, offset);
-  return lba_manager->incref_extent(t, offset
-  ).si_then([FNAME, offset, &t](auto result) {
-    DEBUGT("extent refcount is incremented to {} -- {}~0x{:x}, {}",
-           t, result.refcount, offset, result.length, result.addr);
-    return result.refcount;
-  });
-}
-#endif
-
 TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   LogicalChildNodeRef &ref)
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  return lba_manager->decref_extent(t, ref->get_laddr()
+  return lba_manager->remove_mapping(t, ref->get_laddr()
   ).si_then([this, FNAME, &t, ref](auto result) {
     if (result.refcount == 0) {
       cache->retire_extent(t, ref);
@@ -253,7 +221,7 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  return lba_manager->decref_extent(t, offset
+  return lba_manager->remove_mapping(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     auto fut = ref_iertr::now();
     if (result.refcount == 0) {

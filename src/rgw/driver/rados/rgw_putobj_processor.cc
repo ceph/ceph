@@ -45,9 +45,9 @@ int read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& categ
     auto i = attr_iter->second;
     string m = i.to_str();
 
-    if (m == "cloud-s3") {
+    if (RGWTierType::is_tier_type_supported(m)) {
       category = RGWObjCategory::CloudTiered;
-      manifest.set_tier_type("cloud-s3");
+      manifest.set_tier_type(m);
 
       auto config_iter = attrs.find(RGW_ATTR_CLOUD_TIER_CONFIG);
       if (config_iter != attrs.end()) {

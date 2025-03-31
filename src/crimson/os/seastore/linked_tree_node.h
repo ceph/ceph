@@ -302,9 +302,9 @@ public:
   TCachedExtentRef<T> find_pending_version(Transaction &t, node_key_t key) {
     auto &me = down_cast();
     assert(me.is_stable());
-    auto mut_iter = me.mutation_pendings.find(
+    auto mut_iter = me.mutation_pending_extents.find(
       t.get_trans_id(), trans_spec_view_t::cmp_t());
-    if (mut_iter != me.mutation_pendings.end()) {
+    if (mut_iter != me.mutation_pending_extents.end()) {
       assert(copy_dests_by_trans.find(t.get_trans_id()) ==
 	copy_dests_by_trans.end());
       return static_cast<T*>(&(*mut_iter));

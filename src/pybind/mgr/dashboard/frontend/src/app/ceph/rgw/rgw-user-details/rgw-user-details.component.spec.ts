@@ -82,12 +82,10 @@ describe('RgwUserDetailsComponent', () => {
     component.keysSelection.first = () => {
       return { type: 'S3', ref: { user: '', access_key: '', secret_key: '' } };
     };
-    const modalShowSpy = spyOn(component['modalService'], 'show').and.callFake(() => {
+    const modalShowSpy = spyOn(component['cdsModalService'], 'show').and.callFake(() => {
       modalRef = {
-        componentInstance: {
-          setValues: jest.fn(),
-          setViewing: jest.fn()
-        }
+        setValues: jest.fn(),
+        setViewing: jest.fn()
       };
       return modalRef;
     });
@@ -99,12 +97,10 @@ describe('RgwUserDetailsComponent', () => {
     component.keysSelection.first = () => {
       return { type: 'Swift', ref: { user: '', access_key: '', secret_key: '' } };
     };
-    const modalShowSpy = spyOn(component['modalService'], 'show').and.callFake(() => {
+    const modalShowSpy = spyOn(component['cdsModalService'], 'show').and.callFake(() => {
       modalRef = {
-        componentInstance: {
-          setValues: jest.fn(),
-          setViewing: jest.fn()
-        }
+        setValues: jest.fn(),
+        setViewing: jest.fn()
       };
       return modalRef;
     });

@@ -199,20 +199,49 @@ Erasure-coded pool overhead
 
 The overhead factor (space amplification) of an erasure-coded pool
 is `(k+m) / k`.  For a 4,2 profile, the overhead is
-thus 1.5, which means that 1.5 GiB of underlying storage are used to store
-1 GiB of user data.  Contrast with default three-way replication, with
+thus 1.5, which means that 1.5 GiB of underlying storage is used to store
+1 GiB of user data.  Contrast with default replication with ``size-3``, with
 which the overhead factor is 3.0.  Do not mistake erasure coding for a free
 lunch: there is a significant performance tradeoff, especially when using HDDs
 and when performing cluster recovery or backfill.
 
 Below is a table showing the overhead factors for various values of `k` and `m`.
-As `m` increases above 2, the incremental capacity overhead gain quickly
+As `k` increases above 4, the incremental capacity overhead gain quickly
 experiences diminishing returns but the performance impact grows proportionally.
-We recommend that you do not choose a profile with `k` > 4 or `m` > 2 until
-and unless you fully understand the ramifications, including the number of
-failure domains your cluster topology must contain.  If  you choose `m=1`,
-expect data unavailability during maintenance and data loss if component
-failures overlap.
+We recommend that you do not choose a profile with `k` > 4 or `m` > 2 unless
+and until you fully understand the ramifications, including the number of
+failure domains your cluster topology presents.  If  you choose `m=1`,
+expect data unavailability during maintenance and data loss when component
+failures overlap.  Profiles with `m=1` are thus strongly discouraged for
+production data.
+
+Deployments that must remain active and avoid data loss when larger numbers
+of overlapping component failure must be survived may favor a value of `m` > 2.
+Note that such profiles result in lower space efficiency and lessened performance, especially
+during backfill and recovery.
+
+If you are certain that you wish to use erasure coding for one or more pools but
+are not certain which profile to use, select `k=4` and `m=2`.  You will realize
+double the usable space compared to replication with `size=3` with relatively
+tolerable write and recovery performance impact.
+
+.. note:: Most erasure-coded pool deployments require at least `k+m` CRUSH failure
+	  domains, which in most cases means `rack`s or `hosts`.  There are
+	  operational advantages to planning EC profiles and cluster topology
+	  so that there are at least `k+m+1` failure domains. In most cases
+	  a value of `k` > 8 is discouragd.
+
+.. note:: CephFS and RGW deployments with a significant proportion
+          of very small user files/objects may wish to plan carefully as
+          erasure-coded data pools can result in considerable additional space
+          ampliificaton.  Both CephFS and RGW support multiple data pools
+          with different media, performance, and data protection strategies,
+          which can enable efficient and effective deployments.  An RGW
+	  deployment might for example provision a modest complement of
+	  TLC SSDs used by replicated index and default bucket data pools,
+	  and a larger complement of erasure-coded QLC SSDs or HDDs to which
+	  larger and colder objects are directed via storage class, placement
+	  target, or Lua scripting.
 
 .. list-table:: Erasure coding overhead
    :widths: 4 4 4 4 4 4 4 4 4 4 4 4
@@ -363,10 +392,30 @@ failures overlap.
      - 1.82
      - 1.91
      - 2.00
-
-
-
-
+   * - k=12
+     - 1.08
+     - 1.17
+     - 1.25
+     - 1.33
+     - 1.42
+     - 1.50
+     - 1.58
+     - 1.67
+     - 1.75
+     - 1.83
+     - 1.92
+   * - k=20
+     - 1.05
+     - 1.10
+     - 1.15
+     - 1.20
+     - 1.25
+     - 1.30
+     - 1.35
+     - 1.40
+     - 1.45
+     - 1.50
+     - 1.55
 
 
 
@@ -374,7 +423,7 @@ failures overlap.
 Erasure-coded pools and cache tiering
 -------------------------------------
 
-.. note:: Cache tiering is deprecated in Reef.
+.. note:: Cache tiering was deprecated in Reef.  We strongly advise not deploying new cache tiers, and working to remove them from existing deployments.
 
 Erasure-coded pools require more resources than replicated pools and
 lack some of the functionality supported by replicated pools (for example, omap).

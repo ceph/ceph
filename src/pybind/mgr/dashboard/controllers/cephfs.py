@@ -4,7 +4,7 @@ import errno
 import json
 import os
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import cephfs
 import cherrypy
@@ -17,7 +17,8 @@ from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
-    RESTController, UIRouter, UpdatePermission, allow_empty_body
+    ReadPermission, RESTController, UIRouter, UpdatePermission, \
+    allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -42,10 +43,15 @@ class CephFS(RESTController):
         self.cephfs_clients = {}
 
     def list(self):
-        fsmap = mgr.get("fs_map")
-        return fsmap['filesystems']
+        return CephFS_.list_filesystems(all_info=True)
 
-    def create(self, name: str, service_spec: Dict[str, Any]):
+    def create(
+        self,
+        name: str,
+        service_spec: Dict[str, Any],
+        data_pool: Optional[str] = None,
+        metadata_pool: Optional[str] = None
+    ):
         service_spec_str = '1 '
         if 'labels' in service_spec['placement']:
             for label in service_spec['placement']['labels']:
@@ -56,8 +62,17 @@ class CephFS(RESTController):
                 service_spec_str += f'{host} '
             service_spec_str = service_spec_str[:-1]
 
-        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_create', None,
-                                        {'name': name, 'placement': service_spec_str})
+        error_code, _, err = mgr.remote(
+            'volumes',
+            '_cmd_fs_volume_create',
+            None,
+            {
+                'name': name,
+                'placement': service_spec_str,
+                'data_pool': data_pool,
+                'meta_pool': metadata_pool
+            }
+        )
         if error_code != 0:
             raise RuntimeError(
                 f'Error creating volume {name} with placement {str(service_spec)}: {err}')
@@ -719,6 +734,19 @@ class CephFsUi(CephFS):
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
+
+    @Endpoint('GET', path='/used-pools')
+    @ReadPermission
+    def ls_used_pools(self):
+        """
+        This API is created just to list all the used pools to the UI
+        so that it can be used for different validation purposes within
+        the UI
+        """
+        pools = []
+        for fs in CephFS_.list_filesystems(all_info=True):
+            pools.extend(fs['mdsmap']['data_pools'] + [fs['mdsmap']['metadata_pool']])
+        return pools
 
 
 @APIRouter('/cephfs/subvolume', Scope.CEPHFS)

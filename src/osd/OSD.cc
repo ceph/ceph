@@ -193,6 +193,7 @@ using ceph::make_mutex;
 using namespace ceph::osd::scheduler;
 using TOPNSPC::common::cmd_getval;
 using TOPNSPC::common::cmd_getval_or;
+using TOPNSPC::common::cmd_getval_cast_or;
 using namespace std::literals;
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
@@ -2133,6 +2134,7 @@ void OSD::write_superblock(CephContext* cct, OSDSuperblock& sb, ObjectStore::Tra
 
   bufferlist bl;
   encode(sb, bl);
+  t.truncate(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
   std::map<std::string, ceph::buffer::list> attrs;
   attrs.emplace(OSD_SUPERBLOCK_OMAP_KEY, bl);
@@ -4705,6 +4707,9 @@ int OSD::shutdown()
     osd_op_tp.drain();
     osd_op_tp.stop();
 
+    dout(10) << "stopping agent" << dendl;
+    service.agent_stop();
+
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
     service.fast_shutdown();
@@ -6582,10 +6587,10 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       return;
     }
 
-    int64_t shardid64 = cmd_getval_or<int64_t>(cmdmap, "shardid", static_cast<int64_t>(shard_id_t::NO_SHARD));
-    shard_id_t shardid = shard_id_t(static_cast<int8_t>(shardid64));
-
-    hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
+    shard_id_t shardid =
+	cmd_getval_cast_or<int64_t>(cmdmap, "shardid", shard_id_t::NO_SHARD);
+    hobject_t obj(
+	object_t(objname), ""s, CEPH_NOSNAP, rawpg.ps(), pool, nspace);
     ghobject_t gobj(obj, ghobject_t::NO_GEN, shardid);
     spg_t pgid(curmap->raw_pg_to_pg(rawpg), shardid);
     if (curmap->pg_is_ec(rawpg)) {
