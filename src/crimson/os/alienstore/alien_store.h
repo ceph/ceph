@@ -66,14 +66,6 @@ public:
     const omap_keys_t& keys,
     uint32_t op_flags = 0) final;
 
-  /// Retrieves paged set of values > start (if present)
-  read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
-    CollectionRef c,           ///< [in] collection
-    const ghobject_t &oid,     ///< [in] oid
-    const std::optional<std::string> &start, ///< [in] start, empty for begin
-    uint32_t op_flags = 0
-    ) final; ///< @return <done, values> values.empty() iff done
-
   seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
     CollectionRef c,
     const ghobject_t& start,

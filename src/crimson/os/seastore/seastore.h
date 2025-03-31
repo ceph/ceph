@@ -42,7 +42,6 @@ enum class op_type_t : uint8_t {
     GET_ATTRS,
     STAT,
     OMAP_GET_VALUES,
-    OMAP_GET_VALUES2,
     OMAP_ITERATE,
     MAX
 };
@@ -139,14 +138,6 @@ public:
       const ghobject_t& oid,
       const omap_keys_t& keys,
       uint32_t op_flags = 0) final;
-
-    /// Retrieves paged set of values > start (if present)
-    read_errorator::future<omap_values_paged_t> omap_get_values(
-      CollectionRef c,           ///< [in] collection
-      const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start, ///< [in] start, empty for begin
-      uint32_t op_flags = 0
-      ) final; ///< @return <done, values> values.empty() iff done
 
     read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
       CollectionRef c,
@@ -514,6 +505,7 @@ public:
       omap_root_t&& root,
       const omap_keys_t& keys) const;
 
+    using omap_values_paged_t = std::tuple<bool, omap_values_t>;
     base_iertr::future<omap_values_paged_t> omaptree_get_values(
       Transaction& t,
       omap_root_t&& root,
