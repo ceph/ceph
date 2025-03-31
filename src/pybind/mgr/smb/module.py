@@ -367,3 +367,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             return
         log.debug('Preparing db tables')
         self._internal_store.prepare(db.cursor())
+
+
+# TICKLER COMMENT
