@@ -205,7 +205,7 @@ class SubvolumeV3(SubvolumeV2):
     def trash_subvol_dir(self):
         create_trashcan(self.fs, self.vol_spec)
 
-        if self.is_mnt_dir_empty() and not self.are_there_other_incarnations():
+        if not self.are_there_other_incarnations():
             with open_trashcan(self.fs, self.vol_spec) as trashcan:
                 trashcan.dump(self.subvol_dir)
 
