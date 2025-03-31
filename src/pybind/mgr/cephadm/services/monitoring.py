@@ -278,15 +278,10 @@ class AlertmanagerService(CephadmService):
     USER_CFG_KEY = 'alertmanager/web_user'
     PASS_CFG_KEY = 'alertmanager/web_password'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
     def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "alertmanager_servers"], node_ip)
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
+        cert, key = self.get_certificates(daemon_spec, host_ips, host_fqdns)
         return cert, key
 
     @classmethod
