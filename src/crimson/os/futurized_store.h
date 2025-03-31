@@ -88,14 +88,6 @@ public:
       const omap_keys_t& keys,
       uint32_t op_flags = 0) = 0;
 
-    using omap_values_paged_t = std::tuple<bool, omap_values_t>;
-    virtual read_errorator::future<omap_values_paged_t> omap_get_values(
-      CollectionRef c,           ///< [in] collection
-      const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start, ///< [in] start, empty for begin
-      uint32_t op_flags = 0
-      ) = 0; ///< @return <done, values> values.empty() only if done
-
     /**
      * Iterate over object map with user-provided callable
      *
