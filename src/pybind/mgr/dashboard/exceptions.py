@@ -16,10 +16,12 @@ class DashboardException(Exception):
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, e=None, code=None, component=None, http_status_code=None, msg=None):
+    def __init__(self, e=None, code=None, component=None, http_status_code=None,
+                 msg=None, title=None):
         super(DashboardException, self).__init__(msg)
         self._code = code
         self.component = component
+        self.title = title
         if e:
             self.e = e
         if http_status_code:

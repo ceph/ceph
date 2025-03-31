@@ -121,24 +121,27 @@ JOIN_AUTH_SCHEMA_RESULTS = add_results_to_schema(JOIN_AUTH_SCHEMA)
 USERSGROUPS_SCHEMA_RESULTS = add_results_to_schema(JOIN_AUTH_SCHEMA_RESULTS)
 
 
-def raise_on_failure(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
+def raise_on_failure(resource: str = '', title: str = ''):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
 
-        if isinstance(result, dict) and result.get('success') is False:
-            msg = 'Operation failed'
+            if isinstance(result, dict) and result.get('success') is False:
+                msg = 'Operation failed'
 
-            # Extracts the result msg from either of two possible response structures:
-            if 'results' in result:
-                msg = result['results'][0].get('msg', msg)
-            elif 'msg' in result:
-                msg = result['msg']
-            raise DashboardException(msg=msg, component='smb')
+                # Extracts the result msg from either of two possible response structures:
+                if 'results' in result:
+                    msg = result['results'][0].get('msg', msg)
+                elif 'msg' in result:
+                    msg = result['msg']
+                raise DashboardException(msg=msg,
+                                         component=resource or 'smb', title=title or func.__name__)
 
-        return result
+            return result
 
-    return wrapper
+        return wrapper
+    return decorator
 
 
 @APIRouter('/smb/cluster', Scope.SMB)
@@ -168,7 +171,7 @@ class SMBCluster(RESTController):
         """
         return mgr.remote('smb', 'show', [f'{self._resource}.{cluster_id}'])
 
-    @raise_on_failure
+    @raise_on_failure('cluster')
     @CreatePermission
     @EndpointDoc("Create smb cluster",
                  parameters={
@@ -191,6 +194,7 @@ class SMBCluster(RESTController):
         except RuntimeError as e:
             raise DashboardException(e, component='smb')
 
+    @raise_on_failure('cluster')
     @DeletePermission
     @EndpointDoc("Remove an smb cluster",
                  parameters={
@@ -235,7 +239,7 @@ class SMBShare(RESTController):
             [f'{self._resource}.{cluster_id}' if cluster_id else self._resource])
         return res['resources'] if 'resources' in res else [res]
 
-    @raise_on_failure
+    @raise_on_failure('share')
     @CreatePermission
     @EndpointDoc("Create smb share",
                  parameters={
@@ -271,7 +275,7 @@ class SMBShare(RESTController):
         """
         return mgr.remote('smb', 'show', [f'{self._resource}.{cluster_id}.{share_id}'])
 
-    @raise_on_failure
+    @raise_on_failure('share')
     @DeletePermission
     @EndpointDoc("Remove an smb share",
                  parameters={
@@ -349,7 +353,8 @@ class SMBJoinAuth(RESTController):
         """
         return mgr.remote('smb', 'apply_resources', json.dumps(join_auth)).to_simplified()
 
-    @CreatePermission
+    @raise_on_failure('active-directory')
+    @DeletePermission
     @EndpointDoc("Delete smb join auth",
                  parameters={
                      'auth_id': (str, 'auth_id')
@@ -423,7 +428,8 @@ class SMBUsersgroups(RESTController):
         """
         return mgr.remote('smb', 'apply_resources', json.dumps(usersgroups)).to_simplified()
 
-    @CreatePermission
+    @raise_on_failure('standalone')
+    @DeletePermission
     @EndpointDoc("Delete smb join auth",
                  parameters={
                      'users_groups_id': (str, 'users_groups_id')
