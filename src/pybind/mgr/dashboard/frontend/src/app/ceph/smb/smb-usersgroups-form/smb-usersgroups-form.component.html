@@ -53,6 +53,12 @@
           i18n
           >This field is required.</span
         >
+        <span
+          class="invalid-feedback"
+          *ngIf="form.showError('usersGroupsId', form, 'notUnique')"
+          i18n
+        >The chosen users and groups name is already in use.
+        </span>
       </ng-template>
     </div>
 

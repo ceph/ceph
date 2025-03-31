@@ -1,6 +1,8 @@
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable, signal } from '@angular/core';
-import { Observable, Subject } from 'rxjs';
+import { Observable, of, Subject } from 'rxjs';
+import _ from 'lodash';
+import { map, catchError } from 'rxjs/operators';
 
 import {
   ClusterRequestModel,
@@ -83,6 +85,41 @@ export class SmbService {
     return this.http.delete(`${this.baseURL}/cluster/${clusterId}`, {
       observe: 'response'
     });
+  }
+
+  resourceExistsOperator() {
+    return (source$: Observable<any>) =>
+      source$.pipe(
+        map((response: SMBCluster | any) => {
+          // returns [] or {"resources": []} when not found
+          if (response?.length === 0 || response?.resources?.length === 0) {
+            return false;
+          }
+          return true;
+        }),
+        catchError((error: any) => {
+          if (_.isFunction(error.preventDefault)) {
+            error.preventDefault();
+          }
+          return of(false);
+        })
+      );
+  }
+
+  clusterExists(clusterId: string) {
+    return this.getCluster(clusterId).pipe(this.resourceExistsOperator());
+  }
+
+  shareExists(shareId: string, clusterId: string) {
+    return this.getShare(clusterId, shareId).pipe(this.resourceExistsOperator());
+  }
+
+  joinAuthExists(joinAuthId: string) {
+    return this.getJoinAuth(joinAuthId).pipe(this.resourceExistsOperator());
+  }
+
+  usersGroupsExists(usersGroupsId: string) {
+    return this.getUsersGroups(usersGroupsId).pipe(this.resourceExistsOperator());
   }
 
   listShares(clusterId: string): Observable<SMBShare[]> {
