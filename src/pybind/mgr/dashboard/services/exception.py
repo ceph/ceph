@@ -33,6 +33,8 @@ def serialize_dashboard_exception(e, include_http_status=False, task=None):
         pass
     component = getattr(e, 'component', None)
     out['component'] = component if component else None
+    if title := getattr(e, 'title', None):
+        out['title'] = title
     if include_http_status:
         out['status'] = getattr(e, 'status', 500)  # type: ignore
     if task:
