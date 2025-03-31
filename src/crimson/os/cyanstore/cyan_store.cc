@@ -390,29 +390,6 @@ auto CyanStore::Shard::omap_get_values(
   return seastar::make_ready_future<omap_values_t>(std::move(values));
 }
 
-auto CyanStore::Shard::omap_get_values(
-  CollectionRef ch,
-  const ghobject_t &oid,
-  const std::optional<string> &start,
-  uint32_t op_flags)
-  -> CyanStore::Shard::read_errorator::future<std::tuple<bool, omap_values_t>>
-{
-  auto c = static_cast<Collection*>(ch.get());
-  logger().debug("{} {} {}", __func__, c->get_cid(), oid);
-  auto o = c->get_object(oid);
-  if (!o) {
-    return crimson::ct_error::enoent::make();
-  }
-  omap_values_t values;
-  for (auto i = start ? o->omap.upper_bound(*start) : o->omap.begin();
-       i != o->omap.end();
-       ++i) {
-    values.insert(*i);
-  }
-  return seastar::make_ready_future<std::tuple<bool, omap_values_t>>(
-    std::make_tuple(true, std::move(values)));
-}
-
 auto CyanStore::Shard::omap_iterate(
   CollectionRef ch,
   const ghobject_t &oid,
