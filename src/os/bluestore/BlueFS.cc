@@ -3744,7 +3744,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   if (offset > fnode.size) {
     ceph_abort_msg("truncate up not supported");
   }
-
+  unittest_inject_delay();
   _flush_bdev(h);
   {
     std::lock_guard ll(log.lock);
