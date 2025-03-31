@@ -11996,6 +11996,53 @@ TEST_P(StoreTestSpecificAUSize, BlueFSReservedTest) {
             g_conf()->bluefs_alloc_size + wal_extra);
 }
 
+
+TEST_P(StoreTest, BlueFS_truncate_remove_race) {
+  if (string(GetParam()) != "bluestore")
+    GTEST_SKIP();
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS& fs = *bstore->get_bluefs();
+  fs.unittest_inject_delay = []() { usleep(1000); };
+  static constexpr uint32_t batch_size = 20;
+  std::binary_semaphore go_remove(0);
+  std::binary_semaphore done_remove(0);
+
+  auto files_remover = [&]() {
+    for (uint32_t cnt = 0; cnt < batch_size; cnt++) {
+      go_remove.acquire();
+      std::string name = "test-file-" + std::to_string(cnt);
+      fs.unlink("dir", name);
+      fs.sync_metadata(false);
+      done_remove.release();
+    }
+  };
+
+  ASSERT_EQ(0, fs.mkdir("dir"));
+  std::thread remover_thread(files_remover);
+
+  for (uint32_t cnt = 0; cnt < batch_size; cnt++) {
+    std::string name = "test-file-" + std::to_string(cnt);
+    BlueFS::FileWriter *f = nullptr;
+    ASSERT_EQ(0, fs.open_for_write("dir", name, &f, false));
+    fs.preallocate(f->file, 0, 100000);
+    for (uint32_t i = 0; i < 10; i++) {
+      fs.append_try_flush(f, "x", 1);
+      fs.fsync(f);
+    }
+    go_remove.release();
+    fs.truncate(f, 10);
+    fs.close_writer(f);
+    done_remove.acquire();
+  }
+
+  remover_thread.join();
+  fs.unittest_inject_delay = nullptr;
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
