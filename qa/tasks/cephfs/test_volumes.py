@@ -5311,7 +5311,9 @@ class TestPauseCloning(TestVolumesHelper):
         # ...and now let's pause cloning
         self.run_ceph_cmd(f'config set mgr {self.CONF_OPT} true')
 
-        path = os.path.dirname(os.path.dirname(sv_path))
+        path = sv_path
+        for i in range(0, 4):
+            path = os.path.dirname(path)
         uuid = self.mount_a.get_shell_stdout(f'ls {path}/{c}').strip()
         # n = num of files, value returned by "wc -l"
         n = self.mount_a.get_shell_stdout(f'ls {path}/{c}/{uuid} | wc -l')
