@@ -67,6 +67,7 @@
     "detect-browser": "5.2.0",
     "file-saver": "2.0.2",
     "fork-awesome": "1.1.7",
+    "is-cidr": "5.1.1",
     "js-yaml": "4.1.0",
     "lodash": "4.17.21",
     "moment": "2.29.4",
