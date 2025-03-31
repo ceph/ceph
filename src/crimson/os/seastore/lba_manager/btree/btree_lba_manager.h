@@ -67,7 +67,18 @@ public:
 
   get_mapping_ret get_mapping(
     Transaction &t,
-    laddr_t offset) final;
+    laddr_t offset,
+    bool find_containment = false) final;
+
+  get_mapping_ret get_mapping(
+    Transaction &t,
+    LogicalChildNode &extent) final;
+
+  alloc_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping pos,
+    laddr_t laddr,
+    extent_len_t len) final;
 
   alloc_extent_ret reserve_region(
     Transaction &t,
@@ -120,6 +131,15 @@ public:
 	crimson::ct_error::input_output_error::pass_further{},
 	crimson::ct_error::assert_all{"unexpect enoent"});
   }
+
+  next_mapping_ret next_mapping(
+    Transaction &t,
+    LBAMapping mapping) final;
+
+  alloc_extents_ret alloc_extents(
+    Transaction &t,
+    LBAMapping mapping,
+    std::vector<LogicalChildNodeRef> ext) final;
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
@@ -195,15 +215,53 @@ public:
     laddr_t addr) final {
     return update_refcount(t, addr, -1, true
     ).si_then([](auto res) {
-      return ref_update_result_t(res);
+      return ref_update_result_t(std::move(res));
+    });
+  }
+
+  ref_ret remove_mapping(
+    Transaction &t,
+    LBAMapping mapping) final {
+    assert(mapping.is_valid());
+    return seastar::do_with(
+      std::move(mapping),
+      [&t, this](auto &mapping) {
+      auto &cursor = mapping.get_effective_cursor();
+      return update_refcount(t, &cursor, -1, true
+      ).si_then([](auto res) {
+	return ref_update_result_t(std::move(res));
+      });
+    });
+  }
+
+  ref_ret incref_extent(
+    Transaction &t,
+    laddr_t addr) final {
+    return update_refcount(t, addr, 1, false
+    ).si_then([](auto res) {
+      return ref_update_result_t(std::move(res));
+    });
+  }
+
+  ref_ret incref_extent(
+    Transaction &t,
+    LBAMapping mapping) final {
+    assert(mapping.is_valid());
+    return seastar::do_with(
+      std::move(mapping),
+      [&t, this](auto &mapping) {
+      auto &cursor = mapping.get_effective_cursor();
+      return update_refcount(t, &cursor, 1, false
+      ).si_then([](auto res) {
+	return ref_update_result_t(std::move(res));
+      });
     });
   }
 
   remap_ret remap_mappings(
     Transaction &t,
-    LBAMapping orig_mapping,
-    std::vector<remap_entry_t> remaps,
-    std::vector<LogicalChildNodeRef> extents) final;
+    LBAMapping mapping,
+    std::vector<remap_entry_t> remaps) final;
 
   /**
    * init_cached_extent
@@ -233,7 +291,7 @@ public:
 
   update_mapping_ret update_mapping(
     Transaction& t,
-    laddr_t laddr,
+    LBAMapping mapping,
     extent_len_t prev_len,
     paddr_t prev_addr,
     LogicalChildNode&) final;
@@ -250,6 +308,10 @@ public:
     extent_len_t len) final;
 
   refresh_lba_mapping_ret refresh_lba_mapping(
+    Transaction &t,
+    LBAMapping mapping) final;
+
+  complete_lba_mapping_ret complete_indirect_lba_mapping(
     Transaction &t,
     LBAMapping mapping) final;
 
@@ -322,12 +384,14 @@ private:
     update_mapping_ret_bare_t(LBACursorRef cursor)
 	: ret(std::move(cursor)) {}
 
-    update_mapping_ret_bare_t(laddr_t laddr, lba_map_val_t value)
-	: ret(removed_mapping_t{laddr, value}) {}
+    update_mapping_ret_bare_t(
+      laddr_t laddr, lba_map_val_t value, LBACursorRef &&cursor)
+	: ret(removed_mapping_t{laddr, value, std::move(cursor)}) {}
 
     struct removed_mapping_t {
       laddr_t laddr;
       lba_map_val_t map_value;
+      LBACursorRef next;
     };
     std::variant<removed_mapping_t, LBACursorRef> ret;
 
@@ -337,6 +401,11 @@ private:
 
     bool is_alive_mapping() const {
       return ret.index() == 1 && std::get<1>(ret);
+    }
+
+    removed_mapping_t &get_removed_mapping() {
+      assert(is_removed_mapping());
+      return std::get<0>(ret);
     }
 
     const removed_mapping_t& get_removed_mapping() const {
@@ -354,16 +423,26 @@ private:
       return std::move(std::get<1>(ret));
     }
 
-    operator ref_update_result_t() const {
+    operator ref_update_result_t() && {
       if (is_removed_mapping()) {
 	auto v = get_removed_mapping();
 	auto &val = v.map_value;
-	return {v.laddr, val.refcount, val.pladdr, val.len};
+	return {v.laddr,
+		val.refcount,
+		val.pladdr,
+		val.len,
+		(!v.next->is_end() && v.next->is_indirect())
+		  ? LBAMapping::create_indirect(std::move(v.next))
+		  : LBAMapping::create_direct(std::move(v.next))};
       } else {
 	auto &c = get_cursor();
 	assert(!c.is_end());
 	assert(c.val);
-	return {c.get_laddr(), c.val->refcount, c.val->pladdr, c.val->len};
+	return {c.get_laddr(), c.val->refcount, 
+	  c.val->pladdr, c.val->len,
+	  c.is_indirect()
+	    ? LBAMapping::create_indirect(take_cursor())
+	    : LBAMapping::create_direct(take_cursor())};
       }
     }
   };
@@ -373,7 +452,7 @@ private:
     update_mapping_ret_bare_t>;
   update_refcount_ret update_refcount(
     Transaction &t,
-    laddr_t addr,
+    std::variant<laddr_t, LBACursor*> addr_or_cursor,
     int delta,
     bool cascade_remove);
 
@@ -391,6 +470,11 @@ private:
   _update_mapping_ret _update_mapping(
     Transaction &t,
     laddr_t addr,
+    update_func_t &&f,
+    LogicalChildNode*);
+  _update_mapping_ret _update_mapping(
+    Transaction &t,
+    LBACursor &cursor,
     update_func_t &&f,
     LogicalChildNode*);
 
@@ -468,7 +552,7 @@ private:
     ceph_assert(delta > 0);
     return update_refcount(t, addr, delta, false
     ).si_then([](auto res) {
-      return ref_update_result_t(res);
+      return ref_update_result_t(std::move(res));
     });
   }
 
@@ -477,6 +561,11 @@ private:
     op_context_t c,
     LBABtree& btree,
     laddr_t offset);
+
+  _get_cursor_ret get_containing_cursor(
+    op_context_t c,
+    LBABtree &btree,
+    laddr_t laddr);
 
   using _get_cursors_ret = get_mappings_iertr::future<std::list<LBACursorRef>>;
   _get_cursors_ret get_cursors(
@@ -490,6 +579,18 @@ private:
     op_context_t c,
     LBABtree& btree,
     const LBACursor& indirect_cursor);
+
+  resolve_indirect_cursor_ret resolve_indirect_cursor(
+    op_context_t c,
+    const LBACursor& indirect_cursor) {
+    assert(indirect_cursor.is_indirect());
+    return with_btree<LBABtree>(
+      cache,
+      c,
+      [c, &indirect_cursor, this](auto &btree) {
+      return resolve_indirect_cursor(c, btree, indirect_cursor);
+    });
+  }
 
   using _decref_intermediate_ret = ref_iertr::future<
     update_mapping_ret_bare_t>;
@@ -511,7 +612,18 @@ private:
   refresh_lba_cursor_ret refresh_lba_cursor(
     op_context_t c,
     LBABtree &btree,
-    LBACursorRef &cursor);
+    LBACursorRef cursor);
+
+  refresh_lba_cursor_ret refresh_lba_cursor(
+    op_context_t c,
+    LBACursorRef cursor) {
+    return with_btree<LBABtree>(
+      cache,
+      c,
+      [c, cursor, this](auto &btree) {
+      return refresh_lba_cursor(c, btree, cursor);
+    });
+  }
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
