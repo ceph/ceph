@@ -102,7 +102,8 @@ def _config_user(s3tests_conf, section, user, email, account = None):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', email)
     s3tests_conf[section].setdefault('display_name', 'Mr.{user}'.format(user=user))
-    s3tests_conf[section].setdefault('account_id', account)
+    if account:
+        s3tests_conf[section].setdefault('account_id', account)
     s3tests_conf[section].setdefault('access_key',
         ''.join(random.choice(string.ascii_uppercase) for i in range(20)))
     s3tests_conf[section].setdefault('secret_key',
