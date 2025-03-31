@@ -25,6 +25,8 @@
 #include "rgw_process_env.h"
 #include "rgw_rest.h"
 #include "rgw_rest_iam.h"
+// TODO: move from rados
+#include "driver/rados/rgw_user.h"
 
 
 static std::string make_resource_name(const RGWUserInfo& info)
@@ -939,11 +941,12 @@ void RGWCreateAccessKey_IAM::execute(optional_yield y)
   }
 
   // generate the key. forward_to_master() may overwrite this
-  if (rgw_generate_access_key(this, y, driver, key.id) < 0) {
+  // TODO: move rgw_generate_access_key from rados
+  /*if (rgw_generate_access_key(this, y, driver, key.id) < 0) {
     s->err.message = "failed to generate s3 access key";
     op_ret = -ERR_INTERNAL_ERROR;
     return;
-  }
+  }*/
   rgw_generate_secret_key(get_cct(), key.key);
   key.create_date = ceph::real_clock::now();
 

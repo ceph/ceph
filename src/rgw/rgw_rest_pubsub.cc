@@ -235,9 +235,11 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
 }
 
 bool should_forward_request_to_master(req_state* s, rgw::sal::Driver* driver) {
-  return (!driver->is_meta_master() &&
-          rgw::all_zonegroups_support(*s->penv.site,
-                                      rgw::zone_features::notification_v2));
+  // TODO: move all_zonegroups_support from rados
+  return (!driver->is_meta_master()
+          /*&& rgw::all_zonegroups_support(*s->penv.site,
+                                      rgw::zone_features::notification_v2)*/
+                                      );
 }
 
 // command (AWS compliant):
@@ -324,12 +326,13 @@ class RGWPSCreateTopicOp : public RGWOp {
     }
 
       // account users require the notification_v2 format to index the topic metadata
-    if (s->auth.identity->get_account() &&
+    // TODO: move all_zonegroups_support from rados
+    /*if (s->auth.identity->get_account() &&
         !rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
       s->err.message = "The 'notification_v2' zone feature must be enabled "
           "to create topics in an account";
       return -EINVAL;
-    }
+    }*/
 
     // try to load existing topic for owner and policy
     const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
@@ -499,11 +502,12 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
   const std::string start_token = s->info.args.get("NextToken");
 
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
-  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
+  // TODO: move all_zonegroups_support from rados
+  /*if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
       driver->stat_topics_v1(get_account_or_tenant(s->owner.id), null_yield, this) == -ENOENT) {
     constexpr int max_items = 100;
     op_ret = ps.get_topics_v2(this, start_token, max_items, result, next_token, y);
-  } else {
+  } else*/ {
     op_ret = ps.get_topics_v1(this, result, y);
   }
   // if there are no topics it is not considered an error
@@ -1277,9 +1281,10 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     }
   }
 
-  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+  // TODO: move all_zonegroups_support from rados
+  /*if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
     return execute_v2(y);
-  }
+  }*/
 
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   const RGWPubSub::Bucket b(ps, s->bucket.get());
@@ -1480,9 +1485,10 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     }
   }
 
-  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+  // TODO: move all_zonegroups_support from rados
+  /*if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
     return execute_v2(y);
-  }
+  }*/
 
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   const RGWPubSub::Bucket b(ps, s->bucket.get());
@@ -1586,10 +1592,11 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
+  // TODO: move all_zonegroups_support from rados
+  /*if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
       driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
     op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
-  } else {
+  } else */{
     const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     const RGWPubSub::Bucket b(ps, bucket.get());
     op_ret = b.get_topics(this, bucket_topics, y);
