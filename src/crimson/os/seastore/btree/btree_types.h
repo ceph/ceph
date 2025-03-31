@@ -279,6 +279,9 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     assert(!is_indirect());
     return val->refcount;
   }
+  bool contains(laddr_t laddr) const {
+    return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
+  }
   std::unique_ptr<LBACursor> duplicate() const {
     return std::make_unique<LBACursor>(*this);
   }
