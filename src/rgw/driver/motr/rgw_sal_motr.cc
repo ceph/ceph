@@ -1536,6 +1536,7 @@ int MotrObject::copy_object(const ACLOwner& owner,
     std::string* etag,
     void (*progress_cb)(off_t, void *),
     void* progress_data,
+    rgw::sal::ObjectFilter *read_filter,
     const DoutPrefixProvider* dpp,
     optional_yield y)
 {
