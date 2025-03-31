@@ -728,7 +728,6 @@ BtreeLBAManager::get_physical_extent_if_live(
 BtreeLBAManager::refresh_lba_mapping_ret
 BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
 {
-  assert(mapping.is_linked_direct());
   if (mapping.is_viewable()) {
     return refresh_lba_mapping_iertr::make_ready_future<
       LBAMapping>(std::move(mapping));
@@ -740,8 +739,12 @@ BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
     std::move(mapping),
     [c, this](LBABtree &btree, LBAMapping &mapping) mutable
   {
-    return refresh_lba_cursor(c, btree, *mapping.direct_cursor
-    ).si_then([c, this, &btree, &mapping] {
+    return seastar::futurize_invoke([c, this, &btree, &mapping] {
+      if (mapping.direct_cursor) {
+        return refresh_lba_cursor(c, btree, *mapping.direct_cursor);
+      }
+      return refresh_lba_cursor_iertr::make_ready_future();
+    }).si_then([c, this, &btree, &mapping] {
       if (mapping.indirect_cursor) {
 	return refresh_lba_cursor(c, btree, *mapping.indirect_cursor);
       }
