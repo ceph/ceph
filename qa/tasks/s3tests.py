@@ -94,7 +94,7 @@ def download(ctx, config):
                         )
 
 
-def _config_user(s3tests_conf, section, user, email):
+def _config_user(s3tests_conf, section, user, email, account = None):
     """
     Configure users for this section by stashing away keys, ids, and
     email addresses.
@@ -102,6 +102,7 @@ def _config_user(s3tests_conf, section, user, email):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', email)
     s3tests_conf[section].setdefault('display_name', 'Mr.{user}'.format(user=user))
+    s3tests_conf[section].setdefault('account_id', account)
     s3tests_conf[section].setdefault('access_key',
         ''.join(random.choice(string.ascii_uppercase) for i in range(20)))
     s3tests_conf[section].setdefault('secret_key',
@@ -156,7 +157,7 @@ def create_users(ctx, config, s3tests_conf):
                 if section == 's3 tenant':
                     args += ['--tenant', 'testx']
                 ctx.cluster.only(client).run(args=args)
-                _config_user(conf, section, account_id, account_email)
+                _config_user(conf, section, account_id, account_email, account_id)
             else:
                 _config_user(conf, section, user_id, user_email)
 
