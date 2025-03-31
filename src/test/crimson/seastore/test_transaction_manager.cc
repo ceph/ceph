@@ -1408,6 +1408,7 @@ struct transaction_manager_test_t :
 	auto l_clone_pin = clone_pin(t, l_clone_offset, lpin);
 	auto r_clone_pin = clone_pin(t, r_clone_offset, rpin);
         //split left
+	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
         ASSERT_TRUE(pin1);
         auto pin2 = remap_pin(t, std::move(*pin1), 0, 8 << 10);
@@ -1418,6 +1419,7 @@ struct transaction_manager_test_t :
         EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
 
         //split right
+	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
         ASSERT_TRUE(pin4);
         auto pin5 = remap_pin(t, std::move(*pin4), 8 << 10, 8 << 10);
@@ -1561,17 +1563,17 @@ struct transaction_manager_test_t :
 		continue;
 	      }
               auto new_off = get_laddr_hint(off << 10)
-		  .get_byte_distance<extent_len_t>(last_pin.get_key());
-              auto new_len = last_pin.get_length() - new_off;
+		  .get_byte_distance<extent_len_t>(last_pin->get_key());
+              auto new_len = last_pin->get_length() - new_off;
               //always remap right extent at new split_point
-	      auto pin = remap_pin(t, std::move(last_pin), new_off, new_len);
+	      auto pin = remap_pin(t, std::move(*last_pin), new_off, new_len);
               if (!pin) {
 		conflicted++;
 		return;
 	      }
               last_pin = pin->duplicate();
 	    }
-            auto last_ext = try_get_extent(t, last_pin.get_key());
+            auto last_ext = try_get_extent(t, last_pin->get_key());
             if (last_ext) {
 	      auto last_ext1 = mutate_extent(t, last_ext);
 	      ASSERT_TRUE(last_ext1->is_exist_mutation_pending());

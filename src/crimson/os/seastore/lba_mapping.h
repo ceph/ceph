@@ -24,10 +24,17 @@ public:
     assert(!indirect_cursor || indirect_cursor->is_indirect());
   }
 
+  static LBAMapping create_indirect(LBACursorRef indirect) {
+    assert(indirect->is_indirect());
+    return LBAMapping(nullptr, std::move(indirect));
+  }
+
   static LBAMapping create_direct(LBACursorRef direct) {
+    assert(!direct->is_indirect());
     return LBAMapping(std::move(direct), nullptr);
   }
 
+  LBAMapping() = default;
   LBAMapping(const LBAMapping &) = delete;
   LBAMapping(LBAMapping &&) = default;
   LBAMapping &operator=(const LBAMapping &) = delete;
@@ -122,6 +129,11 @@ public:
     };
     return LBAMapping(dup_iter(direct_cursor), dup_iter(indirect_cursor));
   }
+
+  bool is_null() const {
+    return !direct_cursor && !indirect_cursor;
+  }
+
 private:
   friend class lba_manager::btree::BtreeLBAManager;
   friend class TransactionManager;

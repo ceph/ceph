@@ -105,10 +105,11 @@ public:
   using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAMapping>;
   get_pin_ret get_pin(
     Transaction &t,
-    laddr_t offset) {
+    laddr_t offset,
+    bool find_containment = false) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
-    return lba_manager->get_mapping(t, offset
+    return lba_manager->get_mapping(t, offset, find_containment
     ).si_then([FNAME, &t](LBAMapping pin) {
       SUBDEBUGT(seastore_tm, "got {}", t, pin);
       return pin;
@@ -319,6 +320,12 @@ public:
     });
   }
 
+  base_iertr::future<LBAMapping> next_mapping(
+    Transaction &t,
+    LBAMapping mapping) {
+    return lba_manager->next_mapping(t, std::move(mapping));
+  }
+
   template <typename T>
   base_iertr::future<maybe_indirect_extent_t<T>> read_pin(
     Transaction &t,
@@ -352,6 +359,10 @@ public:
   ref_ret remove(
     Transaction &t,
     laddr_t offset);
+
+  ref_iertr::future<LBAMapping> remove(
+    Transaction &t,
+    LBAMapping mapping);
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
@@ -414,6 +425,7 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
+    std::optional<LBAMapping> mapping = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_data_type(T::TYPE));
     LOG_PREFIX(TransactionManager::alloc_data_extents);
@@ -429,13 +441,31 @@ public:
     for (auto& ext : exts) {
       ext->set_seen_by_users();
     }
-    return lba_manager->alloc_extents(
-      t,
-      laddr_hint,
-      std::vector<LogicalChildNodeRef>(
-	exts.begin(), exts.end()),
-      EXTENT_DEFAULT_REF_COUNT
-    ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
+    if (mapping) {
+      // laddr_hint is determined
+      auto off = laddr_hint;
+      for (auto &extent : exts) {
+	extent->set_laddr(off);
+	off = (off + extent->get_length()).checked_to_laddr();
+      }
+    }
+    auto fut = alloc_extents_iertr::make_ready_future<
+      std::vector<LBAMapping>>();
+    if (mapping) {
+      fut = lba_manager->alloc_extents(
+	t,
+	std::move(*mapping),
+	std::vector<LogicalChildNodeRef>(
+	  exts.begin(), exts.end()));
+    } else {
+      fut = lba_manager->alloc_extents(
+	t,
+	laddr_hint,
+	std::vector<LogicalChildNodeRef>(
+	  exts.begin(), exts.end()),
+	EXTENT_DEFAULT_REF_COUNT);
+    }
+    return fut.si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
       for (auto &ext : exts) {
 	SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
       }
@@ -489,6 +519,7 @@ public:
     // must be user-oriented required by (the potential) maybe_init
     assert(is_user_transaction(t.get_src()));
 
+    LOG_PREFIX(TransactionManager::remap_pin);
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
       [](remap_entry_t x, remap_entry_t y) {
@@ -516,19 +547,24 @@ public:
 #endif
 
     return seastar::do_with(
-      std::vector<LogicalChildNodeRef>(),
       std::move(pin),
       std::move(remaps),
-      [&t, this](auto &extents, auto &pin, auto &remaps) {
-      laddr_t original_laddr = pin.get_key();
-      extent_len_t original_len = pin.get_length();
-      paddr_t original_paddr = pin.get_val();
-      LOG_PREFIX(TransactionManager::remap_pin);
-      SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
-                t, original_laddr, original_len, original_paddr, remaps.size(), pin);
+      [FNAME, &t, this](auto &pin, auto &remaps) {
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
-      if (!pin.is_indirect()) {
+      if (pin.is_indirect()) {
+	SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
+	  t, pin, remaps.size());
+	fut = lba_manager->complete_indirect_lba_mapping(t, std::move(pin)
+	).si_then([&pin](auto mapping) {
+	  pin = std::move(mapping);
+	});
+      } else if (!pin.is_indirect()) {
+	laddr_t original_laddr = pin.get_key();
+	extent_len_t original_len = pin.get_length();
+	paddr_t original_paddr = pin.get_val();
+	SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
+	  t, original_laddr, original_len, original_paddr, remaps.size(), pin);
         ceph_assert(!pin.is_clone());
 	fut = fut.si_then([this, &t, pin=pin.duplicate()]() mutable {
 	  if (pin.is_valid()) {
@@ -562,8 +598,7 @@ public:
 	    }
 	  }
 	}).si_then([this, &t, &remaps, original_paddr,
-			    original_laddr, original_len,
-			    &extents, FNAME](auto ext) mutable {
+		    original_laddr, original_len, FNAME](auto ext) mutable {
 	  ceph_assert(full_extent_integrity_check
 	      ? (ext && ext->is_fully_loaded())
 	      : true);
@@ -602,16 +637,15 @@ public:
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
-	    extents.emplace_back(std::move(extent));
+	    remap.extent = extent.get();
 	  }
 	});
       }
-      return fut.si_then([this, &t, &pin, &remaps, &extents, FNAME] {
+      return fut.si_then([this, &t, &pin, &remaps, FNAME] {
 	return lba_manager->remap_mappings(
 	  t,
 	  std::move(pin),
-	  std::vector<remap_entry_t>(remaps.begin(), remaps.end()),
-	  std::move(extents)
+	  std::vector<remap_entry_t>(remaps.begin(), remaps.end())
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
 	  return Cache::retire_extent_iertr::make_ready_future<
@@ -636,6 +670,24 @@ public:
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
     return lba_manager->reserve_region(
       t,
+      hint,
+      len
+    ).si_then([FNAME, &t](auto pin) {
+      SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
+      return pin;
+    });
+  }
+
+  reserve_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping mapping,
+    laddr_t hint,
+    extent_len_t len) {
+    LOG_PREFIX(TransactionManager::reserve_region);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    return lba_manager->reserve_region(
+      t,
+      std::move(mapping),
       hint,
       len
     ).si_then([FNAME, &t](auto pin) {
