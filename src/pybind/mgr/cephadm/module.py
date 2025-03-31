@@ -3649,11 +3649,6 @@ Then run the following:
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
 
-        if spec.service_type == 'oauth2-proxy':
-            mgmt_gw_daemons = self.cache.get_daemons_by_service('mgmt-gateway')
-            if not mgmt_gw_daemons:
-                raise OrchestratorError("The 'oauth2-proxy' service depends on the 'mgmt-gateway' service, but it is not configured.")
-
         if spec.service_type == 'nvmeof':
             nvmeof_spec = cast(NvmeofServiceSpec, spec)
             assert nvmeof_spec.pool is not None, "Pool cannot be None for nvmeof services"
