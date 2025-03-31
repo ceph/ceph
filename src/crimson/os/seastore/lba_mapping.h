@@ -19,8 +19,7 @@ class LBAMapping {
     : direct_cursor(std::move(direct)),
       indirect_cursor(std::move(indirect))
   {
-    assert(is_linked_direct());
-    assert(!direct_cursor->is_indirect());
+    assert(!is_linked_direct() || !direct_cursor->is_indirect());
     assert(!indirect_cursor || indirect_cursor->is_indirect());
   }
 
@@ -45,14 +44,15 @@ public:
   }
 
   bool is_indirect() const {
-    assert(is_linked_direct());
+    assert(!is_null());
     return (bool)indirect_cursor;
   }
 
   bool is_viewable() const {
-    assert(is_linked_direct());
-    return direct_cursor->is_viewable()
-	&& (!indirect_cursor || indirect_cursor->is_viewable());
+    assert(!is_null());
+    return is_indirect()
+      ? indirect_cursor->is_viewable()
+      : direct_cursor->is_viewable();
   }
 
   // For reserved mappings, the return values are
@@ -69,7 +69,7 @@ public:
   }
 
   extent_len_t get_length() const {
-    assert(is_linked_direct());
+    assert(!is_null());
     if (is_indirect()) {
       return indirect_cursor->get_length();
     }
@@ -87,7 +87,7 @@ public:
   }
 
   laddr_t get_key() const {
-    assert(is_linked_direct());
+    assert(!is_null());
     if (is_indirect()) {
       return indirect_cursor->get_laddr();
     }
@@ -130,9 +130,30 @@ public:
     };
     return LBAMapping(dup_iter(direct_cursor), dup_iter(indirect_cursor));
   }
-
 private:
   friend lba::BtreeLBAManager;
+  friend class TransactionManager;
+  friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
+
+  LBACursor& get_effective_cursor() {
+    if (is_indirect()) {
+      return *indirect_cursor;
+    }
+    return *direct_cursor;
+  }
+
+  bool is_null() const {
+    return !indirect_cursor && !direct_cursor;
+  }
+
+  bool is_complete_indirect() const {
+    assert(!is_null());
+    return (bool)indirect_cursor && (bool)direct_cursor;
+  }
+
+  bool is_complete() const {
+    return !is_indirect() || is_complete_indirect();
+  }
 
   // To support cloning, there are two kinds of lba mappings:
   //    1. direct lba mapping: the pladdr in the value of which is the paddr of
