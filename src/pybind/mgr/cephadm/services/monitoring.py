@@ -17,7 +17,6 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
-from cephadm.tlsobject_store import TLSObjectScope
 from .. import utils
 
 if TYPE_CHECKING:
@@ -773,17 +772,6 @@ class NodeExporterService(CephadmService):
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
-    def get_node_exporter_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
-        return cert, key
-
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = []
@@ -791,14 +779,14 @@ class NodeExporterService(CephadmService):
         deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         security_enabled, mgmt_gw_enabled, _ = self.mgr._get_security_config()
         if security_enabled:
-            cert, key = self.get_node_exporter_certificates(daemon_spec)
+            tls_pair = self.get_certificates(daemon_spec)
             r = {
                 'files': {
                     'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2',
                                                         {'enable_mtls': mgmt_gw_enabled}),
                     'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
-                    'node_exporter.crt': cert,
-                    'node_exporter.key': key,
+                    'node_exporter.crt': tls_pair.cert,
+                    'node_exporter.key': tls_pair.key,
                 },
                 'web_config': '/etc/node-exporter/web.yml'
             }
