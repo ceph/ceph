@@ -791,6 +791,12 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       set_status("trimming bilog shards");
       yield call(new BucketTrimShardCollectCR(dpp, store, *pbucket_info, totrim.layout.in_index,
 					      min_markers));
+      if (retcode == -ENOENT) {
+        // this is not a fatal error to retry, as the shard seems to not exist
+        // anymore. This can happen if the shard was removed unexpectedly.
+        // should be already logged by the BucketTrimShardCollectCR().
+        retcode = 0;
+      }
       if (retcode < 0) {
 	ldpp_dout(dpp, 4) << "failed to trim bilog shards: "
 			  << cpp_strerror(retcode) << dendl;
