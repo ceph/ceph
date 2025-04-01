@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { Validators } from '@angular/forms';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { nfsType } from '../models/nfs-cluster-config';
 
 describe('NfsRateLimitComponent', () => {
   let component: NfsRateLimitComponent;
@@ -32,7 +33,7 @@ describe('NfsRateLimitComponent', () => {
     });
 
     it('should handle type "cluster" with QoS enabled', () => {
-      component.type = 'cluster';
+      component.type = nfsType.cluster;
       component.nfsClusterData = { enable_qos: true } as any;
       spyOn(component, 'setFormData');
 
@@ -45,7 +46,7 @@ describe('NfsRateLimitComponent', () => {
     });
 
     it('should handle type "export" with cluster QoS enabled', () => {
-      component.type = 'export';
+      component.type = nfsType.export;
       component.nfsClusterData = { enable_qos: true } as any;
       spyOn(component, 'setFormData');
 
@@ -57,7 +58,7 @@ describe('NfsRateLimitComponent', () => {
     });
 
     it('should handle type "export" with export QoS enabled and cluster QoS disabled', () => {
-      component.type = 'export';
+      component.type = nfsType.export;
       component.nfsClusterData = { enable_qos: false } as any;
       component.nfsExportdata = { enable_qos: true } as any;
       spyOn(component, 'registerQoSChange');
@@ -74,7 +75,7 @@ describe('NfsRateLimitComponent', () => {
     });
 
     it('should handle type "export" with both cluster and export QoS disabled', () => {
-      component.type = 'export';
+      component.type = nfsType.export;
       component.nfsClusterData = { enable_qos: false } as any;
       component.nfsExportdata = { enable_qos: false } as any;
 
@@ -202,16 +203,14 @@ describe('NfsRateLimitComponent', () => {
 
   describe('showQOS', () => {
     it('should allow QoS if type is export and cluster QoS is disabled', () => {
-      component.type = 'export';
+      component.type = nfsType.export;
       component.nfsClusterData = { enable_qos: false } as any;
-
-      component.showQOS();
 
       expect(component.allowQoS).toBeTruthy();
     });
 
     it('should not allow QoS if type is not export', () => {
-      component.type = 'cluster';
+      component.type = nfsType.cluster;
       component.nfsClusterData = { enable_qos: false } as any;
 
       component.showQOS();
