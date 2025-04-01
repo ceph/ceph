@@ -32,7 +32,7 @@ from .grafana import push_local_dashboards
 from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
-from .services.rgw_client import configure_rgw_credentials
+from .services.rgw_client import configure_rgw_credentials, set_rgw_hostname, unset_rgw_hostname
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
@@ -482,6 +482,22 @@ class Module(MgrModule, CherryPyConfig):
             return -errno.EINVAL, '', str(error)
 
         return 0, 'RGW credentials configured', ''
+
+    @CLIWriteCommand("dashboard set-rgw-hostname")
+    def set_rgw_hostname(self, daemon_name: str, hostname: str):
+        try:
+            set_rgw_hostname(daemon_name, hostname)
+            return 0, f'RGW hostname for daemon {daemon_name} configured', ''
+        except Exception as error:
+            return -errno.EINVAL, '', str(error)
+
+    @CLIWriteCommand("dashboard unset-rgw-hostname")
+    def unset_rgw_hostname(self, daemon_name: str):
+        try:
+            unset_rgw_hostname(daemon_name)
+            return 0, f'RGW hostname for daemon {daemon_name} resetted', ''
+        except Exception as error:
+            return -errno.EINVAL, '', str(error)
 
     @CLIWriteCommand("dashboard set-login-banner")
     def set_login_banner(self, inbuf: str):
