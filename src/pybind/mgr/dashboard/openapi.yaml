@@ -8512,6 +8512,7 @@ paths:
             schema:
               properties:
                 enable_ha:
+                  default: true
                   description: Enable high availability
                   type: boolean
                 gw_group:
@@ -8526,7 +8527,6 @@ paths:
                   type: string
               required:
               - nqn
-              - enable_ha
               type: object
       responses:
         '201':
