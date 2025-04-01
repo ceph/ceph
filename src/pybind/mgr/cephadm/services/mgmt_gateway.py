@@ -54,7 +54,6 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
     def get_internal_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
         cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(MgmtGatewayService.TYPE, host_fqdn, 'internal')
         if not (cert and key):
@@ -153,7 +152,7 @@ class MgmtGatewayService(CephadmService):
         Called before mgmt-gateway daemon is removed.
         """
         # reset the standby dashboard redirection behaviour
-        assert daemon.hostname # for mypy
+        assert daemon.hostname  # for mypy
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         self.mgr.cert_mgr.rm_self_signed_cert_key_pair(MgmtGatewayService.TYPE, daemon.hostname, label='internal')
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')

@@ -903,8 +903,10 @@ class ServiceSpec(object):
                  count: Optional[int] = None,
                  config: Optional[Dict[str, str]] = None,
                  ssl: Optional[bool] = False,
-                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 certificate_source: Optional[str] = None,
                  custom_sans: Optional[List[str]] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
@@ -933,6 +935,8 @@ class ServiceSpec(object):
         if self.service_type in self.REQUIRES_CERTIFICATES:
             self.certificate_source = certificate_source
             self.ssl = ssl
+            self.ssl_cert = ssl_cert
+            self.ssl_key = ssl_key
             self.custom_sans = custom_sans
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
@@ -1296,6 +1300,8 @@ class RGWSpec(ServiceSpec):
                  unmanaged: bool = False,
                  ssl: bool = False,
                  certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
                  custom_sans: Optional[List[str]] = None,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
@@ -1329,6 +1335,8 @@ class RGWSpec(ServiceSpec):
             'rgw', service_id=service_id,
             ssl=ssl,
             certificate_source=certificate_source,
+            ssl_cert=ssl_cert,
+            ssl_key=ssl_key,
             custom_sans=custom_sans,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks,
@@ -1882,6 +1890,8 @@ class IscsiServiceSpec(ServiceSpec):
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
                                                ssl=ssl,
+                                               ssl_cert=ssl_cert,
+                                               ssl_key=ssl_key,
                                                certificate_source=certificate_source,
                                                custom_sans=custom_sans,
                                                preview_only=preview_only,
@@ -1902,10 +1912,6 @@ class IscsiServiceSpec(ServiceSpec):
         self.api_password = api_password
         #: ``api_secure`` as defined in the ``iscsi-gateway.cfg``
         self.api_secure = api_secure
-        #: SSL certificate
-        self.ssl_cert = ssl_cert
-        #: SSL private key
-        self.ssl_key = ssl_key
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
@@ -1974,6 +1980,8 @@ class IngressSpec(ServiceSpec):
             networks=networks,
             ssl=ssl,
             certificate_source=certificate_source,
+            ssl_cert=ssl_cert,
+            ssl_key=ssl_key,
             custom_sans=custom_sans,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -1981,8 +1989,6 @@ class IngressSpec(ServiceSpec):
         )
         self.backend_service = backend_service
         self.frontend_port = frontend_port
-        self.ssl_cert = ssl_cert
-        self.ssl_key = ssl_key
         self.ssl_dh_param = ssl_dh_param
         self.ssl_ciphers = ssl_ciphers
         self.ssl_options = ssl_options
@@ -2082,6 +2088,8 @@ class MgmtGatewaySpec(ServiceSpec):
             placement=placement, config=config,
             networks=networks,
             ssl=ssl,
+            ssl_cert=ssl_cert,
+            ssl_key=ssl_key,
             certificate_source=certificate_source,
             custom_sans=custom_sans,
             preview_only=preview_only,
@@ -2095,10 +2103,6 @@ class MgmtGatewaySpec(ServiceSpec):
         self.enable_auth = enable_auth
         #: The port number on which the server will listen
         self.port = port
-        #: A multi-line string that contains the SSL certificate
-        self.ssl_cert = ssl_cert
-        #: A multi-line string that contains the SSL key
-        self.ssl_key = ssl_key
         #: Prefer server ciphers over client ciphers: on | off
         self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
         #: A multioption flag to control session tickets: on | off
@@ -2219,6 +2223,8 @@ class OAuth2ProxySpec(ServiceSpec):
             networks=networks,
             ssl=ssl,
             certificate_source=certificate_source,
+            ssl_cert=ssl_cert,
+            ssl_key=ssl_key,
             custom_sans=custom_sans,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -2240,10 +2246,6 @@ class OAuth2ProxySpec(ServiceSpec):
         #: The secret key used for signing cookies. Its length must be 16,
         # 24, or 32 bytes to create an AES cipher.
         self.cookie_secret = cookie_secret or self.generate_random_secret()
-        #: The multi-line SSL certificate for encrypting communications.
-        self.ssl_cert = ssl_cert
-        #: The multi-line SSL certificate private key for decrypting communications.
-        self.ssl_key = ssl_key
         #: List of allowed domains for safe redirection after login or logout,
         # preventing unauthorized redirects.
         self.allowlist_domains = allowlist_domains
