@@ -825,11 +825,21 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
 
+      bool removed_in_range = false;
+
       if (!entry.exists_at_snap(op.snap_range.end)) {
-        continue;
+        if (op.snap_range.start.is_set() &&
+            entry.exists_at_snap(op.snap_range.start)) {
+          removed_in_range = true;
+          /* entry was removed in this range */
+          entry.flags |= rgw_bucket_dir_entry::FLAG_DELETE;
+        } else {
+          continue;
+        }
       }
 
-      if (op.snap_range.is_set()) {
+      if (!removed_in_range &&
+          op.snap_range.is_set()) {
         if (!op.snap_range.contains(entry.meta.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN))) { /* treat undefined snaps as SNAP_MIN */
           CLS_LOG(20, "%s: entry %s[%s] (%d) skipping: snap_range.start=%d snap_range.end=%d",
                   __func__, key.name.c_str(), key.instance.c_str(),
@@ -837,13 +847,11 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
           continue;
         }
 
-        if (op.snap_range.is_set()) {
-          /* make it current as it was current during the requested snapshot */
-          if (entry.is_current_at_snap(op.snap_range.end)) {
-            entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
-          } else {
-            entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;
-          }
+        /* make it current as it was current during the requested snapshot */
+        if (entry.is_current_at_snap(op.snap_range.end)) {
+          entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+        } else {
+          entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;
         }
       }
 

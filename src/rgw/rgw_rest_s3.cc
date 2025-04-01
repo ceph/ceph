@@ -2055,6 +2055,12 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
+      if (snap_range.start.is_set() &&
+          iter->is_removed()) {
+        /* this is used in snap-diff, so should only show removed if it existed in the 
+         * base snapshot */
+        s->formatter->dump_bool("IsRemoved", true);
+      }
       dump_time_exact_seconds(s, "LastModified", iter->meta.mtime);
       if (!iter->is_delete_marker()) {
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
@@ -2156,6 +2162,12 @@ void RGWListBucket_ObjStore_S3::send_response()
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
 	s->formatter->dump_string("RgwxTag", iter->tag);
+      }
+      if (snap_range.start.is_set() &&
+          iter->is_removed()) {
+        /* this is used in snap-diff, so should only show removed if it existed in the 
+         * base snapshot */
+        s->formatter->dump_bool("IsRemoved", true);
       }
       if (iter->meta.appendable) {
 	s->formatter->dump_string("Type", "Appendable");
