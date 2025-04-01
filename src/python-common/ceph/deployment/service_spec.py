@@ -924,6 +924,8 @@ class ServiceSpec(object):
         #: ``rgw``, ``container``, ``ingress``
         self.service_id = None
 
+        self.certificate_source = None
+        self.ssl = None
         if self.service_type in self.REQUIRES_CERTIFICATES:
             self.certificate_source = certificate_source
             self.ssl = ssl
@@ -1086,6 +1088,10 @@ class ServiceSpec(object):
         # type: () -> OrderedDict[str, Any]
         ret: OrderedDict[str, Any] = OrderedDict()
         ret['service_type'] = self.service_type
+        if self.certificate_source:
+            ret['certificate_source'] = self.certificate_source
+        if self.ssl:
+            ret['ssl'] = self.ssl
         if self.service_id:
             ret['service_id'] = self.service_id
         ret['service_name'] = self.service_name()
@@ -2390,8 +2396,7 @@ class MonitoringSpec(ServiceSpec):
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
-            certificate_source=certificate_source,
-            ssl=ssl,
+            ssl=ssl, certificate_source=certificate_source,
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
@@ -2422,6 +2427,8 @@ class AlertManagerSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'alertmanager',
                  service_id: Optional[str] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 ssl: Optional[bool] = True,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -2439,6 +2446,7 @@ class AlertManagerSpec(MonitoringSpec):
         super(AlertManagerSpec, self).__init__(
             'alertmanager', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
+            ssl=ssl, certificate_source=certificate_source,
             preview_only=preview_only, config=config, networks=networks, port=port,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs)
@@ -2480,7 +2488,7 @@ class GrafanaSpec(MonitoringSpec):
                  service_type: str = 'grafana',
                  service_id: Optional[str] = None,
                  certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
-                 ssl: Optional[bool] = False,
+                 ssl: Optional[bool] = True,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -2498,8 +2506,7 @@ class GrafanaSpec(MonitoringSpec):
         assert service_type == 'grafana'
         super(GrafanaSpec, self).__init__(
             'grafana', service_id=service_id,
-            ssl=True,
-            certificate_source=certificate_source,
+            ssl=ssl, certificate_source=certificate_source,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks, port=port,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
@@ -2553,6 +2560,8 @@ class PrometheusSpec(MonitoringSpec):
     def __init__(self,
                  service_type: str = 'prometheus',
                  service_id: Optional[str] = None,
+                 certificate_source: Optional[str] = CertificateSource.CEPHADM_SIGNED.value,
+                 ssl: Optional[bool] = True,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -2571,6 +2580,7 @@ class PrometheusSpec(MonitoringSpec):
         super(PrometheusSpec, self).__init__(
             'prometheus', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
+            ssl=ssl, certificate_source=certificate_source,
             preview_only=preview_only, config=config, networks=networks, port=port, targets=targets,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs)

@@ -1,7 +1,6 @@
 import errno
 import logging
 import os
-import socket
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
 import ipaddress
 import time

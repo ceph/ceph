@@ -445,7 +445,6 @@ class CephadmService(metaclass=ABCMeta):
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
         if self.requires_certificates:
             spec = self.mgr.spec_store[daemon_spec.service_name].spec
             logger.info(f'redo: calling prepare_create for {spec.service_name()}')
@@ -1573,6 +1572,7 @@ class CephadmAgent(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        super().prepare_create(daemon_spec)
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
         daemon_spec.ports = [self.mgr.agent_starting_port]
 
@@ -1603,7 +1603,7 @@ class CephadmAgent(CephService):
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
-        listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
+        listener_cert, listener_key = self.get_certificates(daemon_spec)
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
