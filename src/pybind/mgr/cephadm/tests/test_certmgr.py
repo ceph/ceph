@@ -426,6 +426,7 @@ class TestCertMgr(object):
         # Services with host target/scope
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, host='host1', user_made=True)
         cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', CEPHADM_SELF_GENERATED_CERT_2, host='host2', user_made=True)
+        cephadm_module.cert_mgr.save_cert('oauth2_proxy_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, host='host1', user_made=True)
         expected_ls['grafana_ssl_cert'] = {
             'scope': 'host',
             'certificates': {
@@ -433,13 +434,17 @@ class TestCertMgr(object):
                 'host2': get_generated_cephadm_cert_info_2(),
             },
         }
+        expected_ls['oauth2_proxy_ssl_cert'] = {
+            'scope': 'host',
+            'certificates': {
+                'host1': get_generated_cephadm_cert_info_1(),
+            }
+        }
         compare_certls_dicts(expected_ls)
 
         # Services with global target/scope
         cephadm_module.cert_mgr.save_cert('mgmt_gateway_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, user_made=True)
-        cephadm_module.cert_mgr.save_cert('oauth2_proxy_ssl_cert', CEPHADM_SELF_GENERATED_CERT_2, user_made=True)
         expected_ls['mgmt_gateway_ssl_cert'] = {'scope': 'global', 'certificates': get_generated_cephadm_cert_info_1()}
-        expected_ls['oauth2_proxy_ssl_cert'] = {'scope': 'global', 'certificates': get_generated_cephadm_cert_info_2()}
         compare_certls_dicts(expected_ls)
 
         # nvmeof certificates
@@ -546,8 +551,8 @@ class TestCertMgr(object):
             'ingress_ssl_cert': ('ingress', 'ingress-ssl-cert', TLSObjectScope.SERVICE),
             'iscsi_ssl_cert': ('iscsi', 'iscsi-ssl-cert', TLSObjectScope.SERVICE),
             'grafana_ssl_cert': ('host1', 'grafana-cert', TLSObjectScope.HOST),
+            'oauth2_proxy_ssl_cert': ('host1', 'oauth2-proxy', TLSObjectScope.HOST),
             'mgmt_gateway_ssl_cert': ('mgmt-gateway', 'mgmt-gw-cert', TLSObjectScope.GLOBAL),
-            'oauth2_proxy_ssl_cert': ('oauth2-proxy', 'oauth2-proxy-cert', TLSObjectScope.GLOBAL),
         }
         unknown_certs = {
             'unknown_per_service_cert': ('unknown-svc.foo', 'unknown-cert', TLSObjectScope.SERVICE),
@@ -562,7 +567,7 @@ class TestCertMgr(object):
             'nvmeof_client_key': ('nvmeof.foo', 'nvmeof-client-key', TLSObjectScope.SERVICE),
             'nvmeof_encryption_key': ('nvmeof.foo', 'nvmeof-encryption-key', TLSObjectScope.SERVICE),
             'mgmt_gateway_ssl_key': ('mgmt-gateway', 'mgmt-gw-key', TLSObjectScope.GLOBAL),
-            'oauth2_proxy_ssl_key': ('oauth2-proxy', 'oauth2-proxy-key', TLSObjectScope.GLOBAL),
+            'oauth2_proxy_ssl_key': ('host1', 'oauth2-proxy', TLSObjectScope.HOST),
             'ingress_ssl_key': ('ingress', 'ingress-ssl-key', TLSObjectScope.SERVICE),
             'iscsi_ssl_key': ('iscsi', 'iscsi-ssl-key', TLSObjectScope.SERVICE),
         }
@@ -816,20 +821,21 @@ class TestCertMgr(object):
 class MockTLSObject(TLSObjectProtocol):
     STORAGE_PREFIX = "mocktls"
 
-    def __init__(self, data: str = "", user_made: bool = False):
+    def __init__(self, data: str = "", user_made: bool = False, editable: bool = False):
         self.data = data
         self.user_made = user_made
+        self.editable = editable
 
     def __bool__(self):
         return bool(self.data)
 
     @staticmethod
     def to_json(obj):
-        return {"data": obj.data, "user_made": obj.user_made}
+        return {"data": obj.data, "user_made": obj.user_made, "editable": obj.editable}
 
     @staticmethod
     def from_json(json_data):
-        return MockTLSObject(json_data["data"], json_data["user_made"])
+        return MockTLSObject(json_data["data"], json_data["user_made"], json_data["editable"])
 
 
 class MockCephadmOrchestrator:
