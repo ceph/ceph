@@ -17,3 +17,8 @@ export class ErasureCodeProfile {
   'crush-device-class'?: string;
   'directory'?: string;
 }
+
+export enum CrushFailureDomains {
+  Osd = 'osd',
+  Host = 'host'
+}
