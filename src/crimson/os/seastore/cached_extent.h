@@ -1336,12 +1336,12 @@ public:
     : CachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
-    ceph_assert(0 == "Should never happen for a placeholder");
+    ceph_abort("Should never happen for a placeholder");
     return CachedExtentRef();
   }
 
   ceph::bufferlist get_delta() final {
-    ceph_assert(0 == "Should never happen for a placeholder");
+    ceph_abort("Should never happen for a placeholder");
     return ceph::bufferlist();
   }
 
@@ -1352,7 +1352,7 @@ public:
 
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
-    ceph_assert(0 == "Should never happen for a placeholder");
+    ceph_abort("Should never happen for a placeholder");
   }
 
   void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
@@ -1362,7 +1362,7 @@ public:
   }
 
   void on_delta_write(paddr_t record_block_offset) final {
-    ceph_assert(0 == "Should never happen for a placeholder");
+    ceph_abort("Should never happen for a placeholder");
   }
 };
 
@@ -1420,10 +1420,13 @@ public:
     extent_len_t len;
   };
   virtual std::optional<modified_region_t> get_modified_region() {
+    ceph_abort("Unsupported");
     return std::nullopt;
   }
 
-  virtual void clear_modified_region() {}
+  virtual void clear_modified_region() {
+    ceph_abort("Unsupported");
+  }
 
   virtual ~LogicalCachedExtent() {}
 
@@ -1497,7 +1500,7 @@ template <typename T>
 using lextent_list_t = addr_extent_list_base_t<
   laddr_t, TCachedExtentRef<T>>;
 
-}
+} // namespace crimson::os::seastore
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
