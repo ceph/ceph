@@ -285,8 +285,8 @@ public:
     if (!ref->is_exist_mutation_pending()) {
       write_set.insert(*ref);
     } else {
-      assert(write_set.find_offset(ref->get_paddr()) !=
-	     write_set.end());
+      // already added as fresh extent in write_set
+      assert(write_set.exists(*ref));
     }
   }
 
