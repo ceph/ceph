@@ -66,6 +66,23 @@ export class NfsService extends ApiClient {
       help: $localize`Allows individual per share and per client setting of export and client bandwidth`
     }
   ];
+  qosiopsType: QOSTypeItem[] = [
+    {
+      key: 'Per Share',
+      value: 'PerShare',
+      help: $localize`Allows individual per share setting of export and client IOPS`
+    },
+    {
+      key: 'Per Client',
+      value: 'PerClient',
+      help: $localize`Allows individual per client setting of export and client IOPS`
+    },
+    {
+      key: 'Per Share Per Client',
+      value: 'PerShare_PerClient',
+      help: $localize`Allows individual per share and per client setting of export and client IOPS`
+    }
+  ];
   bwType: bwTypeItem[] = [
     {
       value: 'Individual',
@@ -160,9 +177,30 @@ export class NfsService extends ApiClient {
     });
   }
 
+  enableQosOpsForExports(exportObj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/export/qos/ops`, exportObj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
   getexportBandwidthOpsConfig(clusterId: string, pseudoPath: string) {
     return this.http.get(
       `${this.apiPath}/export/qos/${clusterId}/${encodeURIComponent(pseudoPath)}`
     );
+  }
+
+  enableQosOpsForCLuster(obj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/cluster/qos/ops`, obj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  enableOpsForExports(exportObj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/export/ops`, exportObj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
   }
 }
