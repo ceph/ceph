@@ -1060,7 +1060,7 @@ void Cache::on_transaction_destruct(Transaction& t)
   }
 }
 
-CachedExtentRef Cache::alloc_new_extent_by_type(
+CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
@@ -1068,7 +1068,7 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   rewrite_gen_t gen      ///< [in] rewrite generation
 )
 {
-  LOG_PREFIX(Cache::alloc_new_extent_by_type);
+  LOG_PREFIX(Cache::alloc_new_non_data_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
             t, type, length, hint, rewrite_gen_printer_t{gen});
   ceph_assert(get_extent_category(type) == data_category_t::METADATA);
