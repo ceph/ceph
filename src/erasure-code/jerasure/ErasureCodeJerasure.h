@@ -32,25 +32,31 @@ public:
   std::string rule_root;
   std::string rule_failure_domain;
   bool per_chunk_alignment;
+  uint64_t flags;
 
   explicit ErasureCodeJerasure(const char *_technique) :
-    k(0),
-    DEFAULT_K("2"),
-    m(0),
-    DEFAULT_M("1"),
-    w(0),
-    DEFAULT_W("8"),
-    technique(_technique),
-    per_chunk_alignment(false)
-  {}
+      k(0),
+      DEFAULT_K("2"),
+      m(0),
+      DEFAULT_M("1"),
+      w(0),
+      DEFAULT_W("8"),
+      technique(_technique),
+      per_chunk_alignment(false) {
+    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+
+    if (0 == strcmp(technique, "reed_sol_van")) {
+      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
+    }
+  }
 
   ~ErasureCodeJerasure() override {}
 
   uint64_t get_supported_optimizations() const override {
-    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+    return flags;
   }
 
   

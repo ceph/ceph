@@ -51,6 +51,7 @@ public:
 
   ErasureCodeIsaTableCache &tcache;
   const char *technique;
+  uint64_t flags;
 
   ErasureCodeIsa(const char *_technique,
                  ErasureCodeIsaTableCache &_tcache) :
@@ -60,6 +61,15 @@ public:
   tcache(_tcache),
   technique(_technique)
   {
+    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+            FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+            FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+            FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+
+    if (0 == strcmp(technique, "reed_sol_van") ||
+        0 == strcmp(technique, "default")) {
+      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
+    }
   }
 
   

@@ -32,26 +32,42 @@ class ECSwitch : public PGBackend
   ECBackend optimized;
   bool is_optimized_actual;
 
+  bool calc_is_optimized_actual() const {
+    if (!get_parent()->get_pool().allows_ecoptimizations()) {
+      return false;
+    }
+
+    if (is_optimized_actual) {
+      return (optimized.ec_impl->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0;
+    }
+
+    return (legacy.ec_impl->get_supported_optimizations() &
+      ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0;
+  }
+
 public:
   ECSwitch(
-    PGBackend::Listener *pg,
-    const coll_t &coll,
-    ObjectStore::CollectionHandle &ch,
-    ObjectStore *store,
-    CephContext *cct,
-    ceph::ErasureCodeInterfaceRef ec_impl,
-    uint64_t stripe_width,
-    ECExtentCache::LRU &lru) :
-    PGBackend(cct, pg, store, coll, ch),
-    legacy(pg, cct, ec_impl, stripe_width, this),
-    optimized(pg, cct, ec_impl, stripe_width, this, lru),
-    is_optimized_actual(get_parent()->get_pool().allows_ecoptimizations()) {}
+      PGBackend::Listener *pg,
+      const coll_t &coll,
+      ObjectStore::CollectionHandle &ch,
+      ObjectStore *store,
+      CephContext *cct,
+      ceph::ErasureCodeInterfaceRef ec_impl,
+      uint64_t stripe_width,
+      ECExtentCache::LRU &lru) :
+      PGBackend(cct, pg, store, coll, ch),
+      legacy(pg, cct, ec_impl, stripe_width, this),
+      optimized(pg, cct, ec_impl, stripe_width, this, lru),
+      is_optimized_actual(false) {
+    calc_is_optimized_actual();
+  }
 
   bool is_optimized() const
   {
     // FIXME: Once we trust this, we can remove this assert, as it adds
     //        function call overhead.
-    ceph_assert(is_optimized_actual == get_parent()->get_pool().allows_ecoptimizations());
+    ceph_assert(is_optimized_actual == calc_is_optimized_actual());
     return is_optimized_actual;
   }
 
@@ -185,9 +201,9 @@ public:
     }
 
     if (!is_optimized_actual)
-      is_optimized_actual = get_parent()->get_pool().allows_ecoptimizations();
+      is_optimized_actual = calc_is_optimized_actual();
     else
-      ceph_assert(get_parent()->get_pool().allows_ecoptimizations());
+      ceph_assert(calc_is_optimized_actual());
   }
 
   void clear_recovery_state() override

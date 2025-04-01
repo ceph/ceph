@@ -8220,7 +8220,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     // Try and enable ec_optimizations, fail silently
     // 1) pool type must be erasure coded
     // 2) require_osd_release must be tentacle or newer
-    // 3) clay is not supported
+    // 3) Plugin supports the optimizations.
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
       if (osdmap.require_osd_release >= ceph_release_t::tentacle) {
 	ErasureCodeInterfaceRef erasure_code;
@@ -8881,8 +8881,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         return -EINVAL;
       }
       if ((erasure_code->get_supported_optimizations() &
-          ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS)) {
-        ss << "ec optimizations not currently supported on clay plugin.";
+          ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+        ss << "ec optimizations not currently supported for pool profile.";
         return -EINVAL;
       }
       // Restrict the set of shards that can be a primary to the 1st data
