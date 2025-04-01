@@ -24,6 +24,12 @@ export interface NFSBwIopConfig {
   enable_bw_control?: boolean;
   combined_rw_bw_control?: boolean;
   pseudo_path?: string;
+  max_export_iops?: number;
+  max_client_iops?: number;
+  disable_Ops?: boolean;
+  enable_ops?: boolean;
+  disable_qos_ops?: boolean;
+  enable_iops_control?: boolean;
 }
 
 export enum QOSType {

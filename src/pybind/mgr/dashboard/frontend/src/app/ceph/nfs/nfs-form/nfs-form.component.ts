@@ -76,6 +76,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   bandwidthObj: NFSBwIopConfig;
+  bandwidthIopsObj: NFSBwIopConfig;
   allsubvolgrps: any[] = [];
   allsubvols: any[] = [];
 
@@ -609,10 +610,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
   childCompErrorHandler(event: Event) {
     this.nfsForm.addControl('rateLimit', event);
   }
+
   submitAction() {
     let action: Observable<any>;
     const requestModel = this.buildRequest();
-
     if (this.isEdit) {
       action = this.taskWrapper.wrapTaskAroundCall({
         task: new FinishedTask('nfs/edit', {
@@ -637,13 +638,24 @@ export class NfsFormComponent extends CdForm implements OnInit {
       error: (errorResponse: CdHttpErrorResponse) => this.setFormErrors(errorResponse),
       complete: () => {
         this.bandwidthObj = this.nfsRateLimitComponent?.getRateLimitFormValue();
-        if (
-          !!this.bandwidthObj &&
-          this.clusterAllConfig?.enable_qos === this.bandwidthObj?.enable_qos
-        ) {
-          this.submitRateLimit();
+        this.bandwidthIopsObj = this.nfsRateLimitComponent?.getRateLimitOpsFormValue();
+        if (this.bandwidthObj) {
+          if (
+            !!this.bandwidthObj &&
+            this.clusterAllConfig?.enable_qos === this.bandwidthObj?.enable_qos
+          ) {
+            this.submitRateLimit();
+          }
         }
-        this.router.navigate([`/${getPathfromFsal(this.storageBackend)}/nfs`]);
+        if (this.bandwidthIopsObj) {
+          if (
+            !!this.bandwidthIopsObj &&
+            this.clusterAllConfig?.enable_ops === this.bandwidthIopsObj?.enable_ops
+          ) {
+            this.submitRateOPSLimit();
+          }
+          this.router.navigate([`/${getPathfromFsal(this.storageBackend)}/nfs`]);
+        }
       }
     });
   }
@@ -668,6 +680,30 @@ export class NfsFormComponent extends CdForm implements OnInit {
       }
     });
   }
+
+  submitRateOPSLimit() {
+    let notificationTitle = $localize`Update Rate Limit For Export`;
+    let cluster_id = this.nfsForm.getValue('cluster_id');
+
+    this.bandwidthIopsObj = {
+      ...this.bandwidthIopsObj,
+      pseudo_path: this.nfsForm.getValue('pseudo'),
+      disable_qos_ops: !this.bandwidthIopsObj.enable_ops,
+      cluster_id
+    };
+    delete this.bandwidthIopsObj.enable_ops;
+    delete this.bandwidthIopsObj.qos_type;
+    this.nfsService.enableQosOpsForExports(this.bandwidthIopsObj).subscribe({
+      error: () => {
+        // Reset the 'Submit' button.
+        this.nfsForm.setErrors({ cdSubmitButton: true });
+      },
+      complete: () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
+      }
+    });
+  }
+
   private setFormErrors(errorResponse: CdHttpErrorResponse) {
     if (
       errorResponse.error.detail &&

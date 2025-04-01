@@ -160,9 +160,30 @@ export class NfsService extends ApiClient {
     });
   }
 
+  enableQosOpsForExports(exportObj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/export/qos/ops`, exportObj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
   getexportBandwidthOpsConfig(clusterId: string, pseudoPath: string) {
     return this.http.get(
       `${this.apiPath}/export/qos/${clusterId}/${encodeURIComponent(pseudoPath)}`
     );
+  }
+
+  enableQosOpsForCLuster(obj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/cluster/qos/ops`, obj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
+  }
+
+  enableOpsForExports(exportObj: NFSBwIopConfig) {
+    return this.http.patch(`${this.apiPath}/export/ops`, exportObj, {
+      headers: { Accept: this.getVersionHeaderValue(1, 0) },
+      observe: 'response'
+    });
   }
 }
