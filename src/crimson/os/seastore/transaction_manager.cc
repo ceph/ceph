@@ -498,7 +498,7 @@ TransactionManager::rewrite_logical_extent(
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
-    auto nextent = cache->alloc_new_extent_by_type(
+    auto nextent = cache->alloc_new_non_data_extent_by_type(
       t,
       extent->get_type(),
       extent->get_length(),

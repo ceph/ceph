@@ -1127,11 +1127,11 @@ public:
   }
 
   /**
-   * alloc_new_extent
+   * alloc_new_non_data_extent_by_type
    *
-   * Allocates a fresh extent.  addr will be relative until commit.
+   * Allocates a fresh non data extent.  addr will be relative until commit.
    */
-  CachedExtentRef alloc_new_extent_by_type(
+  CachedExtentRef alloc_new_non_data_extent_by_type(
     Transaction &t,        ///< [in, out] current transaction
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
@@ -1140,9 +1140,9 @@ public:
     );
 
   /**
-   * alloc_new_extent
+   * alloc_new_data_extents_by_type
    *
-   * Allocates a fresh extent.  addr will be relative until commit.
+   * Allocates fresh data extents.  addr will be relative until commit.
    */
   std::vector<CachedExtentRef> alloc_new_data_extents_by_type(
     Transaction &t,        ///< [in, out] current transaction
