@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <cassert>
 #include <optional>
 #include <string>
 
@@ -23,6 +24,7 @@
 #include "messages/MOSDRepScrubMap.h"
 #include "osd/scrubber_common.h"
 
+#include "scrub_machine_if.h"
 #include "scrub_machine_lstnr.h"
 #include "scrub_reservations.h"
 
@@ -278,28 +280,34 @@ struct ReplicaWaitUpdates;
 struct ReplicaBuildingMap;
 
 
-class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
+class ScrubMachine : public ScrubFsmIf, public sc::state_machine<ScrubMachine, NotActive> {
  public:
   friend class PgScrubber;
 
  public:
   explicit ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub);
-  ~ScrubMachine();
+  virtual ~ScrubMachine();
 
   spg_t m_pg_id;
   ScrubMachineListener* m_scrbr;
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  void assert_not_in_session() const;
-  [[nodiscard]] bool is_reserving() const;
-  [[nodiscard]] bool is_accepting_updates() const;
-  [[nodiscard]] bool is_primary_idle() const;
+  void assert_not_in_session() const final;
+  [[nodiscard]] bool is_reserving() const final;
+  [[nodiscard]] bool is_accepting_updates() const final;
+  [[nodiscard]] bool is_primary_idle() const final;
 
   /// elapsed time for the currently active scrub.session
-  ceph::timespan get_time_scrubbing() const;
+  ceph::timespan get_time_scrubbing() const final;
 
   /// replica reservation process status
-  std::optional<pg_scrubbing_status_t> get_reservation_status() const;
+  std::optional<pg_scrubbing_status_t> get_reservation_status() const final;
+
+  void initiate() final { sc::state_machine<ScrubMachine, NotActive>::initiate(); }
+
+  void process_event(const boost::statechart::event_base& evt) final {
+    sc::state_machine<ScrubMachine, NotActive>::process_event(evt);
+  }
 
 // ///////////////// aux declarations & functions //////////////////////// //
 
