@@ -416,6 +416,7 @@ public:
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+    ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
 
@@ -432,6 +433,7 @@ public:
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+    ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
 
@@ -448,6 +450,7 @@ public:
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+    ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
 
@@ -464,6 +467,7 @@ public:
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+    ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
 
@@ -480,6 +484,7 @@ public:
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
       parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+    ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
 
