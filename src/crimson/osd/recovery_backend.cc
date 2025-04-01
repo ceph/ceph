@@ -50,6 +50,8 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   });
   clear_temp_objs();
 
+  replica_push_targets.clear();
+
   for (auto& [soid, recovery_waiter] : recovering) {
     if ((recovery_waiter->pull_info
          && recovery_waiter->pull_info->is_complete())
