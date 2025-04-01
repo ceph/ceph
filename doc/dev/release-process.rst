@@ -228,31 +228,32 @@ the container, release builds do not, because the build does not
 sign the packages.  Thus, release builds do not build the containers.
 This must be done after :ref:`Signing and Publishing the Build`.
 
-A Jenkins job named ceph-release-containers exists so that we can
-test the images before release.  The job exists both for convenience and
-because it requires access to both x86_64 and arm64 builders.  Start the
-job manually on the Jenkins server.  This job:
+A Jenkins job named ``ceph-release-containers`` exists so that we can test the
+images before release. The job exists both for convenience and because it
+requires access to both x86_64 and arm64 builders. Start the job manually on
+the Jenkins server. This job:
 
 * builds the architecture-specific container imagess and pushes them to
-  quay.ceph.io/ceph/prerelease-amd64 and
-  quay.ceph.io/ceph/prerelease-arm64
+  ``quay.ceph.io/ceph/prerelease-amd64`` and
+  ``quay.ceph.io/ceph/prerelease-arm64``
 
-* fuses the architecture-specific images together into a 'manifest-list'
-  or 'fat' container image and pushes it to quay.ceph.io/ceph/prerelease
+* fuses the architecture-specific images together into a "manifest-list"
+  or "fat" container image and pushes it to ``quay.ceph.io/ceph/prerelease``
 
 Finally, when all appropriate testing and verification is done on the
-container images, run ``make-manifest-list.py --promote`` from the ceph
+container images, run ``make-manifest-list.py --promote`` from the Ceph
 source tree (at ``container/make-manifest-list.py``) to promote them to
 their final release location on ``quay.io/ceph/ceph`` (you must ensure
-you're logged into ``quay.io/ceph`` with appropriate permissions):
+that you're logged into ``quay.io/ceph`` with appropriate permissions):
 
     .. prompt:: bash
 
        cd <ceph-checkout>/src/container
        ./make-manifest-list.py --promote
 
-The --promote step should only be performed as the final step in releasing
-containers, when the container images have been tested to be good.
+The ``--promote`` step should be performed only as the final step in releasing
+containers, after the container images have been tested and have been confirmed
+to be good.
 
 
 6. Announce the Release
