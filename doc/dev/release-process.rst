@@ -225,86 +225,31 @@ the container, release builds do not, because the build does not
 sign the packages.  Thus, release builds do not build the containers.
 This must be done after :ref:`Signing and Publishing the Build`.
 
-Architecture-specific containers are built first, and pushed to
-quay.ceph.io/ceph/prerelease-{amd64,arm64}.  Note: this must be done on
-both architectures.
+A Jenkins job named ceph-release-containers exists so that we can
+test the images before release.  The job exists both for convenience and
+because it requires access to both x86_64 and arm64 builders.  Start the
+job manually on the Jenkins server.  This job:
 
-#. Use a host with a relatively-recent version of podman and skopeo available.
-   CentOS/RHEL/Fedora usually have later versions than Ubuntu, but Ubuntu 22.04
-   or later are probably ok.
+* builds the architecture-specific container imagess and pushes them to
+  quay.ceph.io/ceph/prerelease-amd64 and
+  quay.ceph.io/ceph/prerelease-arm64
 
-#. Copy and run this shell wrapper for building a container (in container/ is
-   assumed below, to invoke ``./build.sh``), replacing the values in ``<>`` as
-   appropriate:
+* fuses the architecture-specific images together into a 'manifest-list'
+  or 'fat' container image and pushes it to quay.ceph.io/ceph/prerelease
 
-     .. code-block:: bash
-
-        #!/bin/bash
-        set -xa
-
-        CI_CONTAINER=false
-        VERSION=19.2.1
-        FLAVOR=default
-        BRANCH=squid
-        ARCH=x86_64
-        CEPH_SHA1=58a7fab8be0a062d730ad7da874972fd3fba59fb
-        CONTAINER_REPO_HOSTNAME=quay.ceph.io
-        CONTAINER_REPO_ORGANIZATION=ceph
-        CONTAINER_REPO_USERNAME=<quay.ceph.io username>
-        CONTAINER_REPO_PASSWORD=<password for above>
-        PRERELEASE_USERNAME=<download.ceph.com prerelease username>
-        PRERELEASE_PASSWORD=<password for above>
-        unset NO_PUSH
-        ./build.sh  | tee build.sh.log
-
-#. Verify that the container images exist on
-   ``quay.ceph.io/ceph/prerelease-amd64`` and
-   ``quay.ceph.io/ceph/prerelease-arm64``.
-
-#. The prerelease manifest-list container, which refers to both arch-specific
-   containers, is built by using the command ``make-manifest-list.py`` in
-   ``ceph.git:src/container/make-manifest-list.py``. Note that you must be
-   logged into the appropriate container repos for any of these manipulations:
-   ``quay.ceph.io`` for fetching prerelease arch-specific containers and
-   pushing the prerelease manifest-list container, and ``quay.io`` for
-   promoting the prerelease containers to released containers.
-
-    .. prompt:: bash
-
-       cd <ceph-checkout>/container
-       ./make-manifest-list.py
-
-   Reasonable defaults are set for all inputs, but environment variables can be
-   used to override the following:
-
-    * ``ARCH_SPECIFIC_HOST`` (default 'quay.ceph.io'): host of prerelease repos
-    * ``AMD64_REPO`` (default 'ceph/prerelease-amd64') prerelease amd64 repo
-    * ``ARM64_REPO`` (default 'ceph/prerelease-arm64') prerelease arm64 repo
-
-   (prerelease arch-specific containers will be copied from here)
-
-    * ``MANIFEST_HOST`` (default 'quay.ceph.io') prerelease manifest-list host
-    * ``MANIFEST_REPO`` (default 'ceph/prerelease') prerelease manifest-list
-      repo
-
-   (prerelease manifest-list containers will be placed here)
-
-#. Finally, when all appropriate testing and verification is done on the
-   container images, you can use ``make-manifest-list.py`` to promote them to
-   their final release location on ``quay.io/ceph/ceph`` (again, be sure you're
-   logged into ``quay.io/ceph`` with appropriate permissions):
+Finally, when all appropriate testing and verification is done on the
+container images, run ``make-manifest-list.py --promote`` from the ceph
+source tree (at ``container/make-manifest-list.py``) to promote them to
+their final release location on ``quay.io/ceph/ceph`` (you must ensure
+you're logged into ``quay.io/ceph`` with appropriate permissions):
 
     .. prompt:: bash
 
        cd <ceph-checkout>/src/container
        ./make-manifest-list.py --promote
 
-   Two more environment variables can override the default destination for
-   promotion (the source of the prerelease container to be promoted is as
-   above, in ``MANIFEST_HOST/REPO``):
-
-    * ``RELEASE_MANIFEST_HOST`` (default 'quay.io') release host
-    * ``RELEASE_MANIFEST_REPO`` (default 'ceph/ceph') release repo
+The --promote step should only be performed as the final step in releasing
+containers, when the container images have been tested to be good.
 
 
 6. Announce the Release
