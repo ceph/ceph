@@ -4521,12 +4521,6 @@ public:
             goto done;
           }
 
-          // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
-          if (key.instance.empty() == sync_pipe.dest_bucket_info.versioned()) {
-            set_status("skipping entry due to versioning mismatch");
-            tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
-            goto done;
-          }
           // if object lock is enabled on either, the other should follow as well
           if (sync_pipe.source_bucket_info.obj_lock_enabled() != sync_pipe.dest_bucket_info.obj_lock_enabled()) {
             set_status("skipping entry due to object lock mismatch");
@@ -4540,6 +4534,13 @@ public:
             retcode = -EIO;
           } else if (op == CLS_RGW_OP_ADD ||
                      op == CLS_RGW_OP_LINK_OLH) {
+            // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
+            if (key.instance.empty() == (sync_pipe.dest_bucket_info.versioned()
+                && !(sync_pipe.dest_bucket_info.flags & BUCKET_VERSIONS_SUSPENDED))) {
+              set_status("skipping entry due to versioning mismatch");
+              tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
+              goto done;
+            }
             set_status("syncing obj");
             tn->log(5, SSTR("bucket sync: sync obj: " << sc->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
 	    if (versioned_epoch) {
