@@ -1861,7 +1861,7 @@ uint32_t pg_pool_t::get_random_pg_position(pg_t pg, uint32_t seed) const
 void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   using ceph::encode;
-  if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, PGPOOL3)) {
     // this encoding matches the old struct ceph_pg_pool
     __u8 struct_v = 2;
     encode(struct_v, bl);
@@ -1890,7 +1890,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  if ((features & CEPH_FEATURE_OSDENC) == 0) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, OSDENC)) {
     __u8 struct_v = 4;
     encode(struct_v, bl);
     encode(type, bl);
@@ -1913,7 +1913,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  if ((features & CEPH_FEATURE_OSD_POOLRESEND) == 0) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, OSD_POOLRESEND)) {
     // we simply added last_force_op_resend here, which is a fully
     // backward compatible change.  however, encoding the same map
     // differently between monitors triggers scrub noise (even though
@@ -1965,16 +1965,16 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t v = 32;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
-    if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
+    if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
       // this was the first post-hammer thing we added; if it's missing, encode
       // like hammer.
       v = 21;
-    } else if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_LUMINOUS)) {
       v = 24;
-    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_MIMIC)) {
       v = 26;
-    } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_NAUTILUS)) {
       v = 27;
     } else if (!is_stretch_pool()) {
       v = 29;
