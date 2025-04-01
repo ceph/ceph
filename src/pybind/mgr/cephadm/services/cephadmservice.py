@@ -302,7 +302,9 @@ class CephadmService(metaclass=ABCMeta):
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
                          ips: List[str] = [],
-                         fqdns: List[str] = []) -> Tuple[str, str]:
+                         fqdns: List[str] = [],
+                         custom_sans: List[str] = []
+                         ) -> Tuple[str, str]:
 
         svc_spec = cast(ServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         if not self.requires_certificates or not svc_spec.ssl:
@@ -318,7 +320,7 @@ class CephadmService(metaclass=ABCMeta):
         elif cert_source == CertificateSource.REFEFRENCE.value:
             return self._get_certificates_from_certmgr_store(svc_spec)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
-            return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns)
+            return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
             logger.error(f'redo: invalid cert_source is {cert_source}')
             return '', ''
@@ -358,7 +360,9 @@ class CephadmService(metaclass=ABCMeta):
                                          svc_spec: ServiceSpec,
                                          daemon_spec: CephadmDaemonDeploySpec,
                                          ips: List[str] = [],
-                                         fqdns: List[str] = []) -> Tuple[str, str]:
+                                         fqdns: List[str] = [],
+                                         custom_sans: List[str] = [],
+                                         ) -> Tuple[str, str]:
 
         cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_spec.service_name(), daemon_spec.host)
         if cert and key:
@@ -373,7 +377,7 @@ class CephadmService(metaclass=ABCMeta):
 
         # Either there were not certs or ips/fqdns have changed generate new cets
         logger.info(f'redo: certs changed or dont exist ... generating new certs for {svc_spec.service_name()}')
-        cert, key = self.mgr.cert_mgr.generate_cert(fqdns, ips)
+        cert, key = self.mgr.cert_mgr.generate_cert(fqdns, ips, custom_sans)
         if cert and key:
             self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_spec.service_name(), cert, key, host=daemon_spec.host)
         else:
@@ -1131,8 +1135,8 @@ class RgwService(CephService):
             if isinstance(ssl_cert, list):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{str(utils.md5_hash(ssl_cert))}')
-        else:
-            deps += RgwService.get_daemons_ips(mgr, rgw_spec)
+        #else:
+        #    deps += RgwService.get_daemons_ips(mgr, rgw_spec)
 
         return sorted(deps)
 
@@ -1218,9 +1222,8 @@ class RgwService(CephService):
 
         if spec.ssl:
             san_list = spec.zonegroup_hostnames or []
-            custom_san_list = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
-            # TODO(redo): pass custom_san_list to the get_certifiactes function
-            cert, key = self.get_certificates(daemon_spec)
+            custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
+            cert, key = self.get_certificates(daemon_spec, custom_sans)
             pem = ''.join([key, cert])
             rgw_cert_name = daemon_spec.name() if spec.generate_cert else spec.service_name()
             ret, out, err = self.mgr.check_mon_command({
