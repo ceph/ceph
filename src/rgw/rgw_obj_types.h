@@ -279,6 +279,8 @@ struct rgw_obj_key {
 
   bool need_to_encode_instance() const {
     return have_non_null_instance() ||
+      (snap_id.is_set() && !snap_id.is_min());
+
       snap_id.is_set();
   }
 

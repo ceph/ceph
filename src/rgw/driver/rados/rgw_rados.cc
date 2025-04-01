@@ -6754,7 +6754,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   *psm = sm;
   if (s->has_attrs) {
     bool has_snap_info = s->attrset.find(RGW_ATTR_OLH_SNAP_INFO) != s->attrset.end();
-    bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info);
+    bool avoid_snap_olh = obj.key.snap_id.is_min();
+    bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info) && !avoid_snap_olh;
     if (s->is_olh && need_follow_olh) {
       return get_olh_target_state(dpp, *octx, bucket_info, obj, snap_id,
                                   delete_marker_enoent, follow_snap, s, psm, y);
@@ -6810,7 +6811,8 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   s->accounted_size = s->size;
 
   bool has_snap_info = s->attrset.find(RGW_ATTR_OLH_SNAP_INFO) != s->attrset.end();
-  bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info);
+  bool avoid_snap_olh = obj.key.snap_id.is_min();
+  bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info) && !avoid_snap_olh;
 
   auto iter = s->attrset.find(RGW_ATTR_ETAG);
   if (iter != s->attrset.end()) {
