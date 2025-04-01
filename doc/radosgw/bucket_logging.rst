@@ -20,6 +20,12 @@ in different objects in the log bucket.
     - The log bucket must be created before enabling logging on a bucket
     - The log bucket cannot be the same as the bucket being logged
     - The log bucket cannot have logging enabled on it
+    - The log bucket cannot have any encryption set on in (including SSE-S3 with AES-256)
+    - The log bucket cannot have any compression set on it
+    - The log bucket must not have RequestPayer enabled
+    - Source and log bucket must be in the same zonegroup
+    - Source and log buckets may belong to different accounts (with proper bucket policy set)
+    - The log bucket may have object lock enabled with default retention period
 
 
 .. toctree::
@@ -49,6 +55,46 @@ This means that if the logging action fails, the operation will not be executed,
 An exception to the above are "multi/delete" log records: if writing these log records fail, the operation continues and may still be successful.
 Journal mode supports filtering out records based on matches of the prefixes and suffixes of the logged object keys. Regular-expression matching can also be used on these to create filters.
 Note that it may happen that the log records were successfully written, but the bucket operation failed, since the logs are written.
+
+
+Bucket Logging Policy
+---------------------
+On the source bucket, only its owner is allowed to enable or disable bucket logging.
+For a bucket to be used as a log bucket, it must have bucket policy that allows that (even if the source bucket and the log bucket are owned by the same user or account).
+The bucket policy must allow the `s3:PutObject` action for the log bucket, to be perfomed by the `logging.s3.amazonaws.com` service principal.
+It should also specify the source bucket and account that are expected to write logs to it. For example:
+
+::
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "AllowLoggingFromSourceBucket",
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "logging.s3.amazonaws.com"
+          },
+          "Action": "s3:PutObject",
+          "Resource": "arn:aws:s3:::log-bucket-name/prefix*",
+          "Condition": {
+            "StringEquals": {
+              "aws:SourceAccount": "source-account-id"
+            },
+            "ArnLike": {
+              "aws:SourceArn": "arn:aws:s3:::source-bucket-name"
+            }
+          }
+        }
+      ]
+    }
+
+
+Bucket Logging Quota
+--------------------
+Bucket and user quota are applied on the log bucket. Quota is checked every time a log record is written,
+and updated when the log object is added to the log bucket. In "Journal" mode, if the quota is exceeded, the logging operation will fail
+and as a result the bucket operation will also fail. In "Standard" mode, the logging operation will be skipped, but the bucket operation will continue.
 
 
 Bucket Logging REST API
