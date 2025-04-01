@@ -24,6 +24,7 @@ from ceph.deployment.service_spec import (
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from mgr_util import parse_combined_pem_file
 
 from .utils import resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
@@ -399,10 +400,15 @@ class SpecStore():
                 else:
                     cert_str = rgw_cert
                 assert isinstance(cert_str, str)
-                #fixme: split the rgw PEM into cert/key
+                cert, key = parse_combined_pem_file(cert_str)
                 self.mgr.cert_mgr.save_cert(
                     'rgw_ssl_cert',
-                    cert_str,
+                    cert,
+                    service_name=rgw_spec.service_name(),
+                    user_made=True)
+                self.mgr.cert_mgr.save_key(
+                    'rgw_ssl_key',
+                    key,
                     service_name=rgw_spec.service_name(),
                     user_made=True)
         elif spec.service_type == 'iscsi':
