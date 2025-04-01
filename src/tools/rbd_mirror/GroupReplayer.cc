@@ -828,12 +828,12 @@ template <typename I>
 void GroupReplayer<I>::finish_start_fail(int r, const std::string &desc) {
   dout(10) << "r=" << r << ", desc=" << desc << dendl;
   Context *ctx = new LambdaContext([this, r, desc](int _r) {
-    m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED;
-    m_state_desc = desc;
     {
       std::lock_guard locker{m_lock};
       ceph_assert(m_state == STATE_STARTING);
       m_state = STATE_STOPPING;
+      m_status_state = cls::rbd::MIRROR_GROUP_STATUS_STATE_STOPPED;
+      m_state_desc = desc;
       if (r < 0) {
 	if (r == -ECANCELED) {
 	  dout(10) << "start canceled" << dendl;
@@ -1080,7 +1080,7 @@ void GroupReplayer<I>::set_mirror_group_status_update(
   auto remote_status = local_status;
 
   {
-    std::unique_lock locker{m_lock};
+    std::lock_guard locker{m_lock};
     for (auto &[_, ir] : m_image_replayers) {
       cls::rbd::MirrorImageSiteStatus mirror_image;
       if (ir->is_running()) {
@@ -1130,8 +1130,12 @@ void GroupReplayer<I>::set_mirror_group_status_update(
     m_remote_group_peer.mirror_status_updater->set_mirror_group_status(
         m_global_group_id, remote_status, true);
   }
-  m_status_state = local_status.state;
-  m_state_desc = local_status.description;
+
+  {
+    std::lock_guard locker{m_lock};
+    m_status_state = local_status.state;
+    m_state_desc = local_status.description;
+  }
 }
 
 } // namespace mirror
