@@ -4,14 +4,27 @@ Cloud Transition
 
 This feature enables data transition to a remote cloud service as part of `Lifecycle Configuration <https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html>`__ via :ref:`storage_classes`. The transition is unidirectional; data cannot be transitioned back from the remote zone. The goal of this feature is to enable data transition to multiple cloud providers. The currently supported cloud providers are those that are compatible with AWS (S3).
 
-Special storage class of tier type ``cloud-s3`` is used to configure the remote cloud S3 object store service to which the data needs to be transitioned. These are defined in terms of zonegroup placement targets and unlike regular storage classes, do not need a data pool.
+Special storage class of tier type ``cloud-s3`` or ``cloud-s3-glacier`` is used to configure the remote cloud S3 object store service to which the data needs to be transitioned. These are defined in terms of zonegroup placement targets and unlike regular storage classes, do not need a data pool.
 
 User credentials for the remote cloud object store service need to be configured. Note that source ACLs will not
 be preserved. It is possible to map permissions of specific source users to specific destination users.
 
 
-Cloud Storage Class Configuration
----------------------------------
+Cloud Storage Class Tier Type
+-----------------------------
+
+* ``tier-type`` (string)
+
+The type of remote cloud service that will be used to transition objects. Below tier types are supported:
+
+* ``cloud-s3`` : S3 compatible object store service
+
+* ``cloud-s3-glacier`` : S3 Glacier or Tape storage services where in objects are archived
+
+
+
+Cloud Storage Class Tier Configuration
+--------------------------------------
 
 ::
 
@@ -120,7 +133,7 @@ Minimum parts size to use when transitioning objects using multipart upload.
 How to Configure
 ~~~~~~~~~~~~~~~~
 
-See :ref:`adding_a_storage_class` for how to configure storage-class for a zonegroup. The cloud transition requires a creation of a special storage class with tier type defined as ``cloud-s3``
+See :ref:`adding_a_storage_class` for how to configure storage-class for a zonegroup. The cloud transition requires a creation of a special storage class with tier type defined as ``cloud-s3`` or ``cloud-s3-glacier``
 
 .. note:: If you have not done any previous `Multisite Configuration`_,
           a ``default`` zone and zonegroup are created for you, and changes
@@ -179,7 +192,7 @@ For example:
     ]
 
 
-.. note:: Once a storage class is created of ``--tier-type=cloud-s3``, it cannot be later modified to any other storage class type.
+.. note:: Once a storage class is created of ``--tier-type=cloud-s3`` or ``--tier-type=cloud-s3-glacier`` , it cannot be later modified to any other storage class type.
 
 The tier configuration can be then done using the following command
 
@@ -354,14 +367,18 @@ For versioned and locked objects, similar semantics as that of LifecycleExpirati
 * If the object is noncurrent and is locked, its transition is skipped.
 
 
+Restoring Objects
+-----------------
+The objects transitioned to cloud can now be restored. For more information, refer to 
+`Restoring Objects from Cloud <https://docs.aws.amazon.com/AmazonS3/latest/dev/cloud-restore.html>`
+
+
 Future Work
 -----------
 
 * Send presigned redirect or read-through the objects transitioned to cloud
 
 * Support s3:RestoreObject operation on cloud transitioned objects.
-
-* Federation between RGW and Cloud services.
 
 * Support transition to other cloud providers (like Azure).
 
