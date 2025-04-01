@@ -548,6 +548,10 @@ public:
   void op_applied(const eversion_t &applied_version) override {
 
   }
+
+  uint64_t min_peer_features() const {
+    return 0;
+  }
 };
 
 TEST(ECCommon, get_min_want_to_read_shards)
