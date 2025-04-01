@@ -9087,6 +9087,14 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     if (r < 0) {
       return r;
     }
+  } else {
+    /* plain object exists, update the snap_info.snap_map to reflect that */
+    rgw_bucket_snap_id snap_id;
+    snap_id = rgw_bucket_snap_id::SNAP_MIN;
+    auto& snap_entry = snap_info.snap_map[snap_id];
+    snap_entry.key = obj.key;
+    snap_entry.key.snap_id = snap_id;
+    snap_entry.delete_marker = false;
   }
 
   for (iter = log.begin(); iter != log.end(); ++iter) {
