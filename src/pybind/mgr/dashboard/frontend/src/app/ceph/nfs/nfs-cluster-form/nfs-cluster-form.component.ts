@@ -71,9 +71,11 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
       cluster_id: new UntypedFormControl({ value: '', disabled: true })
     });
   }
+
   goToListView() {
     this.router.navigate([`/${getPathfromFsal(this.fsal)}/nfs`]);
   }
+
   submitAction() {
     let notificationTitle: string;
     // Exit immediately if the form isn't dirty.
@@ -83,16 +85,37 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
     }
     let clusteFormrObj = this.nfsForm.getRawValue();
     delete clusteFormrObj.rateLimit;
-    let ratelimitValue: NFSBwIopConfig = this.nfsRateLimitComponent.getRateLimitFormValue();
-    ratelimitValue = {
-      ...ratelimitValue,
+    let ratelimitBw: NFSBwIopConfig = this.nfsRateLimitComponent.getRateLimitFormValue();
+    let ratelimitOpsValue: NFSBwIopConfig = this.nfsRateLimitComponent.getRateLimitOpsFormValue();
+    ratelimitBw = {
+      ...ratelimitBw,
       ...clusteFormrObj,
-      disable_qos: !ratelimitValue.enable_qos
+      disable_qos: !ratelimitBw?.enable_qos
     };
-    delete ratelimitValue.enable_qos;
-    this.submitObservables.push(this.nfsService.enableQosBandwidthForCLuster(ratelimitValue));
-    notificationTitle = $localize`Cluster QoS Type Configured for '${this.id}'`;
 
+    delete ratelimitBw.enable_qos;
+    this.submitObservables.push(this.nfsService.enableQosBandwidthForCLuster(ratelimitBw));
+    notificationTitle = $localize`Cluster QoS Type Configured for '${this.id}'`;
+    // Finally execute observables
+    observableConcat(...this.submitObservables).subscribe({
+      error: () => {
+        // Reset the 'Submit' button.
+        this.nfsForm.setErrors({ cdSubmitButton: true });
+      },
+      complete: () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
+        this.goToListView();
+      }
+    });
+
+    ratelimitOpsValue = {
+      ...ratelimitOpsValue,
+      ...clusteFormrObj,
+      disable_Ops: !ratelimitOpsValue?.enable_ops
+    };
+    delete ratelimitOpsValue.enable_ops;
+    this.submitObservables.push(this.nfsService.enableQosOpsForCLuster(ratelimitOpsValue));
+    notificationTitle = $localize`Cluster QoS Type Configured for '${this.id}'`;
     // Finally execute observables
     observableConcat(...this.submitObservables).subscribe({
       error: () => {

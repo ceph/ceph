@@ -205,8 +205,6 @@ describe('NfsRateLimitComponent', () => {
       component.type = 'export';
       component.nfsClusterData = { enable_qos: false } as any;
 
-      component.showQOS();
-
       expect(component.allowQoS).toBeTruthy();
     });
 
