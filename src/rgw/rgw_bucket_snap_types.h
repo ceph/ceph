@@ -84,6 +84,14 @@ struct rgw_bucket_snap_id {
     }
     return other;
   }
+
+  bool is_min() const {
+    return snap_id == SNAP_MIN;
+  }
+
+  static rgw_bucket_snap_id min() {
+    return rgw_bucket_snap_id(SNAP_MIN);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_snap_id)
 
