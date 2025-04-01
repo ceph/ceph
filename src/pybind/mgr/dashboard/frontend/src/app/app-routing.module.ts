@@ -51,11 +51,14 @@ import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluste
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { MultiClusterDetailsComponent } from './ceph/cluster/multi-cluster/multi-cluster-details/multi-cluster-details.component';
 import { SmbClusterFormComponent } from './ceph/smb/smb-cluster-form/smb-cluster-form.component';
-import { SmbTabsComponent } from './ceph/smb/smb-tabs/smb-tabs.component';
 import { SmbShareFormComponent } from './ceph/smb/smb-share-form/smb-share-form.component';
 import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join-auth-form.component';
 import { SmbUsersgroupsFormComponent } from './ceph/smb/smb-usersgroups-form/smb-usersgroups-form.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
+import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster-list.component';
+import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
+import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
+import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -437,7 +440,7 @@ const routes: Routes = [
           },
           {
             path: 'smb',
-            canActivateChild: [ModuleStatusGuardService],
+            canActivate: [ModuleStatusGuardService],
             data: {
               moduleStatusGuardConfig: {
                 uiApiPath: 'smb',
@@ -449,40 +452,66 @@ const routes: Routes = [
               breadcrumbs: 'File/SMB'
             },
             children: [
-              { path: '', component: SmbTabsComponent },
+              { path: '', component: SmbClusterListComponent },
               {
-                path: `${URLVerbs.CREATE}`,
-                component: SmbClusterFormComponent,
-                data: { breadcrumbs: ActionLabels.CREATE }
+                path: 'clusters',
+                data: { breadcrumbs: 'Clusters' },
+                children: [
+                  { path: '', component: SmbClusterListComponent },
+                  {
+                    path: `${URLVerbs.CREATE}`,
+                    component: SmbClusterFormComponent,
+                    data: { breadcrumbs: ActionLabels.CREATE }
+                  },
+                  {
+                    path: `${URLVerbs.EDIT}/:cluster_id`,
+                    component: SmbClusterFormComponent,
+                    data: { breadcrumbs: ActionLabels.EDIT }
+                  }
+                ]
+              },
+              {
+                path: 'active-directory',
+                data: { breadcrumbs: 'Active Directory' },
+                children: [
+                  { path: '', component: SmbJoinAuthListComponent },
+                  {
+                    path: `${URLVerbs.CREATE}`,
+                    component: SmbJoinAuthFormComponent,
+                    data: { breadcrumbs: ActionLabels.CREATE }
+                  },
+                  {
+                    path: `${URLVerbs.EDIT}/:authId`,
+                    component: SmbJoinAuthFormComponent,
+                    data: { breadcrumbs: ActionLabels.EDIT }
+                  }
+                ]
+              },
+              {
+                path: 'standalone',
+                data: { breadcrumbs: 'Standalone' },
+                children: [
+                  { path: '', component: SmbUsersgroupsListComponent },
+                  {
+                    path: `${URLVerbs.CREATE}`,
+                    component: SmbUsersgroupsFormComponent,
+                    data: { breadcrumbs: ActionLabels.CREATE }
+                  },
+                  {
+                    path: `${URLVerbs.EDIT}/:usersGroupsId`,
+                    component: SmbUsersgroupsFormComponent
+                  }
+                ]
+              },
+              {
+                path: 'overview',
+                component: SmbOverviewComponent,
+                data: { breadcrumbs: 'Overview' }
               },
               {
                 path: `share/${URLVerbs.CREATE}/:clusterId`,
                 component: SmbShareFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
-              },
-              {
-                path: `${URLVerbs.EDIT}/:cluster_id`,
-                component: SmbClusterFormComponent,
-                data: { breadcrumbs: ActionLabels.EDIT }
-              },
-              {
-                path: `ad/${URLVerbs.CREATE}`,
-                component: SmbJoinAuthFormComponent,
-                data: { breadcrumbs: ActionLabels.CREATE }
-              },
-              {
-                path: `ad/${URLVerbs.EDIT}/:authId`,
-                component: SmbJoinAuthFormComponent,
-                data: { breadcrumbs: ActionLabels.EDIT }
-              },
-              {
-                path: `standalone/${URLVerbs.CREATE}`,
-                component: SmbUsersgroupsFormComponent,
-                data: { breadcrumbs: ActionLabels.CREATE }
-              },
-              {
-                path: `standalone/${URLVerbs.EDIT}/:usersGroupsId`,
-                component: SmbUsersgroupsFormComponent
               },
               {
                 path: `share/${URLVerbs.EDIT}/:clusterId/:shareId`,
