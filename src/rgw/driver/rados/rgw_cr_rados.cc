@@ -950,21 +950,21 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
     std::optional<RGWUserPermHandler> user_perms;
     RGWUserPermHandler::Bucket dest_bucket_perms;
 
-    if (params.user.empty()) {
+    if (!params.user.has_value()) {
       ldpp_dout(dpp, 20) << "ERROR: " << __func__ << ": user level sync but user param not set" << dendl;
       return -EPERM;
     }
-    user_perms.emplace(dpp, store, dpp->get_cct(), params.user);
+    user_perms.emplace(dpp, store, dpp->get_cct(), *params.user);
 
     ret = user_perms->init();
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << params.user << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init user perms for uid=" << *params.user << " ret=" << ret << dendl;
       return ret;
     }
 
     ret = user_perms->init_bucket(sync_pipe.dest_bucket_info, sync_pipe.dest_bucket_attrs, &dest_bucket_perms);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": failed to init bucket perms for uid=" << *params.user << " bucket=" << bucket->get_key() << " ret=" << ret << dendl;
       return ret;
     }
 
