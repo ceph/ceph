@@ -342,7 +342,7 @@ struct rgw_sync_pipe_params {
     MODE_USER = 1,
   } mode{MODE_SYSTEM};
   int32_t priority{0};
-  rgw_user user;
+  std::optional<rgw_user> user;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -350,7 +350,7 @@ struct rgw_sync_pipe_params {
     encode(dest, bl);
     encode(priority, bl);
     encode((uint8_t)mode, bl);
-    encode(user, bl);
+    encode(user.value_or(rgw_user()), bl);
     ENCODE_FINISH(bl);
   }
 
@@ -362,7 +362,13 @@ struct rgw_sync_pipe_params {
     uint8_t m;
     decode(m, bl);
     mode = (Mode)m;
-    decode(user, bl);
+    { // decode user
+      rgw_user _user;
+      decode(_user, bl);
+      if (!_user.empty()) {
+        user = _user;
+      }
+    }
     DECODE_FINISH(bl);
   }
 
