@@ -448,7 +448,7 @@ class CephadmService(metaclass=ABCMeta):
         if self.requires_certificates:
             spec = self.mgr.spec_store[daemon_spec.service_name].spec
             logger.info(f'redo: calling prepare_create for {spec.service_name()}')
-            if spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value:
+            if spec.ssl and spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value:
                 self.mgr.cert_mgr.register_self_signed_cert_key_pair(spec.service_name())
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
@@ -681,9 +681,11 @@ class CephadmService(metaclass=ABCMeta):
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
         if self.requires_certificates:
-            spec = self.mgr.spec_store[daemon.service_name()].spec
-            if spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value:
-                self.mgr.cert_mgr.rm_self_signed_cert_key_pair(spec.service_name(), daemon.hostname)
+            svc_name = daemon.service_name()
+            if svc_name in self.mgr.spec_store:
+                spec = self.mgr.spec_store[svc_name].spec
+                if spec.ssl and spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value:
+                    self.mgr.cert_mgr.rm_self_signed_cert_key_pair(svc_name, daemon.hostname)
 
     def purge(self, service_name: str) -> None:
         """Called to carry out any purge tasks following service removal"""
