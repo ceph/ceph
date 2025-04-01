@@ -190,8 +190,11 @@ void ECExtentCache::Object::invalidate(const OpRef &invalidating_op) {
   requesting_ops.clear();
   reading_ops.clear();
 
-  current_size = invalidating_op->projected_size;
-  projected_size = current_size;
+  /* Current size should reflect the actual size of the object, which was set
+   * by the previous write. We are going to replay all the writes now, so set
+   * the projected size to that of this op.
+   */
+  projected_size = invalidating_op->projected_size;
 
   // Cache can now be replayed and invalidate teh cache!
   invalidating_op->invalidates_cache = false;
