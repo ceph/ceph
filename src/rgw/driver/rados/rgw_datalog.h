@@ -366,6 +366,7 @@ class RGWDataChangesLog {
   bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
   std::atomic<bool> down_flag = { true };
+  bool ran_background = false;
 
   struct ChangeStatus {
     std::shared_ptr<const rgw_sync_policy_info> sync_policy;
@@ -416,14 +417,14 @@ public:
 
   asio::awaitable<void> start(const DoutPrefixProvider* dpp,
 			      const rgw_pool& log_pool,
-			      // For testing
-			      bool recovery = true,
-			      bool watch = true,
-			      bool renew = true);
+			      // Broken out for testing, in use
+			      // they're either all on (radosgw) or
+			      // all off (radosgw-admin)
+			      bool recovery, bool watch, bool renew);
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
-	    const RGWZoneParams& zoneparams,
-	    rgw::sal::RadosStore* store);
+	    const RGWZoneParams& zoneparams, rgw::sal::RadosStore* store,
+	    bool background_tasks);
   asio::awaitable<bool> establish_watch(const DoutPrefixProvider* dpp,
 					std::string_view oid);
   asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,

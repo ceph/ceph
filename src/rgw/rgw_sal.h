@@ -1879,7 +1879,9 @@ public:
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
-				      bool run_notification_thread, optional_yield y,
+				      bool run_notification_thread,
+				      bool background_tasks,
+				      optional_yield y,
 				      bool use_cache = true,
 				      bool use_gc = true) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
@@ -1890,7 +1892,8 @@ public:
 						   run_sync_thread,
 						   run_reshard_thread,
                                                    run_notification_thread,
-						   use_cache, use_gc, y);
+						   use_cache, use_gc,
+						   background_tasks, y);
     return driver;
   }
   /** Get a stripped down driver by service name */
@@ -1916,7 +1919,8 @@ public:
 						bool run_reshard_thread,
                                                 bool run_notification_thread,
 						bool use_metadata_cache,
-						bool use_gc, optional_yield y);
+						bool use_gc, bool background_tasks,
+						optional_yield y);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,

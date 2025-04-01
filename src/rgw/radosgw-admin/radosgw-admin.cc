@@ -4557,6 +4557,7 @@ int main(int argc, const char **argv)
 					false,
 					false,
                                         false,
+					false, // No background tasks!
                                         null_yield,
 					need_cache && g_conf()->rgw_cache_enabled,
 					need_gc);

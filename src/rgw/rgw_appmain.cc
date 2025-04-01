@@ -252,7 +252,7 @@ int rgw::AppMain::init_storage()
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
-          true, null_yield, // run notification thread
+	  true, true, null_yield, // run notification thread
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
     return -EIO;
