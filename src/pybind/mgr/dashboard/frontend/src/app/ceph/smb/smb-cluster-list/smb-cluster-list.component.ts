@@ -24,7 +24,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
-const BASE_URL = 'cephfs/smb';
+const BASE_URL = 'cephfs/smb/clusters';
 @Component({
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
