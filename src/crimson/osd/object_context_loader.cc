@@ -22,8 +22,9 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
     auto [obc, _] = obc_registry.get_cached_obc(manager.target);
     manager.set_state_obc(manager.head_state, obc);
   }
-  ceph_assert(manager.target_state.is_empty());
-  manager.set_state_obc(manager.target_state, manager.head_state.obc);
+  if (manager.target_state.is_empty()) {
+    manager.set_state_obc(manager.target_state, manager.head_state.obc);
+  }
 
   if (manager.target_state.obc->loading_started) {
     co_await manager.target_state.lock_to(lock_type);
@@ -45,7 +46,6 @@ ObjectContextLoader::load_and_lock_clone(
   auto releaser = manager.get_releaser();
 
   ceph_assert(!manager.target.is_head());
-  ceph_assert(manager.target_state.is_empty());
 
   if (manager.head_state.is_empty()) {
     auto [obc, _] = obc_registry.get_cached_obc(manager.target.get_head());
@@ -65,6 +65,9 @@ ObjectContextLoader::load_and_lock_clone(
   }
 
   if (manager.options.resolve_clone) {
+    // target_state must be empty because we won't know which object to load
+    // until now
+    ceph_assert(manager.target_state.is_empty());
     auto resolved_oid = resolve_oid(
       manager.head_state.obc->get_head_ss(),
       manager.target);
@@ -91,6 +94,8 @@ ObjectContextLoader::load_and_lock_clone(
      * actually can mutate a clone do not set resolve_clone, so target will not
      * become head here.
      */
+    ceph_assert(manager.options.resolve_clone);
+    ceph_assert(manager.target_state.is_empty());
     manager.set_state_obc(manager.target_state, manager.head_state.obc);
     if (lock_type != manager.head_state.state) {
       // This case isn't actually possible at the moment for the above reason.
@@ -101,11 +106,20 @@ ObjectContextLoader::load_and_lock_clone(
       manager.head_state.state = RWState::RWNONE;
     }
   } else {
-    auto [obc, _] = obc_registry.get_cached_obc(manager.target);
-    manager.set_state_obc(manager.target_state, obc);
+    // caller may have already populated this if !resolve_clone
+    if (manager.target_state.is_empty()) {
+      auto [obc, _] = obc_registry.get_cached_obc(manager.target);
+      manager.set_state_obc(manager.target_state, obc);
+    }
 
     if (manager.target_state.obc->loading_started) {
       co_await manager.target_state.lock_to(RWState::RWREAD);
+      if (!manager.target_state.obc->ssc) {
+	// A cached clone obc may have a null ssc if created via
+	// create_cached_obc_from_push_data.  This interface
+	// is responsible for fixing that if found.
+	manager.target_state.obc->ssc = manager.head_state.obc->ssc;
+      }
     } else {
       manager.target_state.lock_excl_sync();
       manager.target_state.obc->loading_started = true;
@@ -115,6 +129,8 @@ ObjectContextLoader::load_and_lock_clone(
     }
   }
 
+  ceph_assert(manager.target_state.obc->ssc);
+  ceph_assert(manager.head_state.obc->ssc);
   releaser.cancel();
 }
 

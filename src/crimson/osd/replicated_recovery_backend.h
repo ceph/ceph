@@ -102,11 +102,6 @@ protected:
   void submit_push_complete(
     const ObjectRecoveryInfo &recovery_info,
     ObjectStore::Transaction *t);
-  interruptible_future<> _handle_push(
-    pg_shard_t from,
-    PushOp& push_op,
-    PushReplyOp *response,
-    ceph::os::Transaction *t);
   interruptible_future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
     const PushReplyOp &op);
@@ -180,4 +175,7 @@ private:
     bufferlist omap_header);
   using interruptor = crimson::interruptible::interruptor<
     crimson::osd::IOInterruptCondition>;
+
+  std::pair<object_info_t, crimson::osd::SnapSetContextRef>
+  get_md_from_push_op(PushOp &push_op);
 };
