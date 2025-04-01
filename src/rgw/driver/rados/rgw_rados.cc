@@ -1418,13 +1418,14 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
 }
 
 int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp,
+		       bool background_tasks, // Ignored when `raw`
                        const rgw::SiteConfig& site)
 {
   if (raw) {
     return svc.init_raw(cct, driver, use_cache, null_yield, dpp, site);
   }
 
-  return svc.init(cct, driver, use_cache, run_sync_thread, null_yield, dpp, site);
+  return svc.init(cct, driver, use_cache, run_sync_thread, background_tasks, null_yield, dpp, site);
 }
 
 /** 
@@ -1432,6 +1433,7 @@ int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp,
  * Returns 0 on success, -ERR# on failure.
  */
 int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
+			 bool background_tasks,
                          const rgw::SiteConfig& site)
 {
   set_context(_cct);
@@ -1446,7 +1448,7 @@ int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = init_svc(false, dpp, site);
+  ret = init_svc(false, dpp, background_tasks, site);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;

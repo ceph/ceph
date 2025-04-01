@@ -435,16 +435,18 @@ void DataLogBackends::handle_empty_to(uint64_t new_tail) {
 int RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 			     const RGWZone* zone,
 			     const RGWZoneParams& zoneparams,
-			     rgw::sal::RadosStore* store)
+			     rgw::sal::RadosStore* store,
+			     bool background_tasks)
 {
   log_data = zone->log_data;
   rados = &store->get_neorados();
-
   try {
     // Blocking in startup code, not ideal, but won't hurt anything.
     std::exception_ptr eptr
       = asio::co_spawn(store->get_io_context(),
-		       start(dpp, zoneparams.log_pool),
+		       start(dpp, zoneparams.log_pool,
+			     background_tasks, background_tasks,
+			     background_tasks),
 		       async::use_blocked);
     if (eptr) {
       std::rethrow_exception(eptr);
@@ -472,6 +474,7 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 {
   down_flag = false;
   cancel_strand = asio::make_strand(rados->get_executor());
+  ran_background = (recovery || watch || renew);
 
   auto defbacking = to_log_type(
     cct->_conf.get_val<std::string>("rgw_default_data_log_backing"));
@@ -1250,7 +1253,8 @@ asio::awaitable<void> DataLogBackends::trim_entries(
   std::unique_lock l(m);
   const auto head_gen = (end() - 1)->second->gen_id;
   const auto tail_gen = begin()->first;
-  if (target_gen < tail_gen)
+ if (target_gen < tail_gen)
+   
     co_return;
   auto r = 0;
   for (auto be = lower_bound(0)->second;
@@ -1344,7 +1348,7 @@ bool RGWDataChangesLog::going_down() const
 
 asio::awaitable<void> RGWDataChangesLog::shutdown() {
   DoutPrefix dp{cct, ceph_subsys_rgw, "Datalog Shutdown"};
-  if (down_flag) {
+  if (down_flag || !ran_background) {
     co_return;
   }
   down_flag = true;
@@ -1370,7 +1374,7 @@ asio::awaitable<void> RGWDataChangesLog::shutdown() {
     watchcookie = 0;
     co_await rados->unwatch(wc, loc, asio::use_awaitable);
   }
-  co_await renew_entries(&dp);
+  co_return;
 }
 
 asio::awaitable<void> RGWDataChangesLog::shutdown_or_timeout() {
@@ -1391,7 +1395,7 @@ asio::awaitable<void> RGWDataChangesLog::shutdown_or_timeout() {
 RGWDataChangesLog::~RGWDataChangesLog() {
   if (log_data && !down_flag) {
     lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-	       << ": RGWDataChangesLog destructed without dhutdown." << dendl;
+	       << ": RGWDataChangesLog destructed without shutdown." << dendl;
   }
 }
 

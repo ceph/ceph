@@ -51,6 +51,7 @@ int RGWServices_Def::init(CephContext *cct,
 			  bool have_cache,
                           bool raw,
 			  bool run_sync,
+			  bool background_tasks,
 			  optional_yield y,
                           const DoutPrefixProvider *dpp)
 {
@@ -136,7 +137,7 @@ int RGWServices_Def::init(CephContext *cct,
 
     r = datalog_rados->start(dpp, &zone->get_zone(),
 			     zone->get_zone_params(),
-			     driver);
+			     driver, background_tasks);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
@@ -261,12 +262,12 @@ void RGWServices_Def::shutdown()
   has_shutdown = true;
 }
 
-int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp, const rgw::SiteConfig& _site)
+int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, bool background_tasks, optional_yield y, const DoutPrefixProvider *dpp, const rgw::SiteConfig& _site)
 {
   cct = _cct;
   site = &_site;
 
-  int r = _svc.init(cct, driver, have_cache, raw, run_sync, y, dpp);
+  int r = _svc.init(cct, driver, have_cache, raw, run_sync, background_tasks, y, dpp);
   if (r < 0) {
     return r;
   }
