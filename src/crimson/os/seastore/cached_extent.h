@@ -1258,6 +1258,14 @@ public:
     return extent_index.find(offset, paddr_cmp());
   }
 
+  bool exists(CachedExtent& extent) const {
+    auto iter = extent_index.find(extent.get_paddr(), paddr_cmp());
+    if (iter == extent_index.end()) {
+      return false;
+    }
+    return (&*iter == &extent);
+  }
+
   auto begin() {
     return extent_index.begin();
   }
