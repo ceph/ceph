@@ -1497,7 +1497,7 @@ int RGWOp::do_aws4_auth_completion()
   return 0;
 }
 
-static int get_owner_quota_info(DoutPrefixProvider* dpp,
+int get_owner_quota_info(const DoutPrefixProvider* dpp,
                                 optional_yield y,
                                 rgw::sal::Driver* driver,
                                 const rgw_owner& owner,
