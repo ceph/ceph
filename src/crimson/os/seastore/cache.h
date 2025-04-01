@@ -711,6 +711,8 @@ private:
       SUBDEBUG(seastore_cache,
           "{} {}~0x{:x} is absent(placeholder), add extent and reading range 0x{:x}~0x{:x} ... -- {}",
           T::TYPE, offset, length, partial_off, partial_len, *ret);
+      extent_init_func(*ret);
+      on_cache(*ret);
       extents_index.replace(*ret, *cached);
 
       // replace placeholder in transactions
@@ -720,8 +722,6 @@ private:
       }
 
       cached->state = CachedExtent::extent_state_t::INVALID;
-      extent_init_func(*ret);
-      on_cache(*ret);
       return read_extent<T>(
 	std::move(ret), partial_off, partial_len, p_src);
     }

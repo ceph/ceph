@@ -1179,7 +1179,6 @@ CachedExtentRef Cache::duplicate_for_write(
   assert(!i->prior_poffset);
   auto [iter, inserted] = i->mutation_pending_extents.insert(*ret);
   ceph_assert(inserted);
-  t.add_mutated_extent(ret);
   if (is_root_type(ret->get_type())) {
     t.root = ret->cast<RootBlock>();
   } else {
@@ -1194,6 +1193,8 @@ CachedExtentRef Cache::duplicate_for_write(
     assert(ret->is_logical());
     static_cast<LogicalCachedExtent&>(*ret).set_laddr(lextent.get_laddr());
   }
+
+  t.add_mutated_extent(ret);
   DEBUGT("{} -> {}", t, *i, *ret);
   return ret;
 }
