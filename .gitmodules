@@ -68,7 +68,7 @@
 	url = https://github.com/JuliaStrings/utf8proc
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
-	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+	url = https://github.com/ceph/opentelemetry-cpp.git
 [submodule "src/qatlib"]
 	path = src/qatlib
 	url = https://github.com/intel/qatlib.git
