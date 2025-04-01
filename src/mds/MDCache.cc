@@ -9916,8 +9916,9 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
     auto new_batch_head = it->second->find_new_head();
     if (!new_batch_head) {
       mdr->batch_op_map->erase(it);
+    } else {
+      mds->finisher->queue(new C_MDS_RetryRequest(this, new_batch_head));
     }
-    mds->finisher->queue(new C_MDS_RetryRequest(this, new_batch_head));
   }
 
   if (mdr->has_more()) {
