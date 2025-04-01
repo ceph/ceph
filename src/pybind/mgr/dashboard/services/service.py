@@ -204,3 +204,20 @@ class RgwServiceManager:
         except (AssertionError, SubprocessError) as error:
             logger.exception(error)
             raise NoCredentialsException
+
+    def set_rgw_hostname(self, daemon_name: str, hostname: str):
+        if not Settings.RGW_HOSTNAME_PER_DAEMON:
+            Settings.RGW_HOSTNAME_PER_DAEMON = {daemon_name: hostname}
+            return
+
+        rgw_hostname_setting = Settings.RGW_HOSTNAME_PER_DAEMON
+        rgw_hostname_setting[daemon_name] = hostname
+        Settings.RGW_HOSTNAME_PER_DAEMON = rgw_hostname_setting
+
+    def unset_rgw_hostname(self, daemon_name: str):
+        if not Settings.RGW_HOSTNAME_PER_DAEMON:
+            return
+
+        rgw_hostname_setting = Settings.RGW_HOSTNAME_PER_DAEMON
+        rgw_hostname_setting.pop(daemon_name, None)
+        Settings.RGW_HOSTNAME_PER_DAEMON = rgw_hostname_setting
