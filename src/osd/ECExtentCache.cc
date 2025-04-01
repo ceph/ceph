@@ -112,7 +112,6 @@ void ECExtentCache::Object::read_done(shard_extent_map_t const &buffers) {
   }
   reading_ops.clear();
   insert(buffers);
-  send_reads();
 }
 
 uint64_t ECExtentCache::Object::line_align(uint64_t x) const {
@@ -259,6 +258,7 @@ void ECExtentCache::read_done(hobject_t const &oid,
                               shard_extent_map_t const &&update) {
   objects.at(oid).read_done(update);
   cache_maybe_ready();
+  objects.at(oid).send_reads();
 }
 
 void ECExtentCache::write_done(OpRef const &op,
