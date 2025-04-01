@@ -2062,7 +2062,7 @@ std::ostream& operator<<(std::ostream& out, const lock_fnode_print& to_lock) {
   return out;
 }
 
-void BlueFS::_drop_link_D(FileRef file)
+void BlueFS::_drop_link_DF(FileRef file)
 {
   dout(20) << __func__ << " had refs " << file->refs
 	   << " on " << lock_fnode_print(file) << dendl;
@@ -2078,9 +2078,11 @@ void BlueFS::_drop_link_D(FileRef file)
     log.t.op_file_remove(file->fnode.ino);
     nodes.file_map.erase(file->fnode.ino);
     logger->set(l_bluefs_num_files, nodes.file_map.size());
-    file->deleted = true;
-
     std::lock_guard dl(dirty.lock);
+    std::lock_guard fl(file->lock);
+    // setting `deleted` is under log+nodes+dirty+file locks
+    // so it is enough to held one of those locks to make sure it does not change
+    file->deleted = true;
     for (auto& r : file->fnode.extents) {
       dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
@@ -3392,10 +3394,6 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " to " << h->file->fnode
 	   << " hint " << h->file->vselector_hint
            << dendl;
-  if (h->file->deleted) {
-    dout(10) << __func__ << "  deleted, no-op" << dendl;
-    return 0;
-  }
 
   bool buffered = cct->_conf->bluefs_buffered_io;
 
@@ -3409,6 +3407,10 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
              << dendl;
   }
   std::lock_guard file_lock(h->file->lock);
+  if (h->file->deleted) {
+    dout(10) << __func__ << " deleted, no-op" << dendl;
+    return 0;
+  }
   ceph_assert(offset <= h->file->fnode.size);
 
   uint64_t allocated = h->file->fnode.get_allocated();
@@ -3663,15 +3665,12 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 {
   std::lock_guard hl(h->lock);
   auto& fnode = h->file->fnode;
-  dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
-           << " file " << fnode << dendl;
-  if (h->file->deleted) {
-    dout(10) << __func__ << "  deleted, no-op" << dendl;
-    return 0;
-  }
 
   // we never truncate internal log files
   ceph_assert(fnode.ino > 1);
+
+  dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
+           << " file " << fnode << dendl;
 
   // truncate off unflushed data?
   if (h->pos < offset &&
@@ -3693,6 +3692,10 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   {
     std::lock_guard ll(log.lock);
     std::lock_guard dl(dirty.lock);
+    if (h->file->deleted) {
+      dout(10) << __func__ << " deleted, no-op" << dendl;
+      return 0;
+    }
     bool changed_extents = false;
     vselector->sub_usage(h->file->vselector_hint, fnode);
     uint64_t x_off = 0;
@@ -4280,7 +4283,7 @@ int BlueFS::rename(
 	     << " already exists, unlinking" << dendl;
     ceph_assert(q->second != file);
     log.t.op_dir_unlink(new_dirname, new_filename);
-    _drop_link_D(q->second);
+    _drop_link_DF(q->second);
   }
 
   dout(10) << __func__ << " " << new_dirname << "/" << new_filename << " "
@@ -4474,7 +4477,8 @@ int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
   }
   dir->file_map.erase(string{filename});
   log.t.op_dir_unlink(dirname, filename);
-  _drop_link_D(file);
+  _drop_link_DF(file);
+
   return 0;
 }
 

@@ -522,7 +522,7 @@ private:
 
 
   FileRef _get_file(uint64_t ino);
-  void _drop_link_D(FileRef f);
+  void _drop_link_DF(FileRef f);
 
   unsigned _get_slow_device_id() {
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
