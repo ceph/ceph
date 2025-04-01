@@ -638,8 +638,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self._init_cert_mgr()
-
         # ensure the host lists are in sync
         for h in self.inventory.keys():
             if h not in self.cache.daemons:
@@ -655,6 +653,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.migration = Migrations(self)
 
         service_registry.init_services(self)
+        self._init_cert_mgr()
 
         self.mgr_service: MgrService = cast(MgrService, service_registry.get_service('mgr'))
         self.osd_service: OSDService = cast(OSDService, service_registry.get_service('osd'))
@@ -715,19 +714,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 assert svc.SCOPE != TLSObjectScope.UNKNOWN, f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field."
                 self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE)
 
-        # register per-service certificates
-        self.cert_mgr.register_cert_key_pair('ingress', 'ingress_ssl_cert', 'ingress_ssl_key', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert_key_pair('iscsi', 'iscsi_ssl_cert', 'iscsi_ssl_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
-
-        # register ancilary certificates/keys
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert('rgw', 'rgw_frontend_ssl_cert', TLSObjectScope.SERVICE)
         self.cert_mgr.register_key('nvmeof', 'nvmeof_encryption_key', TLSObjectScope.SERVICE)
-
-        # register per-host certificates
-        self.cert_mgr.register_cert_key_pair('grafana', 'grafana_cert', 'grafana_key', TLSObjectScope.HOST)
 
         self.cert_mgr.init_tlsobject_store()
 
