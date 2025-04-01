@@ -71,36 +71,52 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
       cluster_id: new UntypedFormControl({ value: '', disabled: true })
     });
   }
+
   goToListView() {
     this.router.navigate([`/${getPathfromFsal(this.fsal)}/nfs`]);
   }
+
   submitAction() {
     let notificationTitle: string;
-    // Exit immediately if the form isn't dirty.
     if (this.nfsForm.pristine && this.nfsRateLimitComponent.rateLimitForm.pristine) {
       this.goToListView();
       return;
     }
-    let clusteFormrObj = this.nfsForm.getRawValue();
-    delete clusteFormrObj.rateLimit;
-    let ratelimitValue: NFSBwIopConfig = this.nfsRateLimitComponent.getRateLimitFormValue();
-    ratelimitValue = {
-      ...ratelimitValue,
-      ...clusteFormrObj,
-      disable_qos: !ratelimitValue.enable_qos
+
+    const clusterFormObj = this.nfsForm.getRawValue();
+    delete clusterFormObj.rateLimit;
+
+    let ratelimitBw: NFSBwIopConfig = this.nfsRateLimitComponent.getRateLimitFormValue();
+    let ratelimitOpsValue: NFSBwIopConfig = this.nfsRateLimitComponent.getRateLimitOpsFormValue();
+    ratelimitBw = {
+      ...ratelimitBw,
+      ...clusterFormObj,
+      disable_qos: !ratelimitBw?.enable_qos
     };
-    delete ratelimitValue.enable_qos;
-    this.submitObservables.push(this.nfsService.enableQosBandwidthForCLuster(ratelimitValue));
+    delete ratelimitBw.enable_qos;
+
+    ratelimitOpsValue = {
+      ...ratelimitOpsValue,
+      ...clusterFormObj,
+      disable_Ops: !ratelimitOpsValue?.enable_ops
+    };
+    delete ratelimitOpsValue.enable_ops;
+
+    this.submitObservables.push(
+      this.nfsService.enableQosBandwidthForCLuster(ratelimitBw),
+      this.nfsService.enableQosOpsForCLuster(ratelimitOpsValue)
+    );
+
     notificationTitle = $localize`Cluster QoS Type Configured for '${this.id}'`;
 
-    // Finally execute observables
     observableConcat(...this.submitObservables).subscribe({
+      next: () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
+      },
       error: () => {
-        // Reset the 'Submit' button.
         this.nfsForm.setErrors({ cdSubmitButton: true });
       },
       complete: () => {
-        this.notificationService.show(NotificationType.success, notificationTitle);
         this.goToListView();
       }
     });
