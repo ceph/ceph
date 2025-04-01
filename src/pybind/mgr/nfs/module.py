@@ -383,7 +383,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             raise object_format.ErrorResponse.wrap(e)
         return self.nfs.enable_cluster_qos_bw(cluster_id=cluster_id,
                                               qos_type=QOSType[qos.value],
-                                              bw_obj=bw_obj)
+                                              bw_obj=bw_obj,
+                                              skip_qos_type_validation=True)
 
     def enable_export_qos_bw(self, cluster_id: str,
                              pseudo_path: str,
@@ -418,7 +419,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             raise object_format.ErrorResponse.wrap(e)
         return self.nfs.enable_cluster_qos_ops(cluster_id=cluster_id,
                                                qos_type=QOSType[qos.value],
-                                               ops_obj=ops_obj)
+                                               ops_obj=ops_obj,
+                                               skip_qos_type_validation=True)
 
     def enable_export_qos_ops(self, cluster_id: str,
                               pseudo_path: str,
