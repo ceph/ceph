@@ -190,7 +190,8 @@ public:
       auto &trans = extent.retired_transactions;
       unviewable = (trans.find(trans_id, trans_spec_view_t::cmp_t()) !=
 		 trans.end());
-      assert(unviewable == t.is_retired(extent.get_paddr(), extent.get_length()));
+      assert(unviewable ==
+             t.is_stable_extent_retired(extent.get_paddr(), extent.get_length()));
     }
     return unviewable;
   }

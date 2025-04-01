@@ -350,7 +350,7 @@ public:
     return inline_block_list;
   }
 
-  bool is_retired(paddr_t paddr, extent_len_t len) {
+  bool is_stable_extent_retired(paddr_t paddr, extent_len_t len) {
     auto iter = retired_set.lower_bound(paddr);
     if (iter == retired_set.end()) {
       return false;
