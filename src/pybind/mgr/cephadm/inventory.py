@@ -399,8 +399,9 @@ class SpecStore():
                 else:
                     cert_str = rgw_cert
                 assert isinstance(cert_str, str)
+                #fixme: split the rgw PEM into cert/key
                 self.mgr.cert_mgr.save_cert(
-                    'rgw_frontend_ssl_cert',
+                    'rgw_ssl_cert',
                     cert_str,
                     service_name=rgw_spec.service_name(),
                     user_made=True)

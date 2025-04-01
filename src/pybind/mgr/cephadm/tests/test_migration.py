@@ -331,6 +331,7 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
             assert dict(rgw_spec.to_json()) == {'service_type': 'rgw',
                                                 'service_id': 'foo',
                                                 'service_name': 'rgw.foo',
+                                                'certificate_source': 'cephadm-signed',
                                                 'placement': {'hosts': ['host1']},
                                                 'spec': {
                                                     'rgw_frontend_extra_args': ['tcp_nodelay=1',
@@ -372,13 +373,13 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
 
     cephadm_module.migration.migrate_6_7()
 
-    assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo')
+    assert cephadm_module.cert_mgr.get_cert('rgw_ssl_cert', service_name='rgw.foo')
     assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo')
     assert cephadm_module.cert_mgr.get_key('iscsi_ssl_key', service_name='iscsi.foo')
     assert cephadm_module.cert_mgr.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
     assert cephadm_module.cert_mgr.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
 
-    assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host1')
-    assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host2')
-    assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1')
-    assert cephadm_module.cert_mgr.get_key('grafana_key', host='host2')
+    assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host1')
+    assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host2')
+    assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1')
+    assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host2')
