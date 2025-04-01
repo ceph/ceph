@@ -551,7 +551,8 @@ class NFSCluster:
     def enable_cluster_qos_bw(self,
                               cluster_id: str,
                               qos_type: QOSType,
-                              bw_obj: QOSBandwidthControl
+                              bw_obj: QOSBandwidthControl,
+                              skip_qos_type_validation: bool = False
                               ) -> None:
         """
         There are 2 cases to consider:
@@ -567,7 +568,7 @@ class NFSCluster:
         """
         try:
             qos_obj = self.get_cluster_qos_config(cluster_id)
-            if qos_obj:
+            if qos_obj and not skip_qos_type_validation:
                 self.validate_qos_type(qos_obj, qos_type, bw_obj=bw_obj)
             bw_obj.qos_bandwidth_checks(qos_type)
             self.update_cluster_qos(
@@ -617,10 +618,10 @@ class NFSCluster:
             log.exception(f"Setting NFS-Ganesha QoS bandwidth control config failed for {cluster_id}")
             raise ErrorResponse.wrap(e)
 
-    def enable_cluster_qos_ops(self, cluster_id: str, qos_type: QOSType, ops_obj: QOSOpsControl) -> None:
+    def enable_cluster_qos_ops(self, cluster_id: str, qos_type: QOSType, ops_obj: QOSOpsControl, skip_qos_type_validation: bool = False) -> None:
         try:
             qos_obj = self.get_cluster_qos_config(cluster_id)
-            if qos_obj:
+            if qos_obj and not skip_qos_type_validation:
                 self.validate_qos_type(qos_obj, qos_type, ops_obj=ops_obj)
             ops_obj.qos_ops_checks(qos_type)
             self.update_cluster_qos(
