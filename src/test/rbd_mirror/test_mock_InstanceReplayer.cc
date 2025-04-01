@@ -107,7 +107,7 @@ struct GroupReplayer<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD0(is_finished, bool());
   MOCK_METHOD1(set_finished, void(bool));
 
-  MOCK_CONST_METHOD0(get_health_state, image_replayer::HealthState());
+  MOCK_CONST_METHOD0(get_health_state, group_replayer::HealthState());
 };
 
 GroupReplayer<librbd::MockTestImageCtx>* GroupReplayer<librbd::MockTestImageCtx>::s_instance = nullptr;
