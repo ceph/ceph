@@ -65,7 +65,9 @@ private:
   }
   RecoveryBackend::interruptible_future<> recover_missing(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
-    const hobject_t &soid, eversion_t need);
+    const hobject_t &soid,
+    eversion_t need,
+    bool with_throttle);
   RecoveryBackend::interruptible_future<> prep_object_replica_deletes(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
     const hobject_t& soid,
@@ -96,6 +98,18 @@ private:
 				eversion_t last_complete);
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
+
+  interruptible_future<> recover_object_with_throttle(
+    const hobject_t &soid,
+    eversion_t need);
+
+  interruptible_future<> recover_object(
+    const hobject_t &soid,
+    eversion_t need) {
+    auto backend = pg->get_recovery_backend();
+    assert(backend);
+    return backend->recover_object(soid, need);
+  }
 
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
