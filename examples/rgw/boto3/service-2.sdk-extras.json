@@ -140,6 +140,56 @@
                 }
             }
         },
+        "ListObjectVersionsRequest": {
+            "members": {
+                "AllowUnordered": {
+                    "shape":"AllowUnordered",
+                    "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
+                    "location":"querystring",
+                    "locationName":"allow-unordered"
+                },
+                "SnapRange": {
+                    "shape":"SnapRange",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-range"
+                },
+                "SnapId": {
+                    "shape":"SnapId",
+                    "documentation":"<p></p>",
+                    "location":"header",
+                    "locationName":"x-rgw-snap-id"
+                }
+            }
+        },
+        "Object":{
+          "members":{
+            "IsRemoved":{
+              "shape":"IsRemoved",
+              "documentation":"<p>Whether object has been removed.</p>",
+              "locationName":"IsRemoved"
+            }
+          }
+        },
+        "ObjectVersion":{
+          "members":{
+            "IsRemoved":{
+              "shape":"IsRemoved",
+              "documentation":"<p>Whether object has been removed.</p>",
+              "locationName":"IsRemoved"
+            }
+          }
+        },
+        "DeleteMarker":{
+          "members":{
+            "IsRemoved":{
+              "shape":"IsRemoved",
+              "documentation":"<p>Whether object has been removed.</p>",
+              "locationName":"IsRemoved"
+            }
+          }
+        },
+        "IsRemoved":{"type":"boolean"},
         "GetObjectRequest": {
             "members": {
                 "SnapId": {

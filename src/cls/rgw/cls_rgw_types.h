@@ -444,6 +444,9 @@ struct rgw_bucket_dir_entry {
   static constexpr uint16_t FLAG_DELETE_MARKER =      0x4;
   /* object is versioned, a placeholder for the plain entry */
   static constexpr uint16_t FLAG_VER_MARKER =         0x8;
+  /* object is deleted (delete marker may or may not exist for it,
+   * used to report of object removal in a snapshot range diff */
+  static constexpr uint16_t FLAG_DELETE =            0x10;
   /* object is a proxy; it is not listed in the bucket index but is a
    * prefix ending with a delimiter, perhaps common to multiple
    * entries; it is only useful when a delimiter is used and
@@ -526,11 +529,17 @@ struct rgw_bucket_dir_entry {
            (flags & test_flags) == test_flags;
   }
   bool is_current_at_snap(rgw_bucket_snap_id snap_id) {
+    if (!meta.snap_id.is_set()) {
+      return true;
+    }
     return (flags & rgw_bucket_dir_entry::FLAG_VER) == 0 ||
       (snap_info && snap_info->is_current(snap_id));
   }
   bool is_delete_marker() const {
     return (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) != 0;
+  }
+  bool is_removed() const {
+    return (flags & rgw_bucket_dir_entry::FLAG_DELETE) != 0;
   }
   bool is_visible() const {
     return is_current() && !is_delete_marker();
