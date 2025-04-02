@@ -4520,14 +4520,6 @@ public:
             tn->log(0, "entry with empty obj name, skipping");
             goto done;
           }
-
-          // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
-          if (key.instance.empty() == sync_pipe.dest_bucket_info.versioned()) {
-            set_status("skipping entry due to versioning mismatch");
-            tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
-            goto done;
-          }
-
           if (error_injection &&
               rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
