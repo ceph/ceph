@@ -102,3 +102,30 @@ class SMBClustering(_StrEnum):
     DEFAULT = 'default'
     ALWAYS = 'always'
     NEVER = 'never'
+
+
+class ShowResults(_StrEnum):
+    FULL = 'full'
+    COLLAPSED = 'collapsed'
+
+
+class PasswordFilter(_StrEnum):
+    """Filter type for password values."""
+
+    NONE = 'none'
+    BASE64 = 'base64'
+    HIDDEN = 'hidden'
+
+
+class InputPasswordFilter(_StrEnum):
+    """Filter type for input password values."""
+
+    NONE = 'none'
+    BASE64 = 'base64'
+
+    def to_password_filter(self) -> PasswordFilter:
+        """Convert input password filter to password filter type."""
+        # This is because python doesn't allow extending enums (with values)
+        # but we want a InputPasswordFilter to be a strict subset of the
+        # password filter enum.
+        return PasswordFilter(self.value)

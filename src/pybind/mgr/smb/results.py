@@ -2,8 +2,8 @@ from typing import Iterable, Iterator, List, Optional
 
 import errno
 
-from .proto import Simplified
-from .resources import SMBResource
+from .proto import Self, Simplified
+from .resources import ConversionOp, SMBResource
 from .utils import one
 
 _DOMAIN = 'domain'
@@ -43,6 +43,14 @@ class Result:
         if self.success:
             return ""
         return "resource failed to apply (see response data for details)"
+
+    def replace_resource(self, resource: SMBResource) -> Self:
+        return self.__class__(
+            src=resource,
+            success=self.success,
+            msg=self.msg,
+            status=self.status,
+        )
 
 
 class ErrorResult(Result, Exception):
@@ -135,3 +143,14 @@ class ResultGroup:
         ct = sum(0 if r.success else 1 for r in self._contents)
         s = '' if ct <= 1 else 's'
         return f"{ct} resource{s} failed to apply (see response data for details)"
+
+    def convert_results(self, operation: ConversionOp) -> Self:
+        """Apply a conversion operation to all the resources in the result group
+        returning a new result group with all the results updated.
+        """
+        return self.__class__(
+            initial_results=[
+                result.replace_resource(result.src.convert(operation))
+                for result in self._contents
+            ]
+        )
