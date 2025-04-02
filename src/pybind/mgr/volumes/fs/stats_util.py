@@ -65,11 +65,31 @@ def get_percent_copied(src_path, dst_path, fs_handle):
 
 def get_stats(src_path, dst_path, fs_handle):
     rentries = 'ceph.dir.rentries'
-    rentries_t = int(fs_handle.getxattr(src_path, rentries))
-    rentries_c = int(fs_handle.getxattr(dst_path, rentries))
+    # set it to true when either src_path or dst_path has gone missing.
+    either_path_gone_missing = False
 
-    size_t, size_c, percent = get_amount_copied(src_path, dst_path, fs_handle)
+    try:
+        rentries_t = int(fs_handle.getxattr(src_path, rentries))
+    except ObjectNotFound:
+        either_path_gone_missing = True
+        log.info(f'get_stats(): source path "{src_path}" went missing, '
+                  'couldn\'t run getxattr on it')
 
+    try:
+        rentries_c = int(fs_handle.getxattr(dst_path, rentries))
+    except ObjectNotFound:
+        either_path_gone_missing = True
+        log.info(f'get_stats(): destination path "{dst_path}" went missing, '
+                  'couldn\'t run getxattr on it')
+
+    if either_path_gone_missing:
+        return {}
+
+    retval = get_amount_copied(src_path, dst_path, fs_handle)
+    if not retval:
+        return {}
+
+    size_t, size_c, percent = retval
     return {
         'percentage cloned': percent,
         'amount cloned': get_size_ratio_str(size_c, size_t),
