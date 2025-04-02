@@ -89,6 +89,13 @@ CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
   }
 }
 
+LogicalCachedExtent::~LogicalCachedExtent()
+{
+  if (parent_logical_index) {
+    parent_logical_index->remove(*this);
+  }
+}
+
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
 {
   out << ", laddr=" << laddr;
@@ -286,6 +293,13 @@ ceph::bufferptr BufferSpace::to_full_ptr(extent_len_t length)
   assert(ptr.length() == length);
   buffer_map.clear();
   return ptr;
+}
+
+bool is_logical_extent_linked(LogicalCachedExtent& extent)
+{
+  auto* as_child = dynamic_cast<LogicalChildNode*>(&extent);
+  ceph_assert(as_child != nullptr);
+  return as_child->has_parent_tracker();
 }
 
 }
