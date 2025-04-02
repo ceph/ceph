@@ -1,10 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "PGPeeringEvent.h"
-#include "common/ceph_releases.h"
-#include "common/dout.h"
 #include "PeeringState.h"
+#include "PGPeeringEvent.h"
+#include "osd_perf_counters.h"
+#include "common/ceph_releases.h"
+#include "common/debug.h"
+#include "common/ostream_temp.h"
+#include "crush/crush.h" // for CRUSH_ITEM_NONE
+#include "crush/CrushWrapper.h"
 
 #include "messages/MOSDPGRemove.h"
 #include "messages/MBackfillReserve.h"

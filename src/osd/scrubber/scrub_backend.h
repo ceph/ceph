@@ -43,6 +43,7 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
+#include <iosfwd>
 #include <string_view>
 
 #include "common/LogClient.h"

@@ -15,13 +15,15 @@
  *
  */
 
-
+#include "PGBackend.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
+#include "include/random.h" // for ceph::util::generate_random_number()
 #include "ReplicatedBackend.h"
 #include "osd/scrubber/ScrubStore.h"
+#include "ECBackend.h"
 #include "ECSwitch.h"
-#include "PGBackend.h"
 #include "OSD.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "OSDMap.h"

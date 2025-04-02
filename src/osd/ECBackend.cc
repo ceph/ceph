@@ -12,10 +12,10 @@
  *
  */
 
-#include <iostream>
-#include <sstream>
-
 #include "ECBackend.h"
+
+#include <iostream>
+
 #include "ECInject.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
@@ -23,6 +23,7 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "common/debug.h"
 #include "ECMsgTypes.h"
 #include "ECTypes.h"
 #include "ECSwitch.h"

@@ -27,6 +27,7 @@
 
 #include "cls/cas/cls_cas_ops.h"
 #include "common/CDC.h"
+#include "common/debug.h"
 #include "common/EventTrace.h"
 #include "common/ceph_crypto.h"
 #include "common/config.h"

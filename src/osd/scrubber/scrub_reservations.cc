@@ -6,6 +6,7 @@
 #include <span>
 
 #include "common/ceph_time.h"
+#include "common/debug.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
 #include "osd/osd_types_fmt.h"

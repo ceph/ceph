@@ -15,6 +15,7 @@
 #include "PG.h"
 #include "messages/MOSDRepScrub.h"
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"

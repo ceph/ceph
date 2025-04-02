@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "common/map_cacher.hpp"
 #include "osd/osd_types_fmt.h"
 #include "osd/SnapMapper.h"  // for OSDriver

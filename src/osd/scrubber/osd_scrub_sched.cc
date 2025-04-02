@@ -6,6 +6,7 @@
 #include "osd/OSD.h"
 
 #include "pg_scrubber.h"
+#include "common/debug.h"
 
 using namespace ::std::chrono;
 using namespace ::std::chrono_literals;
