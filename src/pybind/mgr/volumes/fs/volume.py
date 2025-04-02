@@ -1012,7 +1012,8 @@ class VolumeClient(CephfsClient["Module"]):
             return None
 
         stats = get_stats(src_path, dst_path, vol_handle)
-        stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
+        if stats:
+            stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
         return stats
 
     def _get_clone_status(self, vol_handle, group, subvol):
