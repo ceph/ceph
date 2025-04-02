@@ -94,12 +94,13 @@ void rgw_s3_key_value_filter::dump(Formatter *f) const {
     return;
   }
   f->open_array_section("FilterRules");
-  for (const auto& key_value : kv) {
-    f->open_object_section("");
-    ::encode_json("Name", key_value.first, f);
-    ::encode_json("Value", key_value.second, f);
-    f->close_section();
-  }
+    for (const auto& rule : kv) {
+      f->open_object_section("");
+      ::encode_json("Type", rule.type, f);
+      ::encode_json("Name", rule.key, f);
+      ::encode_json("Value", rule.value, f);
+      f->close_section();
+    }
   f->close_section();
 }
 
@@ -114,18 +115,21 @@ bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
   std::string value;
 
   while ((o = iter.get_next())) {
-    RGWXMLDecoder::decode_xml("Name", key, o, throw_if_missing);
-    RGWXMLDecoder::decode_xml("Value", value, o, throw_if_missing);
-    kv.emplace(key, value);
+    KeyValueRule rule;
+    RGWXMLDecoder::decode_xml("Name", rule.key, o, throw_if_missing);
+    RGWXMLDecoder::decode_xml("Value", rule.value, o, throw_if_missing);
+    RGWXMLDecoder::decode_xml("Type", rule.type, o, false);  
+    kv.push_back(std::move(rule));
   }
   return true;
 }
 
 void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
-  for (const auto& key_value : kv) {
+  for (const auto& rule : kv) {
     f->open_object_section("FilterRule");
-    ::encode_xml("Name", key_value.first, f);
-    ::encode_xml("Value", key_value.second, f);
+    ::encode_xml("Type", rule.type, f);
+    ::encode_xml("Name", rule.key, f);
+    ::encode_xml("Value", rule.value, f);
     f->close_section();
   }
 }
@@ -199,24 +203,51 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   return true;
 }
 
-bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
-  // all filter pairs must exist with the same value in the object's metadata/tags
-  // object metadata/tags may include items not in the filter
-  return std::includes(kv.begin(), kv.end(), filter.kv.begin(), filter.kv.end());
-}
+bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv_map) {
+  for (const auto& rule : filter.kv) {
+    auto it = kv_map.find(rule.key);
 
-bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
-  // all filter pairs must exist with the same value in the object's metadata/tags
-  // object metadata/tags may include items not in the filter
-  for (auto& filter : filter.kv) {
-    auto result = kv.equal_range(filter.first);
-    if (std::any_of(result.first, result.second, [&filter](const std::pair<std::string, std::string>& p) { return p.second == filter.second;}))
-      continue;
-    else
-      return false;
+    if (rule.type == "IN") {
+      if (it == kv_map.end() || it->second != rule.value)
+        return false;
+    } else if (rule.type == "OUT") {
+      if (it != kv_map.end() && it->second == rule.value)
+        return false;
+    } else {
+      if (it == kv_map.end() || it->second != rule.value)
+        return false;
+    }
   }
   return true;
 }
+
+
+bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv_map) {
+  for (const auto& rule : filter.kv) {
+    auto range = kv_map.equal_range(rule.key);
+    bool value_matched = std::any_of(
+      range.first, range.second,
+      [&rule](const std::pair<std::string, std::string>& p) {
+        return p.second == rule.value;
+      });
+
+    if (rule.type == "IN") {
+      if (!value_matched) {
+        return false;
+      }
+    } else if (rule.type == "OUT") {
+      if (value_matched) {
+        return false;
+      }
+    } else {
+      if (!value_matched) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 
 bool match(const rgw_s3_filter& s3_filter, const rgw::sal::Object* obj) {
   if (obj == nullptr) {

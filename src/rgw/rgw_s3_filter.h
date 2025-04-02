@@ -41,8 +41,39 @@ WRITE_CLASS_ENCODER(rgw_s3_key_filter)
 using KeyValueMap = boost::container::flat_map<std::string, std::string>;
 using KeyMultiValueMap = std::multimap<std::string, std::string>;
 
+struct KeyValueRule {
+  std::string type = "IN";
+  std::string key;
+  std::string value;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(type, bl);
+    encode(key, bl);
+    encode(value, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(type, bl);
+    decode(key, bl);
+    decode(value, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter* f) const {
+    f->open_object_section("FilterRule");
+    ::encode_json("Type", type, f);
+    ::encode_json("Name", key, f);
+    ::encode_json("Value", value, f);
+    f->close_section();
+  }
+};
+WRITE_CLASS_ENCODER(KeyValueRule)
+
 struct rgw_s3_key_value_filter {
-  KeyValueMap kv;
+  std::vector<KeyValueRule> kv;
 
   bool has_content() const;
 
