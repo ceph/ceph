@@ -702,13 +702,16 @@ private:
 
   using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
   _get_mapping_ret _get_mapping(
-    Transaction &t,
+    op_context_t<laddr_t> c,
+    LBABtree& btree,
     laddr_t offset);
 
-  using _get_original_mappings_ret = get_mappings_ret;
-  _get_original_mappings_ret _get_original_mappings(
+  using _get_mappings_ret = get_mappings_iertr::future<std::list<BtreeLBAMappingRef>>;
+  _get_mappings_ret _get_mappings(
     op_context_t<laddr_t> c,
-    std::list<BtreeLBAMappingRef> &pin_list);
+    LBABtree& btree,
+    laddr_t offset,
+    extent_len_t length);
 
   using _decref_intermediate_ret = ref_iertr::future<
     std::optional<ref_update_result_t>>;
