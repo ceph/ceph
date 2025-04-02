@@ -217,8 +217,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   multiSelector(event: any, field: 'label' | 'hosts') {
-    if (field === PLACEMENT.host) this.selectedLabels = event.map((label: any) => label.content);
-    else this.selectedHosts = event.map((host: any) => host.content);
+    if (field === PLACEMENT.host) this.selectedHosts = event.map((host: any) => host.content);
+    else this.selectedLabels = event.map((label: any) => label.content);
   }
 
   onAuthModeChange() {
