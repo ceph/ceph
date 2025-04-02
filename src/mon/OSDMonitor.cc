@@ -4062,6 +4062,38 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 // -------------
 // pg_temp changes
 
+bool OSDMonitor::validate_pgtemp_update(const pg_t &pg, const std::vector<int32_t> &pg_temp, int from)
+{
+  // does the pool exist?
+  if (!osdmap.have_pg_pool(pg.pool())) {
+    /*
+     * 1. If the osdmap does not have the pool, it means the pool has been
+     *    removed in-between the osd sending this message and us handling it.
+     * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
+     *    not exist in the pending either, as the osds would not send a
+     *    message about a pool they know nothing about (yet).
+     * 3. However, if the pool does exist in the pending, then it must be a
+     *    new pool, and not relevant to this message (see 1).
+     */
+    dout(10) << __func__ << " ignore " << pg << " -> " << pg_temp
+             << ": pool has been removed" << dendl;
+    return false;
+  }
+  int acting_primary = -1;
+  osdmap.pg_to_up_acting_osds(pg, nullptr, nullptr, nullptr, &acting_primary);
+  if (acting_primary != from) {
+    /* If the source isn't the primary based on the current osdmap, we know
+     * that the interval changed and that we can discard this message.
+     * Indeed, we must do so to avoid 16127 since we can't otherwise determine
+     * which of two pg temp mappings on the same pg is more recent.
+     */
+    dout(10) << __func__ << " ignore " << pg << " -> " << pg_temp
+	     << ": primary has changed" << dendl;
+    return false;
+  }
+  return true;
+}
+
 bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 {
   auto m = op->get_req<MOSDPGTemp>();
@@ -4096,35 +4128,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
              << " -> " << p->second << dendl;
-
-    // does the pool exist?
-    if (!osdmap.have_pg_pool(p->first.pool())) {
-      /*
-       * 1. If the osdmap does not have the pool, it means the pool has been
-       *    removed in-between the osd sending this message and us handling it.
-       * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
-       *    not exist in the pending either, as the osds would not send a
-       *    message about a pool they know nothing about (yet).
-       * 3. However, if the pool does exist in the pending, then it must be a
-       *    new pool, and not relevant to this message (see 1).
-       */
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-               << ": pool has been removed" << dendl;
-      ignore_cnt++;
-      continue;
-    }
-
-    int acting_primary = -1;
-    osdmap.pg_to_up_acting_osds(
-      p->first, nullptr, nullptr, nullptr, &acting_primary);
-    if (acting_primary != from) {
-      /* If the source isn't the primary based on the current osdmap, we know
-       * that the interval changed and that we can discard this message.
-       * Indeed, we must do so to avoid 16127 since we can't otherwise determine
-       * which of two pg temp mappings on the same pg is more recent.
-       */
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-	       << ": primary has changed" << dendl;
+    if (!validate_pgtemp_update(p->first, p->second, from)) {
       ignore_cnt++;
       continue;
     }
@@ -4182,13 +4186,22 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
                << ": pool pending removal" << dendl;
       continue;
     }
-    if (!osdmap.have_pg_pool(pool)) {
-      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
-               << ": pool has been removed" << dendl;
+
+    if (!validate_pgtemp_update(p->first, p->second, from)) {
       continue;
     }
+    // Pools with allow_ec_optimizations set store pg_temp in a different
+    // order to change the primary selection algorithm without breaking
+    // old clients. If necessary re-order the new pg_temp now
+    pg_pool_t pg_pool;
+    if (pending_inc.new_pools.count(pool))
+      pg_pool = pending_inc.new_pools[pool];
+    else
+      pg_pool = *osdmap.get_pg_pool(pool);
+
+    std::vector<int> pg_temp = osdmap.pgtemp_primaryfirst(pg_pool, p->second);
     pending_inc.new_pg_temp[p->first] =
-      mempool::osdmap::vector<int>(p->second.begin(), p->second.end());
+      mempool::osdmap::vector<int>(pg_temp.begin(), pg_temp.end());
 
     // unconditionally clear pg_primary (until this message can encode
     // a change for that, too.. at which point we need to also fix
@@ -5410,7 +5423,8 @@ namespace {
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
-    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO };
+    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
+    EC_OPTIMIZATIONS };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6215,7 +6229,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
       {"bulk", BULK},
-      {"read_ratio", READ_RATIO}
+      {"read_ratio", READ_RATIO},
+      {"allow_ec_optimizations", EC_OPTIMIZATIONS}
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6230,7 +6245,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      EC_OVERWRITES, ERASURE_CODE_PROFILE
+      EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
       READ_RATIO
@@ -6462,17 +6477,23 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
-            pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
-            if (p->opts.is_set(key)) {
-              if(*it == CSUM_TYPE) {
-                int64_t val;
-                p->opts.get(pool_opts_t::CSUM_TYPE, &val);
-                f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
-              } else {
-                p->opts.dump(i->first, f.get());
-              }
+	    {
+	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
+	      if (p->opts.is_set(key)) {
+		if(*it == CSUM_TYPE) {
+		  int64_t val;
+		  p->opts.get(pool_opts_t::CSUM_TYPE, &val);
+		  f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
+		} else {
+		  p->opts.dump(i->first, f.get());
+		}
+	      }
 	    }
             break;
+	  case EC_OPTIMIZATIONS:
+	    f->dump_bool("allow_ec_optimizations",
+			 p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
+	    break;
 	}
       }
       f->close_section();
@@ -6643,6 +6664,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
                 }
 	      }
 	    }
+	    break;
+	  case EC_OPTIMIZATIONS:
+	    ss << "allow_ec_optimizations: " <<
+	      (p->has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS) ? "true" : "false") <<
+	      "\n";
 	    break;
 	}
 	rdata.append(ss.str());
@@ -8189,6 +8215,30 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
   }
 
+  bool allow_ec_optimizations = false;
+  if (g_conf()->osd_pool_default_flag_ec_optimizations) {
+    // Try and enable ec_optimizations, fail silently
+    // 1) pool type must be erasure coded
+    // 2) require_osd_release must be tentacle or newer
+    // 3) Plugin supports the optimizations.
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (osdmap.require_osd_release >= ceph_release_t::tentacle) {
+	ErasureCodeInterfaceRef erasure_code;
+        stringstream tmp;
+        int err = get_erasure_code(erasure_code_profile, &erasure_code, &tmp);
+        if (err == 0) {
+          if (!(erasure_code->get_supported_optimizations() &
+              ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS)) {
+	    allow_ec_optimizations = true;
+	  }
+	} else {
+	  *ss << "get_erasure_code failed: " << tmp.str();
+	  return -EINVAL;
+        }
+      }
+    }
+  }
+
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -8218,6 +8268,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf()->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  if (allow_ec_optimizations) {
+    pi->set_flag(pg_pool_t::FLAG_EC_OVERWRITES);
+    pi->set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  }
   pi->set_flag(pg_pool_t::FLAG_CREATING);
   if (g_conf()->osd_pool_use_gmt_hitset)
     pi->use_gmt_hitset = true;
@@ -8796,8 +8850,74 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
 	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      ss << "ec overwrites cannot be disabled once enabled";
+      if ((p.flags & pg_pool_t::FLAG_EC_OVERWRITES) != 0) {
+	ss << "ec overwrites cannot be disabled once enabled";
+	return -EINVAL;
+      }
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
+    }
+  } else if (var == "allow_ec_optimizations") {
+    if (!p.is_erasure()) {
+      ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
+      return -EINVAL;
+    }
+    if (osdmap.require_osd_release < ceph_release_t::tentacle) {
+      ss << "must set require_osd_release to tentacle or "
+           << "later before setting allow_ec_optimizations";
+        return -EINVAL;
+      }
+    if (val == "true" || (interr.empty() && n == 1)) {
+      ErasureCodeInterfaceRef erasure_code;
+      unsigned int k, m;
+      stringstream tmp;
+      int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+      if (err == 0) {
+        k = erasure_code->get_data_chunk_count();
+        m = erasure_code->get_coding_chunk_count();
+      } else {
+        ss << "get_erasure_code failed: " << tmp.str();
+        return -EINVAL;
+      }
+      if ((erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+        ss << "ec optimizations not currently supported for pool profile.";
+        return -EINVAL;
+      }
+      // Restrict the set of shards that can be a primary to the 1st data
+      // raw_shard (raw_shard 0) and the coding parity raw_shards because
+      // the other shards (including local parity for LRC) may not have
+      // up to date copies of xattrs including OI
+      p.nonprimary_shards.clear();
+      for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
+        if (raw_shard > 0 && raw_shard < k) {
+	  shard_id_t shard;
+	  if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
+	    shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
+	  } else {
+	    shard = shard_id_t(int(raw_shard));
+	  }
+          p.nonprimary_shards.insert(shard);
+	}
+      }
+      // Pools with allow_ec_optimizations set store pg_temp in a different
+      // order to change the primary selection algorithm without breaking
+      // old clients. Modify any existing pg_temp for the pool now
+      for (auto pg_temp = osdmap.pg_temp->begin();
+	   pg_temp != osdmap.pg_temp->end();
+	   ++pg_temp) {
+	if (pg_temp->first.pool() == pool) {
+	  std::vector<int> new_pg_temp = osdmap.pgtemp_primaryfirst(p, pg_temp->second);
+	  pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
+	}
+      }
+      p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
+	ss << "allow_ec_optimizations cannot be disabled once enabled";
+	return -EINVAL;
+      }
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;

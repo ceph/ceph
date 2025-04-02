@@ -16,17 +16,20 @@
  * 1) begin == end == hobject_t() indicates the the interval is unpopulated
  * 2) Else, objects contains all objects in [begin, end)
  */
-struct BackfillInterval {
+
+template <typename T>
+class BackfillInterval {
+public:
   // info about a backfill interval on a peer
   eversion_t version; /// version at which the scan occurred
-  std::map<hobject_t,eversion_t> objects;
   hobject_t begin;
   hobject_t end;
+  T objects;
+
+  virtual ~BackfillInterval() = default;
 
   /// clear content
-  void clear() {
-    *this = BackfillInterval();
-  }
+  virtual void clear() = 0;
 
   /// clear objects std::list only
   void clear_objects() {
@@ -60,10 +63,11 @@ struct BackfillInterval {
 
   /// Adjusts begin to the first object
   void trim() {
-    if (!objects.empty())
+    if (!objects.empty()) {
       begin = objects.begin()->first;
-    else
+    } else {
       begin = end;
+    }
   }
 
   /// drop first entry, and adjust @begin accordingly
@@ -74,25 +78,70 @@ struct BackfillInterval {
   }
 
   /// dump
-  void dump(ceph::Formatter *f) const {
+  virtual void dump(ceph::Formatter *f) const = 0;
+};
+
+class PrimaryBackfillInterval: public BackfillInterval<std::multimap<hobject_t,std::pair<shard_id_t,eversion_t>>> {
+public:
+  /// clear content
+  void clear() override {
+    *this = PrimaryBackfillInterval();
+  }
+
+  /// dump
+  void dump(ceph::Formatter *f) const override {
     f->dump_stream("begin") << begin;
     f->dump_stream("end") << end;
     f->open_array_section("objects");
-    for (std::map<hobject_t, eversion_t>::const_iterator i =
-           objects.begin();
-         i != objects.end();
-         ++i) {
-      f->open_object_section("object");
-      f->dump_stream("object") << i->first;
-      f->dump_stream("version") << i->second;
-      f->close_section();
+    if (!objects.empty()) {
+      for (const auto& [hoid,shard_version] : objects) {
+	const auto& [shard,version] = shard_version;
+	f->open_object_section("object");
+	f->dump_stream("object") << hoid;
+	f->dump_stream("shard") << shard;
+	f->dump_stream("version") << version;
+	f->close_section();
+      }
     }
     f->close_section();
   }
 };
 
-std::ostream &operator<<(std::ostream &out, const BackfillInterval &bi);
+class ReplicaBackfillInterval: public BackfillInterval<std::map<hobject_t,eversion_t>> {
+public:
+  /// clear content
+  void clear() override {
+    *this = ReplicaBackfillInterval();
+  }
+
+  /// dump
+  void dump(ceph::Formatter *f) const override {
+    f->dump_stream("begin") << begin;
+    f->dump_stream("end") << end;
+    f->open_array_section("objects");
+    if (!objects.empty()) {
+      for (const auto& [hoid,version] : objects) {
+	f->open_object_section("object");
+	f->dump_stream("object") << hoid;
+	f->dump_stream("version") << version;
+	f->close_section();
+      }
+    }
+    f->close_section();
+  }
+};
+
+template<typename T> std::ostream& operator<<(std::ostream& out, const BackfillInterval<T>& bi)
+{
+  out << "BackfillInfo(" << bi.begin << "-" << bi.end << " ";
+  if (!bi.objects.empty()) {
+    out << bi.objects.size() << " objects";
+    out << " " << bi.objects;
+  }
+  out << ")";
+  return out;
+}
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<BackfillInterval> : fmt::ostream_formatter {};
+template <typename T> struct fmt::formatter<BackfillInterval<T>> : fmt::ostream_formatter {};
 #endif
