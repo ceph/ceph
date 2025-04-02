@@ -82,8 +82,11 @@
                   *ngIf="form.showError('k', frm, 'min')"
                   i18n>Must be equal to or greater than 2.</span>
             <span class="invalid-feedback"
-                  *ngIf="form.showError('k', frm, 'max')"
+                  *ngIf="form.showError('k', frm, 'max') && form.getValue('crushFailureDomain') === CrushFailureDomains.Osd"
                   i18n>Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'max') && form.getValue('crushFailureDomain') === CrushFailureDomains.Host"
+                  i18n>Chunks (k+m+1) have exceeded the available hosts of {{deviceCount}}.</span>
             <span class="invalid-feedback"
                   *ngIf="form.showError('k', frm, 'unequal')"
                   i18n>For an equal distribution k has to be a multiple of (k+m)/l.</span>
@@ -119,8 +122,11 @@
                   *ngIf="form.showError('m', frm, 'min')"
                   i18n>Must be equal to or greater than 1.</span>
             <span class="invalid-feedback"
-                  *ngIf="form.showError('m', frm, 'max')"
+                  *ngIf="form.showError('m', frm, 'max') && form.getValue('crushFailureDomain') ===  CrushFailureDomains.Osd"
                   i18n>Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('m', frm, 'max') && form.getValue('crushFailureDomain') ===  CrushFailureDomains.Host"
+                  i18n>Chunks (k+m+1) have exceeded the available hosts of {{deviceCount}}.</span>
           </div>
         </div>
 
@@ -240,7 +246,8 @@
             <select class="form-select"
                     id="crushFailureDomain"
                     name="crushFailureDomain"
-                    formControlName="crushFailureDomain">
+                    formControlName="crushFailureDomain"
+                    (change)="onCrushFailureDomainChane()">
               <option *ngIf="!failureDomains"
                       ngValue=""
                       i18n>Loading...</option>
