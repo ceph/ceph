@@ -769,7 +769,6 @@ public:
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
   int delete_obj(const DoutPrefixProvider *dpp, optional_yield y);
   int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
-  int add_zonegroup(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, optional_yield y);
 
   void fork();
   int update(const DoutPrefixProvider *dpp, optional_yield y);

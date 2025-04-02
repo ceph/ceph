@@ -899,7 +899,7 @@ class Bucket {
       std::string zonegroup_id;
       rgw_placement_rule placement_rule;
       // zone placement is optional on buckets created for another zonegroup
-      const RGWZonePlacementInfo* zone_placement;
+      const RGWZonePlacementInfo* zone_placement = nullptr;
       RGWAccessControlPolicy policy;
       Attrs attrs;
       bool obj_lock_enabled = false;
@@ -1749,8 +1749,6 @@ class Zone {
     virtual bool is_writeable() = 0;
     /** Get the URL for the endpoint for redirecting to this zone */
     virtual bool get_redirect_endpoint(std::string* endpoint) = 0;
-    /** Check to see if the given API is supported in this zone */
-    virtual bool has_zonegroup_api(const std::string& api) const = 0;
     /** Get the current period ID for this zone */
     virtual const std::string& get_current_period_id() = 0;
     /** Get thes system access key for this zone */

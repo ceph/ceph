@@ -657,18 +657,6 @@ const string& RGWSI_Zone::get_current_period_id() const
   return current_period->get_id();
 }
 
-bool RGWSI_Zone::has_zonegroup_api(const std::string& api) const
-{
-  if (!current_period->get_id().empty()) {
-    const auto& zonegroups_by_api = current_period->get_map().zonegroups_by_api;
-    if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
-      return true;
-  } else if (zonegroup->api_name == api) {
-    return true;
-  }
-  return false;
-}
-
 bool RGWSI_Zone::zone_is_writeable()
 {
   return writeable_zone && !get_zone().is_read_only();
