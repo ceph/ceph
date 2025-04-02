@@ -150,6 +150,20 @@ else(NOT CMAKE_CROSSCOMPILING)
   message(STATUS "Assuming unaligned access is supported")
 endif(NOT CMAKE_CROSSCOMPILING)
 
+# Clang warns on deprecated specialization used in system
+# headers. but libstdc++-12 uses deprecated get_temporary_buffer<>
+# to implement templated stable_sort(), which is turn used by
+# googletest. see https://github.com/llvm/llvm-project/issues/76515
+# Let's detect it, so we can disable -Wdeprecated-declarations when
+# building googletest.
+cmake_push_check_state(RESET)
+set(CMAKE_REQUIRED_FLAGS "-Werror=deprecated-declarations")
+check_cxx_source_compiles("
+#include <algorithm>
+int main() { std::stable_sort((int *)0, (int*)0); }
+" COMPILER_IGNORES_DEPRECATED_DECL_IN_SYSTEM_HEADERS)
+cmake_pop_check_state()
+
 set(version_script_source "v1 { }; v2 { } v1;")
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
 cmake_push_check_state(RESET)
