@@ -3137,7 +3137,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
 	     << " soid " << prdop->soid << dendl;
     return;
   }
-  proxyread_ops.erase(tid);
+  proxyread_ops.erase(p);
 
   map<hobject_t, list<OpRequestRef>>::iterator q = in_progress_proxy_ops.find(oid);
   if (q == in_progress_proxy_ops.end()) {
@@ -4826,8 +4826,8 @@ int PrimaryLogPG::trim_object(
     t->remove(coid);
     t->update_snaps(
       coid,
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
 
     coi = object_info_t(coid);
 
@@ -4861,8 +4861,8 @@ int PrimaryLogPG::trim_object(
 
     t->update_snaps(
       coid,
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
   }
 
   // save head snapset
@@ -15883,9 +15883,10 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 
     pg->snap_trimq.erase(snap_to_trim);
 
-    if (pg->snap_trimq_repeat.count(snap_to_trim)) {
+    auto it = pg->snap_trimq_repeat.find(snap_to_trim);
+    if (it != pg->snap_trimq_repeat.end()) {
       ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
-      pg->snap_trimq_repeat.erase(snap_to_trim);
+      pg->snap_trimq_repeat.erase(it);
     } else {
       ldout(pg->cct, 10) << "adding snap " << snap_to_trim
 			 << " to purged_snaps"

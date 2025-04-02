@@ -322,16 +322,16 @@ public:
 
   void update_snaps(
     const hobject_t &hoid,         ///< [in] object for snaps
-    const std::set<snapid_t> &old_snaps,///< [in] old snaps value
-    const std::set<snapid_t> &new_snaps ///< [in] new snaps value
+    std::set<snapid_t> &&old_snaps,///< [in] old snaps value
+    std::set<snapid_t> &&new_snaps ///< [in] new snaps value
     ) {
     auto &op = get_object_op(hoid);
     ceph_assert(!op.updated_snaps);
     ceph_assert(op.buffer_updates.empty());
     ceph_assert(!op.truncate);
     op.updated_snaps = make_pair(
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
   }
 
   /// Clears, truncates
