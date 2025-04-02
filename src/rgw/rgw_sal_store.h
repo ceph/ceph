@@ -37,7 +37,6 @@ struct RGWObjState {
   bool has_data{false};
   bufferlist data;
   bool prefetch_data{false};
-  bool keep_tail{false};
   bool is_olh{false};
   bufferlist olh_tag;
   uint64_t pg_ver{false};
@@ -73,7 +72,6 @@ struct RGWObjState {
       data = rhs.data;
     }
     prefetch_data = rhs.prefetch_data;
-    keep_tail = rhs.keep_tail;
     is_olh = rhs.is_olh;
     objv_tracker = rhs.objv_tracker;
     pg_ver = rhs.pg_ver;

@@ -5011,8 +5011,6 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     pmanifest = &manifest;
   } else {
     pmanifest = amanifest;
-    /* don't send the object's tail for garbage collection */
-    astate->keep_tail = true;
   }
 
   if (copy_first) {
@@ -5662,7 +5660,7 @@ int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket
 
 int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y)
 {
-  if ((!manifest) || state->keep_tail || keep_tail)
+  if ((!manifest) || keep_tail)
     return 0;
 
   cls_rgw_obj_chain chain;

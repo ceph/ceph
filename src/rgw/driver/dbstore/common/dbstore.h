@@ -517,7 +517,7 @@ class DBOp {
        *
        * - RGWObjState. Below are omitted from that struct
        *    as they seem in-memory variables
-       *    * is_atomic, has_atts, exists, prefetch_data, keep_tail, 
+       *    * is_atomic, has_atts, exists, prefetch_data, 
        * - RGWObjManifest
        *
        * Extra field added "IsMultipart" to flag multipart uploads,
