@@ -183,6 +183,8 @@ public:
 	last_inclusive);
     }
   };
+  // TODO: this interface is deprecated in favor of omap_iterate()
+  // after optimize omap_rm_key_range, will drop it.
   using omap_list_iertr = base_iertr;
   using omap_list_bare_ret = std::tuple<
     bool,
