@@ -184,7 +184,12 @@ po::options_description get_options_description() {
       "allow_pool_balancer", "Enables pool balancing. Disabled by default.")(
       "allow_pool_deep_scrubbing",
       "Enables pool deep scrub. Disabled by default.")(
-      "allow_pool_scrubbing", "Enables pool scrubbing. Disabled by default.");
+      "allow_pool_scrubbing", "Enables pool scrubbing. Disabled by default.")(
+      "disable_pool_ec_optimizations",
+      "Disables EC optimizations. Enabled by default.")(
+      "allow_unstable_pool_configs",
+      "Permits pool configs that are known to be unstable. This option "
+      " may be removed. at a later date. Disabled by default if ec optimized");
 
   return desc;
 }
@@ -272,22 +277,28 @@ ceph::io_sequence::tester::SelectErasureTechnique::SelectErasureTechnique(
     : ProgramOptionGeneratedSelector<std::string>(rng, vm, "technique",
                                                   first_use),
       rng(rng),
-      plugin(plugin) {}
+      plugin(plugin),
+      stable(!vm.contains("allow_unstable_pool_configs") ||
+        vm.contains("disable_pool_ec_optimizations")) {}
 
 const std::vector<std::string>
 ceph::io_sequence::tester::SelectErasureTechnique::generate_selections() {
   std::vector<std::string> techniques = {};
   if (plugin == "jerasure") {
     techniques.push_back("reed_sol_van");
-    techniques.push_back("reed_sol_r6_op");
-    techniques.push_back("cauchy_orig");
-    techniques.push_back("cauchy_good");
-    techniques.push_back("liberation");
-    techniques.push_back("blaum_roth");
-    techniques.push_back("liber8tion");
+    if (!stable) {
+      techniques.push_back("reed_sol_r6_op");
+      techniques.push_back("cauchy_orig");
+      techniques.push_back("cauchy_good");
+      techniques.push_back("liberation");
+      techniques.push_back("blaum_roth");
+      techniques.push_back("liber8tion");
+    }
   } else if (plugin == "isa") {
     techniques.push_back("reed_sol_van");
-    techniques.push_back("cauchy");
+    if (!stable) {
+      techniques.push_back("cauchy");
+    }
   } else if (plugin == "shec") {
     techniques.push_back("single");
     techniques.push_back("multiple");
@@ -337,28 +348,24 @@ ceph::io_sequence::tester::SelectErasureKM::generate_selections() {
        (technique == "reed_sol_van" || technique == "cauchy_orig" ||
         technique == "cauchy_good" || technique == std::nullopt))) {
     for (int m = 1; m <= 3; m++)
-      for (int k = 2; k <= 6; k++) selection.push_back({k, m});
+      for (int k = 2; k <= 4; k++) selection.push_back({k, m});
   } else if (plugin == "shec" ||
              (plugin == "jerasure" &&
               (technique == "liberation" || technique == "blaum_roth"))) {
     for (int m = 1; m <= 2; m++)
-      for (int k = 2; k <= 6; k++) selection.push_back({k, m});
+      for (int k = 2; k <= 4; k++) selection.push_back({k, m});
   } else if (plugin == "jerasure" &&
              (technique == "reed_sol_r6_op" || technique == "liber8tion")) {
-    for (int k = 2; k <= 6; k++) selection.push_back({k, 2});
+    for (int k = 2; k <= 4; k++) selection.push_back({k, 2});
   }
 
   // We want increased chances of these as we will test with c=1 and c=2
   if (plugin == "shec")
     for (int i = 0; i < 2; i++)
-      for (int k = 3; k <= 6; k++) selection.push_back({k, 3});
+      for (int k = 3; k <= 4; k++) selection.push_back({k, 3});
 
   // Add extra miscelaneous interesting options for testing w values
   if (plugin == "jerasure") {
-    if (technique == "reed_sol_van")
-      // Double chance of chosing to test more w values
-      for (int i = 0; i < 2; i++) selection.push_back({6, 3});
-
     if (technique == "liberation" || technique == "blaum_roth")
       // Double chance of chosing to test more different w values
       for (int i = 0; i < 2; i++) selection.push_back({6, 2});
