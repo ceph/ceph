@@ -1023,3 +1023,18 @@ add_executable(test_nvmeof_mon_encoding
 target_link_libraries(test_nvmeof_mon_encoding
   mon ceph-common global-static
   )
+
+find_package(benchmark QUIET)
+if (benchmark_FOUND)
+  add_executable(bench_lrus
+  bench_lrus.cc
+  )
+  target_link_libraries(bench_lrus ceph-common global-static benchmark::benchmark)
+
+  add_executable(bench_secmem
+  bench_secmem.cc
+  )
+  target_link_libraries(bench_secmem ceph-common global-static benchmark::benchmark keyutils)
+else()
+  message(STATUS "Google Benchmark not found. Skipping micro benchmark tests")
+endif()
