@@ -1,0 +1,123 @@
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      {mode, select, edit {Edit} other {Add}} pool mirror peer
+    </h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <form name="editPeerForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="editPeerForm"
+          novalidate>
+      <p>
+        <span i18n>{mode, select, edit {Edit} other {Add}} the pool
+        mirror peer attributes for pool <kbd>{{ poolName }}</kbd> and click
+        <kbd>Submit</kbd>.</span>
+      </p>
+
+      <div class="form-item">
+        <cds-text-label for="clusterName"
+                        [invalid]="editPeerForm.controls['clusterName'].invalid && (editPeerForm.controls['clusterName'].dirty)"
+                        [invalidText]="clusterNameError"
+                        cdRequiredField="Cluster Name"
+                        i18n>Cluster Name
+          <input cdsText
+                 type="text"
+                 placeholder="Name..."
+                 i18n-placeholder
+                 id="clusterName"
+                 name="clusterName"
+                 formControlName="clusterName"
+                 [invalid]="editPeerForm.controls['clusterName'].invalid && (editPeerForm.controls['clusterName'].dirty)"
+                 autofocus>
+        </cds-text-label>
+        <ng-template #clusterNameError>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clusterName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clusterName', formDir, 'invalidClusterName')"
+                i18n>The cluster name is not valid.</span>
+        </ng-template>
+      </div>
+
+      <div class="form-item">
+        <cds-text-label for="clientID"
+                        [invalid]="editPeerForm.controls['clientID'].invalid && (editPeerForm.controls['clientID'].dirty)"
+                        [invalidText]="clientIDError"
+                        cdRequiredField="CephX ID"
+                        i18n>CephX ID
+          <input cdsText
+                 type="text"
+                 placeholder="CephX ID..."
+                 i18n-placeholder
+                 id="clientID"
+                 name="clientID"
+                 formControlName="clientID"
+                 [invalid]="editPeerForm.controls['clientID'].invalid && (editPeerForm.controls['clientID'].dirty)">
+        </cds-text-label>
+        <ng-template #clientIDError>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clientID', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('clientID', formDir, 'invalidClientID')"
+                i18n>The CephX ID is not valid.</span>
+        </ng-template>
+      </div>
+
+      <div class="form-item">
+        <cds-text-label for="monAddr"
+                        [invalid]="editPeerForm.controls['monAddr'].invalid && (editPeerForm.controls['monAddr'].dirty)"
+                        [invalidText]="monAddrError"
+                        i18n>Monitor Addresses
+          <input cdsText
+                 type="text"
+                 placeholder="Comma-delimited addresses..."
+                 i18n-placeholder
+                 id="monAddr"
+                 name="monAddr"
+                 formControlName="monAddr"
+                 [invalid]="editPeerForm.controls['monAddr'].invalid && (editPeerForm.controls['monAddr'].dirty)">
+        </cds-text-label>
+        <ng-template #monAddrError>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('monAddr', formDir, 'invalidMonAddr')"
+                i18n>The monitory address is not valid.</span>
+        </ng-template>
+      </div>
+
+      <div class="form-item">
+        <cds-text-label for="key"
+                        [invalid]="editPeerForm.controls['key'].invalid && (editPeerForm.controls['key'].dirty)"
+                        [invalidText]="keyError"
+                        i18n>CephX Key
+          <input cdsText
+                 type="text"
+                 placeholder="Base64-encoded key..."
+                 i18n-placeholder
+                 id="key"
+                 name="key"
+                 formControlName="key"
+                 [invalid]="editPeerForm.controls['key'].invalid && (editPeerForm.controls['key'].dirty)">
+        </cds-text-label>
+        <ng-template #keyError>
+          <span class="invalid-feedback"
+                *ngIf="editPeerForm.showError('key', formDir, 'invalidKey')"
+                i18n>CephX key must be base64 encoded.</span>
+        </ng-template>
+      </div>
+    </form>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="update()"
+                        [form]="editPeerForm"
+                        [submitText]="actionLabels.SUBMIT"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

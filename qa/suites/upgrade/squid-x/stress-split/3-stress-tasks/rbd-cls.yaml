@@ -1,0 +1,12 @@
+meta:
+- desc: |
+   run basic cls tests for rbd
+stress-tasks:
+- workunit:
+    branch: squid
+    clients:
+      client.0:
+        - cls/test_cls_rbd.sh
+    env:
+      CLS_RBD_GTEST_FILTER: '-TestClsRbd.group_snap_set:TestClsRbd.group_snap_remove'
+- print: "**** done cls/test_cls_rbd.sh 5-workload"
