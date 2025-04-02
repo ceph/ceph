@@ -176,18 +176,14 @@ BtreeLBAManager::get_mappings(
           auto key = pin->get_key();
           auto intermediate_key = pin->get_raw_val().get_laddr();
           auto intermediate_len = pin->get_length();
-          return _get_mappings(c, btree, intermediate_key, intermediate_len
-          ).si_then([FNAME, c, laddr, length, key, intermediate_key,
-                     intermediate_len, &ret](auto pin_list) {
-            ceph_assert(pin_list.size() == 1);
-            auto& pin = pin_list.front();
-            assert(!pin->is_indirect());
-            assert(pin->get_key() <= intermediate_key);
-            assert(pin->get_key() + pin->get_length() >= intermediate_key + intermediate_len);
+          return get_indirect_pin(c, btree, key, intermediate_key, intermediate_len
+          ).si_then([FNAME, c, &ret, laddr, length](auto pin) {
             TRACET("{}~0x{:x} got indirect pin {}~0x{:x}->{}({}~0x{:x})",
-                   c.trans, laddr, length, key, intermediate_len, intermediate_key,
-                   pin->get_key(), pin->get_length());
-            pin->make_indirect(key, intermediate_len, intermediate_key);
+                   c.trans, laddr, length,
+                   pin->get_key(), pin->get_length(),
+                   pin->get_intermediate_key(),
+                   pin->get_intermediate_base(),
+                   pin->get_intermediate_length());
             ret.emplace_back(std::move(pin));
             return get_mappings_iertr::now();
           });
@@ -235,6 +231,28 @@ BtreeLBAManager::_get_mappings(
   });
 }
 
+BtreeLBAManager::get_indirect_pin_ret
+BtreeLBAManager::get_indirect_pin(
+  op_context_t<laddr_t> c,
+  LBABtree& btree,
+  laddr_t key,
+  laddr_t intermediate_key,
+  extent_len_t length)
+{
+  return _get_mappings(c, btree, intermediate_key, length
+  ).si_then([key, intermediate_key, length](auto pin_list) {
+    ceph_assert(pin_list.size() == 1);
+    auto& pin = pin_list.front();
+    assert(!pin->is_indirect());
+    assert(pin->get_key() <= intermediate_key);
+    assert(pin->get_key() + pin->get_length() >= intermediate_key + length);
+    pin->make_indirect(key, length, intermediate_key);
+    assert(pin->get_key() == key);
+    assert(pin->get_length() == length);
+    return std::move(pin);
+  });
+}
+
 BtreeLBAManager::get_mapping_ret
 BtreeLBAManager::get_mapping(
   Transaction &t,
@@ -257,12 +275,14 @@ BtreeLBAManager::get_mapping(
       assert(laddr == pin->get_key());
       auto len = pin->get_length();
       laddr_t direct_laddr = pin->get_raw_val().get_laddr();
-      return _get_mapping(c, btree, direct_laddr
-      ).si_then([FNAME, c, laddr, len](auto pin) {
-        ceph_assert(len == pin->get_length());
-        TRACET("{} got indirect pin->{}~0x{:x}",
-               c.trans, laddr, pin->get_key(), len);
-        pin->make_indirect(laddr, len);
+      return get_indirect_pin(c, btree, laddr, direct_laddr, len
+      ).si_then([FNAME, c, laddr](auto pin) {
+        TRACET("{} got indirect pin {}~0x{:x}->{}({}~0x{:x})",
+               c.trans, laddr,
+               pin->get_key(), pin->get_length(),
+               pin->get_intermediate_key(),
+               pin->get_intermediate_base(),
+               pin->get_intermediate_length());
         return get_mapping_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
       });
     });
