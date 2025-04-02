@@ -903,6 +903,7 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
 {
   LOG_PREFIX(OpsExecuter::prepare_head_update);
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
+  assert(obc->obs.oi.soid.is_head());
 
   update_clone_overlap();
   if (cloning_ctx) {
