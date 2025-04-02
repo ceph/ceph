@@ -435,13 +435,16 @@ BtreeLBAManager::_alloc_extents(
 	      ceph_assert(alloc_info.val.is_paddr());
 	      assert(alloc_info.val == iter.get_val().pladdr);
 	      assert(alloc_info.len == iter.get_val().len);
+	      assert(alloc_info.extent->is_logical());
 	      if (alloc_info.extent->has_laddr()) {
+	        // see TM::remap_pin()
 		assert(alloc_info.key == alloc_info.extent->get_laddr());
 		assert(alloc_info.key == iter.get_key());
 	      } else {
+		// see TM::alloc_non_data_extent()
+		//     TM::alloc_data_extents()
 		alloc_info.extent->set_laddr(iter.get_key());
 	      }
-	      alloc_info.extent->set_laddr(iter.get_key());
 	    }
 	    ceph_assert(inserted);
 	    rets.emplace_back(iter.get_pin(c));
