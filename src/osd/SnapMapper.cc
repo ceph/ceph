@@ -473,8 +473,8 @@ void SnapMapper::clear_snaps(
 {
   dout(20) << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
-  set<string> to_remove;
-  to_remove.insert(to_object_key(oid));
+  vector<string> to_remove;
+  to_remove.emplace_back(to_object_key(oid));
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << "::rm " << i << dendl;
@@ -544,12 +544,13 @@ int SnapMapper::update_snaps(
   object_snaps in(oid, new_snaps);
   set_snaps(oid, in, t);
 
-  set<string> to_remove;
+  vector<string> to_remove;
+  to_remove.reserve(out.snaps.size());
   for (set<snapid_t>::iterator i = out.snaps.begin();
        i != out.snaps.end();
        ++i) {
     if (!new_snaps.count(*i)) {
-      to_remove.insert(to_raw_key(make_pair(*i, oid)));
+      to_remove.emplace_back(to_raw_key(make_pair(*i, oid)));
     }
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
@@ -736,11 +737,12 @@ int SnapMapper::_remove_oid(
 
   clear_snaps(oid, t);
 
-  set<string> to_remove;
+  vector<string> to_remove;
+  to_remove.reserve(out.snaps.size());
   for (set<snapid_t>::iterator i = out.snaps.begin();
        i != out.snaps.end();
        ++i) {
-    to_remove.insert(to_raw_key(make_pair(*i, oid)));
+    to_remove.emplace_back(to_raw_key(make_pair(*i, oid)));
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
@@ -876,7 +878,8 @@ void SnapMapper::record_purged_snaps(
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
   map<string,ceph::buffer::list> m;
-  set<string> rm;
+  vector<string> rm;
+  rm.reserve(4096);
   for (auto& [epoch, bypool] : purged_snaps) {
     // index by (pool, snap)
     for (auto& [pool, snaps] : bypool) {
@@ -897,13 +900,13 @@ void SnapMapper::record_purged_snaps(
 		   << before_begin << "," << before_end << ") and ["
 		   << after_begin << "," << after_end << ")" << dendl;
 	  // erase only the begin record; we'll overwrite the end one
-	  rm.insert(make_purged_snap_key(pool, before_end - 1));
+	  rm.push_back(make_purged_snap_key(pool, before_end - 1));
 	  make_purged_snap_key_value(pool, before_begin, after_end, &m);
 	} else if (!b) {
 	  dout(10) << __func__
 		   << " [" << begin << "," << end << ") - join with earlier ["
 		   << before_begin << "," << before_end << ")" << dendl;
-	  rm.insert(make_purged_snap_key(pool, before_end - 1));
+	  rm.emplace_back(make_purged_snap_key(pool, before_end - 1));
 	  make_purged_snap_key_value(pool, before_begin, end, &m);
 	} else if (!a) {
 	  dout(10) << __func__

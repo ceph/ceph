@@ -1176,6 +1176,19 @@ public:
     encode(keys, data_misaligned_bl);
     data.ops = data.ops + 1;
   }
+ void omap_rmkeys(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+    const std::vector<std::string> &keys ///< [in] Keys to clear
+    ) {
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_RMKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(keys, data_bl);
+    data.ops = data.ops + 1;
+  }
 
   /// Remove key from oid omap
   void omap_rmkey(

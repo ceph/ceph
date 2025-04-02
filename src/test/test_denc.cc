@@ -135,6 +135,9 @@ struct denc_counter_t {
     p += 1;
     ++counts.num_decode;
   }
+  bool operator <(const denc_counter_t& other) const {
+    return this < &other;
+  }
 };
 WRITE_CLASS_DENC(denc_counter_t)
 
@@ -270,6 +273,41 @@ TEST(denc, vector)
       decode(v2, bl);
     }
     ASSERT_EQ(counts.num_bound_encode, 1);
+    ASSERT_EQ(counts.num_encode, 100);
+    ASSERT_EQ(counts.num_decode, 100);
+  }
+}
+
+TEST(denc, vector_as_set)
+{
+  {
+    counts.reset();
+    vector<denc_counter_t> v;
+    set<denc_counter_t> s;
+    v.resize(100);
+    {
+      bufferlist bl;
+      encode(v, bl);
+      decode(s, bl);
+    }
+    ASSERT_EQ(counts.num_bound_encode, 100);
+    ASSERT_EQ(counts.num_encode, 100);
+    ASSERT_EQ(counts.num_decode, 100);
+  }
+  {
+    counts.reset();
+    vector<denc_counter_t> v;
+    set<denc_counter_t> s;
+    std::array<denc_counter_t, 100> cnts;
+    for( auto& c : cnts) {
+      s.insert(c);
+    }
+    {
+      bufferlist bl;
+      encode(s, bl);
+      decode(v, bl);
+    }
+    ASSERT_EQ(counts.num_bound_encode, 100);
     ASSERT_EQ(counts.num_encode, 100);
     ASSERT_EQ(counts.num_decode, 100);
   }

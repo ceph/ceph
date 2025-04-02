@@ -41,10 +41,10 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   typedef std::shared_ptr<_Op> Op;
   struct Remove : public _Op {
-    set<string> to_remove;
-    explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
+    vector<string> to_remove;
+    explicit Remove(const vector<string> &to_remove) : to_remove(to_remove) {}
     void operate(map<string, bufferlist> *store) override {
-      for (set<string>::iterator i = to_remove.begin();
+      for (auto i = to_remove.begin();
 	   i != to_remove.end();
 	   ++i) {
 	store->erase(*i);
@@ -79,8 +79,8 @@ public:
     void set_keys(const map<string, bufferlist> &i) override {
       ops.push_back(Op(new Insert(i)));
     }
-    void remove_keys(const set<string> &r) override {
-      ops.push_back(Op(new Remove(r)));
+    void remove_keys(const vector<string> &r) override {
+      ops.emplace_back(Op(new Remove(r)));
     }
     void add_callback(Context *c) override {
       callbacks.push_back(Op(new Callback(c)));
@@ -316,11 +316,12 @@ public:
   }
   void remove() {
     size_t remove_size = random_num();
-    set<string> to_remove;
+    vector<string> to_remove;
+    to_remove.reserve(remove_size);
     for (size_t i = 0; i < remove_size ; ++i) {
-      to_remove.insert(*rand_choose(names));
+      to_remove.emplace_back(*rand_choose(names));
     }
-    for (set<string>::iterator i = to_remove.begin();
+    for (auto i = to_remove.begin();
 	 i != to_remove.end();
 	 ++i) {
       truth.erase(*i);
@@ -1088,7 +1089,7 @@ public:
 
     // replace the key with its shortened version
     PausyAsyncMap::Transaction t;
-    mapper->backend.remove_keys(set{k}, &t);
+    mapper->backend.remove_keys(vector{k}, &t);
     auto short_k = k.substr(0, 10);
     mapper->backend.set_keys(map<string, bufferlist>{{short_k, kvmap[k]}}, &t);
     driver->submit(&t);

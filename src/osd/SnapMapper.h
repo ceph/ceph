@@ -64,7 +64,7 @@ public:
       t->omap_setkeys(cid, hoid, to_set);
     }
     void remove_keys(
-      const std::set<std::string> &to_remove) override {
+      const std::vector<std::string> &to_remove) override {
       t->omap_rmkeys(cid, hoid, to_remove);
     }
     void add_callback(
@@ -172,7 +172,6 @@ public:
   static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
-  static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
 #ifndef WITH_CRIMSON

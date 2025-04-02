@@ -23,6 +23,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 
 namespace MapCacher {
 /**
@@ -38,7 +39,7 @@ public:
 
   /// Remove keys
   virtual void remove_keys(
-    const std::set<K> &to_remove ///< [in] keys to remove
+    const std::vector<K> &to_remove ///< [in] keys to remove
     ) = 0;
 
   /// Add context to fire when data is readable
@@ -197,7 +198,7 @@ public:
 
   /// Adds operation removing keys to Transaction
   void remove_keys(
-    const std::set<K> &keys,  ///< [in]
+    const std::vector<K> &keys,  ///< [in]
     Transaction<K, V> *t ///< [out] transaction to use
     ) {
     std::set<VPtr> vptrs;
