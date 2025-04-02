@@ -157,6 +157,7 @@ Tooltip
 .cds--tooltip-content {
   background-color: theme.$layer-02;
 }
+
 /******************************************
 Carbon Popover
 ******************************************/
@@ -164,4 +165,11 @@ Carbon Popover
   background-color: theme.$layer-02;
   max-height: layout.$spacing-13;
   overflow: auto;
+}
+
+/******************************************
+Tabs
+******************************************/
+.cds--tab-content {
+  background: var(--cds-layer-01);
 }
