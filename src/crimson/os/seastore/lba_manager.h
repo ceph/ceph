@@ -192,7 +192,7 @@ public:
   /**
    * update_mapping
    *
-   * update lba mapping for a delayed allocated extent
+   * update lba mapping for rewrite
    */
   using update_mapping_iertr = base_iertr;
   using update_mapping_ret = base_iertr::future<extent_ref_count_t>;
@@ -201,10 +201,7 @@ public:
     laddr_t laddr,
     extent_len_t prev_len,
     paddr_t prev_addr,
-    extent_len_t len,
-    paddr_t paddr,
-    uint32_t checksum,
-    LogicalChildNode *nextent) = 0;
+    LogicalChildNode& nextent) = 0;
 
   /**
    * update_mappings
@@ -213,9 +210,9 @@ public:
    */
   using update_mappings_iertr = update_mapping_iertr;
   using update_mappings_ret = update_mappings_iertr::future<>;
-  update_mappings_ret update_mappings(
+  virtual update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalChildNodeRef>& extents);
+    const std::list<LogicalChildNodeRef>& extents) = 0;
 
   /**
    * get_physical_extent_if_live

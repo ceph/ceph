@@ -595,19 +595,21 @@ BtreeLBAManager::update_mapping(
   laddr_t laddr,
   extent_len_t prev_len,
   paddr_t prev_addr,
-  extent_len_t len,
-  paddr_t addr,
-  uint32_t checksum,
-  LogicalChildNode *nextent)
+  LogicalChildNode& nextent)
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
-  TRACET("laddr={}, paddr {} => {}", t, laddr, prev_addr, addr);
+  auto addr = nextent.get_paddr();
+  auto len = nextent.get_length();
+  auto checksum = nextent.get_last_committed_crc();
+  TRACET("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x}",
+         t, laddr, prev_addr, prev_len, addr, len, checksum);
+  assert(laddr == nextent.get_laddr());
+  assert(!addr.is_null());
   return _update_mapping(
     t,
     laddr,
-    [prev_addr, addr, prev_len, len, checksum](
-      const lba_map_val_t &in) {
-      assert(!addr.is_null());
+    [prev_addr, addr, prev_len, len, checksum]
+    (const lba_map_val_t &in) {
       lba_map_val_t ret = in;
       ceph_assert(in.pladdr.is_paddr());
       ceph_assert(in.pladdr.get_paddr() == prev_addr);
@@ -617,11 +619,11 @@ BtreeLBAManager::update_mapping(
       ret.checksum = checksum;
       return ret;
     },
-    nextent
-  ).si_then([&t, laddr, prev_addr, addr, FNAME](auto res) {
+    &nextent
+  ).si_then([&t, laddr, prev_addr, prev_len, addr, len, checksum, FNAME](auto res) {
       auto &result = res.map_value;
-      DEBUGT("laddr={}, paddr {} => {} done -- {}",
-             t, laddr, prev_addr, addr, result);
+      DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
+             t, laddr, prev_addr, prev_len, addr, len, checksum, result);
       return update_mapping_iertr::make_ready_future<
 	extent_ref_count_t>(result.refcount);
     },
@@ -631,6 +633,51 @@ BtreeLBAManager::update_mapping(
       "Invalid error in BtreeLBAManager::update_mapping"
     }
   );
+}
+
+BtreeLBAManager::update_mappings_ret
+BtreeLBAManager::update_mappings(
+  Transaction& t,
+  const std::list<LogicalChildNodeRef>& extents)
+{
+  return trans_intr::do_for_each(extents, [this, &t](auto &extent) {
+    LOG_PREFIX(BtreeLBAManager::update_mappings);
+    auto laddr = extent->get_laddr();
+    auto prev_addr = extent->get_prior_paddr_and_reset();
+    auto len = extent->get_length();
+    auto addr = extent->get_paddr();
+    auto checksum = extent->get_last_committed_crc();
+    TRACET("laddr={}, paddr {}~0x{:x} => {}, crc=0x{:x}",
+           t, laddr, prev_addr, len, addr, checksum);
+    assert(!addr.is_null());
+    return _update_mapping(
+      t,
+      laddr,
+      [prev_addr, addr, len, checksum](
+        const lba_map_val_t &in) {
+        lba_map_val_t ret = in;
+        ceph_assert(in.pladdr.is_paddr());
+        ceph_assert(in.pladdr.get_paddr() == prev_addr);
+        ceph_assert(in.len == len);
+        ret.pladdr = addr;
+        ret.checksum = checksum;
+        return ret;
+      },
+      nullptr   // all the extents should have already been
+                // added to the fixed_kv_btree
+    ).si_then([&t, laddr, prev_addr, len, addr, checksum, FNAME](auto res) {
+        auto &result = res.map_value;
+        DEBUGT("laddr={}, paddr {}~0x{:x} => {}, crc=0x{:x} done -- {}",
+               t, laddr, prev_addr, len, addr, checksum, result);
+        return update_mapping_iertr::make_ready_future();
+      },
+      update_mapping_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+        "Invalid error in BtreeLBAManager::update_mappings"
+      }
+    );
+  });
 }
 
 BtreeLBAManager::get_physical_extent_if_live_ret

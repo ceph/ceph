@@ -526,10 +526,7 @@ TransactionManager::rewrite_logical_extent(
       extent->get_laddr(),
       extent->get_length(),
       extent->get_paddr(),
-      nextent->get_length(),
-      nextent->get_paddr(),
-      nextent->get_last_committed_crc(),
-      nextent.get()
+      *nextent
     ).discard_result();
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
@@ -570,15 +567,13 @@ TransactionManager::rewrite_logical_extent(
            * avoid this complication. */
           auto fut = base_iertr::now();
           if (first_extent) {
+            assert(off == 0);
             fut = lba_manager->update_mapping(
               t,
-              (extent->get_laddr() + off).checked_to_laddr(),
+              extent->get_laddr(),
               extent->get_length(),
               extent->get_paddr(),
-              nextent->get_length(),
-              nextent->get_paddr(),
-              nextent->get_last_committed_crc(),
-              nextent.get()
+              *nextent
             ).si_then([&refcount](auto c) {
               refcount = c;
             });
