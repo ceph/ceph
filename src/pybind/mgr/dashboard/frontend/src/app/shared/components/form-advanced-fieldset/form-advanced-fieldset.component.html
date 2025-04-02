@@ -1,7 +1,7 @@
 <fieldset>
   <cds-accordion size="lg"
                  class="form-item">
-    <cds-accordion-item [title]="title"
+    <cds-accordion-item [title]="titleTpl"
                         i18n
                         id="advanced-fieldset"
                         (selected)="showAdvanced = !showAdvanced">
@@ -9,7 +9,8 @@
     </cds-accordion-item>
   </cds-accordion>
 
-  <ng-template #title>
-    <h5 class="cds--accordion__title cd-header">Advanced</h5>
+  <ng-template #titleTpl>
+    <h5 class="cds--accordion__title cd-header"
+        i18n>{{title}}</h5>
   </ng-template>
 </fieldset>
