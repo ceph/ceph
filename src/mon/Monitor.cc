@@ -4193,10 +4193,10 @@ struct AnonConnection : public Connection {
   entity_addr_t socket_addr;
 
   int send_message(Message *m) override {
-    ceph_assert(!"send_message on anonymous connection");
+    ceph_abort_msg("send_message on anonymous connection");
   }
   void send_keepalive() override {
-    ceph_assert(!"send_keepalive on anonymous connection");
+    ceph_abort_msg("send_keepalive on anonymous connection");
   }
   void mark_down() override {
     // silently ignore
