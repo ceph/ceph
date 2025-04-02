@@ -306,8 +306,8 @@ public:
       extent_len_t len,
       paddr_t paddr,
       uint32_t checksum,
-      LogicalChildNode *extent) {
-      return {laddr, len, paddr, checksum, extent};
+      LogicalChildNode& extent) {
+      return {laddr, len, paddr, checksum, &extent};
     }
   };
 
@@ -384,7 +384,7 @@ public:
 	ext.get_length(),
 	ext.get_paddr(),
 	ext.get_last_committed_crc(),
-	&ext)};
+	ext)};
     return seastar::do_with(
       std::move(alloc_infos),
       [this, &t, hint, refcount](auto &alloc_infos) {
@@ -416,7 +416,7 @@ public:
 	  extent->get_length(),
 	  extent->get_paddr(),
 	  extent->get_last_committed_crc(),
-	  extent.get()));
+	  *extent));
     }
     return seastar::do_with(
       std::move(alloc_infos),
