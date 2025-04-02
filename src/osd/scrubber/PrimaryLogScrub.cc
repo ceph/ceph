@@ -5,6 +5,7 @@
 
 #include <sstream>
 
+#include "common/debug.h"
 #include "common/scrub_types.h"
 #include "osd/PeeringState.h"
 #include "osd/PrimaryLogPG.h"
