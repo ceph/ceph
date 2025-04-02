@@ -171,7 +171,7 @@ else:
         @NvmeofCLICommand("nvmeof subsystem add")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
-        def create(self, nqn: str, enable_ha: bool, max_namespaces: int = 1024,
+        def create(self, nqn: str, enable_ha: bool = True, max_namespaces: int = 1024,
                    gw_group: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group).stub.create_subsystem(
                 NVMeoFClient.pb2.create_subsystem_req(
