@@ -119,7 +119,6 @@ struct RGWObjState {
   bool has_data{false};
   bufferlist data;
   bool prefetch_data{false};
-  bool keep_tail{false};
   bool is_olh{false};
   bufferlist olh_tag;
   uint64_t pg_ver{false};
