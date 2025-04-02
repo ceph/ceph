@@ -100,6 +100,7 @@ public:
     extent_len_t len) = 0;
 
   struct ref_update_result_t {
+    laddr_t direct_key;
     extent_ref_count_t refcount = 0;
     pladdr_t addr;
     extent_len_t length = 0;

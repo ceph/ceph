@@ -748,9 +748,10 @@ BtreeLBAManager::_decref_intermediate(
 	std::move(iter),
 	[&btree, addr, len, c](auto &iter) {
 	ceph_assert(!iter.is_end());
-	ceph_assert(iter.get_key() <= addr);
+	laddr_t key = iter.get_key();
+	ceph_assert(key <= addr);
 	auto val = iter.get_val();
-	ceph_assert(iter.get_key() + val.len >= addr + len);
+	ceph_assert(key + val.len >= addr + len);
 	ceph_assert(val.pladdr.is_paddr());
 	ceph_assert(val.refcount >= 1);
 	val.refcount -= 1;
@@ -758,13 +759,14 @@ BtreeLBAManager::_decref_intermediate(
 	LOG_PREFIX(BtreeLBAManager::_decref_intermediate);
 	TRACET("decreased refcount of intermediate key {} -- {}",
 	  c.trans,
-	  iter.get_key(),
+	  key,
 	  val);
 
 	if (!val.refcount) {
 	  return btree.remove(c, iter
-	  ).si_then([val] {
+	  ).si_then([key, val] {
 	    auto res = ref_update_result_t{
+	      key,
 	      val.refcount,
 	      val.pladdr.get_paddr(),
 	      val.len
@@ -817,7 +819,7 @@ BtreeLBAManager::update_refcount(
 	map_value.len
       );
     }
-    return fut.si_then([map_value, mapping=std::move(mapping)]
+    return fut.si_then([addr, map_value, mapping=std::move(mapping)]
 		       (auto decref_intermediate_res) mutable {
       if (map_value.pladdr.is_laddr()
 	  && decref_intermediate_res) {
@@ -828,6 +830,7 @@ BtreeLBAManager::update_refcount(
       } else {
 	return update_refcount_ret_bare_t{
 	  ref_update_result_t{
+	    addr,
 	    map_value.refcount,
 	    map_value.pladdr,
 	    map_value.len
