@@ -713,6 +713,14 @@ private:
     laddr_t offset,
     extent_len_t length);
 
+  using get_indirect_pin_ret = get_mappings_iertr::future<BtreeLBAMappingRef>;
+  get_indirect_pin_ret get_indirect_pin(
+    op_context_t<laddr_t> c,
+    LBABtree& btree,
+    laddr_t key,
+    laddr_t intermediate_key,
+    extent_len_t length);
+
   using _decref_intermediate_ret = ref_iertr::future<
     std::optional<ref_update_result_t>>;
   _decref_intermediate_ret _decref_intermediate(
