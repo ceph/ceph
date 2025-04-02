@@ -1023,3 +1023,11 @@ add_executable(test_nvmeof_mon_encoding
 target_link_libraries(test_nvmeof_mon_encoding
   mon ceph-common global-static
   )
+
+if(NOT WIN32)
+# unittest_ceph_assert
+add_executable(unittest_ceph_assert
+  ceph_assert.cc)
+add_ceph_unittest(unittest_ceph_assert)
+target_link_libraries(unittest_ceph_assert ceph-common global)
+endif()

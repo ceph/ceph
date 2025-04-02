@@ -1052,7 +1052,7 @@ public:
       }
       loc -= e.length;
     }
-    ceph_assert(false);
+    ceph_abort();
   };
 
   /// updates blob's pextents container and return unused pextents eligible
