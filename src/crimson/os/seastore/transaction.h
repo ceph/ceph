@@ -98,17 +98,6 @@ struct rbm_pending_ool_t {
  * - seastore_cache logs
  */
 class Transaction {
-private:
-  auto lookup_read_set(CachedExtentRef ref) const {
-    assert(ref->is_valid());
-    assert(!is_weak());
-    auto it = ref->read_transactions.lower_bound(
-      this, read_set_item_t<Transaction>::trans_cmp_t());
-    bool exists =
-      (it != ref->read_transactions.end() && it->t == this);
-    return std::make_pair(exists, it);
-  }
-
 public:
   using Ref = std::unique_ptr<Transaction>;
   using on_destruct_func_t = std::function<void(Transaction&)>;
@@ -130,7 +119,8 @@ public:
   }
 
   void add_absent_to_retired_set(CachedExtentRef ref) {
-    add_to_read_set(ref);
+    bool added = do_add_to_read_set(ref);
+    ceph_assert(added);
     add_present_to_retired_set(ref);
   }
 
@@ -169,18 +159,7 @@ public:
     if (is_weak()) {
       return false;
     }
-
-    assert(ref->is_stable());
-    auto [exists, it] = lookup_read_set(ref);
-    if (exists) {
-      return false;
-    }
-
-    auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
-    ref->read_transactions.insert_before(
-      it, const_cast<read_set_item_t<Transaction>&>(*iter));
-    return true;
+    return do_add_to_read_set(ref);
   }
 
   void add_to_read_set(CachedExtentRef ref) {
@@ -188,14 +167,8 @@ public:
       return;
     }
 
-    assert(ref->is_stable());
-    auto [exists, it] = lookup_read_set(ref);
-    assert(!exists);
-
-    auto [iter, inserted] = read_set.emplace(this, ref);
-    ceph_assert(inserted);
-    ref->read_transactions.insert_before(
-      it, const_cast<read_set_item_t<Transaction>&>(*iter));
+    bool added = do_add_to_read_set(ref);
+    ceph_assert(added);
   }
 
   void add_fresh_extent(
@@ -605,6 +578,31 @@ private:
     } else {
       return {get_extent_ret::ABSENT, nullptr};
     }
+  }
+
+  auto lookup_read_set(CachedExtentRef ref) const {
+    assert(ref->is_valid());
+    assert(!is_weak());
+    auto it = ref->read_transactions.lower_bound(
+      this, read_set_item_t<Transaction>::trans_cmp_t());
+    bool exists =
+      (it != ref->read_transactions.end() && it->t == this);
+    return std::make_pair(exists, it);
+  }
+
+  bool do_add_to_read_set(CachedExtentRef ref) {
+    assert(!is_weak());
+    assert(ref->is_stable());
+    auto [exists, it] = lookup_read_set(ref);
+    if (exists) {
+      return false;
+    }
+
+    auto [iter, inserted] = read_set.emplace(this, ref);
+    ceph_assert(inserted);
+    ref->read_transactions.insert_before(
+      it, const_cast<read_set_item_t<Transaction>&>(*iter));
+    return true;
   }
 
   void set_backref_entries(backref_entry_refs_t&& entries) {
