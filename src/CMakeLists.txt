@@ -767,6 +767,12 @@ if(WITH_TESTS)
     find_package(GTest 1.13.0 REQUIRED)
     find_package(GMock REQUIRED)
   else()
+    if(NOT COMPILER_IGNORES_DEPRECATED_DECL_IN_SYSTEM_HEADERS)
+      # See https://github.com/llvm/llvm-project/issues/76515
+      set_property(DIRECTORY googletest
+        APPEND "-Wno-deprecated-declarations"
+        PROPERTY COMPILE_OPTIONS)
+    endif()
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
     add_subdirectory(googletest)
     add_library(GMock::GMock ALIAS gmock)
