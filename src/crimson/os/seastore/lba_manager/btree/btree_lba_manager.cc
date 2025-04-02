@@ -875,6 +875,7 @@ BtreeLBAManager::_update_mapping(
 
 	auto ret = f(iter.get_val());
 	if (ret.refcount == 0) {
+	  assert(nextent == nullptr);
 	  return btree.remove(
 	    c,
 	    iter
@@ -890,15 +891,16 @@ BtreeLBAManager::_update_mapping(
 	    iter,
 	    ret
 	  ).si_then([c, ret, nextent](auto iter) {
-	    // child-ptr may already be correct,
-	    // see LBAManager::update_mappings()
-	    if (nextent && !nextent->has_parent_tracker()) {
+	    if (nextent) {
+	      // nextent is provided iff unlinked,
+              // also see TM::rewrite_logical_extent()
+	      assert(!nextent->has_parent_tracker());
 	      iter.get_leaf_node()->update_child_ptr(
 		iter.get_leaf_pos(), nextent);
 	    }
 	    assert(!nextent || 
-	      (nextent->has_parent_tracker()
-		&& nextent->get_parent_node().get() == iter.get_leaf_node().get()));
+	           (nextent->has_parent_tracker() &&
+		    nextent->get_parent_node().get() == iter.get_leaf_node().get()));
 	    return update_mapping_ret_bare_t{
 	      std::move(ret),
 	      iter.get_pin(c)
