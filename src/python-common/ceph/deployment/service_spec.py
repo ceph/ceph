@@ -1224,6 +1224,7 @@ class RGWSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 only_bind_port_on_networks: bool = False,
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
                  zone_endpoints: Optional[str] = None,  # comma separated endpoints list
@@ -1277,6 +1278,8 @@ class RGWSpec(ServiceSpec):
         self.update_endpoints = update_endpoints
         self.zone_endpoints = zone_endpoints
         self.zonegroup_hostnames = zonegroup_hostnames
+        #: Whether to limit ip we bind to to what's specified in "networks" parameter
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
         #: To track op metrics by user config value rgw_user_counters_cache must be set to true
         self.rgw_user_counters_cache = rgw_user_counters_cache
