@@ -48,9 +48,9 @@ tasks:
           enable_health_check_endpoint: True
         EOT
         # Add generated certificates to spec file
-        echo "  ssl_certificate: |" >> /tmp/mgmt.spec 
+        echo "  ssl_cert: |" >> /tmp/mgmt.spec 
         while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
-        echo "  ssl_certificate_key: |" >> /tmp/mgmt.spec
+        echo "  ssl_key: |" >> /tmp/mgmt.spec
         while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
         # Apply spec
         ceph orch apply -i /tmp/mgmt.spec
