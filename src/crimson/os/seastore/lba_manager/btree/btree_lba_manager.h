@@ -580,10 +580,11 @@ public:
     laddr_t laddr,
     extent_len_t prev_len,
     paddr_t prev_addr,
-    extent_len_t len,
-    paddr_t paddr,
-    uint32_t checksum,
-    LogicalChildNode*) final;
+    LogicalChildNode&) final;
+
+  update_mappings_ret update_mappings(
+    Transaction& t,
+    const std::list<LogicalChildNodeRef>& extents);
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -593,7 +594,6 @@ public:
     extent_len_t len) final;
 private:
   Cache &cache;
-
 
   struct {
     uint64_t num_alloc_extents = 0;
