@@ -576,6 +576,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 {
   const int interval = dpp->get_cct()->_conf->rgw_d4n_cache_cleaning_interval;
   while(!quit) {
+    //TODO at this point we start-transaction and end-transaction(?).
     ldpp_dout(dpp, 20) << __func__ << " : " << " Cache cleaning!" << dendl;
     uint64_t len = 0;
     rgw::sal::Attrs obj_attrs;

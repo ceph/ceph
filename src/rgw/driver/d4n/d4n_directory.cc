@@ -905,6 +905,7 @@ int save_trx_info(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn
 
 void D4NTransaction::start_trx()
 {
+  // NOTE: check whether at this point its better to get the transaction id from the redis server or generate a unique id.
   trxState = TrxState::STARTED;
 }
 
@@ -915,8 +916,12 @@ std::string lua_script_clone_keys = R"(
 local function clone_key(key_source, key_destination)
 		local keyType = redis.call('TYPE', key_destination).ok
 		if keyType == 'none' then
-				return redis.call('COPY', key_source, key_destination)
+				redis.log(redis.LOG_NOTICE,"key does not exists: " .. key_destination .. " cloning key: " .. key_source)
+				redis.call('COPY', key_source, key_destination)
+				local exist_status = redis.call('EXISTS', key_destination)
+				redis.log(redis.LOG_NOTICE,"key exists: " .. key_destination .. " status: " .. exist_status)
 		else
+				redis.log(redis.LOG_NOTICE,"key already exists: " .. key_destination)
 				return -1
 		end
 end
@@ -977,13 +982,39 @@ std::string lua_script_end_trx  = R"(
 --- the same is with reading the key, it is gurenteed that no other transaction is writing to the same key.
 --- upon end of the transaction, cloned key are compared to the original key, in case they are different, it means that other transaction has updated the key.
 
+--- log message : redis.log(redis.LOG_NOTICE,"message"), are written to the log file, the log-file is defined in the redis.conf file.
+--- redis monitor can be used to monitor redis server, "redis/valkey-cli monitor"
+
+local allComparisonsSuccessful = true
+
+local function log_message(message)
+--- TODO use runtime configuration to enable/disable logging (the runtime configuration setting should retrieve once and stored in a global variable)
+	redis.log(redis.LOG_NOTICE,message)
+end
+
 local function compareTables(tbl1, tbl2)
-    if #tbl1 ~= #tbl2 then return false end
+    if not tbl1 then
+      log_message("compareTables : tbl1 is nil")
+      return false
+    end
+
+    if not tbl2 then
+      log_message("compareTables : tbl2 is nil")
+      return false
+    end
+
+    if #tbl1 ~= #tbl2 then 
+	log_message("tables are not equal in size")
+	return false 
+    end
     local set1, set2 = {}, {}
     for _, v in ipairs(tbl1) do set1[v] = (set1[v] or 0) + 1 end
     for _, v in ipairs(tbl2) do set2[v] = (set2[v] or 0) + 1 end
     for k, v in pairs(set1) do
-        if set2[k] ~= v then return false end
+        if set2[k] ~= v then
+	  log_message("tables are not equal in values k,v: " .. k .. " " .. v)
+	  return false 
+	end
     end
     return true
 end
@@ -1001,106 +1032,131 @@ local function getKeyValues(key)
     elseif keyType == 'hash' then
         return redis.call('HGETALL', key)
     else
+	log_message("keyType is not supported: " .. keyType .. " key: " .. key)
         return nil
     end
 end
 
 --- for debuging purposes
 local function create_timestamp()
-                local time = redis.call('TIME')
-                return time[1] .. "." .. time[2]
+  local time = redis.call('TIME')
+  return time[1] .. "." .. time[2]
 end
 
 local function save_trx_info(key, value)
-		redis.call('HSET', "trx_debug", key, value)
+  redis.call('HSET', "trx_debug", key, value)
 end
 
 
 -- delete keys from the input keys(set by D4N application), delete by suffix
 local function deleteKeysWithSuffix(suffix)
-    for _, key in ipairs(KEYS) do --KEYS conatain keys that are related to the unique transaction
+    for _, key in ipairs(KEYS) do --KEYS conatain keys that are related to the unique transaction send by D4N application
         if key:match(suffix .. "$") then
             redis.call('DEL', key)
+	    log_message("deleted key: " .. key)
         end
     end
 end
 
-local function rename_temp_write_keys(baseKey,trx_id)
-      local tempWriteKey = baseKey .. trx_id .. "temp_write"
-      local testWriteKey = baseKey .. trx_id ..  "_temp_test_write"
-      redis.call('RENAME', tempWriteKey, baseKey)
-      redis.call('DEL', testWriteKey)
-
-      local ts = create_timestamp() -- for debuging purposes
-      save_trx_info( ts .. " temp_write_key", tempWriteKey .. " renamed to " .. baseKey)
-      save_trx_info(ts .. "temp_test_write_key", testWriteKey .. " deleted")
+local function rename_all_write_keys()
+    for _, key in ipairs(KEYS) do
+      if key:match("_temp_write$") then
+	local baseKey = key:gsub("_%d%d%d%d%d_temp_write$", "")
+	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
+	local tempWriteKey = baseKey .. trx_id .. "temp_write"
+	-- local testWriteKey = baseKey .. trx_id .. "temp_test_write"
+	if redis.call('EXISTS', tempWriteKey) ~= 0 then
+	  redis.call('RENAME', tempWriteKey, baseKey)
+	end
+	-- redis.call('DEL', testWriteKey)
+      end
+    end
 end
 
-local allComparisonsSuccessful = true
-
+log_message("START: end transaction")
 for _, key in ipairs(KEYS) do
 
+    log_message("IN: the for-loop -- key: " .. key)
+    
     if allComparisonsSuccessful == false then
+	log_message("allComparisonsSuccessful is false, breaking the loop")
 	break
     end
 
     if key:match("_temp_read$") then
 -- cut the suffix from the key
-    local baseKey = key:gsub("_%d%d%d%d%d_temp_read$", "")
+	local baseKey = key:gsub("_%d%d%d%d%d_temp_read$", "")
+
+	if redis.call('EXISTS', baseKey) == 0 then
+	  log_message("base key does not exist for <KEY>_temp_read")
+	  break
+	end
 
 -- cut the transaction id from the key
 	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
         local values1 = getKeyValues(key)
         local values2 = getKeyValues(baseKey)
 
-        if not values1 or not values2 or not compareTables(values1, values2) then
+	log_message("compring 2 keys of baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
+        if not compareTables(values1, values2) then
 -- in case the read key is not the same as the base key, it means the base key has been written to
 -- the transaction should be rolled back
+	      log_message("<KEY>_temp_read **NOT EQUAL** to " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
 	      allComparisonsSuccessful = false
         end
+
+	if allComparisonsSuccessful == true then
+	  log_message("<KEY>_temp_read is OK " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
+	end	
+
     elseif key:match("_temp_write$") then
 
         local baseKey = key:gsub("_%d%d%d%d%d_temp_write$", "")
 	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
         local testKey = baseKey .. trx_id .. "temp_test_write"
 
+        log_message("in _temp_write :  baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
+
 -- in case the base key does not exist, we can rename the write keys to the base key
 	if redis.call('EXISTS', baseKey) == 0 then 
-	  rename_temp_write_keys(baseKey,trx_id)
+	  log_message("base key does not exist for <KEY>_temp_write")
 	else
 
 	  local values1 = getKeyValues(baseKey)
 	  local values2 = getKeyValues(testKey)
-	  if values1 and values2 and compareTables(values1, values2) then
+
+	  log_message("compring 2 keys of baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
+	  if compareTables(values1, values2) then
 -- the test-write key is the same as the base key, it means no one has written to the base key
-	      redis.call('DEL', testKey)
+	      log_message("<KEY>_temp_write is safe for commit " .. "baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
 	  else
 -- in case the test-write key is not the same as the base key, it means the base key has been written to
 -- the transaction should be rolled back
+	      log_message("temp_write branch **NOT EQUAL** " .. "baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
 	      allComparisonsSuccessful = false
 	  end -- end of if values1 and values2 and compareTables(values1, values2)
-      end -- end of if redis.call('EXISTS', baseKey) == 0
+	end -- end of if redis.call('EXISTS', baseKey) == 0
     end -- end of if key:match("_temp_write$") 
 end -- end of for _, key in ipairs(KEYS)
 
--- if all keys are consistent, rename the write keys to the base key and delete the read keys
-for _, key in ipairs(KEYS) do
-    if key:match("_temp_write$") then
-        local baseKey = key:gsub("_temp_write$", "")
-        redis.call('RENAME', key, baseKey)
-    elseif key:match("temp_read$") then
-        redis.call('DEL', key)
-    end
-end
 
-if allComparisonsSuccessful then
+if allComparisonsSuccessful == true then
+-- the rename of the write keys should be done only if all keys are consistent
+
+	log_message("allComparisonsSuccessful is true, deleting all temp-read keys")
+	deleteKeysWithSuffix("_temp_read") 
+
+	log_message("allComparisonsSuccessful is true, renaming all write keys")
+	rename_all_write_keys()
 	return {true, "Processing complete"}
 else
-	deleteKeysWithSuffix("_temp_read")           
+-- the transaction should be rolled back, all temp keys should be deleted
 	deleteKeysWithSuffix("_temp_write")
 	deleteKeysWithSuffix("_temp_test_write")
+	deleteKeysWithSuffix("_temp_read") 
 	return {false, "Processing failed"}
 end
+
 
 )";
 
