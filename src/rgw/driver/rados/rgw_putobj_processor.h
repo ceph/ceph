@@ -254,6 +254,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     uint64_t *cur_accounted_size;
     std::string cur_etag;
     const std::string unique_tag;
+    bool keep_tail;
 
     RGWObjManifest *cur_manifest;
 
@@ -271,7 +272,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
             : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                                       owner, obj_ctx, _head_obj, dpp, y),
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
-              unique_tag(unique_tag), cur_manifest(nullptr)
+              unique_tag(unique_tag), keep_tail(false), cur_manifest(nullptr)
     {}
     int prepare(optional_yield y) override;
     int complete(size_t accounted_size, const std::string& etag,
