@@ -138,7 +138,7 @@ class D4NFilterBucket : public FilterBucket {
       if(objDir) delete objDir;
       if(blockDir) delete blockDir;
       if(bucketDir) delete bucketDir;
-      if(m_d4n_trx) delete m_d4n_trx;
+      if(m_d4n_trx) {delete m_d4n_trx;m_d4n_trx=nullptr;}
     }
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
@@ -251,7 +251,7 @@ class D4NFilterObject : public FilterObject {
 
       //all objects share the same transaction
       d4n_trx = new rgw::d4n::D4NTransaction();
-      d4n_trx->start_trx();
+      d4n_trx->start_trx(); 
       objDir->set_d4n_trx(d4n_trx);
       blockDir->set_d4n_trx(d4n_trx);
       bucketDir->set_d4n_trx(d4n_trx);
@@ -274,7 +274,7 @@ class D4NFilterObject : public FilterObject {
       if(objDir) delete objDir; 
       if(blockDir) delete blockDir; 
       if(bucketDir) delete bucketDir; 
-      if(d4n_trx) delete d4n_trx;
+      if(d4n_trx) {delete d4n_trx;d4n_trx=nullptr;}
     }
 
     virtual int copy_object(const ACLOwner& owner,
