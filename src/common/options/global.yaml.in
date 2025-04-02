@@ -6718,3 +6718,27 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: dmclock_client_res
+  type: uint
+  level: basic
+  desc: The minimum IO proportion (IOPS) requested by a client. The default
+    reservation is set to 0 (No reservation enforcement).
+  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: The minimum IO proportion (IOPS) requested by a client.
+  default: 0
+- name: dmclock_client_wgt
+  type: uint
+  level: basic
+  desc: IO share requested by a client over reservation. The default share
+    is set to 1.
+  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO share for the client over reservation.
+  default: 1
+- name: dmclock_client_lim
+  type: uint
+  level: basic
+  desc: IO limit requested by a client over reservation. The default limit
+    is set to 0 (no limit enforcement).
+  long_desc: Only considered for osd_op_queue = mclock_scheduler
+  fmt_desc: IO limit for each client (default) over reservation.
+  default: 0
