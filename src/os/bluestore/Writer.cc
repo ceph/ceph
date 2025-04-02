@@ -499,7 +499,9 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   _get_disk_space(blob_length - alloc_offset, blob_allocs);
   bblob.allocated(alloc_offset, blob_length - alloc_offset, blob_allocs);
   //^sets also logical_length = blob_length
-  bblob.add_unused_all();
+  if (min_alloc_size != block_size) {
+    bblob.add_unused_all();
+  }
   dout(25) << __func__ << " @0x" << std::hex << in_blob_offset
     << "~" << disk_data.length()
     << " alloc_offset=" << alloc_offset
