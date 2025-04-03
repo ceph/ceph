@@ -756,6 +756,10 @@ private:
 public:
   PeeringState peering_state;
 
+  interruptible_future<bool> do_recover_missing(
+    const hobject_t& soid,
+    const osd_reqid_t& reqid);
+
   // scrub state
 
   friend class ScrubScan;
