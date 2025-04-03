@@ -619,6 +619,7 @@ class Orchestrator(object):
         cert: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
+        force: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 

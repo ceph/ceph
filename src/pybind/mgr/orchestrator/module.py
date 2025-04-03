@@ -1255,7 +1255,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         cert_name: Optional[str] = None,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
-        force: Optional[bool] = False,
+        force: bool = False,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
         """
@@ -1290,6 +1290,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         cert: Optional[str] = None,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
+        force: bool = False,
         inbuf: Optional[str] = None
     ) -> HandleCommandResult:
         """
@@ -1304,6 +1305,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             cert_content,
             service_name,
             hostname,
+            force
         )
         output = raise_if_exception(completion)
         return HandleCommandResult(stdout=output)
