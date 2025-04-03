@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { NvmeofSubsystem } from '~/app/shared/models/nvmeof';
-import { Permission } from '~/app/shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -31,7 +31,7 @@ const BASE_URL = 'block/nvmeof/subsystems';
 export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit {
   subsystems: NvmeofSubsystem[] = [];
   subsystemsColumns: any;
-  permission: Permission;
+  permissions: Permissions;
   selection = new CdTableSelection();
   tableActions: CdTableAction[];
   subsystemDetails: any[];
@@ -48,7 +48,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private route: ActivatedRoute
   ) {
     super();
-    this.permission = this.authStorageService.getPermissions().nvmeof;
+    this.permissions = this.authStorageService.getPermissions();
   }
 
   ngOnInit() {
