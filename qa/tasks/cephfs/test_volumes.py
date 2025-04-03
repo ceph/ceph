@@ -221,7 +221,7 @@ class TestVolumesHelper(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
-    def  _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
+    def _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "info", vol_name, subvol_name]
         if group_name:
             args.append(group_name)
