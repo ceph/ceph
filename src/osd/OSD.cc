@@ -5017,8 +5017,7 @@ int OSD::read_superblock()
   // mismatch.
   bufferlist bl;
 
-  set<string> keys;
-  keys.insert(OSD_SUPERBLOCK_OMAP_KEY);
+  vector<string> keys(1, OSD_SUPERBLOCK_OMAP_KEY);
   map<string, bufferlist> vals;
   OSDSuperblock super_omap;
   OSDSuperblock super_disk;

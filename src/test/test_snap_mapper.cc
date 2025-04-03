@@ -169,15 +169,13 @@ public:
     doer.join();
   }
   int get_keys(
-    const set<string> &keys,
+    const vector<string> &keys,
     map<string, bufferlist> *out) override {
     std::lock_guard l{lock};
-    for (set<string>::const_iterator i = keys.begin();
-	 i != keys.end();
-	 ++i) {
-      map<string, bufferlist>::iterator j = store.find(*i);
+    for (auto& s : keys) {
+      map<string, bufferlist>::iterator j = store.find(s);
       if (j != store.end())
-	out->insert(*j);
+	out->emplace(*j);
     }
     return 0;
   }
@@ -333,19 +331,18 @@ public:
     }
   }
   void get() {
-    set<string> to_get;
+    vector<string> to_get;
     size_t get_size = random_num();
+    to_get.reserve(get_size);
     for (size_t i = 0; i < get_size; ++i) {
-      to_get.insert(*rand_choose(names));
+      to_get.emplace_back(*rand_choose(names));
     }
 
     map<string, bufferlist> got_truth;
-    for (set<string>::iterator i = to_get.begin();
-	 i != to_get.end();
-	 ++i) {
-      map<string, bufferlist>::iterator j = truth.find(*i);
+    for (auto& s : to_get) {
+      map<string, bufferlist>::iterator j = truth.find(s);
       if (j != truth.end())
-	got_truth.insert(*j);
+	got_truth.emplace(*j);
     }
 
     map<string, bufferlist> got;
@@ -397,12 +394,12 @@ TEST_F(MapCacherTest, Simple)
 {
   driver->pause();
   map<string, bufferlist> truth;
-  set<string> truth_keys;
+  vector<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
   encode(blah, bl);
   truth[string("asdf")] = bl;
-  truth_keys.insert(truth.begin()->first);
+  truth_keys.push_back(truth.begin()->first);
   {
     PausyAsyncMap::Transaction t;
     cache->set_keys(truth, &t);
@@ -1084,7 +1081,7 @@ public:
 
     // find the value for this key
     map<string, bufferlist> kvmap;
-    auto r = mapper->backend.get_keys(set{k}, &kvmap);
+    auto r = mapper->backend.get_keys(vector{1, k}, &kvmap);
     ASSERT_GE(r, 0);
 
     // replace the key with its shortened version

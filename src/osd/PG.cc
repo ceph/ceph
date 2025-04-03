@@ -953,8 +953,7 @@ bool PG::_has_removal_flag(ObjectStore *store,
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
 
   // first try new way
-  set<string> keys;
-  keys.insert("_remove");
+  vector<string> keys(1, "_remove");
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
@@ -977,9 +976,9 @@ int PG::peek_map_epoch(ObjectStore *store,
   ceph_assert(coll.is_pg());
 
   // try for v8
-  set<string> keys;
-  keys.insert(string(infover_key));
-  keys.insert(string(epoch_key));
+  vector<string> keys(2);
+  keys[0] = string(infover_key);
+  keys[1] = string(epoch_key);
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
@@ -1037,11 +1036,11 @@ int PG::read_info(
   pg_info_t &info, PastIntervals &past_intervals,
   __u8 &struct_v)
 {
-  set<string> keys;
-  keys.insert(string(infover_key));
-  keys.insert(string(info_key));
-  keys.insert(string(biginfo_key));
-  keys.insert(string(fastinfo_key));
+  vector<string> keys(4);
+  keys[0] = string(infover_key);
+  keys[1] = string(info_key);
+  keys[2] = string(biginfo_key);
+  keys[3] = string(fastinfo_key);
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);

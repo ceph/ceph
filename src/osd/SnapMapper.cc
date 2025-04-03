@@ -85,7 +85,7 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
 #define CRIMSON_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).debug(FMT_MSG, ##__VA_ARGS__)
 int OSDriver::get_keys(
-  const std::set<std::string> &keys,
+  const std::vector<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
   CRIMSON_DEBUG("OSDriver::{}", __func__);
@@ -151,7 +151,7 @@ int OSDriver::get_next_or_current(
 }
 #else
 int OSDriver::get_keys(
-  const std::set<std::string> &keys,
+  const std::vector<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
   return os->omap_get_values(ch, hoid, keys, out);
@@ -366,7 +366,7 @@ tl::expected<SnapMapper::object_snaps, Scrub::SnapMapReaderI::result_t>
 SnapMapper::get_snaps_common(const hobject_t &oid) const
 {
   ceph_assert(check(oid));
-  set<string> keys{to_object_key(oid)};
+  vector<string> keys{1, to_object_key(oid)};
   dout(20) << fmt::format("{}: key string: {} oid:{}", __func__, keys, oid)
 	   << dendl;
 
@@ -398,13 +398,14 @@ SnapMapper::get_snaps_common(const hobject_t &oid) const
   return out;
 }
 
-std::set<std::string> SnapMapper::to_raw_keys(
+std::vector<std::string> SnapMapper::to_raw_keys(
   const hobject_t &clone,
   const std::set<snapid_t> &snaps) const
 {
-  std::set<std::string> keys;
+  std::vector<std::string> keys;
+  keys.reserve(snaps.size());
   for (auto snap : snaps) {
-    keys.insert(to_raw_key(snap, clone));
+    keys.emplace_back(to_raw_key(snap, clone));
   }
   dout(20) << fmt::format(
 		"{}: clone:{} snaps:{} -> keys: {}", __func__, clone, snaps,

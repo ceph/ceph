@@ -88,7 +88,7 @@ public:
     hoid(hoid) {}
 
   int get_keys(
-    const std::set<std::string> &keys,
+    const std::vector<std::string> &keys,
     std::map<std::string, ceph::buffer::list> *out) override;
   int get_next(
     const std::string &key,
@@ -250,7 +250,7 @@ private:
 
   int get_snaps(const hobject_t &oid, object_snaps *out) const;
 
-  std::set<std::string> to_raw_keys(
+  std::vector<std::string> to_raw_keys(
     const hobject_t &clone,
     const std::set<snapid_t> &snaps) const;
 

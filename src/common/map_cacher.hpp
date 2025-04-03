@@ -57,7 +57,7 @@ class StoreDriver {
 public:
   /// Returns requested key values
   virtual int get_keys(
-    const std::set<K> &keys,   ///< [in] keys requested
+    const std::vector<K> &keys,   ///< [in] keys requested
     std::map<K, V> *got  ///< [out] values for keys obtained
     ) = 0; ///< @return error value
 
@@ -214,30 +214,25 @@ public:
 
   /// Gets keys, uses cached values for unstable keys
   int get_keys(
-    const std::set<K> &keys_to_get, ///< [in] std::set of keys to fetch
-    std::map<K, V> *got             ///< [out] keys gotten
+    const std::vector<K> &keys_to_get, ///< [in] std::set of keys to fetch
+    std::map<K, V> *got                ///< [out] keys gotten
     ) {
-    std::set<K> to_get;
-    std::map<K, V> _got;
+    std::vector<K> to_get;
+    to_get.reserve(keys_to_get.size());
     for (auto i = keys_to_get.begin();
 	 i != keys_to_get.end();
 	 ++i) {
       VPtr val = in_progress.lookup(*i);
       if (val) {
 	if (*val)
-	  got->insert(make_pair(*i, val->get()));
+	  got->emplace(*i, val->get());
 	//else: value cached is empty, key doesn't exist
       } else {
-	to_get.insert(*i);
+	to_get.emplace_back(*i);
       }
     }
-    int r = driver->get_keys(to_get, &_got);
-    if (r < 0)
-      return r;
-    for (auto i = _got.begin(); i != _got.end(); ++i) {
-      got->insert(*i);
-    }
-    return 0;
+    int r = driver->get_keys(to_get, got);
+    return r;
   } ///< @return error value, 0 on success
 };
 } // namespace

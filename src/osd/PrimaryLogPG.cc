@@ -7846,7 +7846,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       ++ctx->num_read;
       {
-	set<string> keys_to_get;
+	vector<string> keys_to_get;
 	try {
 	  decode(keys_to_get, bp);
 	}
@@ -7888,11 +7888,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	map<string, bufferlist> out;
 
 	if (oi.is_omap()) {
-	  set<string> to_get;
+	  vector<string> to_get;
+          to_get.reserve(assertions.size());
 	  for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
 	       i != assertions.end();
 	       ++i)
-	    to_get.insert(i->first);
+	    to_get.emplace_back(i->first);
 	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
 					      to_get, &out);
 	  if (r < 0) {
