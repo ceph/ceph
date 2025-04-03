@@ -767,10 +767,16 @@ void Replayer<I>::create_mirror_snapshot(
   int r;
   std::set<std::string> mirror_peer_uuids;
   if (snap_state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) {
+    librados::IoCtx default_ns_io_ctx;
+    default_ns_io_ctx.dup(m_local_io_ctx);
+    default_ns_io_ctx.set_namespace("");
     std::vector<cls::rbd::MirrorPeer> mirror_peers;
-    r = librbd::cls_client::mirror_peer_list(&m_local_io_ctx, &mirror_peers);
+    r = librbd::cls_client::mirror_peer_list(&default_ns_io_ctx, &mirror_peers);
     if (r < 0) {
-      derr << "failed to list peers: " << cpp_strerror(r) << dendl;
+      derr << "failed to list mirror peers: " << cpp_strerror(r) << dendl;
+      locker.unlock();
+      on_finish->complete(r);
+      return;
     }
 
     for (auto &peer : mirror_peers) {
