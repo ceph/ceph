@@ -2934,6 +2934,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	pi->peering_crush_bucket_barrier,
 	t->peering_crush_mandatory_member,
 	pi->peering_crush_mandatory_member,
+	t->allows_ecoptimizations,
+	pi->allows_ecoptimizations(),
 	prev_pgid)) {
     force_resend = true;
   }
@@ -2989,6 +2991,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->peering_crush_bucket_target = pi->peering_crush_bucket_target;
     t->peering_crush_bucket_barrier = pi->peering_crush_bucket_barrier;
     t->peering_crush_mandatory_member = pi->peering_crush_mandatory_member;
+    t->allows_ecoptimizations = pi->allows_ecoptimizations();
     ldout(cct, 10) << __func__ << " "
 		   << " raw pgid " << pgid << " -> actual " << t->actual_pgid
 		   << " acting " << t->acting
