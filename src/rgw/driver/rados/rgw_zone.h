@@ -97,7 +97,9 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWSystemMetaObj)
 
-struct RGWZoneParams : RGWSystemMetaObj {
+struct RGWZoneParams {
+  std::string id;
+  std::string name;
   rgw_pool domain_root;
   rgw_pool control_pool;
   rgw_pool gc_pool;
@@ -126,33 +128,24 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   JSONFormattable tier_config;
 
-  RGWZoneParams() : RGWSystemMetaObj() {}
-  explicit RGWZoneParams(const std::string& name) : RGWSystemMetaObj(name){}
-  RGWZoneParams(const rgw_zone_id& id, const std::string& name) : RGWSystemMetaObj(id.id, name) {}
-  RGWZoneParams(const rgw_zone_id& id, const std::string& name, const std::string& _realm_id)
-    : RGWSystemMetaObj(id.id, name), realm_id(_realm_id) {}
-  virtual ~RGWZoneParams();
+  RGWZoneParams() {}
+  explicit RGWZoneParams(const std::string& _name) : name(_name){}
+  RGWZoneParams(const rgw_zone_id& _id, const std::string& _name) : id(_id.id), name(_name) {}
+  RGWZoneParams(const rgw_zone_id& _id, const std::string& _name, const std::string& _realm_id)
+    : id(_id.id), name(_name), realm_id(_realm_id) {}
 
-  rgw_pool get_pool(CephContext *cct) const override;
-  const std::string get_default_oid(bool old_format = false) const override;
-  const std::string& get_names_oid_prefix() const override;
-  const std::string& get_info_oid_prefix(bool old_format = false) const override;
-  std::string get_predefined_id(CephContext *cct) const override;
-  const std::string& get_predefined_name(CephContext *cct) const override;
+  const std::string& get_name() const { return name; }
+  const std::string& get_id() const { return id; }
 
-  int init(const DoutPrefixProvider *dpp, 
-           CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y,
-	   bool setup_obj = true, bool old_format = false);
-  using RGWSystemMetaObj::init;
-  int read_default_id(const DoutPrefixProvider *dpp, std::string& default_id, optional_yield y, bool old_format = false) override;
-  int set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = false) override;
-  int create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format = false);
-  int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true) override;
-  int fix_pool_names(const DoutPrefixProvider *dpp, optional_yield y);
+  void set_name(const std::string& _name) { name = _name;}
+  void set_id(const std::string& _id) { id = _id;}
+  void clear_id() { id.clear(); }
+
+  rgw_pool get_pool(CephContext *cct) const;
 
   const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
-  void encode(bufferlist& bl) const override {
+  void encode(bufferlist& bl) const {
     ENCODE_START(15, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
@@ -164,7 +157,14 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(user_email_pool, bl);
     encode(user_swift_pool, bl);
     encode(user_uid_pool, bl);
-    RGWSystemMetaObj::encode(bl);
+    {
+      // these used to be wrapped by RGWSystemMetaObj::encode(),
+      // so the extra ENCODE_START/ENCODE_FINISH are preserved
+      ENCODE_START(1, 1, bl);
+      encode(id, bl);
+      encode(name, bl);
+      ENCODE_FINISH(bl);
+    }
     encode(system_key, bl);
     encode(placement_pools, bl);
     rgw_pool unused_metadata_heap;
@@ -185,7 +185,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(15, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
@@ -198,7 +198,14 @@ struct RGWZoneParams : RGWSystemMetaObj {
     decode(user_swift_pool, bl);
     decode(user_uid_pool, bl);
     if (struct_v >= 6) {
-      RGWSystemMetaObj::decode(bl);
+      {
+        // these used to be wrapped by RGWSystemMetaObj::decode(),
+        // so the extra DECODE_START/DECODE_FINISH are preserved
+        DECODE_START(1, bl);
+        decode(id, bl);
+        decode(name, bl);
+        DECODE_FINISH(bl);
+      }
     } else if (struct_v >= 2) {
       decode(name, bl);
       id = name;

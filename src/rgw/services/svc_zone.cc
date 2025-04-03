@@ -151,7 +151,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  ret = zone_params->init(dpp, cct, sysobj_svc, y);
+  ret = cfgstore->read_default_zone(dpp, y, realm->get_id(), *zone_params, nullptr);
   bool found_zone = (ret == 0);
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
@@ -581,8 +581,7 @@ int RGWSI_Zone::create_default_zg(const DoutPrefixProvider *dpp, optional_yield 
 int RGWSI_Zone::init_default_zone(const DoutPrefixProvider *dpp, optional_yield y)
 {
   ldpp_dout(dpp, 10) << " Using default name "<< default_zone_name << dendl;
-  zone_params->set_name(default_zone_name);
-  int ret = zone_params->init(dpp, cct, sysobj_svc, y);
+  int ret = cfgstore->read_zone_by_name(dpp, y, default_zone_name, *zone_params, nullptr);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
     return ret;
