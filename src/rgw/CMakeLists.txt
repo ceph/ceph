@@ -217,7 +217,8 @@ set(librgw_common_srcs
   driver/rados/topic.cc
   driver/rados/topic_migration.cc
   driver/rados/topics.cc
-  driver/rados/users.cc)
+  driver/rados/users.cc
+  driver/rados/oidc.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc

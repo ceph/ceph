@@ -103,7 +103,7 @@ int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield 
     idp_url.erase(pos, 7);
   }
 
-  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info);
+  return driver->load_oidc_provider(dpp, y, tenant, idp_url, nullptr, info);
 }
 
 bool

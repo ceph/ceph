@@ -641,20 +641,23 @@ class Driver {
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
                                     bool exclusive) = 0;
-    virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
+    virtual int load_oidc_provider(const DoutPrefixProvider *dpp,
                                    optional_yield y,
-                                   std::string_view tenant,
+                                   std::string_view account,
                                    std::string_view url,
+                                   RGWObjVersionTracker* objv_tracker,
                                    RGWOIDCProviderInfo& info) = 0;
-    virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
+    virtual int delete_oidc_provider(const DoutPrefixProvider *dpp,
                                      optional_yield y,
                                      std::string_view tenant,
-                                     std::string_view url) = 0;
+                                     std::string_view url,
+                                     RGWObjVersionTracker& objv_tracker,
+                                     RGWOIDCProviderInfo& info) = 0;
     /** Get all Open ID Connector providers, optionally filtered by tenant  */
     virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
-                                   optional_yield y,
-                                   std::string_view tenant,
-                                   std::vector<RGWOIDCProviderInfo>& providers) = 0;
+				                           optional_yield y,
+				                           std::string_view tenant,
+				                           std::vector<RGWOIDCProviderInfo>& providers) = 0;
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
