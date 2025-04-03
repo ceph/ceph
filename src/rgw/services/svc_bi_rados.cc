@@ -514,8 +514,8 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
     ret = svc.datalog_rados->add_entry(dpp, info, bilog, i, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
-    } // datalog error is not fatal
+    } // datalog error is now fatal, so we'll error on semaphore increment failure
   }
 
-  return 0;
+  return ret;
 }
