@@ -32,6 +32,7 @@
 #include "rgw_rados.h"
 #include "rgw_role.h"
 #include "rgw_sal_store.h"
+#include "rgw_customer_managed_policy.h"
 
 inline bool IsDebuggerAttached() {
 #ifdef DEBUG
@@ -1026,6 +1027,14 @@ class DaosStore : public StoreDriver {
       std::multimap<std::string, std::string> tags = {}) override;
   virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
+  virtual std::unique_ptr<RGWCustomerManagedPolicy> get_policy(std::string name,
+            std::string tenant,
+            rgw_account_id account_id,
+            std::string path="",
+            std::string policy_document="",
+            std::string description="",
+            std::string default_version="",
+            std::multimap<std::string,std::string> tags={}) override;
   int list_roles(const DoutPrefixProvider *dpp,
                  optional_yield y,
                  const std::string& tenant,

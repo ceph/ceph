@@ -27,6 +27,7 @@
 #include "rgw_putobj_processor.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
+#include "rgw_customer_managed_policy.h"
 
 namespace rgw { namespace sal {
 
@@ -201,6 +202,12 @@ class RadosStore : public StoreDriver {
                             optional_yield y,
                             std::string_view account_id,
                             uint32_t& count) override;
+
+    int count_account_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            uint32_t& count) override;
+
     int list_account_roles(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            std::string_view account_id,
@@ -385,6 +392,14 @@ class RadosStore : public StoreDriver {
                 std::multimap<std::string,std::string> tags={}) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
     virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
+    virtual std::unique_ptr<RGWCustomerManagedPolicy> get_policy(std::string name,
+                std::string tenant,
+                rgw_account_id account_id,
+                std::string path="",
+                std::string policy_document="",
+                std::string description="",
+                std::string default_version="",
+                std::multimap<std::string,std::string> tags={}) override;
     int list_roles(const DoutPrefixProvider *dpp,
                    optional_yield y,
                    const std::string& tenant,
@@ -1209,6 +1224,31 @@ public:
   int load_by_name(const DoutPrefixProvider *dpp, optional_yield y) override;
   int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override;
   int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) override;
+  int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
+};
+
+
+class RadosCustomerManagedPolicy : public RGWCustomerManagedPolicy {
+  RadosStore* store;
+public:
+  RadosCustomerManagedPolicy(RadosStore *_store, std::string name,
+                             std::string tenant,
+                             rgw_account_id account_id,
+                             std::string path,
+                             std::string policy_document,
+                             std::string description,
+                             std::string default_version,
+                             std::multimap<std::string, std::string> tags)
+      : RGWCustomerManagedPolicy(name, tenant, std::move(account_id), path, policy_document, std::move(description), default_version, tags), store(_store) {}
+  RadosCustomerManagedPolicy(RadosStore* _store, std::string id) : RGWCustomerManagedPolicy(id), store(_store) {}
+  RadosCustomerManagedPolicy(RadosStore *_store, const ManagedPolicyInfo &info) : RGWCustomerManagedPolicy(info), store(_store) {}
+  RadosCustomerManagedPolicy(RadosStore* _store) : store(_store) {}
+  ~RadosCustomerManagedPolicy() = default;
+
+  int load_by_name(const DoutPrefixProvider *dpp, optional_yield y) override;
+  int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override;
+  int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y, const RGWAccountInfo &acc_info, std::map<std::string, bufferlist> &acc_attrs,
+                   RGWObjVersionTracker &objv) override;
   int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
 

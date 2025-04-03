@@ -815,6 +815,9 @@ struct RGWAccountInfo {
   static constexpr int32_t DEFAULT_ROLE_LIMIT = 1000;
   int32_t max_roles = DEFAULT_ROLE_LIMIT;
 
+  static constexpr int32_t DEFAULT_POLICY_LIMIT = 1000;
+  int32_t max_policy = DEFAULT_POLICY_LIMIT;
+
   static constexpr int32_t DEFAULT_GROUP_LIMIT = 1000;
   int32_t max_groups = DEFAULT_GROUP_LIMIT;
 

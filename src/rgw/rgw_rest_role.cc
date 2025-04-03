@@ -312,7 +312,7 @@ void RGWCreateRole::execute(optional_yield y)
     ldpp_dout(this, 0) << "role_id decoded from master zonegroup response is " << role_id << dendl;
   }
 
-  op_ret = role->create(s, role_id, y);
+  op_ret = role->create(s, role_id, y); //create role.
   if (op_ret == -EEXIST) {
     if (site.is_meta_master()) {
       op_ret = -ERR_ROLE_EXISTS;
