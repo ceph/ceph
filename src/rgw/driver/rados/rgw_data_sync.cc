@@ -4467,7 +4467,9 @@ public:
 	      pretty_print(sc->env, "Deleting object s3://{}/{} in sync from zone {}\n",
 			   bs.bucket.name, key, zone_name);
 	    }
-            if (op == CLS_RGW_OP_UNLINK_INSTANCE) {
+            if (key.instance.empty() && sync_pipe.dest_bucket_info.versioned()) {
+              // if the object is not versioned, we need to treat it as deleting the null version
+              key.instance = "null";		
               versioned = true;
             }
             if (null_verid) {
