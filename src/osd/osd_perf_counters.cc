@@ -356,7 +356,25 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
   l_osd_watch_timeouts, "watch_timeouts",
   "Number of watches that timed out or were blocklisted",
-  NULL, PerfCountersBuilder::PRIO_USEFUL);
+  nullptr, PerfCountersBuilder::PRIO_USEFUL);
+
+  // scrub I/O (no EC vs. replicated differentiation)
+  osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_cnt, "scrub_omapgetheader_cnt", "scrub omap get header calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_bytes, "scrub_omapgetheader_bytes", "scrub omap get header bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_omapget_cnt, "scrub_omapget_cnt", "scrub omap get calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_omapget_bytes, "scrub_omapget_bytes", "scrub omap get bytes read");
+  // scrub I/O performed for replicated pools
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_getattr_cnt, "scrub_replicated_getattr_cnt", "scrub replicated pool getattr calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_stats_cnt, "scrub_replicated_stats_cnt", "scrub replicated pool stats calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_read_cnt, "scrub_replicated_read_cnt", "scrub replicated pool read calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_read_bytes, "scrub_replicated_read_bytes", "scrub replicated pool read bytes read");
+  // scrub I/O performed for EC pools
+  osd_plb.add_u64_counter(l_osd_scrub_ec_getattr_cnt, "scrub_ec_getattr_cnt", "scrub ec getattr calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_stats_cnt, "scrub_ec_stats_cnt", "scrub ec stats calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_read_cnt, "scrub_ec_read_cnt", "scrub ec read calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_read_bytes, "scrub_ec_read_bytes", "scrub ec read bytes read");
+
+  // scrub I/O performed for replicated pools
 
   return osd_plb.create_perf_counters();
 }
