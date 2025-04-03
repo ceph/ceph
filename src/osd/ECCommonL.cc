@@ -53,6 +53,8 @@ using ceph::bufferptr;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
+IGNORE_DEPRECATED
+
 namespace ECLegacy {
 static ostream& _prefix(std::ostream *_dout, ECCommonL::RMWPipeline *rmw_pipeline) {
   return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout) << "ECCommonL ";
@@ -1103,3 +1105,5 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
   return ref;
 }
 }
+
+END_IGNORE_DEPRECATED

@@ -20,6 +20,8 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+IGNORE_DEPRECATED
+
 using namespace std;
 
 TEST(ErasureCodeExample, chunk_size)
@@ -32,79 +34,79 @@ TEST(ErasureCodeExample, chunk_size)
 TEST(ErasureCodeExample, minimum_to_decode)
 {
   ErasureCodeExample example;
-  set<int> available_chunks;
-  set<int> want_to_read;
-  want_to_read.insert(1);
+  shard_id_set  available_chunks;
+  shard_id_set  want_to_read;
+  want_to_read.insert(shard_id_t(1));
   {
-    set<int> minimum;
+    shard_id_set  minimum;
     EXPECT_EQ(-EIO, example._minimum_to_decode(want_to_read,
                                               available_chunks,
                                               &minimum));
   }
-  available_chunks.insert(0);
-  available_chunks.insert(2);
+  available_chunks.insert(shard_id_t(0));
+  available_chunks.insert(shard_id_t(2));
   {
-    set<int> minimum;
+    shard_id_set  minimum;
     EXPECT_EQ(0, example._minimum_to_decode(want_to_read,
 					    available_chunks,
 					    &minimum));
     EXPECT_EQ(available_chunks, minimum);
     EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(0));
-    EXPECT_EQ(1u, minimum.count(2));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(0)));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(2)));
   }
   {
-    set<int> minimum;
-    available_chunks.insert(1);
+    shard_id_set  minimum;
+    available_chunks.insert(shard_id_t(1));
     EXPECT_EQ(0, example._minimum_to_decode(want_to_read,
 					    available_chunks,
 					    &minimum));
     EXPECT_EQ(1u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(1));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(1)));
   }
 }
 
 TEST(ErasureCodeExample, minimum_to_decode_with_cost)
 {
   ErasureCodeExample example;
-  map<int,int> available;
-  set<int> want_to_read;
-  want_to_read.insert(1);
+  shard_id_map<int> available(example.get_chunk_count());
+  shard_id_set  want_to_read;
+  want_to_read.insert(shard_id_t(1));
   {
-    set<int> minimum;
+    shard_id_set  minimum;
     EXPECT_EQ(-EIO, example.minimum_to_decode_with_cost(want_to_read,
 							available,
 							&minimum));
   }
-  available[0] = 1;
-  available[2] = 1;
+  available[shard_id_t(0)] = 1;
+  available[shard_id_t(2)] = 1;
   {
-    set<int> minimum;
+    shard_id_set  minimum;
     EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
 						     available,
 						     &minimum));
     EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(0));
-    EXPECT_EQ(1u, minimum.count(2));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(0)));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(2)));
   }
   {
-    set<int> minimum;
-    available[1] = 1;
+    shard_id_set  minimum;
+    available[shard_id_t(1)] = 1;
     EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
 						     available,
 						     &minimum));
     EXPECT_EQ(1u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(1));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(1)));
   }
   {
-    set<int> minimum;
-    available[1] = 2;
+    shard_id_set  minimum;
+    available[shard_id_t(1)] = 2;
     EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
 						     available,
 						     &minimum));
     EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(0));
-    EXPECT_EQ(1u, minimum.count(2));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(0)));
+    EXPECT_EQ(1u, minimum.count(shard_id_t(2)));
   }
 }
 
@@ -114,59 +116,60 @@ TEST(ErasureCodeExample, encode_decode)
 
   bufferlist in;
   in.append("ABCDE");
-  set<int> want_to_encode;
+  shard_id_set  want_to_encode;
   for(unsigned int i = 0; i < example.get_chunk_count(); i++)
-    want_to_encode.insert(i);
-  map<int, bufferlist> encoded;
+    want_to_encode.insert(shard_id_t(i));
+  shard_id_map<bufferlist> encoded(example.get_chunk_count());
   EXPECT_EQ(0, example.encode(want_to_encode, in, &encoded));
   EXPECT_EQ(example.get_chunk_count(), encoded.size());
-  EXPECT_EQ(example.get_chunk_size(in.length()), encoded[0].length());
-  EXPECT_EQ('A', encoded[0][0]);
-  EXPECT_EQ('B', encoded[0][1]);
-  EXPECT_EQ('C', encoded[0][2]);
-  EXPECT_EQ('D', encoded[1][0]);
-  EXPECT_EQ('E', encoded[1][1]);
-  EXPECT_EQ('A'^'D', encoded[2][0]);
-  EXPECT_EQ('B'^'E', encoded[2][1]);
-  EXPECT_EQ('C'^0, encoded[2][2]);
+  EXPECT_EQ(example.get_chunk_size(in.length()), encoded[shard_id_t(0)].length());
+  EXPECT_EQ('A', encoded[shard_id_t(0)][0]);
+  EXPECT_EQ('B', encoded[shard_id_t(0)][1]);
+  EXPECT_EQ('C', encoded[shard_id_t(0)][2]);
+  EXPECT_EQ('D', encoded[shard_id_t(1)][0]);
+  EXPECT_EQ('E', encoded[shard_id_t(1)][1]);
+  EXPECT_EQ('A'^'D', encoded[shard_id_t(2)][0]);
+  EXPECT_EQ('B'^'E', encoded[shard_id_t(2)][1]);
+  EXPECT_EQ('C'^0, encoded[shard_id_t(2)][2]);
 
   // all chunks are available
   {
     int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, example._decode(set<int>(want_to_decode, want_to_decode+2),
+    shard_id_map<bufferlist> decoded(example.get_chunk_count());
+    EXPECT_EQ(0, example._decode(shard_id_set (want_to_decode, want_to_decode+2),
 				 encoded,
 				 &decoded));
     EXPECT_EQ(2u, decoded.size());
-    EXPECT_EQ(3u, decoded[0].length());
-    EXPECT_EQ('A', decoded[0][0]);
-    EXPECT_EQ('B', decoded[0][1]);
-    EXPECT_EQ('C', decoded[0][2]);
-    EXPECT_EQ('D', decoded[1][0]);
-    EXPECT_EQ('E', decoded[1][1]);
+    EXPECT_EQ(3u, decoded[shard_id_t(0)].length());
+    EXPECT_EQ('A', decoded[shard_id_t(0)][0]);
+    EXPECT_EQ('B', decoded[shard_id_t(0)][1]);
+    EXPECT_EQ('C', decoded[shard_id_t(0)][2]);
+    EXPECT_EQ('D', decoded[shard_id_t(1)][0]);
+    EXPECT_EQ('E', decoded[shard_id_t(1)][1]);
   }
 
-  // one chunk is missing 
+  // one chunk is missing
   {
-    map<int, bufferlist> degraded = encoded;
-    degraded.erase(0);
+    shard_id_map<bufferlist> degraded = encoded;
+    degraded.erase(shard_id_t(0));
     EXPECT_EQ(2u, degraded.size());
     int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, example._decode(set<int>(want_to_decode, want_to_decode+2),
+    shard_id_map<bufferlist> decoded(example.get_chunk_count());
+    EXPECT_EQ(0, example._decode(shard_id_set (want_to_decode, want_to_decode+2),
 				 degraded,
 				 &decoded));
     EXPECT_EQ(2u, decoded.size());
-    EXPECT_EQ(3u, decoded[0].length());
-    EXPECT_EQ('A', decoded[0][0]);
-    EXPECT_EQ('B', decoded[0][1]);
-    EXPECT_EQ('C', decoded[0][2]);
-    EXPECT_EQ('D', decoded[1][0]);
-    EXPECT_EQ('E', decoded[1][1]);
+    EXPECT_EQ(3u, decoded[shard_id_t(0)].length());
+    EXPECT_EQ('A', decoded[shard_id_t(0)][0]);
+    EXPECT_EQ('B', decoded[shard_id_t(0)][1]);
+    EXPECT_EQ('C', decoded[shard_id_t(0)][2]);
+    EXPECT_EQ('D', decoded[shard_id_t(1)][0]);
+    EXPECT_EQ('E', decoded[shard_id_t(1)][1]);
   }
 }
 
-TEST(ErasureCodeExample, decode)
+IGNORE_DEPRECATED
+TEST(ErasureCodeExample, decode_legacy)
 {
   ErasureCodeExample example;
 
@@ -219,9 +222,46 @@ TEST(ErasureCodeExample, decode)
   EXPECT_EQ(out.length(), encoded[0].length());
 
   // cannot recover
-  map<int, bufferlist> degraded;  
+  map<int, bufferlist> degraded;
   degraded[2] = encoded[2];
   EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
+}
+END_IGNORE_DEPRECATED
+
+TEST(ErasureCodeExample, decode)
+{
+  ErasureCodeExample example;
+
+#define LARGE_ENOUGH 2048
+  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  in_ptr.zero();
+  in_ptr.set_length(0);
+  const char *payload =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  in_ptr.append(payload, strlen(payload));
+  bufferlist in;
+  in.push_back(in_ptr);
+  int want_to_encode[] = { 0, 1, 2 };
+  shard_id_map<bufferlist> encoded(example.get_chunk_count());
+  EXPECT_EQ(0, example.encode(shard_id_set(want_to_encode, want_to_encode+3),
+                              in,
+                              &encoded));
+  EXPECT_EQ(3u, encoded.size());
+
+  // successful decode
+  bufferlist out;
+  shard_id_t shard0(0);
+  shard_id_t shard1(1);
+  encoded.erase(shard0);
+  shard_id_map<bufferlist> decoded(example.get_chunk_count());
+  EXPECT_EQ(0, example.decode(shard_id_set{shard0},
+              encoded, &decoded, 0));
+  bufferlist usable;
+  EXPECT_EQ(decoded[shard0].length(), encoded[shard1].length());
 }
 
 TEST(ErasureCodeExample, create_rule)
@@ -267,3 +307,4 @@ TEST(ErasureCodeExample, create_rule)
  * End:
  */
 
+END_IGNORE_DEPRECATED

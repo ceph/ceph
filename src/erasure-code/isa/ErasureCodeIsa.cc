@@ -114,36 +114,145 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
   return isa_decode(erasures, data, coding, blocksize);
 }
 
+int ErasureCodeIsa::encode_chunks(const shard_id_map<bufferptr> &in,
+                                       shard_id_map<bufferptr> &out)
+{
+  char *chunks[k + m]; //TODO don't use variable length arrays
+  memset(chunks, 0, sizeof(char*) * (k + m));
+  uint64_t size = 0;
+
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[static_cast<int>(shard)] = ptr.c_str();
+  }
+
+  char *zeros = nullptr;
+
+  for (shard_id_t i; i < k + m; ++i) {
+    if (in.contains(i) || out.contains(i)) continue;
+
+    if (zeros == nullptr) {
+      zeros = (char*)malloc(size);
+      memset(zeros, 0, size);
+    }
+
+    chunks[static_cast<int>(i)] = zeros;
+  }
+
+  isa_encode(&chunks[0], &chunks[k], size);
+
+  if (zeros != nullptr) free(zeros);
+
+  return 0;
+}
+
+int ErasureCodeIsa::decode_chunks(const shard_id_set &want_to_read,
+                                  shard_id_map<bufferptr> &in,
+				  shard_id_map<bufferptr> &out)
+{
+  unsigned int size = 0;
+  shard_id_set erasures_set;
+  shard_id_set to_free;
+  erasures_set.insert_range(shard_id_t(0), k + m);
+  int erasures[k + m + 1];
+  int erasures_count = 0;
+  char *data[k];
+  char *coding[m];
+  memset(data, 0, sizeof(char*) * k);
+  memset(coding, 0, sizeof(char*) * m);
+
+  for (auto &&[shard, ptr] : in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+    }
+    erasures_set.erase(shard);
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    if (shard < k) {
+      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+    }
+    else {
+      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+    }
+  }
+
+  for (int i = 0; i < k + m; i++) {
+    char **buf = i < k ? &data[i] : &coding[i - k];
+    if (*buf == nullptr) {
+      *buf = (char *)malloc(size);
+      to_free.insert(shard_id_t(i));
+    }
+  }
+
+  for (auto && shard : erasures_set) {
+    erasures[erasures_count++] = static_cast<int>(shard);
+  }
+
+
+  erasures[erasures_count] = -1;
+  ceph_assert(erasures_count > 0);
+  int r = isa_decode(erasures, data, coding, size);
+  for (auto & shard : to_free) {
+    int i = static_cast<int>(shard);
+    char **buf = i < k ? &data[i] : &coding[i - k];
+    free(*buf);
+    *buf = nullptr;
+  }
+  return r;
+}
+
 // -----------------------------------------------------------------------------
 
 void
-ErasureCodeIsa::isa_xor(char **data, char **coding, int blocksize)
+ErasureCodeIsa::isa_xor(char **data, char *coding, int blocksize, int data_vectors)
 {
-    // If addresses are aligned to 32 bytes, then we can use xor_gen()
-    // Otherwise, use byte_xor()
-    int i;
-    bool src_aligned = true;
+  ceph_assert(data_vectors <= MAX_K);
+  char * xor_bufs[MAX_K + 1];
+  for (int i = 0; i < data_vectors; i++) {
+    xor_bufs[i] = data[i];
+  }
+  xor_bufs[data_vectors] = coding;
 
-    for (i = 0; i < k; i++) {
-      src_aligned &= is_aligned(data[i], EC_ISA_ADDRESS_ALIGNMENT);
-    }
+  // If addresses are aligned to 32 bytes, then we can use xor_gen()
+  // Otherwise, use byte_xor()
+  bool aligned = true;
+  for (int i = 0; i <= data_vectors; i++) {
+    aligned &= is_aligned(xor_bufs[i], EC_ISA_ADDRESS_ALIGNMENT);
+  }
 
-    if (src_aligned && is_aligned(coding[0], EC_ISA_ADDRESS_ALIGNMENT)) {
-      xor_gen(k+1, blocksize, (void**) data);
-    }
-    else {
-      memcpy(coding[0], data[0], blocksize);
-      for (i = 1; i < k; i++) {
-        byte_xor(data[i], coding[0], data[i]+blocksize);
-      }
-    }
+  if (aligned) {
+    xor_gen(data_vectors + 1, blocksize, (void**) xor_bufs);
+  }
+  else {
+    byte_xor(data_vectors, blocksize, xor_bufs);
+  }
 }
 
 void
-ErasureCodeIsa::byte_xor(char *data, char *coding, char *data_end)
+ErasureCodeIsa::byte_xor(int data_vects, int blocksize, char **array)
 {
-  while (data < data_end)
-    *coding++ ^= *data++;
+  for (int i = 0; i < blocksize; i++) {
+    char parity = array[0][i];
+    for (int j = 1; j < data_vects; j++ ) {
+      parity ^= array[j][i];
+    }
+    array[data_vects][i] = parity;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -154,7 +263,7 @@ ErasureCodeIsaDefault::isa_encode(char **data,
                                   int blocksize)
 {
   if (m == 1) {
-    isa_xor(data, coding, blocksize);
+    isa_xor(data, coding[0], blocksize, k);
   } else {
     ec_encode_data(blocksize, k, m, encode_tbls,
                    (unsigned char**) data, (unsigned char**) coding);
@@ -175,6 +284,51 @@ ErasureCodeIsaDefault::erasure_contains(int *erasures, int i)
 
 // -----------------------------------------------------------------------------
 
+void
+ErasureCodeIsaDefault::encode_delta(const bufferptr &old_data,
+                                  const bufferptr &new_data,
+                                  bufferptr *delta_maybe_in_place)
+{
+  constexpr int data_vectors = 2;
+  char * data[data_vectors];
+  data[0] = const_cast<char*>(old_data.c_str());
+  data[1] = const_cast<char*>(new_data.c_str());
+  char * coding = delta_maybe_in_place->c_str();
+
+  isa_xor(data, coding, delta_maybe_in_place->length(), data_vectors);
+}
+
+// -----------------------------------------------------------------------------
+
+void
+ErasureCodeIsaDefault::apply_delta(const shard_id_map<bufferptr> &in,
+                                        shard_id_map<bufferptr> &out)
+{
+  auto first = in.begin();
+  const unsigned blocksize = first->second.length();
+
+  for (auto const& [datashard, databuf] : in) {
+    if (datashard < k) {
+      for (auto const& [codingshard, codingbuf] : out) {
+        if (codingshard >= k) {
+          ceph_assert(codingbuf.length() == blocksize);
+          if (m==1) {
+            constexpr int data_vectors = 2;
+            char * data[data_vectors];
+            data[0] = const_cast<char*>(databuf.c_str());
+            data[1] = const_cast<char*>(codingbuf.c_str());
+            char * coding = const_cast<char*>(codingbuf.c_str());
+            isa_xor(data, coding, blocksize, data_vectors);
+          } else {
+            unsigned char* data = reinterpret_cast<unsigned char*>(const_cast<char*>(databuf.c_str()));
+            unsigned char* coding = reinterpret_cast<unsigned char*>(const_cast<char*>(codingbuf.c_str()));
+            ec_encode_data_update(blocksize, k, 1, static_cast<int>(datashard), encode_tbls + (32 * k * (static_cast<int>(codingshard) - k)), data, &coding);
+          }
+        }
+      }
+    }
+  }
+}
 
 
 // -----------------------------------------------------------------------------
@@ -262,7 +416,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
       ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // single parity decoding
     dout(20) << "isa_decode: reconstruct using xor_gen [" << erasures[0] << "]" << dendl;
-    isa_xor(recover_buf, &recover_buf[k], blocksize);
+    isa_xor(recover_buf, recover_buf[k], blocksize, k);
     return 0;
   }
 
@@ -376,14 +530,22 @@ int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
   err |= to_int("m", profile, &m, DEFAULT_M, ss);
   err |= sanity_check_k_m(k, m, ss);
 
+  if (m > MAX_M) {
+    *ss << "isa: m=" << m << " should be less/equal than " << MAX_M
+    << " : revert to m=" << MAX_M << std::endl;
+    m = MAX_M;
+    err = -EINVAL;
+  }
+
   if (matrixtype == kVandermonde) {
     // these are verified safe values evaluated using the
     // benchmarktool and 10*(combinatoric for maximum loss) random
     // full erasures
-    if (k > 32) {
+    if (k > MAX_K) {
       *ss << "Vandermonde: m=" << m
-        << " should be less/equal than 32 : revert to k=32" << std::endl;
-      k = 32;
+        << " should be less/equal than " << MAX_K
+        << " : revert to k=" << MAX_K << std::endl;
+      k = MAX_K;
       err = -EINVAL;
     }
 
