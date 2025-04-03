@@ -1,0 +1,2 @@
+#include <winuser.h>
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "code_page.manifest"
