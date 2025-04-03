@@ -4434,6 +4434,12 @@ public:
             tn->log(0, SSTR("skipping entry due to object lock mismatch: " << key));
             goto done;
           }
+          // make sure versioned object only lands on versioned bucket
+          if (!key.instance.empty() && !sync_pipe.dest_bucket_info.versioned()) {
+            set_status("skipping entry due to versioning mismatch. cannot sync versioned object to non-versioned bucket");
+            tn->log(0, SSTR("skipping entry due to versioning mismatch. cannot sync versioned object to non-versioned bucket: " << key));
+            goto done;
+          }
 
           if (error_injection &&
               rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
