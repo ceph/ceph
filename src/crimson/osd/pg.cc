@@ -660,6 +660,69 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
   }
 }
 
+PG::interruptible_future<bool> PG::do_recover_missing(
+  const hobject_t& soid,
+  const osd_reqid_t& reqid)
+{
+  LOG_PREFIX(PG::do_recover_missing);
+  DEBUGDPP(
+    "reqid {} check for recovery, {}",
+    *this, reqid, soid);
+  assert(is_primary());
+  eversion_t ver;
+  auto &missing_loc = peering_state.get_missing_loc();
+  bool needs_recovery_or_backfill = false;
+
+  if (is_unreadable_object(soid)) {
+    DEBUGDPP(
+      "reqid {}, {} is unreadable",
+      *this, reqid, soid);
+    ceph_assert(missing_loc.needs_recovery(soid, &ver));
+    needs_recovery_or_backfill = true;
+  }
+
+  if (is_degraded_or_backfilling_object(soid)) {
+    DEBUGDPP(
+      "reqid {}, {} is degraded or backfilling",
+      *this, reqid, soid);
+    if (missing_loc.needs_recovery(soid, &ver)) {
+      needs_recovery_or_backfill = true;
+    }
+  }
+
+  if (!needs_recovery_or_backfill) {
+    DEBUGDPP(
+      "reqid {} nothing to recover {}",
+      *this, reqid, soid);
+    co_return false;
+  }
+
+  if (peering_state.get_missing_loc().is_unfound(soid)) {
+    co_return true;
+  }
+  DEBUGDPP(
+    "reqid {} need to wait for recovery, {} version {}",
+    *this, reqid, soid);
+  if (recovery_backend->is_recovering(soid)) {
+    DEBUGDPP(
+      "reqid {} object {} version {}, already recovering",
+      *this, reqid, soid, ver);
+    co_await PG::interruptor::make_interruptible(
+      recovery_backend->get_recovering(
+	soid).wait_for_recovered());
+    co_return false;
+  } else {
+    DEBUGDPP(
+      "reqid {} object {} version {}, starting recovery",
+      *this, reqid, soid, ver);
+    auto [op, fut] =
+      shard_services.start_operation<UrgentRecovery>(
+        soid, ver, this, shard_services, get_osdmap_epoch());
+    co_await PG::interruptor::make_interruptible(std::move(fut));
+    co_return false;
+  }
+}
+
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
   /* We don't actually route the scrub request message into the state machine.

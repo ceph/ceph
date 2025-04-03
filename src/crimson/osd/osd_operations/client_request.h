@@ -15,7 +15,6 @@
 #include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
-#include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/scrub/pg_scrubber.h"
@@ -28,8 +27,7 @@ class PG;
 class OSD;
 class ShardServices;
 
-class ClientRequest final : public PhasedOperationT<ClientRequest>,
-                            private CommonClientRequest {
+class ClientRequest final : public PhasedOperationT<ClientRequest> {
   // Initially set to primary core, updated to pg core after with_pg()
   ShardServices *shard_services = nullptr;
 
