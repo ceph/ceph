@@ -71,8 +71,8 @@ protected:
 			 rados_omap_iter_t iter)
   {
     size_t i = 0;
-    char *key = NULL;
-    char *val = NULL;
+    const char *key = NULL;
+    const char *val = NULL;
     size_t val_len = 0;
     ASSERT_EQ(len, rados_omap_iter_size(iter));
     while (i < len) {
@@ -122,8 +122,8 @@ protected:
                          rados_omap_iter_t iter)
   {
     size_t i = 0;
-    char *key = NULL;
-    char *val = NULL;
+    const char *key = NULL;
+    const char *val = NULL;
     size_t key_len = 0;
     size_t val_len = 0;
     ASSERT_EQ(len, rados_omap_iter_size(iter));

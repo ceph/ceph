@@ -6182,7 +6182,7 @@ void RGWPutACLs::execute(optional_yield y)
     return;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   ldpp_dout(this, 15) << "read len=" << data.length() << " data=" << (buf ? buf : "") << dendl;
 
   if (!s->canned_acl.empty() && data.length() > 0) {
@@ -6314,7 +6314,7 @@ void RGWPutLC::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   ldpp_dout(this, 15) << "read len=" << data.length() << " data=" << (buf ? buf : "") << dendl;
 
   if (content_md5_bin) {

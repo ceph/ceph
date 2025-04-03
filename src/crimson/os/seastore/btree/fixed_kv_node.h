@@ -36,7 +36,7 @@ struct FixedKVNode : CachedExtent {
     return range.is_root();
   }
 
-  FixedKVNode(ceph::bufferptr &&ptr)
+  FixedKVNode(ceph::bufferptr_rw &&ptr)
     : CachedExtent(std::move(ptr)) {}
   // Must be identical with FixedKVNode(ptr) after on_fully_loaded()
   explicit FixedKVNode(extent_len_t length)
@@ -152,7 +152,7 @@ struct FixedKVInternalNode
     this->parent_node_t::on_rewrite(t, static_cast<node_type_t&>(extent));
   }
 
-  explicit FixedKVInternalNode(ceph::bufferptr &&ptr)
+  explicit FixedKVInternalNode(ceph::bufferptr_rw &&ptr)
     : FixedKVNode<NODE_KEY>(std::move(ptr)),
       ParentNode<node_type_t, NODE_KEY>(CAPACITY) {
     this->set_layout_buf(this->get_bptr().c_str());
@@ -432,7 +432,7 @@ struct FixedKVInternalNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    ceph::buffer::ptr_rw bptr(delta_buffer.get_bytes());
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);
@@ -515,7 +515,7 @@ struct FixedKVLeafNode
   using base_t = FixedKVNode<NODE_KEY>;
   using child_node_t = ChildNode<internal_node_type_t, node_type_t, NODE_KEY>;
   using root_node_t = RootChildNode<RootBlock, node_type_t>;
-  explicit FixedKVLeafNode(ceph::bufferptr &&ptr)
+  explicit FixedKVLeafNode(ceph::bufferptr_rw &&ptr)
     : FixedKVNode<NODE_KEY>(std::move(ptr)) {
     this->set_layout_buf(this->get_bptr().c_str());
   }
@@ -733,7 +733,7 @@ struct FixedKVLeafNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    ceph::buffer::ptr_rw bptr(delta_buffer.get_bytes());
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);
