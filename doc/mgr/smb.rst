@@ -495,6 +495,14 @@ custom_smb_global_options
     things in ways that the Ceph team can not help with. This special key will
     automatically be removed from the list of options passed to Samba.
 
+.. warning::
+   Setting the ``clustering`` option allows an administrator to choose exactly
+   when Samba's CTDB clustering will be used. By default, the use of Samba's
+   clustering is derived from the ``placement`` count.  If you choose to set
+   ``clustering`` make sure you understand how clustering interacts with
+   placement. In particular, be aware that running multiple instances of the
+   same ``smb`` service without clustering enabled can cause unexpected behavior.
+
 
 .. _join-source-fields:
 
