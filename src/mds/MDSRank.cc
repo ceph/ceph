@@ -2277,6 +2277,30 @@ void MDSRankDispatcher::handle_mds_map(
   if (state != oldstate) {
     last_state = oldstate;
     incarnation = mdsmap->get_inc_gid(mds_gid);
+    utime_t uptime;
+    uptime.set_from_double(get_uptime().count());
+    switch (state) {
+    case MDSMap::STATE_REPLAY:
+      logger->tset(l_mdss_enter_state_replay_time, uptime);
+      break;
+    case MDSMap::STATE_RESOLVE:
+      logger->tset(l_mdss_enter_state_resolve_time, uptime);
+      break;
+    case MDSMap::STATE_RECONNECT:
+      logger->tset(l_mdss_enter_state_reconnect_time, uptime);
+      break;
+    case MDSMap::STATE_REJOIN:
+      logger->tset(l_mdss_enter_state_rejoin_time, uptime);
+      break;
+    case MDSMap::STATE_CLIENTREPLAY:
+      logger->tset(l_mdss_enter_state_clientreplay_time, uptime);
+      break;
+    case MDSMap::STATE_ACTIVE:
+      logger->tset(l_mdss_enter_state_active_time, uptime);
+      break;
+    default: // ignore others
+       break;
+    }
   }
 
   version_t epoch = m->get_epoch();
@@ -3766,6 +3790,14 @@ void MDSRank::create_logger()
                             "OpenIno backtrace fetchings");
     mds_plb.add_u64_counter(l_mds_openino_peer_discover, "openino_peer_discover",
                             "OpenIno peer inode discovers");
+
+    // boot states cost time
+    mds_plb.add_time(l_mdss_enter_state_replay_time, "enter_replay_time", "enter state replay time since boot");
+    mds_plb.add_time(l_mdss_enter_state_resolve_time, "enter_resolve_time", "enter state resolve time since boot");
+    mds_plb.add_time(l_mdss_enter_state_reconnect_time, "enter_reconnect_time", "enter state reconnect time since boot");
+    mds_plb.add_time(l_mdss_enter_state_rejoin_time, "enter_rejoin_time", "enter state rejoin time since boot");
+    mds_plb.add_time(l_mdss_enter_state_clientreplay_time, "enter_clientreplay_time", "enter state clientreplay time since boot");
+    mds_plb.add_time(l_mdss_enter_state_active_time, "enter_active_time", "enter state active time since boot");
 
     // scrub stats
     mds_plb.add_u64(l_mds_scrub_backtrace_fetch, "scrub_backtrace_fetch",

@@ -100,6 +100,13 @@ enum {
   l_mdss_handle_client_caps_dirty,
   l_mdss_handle_client_cap_release,
   l_mdss_process_request_cap_release,
+  l_mdss_enter_state_replay_time,
+  l_mdss_enter_state_resolve_time,
+  l_mdss_enter_state_reconnect_time,
+  l_mdss_enter_state_rejoin_time,
+  l_mdss_enter_state_clientreplay_time,
+  l_mdss_enter_state_active_time,
+  l_mdss_replay_queue_size,
   l_mds_last,
 };
 
