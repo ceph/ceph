@@ -224,7 +224,7 @@ class ScrubQueue {
   CephContext* cct;
   Scrub::ScrubSchedListener& osd_service;
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   auto& conf() const { return local_conf(); }
 #else
   auto& conf() const { return cct->_conf; }

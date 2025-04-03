@@ -33,7 +33,7 @@ public:
 	spgid,
 	pg_shard_t(get_source().num(), notify.from),
 	notify,
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 	features
 #else
 	get_connection()->get_features()

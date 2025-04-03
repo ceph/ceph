@@ -372,7 +372,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         sysutils/fusefs-libs \
     exit
 else
-    [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
+    [ $WITH_CRIMSON ] && with_seastar=true || with_seastar=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in

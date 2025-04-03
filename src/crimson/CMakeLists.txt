@@ -1,5 +1,5 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
-set(crimson_cflag_definitions "WITH_SEASTAR=1")
+set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
