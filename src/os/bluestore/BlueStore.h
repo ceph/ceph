@@ -3420,9 +3420,15 @@ public:
 
   /// Get key values
   int omap_get_values(
-    CollectionHandle &c,         ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const std::set<std::string> &keys,     ///< [in] Keys to get
+    CollectionHandle &c,           ///< [in] Collection containing oid
+    const ghobject_t &oid,         ///< [in] Object containing omap
+    const std::set<std::string> &keys,             ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
+    ) override;
+  int omap_get_values(
+    CollectionHandle &c,           ///< [in] Collection containing oid
+    const ghobject_t &oid,         ///< [in] Object containing omap
+    const std::vector<std::string> &keys,          ///< [in] Keys to get
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 

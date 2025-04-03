@@ -13772,7 +13772,6 @@ int BlueStore::omap_get_values(
   std::shared_lock l(c->lock);
   auto start1 = mono_clock::now();
   int r = 0;
-  string final_key;
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     r = -ENOENT;
@@ -13783,21 +13782,75 @@ int BlueStore::omap_get_values(
   }
   o->flush();
   {
+    string final_key;
     const string& prefix = o->get_omap_prefix();
     o->get_omap_key(string(), &final_key);
     size_t base_key_len = final_key.size();
-    for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
+    for (auto& s : keys) {
       final_key.resize(base_key_len); // keep prefix
-      final_key += *p;
+      final_key += s;
       bufferlist val;
       if (db->get(prefix, final_key, &val) >= 0) {
-	dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
-		 << " -> " << *p << dendl;
-	out->insert(make_pair(*p, val));
+        dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
+	         << " -> " << s << dendl;
+        out->emplace(s, val);
       }
     }
   }
- out:
+
+out:
+  c->store->log_latency(
+    __func__,
+    l_bluestore_omap_get_values_lat,
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
+
+  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+	   << dendl;
+  return r;
+}
+
+int BlueStore::omap_get_values(
+  CollectionHandle &c_,        ///< [in] Collection containing oid
+  const ghobject_t &oid,       ///< [in] Object containing omap
+  const vector<string> &keys,     ///< [in] Keys to get
+  map<string, bufferlist> *out ///< [out] Returned keys and values
+  )
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
+  if (!c->exists)
+    return -ENOENT;
+  std::shared_lock l(c->lock);
+  auto start1 = mono_clock::now();
+  int r = 0;
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o || !o->exists) {
+    r = -ENOENT;
+    goto out;
+  }
+  if (!o->onode.has_omap()) {
+    goto out;
+  }
+  o->flush();
+  {
+    string final_key;
+    const string& prefix = o->get_omap_prefix();
+    o->get_omap_key(string(), &final_key);
+    size_t base_key_len = final_key.size();
+    for (auto& s : keys) {
+      final_key.resize(base_key_len); // keep prefix
+      final_key += s;
+      bufferlist val;
+      if (db->get(prefix, final_key, &val) >= 0) {
+        dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
+	         << " -> " << s << dendl;
+        out->emplace(s, val);
+      }
+    }
+  }
+
+out:
   c->store->log_latency(
     __func__,
     l_bluestore_omap_get_values_lat,

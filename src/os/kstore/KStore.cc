@@ -1689,7 +1689,7 @@ int KStore::omap_get_keys(
 }
 
 int KStore::omap_get_values(
-  CollectionHandle& ch,                    ///< [in] Collection containing oid
+  CollectionHandle& ch,        ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
   map<string, bufferlist> *out ///< [out] Returned keys and values
@@ -1707,14 +1707,48 @@ int KStore::omap_get_values(
   if (!o->onode.omap_head)
     goto out;
   o->flush();
-  for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
+  for (auto& s : keys) {
     string key;
-    get_omap_key(o->onode.omap_head, *p, &key);
+    get_omap_key(o->onode.omap_head, s, &key);
     bufferlist val;
     if (db->get(PREFIX_OMAP, key, &val) >= 0) {
       dout(30) << __func__ << "  got " << pretty_binary_string(key)
-	       << " -> " << *p << dendl;
-      out->insert(make_pair(*p, val));
+	       << " -> " << s << dendl;
+      out->emplace(s, val);
+    }
+  }
+ out:
+  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
+  return r;
+}
+
+int KStore::omap_get_values(
+  CollectionHandle& ch,        ///< [in] Collection containing oid
+  const ghobject_t &oid,       ///< [in] Object containing omap
+  const vector<string> &keys,  ///< [in] Keys to get
+  map<string, bufferlist> *out ///< [out] Returned keys and values
+  )
+{
+  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
+  std::shared_lock l{c->lock};
+  int r = 0;
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o || !o->exists) {
+    r = -ENOENT;
+    goto out;
+  }
+  if (!o->onode.omap_head)
+    goto out;
+  o->flush();
+  for (auto& s : keys) {
+    string key;
+    get_omap_key(o->onode.omap_head, s, &key);
+    bufferlist val;
+    if (db->get(PREFIX_OMAP, key, &val) >= 0) {
+      dout(30) << __func__ << "  got " << pretty_binary_string(key)
+	       << " -> " << s << dendl;
+      out->emplace(s, val);
     }
   }
  out:
