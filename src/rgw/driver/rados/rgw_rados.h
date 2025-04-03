@@ -595,9 +595,9 @@ public:
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
   int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp,
-                         const rgw::SiteConfig& site);
+                 bool background_tasks, const rgw::SiteConfig& site);
   /** Initialize the RADOS instance and prepare to do other ops */
-  int init_svc(bool raw, const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
+  int init_svc(bool raw, const DoutPrefixProvider *dpp, bool background_tasks, const rgw::SiteConfig& site);
   virtual int init_rados();
   int init_complete(const DoutPrefixProvider *dpp, optional_yield y);
   void finalize();

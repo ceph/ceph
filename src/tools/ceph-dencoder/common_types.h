@@ -155,13 +155,13 @@ TYPE(cls_2pc_reservation)
 TYPE_NONDETERMINISTIC(cls_2pc_urgent_data)
 
 #include "cls/log/cls_log_types.h"
-TYPE(cls_log_header)
+TYPE(cls::log::header)
 
 #include "cls/log/cls_log_ops.h"
-TYPE(cls_log_info_op)
-TYPE(cls_log_list_op)
-TYPE(cls_log_list_ret)
-TYPE(cls_log_trim_op)
+TYPE(cls::log::ops::info_op)
+TYPE(cls::log::ops::list_op)
+TYPE(cls::log::ops::list_ret)
+TYPE(cls::log::ops::trim_op)
 
 #include "cls/version/cls_version_ops.h"
 TYPE(cls_version_check_op)

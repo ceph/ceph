@@ -22,6 +22,7 @@
 #include "rgw_url.h"
 #include <chrono>
 #include <fmt/format.h>
+#include "librados/AioCompletionImpl.h"
 
 #include <unordered_map>
 

@@ -79,7 +79,9 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool run_reshard_thread,
                                                      bool run_notification_thread,
 						     bool use_cache,
-						     bool use_gc, optional_yield y)
+						     bool use_gc,
+						     bool background_tasks,
+						     optional_yield y)
 {
   rgw::sal::Driver* driver{nullptr};
 
@@ -96,7 +98,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .set_run_notification_thread(run_notification_thread)
-                .init_begin(cct, dpp, site_config) < 0) {
+	        .init_begin(cct, dpp, background_tasks, site_config) < 0) {
       delete driver;
       return nullptr;
     }
@@ -123,7 +125,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .set_run_notification_thread(run_notification_thread)
-                .init_begin(cct, dpp, site_config) < 0) {
+	        .init_begin(cct, dpp, background_tasks, site_config) < 0) {
       delete driver;
       return nullptr;
     }
@@ -246,7 +248,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
       return nullptr;
     }
 
-    int ret = rados->init_svc(true, dpp, site_config);
+    int ret = rados->init_svc(true, dpp, false, site_config);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
       delete driver;

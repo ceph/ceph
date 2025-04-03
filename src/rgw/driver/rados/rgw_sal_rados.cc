@@ -13,79 +13,77 @@
  *
  */
 
-#include <asm-generic/errno-base.h>
-#include <errno.h>
-#include <fmt/core.h>
-#include <stdlib.h>
+#include <cerrno>
+#include <cstdlib>
 #include <string>
-#include <system_error>
-#include <filesystem>
+
 #include <unistd.h>
-#include <sstream>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/process.hpp>
 
-#include "common/async/blocked_completion.h"
-#include "include/function2.hpp"
+#include <fmt/core.h>
 
-#include "common/Clock.h"
+#include "common/async/blocked_completion.h"
+
 #include "common/ceph_time.h"
+#include "common/Clock.h"
 #include "common/errno.h"
 
-#include "role.h"
-#include "rgw_obj_types.h"
-#include "rgw_rados.h"
-#include "rgw_sal.h"
-#include "rgw_sal_rados.h"
-#include "rgw_bucket.h"
-#include "rgw_multi.h"
-#include "rgw_acl.h"
-#include "rgw_acl_s3.h"
-#include "rgw_aio.h"
-#include "rgw_aio_throttle.h"
-#include "rgw_tools.h"
-#include "rgw_tracer.h"
-#include "rgw_oidc_provider.h"
+#include "librados/AioCompletionImpl.h"
 
-#include "rgw_zone.h"
-#include "rgw_rest_conn.h"
-#include "rgw_service.h"
+#include "cls/rgw/cls_rgw_client.h"
+
+#include "rgw_acl.h"
+#include "rgw_aio_throttle.h"
+#include "rgw_bucket.h"
+#include "rgw_bucket_logging.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
+#include "rgw_lc_tier.h"
 #include "rgw_mdlog.h"
-#include "rgw_rest_admin.h"
+#include "rgw_multi.h"
+#include "rgw_obj_types.h"
+#include "rgw_oidc_provider.h"
+#include "rgw_rados.h"
 #include "rgw_rest_bucket.h"
-#include "rgw_rest_metadata.h"
-#include "rgw_rest_log.h"
 #include "rgw_rest_config.h"
+#include "rgw_rest_conn.h"
+#include "rgw_rest_log.h"
+#include "rgw_rest_metadata.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
-#include "rgw_lc_tier.h"
-#include "rgw_bucket_logging.h"
-#include "services/svc_sys_obj.h"
-#include "services/svc_mdlog.h"
-#include "services/svc_cls.h"
+#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
+#include "rgw_service.h"
+#include "rgw_tools.h"
+#include "rgw_tracer.h"
+#include "rgw_zone.h"
+
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
-#include "services/svc_zone.h"
-#include "services/svc_tier_rados.h"
-#include "services/svc_quota.h"
+#include "services/svc_cls.h"
 #include "services/svc_config_key.h"
-#include "services/svc_zone_utils.h"
-#include "services/svc_user.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_quota.h"
+#include "services/svc_sys_obj.h"
 #include "services/svc_sys_obj_cache.h"
-#include "cls/rgw/cls_rgw_client.h"
+#include "services/svc_tier_rados.h"
+#include "services/svc_user.h"
+#include "services/svc_zone.h"
+#include "services/svc_zone_utils.h"
 
 #include "account.h"
 #include "buckets.h"
 #include "group.h"
 #include "groups.h"
-#include "roles.h"
-#include "users.h"
 #include "rgw_pubsub.h"
+#include "role.h"
+#include "roles.h"
 #include "topic.h"
 #include "topics.h"
+#include "users.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2292,6 +2290,11 @@ std::string RadosStore::meta_get_marker(void* handle)
 int RadosStore::meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y)
 {
   return ctl()->meta.mgr->remove(metadata_key, y, dpp);
+}
+
+void RadosStore::shutdown(void) {
+  svc()->datalog_rados->blocking_shutdown();
+  return;
 }
 
 void RadosStore::finalize(void)

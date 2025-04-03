@@ -97,6 +97,7 @@ void RGWRealmReloader::reload()
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
 
+  env.driver->shutdown();
   // destroy the existing driver
   DriverManager::close_storage(env.driver);
   env.driver = nullptr;
@@ -127,7 +128,7 @@ void RGWRealmReloader::reload()
           cct->_conf->rgw_enable_quota_threads,
           cct->_conf->rgw_run_sync_thread,
           cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
-          true, null_yield, // run notification thread
+	  true, true, null_yield, // run notification thread
           cct->_conf->rgw_cache_enabled);
     }
 
