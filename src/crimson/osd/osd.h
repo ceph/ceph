@@ -189,6 +189,7 @@ private:
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
   seastar::future<> _add_device_class();
+  seastar::future<bool> _get_device_type();
 
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 

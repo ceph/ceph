@@ -38,8 +38,12 @@ protected:
 private:
   virtual void dump_detail(Formatter *f) const;
   crimson::osd::scheduler::params_t get_scheduler_params() const {
+    int cost = std::max<int64_t>(1, (pg->get_info().stats.stats.sum.num_bytes / pg->get_info().stats.stats.sum.num_objects));
+    unsigned priority = pg->get_recovery_op_priority();
+
     return {
-      1, // cost
+      cost, // cost
+      priority, // priority
       0, // owner
       scheduler_class
     };
@@ -66,7 +70,6 @@ public:
   void print(std::ostream&) const final;
 
   std::tuple<
-    OperationThrottler::BlockingEvent,
     RecoveryBackend::RecoveryBlockingEvent
   > tracking_events;
 
@@ -86,7 +89,6 @@ public:
     float delay = 0);
 
   std::tuple<
-    OperationThrottler::BlockingEvent,
     RecoveryBackend::RecoveryBlockingEvent
   > tracking_events;
 

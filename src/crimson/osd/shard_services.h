@@ -209,6 +209,10 @@ public:
     PerfCounters *recoverystate_perf,
     crimson::os::FuturizedStore &store,
     OSDState& osd_state);
+
+  void initialize_scheduler(CephContext* cct, bool is_rotational) {
+    throttler.initialize_scheduler(cct, crimson::common::local_conf(), is_rotational, whoami);
+ }
 };
 
 /**
@@ -593,8 +597,7 @@ public:
   }
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
-  FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
-  FORWARD(try_acquire_throttle_now, try_acquire_throttle_now, local_state.throttler)
+  FORWARD(with_throttle, with_throttle, local_state.throttler)
 
   FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)
@@ -618,6 +621,9 @@ public:
     snap_dump_reservations,
     snap_reserver.dump)
 
+  bool throttle_available() const {
+    return local_state.throttler.available();
+  }
 
   auto local_update_priority(
     singleton_orderer_t &orderer,
