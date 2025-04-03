@@ -24,6 +24,7 @@ overrides:
       - OSD_DOWN
       - CEPHADM_FAILED_DAEMON
       - but is still running
+      - PG_DEGRADED
     conf:
       osd:
         osd shutdown pgref assert: true
