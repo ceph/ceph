@@ -22,6 +22,7 @@ class DumpInFlightOpsHook;
 class DumpHistoricOpsHook;
 class DumpSlowestHistoricOpsHook;
 class DumpRecoveryReservationsHook;
+class ScrubPurgedSnapsHook;
 
 template<class Hook, class... Args>
 std::unique_ptr<AdminSocketHook> make_asok_hook(Args&&... args);
