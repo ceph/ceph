@@ -4276,54 +4276,6 @@ def test_bucket_replication_reject_objectlock_identical():
     assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
 @allow_bucket_replication
-def test_bucket_replication_non_versioned_to_versioned():
-    zonegroup = realm.master_zonegroup()
-    zonegroup_conns = ZonegroupConns(zonegroup)
-
-    source = zonegroup_conns.non_account_rw_zones[0]
-    dest = zonegroup_conns.non_account_rw_zones[1]
-
-    source_bucket = source.create_bucket(gen_bucket_name())
-    dest_bucket = dest.create_bucket(gen_bucket_name())
-    zonegroup_meta_checkpoint(zonegroup)
-
-    # create replication configuration
-    response = source.s3_client.put_bucket_replication(
-        Bucket=source_bucket.name,
-        ReplicationConfiguration={
-            'Role': '',
-            'Rules': [
-                {
-                    'ID': 'rule1',
-                    'Status': 'Enabled',
-                    'Destination': {
-                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
-                    }
-                }
-            ]
-        }
-    )
-    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
-    zonegroup_meta_checkpoint(zonegroup)
-
-    # enable versioning on destination bucket
-    dest.s3_client.put_bucket_versioning(
-        Bucket=dest_bucket.name,
-        VersioningConfiguration={'Status': 'Enabled'}
-    )
-    zonegroup_meta_checkpoint(zonegroup)
-
-    # upload an object and wait for sync.
-    objname = 'dummy'
-    k = new_key(source, source_bucket, objname)
-    k.set_contents_from_string('foo')
-    zone_data_checkpoint(dest.zone, source.zone)
-
-    # check that object not exists in destination bucket
-    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
-    assert e.response['Error']['Code'] == 'NoSuchKey'
-
-@allow_bucket_replication
 def test_bucket_replication_versioned_to_non_versioned():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -4370,6 +4322,594 @@ def test_bucket_replication_versioned_to_non_versioned():
     # check that object not exists in destination bucket
     e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
     assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # try again to test incremental sync as well
+    # upload an object and wait for sync.
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object not exists in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+    # upload dummy object to destination to test the delete
+    objname = 'dummy'
+    k = new_key(dest, dest_bucket, objname)
+    k.set_contents_from_string('bar')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object is not deleted in destination bucket
+    k = get_key(dest, dest_bucket, objname)
+    assert_equal(k.get_contents_as_string().decode('utf-8'), 'bar')
+
+@allow_bucket_replication
+def test_bucket_replication_versioned_to_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on source bucket
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    # enable versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # upload another version to test incremental sync
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+    # check that delete marker exists in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert len(response['DeleteMarkers']) == 1
+
+    # delete delete marker
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname, VersionId=response['DeleteMarkers'][0]['VersionId'])
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that delete marker is deleted in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert 'DeleteMarker' not in response
+
+@allow_bucket_replication
+def test_bucket_replication_versioned_to_suspend_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on source bucket
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    # suspend versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # upload another object to test incremental sync
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+    # check that delete marker exists in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert len(response['DeleteMarkers']) == 1
+
+    # delete delete marker
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname, VersionId=response['DeleteMarkers'][0]['VersionId'])
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that delete marker is deleted in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert 'DeleteMarker' not in response
+
+@allow_bucket_replication
+def test_bucket_replication_suspend_versioned_to_non_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on source bucket
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # try again to test incremental sync as well
+    # upload another object and wait for sync.
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+
+@allow_bucket_replication
+def test_bucket_replication_suspend_versioned_to_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on source bucket
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
+    # enable versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # upload another object to test incremental sync
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+    # check that delete marker exists in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert len(response['DeleteMarkers']) == 1
+
+    # delete delete marker
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname, VersionId=response['DeleteMarkers'][0]['VersionId'])
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that delete marker is deleted in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert 'DeleteMarker' not in response
+
+@allow_bucket_replication
+def test_bucket_replication_suspend_versioned_to_suspend_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on source bucket
+    source.s3_client.put_bucket_versioning(
+        Bucket=source_bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
+    # enable versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # upload another object to test incremental sync
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object exists in destination bucket
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+    # check that delete marker exists in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert len(response['DeleteMarkers']) == 1
+
+    # delete delete marker
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname, VersionId=response['DeleteMarkers'][0]['VersionId'])
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that delete marker is deleted in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert 'DeleteMarker' not in response
+
+@allow_bucket_replication
+def test_bucket_replication_non_versioned_to_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    objname = 'dummy'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket as null version
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # upload another object to test incremental sync
+    objname = 'dummy2'
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+    # check that object exists in destination bucket as null version
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname)
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+    # check that delete marker not created
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert 'DeleteMarkers' not in response
+
+@allow_bucket_replication
+def test_bucket_replication_non_versioned_to_suspened_versioned():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    source = zonegroup_conns.non_account_rw_zones[0]
+    dest = zonegroup_conns.non_account_rw_zones[1]
+
+    source_bucket = source.create_bucket(gen_bucket_name())
+    dest_bucket = dest.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create replication configuration
+    response = source.s3_client.put_bucket_replication(
+        Bucket=source_bucket.name,
+        ReplicationConfiguration={
+            'Role': '',
+            'Rules': [
+                {
+                    'ID': 'rule1',
+                    'Status': 'Enabled',
+                    'Destination': {
+                        'Bucket': f'arn:aws:s3:::{dest_bucket.name}',
+                    }
+                }
+            ]
+        }
+    )
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # enable versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload one object to destination to make sure we are not loosing it
+    objname = 'dummy'
+    k = new_key(dest, dest_bucket, objname)
+    k.set_contents_from_string('versioned')
+
+    # suspend versioning on destination bucket
+    dest.s3_client.put_bucket_versioning(
+        Bucket=dest_bucket.name,
+        VersioningConfiguration={'Status': 'Suspended'}
+    )
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an object and wait for sync.
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object exists in destination bucket as null version
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'foo'
+
+    # list object versions in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert len(response['Versions']) == 2
+
+    # upload another make sure it gets replaced by the null version
+    k = new_key(source, source_bucket, objname)
+    k.set_contents_from_string('bar')
+    zone_data_checkpoint(dest.zone, source.zone)
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' not in response
+    assert response['Body'].read().decode('utf-8') == 'bar'
+
+    # list object versions in destination bucket
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert len(response['Versions']) == 2
+
+    # delete the object
+    source.s3_client.delete_object(Bucket=source_bucket.name, Key=objname)
+    time.sleep(config.checkpoint_delay)
+    zone_data_checkpoint(dest.zone, source.zone)
+
+    # check that object is deleted in destination bucket
+    e = assert_raises(ClientError, dest.s3_client.get_object, Bucket=dest_bucket.name, Key=objname, VersionId='null')
+    assert e.response['Error']['Code'] == 'NoSuchKey'
+    # check that delete marker not created
+    response = dest.s3_client.list_object_versions(Bucket=dest_bucket.name)
+    assert 'DeleteMarkers' not in response
+    # check that the other object is still there
+    response = dest.s3_client.get_object(Bucket=dest_bucket.name, Key=objname)
+    assert 'VersionId' in response
+    assert response['Body'].read().decode('utf-8') == 'versioned'
 
 @allow_bucket_replication
 def test_bucket_replication_lock_enabled_to_lock_disabled():
