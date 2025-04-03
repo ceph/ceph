@@ -870,8 +870,8 @@ protected:
   std::set<int> probe_targets;
 
 protected:
-  BackfillInterval backfill_info;
-  std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
+  PrimaryBackfillInterval backfill_info;
+  std::map<pg_shard_t, ReplicaBackfillInterval> peer_backfill_info;
   bool backfill_reserving;
 
   // The primary's num_bytes and local num_bytes for this pg, only valid
