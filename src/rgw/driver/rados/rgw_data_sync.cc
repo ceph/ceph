@@ -4521,10 +4521,10 @@ public:
             goto done;
           }
 
-          // make sure versioned object only lands on versioned bucket and non-versioned object only lands on non-versioned bucket
-          if (key.instance.empty() == sync_pipe.dest_bucket_info.versioned()) {
-            set_status("skipping entry due to versioning mismatch");
-            tn->log(0, SSTR("skipping entry due to versioning mismatch: " << key));
+          // make sure versioned object only lands on versioned bucket
+          if (!key.instance.empty() && !sync_pipe.dest_bucket_info.versioned()) {
+            set_status("skipping entry due to versioning mismatch. cannot sync versioned object to non-versioned bucket");
+            tn->log(0, SSTR("skipping entry due to versioning mismatch. cannot sync versioned object to non-versioned bucket: " << key));
             goto done;
           }
           // if object lock is enabled on either, the other should follow as well
