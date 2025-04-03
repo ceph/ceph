@@ -321,7 +321,7 @@ ClientRequest::recover_missing_snaps(
   co_await std::move(resolve_oids);
 
   for (auto &oid : ret) {
-    auto unfound = co_await do_recover_missing(pg, oid, m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(oid, m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, oid);
       co_await interruptor::make_interruptible(
@@ -347,8 +347,8 @@ ClientRequest::process_op(
       "Skipping recover_missings on non primary pg for soid {}",
       *pg, m->get_hobj());
   } else {
-    auto unfound = co_await do_recover_missing(
-      pg, m->get_hobj().get_head(), m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(
+      m->get_hobj().get_head(), m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
       co_await interruptor::make_interruptible(
