@@ -56,7 +56,6 @@ SnapsetMockData::CookedCloneSnaps ms1_fn()
 }
 
 static SnapsetMockData hobj_ms1_snapset{/* seq */ 0x40,
-					/* snaps */ {0x30, 0x20},
 					/* clones */ {0x20, 0x30},
 					ms1_fn};
 
