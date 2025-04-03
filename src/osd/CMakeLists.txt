@@ -48,7 +48,7 @@ set(osd_srcs
   ECUtilL.cc
   ECCommon.cc
   ECBackend.cc
-  ExtentCache.cc
+  ECExtentCache.cc
   ECTransaction.cc
   ECUtil.cc
   ECInject.cc
