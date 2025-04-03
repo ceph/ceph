@@ -575,7 +575,8 @@ private:
     CEPH_FEATUREMASK_SERVER_MIMIC |
     CEPH_FEATUREMASK_SERVER_NAUTILUS |
     CEPH_FEATUREMASK_SERVER_OCTOPUS |
-    CEPH_FEATUREMASK_SERVER_REEF;
+    CEPH_FEATUREMASK_SERVER_REEF |
+    CEPH_FEATUREMASK_SERVER_TENTACLE;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -706,6 +707,12 @@ public:
   /// return feature mask subset that is relevant to OSDMap encoding
   static uint64_t get_significant_features(uint64_t features) {
     return SIGNIFICANT_FEATURES & features;
+  }
+
+  template<uint64_t feature>
+    requires ((SIGNIFICANT_FEATURES & feature) == feature)
+  static constexpr bool have_significant_feature(uint64_t x) {
+    return (x & feature) == feature;
   }
 
   uint64_t get_encoding_features() const;
@@ -1841,6 +1848,9 @@ public:
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
+
+#define HAVE_SIGNIFICANT_FEATURE(x, name) \
+(OSDMap::have_significant_feature<CEPH_FEATUREMASK_##name>(x))
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/local_shared_foreign_ptr.h"
