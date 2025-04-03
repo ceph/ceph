@@ -23,7 +23,7 @@
 
 #include "common/hobject.h"
 #include "common/map_cacher.hpp"
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #  include "crimson/os/futurized_store.h"
 #  include "crimson/os/futurized_collection.h"
 #endif
@@ -35,7 +35,7 @@
 #include "osd/SnapMapReaderI.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   using ObjectStoreT = crimson::os::FuturizedStore::Shard;
   using CollectionHandleT = ObjectStoreT::CollectionRef;
 #else
@@ -78,7 +78,7 @@ public:
     return OSTransaction(ch->get_cid(), hoid, t);
   }
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   OSDriver(ObjectStoreT *os, const coll_t& cid, const ghobject_t &hoid) :
     OSDriver(os, os->open_collection(cid), hoid) {}
 #endif
@@ -175,7 +175,7 @@ public:
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
   struct Scrubber {
     CephContext *cct;
     ObjectStore *store;

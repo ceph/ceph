@@ -21,7 +21,7 @@ class CctCleaner {
 public:
   CctCleaner(CephContext* _cct) : cct(_cct) {}
   ~CctCleaner() { 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
     delete cct; 
 #else
     cct->put(); 

@@ -5174,7 +5174,7 @@ options:
     Only applied when OSD is doing ``--mkfs``.
   default: true
   verbatim: |
-    #ifdef WITH_SEASTAR
+    #ifdef WITH_CRIMSON
     // This is necessary as the Seastar's allocator imposes restrictions
     // on the number of threads that entered malloc/free/*. Unfortunately,
     // RocksDB sharding in BlueStore dramatically lifted the number of

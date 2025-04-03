@@ -121,7 +121,7 @@ public:
             match_string = stringify(m->get_reqid().name);
             break;
           case OSDPerfMetricSubKeyType::CLIENT_ADDRESS:
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 	    match_string = stringify(op.get_connection()->get_peer_addr());
 #else
             match_string = stringify(m->get_connection()->get_peer_addr());
