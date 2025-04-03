@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab expandtab
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/log.h"
 #include "crimson/osd/osd_operations/client_request_common.h"
 #include "crimson/osd/pg.h"
@@ -47,11 +48,11 @@ CommonClientRequest::do_recover_missing(
     DEBUGDPP(
       "reqid {} nothing to recover {}",
       *pg, reqid, soid);
-    return seastar::make_ready_future<bool>(false);
+    co_return false;
   }
 
   if (pg->get_peering_state().get_missing_loc().is_unfound(soid)) {
-    return seastar::make_ready_future<bool>(true);
+    co_return true;
   }
   DEBUGDPP(
     "reqid {} need to wait for recovery, {} version {}",
@@ -60,11 +61,10 @@ CommonClientRequest::do_recover_missing(
     DEBUGDPP(
       "reqid {} object {} version {}, already recovering",
       *pg, reqid, soid, ver);
-    return pg->get_recovery_backend()->get_recovering(
-      soid).wait_for_recovered(
-    ).then([] {
-      return seastar::make_ready_future<bool>(false);
-    });
+    co_await PG::interruptor::make_interruptible(
+      pg->get_recovery_backend()->get_recovering(
+	soid).wait_for_recovered());
+    co_return false;
   } else {
     DEBUGDPP(
       "reqid {} object {} version {}, starting recovery",
@@ -72,7 +72,8 @@ CommonClientRequest::do_recover_missing(
     auto [op, fut] =
       pg->get_shard_services().start_operation<UrgentRecovery>(
         soid, ver, pg, pg->get_shard_services(), pg->get_osdmap_epoch());
-    return fut.then([] { return seastar::make_ready_future<bool>(false); });
+    co_await PG::interruptor::make_interruptible(std::move(fut));
+    co_return false;
   }
 }
 
