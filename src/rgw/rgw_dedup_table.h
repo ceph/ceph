@@ -95,8 +95,8 @@ namespace rgw::dedup {
                   uint64_t slab_size);
     int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
                   bool shared_manifest, bool has_sha256);
-    int update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-                     bool shared_manifest, bool valid_sha256);
+    void update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+                      bool shared_manifest, bool valid_sha256);
 
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
 
@@ -115,7 +115,7 @@ namespace rgw::dedup {
       value_t val;
     } __attribute__((__packed__));
 
-    uint32_t find_entry(const key_t *p_key);
+    uint32_t find_entry(const key_t *p_key) const;
     uint32_t       values_count = 0;
     uint32_t       entries_count = 0;
     uint32_t       occupied_count = 0;

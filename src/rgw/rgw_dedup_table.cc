@@ -3,9 +3,6 @@
 #include <cstring>
 #include <iostream>
 
-static uint64_t max   = 0;
-static uint64_t total = 0;
-
 namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
@@ -74,7 +71,7 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  uint32_t dedup_table_t::find_entry(const key_t *p_key)
+  uint32_t dedup_table_t::find_entry(const key_t *p_key) const
   {
     uint64_t count = 1;
     uint32_t idx = p_key->hash() % entries_count;
@@ -84,14 +81,15 @@ namespace rgw::dedup {
       count++;
       idx = (idx + 1) % entries_count;
     }
-    max = std::max(max, count);
-    total += count;
     return idx;
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-                               bool shared_manifest, bool valid_sha256)
+  int dedup_table_t::add_entry(key_t *p_key,
+                               disk_block_id_t block_id,
+                               record_id_t rec_id,
+                               bool shared_manifest,
+                               bool valid_sha256)
   {
     value_t val(block_id, rec_id, shared_manifest, valid_sha256);
     uint32_t idx = find_entry(p_key);
@@ -132,8 +130,11 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-                                  bool shared_manifest, bool valid_sha256)
+  void dedup_table_t::update_entry(key_t *p_key,
+                                   disk_block_id_t block_id,
+                                   record_id_t rec_id,
+                                   bool shared_manifest,
+                                   bool valid_sha256)
   {
     uint32_t idx = find_entry(p_key);
     ceph_assert(hash_tab[idx].key == *p_key);
@@ -150,8 +151,6 @@ namespace rgw::dedup {
       val.clear_singleton();
       hash_tab[idx].val = val;
     }
-
-    return 0;
   }
 
   //---------------------------------------------------------------------------
