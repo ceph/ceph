@@ -59,7 +59,7 @@ Starting the upgrade
 
    .. prompt:: bash #
 
-      ceph confg set mgr mgr/orchestrator/fail_fs true
+      ceph config set mgr mgr/orchestrator/fail_fs true
 
    This would:
                #. Fail CephFS filesystems, bringing active MDS daemon(s) to
