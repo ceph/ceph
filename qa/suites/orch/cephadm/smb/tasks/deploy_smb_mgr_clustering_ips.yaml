@@ -28,7 +28,7 @@ tasks:
     count: 1
 - pexec:
     all:
-      - setsebool -P virt_sandbox_use_netlink 1 || true
+      - sudo setsebool -P virt_sandbox_use_netlink 1 || true
 - cephadm:
 
 - cephadm.shell:
